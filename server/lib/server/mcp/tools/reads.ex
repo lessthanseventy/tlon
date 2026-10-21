@@ -121,7 +121,14 @@ defmodule Server.MCP.Tool.SearchHistory do
   @impl true
   def execute(params, frame) do
     around = (params[:around] || 0) |> max(0) |> min(3)
-    ok(frame, Search.history(params[:query], params[:limit] || 10, around: around))
+
+    case Search.history(params[:query], params[:limit] || 10, around: around) do
+      {:error, :timeout} ->
+        fail(frame, ~s(search_history timed out on "#{params[:query]}": try fewer or rarer words))
+
+      cut ->
+        ok(frame, cut)
+    end
   end
 end
 

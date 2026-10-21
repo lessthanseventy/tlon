@@ -24,6 +24,11 @@ defmodule Server.Search do
   @pool 50
   @rrf_k 60
 
+  # The meaning pass decodes and scores each embedding in Elixir (~9KB of JSON a message), so it
+  # sees only the newest embedded messages; older ones are still found by their words.
+  @semantic_window 2_000
+  @query_timeout 10_000
+
   @headline "StartSel=⟪, StopSel=⟫, MaxWords=12, MinWords=4, MaxFragments=1, FragmentDelimiter=…"
 
   @doc """
@@ -33,51 +38,17 @@ defmodule Server.Search do
   embedded when any message has one). `around: n` adds each hit's `window`: the hit and up to `n`
   messages either side of it in its own thread, in order, as `%{message_id, author, body, at}` — a
   message is half an exchange, and its answer or question is usually the next or last one.
+  `semantic_window:` bounds how many of the newest embedded messages the meaning pass scores;
+  `timeout:` (ms) bounds each query, and a search that outruns it answers `{:error, :timeout}`.
   """
   def history(query, limit \\ @cap, opts \\ []) when is_binary(query) do
-    case any_terms(query) do
-      "" ->
-        %{shown: [], more: 0}
+    do_history(query, limit, opts)
+  rescue
+    DBConnection.ConnectionError ->
+      {:error, :timeout}
 
-      q ->
-        %{rows: keyword} =
-          Repo.query!(
-            """
-            -- idf is MATERIALIZED: inlined, Postgres re-counts every term's document frequency per candidate row
-            WITH terms AS (
-              SELECT DISTINCT lex FROM unnest(tsvector_to_array(to_tsvector('english', $1))) AS lex
-            ),
-            stats AS (
-              SELECT count(*)::float8 AS n, coalesce(avg(length(body_tsv)), 1)::float8 AS avgdl FROM message
-            ),
-            idf AS MATERIALIZED (
-              SELECT t.lex, ln(1 + (s.n - df.c + 0.5) / (df.c + 0.5)) AS w
-              FROM terms t CROSS JOIN stats s,
-              LATERAL (SELECT count(*)::float8 AS c FROM message
-                       WHERE body_tsv @@ to_tsquery('simple', quote_literal(t.lex))) df
-            )
-            SELECT m.id
-            FROM message m CROSS JOIN stats s
-            WHERE m.body_tsv @@ websearch_to_tsquery('english', $1)
-            ORDER BY (
-              SELECT coalesce(sum(i.w * cardinality(v.positions) * 2.2 /
-                (cardinality(v.positions) + 1.2 * (0.25 + 0.75 * length(m.body_tsv) / s.avgdl))), 0)
-              FROM unnest(m.body_tsv) AS v(lexeme, positions, weights) JOIN idf i ON i.lex = v.lexeme
-            ) DESC, m.id DESC
-            LIMIT $2
-            """,
-            [q, @pool]
-          )
-
-        ids =
-          [Enum.map(keyword, &hd/1), semantic_ranked(query, opts)]
-          |> fuse()
-          |> Enum.take(limit)
-
-        shown = ids |> details(q) |> with_window(Keyword.get(opts, :around, 0))
-
-        %{shown: shown, more: max(count("message", "body_tsv", q, "") - length(shown), 0)}
-    end
+    e in Postgrex.Error ->
+      if e.postgres.code == :query_canceled, do: {:error, :timeout}, else: reraise(e, __STACKTRACE__)
   end
 
   @doc """
@@ -159,7 +130,13 @@ defmodule Server.Search do
   # when there is something to compare it with, and a down embedder degrades to keyword alone within
   # the same bound recall gives it. Cosine is computed here, not in SQL, so any Postgres will do.
   defp semantic_ranked(query, opts) do
-    rows = Repo.query!("SELECT id, embedding FROM message WHERE embedding IS NOT NULL").rows
+    rows =
+      Repo.query!(
+        "SELECT id, embedding FROM message WHERE embedding IS NOT NULL ORDER BY id DESC LIMIT $1",
+        [Keyword.get(opts, :semantic_window, @semantic_window)],
+        timeout: timeout(opts)
+      ).rows
+
     vec = rows != [] && (opts[:query_embedding] || query_vector(query))
     if vec, do: by_cosine(rows, vec), else: []
   end
@@ -235,12 +212,19 @@ defmodule Server.Search do
     end)
   end
 
-  defp count(table, column, q, extra) do
+  defp count(table, column, q, extra, timeout \\ @query_timeout) do
     %{rows: [[n]]} =
-      Repo.query!("SELECT count(*) FROM #{table} WHERE #{column} @@ websearch_to_tsquery('english', $1) #{extra}", [q])
+      Repo.query!(
+        "SELECT count(*) FROM #{table} WHERE #{column} @@ websearch_to_tsquery('english', $1) #{extra}",
+        [q],
+        timeout: timeout
+      )
 
     n
   end
+
+  defp timeout(opts),
+    do: Keyword.get_lazy(opts, :timeout, fn -> Application.get_env(:server, :search_timeout, @query_timeout) end)
 
   # The literal terms, OR-joined for websearch_to_tsquery. `or` is the one operator left for it to
   # read: a leading `-` (its NOT) and quotes (its phrases) are stripped, so a word is always searched for.
@@ -251,5 +235,52 @@ defmodule Server.Search do
     |> String.split(~r/\s+/, trim: true)
     |> Enum.map(&(&1 |> String.replace("\"", "") |> String.trim_leading("-")))
     |> Enum.reject(&(&1 == "" or String.downcase(&1) == "or"))
+  end
+
+  defp do_history(query, limit, opts) do
+    case any_terms(query) do
+      "" ->
+        %{shown: [], more: 0}
+
+      q ->
+        %{rows: keyword} =
+          Repo.query!(
+            """
+            -- idf is MATERIALIZED: inlined, Postgres re-counts every term's document frequency per candidate row
+            WITH terms AS (
+              SELECT DISTINCT lex FROM unnest(tsvector_to_array(to_tsvector('english', $1))) AS lex
+            ),
+            stats AS (
+              SELECT count(*)::float8 AS n, coalesce(avg(length(body_tsv)), 1)::float8 AS avgdl FROM message
+            ),
+            idf AS MATERIALIZED (
+              SELECT t.lex, ln(1 + (s.n - df.c + 0.5) / (df.c + 0.5)) AS w
+              FROM terms t CROSS JOIN stats s,
+              LATERAL (SELECT count(*)::float8 AS c FROM message
+                       WHERE body_tsv @@ to_tsquery('simple', quote_literal(t.lex))) df
+            )
+            SELECT m.id
+            FROM message m CROSS JOIN stats s
+            WHERE m.body_tsv @@ websearch_to_tsquery('english', $1)
+            ORDER BY (
+              SELECT coalesce(sum(i.w * cardinality(v.positions) * 2.2 /
+                (cardinality(v.positions) + 1.2 * (0.25 + 0.75 * length(m.body_tsv) / s.avgdl))), 0)
+              FROM unnest(m.body_tsv) AS v(lexeme, positions, weights) JOIN idf i ON i.lex = v.lexeme
+            ) DESC, m.id DESC
+            LIMIT $2
+            """,
+            [q, @pool],
+            timeout: timeout(opts)
+          )
+
+        ids =
+          [Enum.map(keyword, &hd/1), semantic_ranked(query, opts)]
+          |> fuse()
+          |> Enum.take(limit)
+
+        shown = ids |> details(q) |> with_window(Keyword.get(opts, :around, 0))
+
+        %{shown: shown, more: max(count("message", "body_tsv", q, "", timeout(opts)) - length(shown), 0)}
+    end
   end
 end

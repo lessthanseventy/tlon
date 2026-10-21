@@ -139,6 +139,32 @@ defmodule Server.SearchTest do
       assert micros < 1_000_000
     end
 
+    test "the meaning pass scores only the newest embedded messages, not the whole channel", %{thread: thread} do
+      {:ok, old} = Channel.post(%{thread_id: thread.id, author: "a", body: "the oldest note"})
+      {:ok, mid} = Channel.post(%{thread_id: thread.id, author: "a", body: "a middle note"})
+      {:ok, new} = Channel.post(%{thread_id: thread.id, author: "a", body: "the newest note"})
+      embed!(old, [1.0, 0.0])
+      embed!(mid, [0.0, 1.0])
+      embed!(new, [0.5, 0.5])
+
+      %{shown: shown} = Search.history("zzzunmatched", 10, query_embedding: [1.0, 0.0], semantic_window: 2)
+
+      assert Enum.sort(Enum.map(shown, & &1.message_id)) == Enum.sort([mid.id, new.id])
+    end
+
+    test "a query that outruns its time answers {:error, :timeout}, never raises", %{thread: thread} do
+      Repo.query!(
+        """
+        INSERT INTO message (thread_id, author, body, created_at)
+        SELECT $1, 'a', 'ticket ' || g || ' review lonnrot verify filler words here', now()
+        FROM generate_series(1, 20000) g
+        """,
+        [thread.id]
+      )
+
+      assert {:error, :timeout} = Search.history("ticket review", 10, query_embedding: [1.0, 0.0], timeout: 1)
+    end
+
     test "an empty/whitespace query returns nothing, not an error" do
       assert %{shown: [], more: 0} = Search.history("   ")
     end
