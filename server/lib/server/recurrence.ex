@@ -71,18 +71,8 @@ defmodule Server.Recurrence do
   @doc "Record `detail`, seen by `by`, on issue `id`: reopened if closed, and the ticket that owns it seen again too."
   def issue_seen(id, detail, by) do
     case Repo.get(Issue, id) do
-      %Issue{} = i ->
-        line = "Seen again (#{Date.utc_today()}, by #{by}): " <> String.trim(detail || "")
-        evidence = Enum.join(Enum.reject([i.evidence, line], &(&1 in [nil, ""])), "\n\n")
-
-        with {:ok, issue} <-
-               i |> Ecto.Changeset.change(seen: i.seen + 1, state: "open", evidence: evidence) |> Repo.update() do
-          if i.ticket_id, do: ticket_seen(i.ticket_id, detail, by)
-          {:ok, issue}
-        end
-
-      nil ->
-        {:error, "no issue ##{id}"}
+      %Issue{} = i -> seen(i, detail, by)
+      nil -> {:error, "no issue ##{id}"}
     end
   end
 
@@ -116,4 +106,12 @@ defmodule Server.Recurrence do
   end
 
   defp headline(summary), do: summary |> to_string() |> String.slice(0, 200)
+
+  defp seen(%Issue{} = i, detail, by) do
+    line = "Seen again (#{Date.utc_today()}, by #{by}): " <> String.trim(detail || "")
+    evidence = Enum.join(Enum.reject([i.evidence, line], &(&1 in [nil, ""])), "\n\n")
+    result = i |> Ecto.Changeset.change(seen: i.seen + 1, state: "open", evidence: evidence) |> Repo.update()
+    if match?({:ok, _}, result) and i.ticket_id, do: ticket_seen(i.ticket_id, detail, by)
+    result
+  end
 end
