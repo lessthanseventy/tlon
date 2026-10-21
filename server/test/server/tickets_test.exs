@@ -393,20 +393,16 @@ defmodule Server.TicketsTest do
     end
   end
 
-  describe "a ticket marked done" do
-    test "resolves the issues it owns, naming the ticket, so a closed one is never re-announced", %{workspace: ws} do
+  describe "Dossier.resolve_owned/2" do
+    test "resolves the open issues a ticket owns, naming it, and no other", %{workspace: ws} do
       {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "the hall-hire test flakes"})
       {:ok, issue} = Server.Dossier.raise_issue(%{summary: "hall-hire flaked on the gate"})
       {:ok, _} = Server.Dossier.own_issue(issue, t, "test")
       {:ok, other} = Server.Dossier.raise_issue(%{summary: "an unowned finding"})
 
-      {:ok, _} = Tickets.update(t, %{status: "doing"})
-      assert Server.Repo.get(Server.Issue, issue.id).state == "open"
-
-      {:ok, _} = Tickets.update(Tickets.get(t.id), %{status: "done"})
+      assert [_] = Server.Dossier.resolve_owned(t.id, "its ticket ##{t.id} was closed: fixed by abc1234")
       closed = Server.Repo.get(Server.Issue, issue.id)
-      assert closed.state == "closed"
-      assert closed.resolution =~ "ticket ##{t.id}"
+      assert closed.state == "closed" and closed.resolution =~ "fixed by abc1234"
       assert Server.Repo.get(Server.Issue, other.id).state == "open"
     end
   end

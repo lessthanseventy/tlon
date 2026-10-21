@@ -68,10 +68,6 @@ defmodule Server.Tickets do
   def update(%Ticket{} = ticket, attrs) do
     result = ticket |> Ticket.update_changeset(attrs) |> Repo.update() |> Bus.announce(:ticket_updated)
     refresh_epic(epic_of(ticket.id))
-
-    with {:ok, %Ticket{status: "done"}} when ticket.status != "done" <- result,
-         do: Server.Dossier.resolve_owned(ticket.id, "its ticket ##{ticket.id} was closed")
-
     result
   end
 
