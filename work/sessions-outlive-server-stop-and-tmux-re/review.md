@@ -1,28 +1,35 @@
-# APPROVE — sessions-outlive-server-stop-and-tmux-re (round 2)
+# REQUEST CHANGES — sessions-outlive-server-stop-and-tmux-re (round 2, revised)
 
 ## Verdict
 
-**Approve.** Both blocking findings from round 1 (594558a) are fixed correctly, the interaction between `end_predating_tmux` and `resume_interrupted` is now covered by a mid-turn test that asserts the carry-on notice, and the verify gate is green (1938 tests, 0 failed). No new findings.
+**Request changes.** My round-2 approve is withdrawn: the risk grader's pass (msg #10597) caught three real, cheap problems I under-weighted, and the workline is still at the operator's gate so the cost is one small rebuild round. The core fix and the round-1 ordering fix remain correct; these are about repairability and the suite's honesty, not the mechanism.
 
-## What changed since 594558a
+## Blocking
 
-- `Staffing.pass/3`: `end_predating_tmux(workspace_id)` moved to AFTER `resume_interrupted/3` (staffing.ex:93-94). Comment at :742-743 now states the division of labor: `resume_interrupted` owns the mid-turn carry-on notice; `end_predating_tmux` cleans up the idle and reused-pane sessions left behind.
-- `end_predating_tmux/1`: rewritten from `if` to `case`, logging `Logger.warning` when `Tmux.server_started/1` returns nil (consistent with the existing warning at :75; `require Logger` already at :47).
-- `staffing_test.exs`: shared fake tmux `answer/2` answers `display-message` with `old()` (now−3600s) so the step runs ON across the whole suite; new test "a mid-turn session from before the tmux server is ended and its coworker still told to carry on" creates a thinking session started before tmux and asserts both `ended_at` is set and the `@borges the machine restarted` notice is posted.
+### 1. Silent ends are unrepairable — log each session `end_predating_tmux` ends
 
-## Findings from round 1 — resolution
+`end_predating_tmux/1` calls `Staff.end_session/1` on every predating session — an irreversible stored write that runs every minute, in every workspace, with no log line and no thread message (only the nil-start-time branch logs). A wrong end is currently unfindable: a git revert stops new ends but reopens nothing, and no ids are recorded. This is exactly what `server/AGENTS.md` bars — "Nothing here ships that cannot be repaired at 2am."
 
-### Blocking 1 — ordering dropped the carry-on notice — FIXED
-`end_predating_tmux` ran before `resume_interrupted`, so `Staff.interrupted/1` (`is_nil(ended_at) and not is_nil(thinking_since)`, staff.ex:201) excluded every just-ended mid-turn session and the `@<agent> the machine restarted` notice was never posted. Now `resume_interrupted` runs first: it ends mid-turn sessions with no window and posts the notice (staffing.ex:290-307); `end_predating_tmux` then runs with its `is_nil(s.ended_at)` guard (staffing.ex:755) and skips them. The chosen "move after" fix is strictly better than the "exclude mid-turn" alternative I offered: the alternative would have left a mid-turn predating session *with* a matching window unended by both paths — the stale-claimed-pane bug itself.
+↳ ` |> Enum.each(&Staff.end_session/1)` (staffing.ex:760)
 
-### Blocking 2 — shared fake tmux disabled the step suite-wide — FIXED
-`answer/2`'s catch-all answered `display-message -p #{start_time}` with `""` → `Integer.parse` failed → `server_started` nil → step off in every test using the shared `tmux/1`. The new `"display-message" in args -> {"#{old()}\n", 0}` clause returns a start_time older than any fixture, so existing restart/regression tests now run with the step ON.
+**Fix:** `Logger.info` with the session id, agent and pane_ref before each `Staff.end_session/1`. A wrong end then becomes visible, and the rows can be found and reopened if a revert is needed.
 
-### Follow-ups — addressed
-- Warning logged on nil `server_started`: done (staffing.ex:745-746).
-- Mid-turn test asserting the carry-on notice IS posted: done (the new test).
-- UTC-on-UTC comparison assertion: not added as a separate test. The comparison is genuinely UTC-on-UTC (`started_at` is `:utc_datetime`; `DateTime.from_unix!/1` is UTC), so the skew risk is not real; an assertion would pin what is already correct. Not worth a follow-up ticket.
+### 2. Test 1's title overclaims — "even mid-turn" but the session is idle
 
-## New findings
+`"a session from before the tmux server started is ended, even mid-turn; one after it stays"` creates `dead = session!("borges", here.id, 30)` — the 4th arg defaults to `thinking? = false`, so `dead` is idle, not mid-turn. The title claims coverage it does not have.
 
-None. The mid-turn test exercises the `resume_interrupted` → `end_predating_tmux` ordering (`tmux("")` makes `has_window?` false, so the session is ended and noticed by `resume_interrupted`; `end_predating_tmux` then skips it via the `ended_at` guard — exactly the path finding 1 broke).
+↳ ` dead = session!("borges", here.id, 30)` (staffing_test.exs:176)
+
+**Fix (preferred):** make it `session!("borges", here.id, 30, true)`. The fake `list-windows` reports a window for `borges` on `here.id`, so `resume_interrupted` skips it (`has_window?` true) and `end_predating_tmux` is what ends it — this pins the mid-turn + has-window + predating case nothing currently covers, and makes the title honest. Otherwise drop "even mid-turn" from the title.
+
+### 3. The mid-turn + predating + has-window case is uncovered and the behavior is undecided
+
+Test 2 (`"a mid-turn session from before the tmux server is ended and its coworker still told to carry on"`) gives its mid-turn session no window (`tmux("")`), so `resume_interrupted` ends it and posts the `@borges the machine restarted` notice with `end_predating_tmux` doing nothing — the test passes with the step deleted. It pins the round-1 ordering fix but not `end_predating_tmux` itself. The case it does NOT cover, and nothing does: a mid-turn predating session that HAS a matching window. There `resume_interrupted` skips it (window present) and `end_predating_tmux` ends it silently with no carry-on notice. That behavior is currently "works by accident, not asserted."
+
+↳ ` test "a mid-turn session from before the tmux server is ended and its coworker still told to carry on"` (staffing_test.exs:204)
+
+**Fix:** add a case (or reshape test 1 per finding 2) with a mid-turn predating session that has a matching window. Assert: the session IS ended (its `pane_ref` is stale), and the carry-on notice is NOT posted (the window is present, the turn reads as alive). This pins the intended outcome deliberately — after `server:stop`+`restart` all windows are gone, so this case is a coincidental id-reuse by the same agent on the same thread, where the stale row should be ended and the fresh spawn left alone.
+
+## Follow-ups (non-blocking, filed)
+
+- **Scope the filter to the workspace's own tmux.** The query filters by workspace thread (`t.workspace_id == ^workspace_id`) but not by which tmux a `pane_ref` came from. `pane_ref` is `$TMUX_PANE` cast in at session start (session.ex:39); bench-coworker panes run on the workspace's private tmux, but an outside-citizen session (uqbar's pane runs on a foreign tmux) on a workspace thread that predates the workspace's lazily-started tmux would be wrongly ended. Unverified (pane_ref origin is not in this diff); the logging fix in finding 1 makes a wrong end findable in the meantime. Worth matching `pane_ref` against the panes `list-windows` reports, or recording which socket a `pane_ref` came from, plus a test with a pre-tmux session whose pane_ref is not in the workspace's tabs.
