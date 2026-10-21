@@ -3,8 +3,9 @@
 # Inside a sandboxed Bash call, /proc/1/cmdline is that argv (no shim); a file argument is the same
 # NUL-separated shape. A seat's limit is 9000 (#522).
 set -euo pipefail
-tr '\0' '\n' <"${1:-/proc/1/cmdline}" | awk '
-  { n++ }
+f=${1:-/proc/1/cmdline}
+total=$(tr -cd "\0" <"$f" | wc -c)
+tr "\0" "\n" <"$f" | awk -v total="$total" '
   /^--/ { opt = $0; k = 0; next }
   { k++ }
   k == 1 && opt ~ /^--(ro-bind|bind|tmpfs)$/ {
@@ -13,4 +14,4 @@ tr '\0' '\n' <"${1:-/proc/1/cmdline}" | awk '
     else if (p != "/dev/null") { split(p, c, "/"); p = "/" c[2] "/" c[3] "/" c[4] "/" c[5] }
     g[p]++
   }
-  END { print "total " n; for (p in g) print g[p], p }' | { read -r first; echo "$first"; sort -rn; }
+  END { print "total " total; for (p in g) print g[p], p }' | { read -r first; echo "$first"; sort -rn; }
