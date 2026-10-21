@@ -197,7 +197,7 @@ run = "mise exec zig@0.16.0 -- mix release tlon --overwrite"
 # guide names but mise.toml lost, a pi config file the adapter reads but the flake stopped writing.
 ["check:names"]
 description = "names-exist gate: every Server.* module, mix task, mise task and ~/.pi/agent file the glue names must exist, docs/glossary.md holds, scratch.sh prune keeps exactly the unlanded work, and checks-queue.sh runs waiters first come first served (grep, a temp repo and a temp runtime dir, offline, fast)"
-run = "scripts/check-names.sh && scripts/check-glossary.test.sh && scripts/scratch.test.sh && scripts/checks-queue.test.sh"
+run = "scripts/check-names.sh && scripts/check-glossary.test.sh && scripts/scratch.test.sh && scripts/checks-queue.test.sh && scripts/bwrap-argc.test.sh"
 
 ["check:ignored"]
 description = "tracked-junk gate: fail on any tracked file that .gitignore ignores (scratch committed under an ignored path such as server/tmp)"
