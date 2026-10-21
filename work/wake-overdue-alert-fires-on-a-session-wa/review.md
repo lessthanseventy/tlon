@@ -1,23 +1,23 @@
-# verdict: approve
+# verdict: request_changes
 
-Re-review of the re-build (ef9bd0a..2580039). The one required fix from the prior round landed exactly, and is RED-then-GREEN proven. Verify's full gate passed (exit 0).
+Reversing the prior approve. The grader's finding 1 is a real gate-corruption bug I missed last round (I dismissed −1 as "harmless" without tracing a concurrent new submit). Verified against `submitWakes`/`session.end`.
 
-## required to merge — fixed
+## required to merge
 
-1. **`session.end` resets the submit-lifecycle state.** `mod.ts:569` now resets `pendingSubmits = 0` and `submitting = Promise.resolve()` alongside `running.clear()`, with a load-bearing comment. Both halves are necessary:
-   - `pendingSubmits = 0` reopens the `drainWakes` gate (`if (draining || pendingSubmits > 0) return`). The new test's RED was exactly this: 1 `take_wakes`, expected 2 — the gate stayed shut because the abandoned submit's `finally` never ran.
-   - `submitting = Promise.resolve()` breaks the `submitting = submitting.then(...)` chain (`submitWakes`). Without it, a later `submitWakes` would chain onto the abandoned submit's never-settling promise and "wake two" would be taken but never delivered. The GREEN `world.submitted = ["wake two"]` confirms the chain recovers.
+1. **A late-settling abandoned submit drives `pendingSubmits` negative and breaks the gate for the next conversation.** `session.end` resets `pendingSubmits = 0` and `submitting = Promise.resolve()`, but a submit abandoned at `/clear` is still chained on the *old* `submitting` promise. If the host later **rejects** it (not abandons — exactly what #546 has not settled), the orphaned `finally { pendingSubmits-- }` (`mod.ts:258`) fires after the reset: 0 → −1. The next conversation's `submitWakes` does `pendingSubmits++` → 0, so the `drainWakes` gate `if (draining || pendingSubmits > 0) return` is **false during a genuinely-held submit** — `drainWakes` takes the next wake into memory, re-opening the in-memory loss window this change exists to close, for the conversation right after a reject-`/clear`. (The rejected wake itself is recovered via `put_back_wakes` in the `catch`; the bug is the count corruption, which exposes *subsequent* wakes.) Nothing logs it.
 
-   The recovery test ("a submit the host abandons at session.end does not stop the next conversation taking wakes") proves end-to-end: held submit → `session.end` → second poll takes "wake two" (`take_wakes` length 2) → release → delivers. The defensive note from the prior round holds: if the host rejects rather than abandons, the orphaned `finally` decrements to −1, harmless under the `> 0` gate; no race, since an abandoning host never later resolves.
+   Whether this triggers hinges on #546 (host abandons vs rejects on `/clear`), but the fix is cheap, defensive either way, and sits in lines this change touches.
 
-   `mise run adapters:claude-code:mod` → 46 pass, 0 fail. Diff is surgical: the test (+20 lines) and the two-line reset + comment. ✓
+   Fix: a submit-generation counter — module-level `submitGen`, incremented in `session.end` alongside the resets; `submitWakes` captures `const gen = submitGen` and only decrements `pendingSubmits` in `finally` when `gen === submitGen`, so an orphaned prior-session submit can't touch the current count. Test: held submit → `session.end` → release the abandoned hold (late reject) → new `session.start` + new held submit → advance the clock → assert **no further `take_wakes`** while the new submit is pending (the gate holds), and that releasing the new hold then delivers in order.
 
-## non-blocking follow-ups (carried forward — all filed, held)
+## non-blocking follow-ups (carried forward)
 
-1. **#545 (med, held) — a never-completing subagent pins the seat busy.** A subagent that crashes or aborts without `turn.complete` stays in `running` until `session.end`, so `presence_idle` never fires and the heartbeat runs forever. Fix: store each `agentId` with the tick it started and drop entries older than a bound in the poll callback, with a `note()` line; also reset `mainEnded`/`waitTicks` in `session.end`. Test: `turn.start` with agentId, main `turn.complete`, advance past the bound, expect one `presence_idle`.
+1. **#545 (med, held) — a never-completing subagent pins the seat busy.** A subagent that crashes/aborts without `turn.complete` stays in `running` until `session.end`, so `presence_idle` never fires and the `~180 s` refresh claims "waiting on a background agent" indefinitely — the very refresh meant to beat the stale-turn check, so a dead seat looks alive forever. Fix: store each `agentId` with the tick it started and drop entries older than a bound in the poll callback, with a `note()` line; also reset `mainEnded`/`waitTicks` in `session.end`. Test: `turn.start` with agentId, main `turn.complete`, advance past the bound, expect one `presence_idle` and that refreshes stop. (This is the grader's fix 2.)
 
-2. **#546 (med) — prove live.** Launch a citizen, background a subagent, confirm `turn` events carry `agentId` live (so the running-set path engages) and the seat stays off the overdue clock. This also settles whether the host abandons or rejects the held submit on `/clear` — i.e. whether the `session.end` reset is load-bearing or belt-and-suspenders in production.
+2. **#546 (med) — prove live.** Launch a citizen, background a subagent, confirm `turn` events carry `agentId` live (so the running-set path engages) and the seat stays off the overdue clock. This also settles whether the host abandons or rejects the held submit on `/clear` — i.e. whether the required fix above is load-bearing or belt-and-suspenders in production.
 
 3. **#548 (low, held, blocked by #545) — `waitTicks` drift.** `waitTicks` is module-level, only incremented, never reset, so a second wait's first refresh fires at `60 − N%60` rather than 60. Non-functional (max gap stays under 180 s against the 600 s clock). Reset on main `turn.start`, with a two-waits test.
 
-#545 is the next build after this lands.
+4. **(low) — recover the in-flight batch at `session.end`.** The single wake taken *before* the gate engages ("wake one") sits in the in-memory chain during a held submit; on an abandoned `/clear` it is lost (the recovery test asserts `submitted = ["wake two"]`, accepting that loss). `submitWakes` could record the in-flight texts and `put_back_wakes` them in `session.end` before the reset, so a `/clear` doesn't lose a delivered wake. Closes the last residue of #547; an improvement, not a regression — the change already narrows the loss from "all wakes" to "one batch". (The grader's fix 3.)
+
+#545 remains the next build after this lands.
