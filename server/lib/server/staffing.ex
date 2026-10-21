@@ -757,7 +757,13 @@ defmodule Server.Staffing do
               s.started_at < ^before
         )
         |> Repo.all()
-        |> Enum.each(&Staff.end_session/1)
+        |> Enum.each(fn s ->
+          Logger.info(
+            "staffing: ending session #{s.id} (agent #{s.agent_id}, thread #{s.thread_id}, pane #{s.pane_ref}): it began before workspace #{workspace_id}'s tmux server"
+          )
+
+          Staff.end_session(s)
+        end)
     end
   end
 end
