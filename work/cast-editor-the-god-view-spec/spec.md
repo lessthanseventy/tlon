@@ -97,5 +97,5 @@ only at respawn — see souls step 3 §c).
 
 ## Open
 
-1. Grade/specialty store (assumed office file; operator ask #10659 unanswered).
+1. (settled) Grade/specialty: office file `cast.json`, operator answer #10680; make it a server field when something there needs it.
 2. Whether #277 changes `PLAY`/sandbox key space — re-check key collisions at build.
