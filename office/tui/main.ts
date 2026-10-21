@@ -32,6 +32,8 @@ import { usageHeader } from "../kit/usage"
 import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
 import { bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
+import { castSignature, loadCast, type Cast } from "../kit/cast"
+import { CAST_FIELDS, castRows } from "./cast"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, storeNamesTaken, toggleLock as storeToggle, type Store } from "../kit/store"
 import { stepStoreRow, storeRows } from "./store"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
@@ -70,7 +72,7 @@ type Mode =
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number; from?: Mode }
   | { kind: "look"; name: string; from?: Mode } | { kind: "look-editor"; name: string; view: "front" | "side" | "back"; from?: Mode }
-  | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" }
+  | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" } | { kind: "cast"; tab: "people" | "office" }
   | { kind: "help"; from: Mode; title: string; keys: Hint[] }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
@@ -103,6 +105,8 @@ const SOULS = process.env.TLON_SOULS ?? join(CONFIG, "souls")
 
 // the hiring hall: current seed + locks + edits and the maybe pile, polled like LOOKS
 const HALL = process.env.TLON_HALL ?? join(CONFIG, "hall.json")
+// the cast editor's grade and specialty per seat (kit/cast.ts), polled the same way
+const CAST = process.env.TLON_CAST ?? join(CONFIG, "cast.json")
 // the pet store: species + seed + locks + edits, polled the same way
 const STORE = process.env.TLON_STORE ?? join(CONFIG, "store.json")
 
@@ -178,6 +182,16 @@ function followHall(): boolean {
   const seen = hallSignature(HALL)
   if (seen === hallSeen) return false
   hallSeen = seen; hall = loadHall(HALL)
+  return true
+}
+let cast: Cast = loadCast(CAST), castSeen = castSignature(CAST)
+// the lit field of the cast view's lit row
+let castCol = 0
+
+function followCast(): boolean {
+  const seen = castSignature(CAST)
+  if (seen === castSeen) return false
+  castSeen = seen; cast = loadCast(CAST)
   return true
 }
 async function hallHire() {
@@ -1161,6 +1175,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { ...bind("home.f"), run: () => open({ kind: "archive" }) }, { ...bind("home.W"), run: () => open({ kind: "boss" }) },
         { ...bind("home.S"), run: () => open({ kind: "settings" }) },
         { ...bind("home.h"), run: () => open({ kind: "hall" }) },
+        { ...bind("home.cast"), run: () => open({ kind: "cast", tab: "people" }) },
         { ...bind("home.P"), run: () => open({ kind: "store" }) },
         { ...bind("home.q"), run: quit },
       ]
@@ -1842,6 +1857,28 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           } },
           back1,
         ],
+      }
+    }
+    case "cast": {
+      const on = mode.tab
+      const tab = { ...bind("cast.tab"), run: () => open({ kind: "cast", tab: on === "people" ? "office" : "people" }) }
+      if (on === "office") {
+        const rows: Row[] = whimsyRows(whim).map((w) => ({
+          segs: [plain(w.label.padEnd(16)), { s: w.value.padEnd(10), fg: ROLE.key }, dim(w.note ?? "")],
+          open: () => { setWhim(w.next(whim)); draw() },
+        }))
+        return { title: `THE CAST · office · ${whimsyTitle(whim)}`, rows, actions: [tab, { ...bind("whimsy.0"), run: () => { setWhim(resetToPreset(whim)); draw() } }, back1] }
+      }
+      const seats = a.bench.map((b) => ({ name: b.name, archetype: b.archetype, model: b.model?.model ?? null, voice: b.persona?.voice ?? null, hasSoul: !!soulFor(b.name), hasLook: !!overrideFor(b.name) }))
+      const rows: Row[] = castRows(seats, cast).map((r, i) => ({
+        segs: [plain(r.name.padEnd(14)), ...r.cells.slice(1).map((c, j) => i === sel && j + 1 === castCol ? key(`[${c.value}] `) : (c.editable ? plain : dim)(`${c.value}  `))],
+        ref: r.name,
+      }))
+      if (!rows.length) rows.push({ segs: [dim("nobody on the bench yet — hire from the hall (h)")] })
+      const step = (d: number) => { castCol = (castCol + d + CAST_FIELDS.length) % CAST_FIELDS.length; draw() }
+      return {
+        title: `THE CAST · people · ${CAST_FIELDS[castCol]}`, rows,
+        actions: [tab, { ...bind("cast.left"), run: () => step(-1) }, { ...bind("cast.right"), run: () => step(1) }, back1],
       }
     }
     case "hall": {
@@ -2631,7 +2668,7 @@ async function main() {
   let sec = 0
   every(() => { looks.tick(1); if (focused && ++sec % 5 === 0) stampLooked(); if (!reader && !zoom && notes.some((n) => { const a = looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
   every(() => { if ((mode.kind === "pet" && petDraft) || mode.kind === "store") { previewTick += 10; draw() } }, 1000)
-  every(() => { if (followPalette() || followLooks() || followSouls() || followPets() || followHall() || followStore()) { frame = null; draw() } }, 1000)
+  every(() => { if (followPalette() || followLooks() || followSouls() || followPets() || followHall() || followStore() || followCast()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
   let seenFocus = (await data.focus())?.at ?? 0
