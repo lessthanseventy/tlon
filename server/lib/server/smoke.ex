@@ -97,8 +97,8 @@ defmodule Server.Smoke do
   each step. A seat's own drive is blind to the smoke's port (each sandboxed call has a network
   namespace of its own).
   """
-  @spec drive(integer(), [String.t()]) :: {:ok, String.t()} | {:error, String.t()}
-  def drive(thread_id, keys) do
+  @spec drive(integer(), [String.t()], keyword()) :: {:ok, String.t()} | {:error, String.t()}
+  def drive(thread_id, keys, opts \\ []) do
     case held(thread_id) do
       nil ->
         {:error, none(thread_id, "no smoke is up for this thread: start_smoke first")}
@@ -107,8 +107,8 @@ defmodule Server.Smoke do
         # the smoke's own build dir, so a TUI change drives the candidate's TUI (old holds: the checkout)
         dir = meta["dir"] || Server.Profiles.tlon_root()
         {exe, args} = Job.launch([Path.join(dir, "scripts/office-drive.sh") | keys])
-        opts = [cd: dir, env: [{"TLON_URL", url}, {"MISE_YES", "1"}], stderr_to_stdout: true]
-        task = Task.async(fn -> System.cmd(exe, args, opts) end)
+        env = [{"TLON_URL", url}, {"MISE_YES", "1"} | drive_env(opts)]
+        task = Task.async(fn -> System.cmd(exe, args, cd: dir, env: env, stderr_to_stdout: true) end)
 
         case Task.yield(task, 180_000) || Task.shutdown(task, :brutal_kill) do
           {:ok, {out, _code}} -> {:ok, out}
@@ -150,5 +150,12 @@ defmodule Server.Smoke do
       job ->
         {:ok, job}
     end
+  end
+
+  # wide: the wide room in half blocks (where events, the door and the pets are), read as text lines;
+  # sandbox: the made-up world, where the toy's keys (E, F, D, T) run
+  defp drive_env(opts) do
+    wide = if opts[:wide], do: [{"OFFICE_WIDE", "1"}, {"OFFICE_TEXT", "1"}], else: []
+    if opts[:sandbox], do: [{"OFFICE_SANDBOX", "1"} | wide], else: wide
   end
 end

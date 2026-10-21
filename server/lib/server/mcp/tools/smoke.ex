@@ -60,12 +60,19 @@ defmodule Server.MCP.Tool.DriveSmoke do
 
     field :thread_id, :integer,
       description: "The workline you QA (its #id), when your session is bound to another thread"
+
+    field :wide, :boolean,
+      description:
+        "Draw the wide room (the door, the bathroom, the pets, events and their balloons) and print every screen row as text"
+
+    field :sandbox, :boolean,
+      description: "Run the office's made-up world, where the toy's keys (E event, F drill, D doorbell, T treat) work"
   end
 
   @impl true
   def execute(params, frame) do
     with {:ok, thread} <- Server.MCP.Tool.QASmoke.thread(params, frame),
-         {:ok, screens} <- Smoke.drive(thread.id, params[:keys]) do
+         {:ok, screens} <- Smoke.drive(thread.id, params[:keys], wide: params[:wide], sandbox: params[:sandbox]) do
       ok(frame, %{"screens" => screens})
     else
       {:error, why} -> fail(frame, why)
