@@ -72,6 +72,15 @@ let captured = 0;
 let capturing = false;
 let messages: Message[] = [];
 let draining = false;
+// submits run one at a time on their own chain: the host holds one until the session is idle, and
+// that wait must never hold the poll that takes the next wakes
+let submitting: Promise<void> = Promise.resolve();
+// subagents whose turn started and has not ended: the session is busy while any runs, even after
+// its own turn ended
+const running = new Set<string>();
+let mainEnded = false;
+let waitTicks = 0;
+const STALE_REFRESH_TICKS = 60;
 // what register still has to send: at boot the tlon MCP server may not be connected yet, and a
 // seat whose register was lost runs its whole life off the roster
 let registration: Record<string, unknown> | null = null;
@@ -231,6 +240,20 @@ function registerNow($): Promise<void> {
 // A wake (a teammate's message, an opening assignment) arrives as if typed: Claude Code holds it
 // until the session is idle, so it never lands on a booting input or a half-written prompt. Taking
 // deletes the server's row, so a wake whose submit fails is put back for the next poll.
+function submitWakes($, texts: string[]) {
+  submitting = submitting.then(async () => {
+    const failed: string[] = [];
+    for (const text of texts) {
+      try {
+        await $.prompt.submit({ text, asUser: true });
+      } catch {
+        failed.push(text);
+      }
+    }
+    if (failed.length) await call($, "put_back_wakes", { prompts: failed }).catch(() => {});
+  });
+}
+
 async function drainWakes($) {
   if (draining) return;
   draining = true;
@@ -242,7 +265,7 @@ async function drainWakes($) {
       if (superseded) return;
       superseded = true;
       registration = null;
-      await $.prompt.submit({ text: String((wakes as { text?: string }).text ?? ""), asUser: true });
+      submitWakes($, [String((wakes as { text?: string }).text ?? "")]);
       return;
     }
     // only a real wake list says the seat is free: a non-JSON reply (server mid-restart) must not
@@ -254,16 +277,7 @@ async function drainWakes($) {
       registration = pane ? { pane_ref: pane } : {};
       void registerNow($);
     }
-    const failed: string[] = [];
-    if (Array.isArray(wakes))
-      for (const text of wakes.map(String)) {
-        try {
-          await $.prompt.submit({ text, asUser: true });
-        } catch {
-          failed.push(text);
-        }
-      }
-    if (failed.length) await call($, "put_back_wakes", { prompts: failed });
+    if (Array.isArray(wakes) && wakes.length) submitWakes($, wakes.map(String));
   } catch {
     // a missed poll is taken by the next one; a wake left too long is the server's to report
   } finally {
@@ -493,6 +507,9 @@ export function register(on) {
     sessionId = null;
     void registerNow($);
     $.clock.every(WAKE_POLL_MS, async () => {
+      // the host's stale-turn clock would read a long wait on a subagent as a dead turn
+      if (thread && mainEnded && running.size && ++waitTicks % STALE_REFRESH_TICKS === 0)
+        declare($, "presence_doing", { summary: "waiting on a background agent" });
       if (registration) await registerNow($);
       await drainWakes($);
     });
@@ -540,6 +557,7 @@ export function register(on) {
 
   // A /clear, /resume or /branch is a new conversation: brief it and capture it from the start.
   on("session.end", async ($, e, next) => {
+    running.clear();
     if (thread) declare($, "presence_idle");
     briefed = "";
     captured = 0;
@@ -590,7 +608,9 @@ export function register(on) {
   });
 
   on("turn.start", async ($, e, next) => {
-    if (thread) declare($, "presence_thinking");
+    if (e.agentId) running.add(e.agentId);
+    else mainEnded = false;
+    if (thread && !e.agentId) declare($, "presence_thinking");
     return next(e);
   });
 
@@ -672,11 +692,13 @@ export function register(on) {
 
   // A subagent's turn ends inside the session's own; only the session's turn ending is idle.
   on("turn.complete", async ($, e, next) => {
+    if (e.agentId) running.delete(e.agentId);
+    else mainEnded = true;
     if (thread && !e.agentId) {
-      declare($, "presence_idle");
       void capture($, MIN_DELTA_CHARS);
       void refresh($);
     }
+    if (thread && mainEnded && running.size === 0) declare($, "presence_idle");
     const done = await next(e);
     // past its compaction point, a seat compacts while idle between turns (never under one: the host
     // refuses that), so the next prompt carries the whole brief
