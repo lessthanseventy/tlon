@@ -1,35 +1,23 @@
-# REQUEST CHANGES — sessions-outlive-server-stop-and-tmux-re (round 2, revised)
+## verdict: approve
 
-## Verdict
+Round 3. All three blockers from the round-2 request_changes (4bd78b7) are fixed and verified in 347e58b; the gate is green (1938 tests, 0 failed; verify evidence recorded on the branch).
 
-**Request changes.** My round-2 approve is withdrawn: the risk grader's pass (msg #10597) caught three real, cheap problems I under-weighted, and the workline is still at the operator's gate so the cost is one small rebuild round. The core fix and the round-1 ordering fix remain correct; these are about repairability and the suite's honesty, not the mechanism.
+### blocker 1 — silent ends are unrepairable: FIXED
+`end_predating_tmux` now `Logger.info`s before each `Staff.end_session/1`, naming session id, agent_id, thread_id and pane_ref (staffing.ex:760-766). `require Logger` was already present (line 47). A wrong end is now visible and the row is findable — satisfies server's "nothing ships that cannot be repaired at 2am." The query already filters `not is_nil(s.pane_ref)`, so the pane in the log is never nil.
 
-## Blocking
+### blocker 2 — test 1's title lied ("even mid-turn" but idle): FIXED
+`dead = session!("borges", here.id, 30, true)` (staffing_test.exs:179) — mid-turn, `thinking_since` set. Title rewritten to "a mid-turn session from before the tmux server whose window matches is ended, logged, and not told to carry on; one after it stays." Title and body now agree.
 
-### 1. Silent ends are unrepairable — log each session `end_predating_tmux` ends
+### blocker 3 — mid-turn + predating + has-window case uncovered and undecided: FIXED and PINNED
+Test 1 now covers exactly this case (lines 175-207): `dead` is mid-turn, predating (`started_at` −7200s vs the fake tmux's `display-message` start of −3600s), and `list-windows` returns a matching `borges`/`here` tab. The intended outcome I named in the round-2 review is asserted deliberately:
+- `resume_interrupted` runs first; `has_window?(tabs, here.id, "borges", standing)` is true, so it skips `dead` — no end, no carry-on notice.
+- `end_predating_tmux` then ends `dead` (predating, pane_ref set, not ended) and logs.
+- Asserts: `dead.ended_at` set, `live.ended_at` nil, NO "the machine restarted" message on `here`, and the log names `session #{dead.id}`, `thread #{here.id}`, `%3`.
 
-`end_predating_tmux/1` calls `Staff.end_session/1` on every predating session — an irreversible stored write that runs every minute, in every workspace, with no log line and no thread message (only the nil-start-time branch logs). A wrong end is currently unfindable: a git revert stops new ends but reopens nothing, and no ids are recorded. This is exactly what `server/AGENTS.md` bars — "Nothing here ships that cannot be repaired at 2am."
+RED/GREEN is honest: with only the test edited, the log assertion failed while the ended/no-notice assertions already passed (they pin existing behaviour, as expected); after the `Logger.info` change, staffing_test is 37 tests, 0 failed.
 
-↳ ` |> Enum.each(&Staff.end_session/1)` (staffing.ex:760)
+### complement checked
+Test 2 (`tmux("")`, no window) covers the other branch: `resume_interrupted` ends the mid-turn `cut` and posts the notice; `end_predating_tmux`'s `is_nil(ended_at)` guard skips it — no double-end, no double-notice. The shared fake `answer/2` answers `display-message` with `old()` (now−3600s), so `end_predating_tmux` runs ON across the rest of the suite instead of silently off.
 
-**Fix:** `Logger.info` with the session id, agent and pane_ref before each `Staff.end_session/1`. A wrong end then becomes visible, and the rows can be found and reopened if a revert is needed.
-
-### 2. Test 1's title overclaims — "even mid-turn" but the session is idle
-
-`"a session from before the tmux server started is ended, even mid-turn; one after it stays"` creates `dead = session!("borges", here.id, 30)` — the 4th arg defaults to `thinking? = false`, so `dead` is idle, not mid-turn. The title claims coverage it does not have.
-
-↳ ` dead = session!("borges", here.id, 30)` (staffing_test.exs:176)
-
-**Fix (preferred):** make it `session!("borges", here.id, 30, true)`. The fake `list-windows` reports a window for `borges` on `here.id`, so `resume_interrupted` skips it (`has_window?` true) and `end_predating_tmux` is what ends it — this pins the mid-turn + has-window + predating case nothing currently covers, and makes the title honest. Otherwise drop "even mid-turn" from the title.
-
-### 3. The mid-turn + predating + has-window case is uncovered and the behavior is undecided
-
-Test 2 (`"a mid-turn session from before the tmux server is ended and its coworker still told to carry on"`) gives its mid-turn session no window (`tmux("")`), so `resume_interrupted` ends it and posts the `@borges the machine restarted` notice with `end_predating_tmux` doing nothing — the test passes with the step deleted. It pins the round-1 ordering fix but not `end_predating_tmux` itself. The case it does NOT cover, and nothing does: a mid-turn predating session that HAS a matching window. There `resume_interrupted` skips it (window present) and `end_predating_tmux` ends it silently with no carry-on notice. That behavior is currently "works by accident, not asserted."
-
-↳ ` test "a mid-turn session from before the tmux server is ended and its coworker still told to carry on"` (staffing_test.exs:204)
-
-**Fix:** add a case (or reshape test 1 per finding 2) with a mid-turn predating session that has a matching window. Assert: the session IS ended (its `pane_ref` is stale), and the carry-on notice is NOT posted (the window is present, the turn reads as alive). This pins the intended outcome deliberately — after `server:stop`+`restart` all windows are gone, so this case is a coincidental id-reuse by the same agent on the same thread, where the stale row should be ended and the fresh spawn left alone.
-
-## Follow-ups (non-blocking, filed)
-
-- **Scope the filter to the workspace's own tmux.** The query filters by workspace thread (`t.workspace_id == ^workspace_id`) but not by which tmux a `pane_ref` came from. `pane_ref` is `$TMUX_PANE` cast in at session start (session.ex:39); bench-coworker panes run on the workspace's private tmux, but an outside-citizen session (uqbar's pane runs on a foreign tmux) on a workspace thread that predates the workspace's lazily-started tmux would be wrongly ended. Unverified (pane_ref origin is not in this diff); the logging fix in finding 1 makes a wrong end findable in the meantime. Worth matching `pane_ref` against the panes `list-windows` reports, or recording which socket a `pane_ref` came from, plus a test with a pre-tmux session whose pane_ref is not in the workspace's tabs.
+### non-blocking follow-up (held, not blocking this change)
+The filter scopes by workspace thread but not by which tmux a `pane_ref` came from: a session on a foreign tmux (e.g. an outside citizen's pane) on a workspace thread that predates the workspace's lazily-started tmux would be wrongly ended. Unverified; the logging fix above makes any such wrong end findable. Worth scoping to panes the workspace's tmux actually reports + a test, in its own change. Filed as ticket #529 — kept here in follow_ups so it stays held until this workline merges.
