@@ -7,7 +7,7 @@ mid-turn, a screensaver dot while warm, dark once cold: `screenOf`) — in the l
 cold, queued at your door when a thread waits on you; the whiteboard holds the worklines in columns TICKETS · SPEC (intent shares it) · PLAN · BUILD · VERIFY · REVIEW, each
 marked where it stands (`cardState` in `kit/crew.ts`, read from the server's `seat` on each
 thread: ▶ its lead is at a desk, ⏸ parked for a seat under the leaf cap, ◇ idle — nobody at a desk —
-⚑ it needs you, ✓ checking — its full check runs or waits its turn in the machine's queue (`health.checks`; the lines name the workline, their order is not the queue's), ⤵ landing — in the merge queue, or landed and waiting on GitHub to merge its PR (the
+⚑ it needs you, ✓ checking — its full check runs or waits its turn in the machine's queue (`health.checks`; the lines name the workline and come in ticket order; the rack (`H`) lists them with the merge queue and a pending restart as one LANDING & CHECKS list, `kit/rack.ts`: status, never a Need), ⤵ landing — in the merge queue, or landed and waiting on GitHub to merge its PR (the
 server's `landing` on the thread, kept on REVIEW); a thread's card names the one key that moves it). A plain thread someone is at a desk on
 (no workline stage) sits on BUILD, marked doing (a violet tick); standing duties (`duty`: a schedule's threads, the sheriff's beat) are not work and stay
 off the board. The TICKETS column shows one row per epic (`Toy 2/13 → #52 sandbox mode`, from the snapshot's `kind`/`epic_id`/progress), its children hidden until ⏎ opens the epic; a ticket's card names its epic. The crew board says who is on what; Nina, your cat, keeps you company. TypeScript on bun; one runtime dep, `@xterm/headless` (pure JS, compiled into the binary), for the
