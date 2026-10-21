@@ -2000,6 +2000,7 @@ defmodule Server.Workline do
     case flip(thread) do
       {:ok, flipped} ->
         finish(flipped, moved, run)
+        Server.Jobs.enqueue(Server.Jobs.Retro.new(%{thread_id: flipped.id}))
         {:ok, flipped}
 
       {:error, {:moved, now}} ->
