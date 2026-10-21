@@ -174,6 +174,7 @@ defmodule Server.WorklineVerifyScriptTest do
       #!/bin/sh
       [ "$1" = run ] || exit 0
       echo "$(git rev-parse HEAD) $CHECKS_LABEL ${TLON_TEST_DATABASE:-}" >"$GATE_LOG"
+      echo "$PWD" >"$GATE_LOG.cwd"
       [ -z "$GATE_NOISE" ] || { echo "the failing assertion, line 42"; seq 1 2000; }
       exit "${FAKE_GATE:-0}"
       """)
@@ -187,6 +188,7 @@ defmodule Server.WorklineVerifyScriptTest do
         [
           {"PATH", "#{ctx.tmp}/bin:#{System.get_env("PATH")}"},
           {"TMPDIR", ctx.tmp},
+          {"XDG_CACHE_HOME", Path.join(ctx.tmp, "cache")},
           {"GATE_LOG", Path.join(ctx.tmp, "gate.log")},
           {"WORKLINE_GATE", "1"},
           {"LAND_REF", "land/feature"},
@@ -203,6 +205,12 @@ defmodule Server.WorklineVerifyScriptTest do
       assert {out, 0} = gate(ctx)
       assert File.read!(Path.join(ctx.tmp, "gate.log")) =~ "#{ctx.ref} PR #7 landing feature tlon_land_pr_7_feature"
       refute out =~ "could not record"
+    end
+
+    test "the checkout lives under the verify cache, never under TMPDIR (a seat's write root)", ctx do
+      assert {_, 0} = gate(ctx)
+      cwd = ctx.tmp |> Path.join("gate.log.cwd") |> File.read!() |> String.trim()
+      assert String.starts_with?(cwd, Path.join(ctx.tmp, "cache/tlon-verify") <> "/")
     end
 
     test "red: exit 1 and the gate's tail on stdout, still nothing recorded", ctx do
