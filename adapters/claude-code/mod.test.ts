@@ -660,7 +660,31 @@ test("a submit the host abandons at session.end does not stop the next conversat
   expect(world.submitted).toEqual(["wake two"]);
 });
 
-test("a subagent's turn.start declares no presence_thinking; the main turn's stands", async ($, on) => {
+test("an abandoned submit settling late does not corrupt the count: the next conversation's held submit still gates the poll", async ($, on) => {
+  const hold: { release?: () => void } = {};
+  const world: World = { ownClock: true, wakes: [["wake one"], ["wake two"], ["wake three"]], submitHold: hold, submitted: [] };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  const takes = () => sent.filter((d) => d.tool === "take_wakes").length;
+  await $.session.start(START);
+
+  await clock.advance(3_000);
+  await settle();
+  const abandoned = hold.release!;
+  await $.session.end({ reason: "clear", sessionId: "s1" });
+  await settle();
+  await clock.advance(3_000);
+  await settle();
+  expect(takes()).toBe(2);
+
+  abandoned();
+  await settle();
+  await clock.advance(3_000);
+  await settle();
+  expect(takes()).toBe(2);
+});
+
+test("a subagent's turn.start declares no presence_thinking; the main turn's stands",async ($, on) => {
   const sent = engine(on);
 
   await $.session.start(START);
