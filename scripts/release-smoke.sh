@@ -12,8 +12,11 @@
 # built, started or recorded. A run ends `ran-on: smoke <sha>`, which a scheduled run records.
 # TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped, or
 # until TLON_SMOKE_HOLD_TTL seconds pass (default 7200): a forgotten hold would hold its port and
-# database for good. A sandboxed Bash is refused up front: it can't reach Postgres, and each of
-# its calls has a network namespace of its own, blind to the port a hold serves on.
+# database for good. TLON_SMOKE_FLAGS and TLON_SMOKE_FIXTURES (space-separated names) turn flags on
+# and seed `Server.Smoke.Fixtures` sets on the node before the drive; TLON_SMOKE_SERVER_BIN is the
+# bin/server the fixtures are rpc'd through (default the scratch build's). A sandboxed Bash is
+# refused up front: it can't reach Postgres, and each of its calls has a network namespace of its
+# own, blind to the port a hold serves on.
 set -uo pipefail
 . "$(dirname "$0")/lib/fresh-script.sh"
 refuse_stale_script "$0"
@@ -22,6 +25,7 @@ root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-co
 port="${TLON_SMOKE_PORT:-$((4100 + $$ % 800))}"
 db="${TLON_SMOKE_DATABASE:-tlon_smoke_$port}" url="${TLON_SMOKE_URL:-}"
 hold="${TLON_SMOKE_HOLD:-}" ttl="${TLON_SMOKE_HOLD_TTL:-7200}" flags="${TLON_SMOKE_FLAGS:-}"
+fixtures="${TLON_SMOKE_FIXTURES:-}" server_bin="${TLON_SMOKE_SERVER_BIN:-}"
 log="$(mktemp -t tlon-smoke-log-XXXXXX)"
 fail() { echo "smoke FAILED: $*$([ -s "$log" ] && echo " (the log: $log)")"; exit 1; }
 
@@ -175,6 +179,16 @@ for flag in $flags; do
     -d '{"enabled": true}' "$url/api/flags/$flag")"
   [ "$code" = 200 ] || fail "flag $flag: /api/flags answered ${code:-nothing} (a flag this build has?)"
   echo "smoke: flag $flag on"
+done
+# TLON_SMOKE_FIXTURES: named seed sets (`start_smoke`'s fixtures) run INSIDE this node, since only the
+# candidate build knows its own catalog; Server.Smoke.Fixtures refuses any db but a tlon_smoke_* one
+for fx in $fixtures; do
+  bin="${server_bin:-${dir:+$dir/server/_build/prod/rel/server/bin/server}}"
+  [ -n "$bin" ] || fail "fixtures need a scratch node (not TLON_SMOKE_URL)"
+  TLON_NODE="tlon-smoke-$port@127.0.0.1" TLON_DATABASE="$db" \
+    "$bin" rpc "Server.Smoke.Fixtures.apply(\"$fx\")" >>"$log" 2>&1 ||
+    fail "fixture $fx: not seeded (a fixture this build has?)"
+  echo "smoke: fixture $fx seeded"
 done
 [ -n "$home" ] || echo "smoke: no wait for the office (no machine workspace)"
 

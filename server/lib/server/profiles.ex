@@ -622,6 +622,9 @@ defmodule Server.Profiles do
   in a few minutes. Then drive the changed path as he would with `drive_smoke(keys, thread_id)`:
   the same steps as `office:drive` (the drive-office skill), the keys he'd press, the screen back after
   each. `stop_smoke(thread_id)` when you're done; a forgotten one tears itself down after two hours.
+  A path that needs state a fresh db lacks (a Need, a refused tool) is seeded at start:
+  `start_smoke(thread_id, fixtures: ["tool_denied_need"])`, names from the build's catalog
+  (`Server.Smoke.Fixtures`); one it lacks fails the smoke.
   Your Bash cannot do either: it is sandboxed, with no Postgres socket and a network of its own, blind
   to the smoke's port. A change to the toy (its keys e/f/d and events) lives only in the made-up
   world: drive that with `OFFICE_SANDBOX=1 mise run office:drive -- <keys>` in your Bash, no release
