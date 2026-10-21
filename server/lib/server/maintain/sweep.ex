@@ -53,11 +53,37 @@ defmodule Server.Maintain.Sweep do
 
     sweep_quiet(opts)
     sweep_tickets()
+    sweep_stale_flakes()
     sweep_worktrees()
     sweep_fact_rechecks()
     # embed-on-write is best-effort: what an embedder outage missed is caught up here
     _ = Server.Recall.embed_missing()
     :ok
+  end
+
+  @doc """
+  A flake ticket seen once, unstarted and untouched for 7 days is closed, its issues with it: most
+  flakes are one-offs, and a pile of them buried the backlog. One that comes back is `seen_again` on
+  its ticket (`Server.Recurrence`), which reopens it, so nothing that recurs is lost. The closed.
+  """
+  def sweep_stale_flakes do
+    since = DateTime.add(DateTime.utc_now(), -7, :day)
+    why = "a flake not seen again in 7 days; seen_again reopens it"
+
+    for t <-
+          Repo.all(
+            from t in Server.Ticket,
+              where:
+                t.kind == "ticket" and t.status in ["backlog", "todo"] and t.seen == 1 and t.updated_at < ^since and
+                  (ilike(t.title, "flake%") or ilike(t.title, "%flaky%") or
+                     fragment("?::text ~* '\"flak(e|y)'", t.labels))
+          ) do
+      {:ok, closed} =
+        Server.Tickets.update(t, %{status: "done", body: (t.body || "") <> "\n\nClosed by the sweep: #{why}"})
+
+      Server.Dossier.resolve_owned(t.id, "its ticket ##{t.id} was closed: #{why}")
+      closed
+    end
   end
 
   # a lead whose window died never goes idle, so it never gets the continuation an idle schedules:
