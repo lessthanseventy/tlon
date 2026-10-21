@@ -313,4 +313,13 @@ defmodule Server.OfficeTest do
       assert JSON.encode!(Office.thread_view(t)) =~ ~s("activity":[{)
     end
   end
+
+  test "the snapshot says each workspace's tickets opened and closed this week, for the board's trend" do
+    {:ok, ws} = Workspaces.register(%{name: "Trend"})
+    {:ok, a} = Tickets.file(%{workspace_id: ws.id, title: "one"})
+    {:ok, _} = Tickets.file(%{workspace_id: ws.id, title: "two"})
+    {:ok, _} = Tickets.update(a, %{status: "done"})
+
+    assert %{opened: 2, closed: 1} = Office.status().ticket_week[ws.id]
+  end
 end

@@ -69,6 +69,7 @@ export function viewOf(a: Agents, ws: number | null): Agents {
     notes: a.notes.filter((n) => n.workspace_id === ws || n.workspace_id === null), visits: a.visits.filter((v) => v.workspace_id === ws),
     awaiting: threads.filter(needsYou).length,
     triage: ws === null ? {} : { [ws]: a.triage[String(ws)] ?? 0 },
+    ticket_week: ws === null || !a.ticket_week?.[String(ws)] ? {} : { [ws]: a.ticket_week[String(ws)]! },
     calendar: ws === null ? {} : { [ws]: a.calendar[String(ws)] ?? [] },
   }
 }
@@ -140,6 +141,13 @@ export const STAGES = ["intent", "spec", "plan", "build", "verify", "review"]
 // TICKETS (unstarted) before the stages; intent shares SPEC, and a plain thread someone is at a desk on (no workline stage) is BUILD's, its stage "doing"
 const STAGE_COL: Record<string, number> = { intent: 1, spec: 1, plan: 2, build: 3, verify: 4, review: 5 }
 export const COLS = ["TICKETS", "SPEC", "PLAN", "BUILD", "VERIFY", "REVIEW"]
+
+/** the TICKETS head's week: "+15/wk" when the pile grew by 15 in seven days, "-4/wk" when it shrank, "" when flat or unknown */
+export function weekTrend(a: { ticket_week?: Record<string, { opened: number; closed: number }> }): string {
+  const w = Object.values(a.ticket_week ?? {})[0]
+  const net = w ? w.opened - w.closed : 0
+  return net === 0 ? "" : `${net > 0 ? "+" : "-"}${Math.abs(net)}/wk`
+}
 const REVIEW_COL = COLS.length - 1
 /** one note on the whiteboard: what a click on it does, and what its sticky and its list row say */
 export type BoardItem = { act: Act; title: string; who: string | null; stage: string; asks: boolean; archetype: string | null; high: boolean; routed?: boolean; state?: CardState | null }

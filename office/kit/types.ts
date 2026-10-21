@@ -61,6 +61,8 @@ export type Agents = {
   visits: Visit[]
   /** each workspace's count of stuck things (blockers, failed checks, unled threads), by id */
   triage: Record<string, number>
+  /** tickets opened and closed per workspace in the last 7 days */
+  ticket_week?: Record<string, { opened: number; closed: number }>
   /** the service's health: `warn` with the problems named */
   health: {
     state: "ok" | "warn"; problems: string[]
