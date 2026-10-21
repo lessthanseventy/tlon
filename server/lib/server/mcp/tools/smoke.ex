@@ -17,13 +17,24 @@ defmodule Server.MCP.Tool.StartSmoke do
 
     field :flags, {:list, :string},
       description: "Feature flags to turn on in the smoke's own database (e.g. [\"build_mode\"]) for a flagged path"
+
+    field :fixtures, {:list, :string},
+      description:
+        "Named seed sets to load into the smoke's own database before you drive it (e.g. [\"tool_denied_need\"]): " <>
+          "the candidate build's catalog, Server.Smoke.Fixtures; an unknown name fails the smoke"
   end
 
   @impl true
   def execute(params, frame) do
     with {:ok, thread} <- Server.MCP.Tool.QASmoke.thread(params, frame),
          {:ok, job} <-
-           Smoke.start(thread, params[:ref], Server.MCP.Identity.from_frame(frame).agent, params[:flags] || []) do
+           Smoke.start(
+             thread,
+             params[:ref],
+             Server.MCP.Identity.from_frame(frame).agent,
+             params[:flags] || [],
+             params[:fixtures] || []
+           ) do
       ok(frame, %{
         "queued" => job.id,
         "next" => "the url is posted on thread ##{thread.id} when the build is up (minutes)"

@@ -11,10 +11,15 @@ defmodule Server.Smoke do
   alias Server.Jobs.Smoke, as: Job
 
   @ref ~r|\A[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9._-])?\z|
+  @name ~r/\A[a-z][a-z0-9_]*\z/
 
-  @doc "Queue the held smoke of `ref` (default the thread's own branch) for `thread`."
+  @doc """
+  Queue the held smoke of `ref` (default the thread's own branch) for `thread`. `fixtures` are
+  checked here by grammar only: the catalog that knows them is the candidate's
+  (`Server.Smoke.Fixtures`, applied by the script on the smoke node).
+  """
   @spec start(Server.Thread.t(), String.t() | nil) :: {:ok, Oban.Job.t()} | {:error, String.t()}
-  def start(%Server.Thread{} = thread, ref, by \\ nil, flags \\ []) do
+  def start(%Server.Thread{} = thread, ref, by \\ nil, flags \\ [], fixtures \\ []) do
     ref = ref || (thread.slug && "work/#{thread.slug}")
 
     cond do
@@ -24,15 +29,22 @@ defmodule Server.Smoke do
       !Regex.match?(@ref, ref) ->
         {:error, "not a ref: #{inspect(ref)}"}
 
-      Enum.any?(flags, &(!Regex.match?(~r/\A[a-z][a-z0-9_]*\z/, &1))) ->
+      Enum.any?(flags, &(!Regex.match?(@name, &1))) ->
         {:error, "not a flag name: #{inspect(flags)}"}
+
+      Enum.any?(fixtures, &(!Regex.match?(@name, &1))) ->
+        {:error, "not a fixture name: #{inspect(fixtures)}"}
 
       held(thread.id) ->
         {:error, "a smoke is already up for this thread: #{held(thread.id).meta["url"]}"}
 
       true ->
         Oban.insert(
-          Job.new(Map.reject(%{thread_id: thread.id, ref: ref, by: by, flags: flags}, fn {_k, v} -> v in [nil, []] end))
+          Job.new(
+            Map.reject(%{thread_id: thread.id, ref: ref, by: by, flags: flags, fixtures: fixtures}, fn {_k, v} ->
+              v in [nil, []]
+            end)
+          )
         )
     end
   end
