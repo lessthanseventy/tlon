@@ -27,7 +27,7 @@ config :phoenix, :json_library, JSON
 config :server, Oban,
   engine: Oban.Engines.Basic,
   repo: Server.Repo,
-  queues: [default: 5, maintain: 1, staff: 1, verify: 1, smoke: 2, landing: 1, schedules: 2],
+  queues: [default: 5, maintain: 1, staff: 1, verify: 1, smoke: 2, landing: 1, schedules: 2, tasks: 1],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 3600},
     # a job left `executing` by a restart is requeued at boot (Server.Jobs.Orphans); this rescues one
@@ -58,7 +58,7 @@ config :server, Oban,
      ]}
   ]
 
-config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 18
+config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 19
 
 config :server, Server.Web.Endpoint,
   adapter: Bandit.PhoenixAdapter,

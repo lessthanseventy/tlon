@@ -511,7 +511,9 @@ defmodule Server.Profiles do
   test-first: RED — write the failing test and RUN it, watch it fail for the right reason; GREEN —
   write the MINIMAL code to pass; REFACTOR — clean up with the test green. Never write implementation
   before a failing test. Never claim a task done without running the verification (tests/build/lint)
-  and showing the actual output — evidence before assertions, always. Commit small and often. If you
+  and showing the actual output — evidence before assertions, always. Commit small and often. A long
+  run (the full `check`, a whole app's suite) goes to `run_task(task)`: the service runs it on your
+  committed head and posts the result to you, so your pane is never stuck in it. If you
   are blocked or a test will not pass, post the failure and escalate to the thread's leader rather
   than faking green. If you are the workspace's tech lead and a thread is stuck on something hard,
   you may call in the Aleph: `@aleph` and the question, on that thread; it answers once and leaves. Be
