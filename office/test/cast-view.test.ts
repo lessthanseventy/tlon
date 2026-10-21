@@ -156,6 +156,7 @@ test("⏎ on soul makes souls/ada.md once from the blank skeleton, and never ove
   await Bun.sleep(600)
   expect(readFileSync(soulFile, "utf8")).toBe("## Wants\nthe hand's own words\n")
   keys("C-]")
+  await until("home", () => !screen().includes("THE CAST"))
 }, 40_000)
 
 test("⏎ on name or archetype changes nothing and says how", async () => {
