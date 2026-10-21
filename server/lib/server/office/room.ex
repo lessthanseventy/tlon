@@ -190,7 +190,8 @@ defmodule Server.Office.Room do
 
   @doc """
   The machine's checks queue (`scripts/checks-queue.sh`): the full check running now, as it said
-  when it took the lock, and the ones waiting their turn, each `"<who>: <command> (pid N) in <dir>
+  when it took the lock, and the ones waiting their turn, in ticket order (entries are
+  `<10-digit ticket>-<pid>`), each `"<who>: <command> (pid N) in <dir>
   since HH:MM:SS"` (a labelled run, like a verify, says its own label). A waiter whose process is
   gone is not counted. `%{running: line | nil, waiting: [line]}`.
   """
@@ -206,8 +207,9 @@ defmodule Server.Office.Room do
       end
 
     waiting =
-      for name <- ls(Path.join(dir, "tlon-checks.wait")),
-          File.exists?("/proc/#{name}"),
+      for name <- Enum.sort(ls(Path.join(dir, "tlon-checks.wait"))),
+          [_, pid] <- [Regex.run(~r/^\d{10}-(\d+)$/, name)],
+          File.exists?("/proc/#{pid}"),
           {:ok, line} <- [File.read(Path.join([dir, "tlon-checks.wait", name]))],
           do: String.trim(line)
 
