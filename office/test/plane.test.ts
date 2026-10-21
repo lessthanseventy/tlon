@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { FOLD, FRAMES, TEAR, UNFOLD, caughtNth, drawPlane, freshPosts, handoffFrom, launch, stepPlane, type Plane } from "../kit/plane"
+import { FOLD, FRAMES, TEAR, UNFOLD, caughtNth, drawPlane, freshPosts, handoffFrom, launch, stepPlane, type FeedRow, type Plane } from "../kit/plane"
 import { Scene } from "../kit/draw"
 
 const run = (p: Plane | null, max = 500) => {
@@ -77,18 +77,16 @@ describe("drawing the plane", () => {
 
 describe("handoffFrom", () => {
   const NOW = Date.parse("2026-10-10T03:00:00Z")
-  const visit = (from: string, to: string, secs: number) => ({ from, to, workspace_id: 1, at: new Date(NOW - secs * 1000).toISOString() })
-  const a = (live: boolean) => ({
-    uqbar: live ? { agent: "uqbar", thread_id: 1, title: "", warm: false } : null,
-    threads: [{ id: 7, lead: "w1" }],
+  const hand = (from: string, tid: number, secs: number, kind = "handoff_opened"): FeedRow =>
+    ({ kind, who: from, thread_id: tid, text: `${from} → x`, at: new Date(NOW - secs * 1000).toISOString() })
+  test("the newest handoff_opened on the thread, within a minute: the old lead's name", () => {
+    const feed = [hand("c", 9, 5), hand("b", 7, 10), hand("a", 7, 50)]
+    expect(handoffFrom(feed, 7, NOW)).toBe("b")
   })
-  test("the freshest staffing hand-off to the post's lead, within a minute: the old lead's name", () => {
-    const vs = [visit("a", "w1", 50), visit("b", "w1", 10), visit("c", "w9", 5)]
-    expect(handoffFrom(vs, a(true), 7, NOW)).toBe("b")
-  })
-  test("none when stale, when it was not to this lead, or when no uqbar session is live", () => {
-    expect(handoffFrom([visit("a", "w1", 90)], a(true), 7, NOW)).toBeNull()
-    expect(handoffFrom([visit("a", "w2", 5)], a(true), 7, NOW)).toBeNull()
-    expect(handoffFrom([visit("a", "w1", 5)], a(false), 7, NOW)).toBeNull()
+  test("none when stale, on another thread, or not a handoff_opened row", () => {
+    expect(handoffFrom([hand("a", 7, 90)], 7, NOW)).toBeNull()
+    expect(handoffFrom([hand("a", 8, 5)], 7, NOW)).toBeNull()
+    expect(handoffFrom([hand("a", 7, 5, "message")], 7, NOW)).toBeNull()
+    expect(handoffFrom([], 7, NOW)).toBeNull()
   })
 })

@@ -57,12 +57,28 @@ defmodule Server.Staff do
   Staff a thread with an agent (a thread has 0..1 agent, §3). Assigning again
   replaces the previous agent. Takes a persisted `%Agent{}`, so the FK cannot fire
   here — it is the DB's guard against a raw write of a bogus agent_id (§10).
+
+  A change from one lead to another records a `handoff_opened` event (`from`/`to` names) for the
+  office to fly the post across; a first staffing or re-seating the same lead records none.
   """
   def assign(%Thread{} = thread, %Agent{} = agent) do
+    old = thread.agent_id && Repo.get(Agent, thread.agent_id)
+
     thread
     |> Ecto.Changeset.change()
     |> Ecto.Changeset.force_change(:agent_id, agent.id)
     |> Repo.update()
+    |> tap(fn
+      {:ok, _} when not is_nil(old) and old.id != agent.id ->
+        Server.Dossier.record_event(%{
+          thread_id: thread.id,
+          kind: "handoff_opened",
+          detail: %{"from" => old.name, "to" => agent.name}
+        })
+
+      _ ->
+        :ok
+    end)
     |> Server.Bus.announce(:thread_assigned)
   end
 

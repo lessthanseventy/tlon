@@ -500,7 +500,7 @@ async function loadFeed() {
   feed = (await data.activity(ws)) ?? feed
   const v = view(), r = room()
   for (const x of freshPosts(feed, flown, first)) {
-    if (r instanceof WideRoom && r.fly(x.thread_id!, v, handoffFrom(v.visits, v, x.thread_id!, Date.now()))) {
+    if (r instanceof WideRoom && r.fly(x.thread_id!, v, handoffFrom(feed, x.thread_id!, Date.now()))) {
       earmarked.add(earmarkOf(x.thread_id!, x.at, x.who))
       writeState(EARS, earmarksOut(earmarked))
     }

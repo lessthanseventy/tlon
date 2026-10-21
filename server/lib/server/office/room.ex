@@ -45,7 +45,7 @@ defmodule Server.Office.Room do
 
     events =
       for e <- Repo.all(in_ws.(Event)),
-          do: row(e.kind, e.created_at, e.thread_id, nil, event_text(e))
+          do: row(e.kind, e.created_at, e.thread_id, event_who(e), event_text(e))
 
     issues = for i <- Repo.all(in_ws.(Issue)), do: row("issue", i.created_at, i.thread_id, i.found_by, i.summary)
 
@@ -474,4 +474,7 @@ defmodule Server.Office.Room do
       _ -> []
     end
   end
+
+  defp event_who(%Event{kind: "handoff_opened", detail: %{"from" => from}}), do: from
+  defp event_who(_), do: nil
 end
