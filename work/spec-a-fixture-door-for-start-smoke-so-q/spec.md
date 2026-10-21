@@ -3,8 +3,7 @@
 QA can't drive verbs that act on state a fresh smoke db lacks (a Need, a denied tool, a held gate).
 `start_smoke` has `flags` today; it has no way to seed rows. This adds one.
 
-**Open decision (ask #10452, unanswered):** this spec assumes **A, named seed sets only**. If the
-operator picks B (inline data) or C (both), §2 and §3 change; the rest stands.
+**Decided (operator, #10626): A, named seed sets only.** The `tlon_smoke_*` db guard stays a must.
 
 ## 1 · What exists, reused
 
