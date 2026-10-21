@@ -1,10 +1,18 @@
-import { expect, test } from "bun:test"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { afterEach, expect, test } from "bun:test"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { castSignature, loadCast, saveCast, setTrait } from "../kit/cast"
 
-const dir = () => mkdtempSync(join(tmpdir(), "cast-file-"))
+const made: string[] = []
+const dir = () => {
+  const d = mkdtempSync(join(tmpdir(), "cast-file-"))
+  made.push(d)
+  return d
+}
+afterEach(() => {
+  for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true })
+})
 
 test("a missing file is an empty cast", () => expect(loadCast(join(dir(), "cast.json"))).toEqual({}))
 test("a garbled file is an empty cast", () => {
