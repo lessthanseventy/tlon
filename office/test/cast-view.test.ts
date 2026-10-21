@@ -141,3 +141,18 @@ test("⏎ on soul makes souls/ada.md once from the blank skeleton, and never ove
   expect(readFileSync(soulFile, "utf8")).toBe("## Wants\nthe hand's own words\n")
   keys("C-]")
 }, 40_000)
+
+test("⏎ on name or archetype changes nothing and says how", async () => {
+  await until("home", () => screen().includes("HOME"))
+  keys("-l", "`")
+  await until("the cast", () => screen().includes("THE CAST · people"))
+  const before = { cast: readFileSync(castFile, "utf8"), looks: readFileSync(looksFile, "utf8") }
+  writes.length = 0
+  for (const f of ["name", "archetype"]) {
+    await field(f)
+    keys("enter")
+    await until(`the hint on ${f}`, () => screen().includes(`a seat's ${f} doesn't change — hire a new one from the hall`))
+  }
+  expect(writes).toEqual([])
+  expect({ cast: readFileSync(castFile, "utf8"), looks: readFileSync(looksFile, "utf8") }).toEqual(before)
+}, 40_000)
