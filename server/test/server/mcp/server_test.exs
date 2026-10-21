@@ -1348,6 +1348,37 @@ defmodule Server.MCP.ServerTest do
     assert %{body: "QA passed"} = List.last(Channel.thread_messages(w))
   end
 
+  test "finish with abandoned on a workline that hasn't merged closes it and sends its ticket back to the backlog" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "StandDown"})
+    {:ok, w} = Server.Workline.open(%{title: "dropped", slug: "dropped-finish", stage: "build", workspace_id: ws.id})
+    {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "dropped work"})
+    {:ok, _} = Server.Tickets.promote(ticket, w.id)
+    {:ok, agent} = Staff.register_agent(%{name: "closer-a", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(w, agent)
+    session = handshake(token)
+
+    r = call(token, session, 2, "finish", %{"summary" => "stood down", "abandoned" => "operator dropped it"})
+    refute r["isError"]
+    assert decode_tool_json(r)["closed"] == w.id
+    assert %Thread{state: "closed"} = Repo.get(Thread, w.id)
+    assert %{status: "backlog"} = Repo.get(Server.Ticket, ticket.id)
+  end
+
+  test "finish with superseded_by on a workline that hasn't merged closes it and marks its ticket done" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Shipped"})
+    {:ok, w} = Server.Workline.open(%{title: "twin", slug: "twin-finish", stage: "build", workspace_id: ws.id})
+    {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "twin work"})
+    {:ok, _} = Server.Tickets.promote(ticket, w.id)
+    {:ok, agent} = Staff.register_agent(%{name: "closer-s", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(w, agent)
+    session = handshake(token)
+
+    r = call(token, session, 2, "finish", %{"summary" => "shipped elsewhere", "superseded_by" => "PR #234"})
+    refute r["isError"]
+    assert %Thread{state: "closed"} = Repo.get(Thread, w.id)
+    assert %{status: "done"} = Repo.get(Server.Ticket, ticket.id)
+  end
+
   test "staff_child with a ticket_id moves that ticket into the thread it opens", %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "yu-machine", mandate: "plan", engine: "fresh"})
     {:ok, ws} = Server.Workspaces.register(%{name: "Ticketed"})
