@@ -100,7 +100,7 @@ and every layer the spine design's re-laid §9 asked for
   refused, held again at a head already requeued, the requeued landing red or conflicting, an hour
   gone — is a `pr_blocked` Need, answered by rebase (back into the merge queue, `Workline.reland_queued/2`: rebased, gated, `tlon/check` posted and merged at that head — never GitHub's own update-branch, whose head no gate ran on), close and reland, or a look at the PR).
   An approved review of a change Andrew sees (`office/`, the operator API) goes to the bench's `qa`
-  seat first: it drives the branch on a scratch release the service holds for it (`start_smoke`, `drive_smoke`, `stop_smoke`: `Server.Smoke`, `Server.Jobs.Smoke` — a seat's sandboxed Bash can't run `release:smoke` or reach its port) and files `submit_qa` (with the workline's
+  seat first: it drives the branch on a scratch release the service holds for it (`start_smoke`, `drive_smoke`, `stop_smoke`: `Server.Smoke`, `Server.Jobs.Smoke` — a seat's sandboxed Bash can't run `release:smoke` or reach its port; `start_smoke`'s `fixtures` seed named sets from the candidate's `Server.Smoke.Fixtures` on the smoke's own `tlon_smoke_*` db, refused on any other) and files `submit_qa` (with the workline's
   `thread_id`, which only a `qa` seat on its bench may name — its session may be bound elsewhere); a fail bounces it to
   build with the finding, and nothing lands past an owed QA (`Server.Workline.qa_verdict/5`) but the
   operator's `approve <id> --skip-qa <why>` (API `{"skip_qa"}`), recorded as its QA verdict.
