@@ -18,6 +18,7 @@ import { resetToPreset, whimsyRows, whimsyTitle } from "./whimsy-card"
 import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, BOARD_LEGEND, STATE_GLYPH, statusGlyph, statusTone, statusWord, viewOf, type Act, type SeatStatus, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
+import { queueItems, type QueueItem } from "../kit/rack"
 import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES_BLURB, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
@@ -573,7 +574,7 @@ async function readCard(w: number) {
   switch (mode.kind) {
     case "archive": archived = await data.archive(w); break
     case "triage": case "issue": stuck = await data.triage(w); break
-    case "health": rack = await data.health(); break
+    case "health": [rack, settings] = await Promise.all([data.health(), data.settings()]); break
     case "memory": shelf = await data.memory(w); break
     case "ticket": case "epic": case "column": tickets = (await data.board(w)) ?? tickets; break
     case "card": card = await data.workspaceCard(w); break
@@ -1462,20 +1463,20 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (!rack) return { title: "THE RACK", rows: [{ segs: [waiting("probing…")] }], actions: [back1] }
       const ok = (b: boolean, s: string): Row => ({ segs: [{ s: b ? "● " : "✕ ", fg: b ? ROLE.live : ROLE.alarm }, plain(s)] })
       const up = rack.up_s < 3600 ? `${Math.floor(rack.up_s / 60)}m` : rack.up_s < 86400 ? `${Math.floor(rack.up_s / 3600)}h` : `${Math.floor(rack.up_s / 86400)}d`
+      const queue = queueItems(rack, settings?.restart_pending ?? false)
+      const queueRow = (q: QueueItem): Row => {
+        const t = q.thread_id
+        const mark = q.kind === "check" || q.kind === "landing" ? { s: "▶ ", fg: ROLE.live } : q.kind === "restart" ? { s: "↻ ", fg: ROLE.attention } : { s: "⧗ ", fg: ROLE.inactive }
+        return { segs: [mark, ...(t ? [tidSeg(t)] : []), plain(q.text)], ...(t ? { open: () => goThread(t, null) } : {}) }
+      }
       const rows: Row[] = [
         ...rack.problems.map((p) => ({ segs: [pink("! "), plain(p)] })),
         ok(true, `tlon ${rack.version}, up ${up}`), ok(rack.db, "the database answers"), ok(rack.jobs, rack.jobs ? "the job queue runs (staffing, sweeps, schedules)" : "no job queue on this node"),
         ok(rack.failed_jobs === 0, `${rack.failed_jobs} failed job(s) today`), ok(rack.tmux, "tmux is there for the coworkers"),
         { segs: [dim(`disk ${rack.disk_pct ?? "?"}% · memory ${rack.mem_pct ?? "?"}% · load ${rack.load ?? "?"}`)] },
         { segs: [plain("")] },
-        { segs: [key("CHECKS QUEUE"), dim("  one full check at a time")] },
-        ...(rack.checks?.running ? [{ segs: [{ s: "▶ ", fg: ROLE.live }, plain(rack.checks.running)] }] : [{ segs: [dim("  idle")] }]),
-        ...(rack.checks?.waiting ?? []).map((w, i): Row => ({ segs: [dim(`${i + 1}. `), plain(w)] })),
-        { segs: [plain("")] },
-        { segs: [key("MERGE QUEUE"), dim("  approved worklines, landing one at a time")] },
-        ...((rack.merge_queue ?? []).length
-          ? (rack.merge_queue ?? []).map((m): Row => ({ segs: [{ s: m.state === "landing" ? "▶ " : "⧗ ", fg: m.state === "landing" ? ROLE.live : ROLE.inactive }, tidSeg(m.thread_id), plain(m.title)], open: () => goThread(m.thread_id, null) }))
-          : [{ segs: [dim("  empty")] }]),
+        { segs: [key("LANDING & CHECKS"), dim("  one full check at a time, one landing at a time")] },
+        ...(queue.length ? queue.map(queueRow) : [{ segs: [dim("  idle")] } as Row]),
       ]
       return { title: `THE RACK · ${rack.state === "ok" ? "all green" : "needs a look"}`, rows, actions: [back1] }
     }
