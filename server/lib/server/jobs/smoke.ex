@@ -28,7 +28,8 @@ defmodule Server.Jobs.Smoke do
          [
            {~c"TLON_SMOKE_HOLD", ~c"1"},
            {~c"MISE_YES", ~c"1"},
-           {~c"TLON_SMOKE_FLAGS", String.to_charlist(Enum.join(job.args["flags"] || [], " "))}
+           {~c"TLON_SMOKE_FLAGS", String.to_charlist(Enum.join(job.args["flags"] || [], " "))},
+           {~c"TLON_SMOKE_FIXTURES", String.to_charlist(Enum.join(job.args["fixtures"] || [], " "))}
          ]}
       ])
 
