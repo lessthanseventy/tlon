@@ -75,11 +75,16 @@ let draining = false;
 // submits run one at a time on their own chain: the host holds one until the session is idle, and
 // that wait must never hold the poll that takes the next wakes
 let submitting: Promise<void> = Promise.resolve();
+// submits taken and not yet landed: while any is, the poll takes nothing, so the wakes behind it stay
+// on the server (durable) and at most one taken batch is ever held in memory
+let pendingSubmits = 0;
 // subagents whose turn started and has not ended: the session is busy while any runs, even after
 // its own turn ended
 const running = new Set<string>();
 let mainEnded = false;
 let waitTicks = 0;
+// ~180 s at 3 s a poll: under the server's 600 s stale-turn clock (Server.Presence.Thinking.stale_turn_seconds/0),
+// so the refresh of thinking_since lands before report_overdue's `not exists(busy)` guard can fail
 const STALE_REFRESH_TICKS = 60;
 // what register still has to send: at boot the tlon MCP server may not be connected yet, and a
 // seat whose register was lost runs its whole life off the roster
@@ -241,21 +246,26 @@ function registerNow($): Promise<void> {
 // until the session is idle, so it never lands on a booting input or a half-written prompt. Taking
 // deletes the server's row, so a wake whose submit fails is put back for the next poll.
 function submitWakes($, texts: string[]) {
+  pendingSubmits++;
   submitting = submitting.then(async () => {
-    const failed: string[] = [];
-    for (const text of texts) {
-      try {
-        await $.prompt.submit({ text, asUser: true });
-      } catch {
-        failed.push(text);
+    try {
+      const failed: string[] = [];
+      for (const text of texts) {
+        try {
+          await $.prompt.submit({ text, asUser: true });
+        } catch {
+          failed.push(text);
+        }
       }
+      if (failed.length) await call($, "put_back_wakes", { prompts: failed }).catch(() => {});
+    } finally {
+      pendingSubmits--;
     }
-    if (failed.length) await call($, "put_back_wakes", { prompts: failed }).catch(() => {});
   });
 }
 
 async function drainWakes($) {
-  if (draining) return;
+  if (draining || pendingSubmits > 0) return;
   draining = true;
   try {
     const wakes = await call($, "take_wakes", sessionId === null ? {} : { session_id: sessionId });
