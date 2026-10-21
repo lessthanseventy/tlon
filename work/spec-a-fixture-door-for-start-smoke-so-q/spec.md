@@ -40,9 +40,8 @@ surface for what a smoke can be made to believe. Not "C": the escape hatch is B'
 
 ## 4 · How it runs and stays apart
 
-1. `Smoke.start/4` validates names against the grammar **and** `Fixtures.names/0` (the live server
-   knows the catalog of the build it runs; the candidate's catalog is the one that matters, see 2). It passes
-   `fixtures` in the job args; `Jobs.Smoke` exports `TLON_SMOKE_FIXTURES` (space-joined, as flags).
+1. `Smoke.start/4` validates names against the grammar only (the live server's catalog is the live
+   build's, not the candidate's). It passes `fixtures` in the job args; `Jobs.Smoke` exports `TLON_SMOKE_FIXTURES` (space-joined, as flags).
 2. `release-smoke.sh`, after the flags loop and before the drive, runs for each name
    `"$node/bin/server" rpc 'Server.Smoke.Fixtures.apply("NAME")'` against the **smoke node**.
    Unknown name or any error raises → the smoke fails (`fail "fixture NAME: …"`), as a bad flag does.
@@ -51,10 +50,7 @@ surface for what a smoke can be made to believe. Not "C": the escape hatch is B'
 4. Isolation is the smoke's own db, one per port, dropped with the smoke; concurrent smokes have
    different ports/dbs, so a seed in one is invisible to another. No change to the lock.
 
-Because validation in step 1 runs on the live server's catalog, a fixture newer than the live
-release is rejected at start; the script's check (step 2) is the authoritative one for the
-candidate build. Step 1 is grammar-only; step 2 owns unknown-name. (Simplest: drop the catalog
-check from step 1.)
+Step 2 owns unknown-name, because only the candidate build knows its own catalog.
 
 ## 5 · Out of scope
 
