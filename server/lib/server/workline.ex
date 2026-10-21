@@ -515,22 +515,9 @@ defmodule Server.Workline do
   def land_train(%Thread{} = lead, others, opts \\ []) do
     cars = Enum.filter([lead | others], &rideable?/1)
 
-    if length(cars) < 2 or hd(cars).id != lead.id do
-      land_queued(lead, opts)
-    else
-      merger = Keyword.get(opts, :merge, Server.Workline.Merge)
-      repo = Git.root(lead)
-      gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate(List.last(cars), &1, &2) end)
-      slugs = Enum.map(cars, & &1.slug)
-
-      case with(
-             {:error, {:gate, _}} <- merger.stack(repo, slugs, gate: gate),
-             do: merger.stack(repo, slugs, gate: gate)
-           ) do
-        {:ok, %{from: from, cars: stacked}} -> ride(Enum.zip(cars, stacked), from, repo, merger, opts)
-        {:error, _} -> land_queued(lead, opts)
-      end
-    end
+    if length(cars) < 2 or hd(cars).id != lead.id,
+      do: land_queued(lead, opts),
+      else: train(cars, opts)
   end
 
   @doc """
@@ -2188,7 +2175,7 @@ defmodule Server.Workline do
       "🚃 landed in a merge train with #{Enum.map_join(rest, ", ", fn {t, _} -> "##{t.id}" end)}: one gate for all of them"
     )
 
-    Enum.reduce_while(rest, :ok, fn car, :ok -> ride_on(car, repo, merger, run) end)
+    _ = Enum.reduce_while(rest, :ok, fn car, :ok -> ride_on(car, repo, merger, run) end)
     {:ok, Repo.get!(Thread, lead.id)}
   end
 
@@ -2204,6 +2191,19 @@ defmodule Server.Workline do
 
       {:error, _} ->
         {:halt, :ok}
+    end
+  end
+
+  defp train([lead | _] = cars, opts) do
+    merger = Keyword.get(opts, :merge, Server.Workline.Merge)
+    repo = Git.root(lead)
+    gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate(List.last(cars), &1, &2) end)
+    slugs = Enum.map(cars, & &1.slug)
+    stack = fn -> merger.stack(repo, slugs, gate: gate) end
+
+    case with({:error, {:gate, _}} <- stack.(), do: stack.()) do
+      {:ok, %{from: from, cars: stacked}} -> ride(Enum.zip(cars, stacked), from, repo, merger, opts)
+      {:error, _} -> land_queued(lead, opts)
     end
   end
 end
