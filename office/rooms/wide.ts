@@ -15,7 +15,7 @@ import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
 import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
 import { ARRIVE, LEAVE, drawAleph, gone, STEP as ALEPH_STEP, type Visit } from "../kit/aleph"
-import { boardColumns, COLS, isManager, peopleOf, seating, STATE_GLYPH, type BoardCtx, type CardState } from "../kit/crew"
+import { boardColumns, COLS, isManager, peopleOf, seating, STATE_GLYPH, weekTrend, type BoardCtx, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawCloset, drawFire, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
 import { ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
@@ -785,7 +785,8 @@ export class WideRoom extends Sim<Layout> {
       if (c) px(Math.round(cx), 4, 1, 34, ROLE.edge)
       // a line at least a cell row tall: the mouse reports whole cells, so two lines in one row can't both be hovered
       const lh = Math.max(measure.lineHeight?.(9) ?? 6, measure.rowHeight ?? 0)
-      const head = `${COLS[c]} ${col.items.length}`
+      const trend = c === 0 ? weekTrend(a) : "", full = `${COLS[c]} ${col.items.length} ${trend}`
+      const head = trend && measure(full, 10) <= colW - 4 ? full : `${COLS[c]} ${col.items.length}`
       sc.text(head, cx + 3, 3 + lh - 0.5, ROLE.key, measure(head, 10) <= colW - 4 ? 10 : 9, "left")
       sc.hits.push({ x: cx, y: 3, w: colW, h: lh + 1, tip: `${COLS[c]!.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
       // as many lines as fit at the surface's text size; the rest are a "+n more" (and the column's list)

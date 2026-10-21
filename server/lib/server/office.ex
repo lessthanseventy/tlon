@@ -61,6 +61,7 @@ defmodule Server.Office do
       counts: Map.new(Repo.all(from(t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}))),
       awaiting: awaiting(prompts),
       triage: Map.new(ws_ids, &{&1, Room.triage(&1).count}),
+      ticket_week: ticket_week(ws_ids),
       life: Map.new(home_ws_ids(wss), &{&1, &1 |> Server.Life.status() |> Map.take([:level, :xp, :due])}),
       health: Map.take(Room.health(), [:state, :problems, :checks, :merge_queue]),
       weather: Server.Office.Weather.now(),
@@ -246,6 +247,26 @@ defmodule Server.Office do
   end
 
   # the shift board: every seat, both crews, and the shift it is on (`all` for both)
+  # the tickets each workspace opened and closed in the last 7 days: the board shows whether the pile
+  # is shrinking or the office is spinning its wheels
+  defp ticket_week(ws_ids) do
+    since = DateTime.add(DateTime.utc_now(), -7, :day)
+
+    count = fn field ->
+      Map.new(
+        Repo.all(
+          from t in Server.Ticket,
+            where: t.workspace_id in ^ws_ids and t.kind == "ticket" and field(t, ^field) > ^since,
+            group_by: t.workspace_id,
+            select: {t.workspace_id, count(t.id)}
+        )
+      )
+    end
+
+    {opened, closed} = {count.(:created_at), count.(:closed_at)}
+    Map.new(ws_ids, &{&1, %{opened: Map.get(opened, &1, 0), closed: Map.get(closed, &1, 0)}})
+  end
+
   defp shifts(ws_ids) do
     for ws <- ws_ids,
         c <- Server.Workspaces.bench_all(ws),
