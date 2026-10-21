@@ -56,7 +56,8 @@ defmodule Server.Wake do
   session's `thinking_since` within the stale-turn clock, `Server.Presence.Thinking`) waits: a pane
   in a long tool call drains only once the call returns. The message it was for is still a row, and
   `Server.Switchboard.redeliver_unheard/1` offers it again. A wake on a closed thread, or whose seat
-  posted anywhere since it was queued, is let go unreported; a seat already paged and silent since is
+  posted anywhere since it was queued, is let go unreported; so is one to a seat with no live session
+  or no window on the thread, or that no longer holds the thread's stage (nothing to drain it); a seat already paged and silent since is
   paged once per stall. Returns how many were reported.
   """
   def report_overdue(now \\ DateTime.utc_now()) do
@@ -80,6 +81,7 @@ defmodule Server.Wake do
       |> Enum.uniq_by(&{&1.thread_id, &1.agent})
       |> Enum.filter(fn w ->
         with %Server.Thread{state: "open"} = thread <- Repo.get(Server.Thread, w.thread_id),
+             true <- seated?(thread, w.agent),
              false <- took_it?(w),
              false <- paged_and_silent?(thread, w.agent) do
           Server.Sheriff.report(
@@ -95,6 +97,34 @@ defmodule Server.Wake do
       end)
 
     length(reported)
+  end
+
+  # A wake is for a pane to drain: the seat holds the workline's current stage, runs a live session
+  # on the thread and has a window for it. Without one the wake is let go unpaged
+  # (`Server.Switchboard.redeliver_unheard/1` and staffing answer a lead that moved on). A tmux that
+  # can't be asked is no proof of a missing window.
+  defp seated?(thread, agent) do
+    holds_stage?(thread, agent) and live_session?(thread, agent) and windowed?(thread, agent)
+  end
+
+  defp holds_stage?(%{stage: nil}, _agent), do: true
+  defp holds_stage?(thread, agent), do: Server.Channel.thread_lead(thread.id) == agent
+
+  defp live_session?(thread, agent) do
+    Repo.exists?(
+      from s in Server.Session,
+        join: a in Server.Agent,
+        on: a.id == s.agent_id,
+        where: s.thread_id == ^thread.id and a.name == ^agent and is_nil(s.ended_at)
+    )
+  end
+
+  defp windowed?(thread, agent) do
+    case Server.Tmux.list_windows(thread.workspace_id) do
+      {:error, :not_up} -> false
+      {:error, _} -> true
+      tabs -> Server.Office.windowed?(tabs, thread.id, agent)
+    end
   end
 
   # A seat that posted anywhere since its wake was queued is alive and heard it, whichever pane
