@@ -1088,14 +1088,19 @@ defmodule Server.Workline do
 
   @doc """
   The proof a workline carries into its merge gate, read now from git and the event log: each
-  stage's owed artifact up to the current one in the checker's words (verify's is `checks`), the
+  stage's owed artifact from the one it was opened at up to the current one, in the checker's
+  words (verify's is `checks`; a workline opened at build never owed an intent, spec or plan), the
   newest verify check per command with its measured exit (five, newest first), and the branch's
   diff against HEAD. `%{artifacts: [{stage, {:ok | :error, why}}], checks: [%{cmd, exit}], diff:
   {:ok | :error, text}}`. `opts[:artifacts]` swaps the checker.
   """
   def proof(%Thread{} = thread, opts \\ []) do
     checker = Keyword.get(opts, :artifacts, Git)
-    upto = Enum.take(@stages, Enum.find_index(@stages, &(&1 == thread.stage)) + 1)
+
+    upto =
+      @stages
+      |> Enum.take(Enum.find_index(@stages, &(&1 == thread.stage)) + 1)
+      |> Enum.drop(Enum.find_index(@stages, &(&1 == entry_stage(thread))) || 0)
 
     %{
       artifacts:
@@ -1776,6 +1781,19 @@ defmodule Server.Workline do
   defp send_back_brief(to, why, by),
     do:
       "↩ back to #{to} — sent back by #{by}: #{why}. The branch keeps the build and review.md: revise #{to}.md to say what changes and what stays, so the build is improved, not redone; then advance_stage."
+
+  # the stage a workline was opened at: its first stage_advanced, the one from nowhere
+  defp entry_stage(thread) do
+    Repo.one(
+      from e in Server.Event,
+        where:
+          e.thread_id == ^thread.id and e.kind == "stage_advanced" and
+            fragment("(?::jsonb ->> 'from') is null", e.detail),
+        order_by: [asc: e.id],
+        limit: 1,
+        select: fragment("?::jsonb ->> 'to'", e.detail)
+    ) || "intent"
+  end
 
   defp tied_follow_ups(thread_id) do
     from(t in Server.Ticket,
