@@ -40,6 +40,7 @@ defmodule Server.StaffingTest do
       "list-windows" in args -> {windows, 0}
       "has-session" in args -> if windows == "", do: {"no", 1}, else: {"", 0}
       "capture-pane" in args -> {"tlon: registered", 0}
+      "display-message" in args -> {"#{old()}\n", 0}
       true -> {"", 0}
     end
   end
@@ -198,6 +199,19 @@ defmodule Server.StaffingTest do
 
     assert Server.Repo.get!(Server.Session, dead.id).ended_at
     refute Server.Repo.get!(Server.Session, live.id).ended_at
+  end
+
+  test "a mid-turn session from before the tmux server is ended and its coworker still told to carry on", %{ws: ws} do
+    thread = staffed_thread(ws, "borges")
+    cut = session!("borges", thread.id, 30, true)
+    before_tmux = DateTime.utc_now() |> DateTime.add(-7_200) |> DateTime.truncate(:second)
+    cut |> Ecto.Changeset.change(pane_ref: "%3", started_at: before_tmux) |> Server.Repo.update!()
+    tmux("")
+
+    assert :ok = Staffing.pass(ws.id)
+
+    assert Server.Repo.get!(Server.Session, cut.id).ended_at
+    assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "@borges the machine restarted"))
   end
 
   test "a tmux that can't be asked ends nothing: no idle session ended, no cut-off turn announced", %{ws: ws} do
