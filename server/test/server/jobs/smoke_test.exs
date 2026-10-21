@@ -108,6 +108,18 @@ defmodule Server.Jobs.SmokeTest do
     assert out =~ "cwd=#{dir} argv=/ Enter yes=1 url=http://127.0.0.1:4999"
   end
 
+  test "start carries fixtures into the job's args, and leaves them out when there are none", %{thread: t} do
+    {:ok, _} = Smoke.start(t, nil, "qa1", [], ["tool_denied_need"])
+    assert_enqueued(worker: Server.Jobs.Smoke, args: %{thread_id: t.id, fixtures: ["tool_denied_need"]})
+    {:ok, job} = Smoke.start(t, "main", "qa1", [], [])
+    refute Map.has_key?(Server.Repo.reload(job).args, "fixtures")
+  end
+
+  test "a malformed fixture name is refused", %{thread: t} do
+    assert {:error, "not a fixture name: " <> _} = Smoke.start(t, nil, "qa1", [], ["Bad Name; rm"])
+    refute_enqueued(worker: Server.Jobs.Smoke)
+  end
+
   test "a smoke that fails posts its last lines", %{thread: t} do
     File.write!(Smoke.script(), "#!/usr/bin/env bash\necho 'smoke FAILED: no build'\nexit 1\n")
     {:ok, _} = Smoke.start(t, nil)
