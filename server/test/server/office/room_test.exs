@@ -7,7 +7,7 @@ defmodule Server.Office.RoomChecksTest do
 
   alias Server.Office.Room
 
-  test "the checks queue: who holds the lock and who waits, a waiter whose process is gone not counted" do
+  test "the checks queue: who holds the lock and who waits, a waiter whose process is gone not counted, waiters in ticket order" do
     dir = Path.join(System.tmp_dir!(), "checks-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(dir, "tlon-checks.wait"))
     on_exit(fn -> File.rm_rf!(dir) end)
@@ -19,11 +19,17 @@ defmodule Server.Office.RoomChecksTest do
 
     File.write!(Path.join(dir, "tlon-checks.holder"), "mise run check:all (pid 1) in /w since 21:49:17\n")
     me = System.pid()
-    File.write!(Path.join([dir, "tlon-checks.wait", me]), "mise run check:all (pid #{me}) in /v since 21:50:00\n")
-    File.write!(Path.join([dir, "tlon-checks.wait", "999999999"]), "gone\n")
+    wait = Path.join(dir, "tlon-checks.wait")
+    File.write!(Path.join(wait, "0000000002-#{me}"), "second (pid #{me}) in /v since 21:50:01\n")
+    File.write!(Path.join(wait, "0000000001-#{me}"), "first (pid #{me}) in /v since 21:50:00\n")
+    File.write!(Path.join(wait, "0000000003-999999999"), "gone\n")
+    File.write!(Path.join(wait, "junk"), "not an entry\n")
 
-    assert %{running: "mise run check:all (pid 1) in /w since 21:49:17", waiting: [waiter]} = Room.checks(dir)
-    assert waiter =~ "in /v"
+    assert %{
+             running: "mise run check:all (pid 1) in /w since 21:49:17",
+             waiting: ["first (pid" <> _, "second (pid" <> _]
+           } =
+             Room.checks(dir)
   end
 
   test "the merge queue: the landing one first, then the queued, by thread" do
