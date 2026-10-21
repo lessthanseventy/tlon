@@ -26,6 +26,8 @@ type World = {
   dossierCalls?: number;
   dossierFails?: string;
   submitFails?: boolean;
+  /** a submit the host holds until the session is idle: it never resolves */
+  submitHangs?: boolean;
   /** registers refused until this many have been tried: the MCP server still connecting at boot */
   notConnectedFor?: number;
   writes?: { path: string; text: string }[];
@@ -48,6 +50,7 @@ function engine(on, world: World = {}): Declare[] {
   on("turn.complete", ($, e) => ({ text: e.answer }));
   on("prompt.submit", ($, e) => {
     if (world.submitFails) throw new Error("session closing");
+    if (world.submitHangs) return new Promise(() => {});
     world.submitted?.push(e.text);
     return { text: e.text, context: e.context };
   });
@@ -581,6 +584,35 @@ test("a wake whose submit fails is put back on the server, not lost", async ($, 
   await settle();
 
   expect(sent.filter((d) => d.tool === "put_back_wakes")).toEqual([{ tool: "put_back_wakes", args: { prompts: ["wake one", "wake two"] } }]);
+});
+
+test("a submit the host holds until idle doesn't stop the next poll from taking", async ($, on) => {
+  const world: World = { ownClock: true, wakes: [["wake one"], ["wake two"]], submitHangs: true };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+
+  await clock.advance(3_000);
+  await settle();
+  await clock.advance(3_000);
+  await settle();
+
+  expect(sent.filter((d) => d.tool === "take_wakes").length).toBeGreaterThanOrEqual(2);
+});
+
+test("a main turn ending while a subagent still runs is not idle; the last subagent ending is", async ($, on) => {
+  const sent = engine(on);
+
+  await $.session.start(START);
+  await $.turn.start({ text: "go", turnId: "t1" });
+  await $.turn.start({ text: "bg", turnId: "s1", agentId: "sub-1" });
+  await $.turn.complete(TURN_END);
+  await settle();
+  expect(declares(sent).filter((d) => d.tool === "presence_idle")).toEqual([]);
+
+  await $.turn.complete({ ...TURN_END, agentId: "sub-1" });
+  await settle();
+  expect(declares(sent).filter((d) => d.tool === "presence_idle")).toHaveLength(1);
 });
 
 test("a push is held for the server's push_branch; a status runs", async ($, on) => {
