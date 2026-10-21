@@ -1,35 +1,28 @@
-# REQUEST CHANGES — sessions-outlive-server-stop-and-tmux-re
+# APPROVE — sessions-outlive-server-stop-and-tmux-re (round 2)
 
 ## Verdict
 
-**Request changes.** The core fix is right, but the ordering suppresses the restart carry-on notice — a behavioral regression in the restart-pickup flow — and the test harness runs the new step switched off, so neither the regression nor the interaction is covered. Two blocking findings below. (This supersedes my earlier approve; the grader's blast/detectability/proof grades traced the interaction I missed.)
+**Approve.** Both blocking findings from round 1 (594558a) are fixed correctly, the interaction between `end_predating_tmux` and `resume_interrupted` is now covered by a mid-turn test that asserts the carry-on notice, and the verify gate is green (1938 tests, 0 failed). No new findings.
 
-## Blocking
+## What changed since 594558a
 
-### 1. Ordering before `resume_interrupted` drops the "machine restarted, pick it up" notice
+- `Staffing.pass/3`: `end_predating_tmux(workspace_id)` moved to AFTER `resume_interrupted/3` (staffing.ex:93-94). Comment at :742-743 now states the division of labor: `resume_interrupted` owns the mid-turn carry-on notice; `end_predating_tmux` cleans up the idle and reused-pane sessions left behind.
+- `end_predating_tmux/1`: rewritten from `if` to `case`, logging `Logger.warning` when `Tmux.server_started/1` returns nil (consistent with the existing warning at :75; `require Logger` already at :47).
+- `staffing_test.exs`: shared fake tmux `answer/2` answers `display-message` with `old()` (now−3600s) so the step runs ON across the whole suite; new test "a mid-turn session from before the tmux server is ended and its coworker still told to carry on" creates a thinking session started before tmux and asserts both `ended_at` is set and the `@borges the machine restarted` notice is posted.
 
-`end_predating_tmux/1` runs in `pass/3` BEFORE `resume_interrupted/3`. It ends every predating session with a `pane_ref`, including mid-turn ones (`thinking_since` set). `Staff.interrupted/1` then filters `is_nil(s.ended_at) and not is_nil(s.thinking_since)` — so every session just ended is excluded, `resume_interrupted` sees nothing, and the `@<agent> the machine restarted while you were mid-turn here — pick it up from the brief` carry-on notice is never posted.
+## Findings from round 1 — resolution
 
-After a real `server:stop` + `server:restart`: the tmux server is gone, all panes dead, mid-turn session rows still open. Before this change, `resume_interrupted` ended them AND posted the notice (that post is the wake that re-spawns the coworker onto the thread). With this change, the session is silently ended first and the coworker is never re-woken — the cut-off turn stalls on the floor.
+### Blocking 1 — ordering dropped the carry-on notice — FIXED
+`end_predating_tmux` ran before `resume_interrupted`, so `Staff.interrupted/1` (`is_nil(ended_at) and not is_nil(thinking_since)`, staff.ex:201) excluded every just-ended mid-turn session and the `@<agent> the machine restarted` notice was never posted. Now `resume_interrupted` runs first: it ends mid-turn sessions with no window and posts the notice (staffing.ex:290-307); `end_predating_tmux` then runs with its `is_nil(s.ended_at)` guard (staffing.ex:755) and skips them. The chosen "move after" fix is strictly better than the "exclude mid-turn" alternative I offered: the alternative would have left a mid-turn predating session *with* a matching window unended by both paths — the stale-claimed-pane bug itself.
 
-↳ `end_predating_tmux(workspace_id)` placed before `resume_interrupted(workspace_id, tabs, standing)`
+### Blocking 2 — shared fake tmux disabled the step suite-wide — FIXED
+`answer/2`'s catch-all answered `display-message -p #{start_time}` with `""` → `Integer.parse` failed → `server_started` nil → step off in every test using the shared `tmux/1`. The new `"display-message" in args -> {"#{old()}\n", 0}` clause returns a start_time older than any fixture, so existing restart/regression tests now run with the step ON.
 
-**Fix (either):**
-- Move `end_predating_tmux(workspace_id)` to AFTER `resume_interrupted/3`. Mid-turn predating sessions get their carry-on notice and are ended by `resume_interrupted`; `end_predating_tmux` then cleans up the idle and reused-pane ones, skipping the already-ended via its `is_nil(s.ended_at)` guard. No double-end. This keeps `end_predating_tmux` out of warmth's semantic lane entirely, OR
-- Exclude mid-turn sessions from `end_predating_tmux` (`and is_nil(s.thinking_since)`), leaving them for `resume_interrupted`.
+### Follow-ups — addressed
+- Warning logged on nil `server_started`: done (staffing.ex:745-746).
+- Mid-turn test asserting the carry-on notice IS posted: done (the new test).
+- UTC-on-UTC comparison assertion: not added as a separate test. The comparison is genuinely UTC-on-UTC (`started_at` is `:utc_datetime`; `DateTime.from_unix!/1` is UTC), so the skew risk is not real; an assertion would pin what is already correct. Not worth a follow-up ticket.
 
-The first is cleaner — `resume_interrupted` owns the mid-turn-carry-on contract; `end_predating_tmux` shouldn't have to know about it.
+## New findings
 
-### 2. The shared fake tmux disables the new step across the entire existing suite
-
-`answer/2`'s catch-all `true -> {"", 0}` answers `display-message -p #{start_time}` with `""`, which `Integer.parse/1` rejects → `server_started` returns nil → `end_predating_tmux` does nothing. So every existing staffing test that uses the shared `tmux/1` helper runs with the new step switched OFF. The new path's interaction with `resume_interrupted`, `end_windowless` and the restart flow has zero regression coverage — which is precisely how finding 1 escaped the suite.
-
-↳ `true -> {"", 0}` in `answer/2`
-
-**Fix:** add a `"display-message" in args -> {"#{System.os_time(:second) - 3_600}\n", 0}` clause to `answer/2`, returning a `start_time` older than any fixture session. The existing restart/regression tests then run with `end_predating_tmux` switched ON, and finding 1 surfaces in the suite rather than only in review.
-
-## Follow-ups (non-blocking)
-
-- Log a warning in `end_predating_tmux` when `server_started` returns nil. A `display-message` that fails in production (a tmux without `#{start_time}`, or a fault) silently switches the safety step off with nothing behind it; the module's "skips the pass" contract covers a tmux that is down, not one that is up but partially unaskable.
-- Once the step is ON under the shared fake, make the new test's `dead` session mid-turn (`session!("borges", here.id, 30, true)`) with no window and assert the `@borges the machine restarted` notice IS posted — locking the `resume_interrupted` interaction that finding 1 breaks.
-- The `started_at < start_time` comparison is UTC-on-UTC (`:utc_datetime` and `DateTime.from_unix!/1` both UTC), so a clock/timezone skew is not a real risk; worth one explicit assertion once the step runs under the shared fake to pin that.
+None. The mid-turn test exercises the `resume_interrupted` → `end_predating_tmux` ordering (`tmux("")` makes `has_window?` false, so the session is ended and noticed by `resume_interrupted`; `end_predating_tmux` then skips it via the `ended_at` guard — exactly the path finding 1 broke).
