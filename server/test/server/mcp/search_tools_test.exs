@@ -29,6 +29,27 @@ defmodule Server.MCP.SearchToolsTest do
       assert Enum.map(window, & &1["body"]) == ~w(two three four needle five six seven)
     end
 
+    test "a search that times out is a named tool error, not Internal error" do
+      {:ok, thread} = Channel.open_thread(%{title: "busy"})
+
+      Server.Repo.query!(
+        """
+        INSERT INTO message (thread_id, author, body, created_at)
+        SELECT $1, 'a', 'ticket ' || g || ' review lonnrot verify filler words here', now()
+        FROM generate_series(1, 20000) g
+        """,
+        [thread.id]
+      )
+
+      Application.put_env(:server, :search_timeout, 1)
+      on_exit(fn -> Application.delete_env(:server, :search_timeout) end)
+
+      {:reply, resp, _} = Tool.SearchHistory.execute(%{query: "ticket review"}, %Frame{})
+      assert %{isError: true, content: [%{"text" => text}]} = resp
+      assert text =~ "ticket review"
+      assert text =~ "timed out"
+    end
+
     test "without around a hit is its snippet alone" do
       {:reply, resp, _} = Tool.SearchHistory.execute(%{query: "needle"}, %Frame{})
       assert [hit] = json(resp)["shown"]
