@@ -28,6 +28,8 @@ type World = {
   submitFails?: boolean;
   /** a submit the host holds until the session is idle: it never resolves */
   submitHangs?: boolean;
+  /** a submit held until `release()` is called: the host's wait for idle, ended */
+  submitHold?: { release?: () => void };
   /** registers refused until this many have been tried: the MCP server still connecting at boot */
   notConnectedFor?: number;
   writes?: { path: string; text: string }[];
@@ -51,6 +53,13 @@ function engine(on, world: World = {}): Declare[] {
   on("prompt.submit", ($, e) => {
     if (world.submitFails) throw new Error("session closing");
     if (world.submitHangs) return new Promise(() => {});
+    if (world.submitHold)
+      return new Promise((resolve) => {
+        world.submitHold!.release = () => {
+          world.submitted?.push(e.text);
+          resolve({ text: e.text, context: e.context });
+        };
+      });
     world.submitted?.push(e.text);
     return { text: e.text, context: e.context };
   });
@@ -586,8 +595,36 @@ test("a wake whose submit fails is put back on the server, not lost", async ($, 
   expect(sent.filter((d) => d.tool === "put_back_wakes")).toEqual([{ tool: "put_back_wakes", args: { prompts: ["wake one", "wake two"] } }]);
 });
 
-test("a submit the host holds until idle doesn't stop the next poll from taking", async ($, on) => {
-  const world: World = { ownClock: true, wakes: [["wake one"], ["wake two"]], submitHangs: true };
+test("while a submit is held, the next wake stays on the server; once it lands, the next poll takes it, in order", async ($, on) => {
+  const hold: { release?: () => void } = {};
+  const world: World = { ownClock: true, wakes: [["wake one"], ["wake two"]], submitHold: hold, submitted: [] };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+  const takes = () => sent.filter((d) => d.tool === "take_wakes").length;
+
+  await clock.advance(3_000);
+  await settle();
+  expect(takes()).toBe(1);
+
+  await clock.advance(3_000);
+  await settle();
+  expect(takes()).toBe(1);
+  expect(world.wakes).toEqual([["wake two"]]);
+
+  hold.release!();
+  await settle();
+  await clock.advance(3_000);
+  await settle();
+  expect(takes()).toBe(2);
+  hold.release!();
+  await settle();
+  expect(world.submitted).toEqual(["wake one", "wake two"]);
+});
+
+test("a wake that arrived during a held submit survives the session ending: it was never taken", async ($, on) => {
+  const hold: { release?: () => void } = {};
+  const world: World = { ownClock: true, wakes: [["wake one"], ["wake two"]], submitHold: hold, submitted: [] };
   const sent = engine(on, world);
   const clock = mock.clock(on);
   await $.session.start(START);
@@ -596,8 +633,24 @@ test("a submit the host holds until idle doesn't stop the next poll from taking"
   await settle();
   await clock.advance(3_000);
   await settle();
+  await $.session.end({ reason: "clear", sessionId: "s1" });
+  await settle();
 
-  expect(sent.filter((d) => d.tool === "take_wakes").length).toBeGreaterThanOrEqual(2);
+  expect(world.wakes).toEqual([["wake two"]]);
+  expect(sent.filter((d) => d.tool === "put_back_wakes")).toEqual([]);
+});
+
+test("a subagent's turn.start declares no presence_thinking; the main turn's stands", async ($, on) => {
+  const sent = engine(on);
+
+  await $.session.start(START);
+  await $.turn.start({ text: "go", turnId: "t1" });
+  await settle();
+  expect(declares(sent).filter((d) => d.tool === "presence_thinking")).toHaveLength(1);
+
+  await $.turn.start({ text: "bg", turnId: "s1", agentId: "sub-1" });
+  await settle();
+  expect(declares(sent).filter((d) => d.tool === "presence_thinking")).toHaveLength(1);
 });
 
 test("a main turn ending while a subagent still runs is not idle; the last subagent ending is", async ($, on) => {

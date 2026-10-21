@@ -1,7 +1,8 @@
 Wake-overdue no longer fires falsely on a session waiting on its own background subagent (ticket #532).
 
-- `drainWakes` held `draining` across `$.prompt.submit`, which the host holds until the session is idle, so `take_wakes` never ran again. Submits now run on their own chain; the poll only takes.
+- `drainWakes` held `draining` across `$.prompt.submit`, which the host holds until the session is idle, so `take_wakes` never ran again. Submits now run on their own chain, and the poll takes nothing while one is pending (`pendingSubmits`), so wakes behind a held submit stay on the server (durable across a reload or crash) and at most one taken batch is ever in memory (#547). This is safe against the overdue alarm: `Wake.report_overdue` skips a wake while the seat is busy, and the heartbeat below keeps it busy.
 - The main `turn.complete` declared `presence_idle` while a subagent still ran. The mod now tracks running subagents (`agentId` on `turn.start`/`turn.complete`) and declares idle only once the main turn and the last subagent have ended; while waiting it refreshes presence every ~3 min against the 600 s stale-turn clock.
+- A subagent's `turn.start` no longer declares `presence_thinking`, on purpose: the main turn's presence stands, and subagents are tracked in `running` plus the heartbeat. Pinned by a test.
 - Server guard (`Wake.report_overdue`) unchanged: with presence correct it reads busy.
 
-Checked: `claude plugin test` on the mod (42 pass, incl. two new tests that failed first: a hung submit doesn't stop the next poll from taking; a main turn ending with a subagent running is not idle) and `tsc --noEmit`. Not measured live in a seat; the fix does not depend on whether the host's submit blocks.
+Checked: `mise run adapters:claude-code:mod` (45 pass; new tests failed first: a wake arriving during a held submit stays on the server and lands in order; it survives `session.end`; a subagent `turn.start` declares no `presence_thinking`). Not measured live in a seat (#546); the fix does not depend on whether the host's submit blocks.
