@@ -75,6 +75,24 @@ defmodule Server.Workline.ProofTest do
     assert diff =~ "2 files changed"
   end
 
+  test "a workline promoted straight into build owes no intent, spec or plan: its proof starts at build", ctx do
+    {:ok, t} = Workline.open(%{title: "promoted", slug: "promoted", stage: "review"})
+
+    {:ok, _} =
+      Dossier.record_event(%{
+        thread_id: t.id,
+        kind: "stage_advanced",
+        correlation: "workline:promoted",
+        detail: %{"from" => nil, "to" => "build", "promoted" => true}
+      })
+
+    commit(ctx, [{"work/promoted/review.md", "r"}], "docs")
+
+    stages = Enum.map(Workline.proof(Repo.get!(Thread, t.id)).artifacts, &elem(&1, 0))
+    refute "intent" in stages or "spec" in stages or "plan" in stages
+    assert "build" in stages and "review" in stages
+  end
+
   test "parking at the review gate posts the proof; a missing branch is said, not hidden" do
     {:ok, t} = Workline.open(%{title: "wrap", slug: "nobranch", stage: "review"})
     {:awaiting, _} = Workline.advance(Repo.get!(Thread, t.id), artifacts: OnlyReview)
