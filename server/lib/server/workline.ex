@@ -862,16 +862,26 @@ defmodule Server.Workline do
   # A standing approval: the operator's `auto_land_risk` — a reviewed-and-approved workline whose
   # risk grade has no axis over it (and no limit hit, no decision left open) lands without them,
   # through the same gated queue. Off unless set; a test hands the threshold outright.
+  # A builder with a good enough record has earned a step more of it (`Server.Trust`).
   defp auto_land?(thread, checker, opts) do
     max = Keyword.get_lazy(opts, :auto_land_risk, fn -> if checker == Git, do: auto_land_risk() end)
 
-    is_integer(max) and review_approved?(thread) and Grade.allows?(grade(thread), max) and
+    is_integer(max) and review_approved?(thread) and
+      Grade.allows?(grade(thread), elem(Server.Trust.allowance(thread, max), 0)) and
       qa_cleared(thread, opts) == :ok
   end
 
-  defp auto_land_note(thread, opts),
-    do:
-      "auto-approved by your standing approval (reviewed; #{Grade.line(grade(thread))}, none over #{Keyword.get_lazy(opts, :auto_land_risk, &auto_land_risk/0)})"
+  defp auto_land_note(thread, opts) do
+    {max, earned} = Server.Trust.allowance(thread, Keyword.get_lazy(opts, :auto_land_risk, &auto_land_risk/0))
+
+    by =
+      if earned,
+        do:
+          ": one over your setting, earned by #{earned.name}, who landed #{earned.first_time} of their last #{earned.led} builds first time",
+        else: ""
+
+    "auto-approved by your standing approval (reviewed; #{Grade.line(grade(thread))}, none over #{max}#{by})"
+  end
 
   defp auto_land_risk, do: Server.OperatorConfig.setting("auto_land_risk")
 
@@ -1406,7 +1416,7 @@ defmodule Server.Workline do
       case Server.Channel.assign_lead(thread.id, name) do
         {:ok, restaffed} ->
           close_leaf(restaffed)
-          post_brief(restaffed, "→ #{name} leads (#{thread.stage} stage)#{note}")
+          post_brief(restaffed, "#{Server.Trust.leads_line(name, thread.stage)}#{note}")
           restaffed
 
         {:error, reason} ->
