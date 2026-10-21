@@ -116,7 +116,7 @@ function cleanLocks(raw: unknown): Locks {
 }
 
 // Server.Soul's name check: the name becomes souls/<name>.md and a looks.json key
-const SOUL_NAME = /^[a-z0-9][a-z0-9_-]*$/
+export const SOUL_NAME = /^[a-z0-9][a-z0-9_-]*$/
 function cleanOverrides(raw: unknown): Overrides {
   if (!raw || typeof raw !== "object") return {}
   const { name, ...rest } = raw as Overrides
