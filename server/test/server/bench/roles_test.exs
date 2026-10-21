@@ -28,13 +28,26 @@ defmodule Server.Bench.RolesTest do
     test "every builder check fails on the untouched fixture — a check that cannot go red measures nothing" do
       tmp = tmp!()
 
-      for t <- Roles.load(@tasks, "builder", "full") do
-        work = Path.join(tmp, t.id)
-        File.cp_r!(t.repo, work)
-        File.cp_r!(Path.join(t.dir, "check"), work)
-        {out, code} = System.cmd("sh", ["-c", t.grader["cmd"]], cd: work, stderr_to_stdout: true)
-        assert code != 0, "#{t.id}'s check passed before any work:\n#{out}"
-      end
+      # each grader boots its own BEAM: run them side by side, or a loaded gate times the test out
+      results =
+        @tasks
+        |> Roles.load("builder", "full")
+        |> Task.async_stream(
+          fn t ->
+            work = Path.join(tmp, t.id)
+            File.cp_r!(t.repo, work)
+            File.cp_r!(Path.join(t.dir, "check"), work)
+            {out, code} = System.cmd("sh", ["-c", t.grader["cmd"]], cd: work, stderr_to_stdout: true)
+            {t.id, out, code}
+          end,
+          timeout: :infinity,
+          ordered: false
+        )
+        |> Enum.map(fn {:ok, r} -> r end)
+
+      assert results != []
+
+      for {id, out, code} <- results, do: assert(code != 0, "#{id}'s check passed before any work:\n#{out}")
     end
 
     test "a task.json without a valid grader is refused" do
