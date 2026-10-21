@@ -1875,6 +1875,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         const f = CAST_FIELDS[castCol]
         if (f === "model") pickModel(b)
         else if (f === "voice") pickPersona(b)
+        else if (f === "name" || f === "archetype") { status = `a seat's ${f} doesn't change — hire a new one from the hall (h)`; draw() }
         else if (f === "look") open({ kind: "look", name: b.name, from: mode })
         else if (f === "soul") openSoul(b.name)
         else if (f === "grade" || f === "specialty") {
