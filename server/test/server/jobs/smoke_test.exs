@@ -120,6 +120,15 @@ defmodule Server.Jobs.SmokeTest do
     refute_enqueued(worker: Server.Jobs.Smoke)
   end
 
+  test "the job hands its fixtures to the script, space-joined", %{thread: t} do
+    File.write!(Smoke.script(), "#!/usr/bin/env bash\necho \"fixtures=$TLON_SMOKE_FIXTURES.\"\nexit 1\n")
+    {:ok, _} = Smoke.start(t, nil, nil, [], ["a_set", "b_set"])
+    {:ok, _} = Smoke.start(t, "main", nil, [], [])
+    assert %{success: 2} = Oban.drain_queue(queue: :smoke)
+    assert Enum.any?(bodies(t.id), &(&1 =~ "fixtures=a_set b_set."))
+    assert Enum.any?(bodies(t.id), &(&1 =~ "fixtures=."))
+  end
+
   test "a smoke that fails posts its last lines", %{thread: t} do
     File.write!(Smoke.script(), "#!/usr/bin/env bash\necho 'smoke FAILED: no build'\nexit 1\n")
     {:ok, _} = Smoke.start(t, nil)
