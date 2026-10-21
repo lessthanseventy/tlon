@@ -13,7 +13,7 @@ control loop, not two, and no second way to run anything:
 
 - `mise run check` — names gate + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server, adapters and office gates + the task manual; the green-before-commit gate.
   One at a time per machine: it waits its turn in the checks queue (`scripts/checks-queue.sh`, saying who
-  holds it) and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
+  holds it), first come, first served, and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
   suites on the one test database at once. Don't call `check:all` to skip the line. A shell that can't open
   the queue's lock (a sandboxed Bash) is refused with exit 2: run it unsandboxed; `CHECKS_UNQUEUED=1` runs it
   unqueued on a box with no usable `XDG_RUNTIME_DIR`. **A coworker seat never runs it:** its sandbox has no
