@@ -169,6 +169,37 @@ defmodule Server.StaffingTest do
     refute Server.Repo.get!(Server.Session, kept.id).ended_at
   end
 
+  test "a session from before the tmux server started is ended, even mid-turn; one after it stays", %{ws: ws} do
+    here = staffed_thread(ws, "borges")
+    other = staffed_thread(ws, "hronir")
+    dead = session!("borges", here.id, 30)
+    live = session!("hronir", other.id, 30)
+    before_tmux = DateTime.utc_now() |> DateTime.add(-7_200) |> DateTime.truncate(:second)
+    dead |> Ecto.Changeset.change(pane_ref: "%3", started_at: before_tmux) |> Server.Repo.update!()
+    live |> Ecto.Changeset.change(pane_ref: "%4") |> Server.Repo.update!()
+
+    started = System.os_time(:second) - 3_600
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      cond do
+        "list-windows" in args ->
+          {"0\tt#{here.id}\t#{here.id}\tdone\t999999991\tborges\t#{old()}\n1\tt#{other.id}\t#{other.id}\tdone\t999999992\thronir\t#{old()}\n",
+           0}
+
+        "display-message" in args ->
+          {"#{started}\n", 0}
+
+        true ->
+          {"", 0}
+      end
+    end)
+
+    assert :ok = Staffing.pass(ws.id)
+
+    assert Server.Repo.get!(Server.Session, dead.id).ended_at
+    refute Server.Repo.get!(Server.Session, live.id).ended_at
+  end
+
   test "a tmux that can't be asked ends nothing: no idle session ended, no cut-off turn announced", %{ws: ws} do
     idle = session!("hronir", staffed_thread(ws, "hronir").id, 1_200)
     thread = staffed_thread(ws, "borges")

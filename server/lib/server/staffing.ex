@@ -90,6 +90,7 @@ defmodule Server.Staffing do
       |> retire_stale_launch(workspace_id, standing)
       |> dismiss_aleph(workspace_id)
 
+    end_predating_tmux(workspace_id)
     resume_interrupted(workspace_id, tabs, standing)
     end_windowless(workspace_id, tabs, standing, bench)
     :ok
@@ -734,5 +735,23 @@ defmodule Server.Staffing do
         "sessions_before" => Repo.aggregate(Session, :max, :id) || 0
       }
     })
+  end
+
+  # tmux numbers panes from %0 on every start, so a session that began before this tmux server did
+  # ran in one that is gone: its pane_ref now names whoever reused the id, and a wake routed by it
+  # would land in the wrong seat.
+  defp end_predating_tmux(workspace_id) do
+    if started = Tmux.server_started(workspace_id) do
+      before = DateTime.from_unix!(started)
+
+      from(s in Session,
+        join: t in Thread,
+        on: t.id == s.thread_id,
+        where:
+          is_nil(s.ended_at) and not is_nil(s.pane_ref) and t.workspace_id == ^workspace_id and s.started_at < ^before
+      )
+      |> Repo.all()
+      |> Enum.each(&Staff.end_session/1)
+    end
   end
 end
