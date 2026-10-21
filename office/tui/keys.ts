@@ -118,6 +118,7 @@ export const KEYS = [
   { id: "home.S", scope: "card:home", key: "S", label: "settings (the running system)", verb: "settings" },
   { id: "home.h", scope: "card:home", key: "h", label: "the hiring hall", verb: "hall" },
   { id: "home.P", scope: "card:home", key: "*", label: "the pet store", verb: "pet store" },
+  { id: "home.cast", scope: "card:home", key: "`", label: "the cast editor (god view)", verb: "cast" },
   { id: "home.q", scope: "card:home", key: "q", label: "quit", verb: "quit" },
   // card:crew
   { id: "crew.v", scope: "card:crew", key: "}", label: "tab: …", verb: "next group" },
@@ -277,6 +278,10 @@ export const KEYS = [
   // card:hall-pile
   { id: "hall-pile.x", scope: "card:hall-pile", key: "d", label: "drop", verb: "remove" },
   { id: "hall-pile.esc", scope: "card:hall-pile", key: "esc", label: "back to the hall", verb: "back" },
+  // card:cast
+  { id: "cast.left", scope: "card:cast", key: "left", label: "the field before" },
+  { id: "cast.right", scope: "card:cast", key: "right", label: "the field after" },
+  { id: "cast.tab", scope: "card:cast", key: "}", label: "people / office", verb: "next group" },
   // card:help
   { id: "help.esc", scope: "card:help", key: "esc", label: "back to …", verb: "back" },
   // the reader (full-screen thread); its card keys, threadActions, work there too
