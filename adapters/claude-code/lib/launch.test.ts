@@ -28,5 +28,5 @@ test("a sandboxed seat may use menard's tools without a prompt", async () => {
   const line = out.split("\n").find((l) => l.startsWith("settings:"));
   expect(line).toBeDefined();
   const settings = JSON.parse(line!.slice("settings:".length));
-  expect(settings.permissions.allow).toContain("mcp__menard");
+  expect(settings.permissions.allow).toContain("mcp__plugin_menard_menard");
 });
