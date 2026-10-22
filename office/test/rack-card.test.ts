@@ -6,7 +6,8 @@ import { join } from "node:path"
 // The rack card (H) has one LANDING & CHECKS list: the waiters in the order the server sends them,
 // the running train as one block (its gate, holding the check it runs, then its cars), who waits
 // behind it, and a scheduled restart. Drives the real TUI against a stub server.
-const at = new Date(Date.now() - 3 * 60_000).toISOString()
+// the TUI child reads the real clock, not the suite's frozen OFFICE_TEST_HOUR (test/clock.ts)
+const at = new Date(performance.timeOrigin + performance.now() - 3 * 60_000).toISOString()
 const car = (thread_id: number, title: string, pos: number) =>
   ({ thread_id, title, state: pos === 1 ? "landing" : "queued", train: { lead: 7, pos, size: 3, split: false }, gate: { pid: 4242, started_at: at } })
 const health = {
