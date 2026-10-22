@@ -23,6 +23,7 @@ defmodule Server.DoctorTest do
                "message",
                "need_dismissal",
                "need_heard",
+               "need_routing",
                "note",
                "note_revision",
                "playbook",
