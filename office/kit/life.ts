@@ -41,7 +41,7 @@ export type BedScene = "asleep" | "cat"
 
 /** the bedroom routine ("in bed by 23:00") as today's list has it: stamped, you lie down; overdue, the cat got there first */
 export function bedScene(today: LifeStatus["today"], now: number): BedScene | null {
-  const bed = today.find((r) => /\bbed\b/i.test(r.title))
+  const bed = today.find((r) => /\bin bed\b/i.test(r.title))
   if (!bed) return null
   return bed.done ? "asleep" : Date.parse(bed.due_at) <= now ? "cat" : null
 }
