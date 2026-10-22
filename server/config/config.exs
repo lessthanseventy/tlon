@@ -53,6 +53,8 @@ config :server, Oban,
        {"* * * * *", Server.Jobs.Dispatch},
        # the backlog's intake: the next ready ticket to the manager while worklines are under the cap
        {"*/15 * * * *", Server.Jobs.Intake},
+       # the PM's triage, when due (Server.Triage)
+       {"5 * * * *", Server.Jobs.Triage},
        # the souls' diaries: Monday 06:00, each builder's week (Server.Jobs.Diary)
        {"0 6 * * 1", Server.Jobs.Diary}
      ]}
