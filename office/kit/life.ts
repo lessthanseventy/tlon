@@ -36,3 +36,16 @@ export function lifeRows(s: LifeStatus): LifeRow[] {
   })
   return [...due, ...s.quests.map((q): LifeRow => ({ kind: "quest", id: q.id, title: q.title, text: `${q.title} · +${q.xp} xp` }))]
 }
+
+/** the streak lengths a routine's photo is framed at; a frame's tier is how many of them it has reached */
+export const MILESTONES = [7, 30, 100]
+
+export type StreakFrame = { routine: number; tier: number }
+
+/** the frames the wall hangs, derived from the streaks: one per routine at a milestone, in routine order */
+export function streakFrames(streaks: Record<string, number>): StreakFrame[] {
+  return Object.entries(streaks)
+    .map(([id, n]): StreakFrame => ({ routine: Number(id), tier: MILESTONES.filter((m) => n >= m).length }))
+    .filter((f) => f.tier > 0)
+    .sort((a, b) => a.routine - b.routine)
+}

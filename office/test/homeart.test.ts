@@ -161,3 +161,20 @@ describe("the mailbox on the street tile", () => {
     expect(f(mailbox([blk]))).not.toBe(f())
   })
 })
+
+describe("streak frames on the living tile", () => {
+  const living = { tiles: [{ kind: "living", at: [0, 0] }] } as never
+  const view = (frames?: { routine: number; tier: number }[]) => Buffer.from(renderHome({ ...base, home: living, frames }).rgba).toString("hex")
+  test("one frame hung changes the living tile's pixels", () => expect(view([{ routine: 1, tier: 1 }])).not.toBe(view()))
+  test("no frames is the plain living tile", () => expect(view([])).toBe(view()))
+  test("the tile fits three frames: a fourth is not drawn", () =>
+    expect(view([{ routine: 1, tier: 1 }, { routine: 2, tier: 1 }, { routine: 3, tier: 1 }, { routine: 4, tier: 1 }]))
+      .toBe(view([{ routine: 1, tier: 1 }, { routine: 2, tier: 1 }, { routine: 3, tier: 1 }])))
+  test("a higher tier draws a thicker frame, so the tier reads without colour", () =>
+    expect(view([{ routine: 1, tier: 2 }])).not.toBe(view([{ routine: 1, tier: 1 }])))
+  test("frames hang on the living tile only", () => {
+    const street = { tiles: [{ kind: "street", at: [0, 0] }] } as never
+    const f = (fr: { routine: number; tier: number }[]) => Buffer.from(renderHome({ ...base, home: street, frames: fr }).rgba).toString("hex")
+    expect(f([{ routine: 1, tier: 1 }])).toBe(f([]))
+  })
+})
