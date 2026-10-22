@@ -22,6 +22,7 @@ defmodule Server.TestDB do
     "generator_call",
     "toy_pool",
     "need_dismissal",
+    "need_routing",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so
     # tickets clear before all of them; note has no FK.
     Server.Ticket,
