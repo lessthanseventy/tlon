@@ -240,3 +240,7 @@ run = "scripts/land.sh"
 ["check:main"]
 description = "the whole gate on origin/main in a throwaway worktree (own test db) — main's health, whatever this checkout has out; the nightly schedule runs it"
 run = "scripts/check-main.sh"
+
+["sandbox:argv"]
+description = "inside a sandboxed Bash: the bwrap arg count and its mounts grouped by prefix; `-- record` also appends `<ts> <count> wt=<n>` to $TMPDIR/bwrap-argc/count.log and snapshots the path args on change, `-- diff` shows the paths added since the first snapshot"
+run = "scripts/bwrap-argc.sh"
