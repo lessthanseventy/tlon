@@ -233,6 +233,23 @@ defmodule Server.MaintainTest do
       assert Repo.get!(Server.Ticket, busy.id).status == "doing"
     end
 
+    test "an epic or initiative doing because a child is doing is no stale ticket: left as it is, its body untouched" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Groups"})
+      {:ok, init} = Server.Tickets.file(%{workspace_id: ws.id, title: "kids", kind: "initiative"})
+      {:ok, epic} = Server.Tickets.file(%{workspace_id: ws.id, title: "Toy", kind: "epic", epic_id: init.id})
+      {:ok, step} = Server.Tickets.file(%{workspace_id: ws.id, title: "doorbell", epic_id: epic.id})
+      {:ok, th} = Server.Channel.open_thread(%{title: "work", workspace_id: ws.id})
+      {:ok, _} = Server.Tickets.promote(step, th.id)
+
+      sweep()
+
+      for g <- [init, epic] do
+        g = Repo.get!(Server.Ticket, g.id)
+        assert g.status == "doing"
+        refute g.body =~ "no open thread"
+      end
+    end
+
     test "a ticket claimed by hand stays doing with no thread: someone is working it outside the office" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Claimed"})
       {:ok, t} = Server.Tickets.file(%{workspace_id: ws.id, title: "uqbar has it"})

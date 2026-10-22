@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { BOARD_LEGEND, boardColumns, cardState, epicChildren, STATE_GLYPH } from "../kit/crew"
+import { BOARD_LEGEND, boardColumns, cardState, epicChildren, groupRows, STATE_GLYPH } from "../kit/crew"
 import { EMPTY, type Agents, type Seat, type Thread, type Ticket } from "../kit/types"
 
 const thread = (id: number, over: Partial<Thread> = {}): Thread => ({ id, title: `t${id}`, stage: "build", awaiting: null, workspace_id: 1, lead: "ireneo", seat: "idle", ...over })
@@ -100,6 +100,34 @@ describe("epics on the TICKETS column", () => {
     const quiet = { ...a, tickets: [{ ...toy, next: null }, ...a.tickets.slice(1)] }
     expect(boardColumns(quiet)[0]!.items[0]!.title).toBe("Toy 2/13")
     expect(epicChildren(a, 50).map((t) => t.id)).toEqual([52, 53])
+  })
+})
+
+describe("initiatives on the TICKETS column", () => {
+  const tk = (id: number, over: Partial<Ticket> = {}): Ticket => ({ id, workspace_id: 1, project_id: null, title: `k${id}`, priority: "normal", kind: "ticket", epic_id: null, ...over })
+  const kids = tk(585, { title: "kids", kind: "initiative" })
+  const toy = tk(50, { title: "Toy", kind: "epic", epic_id: 585, done: 2, total: 13, next: { id: 52, title: "sandbox mode" } })
+  const hall = tk(60, { title: "Hall", kind: "epic", epic_id: 585, done: 1, total: 2, next: null })
+  const a = { ...snap([]), tickets: [kids, toy, hall, tk(52, { epic_id: 50, title: "sandbox mode" }), tk(46, { title: "profile" })] }
+
+  test("one row per initiative, its epics' progress summed and the first next step; its epics and tickets hidden", () => {
+    const items = boardColumns(a)[0]!.items
+    expect(items.map((x) => x.title)).toEqual(["kids 3/15 → #52 sandbox mode", "profile"])
+    expect(items[0]!.act).toEqual({ kind: "epic", id: 585 })
+    expect(items[0]!.stage).toBe("initiative")
+  })
+
+  test("an epic under no initiative is still its own row", () => {
+    const loose = { ...a, tickets: [{ ...toy, epic_id: null }, ...a.tickets.filter((t) => t.id !== 50)] }
+    expect(boardColumns(loose)[0]!.items.map((x) => x.title)).toContain("Toy 2/13 → #52 sandbox mode")
+  })
+
+  test("opening an initiative lists its epics, each with its progress", () => {
+    expect(groupRows(a, 585)).toEqual([
+      { id: 50, title: "Toy 2/13 → #52 sandbox mode", kind: "epic" },
+      { id: 60, title: "Hall 1/2", kind: "epic" },
+    ])
+    expect(groupRows(a, 50)).toEqual([{ id: 52, title: "sandbox mode", kind: "ticket" }])
   })
 })
 
