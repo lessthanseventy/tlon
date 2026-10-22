@@ -38,7 +38,7 @@ test("a stalled need lists nudge / hand off / close from the key table, and each
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the inbox in the header", () => screen().includes("1 blocking"))
+  await until("the phone in the header", () => screen().includes("1 waiting on you"))
   keys("i")
   await until("the stalled card", () => screen().includes("nudge the lead"))
   expect(screen()).toMatch(/\^ +nudge the lead/)
