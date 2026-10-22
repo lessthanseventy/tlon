@@ -155,6 +155,9 @@ defmodule Server.MCP.ServerTest do
                "push_branch",
                "review_branch",
                "operator_inbox",
+               # Uqbar's, refused to every other seat
+               "settle_need",
+               "pass_up_need",
                # the PM's (pm-and-release design §1)
                "release_status",
                "check_candidate",
@@ -1700,6 +1703,46 @@ defmodule Server.MCP.ServerTest do
       assert [item] = Enum.filter(items, &(&1["thread_id"] == asked.id))
       assert item["kind"] == "question"
       assert item["asking"] =~ "ireneo: should I build (a) or (b)?"
+    end
+  end
+
+  describe "settle_need / pass_up_need — Uqbar routes a need; any other seat is refused" do
+    setup do
+      {:ok, ws} = Server.Workspaces.create(%{name: "RouteWS"})
+      {:ok, asked} = Channel.open_thread(%{title: "weather", workspace_id: ws.id})
+      {:ok, _} = Server.Attention.ask(asked.id, "ireneo", "should I build (a) or (b)?")
+      {:ok, desk} = Channel.open_thread(%{title: "study", workspace_id: ws.id})
+      %{key: "question:#{asked.id}", desk: desk}
+    end
+
+    defp seated(name, desk) do
+      {:ok, agent} = Staff.register_agent(%{name: name, mandate: "m", engine: "fresh"})
+      token = MCP.Tokens.mint(desk, agent)
+      {token, handshake(token)}
+    end
+
+    test "a coworker's verdict is refused and records nothing", %{key: key, desk: desk} do
+      {token, session} = seated("daneri", desk)
+      assert %{"isError" => true} = call(token, session, 2, "settle_need", %{"key" => key, "why" => "dup"})
+
+      assert %{"isError" => true} =
+               call(token, session, 3, "pass_up_need", %{"key" => key, "why" => "w", "recommendation" => "r"})
+
+      assert Repo.aggregate("need_routing", :count) == 0
+    end
+
+    test "Uqbar's verdict lands a need_routing row", %{key: key, desk: desk} do
+      {token, session} = seated("uqbar", desk)
+
+      result =
+        call(token, session, 2, "pass_up_need", %{"key" => key, "why" => "outward", "recommendation" => "build (a)"})
+
+      refute result["isError"]
+      assert [%{state: "passed_up"}] = Repo.all(from r in "need_routing", select: %{state: r.state})
+
+      refute call(token, session, 3, "settle_need", %{"key" => key, "why" => "answered on the thread"})["isError"]
+      assert [%{state: "settled"}] = Repo.all(from r in "need_routing", select: %{state: r.state})
+      assert %{"isError" => true} = call(token, session, 4, "settle_need", %{"key" => "nope", "why" => "w"})
     end
   end
 

@@ -70,6 +70,9 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.MachineOverview, name: "machine_overview")
   # the manager's scheduled inbox sweep reads what waits on the operator
   component(Server.MCP.Tool.OperatorInbox, name: "operator_inbox")
+  # Uqbar's verdicts on those; every other seat is refused
+  component(Server.MCP.Tool.SettleNeed, name: "settle_need")
+  component(Server.MCP.Tool.PassUpNeed, name: "pass_up_need")
   # The Oracle: a second read from the OTHER subscription bucket (field survey §4 adopt #6).
   component(Server.MCP.Tool.ConsultOracle, name: "consult_oracle")
   # Playbooks: named procedures with success criteria (field survey §4 adopt #4).
