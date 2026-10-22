@@ -178,3 +178,15 @@ describe("streak frames on the living tile", () => {
     expect(f([{ routine: 1, tier: 1 }])).toBe(f([]))
   })
 })
+
+describe("the bed on the bedroom tile", () => {
+  const bedroom = { tiles: [{ kind: "bedroom", at: [0, 0] }] } as never
+  const view = (bed?: "asleep" | "cat" | null, h: unknown = bedroom) => Buffer.from(renderHome({ ...base, home: h as never, bed }).rgba).toString("hex")
+  test("asleep changes the bedroom's pixels", () => expect(view("asleep")).not.toBe(view()))
+  test("the cat on the bed looks different from you asleep, so it reads without colour", () => expect(view("cat")).not.toBe(view("asleep")))
+  test("an empty bed is the plain bedroom", () => expect(view(null)).toBe(view()))
+  test("only the bedroom has a bed", () => {
+    const street = { tiles: [{ kind: "street", at: [0, 0] }] }
+    expect(view("asleep", street)).toBe(view(undefined, street))
+  })
+})

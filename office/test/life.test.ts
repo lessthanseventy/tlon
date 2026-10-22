@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { homeLevel, lifeBar, lifeHeader, lifeRows, streakFrames } from "../kit/life"
+import { bedScene, homeLevel, lifeBar, lifeHeader, lifeRows, streakFrames } from "../kit/life"
 import { EMPTY } from "../kit/types"
 
 describe("lifeBar", () => {
@@ -54,4 +54,18 @@ describe("streakFrames", () => {
   test("100 is tier 3", () => expect(streakFrames({ "9": 100 })).toEqual([{ routine: 9, tier: 3 }]))
   test("one frame per routine that has reached a milestone, in routine order", () =>
     expect(streakFrames({ "2": 2, "8": 7, "5": 30 })).toEqual([{ routine: 5, tier: 2 }, { routine: 8, tier: 1 }]))
+})
+
+describe("bedScene", () => {
+  const at = (iso: string) => Date.parse(iso)
+  const today = (done: boolean) => [
+    { routine_id: 1, title: "teeth", due_at: "2026-10-22T07:00:00Z", done: false },
+    { routine_id: 2, title: "in bed by 23:00", due_at: "2026-10-22T23:00:00Z", done },
+  ]
+  test("a stamped bed routine puts you asleep", () => expect(bedScene(today(true), at("2026-10-22T22:00:00Z"))).toBe("asleep"))
+  test("past its time and unstamped, the cat is already on the bed", () =>
+    expect(bedScene(today(false), at("2026-10-22T23:30:00Z"))).toBe("cat"))
+  test("before its time and unstamped, the bed is empty", () => expect(bedScene(today(false), at("2026-10-22T20:00:00Z"))).toBeNull())
+  test("no bed routine, no scene — other routines don't count", () =>
+    expect(bedScene([{ routine_id: 1, title: "teeth", due_at: "2026-10-22T07:00:00Z", done: true }], at("2026-10-22T23:30:00Z"))).toBeNull())
 })

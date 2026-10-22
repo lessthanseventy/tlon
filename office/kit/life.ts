@@ -37,6 +37,15 @@ export function lifeRows(s: LifeStatus): LifeRow[] {
   return [...due, ...s.quests.map((q): LifeRow => ({ kind: "quest", id: q.id, title: q.title, text: `${q.title} · +${q.xp} xp` }))]
 }
 
+export type BedScene = "asleep" | "cat"
+
+/** the bedroom routine ("in bed by 23:00") as today's list has it: stamped, you lie down; overdue, the cat got there first */
+export function bedScene(today: LifeStatus["today"], now: number): BedScene | null {
+  const bed = today.find((r) => /\bbed\b/i.test(r.title))
+  if (!bed) return null
+  return bed.done ? "asleep" : Date.parse(bed.due_at) <= now ? "cat" : null
+}
+
 /** the streak lengths a routine's photo is framed at; a frame's tier is how many of them it has reached */
 export const MILESTONES = [7, 30, 100]
 
