@@ -14,5 +14,5 @@ mapfile -t steps < <(grep -vE '^\s*(#|$)' "$here/$walk.steps")
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 TMUX_TMPDIR=/tmp TMPDIR="$tmp" OFFICE_SANDBOX=1 "$here/../../../scripts/office-drive.sh" "${steps[@]}" 2>&1 | tee "$tmp/out"
-# office-drive.sh exits 0 whatever happened; a bad step or a TUI stderr is what makes a replay fail
+# office-drive.sh exits 1 when the TUI wrote to stderr; a bad step is what else makes a replay fail
 ! grep -qE '^=== stderr|eval: line|^=== no such text' "$tmp/out"

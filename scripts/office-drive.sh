@@ -14,6 +14,7 @@
 # can read back what the drive saved (home.json, looks.json, …: DIR/config/tlon/).
 # OFFICE_SANDBOX=1 starts the TUI with --sandbox: the made-up world, where the toy's keys (e, f, d) and its
 # events run; a scratch release has neither, and no server is needed (TLON_URL is ignored).
+# Exits 1 when the TUI wrote to stderr (printed under `=== stderr`).
 # OFFICE_WIDE=1 draws the wide room (the door, the bathroom, Argos — it is otherwise only there under kitty
 # graphics, which tmux swallows) in half blocks at the scale the window allows, and sizes the window 280x75
 # unless OFFICE_COLS/OFFICE_ROWS say otherwise. OFFICE_TEXT=1 prints every row of the screen with the
@@ -36,10 +37,14 @@ mkdir -p "$cfg"
 src="${XDG_CONFIG_HOME:-$HOME/.config}/tlon"
 [ -d "$src" ] && cp -r "$src" "$cfg/tlon"
 
+# the real binary, resolved here: the `bun` shim reads mise's trust db from XDG_STATE_HOME, which the TUI's
+# throwaway hides, so the shim there refuses a config that is trusted
+bun="$(cd "$root/office" && bun -e 'console.log(process.execPath)')"
+
 wide="${OFFICE_WIDE:-}"
 if [ -n "$wide" ]; then dcols=280 drows=75; else dcols=150 drows=60; fi
 t new-session -d -x "${OFFICE_COLS:-$dcols}" -y "${OFFICE_ROWS:-$drows}" \
-  "cd '$root/office' && unset TLON_HALL TLON_HOME TLON_LOOKS TLON_PALETTE TLON_PETS TLON_SOULS && TLON_OFFICE_TMUX='$own' TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_WIDE='$wide' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' XDG_CONFIG_HOME='$cfg' bun tui/main.ts ${OFFICE_SANDBOX:+--sandbox} 2>'$state/err'"
+  "cd '$root/office' && unset TLON_HALL TLON_HOME TLON_LOOKS TLON_PALETTE TLON_PETS TLON_SOULS && TLON_OFFICE_TMUX='$own' TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_WIDE='$wide' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' XDG_CONFIG_HOME='$cfg' '$bun' tui/main.ts ${OFFICE_SANDBOX:+--sandbox} 2>'$state/err'"
 sleep 3
 for step in "$@"; do
   case "$step" in
@@ -59,5 +64,5 @@ for r,l in enumerate(L):
   if [ -n "${OFFICE_TEXT:-}" ]; then t capture-pane -p -t 0 | sed -E 's/[▀▄█ ]+/ /g' | grep -E '[[:alnum:]]'
   else t capture-pane -p -t 0 | tail -n "${OFFICE_TAIL:-20}"; fi
 done
-[ -s "$state/err" ] && { echo "=== stderr"; cat "$state/err"; }
+[ -s "$state/err" ] && { echo "=== stderr"; cat "$state/err"; exit 1; }
 exit 0
