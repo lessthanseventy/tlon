@@ -13,4 +13,8 @@ printf 'bwrap\0--ro-bind\0/dev/null\0/y/.bashrc\0--\0zsh\0-c\0echo\n--ro-bind\n/
 out=$("$here/bwrap-argc.sh" "$tmp/multi")
 grep -qx 'total 8' <<<"$out" || { echo "FAIL multi total: $out"; exit 1; }
 ! grep -q '/z/' <<<"$out" || { echo "FAIL multi-line arg grouped as a mount: $out"; exit 1; }
+# It needs no gawk: a gawk that always fails must not matter.
+mkdir "$tmp/bin"; printf '#!/bin/sh\nexit 99\n' >"$tmp/bin/gawk"; chmod +x "$tmp/bin/gawk"
+out=$(PATH="$tmp/bin:$PATH" "$here/bwrap-argc.sh" "$tmp/multi") || { echo "FAIL depends on gawk"; exit 1; }
+grep -qx 'total 8' <<<"$out" || { echo "FAIL no-gawk total: $out"; exit 1; }
 echo "bwrap-argc: ok"
