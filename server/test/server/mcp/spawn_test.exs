@@ -106,6 +106,16 @@ defmodule Server.MCP.SpawnTest do
       assert File.exists?(Path.join(wt, ".git"))
     end
 
+    test "a thread whose worktree dir is not a checkout is refused, never started somewhere else" do
+      %{repo: repo, ws: ws, project: p} = Server.TestRepoDir.with_project()
+      {:ok, thread} = Channel.open_thread(%{title: "stale", workspace_id: ws.id, project_id: p.id})
+      wt = Server.Worktree.path(repo, "t#{thread.id}")
+      File.mkdir_p!(Path.join(wt, "work/x"))
+
+      assert {:error, {:not_a_checkout, ^wt}} = Spawn.join(thread.id, "codex")
+      refute File.exists?(Path.join(wt, ".git"))
+    end
+
     test "an outside citizen's pane starts in the repo's main checkout: no worktree of its own to strand" do
       %{repo: repo, ws: ws} = Server.TestRepoDir.with_project()
       {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})

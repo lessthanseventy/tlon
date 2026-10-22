@@ -97,9 +97,10 @@ defmodule Server.MCP.Spawn do
   end
 
   defp mint_and_export(thread_ref, agent_name, opts) do
-    with {:ok, %{thread: thread, agent: agent}} <- ensure(thread_ref, agent_name, opts) do
+    with {:ok, %{thread: thread, agent: agent}} <- ensure(thread_ref, agent_name, opts),
+         {:ok, cwd} <- cwd_export(thread, agent) do
       token = Tokens.mint(thread, agent)
-      {:ok, %{thread: thread, agent: agent, token: token, exports: exports(thread, agent, token)}}
+      {:ok, %{thread: thread, agent: agent, token: token, exports: exports(thread, agent, token) <> cwd}}
     end
   end
 
@@ -148,7 +149,7 @@ defmodule Server.MCP.Spawn do
     export TLON_MCP_URL="http://127.0.0.1:#{port}/mcp"
     export TLON_THREAD="#{thread.id}"
     export TLON_AUTHOR="#{agent.name}"\
-    """ <> model_export(thread, agent) <> cwd_export(thread, agent) <> read_dirs_export(thread)
+    """ <> model_export(thread, agent) <> read_dirs_export(thread)
   end
 
   # the model this pane launches on, from its seat's profile — what the commit hook stamps as
@@ -163,6 +164,7 @@ defmodule Server.MCP.Spawn do
   # The thread's worktree, ensured now, for the boot script to cd into — a coworker never writes in
   # the main tree (2026-09-08). An outside citizen starts in the repo itself, as the operator's own
   # sessions do, and makes its own scratch worktrees. No repo exports nothing; the pane starts wherever.
+  # A worktree dir that is not a checkout is refused: git there would fall up to the live main tree.
   defp cwd_export(thread, agent) do
     dir =
       if agent.name in Server.Outside.names(),
@@ -170,8 +172,9 @@ defmodule Server.MCP.Spawn do
         else: Server.worktree_for_thread(thread)
 
     case dir do
-      {:ok, path} -> "\nexport TLON_CWD=\"#{path}\""
-      {:error, _} -> ""
+      {:ok, path} -> {:ok, "\nexport TLON_CWD=\"#{path}\""}
+      {:error, {:not_a_checkout, _} = refused} -> {:error, refused}
+      {:error, _} -> {:ok, ""}
     end
   end
 

@@ -313,7 +313,9 @@ defmodule Server.Worktree do
         {:ok, wt}
 
       {out, _} ->
-        {:error, "git worktree add refused: #{String.slice(out, 0, 200)}"}
+        if File.dir?(wt) and not File.exists?(Path.join(wt, ".git")),
+          do: {:error, {:not_a_checkout, wt}},
+          else: {:error, "git worktree add refused: #{String.slice(out, 0, 200)}"}
     end
   end
 
