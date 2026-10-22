@@ -861,7 +861,7 @@ defmodule Server.Office.NeedsTest do
     defp question(ws) do
       {:ok, q} = Channel.open_thread(%{title: "q", workspace_id: ws.id})
       {:ok, _} = Server.Attention.ask(q.id, "daneri", "A or B?")
-      [%{key: key} = item] = Enum.filter(Needs.list(), &(&1.kind == "question"))
+      [%{key: key} = item] = Enum.filter(Needs.list(), &(&1.kind == "question" and &1.thread_id == q.id))
       {key, item}
     end
 
@@ -1017,6 +1017,44 @@ defmodule Server.Office.NeedsTest do
       :ok = Needs.pass_up(key, "second", "do it", "uqbar")
       assert [%{key: ^key, why: "second"}] = Needs.grouped().phone
       assert Server.Repo.aggregate("need_routing", :count) == 1
+    end
+
+    defp aged_question(ws, minutes) do
+      {key, item} = question(ws)
+      at = DateTime.utc_now() |> DateTime.add(-minutes * 60, :second) |> DateTime.truncate(:second)
+      Server.Repo.update_all(from(m in Server.Message, where: m.thread_id == ^item.thread_id), set: [created_at: at])
+      key
+    end
+
+    test "fail-open: a need Uqbar has not routed in uqbar_route_minutes reaches the operator", %{ws: ws} do
+      late = aged_question(ws, 31)
+      fresh = aged_question(ws, 29)
+      g = Needs.grouped()
+      assert [%{key: ^late, route: "pass_up", why: "Uqbar did not route it in time", recommendation: nil}] = g.phone
+      assert [%{key: ^fresh}] = g.uqbar
+    end
+
+    test "the fail-open window is the operator's uqbar_route_minutes knob", %{ws: ws} do
+      key = aged_question(ws, 15)
+      path = Path.join(Path.expand("tmp"), "needs-route-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+      on_exit(fn -> Application.put_env(:server, :operator_config_path, prior) end)
+
+      File.write!(path, ~s({"uqbar_route_minutes": 10}))
+      assert [%{key: ^key}] = Needs.grouped().phone
+      File.write!(path, ~s({"uqbar_route_minutes": 30}))
+      assert [%{key: ^key}] = Needs.grouped().uqbar
+    end
+
+    test "a verdict outlasts the window: settled stays settled, passed up keeps its own why", %{ws: ws} do
+      settled = aged_question(ws, 45)
+      passed = aged_question(ws, 45)
+      :ok = Needs.settle(settled, "handled", "uqbar")
+      :ok = Needs.pass_up(passed, "outward", "approve", "uqbar")
+      g = Needs.grouped()
+      assert [%{key: ^settled}] = g.settled
+      assert [%{key: ^passed, why: "outward", recommendation: "approve"}] = g.phone
     end
 
     test "the flat list stays unrouted", %{ws: ws} do
