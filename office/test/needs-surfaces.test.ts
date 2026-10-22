@@ -7,13 +7,14 @@ const at = "2026-10-21T06:00:00Z"
 const need = (key: string, surface?: Need["surface"]): Need => ({ key, kind: "gate", level: "blocking", thread_id: 1, workspace_id: 1, title: key, text: key, at, options: null, ref: null, ...(surface ? { surface } : {}) })
 const [a, b, c] = [need("gate:1", "phone"), need("mention:2", "machine"), need("issue:3", "clipboard")]
 let body: unknown = { phone: [a], machine: [b], clipboard: [c], counts: { phone: 1, machine: 1, clipboard: 1 } }
-let status = 200, query = "", heard: unknown = null, overruled: unknown = null
+let status = 200, query = "", heard: unknown = null, overruled: unknown = null, posted: unknown = null
 const server = Bun.serve({
   port: 0,
   fetch: async (req) => {
     const url = new URL(req.url)
     if (req.method === "POST" && url.pathname.endsWith("/office/needs/heard")) { heard = await req.json(); return Response.json({ ok: true }) }
     if (req.method === "POST" && url.pathname.endsWith("/office/needs/overrule")) { overruled = await req.json(); return Response.json({ key: "question:6" }) }
+    if (req.method === "POST" && url.pathname.endsWith("/messages")) { posted = { path: url.pathname, body: await req.json() }; return Response.json({ id: 1 }) }
     if (url.pathname.endsWith("/office/needs")) { query = url.search; return status === 200 ? Response.json(body) : new Response("gone", { status }) }
     return new Response("no", { status: 404 })
   },
@@ -48,6 +49,12 @@ test("hear posts the machine's keys", async () => {
   const data = await import("../tui/data")
   expect(await data.hear(["mention:2"])).toBe("heard")
   expect(heard).toEqual({ keys: ["mention:2"] })
+})
+
+test("a tool refusal handed to Uqbar is a post to it on the thread, never a hand-off", async () => {
+  const data = await import("../tui/data")
+  expect(await data.refusalToUqbar(7, "nolan was refused Bash 2 times")).toBe("#7: Uqbar asked to decide")
+  expect(posted).toEqual({ path: "/api/threads/7/messages", body: { body: "@uqbar decide this tool refusal for me: nolan was refused Bash 2 times" } })
 })
 
 test("overrule posts the settled item's key", async () => {

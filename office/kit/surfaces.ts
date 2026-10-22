@@ -44,13 +44,16 @@ const SECTION = {
   phone: { label: "PHONE", note: "an answer is owed: work waits on you" },
   machine: { label: "MACHINE", note: "for your information: heard once you play the machine" },
   clipboard: { label: "CLIPBOARD", note: "the crew owns these: nothing for you to do" },
+  settled: { label: "SETTLED BY UQBAR", note: "today's digest: u overrules one, back to Uqbar" },
+  uqbar: { label: "WITH UQBAR", note: "Uqbar decides whether these need you" },
 } as const
 
-/** the inbox's sections in the order who acts: phone, machine, clipboard — the empty ones left out */
-export function inboxSections<T>(g: Record<keyof typeof SECTION, T[]>) {
-  return (["phone", "machine", "clipboard"] as const)
-    .filter((s) => g[s].length)
-    .map((s) => ({ surface: s, label: `${SECTION[s].label} · ${g[s].length}`, note: SECTION[s].note, items: g[s] }))
+/** the inbox's sections in the order who acts: phone, machine (with Uqbar's settled digest), clipboard, then what waits with Uqbar — the empty ones left out */
+export function inboxSections<T>(g: Record<"phone" | "machine" | "clipboard", T[]> & { settled?: T[]; uqbar?: T[] }) {
+  return (["phone", "machine", "settled", "clipboard", "uqbar"] as const)
+    .map((s) => ({ s, items: g[s] ?? [] }))
+    .filter(({ items }) => items.length)
+    .map(({ s, items }) => ({ surface: s, label: `${SECTION[s].label} · ${items.length}`, note: SECTION[s].note, items }))
 }
 
 /** a clipboard row's who and what: its owner and what tracks it, or that nobody does */

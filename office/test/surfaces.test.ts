@@ -48,6 +48,12 @@ describe("the inbox by surface", () => {
     const s = inboxSections({ phone: [n("a")], machine: [], clipboard: [n("c")] })
     expect(s.map((x) => [x.label, x.items.map((i) => i.key)])).toEqual([["PHONE · 1", ["a"]], ["CLIPBOARD · 1", ["c"]]])
   })
+  test("Uqbar's settled digest sits with the machine; what waits with Uqbar comes last", () => {
+    const s = inboxSections({ phone: [n("a")], machine: [n("m")], clipboard: [n("c")], settled: [n("s")], uqbar: [n("u"), n("v")] })
+    expect(s.map((x) => [x.surface, x.label])).toEqual([
+      ["phone", "PHONE · 1"], ["machine", "MACHINE · 1"], ["settled", "SETTLED BY UQBAR · 1"], ["clipboard", "CLIPBOARD · 1"], ["uqbar", "WITH UQBAR · 2"],
+    ])
+  })
   test("a clipboard row says who has it and what tracks it, or that nobody does", () => {
     expect(clipLabel({ owner: "cruz", tracking: "fix-sink" })).toBe("cruz · fix-sink")
     expect(clipLabel({})).toBe("nobody · untracked")
