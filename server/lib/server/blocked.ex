@@ -19,8 +19,8 @@ defmodule Server.Blocked do
   alias Server.Repo
   alias Server.Thread
   alias Server.Ticket
-  alias Server.TicketThread
   alias Server.Tickets
+  alias Server.TicketThread
 
   @doc """
   Thread `thread_id`, by `agent`, is blocked on open ticket `ticket_id` because of `why`: `why` is
@@ -60,6 +60,11 @@ defmodule Server.Blocked do
   @doc "Whether the thread is blocked on a ticket: nothing is owed from it until `release/0` clears it."
   def blocked?(thread_id) do
     Repo.exists?(from tt in TicketThread, where: tt.thread_id == ^thread_id and tt.kind == "blocked_on")
+  end
+
+  @doc "Every thread blocked on a ticket, as a set: one query for a list of candidates."
+  def thread_ids do
+    from(tt in TicketThread, where: tt.kind == "blocked_on", select: tt.thread_id) |> Repo.all() |> MapSet.new()
   end
 
   @doc """

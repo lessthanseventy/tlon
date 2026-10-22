@@ -13,7 +13,7 @@ defmodule Server.Office.Needs do
       operator plays it (`hear/1`, kept in `need_heard` until something newer comes under its key)
       or for a day;
     * **clipboard** — the crew owns it; each row also carries `owner` (the thread's lead) and
-      `tracking` (the workline's slug, else the ticket an issue names): `issue`, `stalled`,
+      `tracking` (the workline's slug, else the ticket an issue or a block names): `issue`, `blocked`, `stalled`,
       `verify_failed`, `pr_blocked`, `publish_failed`, `release_failed`, `job_failed`, `stranded`.
 
   `grouped/1` is the list by surface, routed, with counts; `list/0` stays the one flat list. `level` orders
@@ -58,6 +58,12 @@ defmodule Server.Office.Needs do
       `job_failed` (a background job discarded in the last day, its runs failing the same way one
       item: retry or dismiss, `ref` the newest run),
       `issue` (a blocker raised on an open thread and not resolved: resolve it, `ref` the issue),
+      `blocked` (an open ticket that seats declared themselves blocked on, `Server.Blocked`: ONE item
+      per ticket however many threads wait, its text naming the ticket and every thread waiting;
+      `ref` the ticket. Decide, not blocking: the fix is the crew's and nothing waits on an answer,
+      but the operator may want to raise the ticket's priority or hand it to someone. A seat
+      blocking again brings it back after a put-away; the ticket closing, or the waiting threads
+      closing, ends it),
       `release_failed` (a workspace's newest release cut failed and live is not at its commit:
       retry it, `ref` its `check_failed` event — `Server.Release.PM.retry/1` — or put it away and
       stay on what runs; a failed cut never moves the pointer, so there is nothing to roll back).
@@ -75,7 +81,7 @@ defmodule Server.Office.Needs do
   |---|---|
   | seats, quota, tool_denied (a permission refusal) | always |
   | gate, question, dialog, ask, no_seat | if irreversible, outward, costly, a host command, or an `auto_land_risk` gate |
-  | issue, stalled, verify_failed, job_failed, stranded, tool_denied (a hook's) | if irreversible or a host command |
+  | issue, blocked, stalled, verify_failed, job_failed, stranded, tool_denied (a hook's) | if irreversible or a host command |
   | pr_blocked, publish_failed, release_failed | if it needs a host command |
   | mention, rollout | information: never routed |
 
@@ -106,7 +112,7 @@ defmodule Server.Office.Needs do
   @holds_ttl_s 300
   @phone ~w(gate question dialog ask seats quota no_seat tool_denied)
   @machine ~w(mention rollout)
-  @clipboard ~w(issue stalled verify_failed pr_blocked publish_failed release_failed job_failed stranded)
+  @clipboard ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed stranded)
   @broad [:irreversible, :outward, :costly, :host_command, :auto_land_risk]
   @narrow [:irreversible, :host_command]
 
@@ -179,7 +185,10 @@ defmodule Server.Office.Needs do
   def pass_up_rule(%{kind: k}) when k in ~w(seats quota tool_denied), do: :always
   def pass_up_rule(%{kind: k}) when k in @machine, do: :info
   def pass_up_rule(%{kind: k}) when k in ~w(gate question dialog ask no_seat), do: {:when, @broad}
-  def pass_up_rule(%{kind: k}) when k in ~w(issue stalled verify_failed job_failed stranded), do: {:when, @narrow}
+
+  def pass_up_rule(%{kind: k}) when k in ~w(issue blocked stalled verify_failed job_failed stranded),
+    do: {:when, @narrow}
+
   def pass_up_rule(%{kind: k}) when k in ~w(pr_blocked publish_failed release_failed), do: {:when, [:host_command]}
 
   @doc """
@@ -454,7 +463,7 @@ defmodule Server.Office.Needs do
 
     from(m in Message,
       where:
-        m.thread_id in ^ids and m.kind not in ["suggestion", "margin"] and m.author != ^operator and
+        m.thread_id in ^ids and m.kind not in ["suggestion", "margin", "notice"] and m.author != ^operator and
           ilike(m.body, ^like) and
           m.created_at > ^since,
       order_by: [desc: m.id]
@@ -618,7 +627,7 @@ defmodule Server.Office.Needs do
 
     decide =
       mentions(open, operator) ++
-        rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open) ++ failed_cuts()
+        rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open) ++ blocked() ++ failed_cuts()
 
     annotate(Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime))
   end
@@ -819,16 +828,20 @@ defmodule Server.Office.Needs do
   def hook_refusal?(%{detail: %{"reason" => "PreToolUse:" <> _}}), do: true
   def hook_refusal?(_event), do: false
 
-  # nothing moved it past the quiet window and nobody is on it
+  # nothing moved it past the quiet window and nobody is on it; a thread blocked on a ticket
+  # (`Server.Blocked`) has said it cannot act, and the ticket's `blocked` item says why
   defp stalled(open, listed) do
     if Server.Pause.state() == :working do
       cutoff = DateTime.add(DateTime.utc_now(), -Server.OperatorConfig.setting("quiet_workline_minutes") * 60, :second)
+
+      blocked = Server.Blocked.thread_ids()
 
       candidates =
         for %Thread{stage: stage} = t <- open,
             stage not in [nil, "merged"],
             is_nil(t.awaiting),
             not MapSet.member?(listed, t.id),
+            not MapSet.member?(blocked, t.id),
             do: {t, Server.Workline.Artifacts.Git.root(t)}
 
       tips = candidates |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Map.new(&{&1, work_tips(&1)})
@@ -1033,6 +1046,28 @@ defmodule Server.Office.Needs do
           Repo.insert_all("need_routing", [row], opts)
           :ok
         end
+    end
+  end
+
+  # one item per open ticket with seats waiting on it, not one per seat
+  defp blocked do
+    for {ticket, threads, at} <- Server.Blocked.waiting() do
+      %{
+        key: "blocked:#{ticket.id}",
+        kind: "blocked",
+        level: "decide",
+        thread_id: nil,
+        workspace_id: ticket.workspace_id,
+        title: "##{ticket.id} #{ticket.title}",
+        text:
+          "#{length(threads)} #{if length(threads) == 1, do: "thread waits", else: "threads wait"} on ticket " <>
+            "##{ticket.id} (#{ticket.status}) and ask nothing of you: " <>
+            Enum.map_join(threads, ", ", &"##{&1.id} #{&1.title}"),
+        at: at,
+        options: nil,
+        ref: ticket.id,
+        tracking: "##{ticket.id}"
+      }
     end
   end
 end
