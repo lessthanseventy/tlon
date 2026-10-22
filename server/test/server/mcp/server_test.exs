@@ -150,6 +150,7 @@ defmodule Server.MCP.ServerTest do
                "list_tickets",
                "update_ticket",
                "start_ticket",
+               "blocked_on",
                "write_note",
                "get_notes",
                "push_branch",
@@ -1684,6 +1685,38 @@ defmodule Server.MCP.ServerTest do
     assert r["isError"]
     %{"text" => text} = Enum.find(r["content"], &(&1["type"] == "text"))
     assert text =~ "999999"
+  end
+
+  test "blocked_on ties the bound thread to an open ticket and asks nobody; a done ticket is refused" do
+    {:ok, ws} = Server.Workspaces.create(%{name: "BlockWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "stuck", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Stuckee", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+    {:ok, open} = Server.Tickets.file(%{workspace_id: ws.id, title: "worktrees read-only"})
+    {:ok, done} = Server.Tickets.file(%{workspace_id: ws.id, title: "old", status: "done"})
+
+    r = call(token, session, 2, "blocked_on", %{"ticket_id" => open.id, "why" => "my worktree is read-only"})
+    refute r["isError"]
+    assert Server.Blocked.blocked?(thread.id)
+    assert Server.Tickets.get(open.id).body =~ "by Stuckee, thread #{thread.id}): my worktree is read-only"
+    assert Server.Attention.open_asks() == []
+
+    r = call(token, session, 3, "blocked_on", %{"ticket_id" => done.id, "why" => "x"})
+    assert r["isError"]
+    %{"text" => text} = Enum.find(r["content"], &(&1["type"] == "text"))
+    assert text =~ "not open"
+  end
+
+  test "post_message as a notice wakes nobody" do
+    {:ok, thread} = Channel.open_thread(%{title: "acks"})
+    {:ok, agent} = Staff.register_agent(%{name: "Acker", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    r = call(token, session, 2, "post_message", %{"body" => "thanks, noted", "notice" => true})
+    refute r["isError"]
+    assert [%{kind: "notice", author: "Acker"}] = Channel.thread_messages(thread)
   end
 
   describe "operator_inbox — the manager reads what waits on the operator" do

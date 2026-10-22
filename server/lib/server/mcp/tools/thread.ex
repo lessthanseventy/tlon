@@ -34,7 +34,9 @@ defmodule Server.MCP.Tool.PostMessage do
   `thread_id` to a thread the caller steers (`Server.MCP.Tool.steers?/2`: its lead, the lead above
   it or the manager), so a lead woken in its lobby window answers on its own workline and the
   manager puts a decision on the thread it staffed. The author is the bound agent; a reply targets
-  the quoted message's author.
+  the quoted message's author. With `notice` the post is an FYI that wakes nobody (an
+  acknowledgement, a status): it is read on each reader's next turn, and it is never an @operator
+  mention that reaches the operator's list.
   """
   use Server.MCP.Tool
 
@@ -47,6 +49,10 @@ defmodule Server.MCP.Tool.PostMessage do
     field :thread_id, :integer,
       description:
         "A thread you lead, lead the parent of, or manage, when your session is bound to another thread (e.g. the lobby)"
+
+    field :notice, :boolean,
+      description:
+        "Post as a notice: an FYI that wakes nobody. Use it when you only acknowledge an answer or report status"
   end
 
   @impl true
@@ -60,7 +66,8 @@ defmodule Server.MCP.Tool.PostMessage do
             thread_id: thread_id,
             author: identity.agent,
             body: params[:body],
-            reply_to: params[:reply_to]
+            reply_to: params[:reply_to],
+            kind: if(params[:notice], do: "notice", else: "chat")
           })
 
         with {:ok, _} <- result,
