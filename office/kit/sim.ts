@@ -712,7 +712,7 @@ export class Sim<L extends { people: Seat[] }> {
   private toys: Toys | null = null
   setToys(t: Toys | null) { this.toys = t }
   private pooled(): Toys {
-    return this.dials.weirdness !== "curated" && this.toys ? this.toys : { visitors: [], puns: [], reactions: {} }
+    return this.dials.weirdness !== "curated" && this.toys ? this.toys : { visitors: [], puns: [], reactions: {}, parts: [] }
   }
   /** the visitor in the doorway, if one is there (not while they wait for someone to come) */
   visitor(): { kind: VisitorKind; seed?: string | number; x: number; y: number } | null {

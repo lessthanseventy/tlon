@@ -28,6 +28,7 @@ const pool: Toys = {
   visitors: [{ name: "Mr. Plover", look_seed: "plover", line: "Is this the room with the ducks?" }],
   puns: ["I would tell you a UDP joke, but you might not get it."],
   reactions: { hronir: { fire_drill: ["Calmly. Calmly. Run."] } },
+  parts: [],
 }
 const fixed = <T,>(r: number, f: () => T): T => { const real = Math.random; Math.random = () => r; try { return f() } finally { Math.random = real } }
 
@@ -64,7 +65,7 @@ describe("the weirdness dial", () => {
     for (const w of ["procedural", "invented"] as const) expect(rung(w, pool)).toMatchObject({ kind: "guest", guest: { name: "Mr. Plover" } })
   })
   test("an empty pool, or none at all (an older server), changes nothing", () => {
-    expect(rung("invented", { visitors: [], puns: [], reactions: {} }).kind).not.toBe("guest")
+    expect(rung("invented", { visitors: [], puns: [], reactions: {}, parts: [] }).kind).not.toBe("guest")
     expect(rung("invented", null).kind).not.toBe("guest")
   })
   test("a pooled seat's reaction replaces the scripted line at an event; curated keeps the script", () => {
@@ -97,7 +98,7 @@ describe("the toys payload", () => {
   test("narrowed to what is usable; junk and an absent route are null or empty", () => {
     expect(toysOf(null)).toBeNull()
     expect(toysOf({ visitors: [{ name: "A", line: "hi" }, { nope: 1 }], puns: ["p", 3, ""], reactions: { x: { fire_drill: ["a", 2], duck: [] } } }))
-      .toEqual({ visitors: [{ name: "A", look_seed: "A", line: "hi" }], puns: ["p"], reactions: { x: { fire_drill: ["a"] } } })
+      .toEqual({ visitors: [{ name: "A", look_seed: "A", line: "hi" }], puns: ["p"], reactions: { x: { fire_drill: ["a"] } }, parts: [] })
   })
 })
 
