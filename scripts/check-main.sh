@@ -4,14 +4,19 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 "$root/scripts/git-fetch-origin.sh" "$root" main || { echo "check-main: fetch failed"; exit 1; }
+# The checkout lives in the verify cache, as workline-verify's do, never in TMPDIR: /tmp is every
+# seat's write root, and the suite's hundreds of seeded git repos there cost every seat bwrap
+# mounts while it runs, past bwrap's 9000 arguments
+vroot="${XDG_CACHE_HOME:-$HOME/.cache}/tlon-verify"
+mkdir -p "$vroot"
 # what a SIGKILLed run left: its worktree and log, once older than any gate takes
-for stale in "${TMPDIR:-/tmp}"/tlon-main-*; do
+for stale in "$vroot"/main-* "${TMPDIR:-/tmp}"/tlon-main-*; do
   [ -n "$(find "$stale" -maxdepth 0 -mmin +120 2>/dev/null)" ] || continue
   [ -d "$stale" ] && git -C "$root" worktree remove --force "$stale" >/dev/null 2>&1
   rm -rf "$stale"
 done
 git -C "$root" worktree prune
-dir="$(mktemp -d -t tlon-main-XXXXXX)"
+dir="$(mktemp -d -p "$vroot" main-XXXXXX)"
 log="$(mktemp -t tlon-main-check-XXXXXX)"
 # the cleanup ignores a second TERM: a signal landing inside it would run `exit 143` and skip the rest
 trap 'trap "" TERM INT; rm -f "$log"; git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir"' EXIT
