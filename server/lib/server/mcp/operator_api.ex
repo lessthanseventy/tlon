@@ -37,7 +37,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/suggestions/:ws  Office.Corkboard.suggestions (the suggestion box)
       DELETE /api/office/suggestions/:ws/:id  Office.Corkboard.drop (filed as a ticket, or thrown out)
       GET    /api/office/margin/:ws  Office.Margin.notes (Uqbar's margin notes)
-      GET    /api/office/toys/:ws         ToyPool.day (the day's doorbell visitors, per-seat reactions and puns: {"visitors", "puns", "reactions": {seat: {event: [line]}}}, empty until generated)
+      GET    /api/office/toys/:ws         ToyPool.day (the day's doorbell visitors, per-seat reactions and puns: {"visitors", "puns", "reactions": {seat: {event: [line]}}, "parts": [{id, day, slot, front, side, back}]}, empty until generated)
       GET    /api/office/activity/:ws     Office.Room.activity (what just happened: the in-tray)
       GET    /api/office/triage/:ws       Office.Room.triage (blockers, failed checks, unled threads: the beacon)
       GET    /api/office/memory/:ws       Office.Room.memory (pinned facts, habits to review: the bookshelf)

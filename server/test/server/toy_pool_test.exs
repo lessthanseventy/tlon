@@ -151,7 +151,7 @@ defmodule Server.ToyPoolTest do
   end
 
   test "day is every stored pool of the workspace, empty until generated", %{ws: ws} do
-    assert ToyPool.day(ws.id) == %{visitors: [], puns: [], reactions: %{}}
+    assert ToyPool.day(ws.id) == %{visitors: [], puns: [], reactions: %{}, parts: []}
 
     {:ok, _} = ToyPool.refresh(ws.id, :visitors)
     {:ok, _} = ToyPool.refresh(ws.id, :puns)
@@ -164,5 +164,11 @@ defmodule Server.ToyPoolTest do
            } = ToyPool.day(ws.id)
 
     assert pun =~ "UDP"
+  end
+
+  test "day carries the part library", %{ws: ws} do
+    {:ok, _} = Server.GeneratedParts.refresh_due(ws.id, ~D[2026-10-22])
+
+    assert [%{id: "gen:2026-10-22", slot: "hand", front: %{"11" => "..........yy"}}] = ToyPool.day(ws.id).parts
   end
 end
