@@ -24,7 +24,7 @@ import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
-import { phoneBar, ringFrame } from "../kit/surfaces"
+import { clipLabel, inboxSections, phoneBar, ringFrame } from "../kit/surfaces"
 import { soulFor, soulLines, soulNote, useSouls } from "../kit/souls"
 import { loadSouls, soulsSignature } from "./souls"
 import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
@@ -1669,25 +1669,25 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "needs": {
-      // what waits on you: blocking first (work has stopped), then what to decide; then what's under way
+      // what waits by who acts: the phone (an answer owed), the machine (information), the clipboard (the crew's); then what's under way
       const row = (n: data.Need): Row => ({
         segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(n.thread_id ? [tidSeg(n.thread_id)] : []),
-          { s: n.title, fg: ROLE.prose }, dim(`  ${ago(n.at)}  `), { s: n.text.replace(/\s+/g, " "), fg: n.level === "blocking" ? ROLE.prose : ROLE.inactive }],
+          ...(n.surface === "clipboard" ? [{ s: `${clipLabel(n)}  `, fg: ROLE.key }] : []),
+          { s: n.title, fg: ROLE.prose }, dim(`  ${ago(n.at)}  `), { s: n.text.replace(/\s+/g, " "), fg: n.surface === "phone" ? ROLE.prose : ROLE.inactive }],
         open: n.thread_id ? () => openReader(n.thread_id!) : undefined, ref: n,
       })
-      const blocking = needs.filter((n) => n.level === "blocking"), deciding = needs.filter((n) => n.level === "decide")
+      const TONE = { phone: ROLE.attention, machine: ROLE.body, clipboard: ROLE.inactive }
       const live = all.threads.filter((t) => t.live && !t.standing && !needs.some((n) => n.thread_id === t.id))
       const section = (label: string, bg: string, note: string): Row => ({ segs: [{ s: ` ${label} `, fg: ROLE.ground, bg, bold: true }, dim(`  ${note}`)] })
       const rows: Row[] = [
-        ...(blocking.length ? [section(`BLOCKING · ${blocking.length}`, ROLE.attention, "work has stopped until you act"), ...blocking.map(row)] : []),
-        ...(deciding.length ? [section(`TO DECIDE · ${deciding.length}`, ROLE.body, "nothing waits on these"), ...deciding.map(row)] : []),
+        ...inboxSections(bySurface).flatMap((s) => [section(s.label, TONE[s.surface], s.note), ...s.items.map(row)]),
         ...(live.length ? [section(`UNDER WAY · ${live.length}`, ROLE.live, "being worked on"), ...live.map((t): Row => ({ segs: [tidSeg(t.id), { s: t.title, fg: ROLE.prose }, dim(`  ${t.lead ?? ""}${t.stage ? ` · ${t.stage}` : ""}`)], open: () => goThread(t.id, t.workspace_id) }))] : []),
       ]
       const n = rows[sel]?.ref as data.Need | undefined
       const acts: Action[] = !n ? [] : [...needActions(n), { ...bind("needs.f"), run: () => open({ kind: "decide", i: Math.max(0, needs.indexOf(n)) }) }]
       return {
-        title: needs.length ? `WAITING ON YOU · ${blocking.length} blocking · ${deciding.length} to decide` : "WAITING ON YOU",
-        tint: blocking.length ? ROLE.attention : deciding.length ? ROLE.body : ROLE.live,
+        title: needs.length ? `WAITING ON YOU · ${bySurface.counts.phone} on the phone · ${bySurface.counts.machine} on the machine · ${bySurface.counts.clipboard} on the clipboard` : "WAITING ON YOU",
+        tint: bySurface.counts.phone ? ROLE.attention : needs.length ? ROLE.body : ROLE.live,
         rows: rows.length ? rows : [{ segs: [{ s: "nothing waits on you. ", fg: ROLE.live }, dim("the crew is getting on with it.")] }],
         actions: [...acts.filter((a, i, all) => all.findIndex((b) => b.key === a.key) === i), back1],
       }
@@ -1730,20 +1730,20 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     }
     case "decide": {
       // one waiting item at a time, everything to decide it on the card; acting moves to the next
-      const order = [...needs.filter((x) => x.level === "blocking"), ...needs.filter((x) => x.level === "decide")]
+      const order = needs // phone first, then the machine, then the clipboard
       if (!order.length) return { title: "WAITING ON YOU", tint: ROLE.live, rows: [{ segs: [{ s: "nothing waits on you. ", fg: ROLE.live }, dim("the crew is getting on with it.")] }], actions: [back1] }
       const i = Math.min(mode.i, order.length - 1), n = order[i]!, tid = n.thread_id ?? null
       const t = tid ? all.threads.find((x) => x.id === tid) : undefined
       const step = (d: number) => open({ kind: "decide", i: (i + d + order.length) % order.length })
       const rows: Row[] = [
         { segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(tid ? [tidSeg(tid)] : []), { s: n.title, fg: ROLE.prose, bold: true }], open: tid ? () => openReader(tid) : undefined },
-        { segs: [dim(`${n.level === "blocking" ? "work has stopped until you act" : "nothing waits on this"} · ${ago(n.at)}${t ? ` · ${t.lead ?? "no lead"}${t.stage ? ` at ${t.stage}` : ""}` : ""}`)] },
+        { segs: [dim(`${n.surface === "clipboard" ? `the crew's: ${clipLabel(n)}` : n.surface === "machine" ? "for your information" : "an answer is owed"} · ${ago(n.at)}${t ? ` · ${t.lead ?? "no lead"}${t.stage ? ` at ${t.stage}` : ""}` : ""}`)] },
         { segs: [plain("")] },
         ...wrap(n.text, paneW() - 4).map((l): Row => ({ segs: [plain(l)] })),
       ]
       return {
         title: `DECIDE · ${i + 1} of ${order.length}`,
-        tint: n.level === "blocking" ? ROLE.attention : ROLE.body,
+        tint: n.surface === "clipboard" ? ROLE.inactive : n.surface === "machine" ? ROLE.body : ROLE.attention,
         rows,
         actions: [...needActions(n), { ...bind("decide.n"), run: () => step(1) }, { ...bind("decide.p"), run: () => step(-1) }, { ...bind("decide.l"), run: () => open({ kind: "needs" }) }, back1],
       }

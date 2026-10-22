@@ -82,8 +82,10 @@ linked window at a time, ctrl+] to the room).
   goes to the server (`PUT /api/life/:ws/dump`), a save the server didn't take is retried on the next write, leave, open or refresh, and `l` lists the
   earlier pages each save kept, to read or put back. That tmux is `TLON_OFFICE_TMUX` (default `tlon-office`), its
   files under `$XDG_RUNTIME_DIR/<it>` (the dump's under `$XDG_STATE_HOME/tlon/<it>`, so unsent words survive a reboot), so a drive's never touch the operator's. It is the
-  operator's surface. Its header carries what waits on you (`⚑ N blocking · M to decide`, from
-  `GET /api/office/needs`), `i` (or a click on it) opens that queue with each item's own actions, a click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
+  operator's surface. Its header carries one count, the phone (`☎ N waiting on you`, ringing while N > 0,
+  from `GET /api/office/needs?by=surface` — `kit/surfaces.ts`); the room's answering machine blinks for
+  information (played, it is heard) and the sheriff's clipboard by the door holds what the crew owns.
+  `i` (or a click on the count) opens the inbox by surface with each item's own actions, a click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
   office than main offers `R` to reload itself. Work that lands dark hides behind a server flag,
   read only from the snapshot (`flagOn` in `kit/types.ts`): `B`, build mode, is there only with
   `build_mode` on. A running coworker's card shows their activity timeline
