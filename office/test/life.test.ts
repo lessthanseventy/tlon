@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { homeLevel, lifeBar, lifeHeader, lifeRows } from "../kit/life"
+import { homeLevel, lifeBar, lifeHeader, lifeRows, streakFrames } from "../kit/life"
 import { EMPTY } from "../kit/types"
 
 describe("lifeBar", () => {
@@ -42,4 +42,16 @@ describe("homeLevel", () => {
     expect(homeLevel(EMPTY)).toBeNull()
     expect(homeLevel({ ...EMPTY, life: {} })).toBeNull()
   })
+})
+
+describe("streakFrames", () => {
+  test("a streak under 7 hangs no frame", () => expect(streakFrames({ "1": 3 })).toEqual([]))
+  test("a broken streak hangs no frame", () => expect(streakFrames({ "1": 0 })).toEqual([]))
+  test("7 hangs a tier 1 frame for its routine", () =>
+    expect(streakFrames({ "1": 7 })).toEqual([{ routine: 1, tier: 1 }]))
+  test("30 is tier 2, the highest milestone reached", () =>
+    expect(streakFrames({ "4": 45 })).toEqual([{ routine: 4, tier: 2 }]))
+  test("100 is tier 3", () => expect(streakFrames({ "9": 100 })).toEqual([{ routine: 9, tier: 3 }]))
+  test("one frame per routine that has reached a milestone, in routine order", () =>
+    expect(streakFrames({ "2": 2, "8": 7, "5": 30 })).toEqual([{ routine: 5, tier: 2 }, { routine: 8, tier: 1 }]))
 })

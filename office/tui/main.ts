@@ -30,7 +30,7 @@ import { soulFor, soulLines, soulNote, useSouls } from "../kit/souls"
 import { loadSouls, soulsSignature } from "./souls"
 import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
-import { lifeHeader, lifeRows } from "../kit/life"
+import { lifeHeader, lifeRows, streakFrames } from "../kit/life"
 import { usageHeader } from "../kit/usage"
 import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
 import { BLANK_SOUL, bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
@@ -595,6 +595,7 @@ async function readCard(w: number) {
     case "review": review = await data.review(mode.tid); break
     case "calendar": cal = await data.schedules(w); break
     case "life": lifeCard = (await data.life(w)) ?? lifeCard; break
+    case "build": lifeCard = await data.life(w); break
     case "pages": dumpPages = await data.dumpPages(w); break
     case "runs": case "run": board = (await data.runs(mode.id)) ?? board; cal ??= await data.schedules(w); break
     case "tray": trayRead = feed[0]?.at ?? trayRead; writeState(TRAY, trayRead); changed(); break
@@ -2096,7 +2097,7 @@ function draw() {
   homeShown = building
   const vp = building ? { x: 0, y: 0, w: viewport.w, h: viewport.h } : viewport
   if (building) {
-    frame = renderHome({ home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(needs) })
+    frame = renderHome({ home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(needs), frames: streakFrames(lifeCard?.streaks ?? {}) })
     imageDirty = true
   } else if (fresh || roomChanged) { frame = room0.render(a, { picked: lit ?? picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx(), machine: bySurface.counts.machine, clipboard: bySurface.clipboard.filter((n) => n.workspace_id == null || n.workspace_id === ws) }, measureFor(g), world?.now()); roomChanged = false }
   const seen = clipFrame(frame!, vp)
