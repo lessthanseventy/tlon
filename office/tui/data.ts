@@ -312,6 +312,8 @@ export const handOff = (id: number, agent: string) => write(`handing #${id} off`
 /** a workline back to an earlier stage on its own branch, the build kept; `why` reaches the stage's lead */
 export const sendBack = (id: number, stage: "spec" | "plan" | "build", why: string) => write(`sending #${id} back to ${stage}`, `/threads/${id}/send_back`, { stage, why }, () => `#${id} back to ${stage}`)
 /** the refused command's allow rule is in your own settings now: said on the thread, which wakes the lead to run it again */
+/** a tool refusal's decision handed to Uqbar: a post to it on the thread, its lead untouched */
+export const refusalToUqbar = (id: number, text: string) => write(`asking Uqbar about #${id}`, `/threads/${id}/messages`, { body: `@uqbar decide this tool refusal for me: ${text}` }, () => `#${id}: Uqbar asked to decide`)
 export const allowed = (id: number, rule: string) => write(`telling #${id} it is allowed`, `/threads/${id}/messages`, { body: `Allowed: \`${rule}\` is in my Claude Code settings now; run it again.` }, () => `#${id} told: allowed`)
 export const move = (id: number, project: number) => write(`moving #${id}`, `/threads/${id}/move`, { project_id: project }, () => `#${id} moved`)
 export const deleteThread = (id: number) => send("DELETE", `deleting #${id}`, `/threads/${id}`, (j) => `deleted #${id}${j.worktree ? ` — worktree ${j.worktree}` : ""}`)

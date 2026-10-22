@@ -797,6 +797,8 @@ const NUDGE = "Nothing has moved here for a while: advance the stage if its work
 function needActions(n: data.Need): Action[] {
   const tid = n.thread_id ?? null
   const after = () => void refresh()
+  // settled by Uqbar: overruling it is the one answer; it goes back to Uqbar, not to you
+  if (n.route === "settled") return [{ ...bind("need.u.settled"), run: () => void did(data.overrule(n.key)).then(after) }, ...(tid ? [{ ...bind("need.v"), run: () => openReader(tid) }] : [])]
   const acts: Action[] = [
     ...(n.kind === "gate" && tid ? [{ ...bind("need.A.gate"), run: () => void did(data.approve(tid)).then(after) }] : []),
     ...(n.kind === "dialog" && n.ref ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.answer(n.ref!, o.key)).then(after) })) : []),
@@ -829,11 +831,11 @@ function needActions(n: data.Need): Action[] {
     ...(n.kind === "publish_failed" && tid ? [{ ...bind("need.d.publish_failed"), run: () => ask("its PR's url — waited on until GitHub merges it", (s) => { if (s.trim()) void did(data.publishedByHand(tid, s.trim())).then(after) }) }] : []),
     ...(n.kind === "no_seat" && n.archetype && n.workspace_id != null ? [{ ...bind("need.h.no_seat", `hire a ${n.archetype}`), run: () => ask(`hire a ${n.archetype} — their name`, (s) => { if (s.trim()) void did(data.hire(n.workspace_id!, s.trim(), n.archetype!)).then(after) }) }] : []),
     ...(n.kind === "no_seat" && tid ? [{ ...bind("need.o.no_seat"), run: () => ask(`hand #${tid} to — a coworker's name`, (s) => { if (s.trim()) void did(data.handOff(tid, s.trim())).then(after) }) }] : []),
-    ...(n.kind === "tool_denied" && tid && n.rule ? [{ ...bind("need.A.tool_denied", `allowed it: ${n.rule} is in your own settings (wakes the lead)`), run: () => void did(data.allowed(tid, n.rule!)).then(after) }] : []),
+    ...(n.kind === "tool_denied" && tid && n.rule && !n.hook ? [{ ...bind("need.A.tool_denied", `allowed it: ${n.rule} is in your own settings (wakes the lead)`), run: () => void did(data.allowed(tid, n.rule!)).then(after) }] : []),
     ...(n.kind === "tool_denied" && tid ? [
       { ...bind("need.r.tool_denied"), run: () => reply(tid) },
       { ...bind("need.B.tool_denied"), run: () => ask(`#${tid} back to build — what to change`, (s) => { if (s.trim()) void did(data.sendBack(tid, "build", s.trim())).then(after) }) },
-      { ...bind("need.u.tool_denied"), run: () => void did(data.handOff(tid, "uqbar")).then(after) },
+      { ...bind("need.u.tool_denied"), run: () => void did(data.refusalToUqbar(tid, n.text)).then(after) },
     ] : []),
     ...(n.kind === "quota" && n.workspace_id != null ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: o.label, run: () => void did(data.shiftSwitch(n.workspace_id!, o.key)).then(after) })) : []),
     ...(n.kind === "quota" ? [
@@ -1680,13 +1682,18 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     }
     case "needs": {
       // what waits by who acts: the phone (an answer owed), the machine (information), the clipboard (the crew's); then what's under way
+      // a settled row says how Uqbar handled it; a passed-up one carries Uqbar's recommendation
+      const detail = (n: data.Need): Row["segs"] =>
+        n.route === "settled" ? [{ s: `settled by Uqbar · ${n.why ?? ""}`, fg: ROLE.body }]
+          : n.route === "uqbar" ? [dim(`with Uqbar · ${n.text.replace(/\s+/g, " ")}`)]
+          : [{ s: n.text.replace(/\s+/g, " "), fg: n.surface === "phone" ? ROLE.prose : ROLE.inactive }, ...(n.recommendation ? [{ s: `  tip: ${n.recommendation}`, fg: ROLE.key }] : [])]
       const row = (n: data.Need): Row => ({
         segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(n.thread_id ? [tidSeg(n.thread_id)] : []),
           ...(n.surface === "clipboard" ? [{ s: `${clipLabel(n)}  `, fg: ROLE.key }] : []),
-          { s: n.title, fg: ROLE.prose }, dim(`  ${ago(n.at)}  `), { s: n.text.replace(/\s+/g, " "), fg: n.surface === "phone" ? ROLE.prose : ROLE.inactive }],
+          { s: n.title, fg: ROLE.prose }, dim(`  ${ago(n.at)}  `), ...detail(n)],
         open: n.thread_id ? () => openReader(n.thread_id!) : undefined, ref: n,
       })
-      const TONE = { phone: ROLE.attention, machine: ROLE.body, clipboard: ROLE.inactive }
+      const TONE = { phone: ROLE.attention, machine: ROLE.body, settled: ROLE.body, clipboard: ROLE.inactive, uqbar: ROLE.inactive }
       const live = all.threads.filter((t) => t.live && !t.standing && !needs.some((n) => n.thread_id === t.id))
       const section = (label: string, bg: string, note: string): Row => ({ segs: [{ s: ` ${label} `, fg: ROLE.ground, bg, bold: true }, dim(`  ${note}`)] })
       const rows: Row[] = [
