@@ -35,6 +35,14 @@ defmodule Server.Workline.ContinuationTest do
     assert m.body =~ "work/x/plan.md is not committed"
   end
 
+  test "a thread blocked on an open ticket is not nudged — it has said it cannot act", %{thread: t} do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Stuck"})
+    {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "worktrees are read-only"})
+    {:ok, _} = Server.Blocked.declare(ticket.id, t.id, "yu", "ro")
+    :ok = Continuation.run(t.id, artifacts: Missing)
+    assert continuations(t.id) == []
+  end
+
   test "at review the continuation says how a reviewer lands it — submit_review, not a commit it cannot make" do
     {:ok, review} = Workline.open(%{title: "review it", slug: "reviewing", stage: "review"})
     :ok = Continuation.run(review.id, artifacts: Missing)
