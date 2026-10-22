@@ -10,7 +10,9 @@ defmodule Server.Workline do
   stage's owed artifact (checked through the `Server.Workline.Artifacts` behaviour, recorded
   as a CHECK either way, correlation `workline:<slug>:artifact`). Gated transitions —
   spec→plan, review→merged, and a machine-born intent→spec — park in `awaiting: <operator>`
-  instead of flipping; `approve/1` is the operator's completion verb. A reviewed change Andrew
+  instead of flipping; `approve/1` is the operator's completion verb, and its approval stands
+  across commits that only touch `work/<slug>/` (an advance after one re-queues, never re-parks;
+  `approval/1`). A reviewed change Andrew
   would see (`@user_visible` paths) also owes a QA pass before its gate (`qa_verdict/5`), when the
   bench seats a qa. Every completed flip
   records a `stage_advanced` event: the slice-6 ledger reads metrics out of rows that
@@ -1102,11 +1104,21 @@ defmodule Server.Workline do
   defp gated?(%Thread{stage: "intent", born: "machine"}), do: true
   defp gated?(%Thread{stage: stage}), do: stage in @gated
 
-  defp park(thread, checker, opts) do
-    if thread.stage == "review" and auto_land?(thread, checker, opts),
-      do: queue(thread, auto_land_note(thread, opts), "auto_land_risk"),
-      else: park_on_operator(thread, checker)
+  # An approval stands across commits that only touched work/<slug>/ (`approval/1`): a reviewer
+  # re-committing review.md and advancing again re-queues the code, it does not ask for it twice.
+  defp park(%Thread{stage: "review"} = thread, checker, opts) do
+    case approval(thread) do
+      %{"by" => by, "sha" => sha} ->
+        queue(thread, "#{by}'s approval at #{String.slice(sha, 0, 7)} still stands", by)
+
+      nil ->
+        if auto_land?(thread, checker, opts),
+          do: queue(thread, auto_land_note(thread, opts), "auto_land_risk"),
+          else: park_on_operator(thread, checker)
+    end
   end
+
+  defp park(thread, checker, _opts), do: park_on_operator(thread, checker)
 
   defp park_on_operator(thread, checker) do
     {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: operator()}) |> Repo.update()

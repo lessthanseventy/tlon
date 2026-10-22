@@ -887,6 +887,39 @@ defmodule Server.WorklineTest do
       assert %{"by" => "andrew"} = Workline.approval(queued)
     end
 
+    defp commit_file!(repo, path, text) do
+      File.mkdir_p!(Path.join(repo, Path.dirname(path)))
+      File.write!(Path.join(repo, path), text)
+      git!(repo, ["add", path])
+      git!(repo, ["commit", "-q", "-m", path])
+      git!(repo, ["branch", "-f", "work/lamp", "HEAD"])
+    end
+
+    test "advancing again after only the workline's docs moved keeps the approval: back in the queue, no new gate",
+         %{repo: repo} do
+      queued = queued_lamp!()
+      commit_file!(repo, "work/lamp/review.md", "VERDICT: approve\nheld follow-up\n")
+      parked = fn -> Enum.count(Channel.thread_messages(queued), &(&1.body =~ "parked at review")) end
+      before = parked.()
+
+      assert {:ok, %{stage: "review", awaiting: nil}} = Workline.advance(queued, artifacts: AllPresent, land: :queue)
+      assert parked.() == before
+    end
+
+    test "advancing again after code moved parks the gate again", %{repo: repo} do
+      queued = queued_lamp!()
+      commit_file!(repo, "lib/x.ex", "code\n")
+
+      assert {:awaiting, %{awaiting: "andrew"}} = Workline.advance(queued, artifacts: AllPresent, land: :queue)
+    end
+
+    test "another workline's docs are not this one's: they void the approval", %{repo: repo} do
+      queued = queued_lamp!()
+      commit_file!(repo, "work/other/review.md", "not ours\n")
+
+      assert {:awaiting, %{awaiting: "andrew"}} = Workline.advance(queued, artifacts: AllPresent, land: :queue)
+    end
+
     test "a closed workline whose landing is queued or running is not stranded work" do
       queued = queued_lamp!()
       {:ok, _} = Channel.close_thread(queued)
