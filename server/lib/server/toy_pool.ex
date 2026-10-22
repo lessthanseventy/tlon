@@ -56,11 +56,12 @@ defmodule Server.ToyPool do
 
   @doc """
   `refresh_due/2` for every pool of `ws`: visitors, puns, and the reactions of each seat on its bench,
-  either crew. `[{kind, result}]`.
+  either crew, then the day's invented accessory (`Server.GeneratedParts`). `[{kind, result}]`.
   """
   def refresh_all_due(ws) do
     seats = for %{name: name} <- Server.Workspaces.bench_all(ws), do: {:reactions, name}
-    for kind <- [:visitors, :puns | seats], do: {kind, refresh_due(ws, kind)}
+    pools = for kind <- [:visitors, :puns | seats], do: {kind, refresh_due(ws, kind)}
+    pools ++ [{:part, Server.GeneratedParts.refresh_due(ws)}]
   end
 
   @doc "`refresh/3` unless the pool was written in the last #{@fresh_hours} hours."

@@ -105,7 +105,7 @@ description = "server: who's on the clock — every live session, warm/cold (Sta
 run = "scripts/tlon-cli.sh roster"
 
 ["toys:refresh"]
-description = "toys: refill the toy's generated pools (visitors, puns, each seat's reactions) a day old or more, on the generator's ollama model, against the LIVE service — the daily script schedule (Server.ToyPool.refresh_all_due)"
+description = "toys: refill the toy's generated pools (visitors, puns, each seat's reactions, and the day's invented accessory) a day old or more, on the generator's ollama model, against the LIVE service — the daily script schedule (Server.ToyPool.refresh_all_due)"
 run = "scripts/tlon-cli.sh toys"
 
 ["server:dossier"]
