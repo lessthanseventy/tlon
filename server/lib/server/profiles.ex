@@ -208,8 +208,9 @@ defmodule Server.Profiles do
       ]
     },
     "filesystem" => %{
-      # Writes: the repo (edits), tlon's own checkout, /tmp + the socket dir (adapters-lspd), and
-      # the dev-tool caches by name. Never the nix store, nor all of ~/.local or ~/.cache: each
+      # Writes: the repo (edits), the tree this module compiled in (the release's, in the service),
+      # /tmp + the socket dir (adapters-lspd), and the dev-tool caches by name. A seat's own worktree
+      # and its gitdirs are added at launch (adapters/claude-code/launch.sh). Never the nix store, nor all of ~/.local or ~/.cache: each
       # denyWrite match and each repo's protected git files under a write root is a bwrap mount, and
       # an AUR clone cache or an app's store takes bwrap past its 9000 arguments, refusing every command.
       "allowWrite" =>
