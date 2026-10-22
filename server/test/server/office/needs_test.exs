@@ -726,4 +726,25 @@ defmodule Server.Office.NeedsTest do
       assert close_path == "/api/threads/#{t.id}/close"
     end
   end
+
+  describe "surface/1 — who acts on each kind" do
+    test "the table: phone owes an answer, the machine is information, the clipboard is the crew's" do
+      phone = ~w(gate question dialog ask seats quota no_seat tool_denied)
+      machine = ~w(mention rollout)
+      clipboard = ~w(issue stalled verify_failed pr_blocked publish_failed release_failed job_failed stranded)
+
+      for k <- phone, do: assert(Needs.surface(k) == "phone")
+      for k <- machine, do: assert(Needs.surface(k) == "machine")
+      for k <- clipboard, do: assert(Needs.surface(k) == "clipboard")
+      assert Enum.sort(Needs.kinds()) == Enum.sort(phone ++ machine ++ clipboard)
+    end
+
+    test "every kind has a surface" do
+      for k <- Needs.kinds(), do: assert(Needs.surface(k) in ~w(phone machine clipboard))
+    end
+
+    test "an unlisted kind is not routed" do
+      assert_raise FunctionClauseError, fn -> Needs.surface("brand_new") end
+    end
+  end
 end

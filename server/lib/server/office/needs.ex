@@ -64,6 +64,9 @@ defmodule Server.Office.Needs do
   @mention_hours 12
   @landing_grace_s 3600
   @holds_ttl_s 300
+  @phone ~w(gate question dialog ask seats quota no_seat tool_denied)
+  @machine ~w(mention rollout)
+  @clipboard ~w(issue stalled verify_failed pr_blocked publish_failed release_failed job_failed stranded)
 
   @doc "Every item waiting on the operator, across the workspaces."
   def list do
@@ -72,6 +75,17 @@ defmodule Server.Office.Needs do
     prune(away, items)
     Enum.reject(items, &put_away?(&1, away[&1.key]))
   end
+
+  @doc "Every kind the list can hold; each has a surface (`surface/1`)."
+  def kinds, do: @phone ++ @machine ++ @clipboard
+
+  @doc """
+  Where a kind is answered: `"phone"` (an answer is owed), `"machine"` (information for the
+  operator) or `"clipboard"` (the crew owns it). No catch-all: a kind not in `kinds/0` raises.
+  """
+  def surface(kind) when kind in @phone, do: "phone"
+  def surface(kind) when kind in @machine, do: "machine"
+  def surface(kind) when kind in @clipboard, do: "clipboard"
 
   @doc """
   The operator puts an item away without acting on it (the inbox's `d`): it leaves the list until
