@@ -39,7 +39,7 @@ Off: every conditional kind routes as `pass_up` (== #326's behaviour; no `uqbar`
 ## Surfaces
 - TUI inbox (`office/tui/data.ts`, `main.ts`, `keys.ts`): sections PHONE, MACHINE, CLIPBOARD, then "with Uqbar: N" (not in the top bar count). The digest rows (settled, with `why`) sit on the machine, with an overrule key (`o`) calling `data.overrule` → `POST /api/office/needs/overrule {"key"}`. Clipboard rows show the recommendation tip. `Needs` type gains `uqbar`, `settled`.
 - Clipboard in the room (`office/kit/draw.ts`) draws `counts.clipboard`.
-- MCP tools `settle_need`, `pass_up_need` (Uqbar only; hidden from other seats' tool lists) and the `POST /api/office/needs/overrule` route; `operator_api.ex` moduledoc lists it.
+- MCP tools `settle_need`, `pass_up_need` (refused for any seat but Uqbar's; the tool list is not changed) and the `POST /api/office/needs/overrule` route; `operator_api.ex` moduledoc lists it.
 
 ## Migration
 `need_routing` is a new table: additive, no backfill. Rollback = drop table; the flag off makes it unread.
