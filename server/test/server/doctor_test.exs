@@ -17,6 +17,7 @@ defmodule Server.DoctorTest do
                "event",
                "fact",
                "fun_with_flags_toggles",
+               "generated_part",
                "generator_call",
                "habit",
                "issue",
