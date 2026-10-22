@@ -169,6 +169,7 @@ defmodule Server.Office.Room do
   def health do
     db = match?({:ok, _}, Repo.query("SELECT 1"))
     failed_jobs = if db, do: Repo.aggregate(Server.Office.Needs.failed_jobs_query(), :count)
+    checks = checks()
 
     h = %{
       version: to_string(Application.spec(:server, :vsn)),
@@ -180,8 +181,8 @@ defmodule Server.Office.Room do
       disk_pct: disk_pct(),
       mem_pct: mem_pct(),
       load: load(),
-      checks: checks(),
-      merge_queue: if(db, do: merge_queue(), else: [])
+      checks: checks,
+      merge_queue: if(db, do: merge_queue(checks), else: [])
     }
 
     problems = problems(h)
@@ -218,21 +219,47 @@ defmodule Server.Office.Room do
 
   @doc """
   The merge queue: worklines approved and PRs reviewed, landing one at a time (`Server.Jobs.Land`)
-  — the one being gated now first, then the queued in order. `[%{thread_id, title, state}]`, `state`
-  `"landing"` or `"queued"`; a PR's `thread_id` is the thread its review was recorded on.
+  — the one being gated now first, then the queued in order. `[%{thread_id, title, state, train,
+  gate}]`, `state` `"landing"` or `"queued"`; a PR's `thread_id` is the thread its review was
+  recorded on. `train` is `%{lead, pos, size, split}` for a car of the running gate, as its job
+  recorded them (`Server.Jobs.Land.record_cars/1`; `split` on a lead a red train left landing alone),
+  `"solo"` for a landing that carries only itself (a PR's or a reland never rides), `nil` for one
+  waiting its own turn. `gate` is on the running gate's items only: `%{pid, started_at}`, `pid` the
+  checks holder's (`checks`, as `checks/1`) when its line names this gate, else nil.
   """
-  def merge_queue do
-    from(j in Oban.Job,
-      join: t in Server.Thread,
-      on: t.id == type(fragment("coalesce(?->>'thread_id', ?->>'on_thread')", j.args, j.args), :integer),
-      where: j.worker == "Server.Jobs.Land" and j.state in ["executing", "available", "scheduled", "retryable"],
-      order_by: [desc: fragment("? = 'executing'", j.state), asc: j.id],
-      select: %{thread_id: t.id, title: t.title, state: j.state, args: j.args}
-    )
-    |> Repo.all()
-    |> Enum.map(fn %{args: args} = row ->
+  def merge_queue(checks \\ checks()) do
+    rows =
+      Repo.all(
+        from(j in Oban.Job,
+          join: t in Server.Thread,
+          on: t.id == type(fragment("coalesce(?->>'thread_id', ?->>'on_thread')", j.args, j.args), :integer),
+          where: j.worker == "Server.Jobs.Land" and j.state in ["executing", "available", "scheduled", "retryable"],
+          order_by: [desc: fragment("? = 'executing'", j.state), asc: j.id],
+          select: %{
+            thread_id: t.id,
+            title: t.title,
+            state: j.state,
+            args: j.args,
+            meta: j.meta,
+            attempted_at: j.attempted_at
+          }
+        )
+      )
+
+    running = Enum.find(rows, &(&1.state == "executing"))
+    {cars, split, gate} = running_gate(running, checks)
+
+    Enum.map(rows, fn %{args: args} = row ->
       title = if args["pr"], do: "PR ##{args["pr"]} #{args["branch"]}", else: row.title
-      %{thread_id: row.thread_id, title: title, state: if(row.state == "executing", do: "landing", else: "queued")}
+      train = train(row, row == running, cars, split)
+
+      %{
+        thread_id: row.thread_id,
+        title: title,
+        state: if(row.state == "executing", do: "landing", else: "queued"),
+        train: train,
+        gate: if(row == running or is_map(train), do: gate)
+      }
     end)
   end
 
@@ -480,4 +507,42 @@ defmodule Server.Office.Room do
 
   defp event_who(%Event{kind: "handoff_opened", detail: %{"from" => from}}), do: from
   defp event_who(_), do: nil
+
+  defp running_gate(nil, _checks), do: {[], false, nil}
+
+  defp running_gate(running, checks) do
+    cars = running.meta["cars"] || [running.thread_id]
+    gate = %{pid: gate_pid(running, cars, checks.running), started_at: running.attempted_at}
+    {cars, running.meta["split"] == true, gate}
+  end
+
+  defp train(%{args: args}, _running?, _cars, _split) when is_map_key(args, "pr") or is_map_key(args, "reland"),
+    do: "solo"
+
+  defp train(_row, true, [lead], true), do: %{lead: lead, pos: 1, size: 1, split: true}
+  defp train(_row, true, [_], _split), do: "solo"
+
+  defp train(%{thread_id: id}, _running?, [lead | _] = cars, false) when length(cars) > 1 do
+    case Enum.find_index(cars, &(&1 == id)) do
+      nil -> nil
+      i -> %{lead: lead, pos: i + 1, size: length(cars), split: false}
+    end
+  end
+
+  defp train(_row, _running?, _cars, _split), do: nil
+
+  # the gate runs on the train's last car (`Server.Jobs.Land.gate_train/4`), labelled by
+  # workline-verify.sh as "#<id> landing <slug>", a PR's as "PR #<n> landing <branch>"
+  defp gate_pid(_running, _cars, nil), do: nil
+
+  defp gate_pid(%{args: args}, cars, line) do
+    label = if args["pr"], do: "PR ##{args["pr"]} landing ", else: "##{List.last(cars)} landing "
+
+    with true <- String.starts_with?(line, label),
+         [_, pid] <- Regex.run(~r/\(pid (\d+)\)/, line) do
+      String.to_integer(pid)
+    else
+      _ -> nil
+    end
+  end
 end

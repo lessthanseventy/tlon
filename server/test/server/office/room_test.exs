@@ -45,6 +45,86 @@ defmodule Server.Office.RoomChecksTest do
              Room.merge_queue()
   end
 
+  defp landing!(thread_id, meta \\ %{}) do
+    {:ok, job} = %{thread_id: thread_id} |> Server.Jobs.Land.new(meta: meta) |> Oban.insert()
+    job
+  end
+
+  defp executing!(job),
+    do:
+      Server.Repo.update_all(from(j in Oban.Job, where: j.id == ^job.id),
+        set: [state: "executing", attempted_at: DateTime.utc_now()]
+      )
+
+  defp threads!(titles), do: for(t <- titles, do: elem(Server.Channel.open_thread(%{title: t}), 1))
+
+  test "a train is the running gate's cars, as its job recorded them: lead first, each with its place, the gate on every car" do
+    Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+    [a, b, c, d] = threads!(~w(lead second third own-turn))
+    ja = landing!(a.id, %{"cars" => [a.id, b.id, c.id], "split" => false})
+    landing!(b.id)
+    landing!(c.id)
+    landing!(d.id)
+    executing!(ja)
+    holder = "##{c.id} landing third (pid 4242) in /w since 21:49:17"
+    lead = a.id
+
+    assert [
+             %{thread_id: ^lead, state: "landing", train: %{lead: ^lead, pos: 1, size: 3, split: false}, gate: gate},
+             %{state: "queued", train: %{lead: ^lead, pos: 2, size: 3}, gate: gate},
+             %{state: "queued", train: %{lead: ^lead, pos: 3, size: 3}, gate: gate},
+             %{state: "queued", train: nil, gate: nil}
+           ] = Room.merge_queue(%{running: holder, waiting: []})
+
+    assert %{pid: 4242, started_at: %DateTime{}} = gate
+
+    assert [%{gate: %{pid: nil}} | _] =
+             Room.merge_queue(%{running: "##{a.id} verify lead (pid 1) in /w since 1", waiting: []})
+
+    assert [%{gate: %{pid: nil}} | _] = Room.merge_queue(%{running: nil, waiting: []})
+  end
+
+  test "a lead split off a red train lands alone: its train says so, the rest wait their own turn" do
+    Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+    [a, b] = threads!(~w(lead second))
+    ja = landing!(a.id, %{"cars" => [a.id], "split" => true})
+    landing!(b.id)
+    executing!(ja)
+
+    assert [%{train: %{pos: 1, size: 1, split: true}, gate: %{pid: 7}}, %{train: nil, gate: nil}] =
+             Room.merge_queue(%{running: "##{a.id} landing lead (pid 7) in /w since 1", waiting: []})
+  end
+
+  test "a PR's landing never rides: solo when it runs and when it waits behind a train, the gate only on the running one" do
+    Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+    [a, b, r] = threads!(~w(lead second review))
+    ja = landing!(a.id, %{"cars" => [a.id, b.id], "split" => false})
+    landing!(b.id)
+    {:ok, pr} = %{"pr" => 7, "branch" => "chat-ux", "on_thread" => r.id} |> Server.Jobs.Land.new() |> Oban.insert()
+    executing!(ja)
+
+    assert [_, _, %{title: "PR #7 chat-ux", train: "solo", gate: nil}] = Room.merge_queue(%{running: nil, waiting: []})
+
+    Server.Repo.update_all(from(j in Oban.Job, where: j.id == ^ja.id), set: [state: "completed"])
+    executing!(pr)
+
+    assert [%{title: "PR #7 chat-ux", train: "solo", gate: %{pid: 9}}, %{train: nil}] =
+             Room.merge_queue(%{running: "PR #7 landing chat-ux (pid 9) in /w since 1", waiting: []})
+  end
+
+  test "a running landing with no train recorded carries only itself" do
+    Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+    [a] = threads!(~w(alone))
+    executing!(landing!(a.id))
+
+    assert [%{train: "solo", gate: %{pid: 3}}] =
+             Room.merge_queue(%{running: "##{a.id} landing alone (pid 3) in /w since 1", waiting: []})
+  end
+
   test "a reviewed PR is on the same line, named as the PR, on the thread its review was recorded on" do
     Server.TestDB.clean!()
     start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
