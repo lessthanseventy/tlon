@@ -273,7 +273,7 @@ let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.
 /** the office corkboard: the crew's chatter to each other, newest first */
 let cork: CorkNote[] = []
 /** everything waiting on you (`Server.Office.Needs`) by who acts; `needs` is every item, phone first */
-let bySurface: data.Needs = { items: [], phone: [], machine: [], clipboard: [], counts: { phone: 0, machine: 0, clipboard: 0 } }
+let bySurface: data.Needs = { items: [], phone: [], machine: [], clipboard: [], uqbar: [], settled: [], counts: { phone: 0, machine: 0, clipboard: 0, uqbar: 0, settled: 0 } }
 let needs: data.Need[] = []
 /** Scharlach's demerit ledger: ticks when a coworker's build goes red (the sheriff's workspace's triage) */
 let ledger: Ledger = newLedger()

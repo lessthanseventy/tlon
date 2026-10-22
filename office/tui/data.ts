@@ -113,12 +113,24 @@ export type Need = {
   /** clipboard: the thread's lead, and the workline or ticket tracking it */
   owner?: string | null
   tracking?: string | null
+  /** tool_denied: a hook refused it, so no allow rule lifts it */
+  hook?: boolean
+  /** `Needs.grouped/1`'s routing: uqbar (awaiting Uqbar), settled, pass_up or info */
+  route?: "uqbar" | "settled" | "pass_up" | "info"
+  /** passed up: what Uqbar would do (null for a kind that always passes up) */
+  recommendation?: string | null
+  /** settled: how Uqbar handled it; passed up: why it needs you */
+  why?: string | null
 }
 export type Surface = "phone" | "machine" | "clipboard"
-/** the inbox by who acts: `items` is every one, phone first, for the callers that want the one list */
-export type Needs = { items: Need[]; phone: Need[]; machine: Need[]; clipboard: Need[]; counts: Record<Surface, number> }
+/** the inbox by who acts: `items` is every one that reaches you, phone first; `uqbar` waits on Uqbar and `settled` is what it handled today — neither reaches you */
+export type Needs = { items: Need[]; phone: Need[]; machine: Need[]; clipboard: Need[]; uqbar: Need[]; settled: Need[]; counts: Record<Surface | "uqbar" | "settled", number> }
 const SURFACES: Surface[] = ["phone", "machine", "clipboard"]
-const inboxOf = (g: Record<Surface, Need[]>): Needs => ({ ...g, items: SURFACES.flatMap((s) => g[s]), counts: { phone: g.phone.length, machine: g.machine.length, clipboard: g.clipboard.length } })
+type Groups = Record<Surface, Need[]> & { uqbar?: Need[]; settled?: Need[] }
+const inboxOf = ({ uqbar = [], settled = [], ...g }: Groups): Needs => ({
+  ...g, uqbar, settled, items: SURFACES.flatMap((s) => g[s]),
+  counts: { phone: g.phone.length, machine: g.machine.length, clipboard: g.clipboard.length, uqbar: uqbar.length, settled: settled.length },
+})
 const noNeeds = inboxOf({ phone: [], machine: [], clipboard: [] })
 let lastNeeds: Needs = noNeeds
 /** everything waiting on the operator, by surface; a server that can't answer keeps the last inbox, so the phone never goes quiet mid-outage. A server with only the flat list is grouped by each item's surface, none on the phone */
@@ -129,12 +141,14 @@ export async function needs(): Promise<Needs> {
     if (Array.isArray(r.json)) {
       const on = (s: Surface) => (r.json as Need[]).filter((n) => (n.surface ?? "phone") === s)
       lastNeeds = inboxOf({ phone: on("phone"), machine: on("machine"), clipboard: on("clipboard") })
-    } else lastNeeds = { ...inboxOf(r.json), counts: r.json.counts }
+    } else { const g = inboxOf(r.json); lastNeeds = { ...g, counts: { ...g.counts, ...r.json.counts } } }
     return lastNeeds
   } catch { return lastNeeds }
 }
 /** the machine opened: these items are heard and leave it */
 export const hear = (keys: string[]) => write("marking heard", "/office/needs/heard", { keys }, () => "heard")
+/** a need Uqbar settled goes back to Uqbar's queue — not to you */
+export const overrule = (key: string) => write("overruling", "/office/needs/overrule", { key }, () => "back with Uqbar")
 /** a landing GitHub isn't merging: back in the merge queue — rebased, gated, merged at that head */
 export const rebaseLanding = (tid: number) => write(`requeuing #${tid}'s PR`, `/threads/${tid}/rebase`, {}, () => `#${tid}'s PR back in the merge queue`)
 /** a landing GitHub isn't merging: its PR closed, the workline back to build on its branch */
