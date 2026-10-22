@@ -16,7 +16,7 @@ defmodule Server.Office.Needs do
       `tracking` (the workline's slug, else the ticket an issue names): `issue`, `stalled`,
       `verify_failed`, `pr_blocked`, `publish_failed`, `release_failed`, `job_failed`, `stranded`.
 
-  `grouped/1` is the list by surface, with counts; `list/0` stays the one flat list. `level` orders
+  `grouped/1` is the list by surface, routed, with counts; `list/0` stays the one flat list. `level` orders
   items within a surface and decides what `dismiss/1` refuses:
 
     * **blocking** — work has stopped until the operator acts:
@@ -45,8 +45,9 @@ defmodule Server.Office.Needs do
       workline last moved — the adapter's `tool_denied` event, the call and the check's reason — and
       nobody is working it: allowed (`rule`, the Claude Code allow rule for a refused Bash command, is
       the operator's to add to their own settings, the one place the check honours one; saying so on
-      the thread is the answer), done by hand, sent back, or handed to Uqbar; an answer is movement,
-      so a refusal after it is a new item);
+      the thread is the answer; a hook's refusal, `hook_refusal?/1`, has no rule), done by hand, sent
+      back, or its decision handed to Uqbar as a post (the lead stays); an answer is movement, so a
+      refusal after it is a new item);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
@@ -64,6 +65,29 @@ defmodule Server.Office.Needs do
   Blocking first, then to decide; oldest first within each. An item leaves the list when the thing
   behind it is resolved — approved, answered, filed — or when the operator puts it away (`dismiss/1`):
   never because it was looked at.
+
+  **Routing through Uqbar** (`grouped/1` only; `list/0` stays flat and unrouted). Under the
+  `uqbar_routing` flag, shipped off, Uqbar is the first stop: an item reaches the operator only when
+  Uqbar passes it up or its rule always does. `pass_up_rule/1`, a pure function of the item, with no
+  catch-all:
+
+  | kinds | reaches the operator |
+  |---|---|
+  | seats, quota, tool_denied (a permission refusal) | always |
+  | gate, question, dialog, ask, no_seat | if irreversible, outward, costly, a host command, or an `auto_land_risk` gate |
+  | issue, stalled, verify_failed, job_failed, stranded, tool_denied (a hook's) | if irreversible or a host command |
+  | pr_blocked, publish_failed, release_failed | if it needs a host command |
+  | mention, rollout | information: never routed |
+
+  Each item in `grouped/1` carries `route`: `uqbar` (awaiting Uqbar: the `uqbar` group, never on the
+  phone's count), `pass_up` (on its surface, with Uqbar's `recommendation` and `why`), `settled` (off
+  every surface; in the `settled` digest for a day with its `why`) or `info`. A verdict is a
+  `need_routing` row from Uqbar's seat only (`settle/3`, `pass_up/4`; the server never infers one
+  from an item's text), applying while it is no older than the item; the operator's `overrule/1`
+  sends a settled item back to Uqbar, not to themselves. Fail-open: an item Uqbar has not routed
+  within the `uqbar_route_minutes` knob passes up as "Uqbar did not route it in time", measured from
+  the item's own time, so an overruled item past it reaches the operator at once. With the flag off,
+  rows are not read and every conditional item passes up.
 
   Only what someone actually asked for, or the machine actually needs, is here: the corkboard's
   suggestions are banter written in a coworker's voice, not their request, so they stay in its
@@ -97,8 +121,9 @@ defmodule Server.Office.Needs do
   end
 
   @doc """
-  The list by who acts on it: `%{phone:, machine:, clipboard:, counts:}`, each in `list/0`'s order.
-  The machine holds only what is not yet heard (`hear/1`) and is under a day old at `now`.
+  The list by who acts on it: `%{phone:, machine:, clipboard:, uqbar:, settled:, counts:}`, each in
+  `list/0`'s order and routed (see Routing). The machine holds only what is not yet heard (`hear/1`)
+  and is under a day old at `now`; `settled` only what was settled in the day before it.
   """
   def grouped(now \\ DateTime.utc_now()) do
     {routes, items} = Enum.split_with(routed(), &(&1.route in ~w(uqbar settled)))
