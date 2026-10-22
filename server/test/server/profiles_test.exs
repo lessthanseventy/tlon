@@ -5,6 +5,27 @@ defmodule Server.ProfilesTest do
   alias Server.Profile
   alias Server.Profiles
 
+  describe "launch_bytes/1 — a launch's scripts, by content" do
+    @describetag :tmp_dir
+
+    # a pane runs the scripts its command names: an edit to one (launch.sh) is a changed launch,
+    # so the stale-launch sweep must see it, not only the command's text
+    test "the bytes of every script the command names, so an edit to one changes the stamp", %{tmp_dir: tmp} do
+      script = Path.join(tmp, "launch.sh")
+      File.write!(script, "echo one\n")
+      command = "env A=1 #{script} --model x"
+
+      before = Profiles.launch_bytes(command)
+      assert before =~ "echo one"
+      File.write!(script, "echo two\n")
+      refute Profiles.launch_bytes(command) == before
+    end
+
+    test "words that are not files add nothing", %{tmp_dir: tmp} do
+      assert Profiles.launch_bytes("env A=1 --model x #{Path.join(tmp, "gone.sh")}") == ""
+    end
+  end
+
   describe "render/1 — the files a profile's dir needs" do
     test "the sandbox and the persona pass through untouched" do
       r = Profiles.render(%Profile{name: "t", sandbox: %{"enabled" => true}, system_prompt: "you are t"})
