@@ -1,6 +1,7 @@
 defmodule Server.TicketThread do
   @moduledoc """
-  A tie between a ticket and a thread (UX slice 4): `promoted | relates`.
+  A tie between a ticket and a thread (UX slice 4): `promoted | relates | blocked_on` (the thread's
+  seat cannot act until the ticket is fixed: `Server.Blocked`).
 
   The many-to-many the single `promoted_thread_id` column could not express — a ticket may be
   discussed in several threads, a thread may carry several tickets, and either lives perfectly
@@ -12,7 +13,7 @@ defmodule Server.TicketThread do
 
   import Ecto.Changeset
 
-  @kinds ~w(promoted relates)
+  @kinds ~w(promoted relates blocked_on)
 
   schema "ticket_thread" do
     field :kind, :string, default: "relates"

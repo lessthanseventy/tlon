@@ -434,6 +434,36 @@ defmodule Server.MCP.Tool.StartTicket do
   end
 end
 
+defmodule Server.MCP.Tool.BlockedOn do
+  @moduledoc """
+  You cannot act because of a problem an OPEN ticket already covers (`list_tickets` first): say so
+  here instead of asking the operator. `why` is appended to the ticket as seen again (what you hit,
+  from your thread), your thread is marked blocked on it and says so in a notice. Nothing is asked
+  of the operator; you are not nudged while blocked; the ticket is one item on the operator's list
+  however many threads wait; and your lead is woken to retry once the ticket is closed and a release
+  is live. A ticket that is not open is refused. See `Server.Blocked`.
+  """
+  use Server.MCP.Tool
+
+  alias Server.MCP
+
+  schema do
+    field :ticket_id, :integer, required: true, description: "The open ticket that covers what blocks you"
+    field :why, :string, required: true, description: "What you hit, as it shows from your thread"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    identity = Identity.from_frame(frame)
+
+    reply(
+      frame,
+      Server.Blocked.declare(params[:ticket_id], identity.thread_id, identity.agent, params[:why]),
+      &MCP.Brief.ticket/1
+    )
+  end
+end
+
 defmodule Server.MCP.Tool.WriteNote do
   @moduledoc """
   Write a NOTE — funes-native scratch, agent-readable/writable. Defaults to a note on THIS thread;
