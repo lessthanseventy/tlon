@@ -947,6 +947,34 @@ defmodule Server.Office.NeedsTest do
       assert g.uqbar == [] and g.settled == []
     end
 
+    defp refused(ws, reason) do
+      {:ok, t} = Channel.open_thread(%{title: "refused", workspace_id: ws.id})
+      hour_ago = DateTime.add(DateTime.utc_now(), -3600, :second)
+      Server.Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [created_at: hour_ago])
+
+      for _ <- 1..2,
+          do:
+            {:ok, _} =
+              Server.Dossier.record_event(%{
+                thread_id: t.id,
+                kind: "tool_denied",
+                correlation: "tool_denied:#{t.id}",
+                detail: %{"agent" => "bauer", "tool" => "Bash", "reason" => reason}
+              })
+
+      "tool_denied:#{t.id}"
+    end
+
+    test "a hook's refusal waits with Uqbar and takes a verdict; a permission refusal rings", %{ws: ws} do
+      hook = refused(ws, "PreToolUse:Bash hook error: python3 does not run here")
+      perm = refused(ws, "Permission to use Bash with command rm -rf x has been denied")
+      g = Needs.grouped()
+      assert [%{key: ^hook, hook: true, route: "uqbar"}] = g.uqbar
+      assert [%{key: ^perm, hook: false}] = g.phone
+      assert :ok = Needs.settle(hook, "the hook is right", "uqbar")
+      assert {:error, :always} = Needs.settle(perm, "w", "uqbar")
+    end
+
     test "only Uqbar's seat records a verdict", %{ws: ws} do
       {key, _} = question(ws)
       assert {:error, :forbidden} = Needs.settle(key, "dup", "daneri")
