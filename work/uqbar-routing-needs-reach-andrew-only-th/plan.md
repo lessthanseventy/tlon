@@ -175,3 +175,38 @@ Done: `menard run check --in server` ok; office and adapters module gates green;
 
 ## Handoff
 Builder reads spec.md first; open question "gate check handle vs session kind" is settled by decision 1 above. Fetch from origin failed in my sandbox: confirm #326 (57b5597) is on origin/main before the final rebase.
+
+---
+# Amendments from the spec review (#12233) — they override anything above they touch
+
+Build order: T1–T5 as above with the A-changes below, then **T10 (fail-open)**, then T6–T8, **T11 (#579)**, T9 last (docs cover all). T12 is a ticket, not code.
+
+## A. `tool_denied` is `:always` only for a permission refusal (amendment 2) — changes T1/T2/T3
+`pass_up_rule` becomes a function of the **item**, not just the kind: `pass_up_rule(%{kind: "tool_denied", hook: true})` → `{:when, [:irreversible, :host_command]}` (a hook refusal cannot be fixed by any setting, so it is Uqbar's); every other `tool_denied` → `:always`; all other kinds as the table. Keep `pass_up_rule/1` accepting a bare kind string too (`def pass_up_rule(kind) when is_binary(kind), do: pass_up_rule(%{kind: kind})`) so T1's coverage test over `Needs.kinds/0` stands. `routed/0` and `record/3` call it with the item.
+- How a hook refusal is told apart: the item gets `hook: boolean` from the newest denial's `detail["source"] == "hook"` (set in `tool_denied/2`'s `item(..., %{rule: …, hook: …})`). The adapter must send `source`: in `adapters/claude-code/mod.ts:643` the `declare($, "tool_denied", {…})` gains `source: "permission"` (this is the `tool.check` deny path = the permission check). **Builder first finds how a PreToolUse hook refusal (menard's, "tool_denied:332") reaches the server** — `grep -rn "PreToolUse\|hook" adapters/claude-code/mod.ts` and the 332 event row (`psql … select detail from events where correlation='tool_denied:332'`). If the adapter never sees it, add the `source: "hook"` report where it does (the `tool_denied` MCP tool, `mcp/tools/denied.ex`, gains an optional `source` field stored in `detail`); if the only tell is the reason text, match on it in ONE place (`Needs.hook_refusal?/1`) and say so in the PR. An event with no `source` counts as permission (old events, old adapters).
+- Tests first (needs_test, flag on): a denial pair with `source: "hook"` → item `route: "uqbar"`, `hook: true`, `settle` allowed; the same with `source: "permission"` or none → on the phone, `settle` → `{:error, :always}`. Rule test: `pass_up_rule(%{kind: "tool_denied", hook: true})` is `{:when, _}`. Adapter test (`mod.test.ts`): a denied `tool.check` declares `tool_denied` with `source: "permission"`.
+
+## T10 — fail-open: Uqbar's silence never hides a decision (amendment 1)  (`operator_config.ex`, `needs.ex`)
+Setting (`operator_config.ex` next to `quiet_workline_minutes`): `%{key: "uqbar_route_minutes", type: "int", min: 5, max: 1440, default: 30, doc: "a need Uqbar has not routed in this long reaches you as passed up"}`.
+Tests first, RED before the code (flag on): 
+- a conditional `question` item with `at` 31 min ago and no row → `phone` (not `uqbar`), `route: "pass_up"`, `why: "Uqbar did not route it in time"`, `recommendation: nil`, `counts.uqbar == 0`;
+- the same at 29 min → still `uqbar`; 
+- an operator `Server.OperatorConfig` override of the setting to 10 moves the boundary;
+- a `settled` row still wins over the timeout (settled is a verdict); a `passed_up` row keeps its own `why`/`recommendation`;
+- a stale row (older than the item) does not defeat the timeout; `overrule`d item (back in Uqbar's queue) gets a fresh clock: measure age from `max(item.at, overruled_at)` — store nothing new: on `overrule`, rewrite nothing; instead age from item.at only (**simplest; an overruled-then-expired item reaching Andrew is acceptable, say so in the docs**).
+- flag off: unchanged (everything already pass_up).
+Code: in `routed/0` pass `now = DateTime.utc_now()` and `limit = OperatorConfig.setting("uqbar_route_minutes")` into the per-item step; extend `route/3` so the last clause (`uqbar`) becomes `if age_min >= limit, do: "pass_up", else: "uqbar"`, and when it takes that branch set `why: "Uqbar did not route it in time"` on the item (`why` is otherwise from the row). Note this is evaluated per read (no job, no row written), so a recovered Uqbar can still `settle` an expired item: allow it (`record/3` only checks existence/kind) and the item leaves — good.
+Docs: moduledoc + AGENTS line: "fail-open at `uqbar_route_minutes`".
+Done: `needs_test.exs` + operator_config test (`grep -rl quiet_workline server/test`) green.
+
+## T11 — ticket #579: "Hand it to Uqbar" hands the decision, not the thread  (`alerts.ex`, `data.ts`)
+Today `actions(%{kind: "tool_denied"})` (`alerts.ex:190`) posts `/hand-off {agent: "uqbar"}`, which reassigns the thread's lead (`Staffing.hand_off`).
+Tests first (`server/test/server/alerts_test.exs`, mirror the existing tool_denied actions test): 
+- a tool_denied card's actions no longer contain a `/hand-off` call; the "Hand it to Uqbar" action (if kept) is `POST /api/office/needs/uqbar` — **decide one shape, simplest: reuse #12's ask-style handoff by posting a message on the thread addressed to uqbar** (`call("Hand it to Uqbar", "/messages", t, %{body: "@uqbar decide this tool refusal for me: …"})`) so the thread's lead is untouched; assert the lead is unchanged after the call;
+- a card with `hook: true` has **no** "Allowed it" action (also true when `rule` is nil already; assert for a hook item that has a `rule`);
+- a permission card still has "Allowed it: <rule>".
+Code: `actions/1` clause adds `not need[:hook]` to the `allowed` branch (`case need[:rule] … ` → `rule when not is_nil(rule) and not hook`); replace the last action as above. With `uqbar_routing` on, an `:always` permission card keeps the phone's four actions; the "Hand it to Uqbar" action is only offered on conditional items (hook ones) — and `ask` handoff (`/prompts/:id/uqbar`) stays as is. Mirror in `office/tui/data.ts:284` ("Allowed" body helper, per #493) only if the TUI builds actions itself (`grep -n "Allowed" office/tui/data.ts`); if it renders the server's list, nothing to change.
+Done: alerts_test green; `ticket #579` referenced in the commit message.
+
+## T12 — file the follow-up now (amendment 3)
+Not code: before advancing, `file_ticket` "Uqbar's judgement: the prompt that calls settle_need/pass_up_need per kind (its playbook), the daily digest job, and the path to flipping `uqbar_routing` on" labels `needs,uqbar`, body = spec "Out of scope" + the fail-open note (until it lands keep the flag off; with it on and Uqbar silent everything reaches Andrew after 30 min). Link it in `pr.md`.
