@@ -1,4 +1,4 @@
-// What's left of the office once every other tile is cut: the boss desk, the in-tray, the beacon,
+// What's left of the office once every other tile is cut: the boss desk, the in-tray, the answering machine, the clipboard,
 // the crew board, the manager's and the lead's desks, two tables of four, the filing cabinet, the
 // server rack, and your queue.
 import { fit, type Measure } from "../canvas"
@@ -7,6 +7,7 @@ import { needsYou, tipOf } from "../crew"
 import { NAMEPLATE, SHERIFF } from "../scharlach"
 import { bossDesk, crewBoard, decor, execDesk } from "../furniture"
 import { ROLE, tint } from "../palette"
+import { drawClipboard, drawMachine } from "../surfaces"
 import { at, type Live, type Rect, type Tile } from "../tiles"
 import type { Spot } from "../sim"
 import { shirtOf, BIG_PLANT } from "../sprites"
@@ -101,7 +102,8 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
       const px = sc.px.bind(sc), blit = sc.blit.bind(sc)
       for (const d of desks) if (d.kind === "boss") bossDesk(sc, a, d)
       inTray(sc, focus.tray ?? 0)
-      beacon(sc, Object.values(a.triage).reduce((n, x) => n + x, 0))
+      drawMachine(sc, TRAY.x - 2, TRAY.y + 46, focus.machine ?? 0) // on the floor left of the rug, below the in-tray
+      drawClipboard(sc, OFF_W - 4, OFF_DOOR - 16, focus.clipboard ?? [], BAND + 1)
       sc.item(OFFICE_PLANT.y + 11, () => blit(BIG_PLANT, OFFICE_PLANT.x, OFFICE_PLANT.y, { l: ROLE.live, o: ROLE.structure }))
 
       crewBoard(sc, a, measure, F0 + 8, EXEC_Y, CREW_W, 32, 9)
@@ -139,19 +141,6 @@ function inTray(sc: Scene, unread: number) {
   sc.hits.push({ x, y: y - 6, w: 16, h: 20, tip: `the in-tray: what just happened${unread ? ` — ${unread} new` : ""}`, act: { kind: "tray" } })
 }
 
-/** the beacon over your door: dark while nothing is stuck, turning red while something is */
-function beacon(sc: Scene, stuck: number) {
-  const x = OFF_W - 4, y = OFF_DOOR - 16, f = sc.f, px = sc.px.bind(sc)
-  sc.item(BAND + 1, () => {
-    px(x, y + 5, 9, 2, ROLE.inactive)
-    const on = stuck > 0 && f % 4 < 2
-    px(x + 1, y, 7, 5, stuck ? (on ? ROLE.alarm : tint(ROLE.alarm, ROLE.ground, 0.5)) : ROLE.raised)
-    px(x + 3, y + 1, 3, 1, stuck ? ROLE.prose : ROLE.inactive)
-    if (on) for (const [dx, dy] of [[-3, 1], [10, 1], [-2, -2], [9, -2]] as const) px(x + dx, y + dy, 2, 1, ROLE.alarm)
-  })
-  if (stuck) sc.overhead.push(() => sc.text(`${stuck} issues`, x + 4, y - 4, ROLE.alarm, 9))
-  sc.hits.push({ x: x - 3, y: y - 8, w: 15, h: 15, tip: stuck ? `the beacon: ${stuck} issues — the sheriff's to fix (open issues, failed checks, threads nobody leads); nothing for you to do` : "the beacon: nothing is stuck", act: { kind: "beacon" } })
-}
 
 /** the server rack: its lights blink green while the service is well, red while it needs a look */
 function rack(sc: Scene, a: Agents, x: number) {

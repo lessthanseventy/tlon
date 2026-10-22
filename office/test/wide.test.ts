@@ -50,15 +50,15 @@ describe("the wide room", () => {
     expect(Object.keys(got)).toEqual(Object.keys(golden))
   })
 
-  test("the in-tray, the beacon and the rack say what they hold, and open their cards", () => {
-    const tips = (a: Agents, tray: number) => new Map(new WideRoom(560).render(a, { ...focus, tray }, measure).hits.map((h) => [h.act.kind, h.tip]))
-    const quiet = tips(viewOf({ ...office(1), triage: { "1": 0 }, health: { state: "ok", problems: [] } }, 1), 0)
-    expect([quiet.get("tray"), quiet.get("beacon"), quiet.get("rack")]).toEqual(["the in-tray: what just happened", "the beacon: nothing is stuck", "the server rack: all green"])
-    const busy = tips(viewOf({ ...office(1), triage: { "1": 3, "2": 9 }, health: { state: "warn", problems: ["disk 95% full"] } }, 1), 4)
+  test("the in-tray, the answering machine, the clipboard and the rack say what they hold, and open their cards", () => {
+    const tips = (a: Agents, more: Partial<typeof focus & { tray: number; machine: number; clipboard: { owner: string; tracking: string; title: string }[] }>) =>
+      new Map(new WideRoom(560).render(a, { ...focus, ...more }, measure).hits.map((h) => [h.act.kind, h.tip]))
+    const quiet = tips(viewOf({ ...office(1), health: { state: "ok", problems: [] } }, 1), { tray: 0 })
+    expect([quiet.get("tray"), quiet.get("machine"), quiet.get("clipboard"), quiet.get("rack")]).toEqual(["the in-tray: what just happened", "the answering machine: nothing new", "the sheriff's clipboard: nothing on it", "the server rack: all green"])
+    const busy = tips(viewOf({ ...office(1), health: { state: "warn", problems: ["disk 95% full"] } }, 1), { tray: 4, machine: 2, clipboard: [{ owner: "cruz", tracking: "fix-sink", title: "the sink" }] })
     expect(busy.get("tray")).toContain("4 new")
-    // the beacon counts this workspace's stuck things, never another's
-    expect(busy.get("beacon")).toContain("3 issues")
-    expect(busy.get("beacon")).toContain("nothing for you to do")
+    expect(busy.get("machine")).toContain("2 new messages")
+    expect(busy.get("clipboard")).toContain("cruz · fix-sink · the sink")
     expect(busy.get("rack")).toContain("disk 95% full")
   })
 

@@ -30,6 +30,8 @@ export type Act =
   | { kind: "tray" }
   | { kind: "needs" }
   | { kind: "beacon" }
+  | { kind: "machine" }
+  | { kind: "clipboard" }
   | { kind: "rack" }
 
 export const needsYou = (t?: Thread) => !!t && (!!t.awaiting || !!t.prompt)
