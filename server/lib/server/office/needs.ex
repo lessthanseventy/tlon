@@ -62,6 +62,7 @@ defmodule Server.Office.Needs do
   alias Server.Thread
 
   @mention_hours 12
+  @machine_hours 24
   @landing_grace_s 3600
   @holds_ttl_s 300
   @phone ~w(gate question dialog ask seats quota no_seat tool_denied)
@@ -72,8 +73,37 @@ defmodule Server.Office.Needs do
   def list do
     items = all()
     away = Map.new(Repo.all(from d in "need_dismissal", select: {d.key, type(d.at, :utc_datetime)}))
-    prune(away, items)
+    prune("need_dismissal", away, items)
     Enum.reject(items, &put_away?(&1, away[&1.key]))
+  end
+
+  @doc """
+  The list by who acts on it: `%{phone:, machine:, clipboard:, counts:}`, each in `list/0`'s order.
+  The machine holds only what is not yet heard (`hear/1`) and is under a day old at `now`.
+  """
+  def grouped(now \\ DateTime.utc_now()) do
+    items = list()
+    heard = Map.new(Repo.all(from h in "need_heard", select: {h.key, type(h.at, :utc_datetime)}))
+    prune("need_heard", heard, items)
+    since = DateTime.add(now, -@machine_hours * 3600, :second)
+    by = Enum.group_by(items, & &1.surface)
+
+    machine =
+      Enum.reject(Map.get(by, "machine", []), &(put_away?(&1, heard[&1.key]) or DateTime.before?(&1.at, since)))
+
+    groups = %{phone: Map.get(by, "phone", []), machine: machine, clipboard: Map.get(by, "clipboard", [])}
+    Map.put(groups, :counts, Map.new(groups, fn {surface, items} -> {surface, length(items)} end))
+  end
+
+  @doc """
+  The operator opened the machine: these items are heard and leave it until something newer comes
+  under their key. The flat list keeps them. `:ok`.
+  """
+  def hear(keys) do
+    now = DateTime.truncate(DateTime.utc_now(), :second)
+    rows = for key <- keys, do: %{key: key, at: now}
+    Repo.insert_all("need_heard", rows, on_conflict: {:replace, [:at]}, conflict_target: :key)
+    :ok
   end
 
   @doc "Every kind the list can hold; each has a surface (`surface/1`)."
@@ -789,11 +819,11 @@ defmodule Server.Office.Needs do
     if last, do: "#{head} — #{last.author}: #{String.slice(last.body, 0, 200)}", else: head
   end
 
-  # a put-away whose item is gone has nothing left to hide: a later item under the same key is new
-  defp prune(away, items) do
+  # a put-away (or a heard) whose item is gone has nothing left to hide: a later item under the same key is new
+  defp prune(table, away, items) do
     keys = MapSet.new(items, & &1.key)
     gone = for {key, _} <- away, not MapSet.member?(keys, key), do: key
-    if gone != [], do: Repo.delete_all(from d in "need_dismissal", where: d.key in ^gone)
+    if gone != [], do: Repo.delete_all(from d in table, where: d.key in ^gone)
   end
 
   defp failure(j), do: {j.worker, last_error(j.errors)}

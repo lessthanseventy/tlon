@@ -774,4 +774,61 @@ defmodule Server.Office.NeedsTest do
       assert tracking == t.slug
     end
   end
+
+  describe "grouped/1 — the phone, the machine and the clipboard" do
+    defp mention(ws, n) do
+      {:ok, t} = Channel.open_thread(%{title: "m#{n}", workspace_id: ws.id})
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "daneri", body: "@andrew fyi #{n}"})
+      t
+    end
+
+    defp issue(ws, n) do
+      {:ok, t} = Channel.open_thread(%{title: "i#{n}", workspace_id: ws.id})
+      {:ok, _} = Server.Dossier.raise_issue(%{thread_id: t.id, summary: "issue #{n}", found_by: "cruz"})
+      t
+    end
+
+    test "the 2026-10-10 state — four issues, two mentions — rings nothing", %{ws: ws} do
+      for n <- 13..16, do: issue(ws, n)
+      for n <- [191, 207], do: mention(ws, n)
+
+      g = Needs.grouped()
+      assert g.counts == %{phone: 0, machine: 2, clipboard: 4}
+      assert {length(g.phone), length(g.machine), length(g.clipboard)} == {0, 2, 4}
+      assert Enum.all?(g.clipboard, &(&1.surface == "clipboard"))
+    end
+
+    test "a machine item leaves once heard; a newer one under its key comes back", %{ws: ws} do
+      t = mention(ws, 1)
+      issue(ws, 2)
+      [%{key: key}] = Needs.grouped().machine
+      assert :ok = Needs.hear([key])
+
+      g = Needs.grouped()
+      assert g.machine == [] and g.counts.machine == 0
+      assert [_] = g.clipboard
+      assert Enum.any?(Needs.list(), &(&1.key == key)), "the flat list is not filtered by what was heard"
+
+      later = DateTime.add(DateTime.utc_now(), 5, :second)
+
+      Server.Repo.update_all(from(h in "need_heard", where: h.key == ^key),
+        set: [at: DateTime.add(later, -10, :second)]
+      )
+
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "daneri", body: "@andrew again"})
+
+      Server.Repo.update_all(from(m in Server.Message, where: m.thread_id == ^t.id and m.body == "@andrew again"),
+        set: [created_at: later]
+      )
+
+      assert [_] = Needs.grouped().machine
+    end
+
+    test "a machine item older than a day has left the machine", %{ws: ws} do
+      mention(ws, 1)
+      tomorrow = DateTime.add(DateTime.utc_now(), 25 * 3600, :second)
+      assert Needs.grouped(tomorrow).machine == []
+      assert [_] = Needs.grouped().machine
+    end
+  end
 end

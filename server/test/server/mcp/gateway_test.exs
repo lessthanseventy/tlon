@@ -365,6 +365,24 @@ defmodule Server.MCP.GatewayTest do
       assert {404, _} = get_json("/api/office/threads/999999")
     end
 
+    test "GET /api/office/needs?by=surface is the list by who acts; POST …/needs/heard empties the machine",
+         %{thread: t} do
+      {:ok, _} = Server.Attention.ask(t.id, "tertius", "start now?", ["go", "hold"])
+      {:ok, m} = Server.Channel.open_thread(%{title: "m", workspace_id: t.workspace_id})
+      {:ok, _} = Server.Channel.post(%{thread_id: m.id, author: "daneri", body: "@andrew fyi"})
+
+      {200, flat} = get_json("/api/office/needs")
+      assert is_list(flat) and Enum.all?(flat, &is_binary(&1["surface"]))
+
+      {200, g} = get_json("/api/office/needs?by=surface")
+      assert %{"phone" => 1, "machine" => 1, "clipboard" => 0} = g["counts"]
+      assert [%{"key" => key, "surface" => "machine"}] = g["machine"]
+
+      assert {200, %{"ok" => true}} = post_json("/api/office/needs/heard", %{keys: [key]})
+      assert {200, %{"counts" => %{"machine" => 0}}} = get_json("/api/office/needs?by=surface")
+      assert {400, _} = post_json("/api/office/needs/heard", %{keys: "nope"})
+    end
+
     test "POST /api/office/asks/:id answers that ask by its key; a key it doesn't offer is refused", %{thread: t} do
       {:ok, a} = Server.Attention.ask(t.id, "tertius", "start now?", ["go", "hold"])
       assert {409, _} = post_json("/api/office/asks/#{a.id}", %{key: "9"})
