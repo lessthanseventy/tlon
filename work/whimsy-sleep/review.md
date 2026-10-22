@@ -1,37 +1,27 @@
-request_changes
+approve
 
-# whimsy-sleep review
+# whimsy-sleep review (round 2)
 
-One blocking finding; the rest is clean.
+Round 1 had one blocking finding: `bedScene` matched `/\bbed\b/i`, so "make the bed" (a morning routine from the same §7 doc) put the figure to sleep at 08:00. Fix requested: `/\bin bed\b/i` plus a test that "make the bed" alone yields no scene.
 
-## the "bed" match is too loose — "make the bed" puts you to sleep
+## fixed — verified
 
-`bedScene` (office/kit/life.ts:44) finds the first routine whose title contains the word "bed":
+2361e02 makes exactly that change:
 
-```ts
-const bed = today.find((r) => /\bbed\b/i.test(r.title))
-```
+- `office/kit/life.ts:44` — `/\bin bed\b/i`. "in bed by 23:00" matches; "make the bed" does not.
+- `office/test/life.test.ts:69` — new test "making the bed is not going to bed": `bedScene([{ title: "make the bed", … }], …)` → `null`. Closes the gap I flagged (the suite previously only tested "teeth" as the non-bed routine).
 
-§7 (docs/plans/2026-10-06-home-space-and-dollhouse-design.md:360) names two routine packs: `morning` (…make the bed) and `evening` (…in bed by). Both titles contain the word "bed". `today` is ordered by due_at, so the morning "make the bed" sorts first; once it is stamped, `bedScene` returns `"asleep"` and the figure lies down at 08:00 — not what §7 means by "your figure lies down when it is stamped" (the bedtime routine, "in bed by 23:00"). The routine packs are not shipped yet, but a user can create a "make the bed" routine today via `routine_create`, and the collision is designed into the same doc that specifies this whimsy.
+The diff since 2c491e8 is these two hunks and nothing else — surgical, no collateral.
 
-Fix: match the bedtime routine, not any bed — `/\bin bed\b/i` ("in bed by 23:00" matches; "make the bed" does not). Add a test that "make the bed" alone yields no scene, closing the gap the current suite has (only "teeth" is tested as the non-bed routine).
+## the rest (unchanged from round 1, still holds)
 
-### patch
-```diff
---- a/office/kit/life.ts
-+++ b/office/kit/life.ts
-@@ -42,7 +42,7 @@
- export function bedScene(today: LifeStatus["today"], now: number): BedScene | null {
--  const bed = today.find((r) => /\bbed\b/i.test(r.title))
-+  const bed = today.find((r) => /\bin bed\b/i.test(r.title))
-```
+- `BED_ART` silhouettes read without colour — long figure from the pillow vs. short curled cat with ears. Legible for the operator's acuity/double-vision.
+- `bed` flows through `HomeView`/`renderHome`/`paintTile` to the bedroom tile only (tested).
+- `Date.now()` / `Date.parse(bed.due_at)` comparison is sound; `lifeCard?.today ?? []` guards the missing card.
+- office:check green (854 pass, 0 fail); verify passed on the branch.
 
-## the rest
+## non-blocking nit (noted, not filed)
 
-- `BED_ART` silhouettes (long figure from the pillow down vs. short curled cat with ears) read without colour — matches §7's legibility intent and the operator's acuity/double-vision constraint. Good.
-- `bed` flows through `HomeView`/`renderHome`/`paintTile` correctly; only the bedroom tile blits it (tested: "only the bedroom has a bed").
-- `Date.now()` / `Date.parse(bed.due_at)` comparison is sound; `lifeCard?.today ?? []` guards the missing life card.
-- office:check green (853, 0 fail); verify passed on the branch.
-- Provenance: commit 492ffee trailers claude-sonnet-5-5, matching emma's seat. Honest.
+`work/whimsy-sleep/pr.md` (d035d5a, committed after the fix) still says "matched on a routine titled with 'bed'" and "48 pass, 0 fail" — both stale after the regex change (now "in bed", 49 pass in life+homeart). Emma acknowledged this; it's PR-description text, not load-bearing, so no follow-up ticket. If it's easy to refresh before merge, fine; if not, it's history.
 
-The change is small and surgical — one regex and one test away from correct for the documented routine set.
+Ready to land.
