@@ -19,6 +19,9 @@ defmodule Server.Intake do
   alias Server.Thread
   alias Server.Ticket
 
+  # the office's own plumbing, by its labels: what the crew files about itself
+  @self_repair ~w(tooling sandbox sheriff smoke wake staffing tests flake worklines landing merge-queue adapters release intake)
+
   @doc "One pass over every workspace with a backlog, none while the office is paused (`Server.Pause`). `cap` and `route` override for a test."
   def run(opts \\ []) do
     if Server.Pause.state() == :working, do: pass(opts), else: :ok
@@ -92,17 +95,34 @@ defmodule Server.Intake do
   the children of an epic already `doing` first, each epic's lowest-`sort` step before its later ones.
   Equally urgent loose tickets go in board order (`Server.Tickets.in_workspace/1`), the top first:
   filed first, taken first, unless someone moved one.
+
+  Andrew's work first: below high priority, while the office's self-repair (`self_repair?/1`) holds at
+  least as much of what is in flight (todo or doing) as his work does, his next ticket goes before it.
+  Fixing its own plumbing files more plumbing, and without this the office works mostly on itself.
   """
   def next(ws) do
     blocked = Server.Tickets.blocked_in_workspace(ws)
     epics = epics_of(ws)
 
-    from(t in Ticket, where: t.workspace_id == ^ws and t.status == "backlog" and t.kind == "ticket")
-    |> Repo.all()
-    |> Enum.reject(&(MapSet.member?(blocked, &1.id) or held?(&1)))
-    |> first_step_of_each_epic(epics)
-    |> Enum.min_by(&rank(&1, epics), fn -> nil end)
+    ready =
+      from(t in Ticket, where: t.workspace_id == ^ws and t.status == "backlog" and t.kind == "ticket")
+      |> Repo.all()
+      |> Enum.reject(&(MapSet.member?(blocked, &1.id) or held?(&1)))
+      |> first_step_of_each_epic(epics)
+      |> Enum.sort_by(&rank(&1, epics))
+
+    with [best | _] <- ready,
+         false <- elem(rank(best, epics), 0) == Ticket.urgency("high") or not self_repair?(best),
+         true <- self_repair_ahead?(ws),
+         %Ticket{} = mine <- Enum.find(ready, &(not self_repair?(&1))) do
+      mine
+    else
+      _ -> List.first(ready)
+    end
   end
+
+  @doc "Whether a ticket is the office repairing itself, not Andrew's work: a label in #{inspect(@self_repair)}."
+  def self_repair?(%Ticket{labels: labels}), do: is_list(labels) and Enum.any?(labels, &(&1 in @self_repair))
 
   # %{child_id => epic}: which epic (if any) each ticket of the workspace belongs to
   defp epics_of(ws) do
@@ -152,5 +172,14 @@ defmodule Server.Intake do
         do: route.(ticket)
 
     :ok
+  end
+
+  defp self_repair_ahead?(ws) do
+    {self, mine} =
+      from(t in Ticket, where: t.workspace_id == ^ws and t.kind == "ticket" and t.status in ["todo", "doing"])
+      |> Repo.all()
+      |> Enum.split_with(&self_repair?/1)
+
+    length(self) >= length(mine)
   end
 end
