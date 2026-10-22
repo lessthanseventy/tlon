@@ -54,7 +54,12 @@ defmodule Server.CheckMainScriptTest do
   end
 
   defp env(ctx) do
-    [{"PATH", ctx.bin <> ":" <> System.get_env("PATH")}, {"TMPDIR", ctx.scratch}, {"SCRATCH", ctx.scratch}]
+    [
+      {"PATH", ctx.bin <> ":" <> System.get_env("PATH")},
+      {"TMPDIR", ctx.scratch},
+      {"SCRATCH", ctx.scratch},
+      {"XDG_CACHE_HOME", Path.join(ctx.scratch, "cache")}
+    ]
   end
 
   defp start(ctx) do
@@ -73,7 +78,22 @@ defmodule Server.CheckMainScriptTest do
     System.cmd("kill", ["-TERM", "#{pid}"])
   end
 
-  defp leftovers(ctx), do: Path.wildcard(Path.join(ctx.scratch, "tlon-main-*"))
+  defp checkouts(ctx), do: Path.wildcard(Path.join(ctx.scratch, "cache/tlon-verify/main-*"))
+  defp leftovers(ctx), do: Path.wildcard(Path.join(ctx.scratch, "tlon-main-*")) ++ checkouts(ctx)
+
+  # the full suite seeds hundreds of git repos in its checkout; under TMPDIR (/tmp, every seat's write
+  # root) each costs every seat bwrap mounts while it runs, past bwrap's 9000 arguments
+  test "the checkout lives under the verify cache, never under TMPDIR", ctx do
+    port = start(ctx)
+    wait_for(Path.join(ctx.scratch, "gating"))
+    assert [_] = checkouts(ctx)
+
+    assert ctx.scratch |> Path.join("tlon-main-*") |> Path.wildcard() |> Enum.reject(&String.contains?(&1, "-check-")) ==
+             []
+
+    stop(port)
+    assert_receive {^port, {:exit_status, 143}}, 10_000
+  end
 
   test "a TERM mid-gate removes the worktree and the log", ctx do
     port = start(ctx)
@@ -112,10 +132,11 @@ defmodule Server.CheckMainScriptTest do
   end
 
   test "a run sweeps the worktree and log a SIGKILLed one left", ctx do
-    stale = Path.join(ctx.scratch, "tlon-main-STALE1")
+    stale = Path.join(ctx.scratch, "cache/tlon-verify/main-STALE1")
+    File.mkdir_p!(Path.dirname(stale))
     sh!(ctx.root, "git worktree add -q --detach #{stale} HEAD")
     File.write!(Path.join(ctx.scratch, "tlon-main-check-STALE2"), "old")
-    sh!(ctx.scratch, "touch -d '3 hours ago' tlon-main-STALE1 tlon-main-check-STALE2")
+    sh!(ctx.scratch, "touch -d '3 hours ago' cache/tlon-verify/main-STALE1 tlon-main-check-STALE2")
 
     port = start(ctx)
 
