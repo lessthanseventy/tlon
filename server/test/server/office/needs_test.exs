@@ -138,6 +138,58 @@ defmodule Server.Office.NeedsTest do
     assert kinds(ws) == []
   end
 
+  test "a notice that names the operator is not a mention — an acknowledgement is not a question", %{ws: ws} do
+    {:ok, t} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, _} = Channel.post(%{thread_id: t.id, author: "yu", body: "@andrew got it, holding", kind: "notice"})
+    assert kinds(ws) == []
+  end
+
+  describe "blocked — one item per open ticket, however many threads wait on it" do
+    defp stuck(ws, name, ticket) do
+      {:ok, agent} = Server.Staff.register_agent(%{name: name, mandate: "build", engine: "fresh"})
+      {:ok, t} = Channel.open_thread(%{title: "work of #{name}", workspace_id: ws.id, agent_id: agent.id})
+      {:ok, _} = Server.Blocked.declare(ticket.id, t.id, name, "worktree is read-only")
+      t
+    end
+
+    test "three seats on one ticket are one decide item naming the ticket and the threads", %{ws: ws} do
+      {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "worktrees are read-only"})
+      [a, b, c] = for n <- ~w(yu emma hronir), do: stuck(ws, n, ticket)
+
+      assert [%{kind: "blocked", level: "decide", surface: "clipboard", text: text, tracking: tracking} = item] =
+               Needs.list()
+
+      assert item.key == "blocked:#{ticket.id}"
+      assert item.title =~ "worktrees are read-only"
+      assert text =~ "##{ticket.id}"
+      for t <- [a, b, c], do: assert(text =~ "##{t.id}")
+      assert tracking == "##{ticket.id}"
+    end
+
+    test "the ticket closing takes the item off the list, and a new seat on it brings it back after a put-away",
+         %{ws: ws} do
+      {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "ro"})
+      _ = stuck(ws, "yu", ticket)
+      [%{key: key}] = Needs.list()
+      assert :ok = Needs.dismiss(key)
+      assert Needs.list() == []
+
+      Process.sleep(1100)
+      _ = stuck(ws, "emma", ticket)
+      assert [%{kind: "blocked"}] = Needs.list()
+
+      {:ok, _} = Server.Tickets.update(Server.Tickets.get(ticket.id), %{status: "done"})
+      assert Needs.list() == []
+    end
+
+    test "a blocked thread asked nothing of the operator: no question, no stalled", %{ws: ws} do
+      {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "ro"})
+      t = stuck(ws, "yu", ticket)
+      assert [{"blocked", "decide"}] = kinds(ws)
+      refute Enum.any?(Needs.list(), &(&1.thread_id == t.id))
+    end
+  end
+
   test "a margin note that names the operator is not a mention", %{ws: ws} do
     {:ok, t} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
     {:ok, _} = Channel.post(%{thread_id: t.id, author: "uqbar", body: "@andrew #1 back to build", kind: "margin"})
@@ -534,6 +586,16 @@ defmodule Server.Office.NeedsTest do
       assert [%{kind: "tool_denied"}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
     end
 
+    test "a workline blocked on an open ticket is not stalled; the ticket's one item says why", %{ws: ws} do
+      t = workline(ws, "build", 4)
+      assert [{"stalled", "blocking"}] = kinds(ws)
+
+      {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "worktrees are read-only"})
+      {:ok, _} = Server.Blocked.declare(ticket.id, t.id, "bauer", "ro")
+      age(t, 4)
+      assert [{"blocked", "decide"}] = kinds(ws)
+    end
+
     test "a fresh workline is not stalled", %{ws: ws} do
       _ = workline(ws, "build", 0)
       assert kinds(ws) == []
@@ -761,7 +823,7 @@ defmodule Server.Office.NeedsTest do
     test "the table: phone owes an answer, the machine is information, the clipboard is the crew's" do
       phone = ~w(gate question dialog ask seats quota no_seat tool_denied)
       machine = ~w(mention rollout)
-      clipboard = ~w(issue stalled verify_failed pr_blocked publish_failed release_failed job_failed stranded)
+      clipboard = ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed stranded)
 
       for k <- phone, do: assert(Needs.surface(k) == "phone")
       for k <- machine, do: assert(Needs.surface(k) == "machine")
