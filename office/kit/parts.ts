@@ -59,6 +59,25 @@ export const PARTS: Record<string, Part> = {
   bunny: part("head", { hue: HUES, ears: [2, 3], band: ["r", "w", "g"] }, (d) =>
     hat(3, Array.from({ length: d.ears }, () => `${d.hue}....${d.hue}`), rep(d.band, 8))),
 
+  // the weird end: the same head slot, drawn to be a little much
+  duck: part("head", { beak: ["r", "g"] }, (d) => hat(3, ["yy", "yyyyy"], `yyy${d.beak}${d.beak}yyy`)),
+  fishbowl: part("head", { glass: ["c", "w"] }, (d) => hat(3, [rep(d.glass, 6), `${d.glass}....${d.glass}`, `${d.glass}....${d.glass}`], rep(d.glass, 8))),
+  cone: part("head", { stripe: ["w", "y"] }, (d) => hat(3, ["rr", rep(d.stripe, 4), rep("r", 6)], rep("r", 10))),
+  stormcloud: part("head", { cloud: ["w", "c"] }, (d) => {
+    const g = hat(3, [rep(d.cloud, 2), rep(d.cloud, 6)], rep(d.cloud, 8)), rain: View = { 4: at(2, "c..c..c"), 5: at(3, "c..c") }
+    return { front: { ...g.front, ...rain }, side: { ...g.side, 4: at(3, "c.c"), 5: at(4, "c") }, back: g.back }
+  }),
+  // a halo and a UFO hover over the hair rather than sit on it: nothing is cleared
+  halo: part("head", { glow: ["bright", "dim"] }, (d) => {
+    const v: View = d.glow === "bright" ? { 0: mid("yyyyyy"), 1: mid("y....y") } : { 0: mid("y.yy.y"), 1: mid("y....y") }
+    return { front: v, side: { 0: at(2, "yyyy"), 1: at(2, "y..y") }, back: v }
+  }),
+  plantpot: part("head", { leaf: ["g", "y"] }, (d) => hat(3, [`${d.leaf}..${d.leaf}${d.leaf}..${d.leaf}`, `.${rep(d.leaf, 6)}.`, rep("r", 6)], rep("r", 4))),
+  ufo: part("head", { dome: ["c", "g"] }, (d) => {
+    const v: View = { 0: mid(rep(d.dome, 2)), 1: mid(rep(d.dome, 4)), 2: mid("wywywyw") }
+    return { front: v, side: { 0: at(3, rep(d.dome, 2)), 1: at(2, rep(d.dome, 4)), 2: at(2, "wywyw") }, back: v }
+  }),
+
   // eyes: row 6 holds the eyes (front cols 3 and 8, side col 2)
   glasses: part("eyes", { frame: ["round", "shades"], tint: ["k", "g", "r"] }, (d) =>
     d.frame === "round"
@@ -103,6 +122,11 @@ export const PARTS: Record<string, Part> = {
     back: none,
   })),
 
+  snail: part("neck", { shell: ["y", "r"] }, (d) => {
+    const v: View = { 10: at(8, rep(d.shell, 2)), 11: at(7, `ww${rep(d.shell, 2)}`) }
+    return { front: v, side: { 10: at(1, rep(d.shell, 2)), 11: at(0, `ww${rep(d.shell, 2)}`) }, back: v }
+  }),
+
   // back: behind the body from the front and the side, over it from behind
   cape: part("back", { hue: HUES, length: ["short", "long"], trim: ["same", "w", "y"], emblem: [0, 1] }, (d) => {
     const end = d.length === "long" ? 17 : 14, trim = d.trim === "same" ? d.hue : d.trim, edge = (r: number) => (r === end ? trim : d.hue)
@@ -133,6 +157,15 @@ export const PARTS: Record<string, Part> = {
   }),
   balloon: part("hand", { hue: HUES, string: [3, 4] }, (d) => {
     const top = 10 - d.string, v = (col: number): View => ({ ...rows(top, top + 2, () => at(col - 1, rep(d.hue, 2))), ...rows(top + 3, 12, () => at(col, "w")) })
+    return { front: v(10), side: v(1), back: v(10) }
+  }),
+  bananaphone: part("hand", { ripe: ["y", "g"] }, (d) => {
+    const v = (col: number): View => ({ 10: at(col + 1, d.ripe), 11: at(col, rep(d.ripe, 2)), 12: at(col, d.ripe) })
+    return { front: v(10), side: v(1), back: v(10) }
+  }),
+  // toot: 1 shows the streamer the horn blows
+  partyhorn: part("hand", { toot: [0, 1] }, (d) => {
+    const v = (col: number): View => ({ ...(d.toot ? { 9: at(col, "yg"), 10: at(col, "gy") } : {}), 11: at(col, "rr"), 12: at(col, "r") })
     return { front: v(10), side: v(1), back: v(10) }
   }),
 }
