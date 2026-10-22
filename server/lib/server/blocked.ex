@@ -10,7 +10,7 @@ defmodule Server.Blocked do
   (`Server.Office.Needs`).
 
   The block clears when the ticket is closed AND a release has gone live since: the fix reaches a
-  seat's launch only at a cut, so `release/0` runs when `Server.Release.PM.note_live/1` says a new
+  seat's launch only at a cut, so `release/1` runs when `Server.Release.PM.note_live/1` says a new
   release is live, and wakes each blocked thread's lead to retry.
   """
   import Ecto.Query
@@ -57,7 +57,7 @@ defmodule Server.Blocked do
     end
   end
 
-  @doc "Whether the thread is blocked on a ticket: nothing is owed from it until `release/0` clears it."
+  @doc "Whether the thread is blocked on a ticket: nothing is owed from it until `release/1` clears it."
   def blocked?(thread_id) do
     Repo.exists?(from tt in TicketThread, where: tt.thread_id == ^thread_id and tt.kind == "blocked_on")
   end
