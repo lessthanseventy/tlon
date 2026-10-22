@@ -66,6 +66,8 @@ describe("bedScene", () => {
   test("past its time and unstamped, the cat is already on the bed", () =>
     expect(bedScene(today(false), at("2026-10-22T23:30:00Z"))).toBe("cat"))
   test("before its time and unstamped, the bed is empty", () => expect(bedScene(today(false), at("2026-10-22T20:00:00Z"))).toBeNull())
+  test("making the bed is not going to bed", () =>
+    expect(bedScene([{ routine_id: 3, title: "make the bed", due_at: "2026-10-22T07:00:00Z", done: true }], at("2026-10-22T08:00:00Z"))).toBeNull())
   test("no bed routine, no scene — other routines don't count", () =>
     expect(bedScene([{ routine_id: 1, title: "teeth", due_at: "2026-10-22T07:00:00Z", done: true }], at("2026-10-22T23:30:00Z"))).toBeNull())
 })
