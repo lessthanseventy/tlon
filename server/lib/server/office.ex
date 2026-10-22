@@ -395,9 +395,13 @@ defmodule Server.Office do
   defp seat(id, _lead, false), do: if(Server.Staffing.parked_note?(id), do: "parked", else: "idle")
 
   # An epic is a row (progress, its next free child) while any child is unfinished; a child names its epic.
+  # A started child stays on its epic's tree and names its thread; a started loose ticket is its thread's now.
   defp tickets(ws_ids) do
     add_progress(
-      for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), t.status != "doing" or t.kind != "ticket" do
+      for ws <- ws_ids,
+          t <- Server.Tickets.open_in_workspace(ws),
+          epic_id <- [Server.Tickets.epic_of(t.id)],
+          t.status != "doing" or t.kind != "ticket" or epic_id != nil do
         %{
           id: t.id,
           workspace_id: ws,
@@ -406,7 +410,9 @@ defmodule Server.Office do
           priority: t.priority,
           routed: t.status == "todo",
           kind: t.kind,
-          epic_id: Server.Tickets.epic_of(t.id)
+          status: t.status,
+          epic_id: epic_id,
+          thread_id: if(t.status == "doing", do: Server.Tickets.thread_of(t.id))
         }
       end,
       ws_ids

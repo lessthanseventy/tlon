@@ -100,6 +100,24 @@ defmodule Server.OfficeTest do
       refute Enum.any?(ts, &(&1.id == done.id))
     end
 
+    test "an epic's child on a thread stays on the tree, naming its thread; a loose started ticket does not", %{ws: ws} do
+      {:ok, epic} = Tickets.file(%{workspace_id: ws.id, title: "Toy", kind: "epic"})
+      {:ok, idle} = Tickets.file(%{workspace_id: ws.id, title: "not started", epic_id: epic.id})
+      {:ok, child} = Tickets.file(%{workspace_id: ws.id, title: "in flight", epic_id: epic.id})
+      {:ok, loose} = Tickets.file(%{workspace_id: ws.id, title: "loose and started"})
+      {:ok, th} = Server.Channel.open_thread(%{title: "in flight", workspace_id: ws.id})
+      {:ok, _} = Tickets.promote(child, th.id)
+      {:ok, _} = Tickets.promote(loose, th.id)
+
+      ts = Office.status().tickets
+
+      assert %{status: "doing", thread_id: tid} = Enum.find(ts, &(&1.id == child.id))
+      assert tid == th.id
+      assert %{thread_id: nil} = idle_row = Enum.find(ts, &(&1.id == idle.id))
+      refute idle_row.status == "doing"
+      refute Enum.any?(ts, &(&1.id == loose.id))
+    end
+
     test "carries today's celebrations (none when the calendar is off)" do
       assert Office.status().celebrations == []
     end

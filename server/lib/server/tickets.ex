@@ -133,6 +133,16 @@ defmodule Server.Tickets do
   def epic_of(ticket_id),
     do: Repo.one(from l in TicketLink, where: l.to_id == ^ticket_id and l.kind == "parent", select: l.from_id)
 
+  @doc "The thread a ticket was promoted into, or nil."
+  def thread_of(ticket_id),
+    do:
+      Repo.one(
+        from tt in TicketThread,
+          where: tt.ticket_id == ^ticket_id and tt.kind == "promoted",
+          select: tt.thread_id,
+          limit: 1
+      )
+
   @doc """
   Tie each of `ticket_ids` to the epic `epic_id` (a `parent` link). All or nothing: the first refusal rolls the rest
   back and is returned as `{:error, {ticket_id, changeset}}` so a caller can name the ticket. `{:ok, ticket_ids}`.
