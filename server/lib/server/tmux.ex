@@ -186,8 +186,15 @@ defmodule Server.Tmux do
     do:
       ~s|tty=$(readlink /proc/$$/fd/0); for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && [ "$(readlink /proc/$$/fd/$fd)" != "$tty" ] && eval "exec $fd>&-"; done 2>/dev/null|
 
-  @doc "The line every harness boot takes after sourcing the exports: into the thread's worktree, guarded."
-  def cd_worktree, do: ~s([ -n "$TLON_CWD" ] && cd "$TLON_CWD")
+  @doc """
+  The line every harness boot takes after sourcing the exports: into the thread's worktree, or not
+  at all. A worktree that is gone or has no `.git` refuses the boot; with no worktree (a thread with
+  no repo) it starts in the runtime dir. Never `$HOME`: from there Claude Code mounts every repo
+  under home into the seat's sandbox, past bwrap's 9000 arguments, and every Bash call dies.
+  """
+  def cd_worktree,
+    do:
+      ~S'if [ -n "$TLON_CWD" ]; then cd "$TLON_CWD" 2>/dev/null && [ -e .git ] || { echo "tlon: refusing to start: $TLON_CWD is not the worktree of this seat (gone, or no .git)" >&2; exit 1; }; else cd "${XDG_RUNTIME_DIR:-/tmp}"; fi'
 
   @doc "POSIX single-quote `s` so it survives a shell verbatim."
   def sh_single_quote(s), do: "'" <> String.replace(s, "'", "'\\''") <> "'"
