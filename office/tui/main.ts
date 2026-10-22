@@ -1496,8 +1496,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const queue = queueItems(rack, settings?.restart_pending ?? false)
       const queueRow = (q: QueueItem): Row => {
         const t = q.thread_id
-        const mark = q.kind === "check" || q.kind === "landing" ? { s: "▶ ", fg: ROLE.live } : q.kind === "restart" ? { s: "↻ ", fg: ROLE.attention } : { s: "⧗ ", fg: ROLE.inactive }
-        return { segs: [mark, ...(t ? [tidSeg(t)] : []), plain(q.text)], ...(t ? { open: () => goThread(t, null) } : {}) }
+        const mark = q.kind === "check" || q.kind === "gate" ? { s: "▶ ", fg: ROLE.live } : q.kind === "restart" ? { s: "↻ ", fg: ROLE.attention } : q.kind === "car" ? dim(`   ${q.pos} `) : { s: "⧗ ", fg: ROLE.inactive }
+        return { segs: [mark, ...(t ? [tidSeg(t)] : []), plain(q.text), ...(q.kind === "car" && q.lead ? [dim(" (lead)")] : [])], ...(t ? { open: () => goThread(t, null) } : {}) }
       }
       const rows: Row[] = [
         ...rack.problems.map((p) => ({ segs: [pink("! "), plain(p)] })),
@@ -1505,7 +1505,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ok(rack.failed_jobs === 0, `${rack.failed_jobs} failed job(s) today`), ok(rack.tmux, "tmux is there for the coworkers"),
         { segs: [dim(`disk ${rack.disk_pct ?? "?"}% · memory ${rack.mem_pct ?? "?"}% · load ${rack.load ?? "?"}`)] },
         { segs: [plain("")] },
-        { segs: [key("LANDING & CHECKS"), dim("  one full check at a time, one landing at a time")] },
+        { segs: [key("LANDING & CHECKS"), dim("  one full check at a time")] },
         ...(queue.length ? queue.map(queueRow) : [{ segs: [dim("  idle")] } as Row]),
       ]
       return { title: `THE RACK · ${rack.state === "ok" ? "all green" : "needs a look"}`, rows, actions: [back1] }
