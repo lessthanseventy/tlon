@@ -85,7 +85,11 @@ linked window at a time, ctrl+] to the room).
   operator's surface. Its header carries one count, the phone (`☎ N waiting on you`, ringing while N > 0,
   from `GET /api/office/needs?by=surface` — `kit/surfaces.ts`); the room's answering machine blinks for
   information (played, it is heard) and the sheriff's clipboard by the door holds what the crew owns.
-  `i` (or a click on the count) opens the inbox by surface with each item's own actions, a click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
+  `i` (or a click on the count) opens the inbox by surface with each item's own actions: PHONE, MACHINE,
+  then SETTLED BY UQBAR (the day's digest: `u` overrules one, back to Uqbar), CLIPBOARD, then WITH UQBAR
+  (waiting on Uqbar's verdict, never counted on the phone). Those two groups fill only under the
+  server's `uqbar_routing` flag, shipped off: keep it off until Uqbar's judgement (its playbook) lands. A
+  passed-up row shows Uqbar's `tip:`. A click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
   office than main offers `R` to reload itself. Work that lands dark hides behind a server flag,
   read only from the snapshot (`flagOn` in `kit/types.ts`): `B`, build mode, is there only with
   `build_mode` on. A running coworker's card shows their activity timeline
