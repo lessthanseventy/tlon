@@ -135,6 +135,15 @@ defmodule Server.Profiles do
 
   @fable %{provider: "anthropic", model: "claude-fable-5-1", thinking: "high"}
 
+  # The checkout holding `.git` and `.worktrees/`, where every seat's worktree lives. The service is
+  # built in a linked worktree (`.release`), so the source dir alone names that, not the checkout.
+  @checkout (case System.cmd("git", ["-C", __DIR__, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                    stderr_to_stdout: true
+                  ) do
+               {dir, 0} -> dir |> String.trim() |> Path.dirname()
+               _ -> Path.expand("../../..", __DIR__)
+             end)
+
   @doc "The `~/.cache` dirs a coworker's sandbox may write: the dev tools', never the whole of it."
   def dev_caches, do: @dev_caches
 
@@ -216,7 +225,7 @@ defmodule Server.Profiles do
       "allowWrite" =>
         [
           @repo,
-          Path.expand("../../..", __DIR__),
+          @checkout,
           "/tmp",
           "$XDG_RUNTIME_DIR",
           "~/.local/share/mise",
@@ -226,7 +235,7 @@ defmodule Server.Profiles do
       # ~/.nix-profile (any flake-managed binary's files) and the config/cache dirs.
       "allowRead" => [
         @repo,
-        Path.expand("../../..", __DIR__),
+        @checkout,
         "/nix/store",
         "~/.nix-profile",
         "~/.config",

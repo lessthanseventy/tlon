@@ -83,6 +83,14 @@ defmodule Server.ProfilesTest do
           do: refute(gone in writes)
     end
 
+    # run from a linked worktree (as `.release` is), the source dir is not where `.worktrees/` lives
+    test "a seat writes the checkout that holds its worktree and its .git" do
+      {common, 0} = System.cmd("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"])
+      checkout = common |> String.trim() |> Path.dirname()
+      writes = Profiles.instantiate(%{archetype: :builder, name: "zunz"}).sandbox["filesystem"]["allowWrite"]
+      assert checkout in writes
+    end
+
     test "carries the ORCHESTRATOR toolset (Slice 4D): staffing + cross-thread verbs, minus register/consult" do
       tlon = Profiles.fetch("tertius").mcp["tlon"]
       # register (session-claim) + consult_peer (model-to-model) are still cut; the orchestrator does
