@@ -476,7 +476,8 @@ defmodule Server.Office.Needs do
         t = by_id[i.thread_id] do
       item("issue", "decide", t, "#{i.found_by || "someone"}: #{i.summary}", i.created_at, %{
         key: "issue:#{i.id}",
-        ref: i.id
+        ref: i.id,
+        tracking: i.ticket_id && "##{i.ticket_id}"
       })
     end
   end
@@ -496,7 +497,35 @@ defmodule Server.Office.Needs do
       mentions(open, operator) ++
         rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open) ++ failed_cuts()
 
-    Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime)
+    annotate(Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime))
+  end
+
+  # every item its surface; a clipboard row also who owns it (the thread's lead) and what tracks it
+  # (the workline's slug, else the ticket an issue names), one query for all of them
+  defp annotate(items) do
+    ids = for %{kind: k, thread_id: id} <- items, surface(k) == "clipboard", id, uniq: true, do: id
+
+    threads =
+      Map.new(
+        Repo.all(
+          from t in Thread,
+            left_join: a in Server.Agent,
+            on: a.id == t.agent_id,
+            where: t.id in ^ids,
+            select: {t.id, {a.name, t.slug}}
+        )
+      )
+
+    for item <- items do
+      case surface(item.kind) do
+        "clipboard" ->
+          {owner, slug} = Map.get(threads, item.thread_id, {nil, nil})
+          Map.merge(item, %{surface: "clipboard", owner: owner, tracking: slug || item[:tracking]})
+
+        surface ->
+          Map.put(item, :surface, surface)
+      end
+    end
   end
 
   # an open workline at a stage whose kind the bench lacks, and nobody on the bench leads it:
