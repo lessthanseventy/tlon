@@ -754,7 +754,10 @@ defmodule Server.Office.Needs do
         not on_duty?(t) do
       last = hd(denials)
 
-      item("tool_denied", "blocking", t, tool_denied_text(t, denials), last.created_at, %{rule: rule_of(last)})
+      item("tool_denied", "blocking", t, tool_denied_text(t, denials), last.created_at, %{
+        rule: rule_of(last),
+        hook: hook_refusal?(last)
+      })
     end
   end
 
@@ -780,6 +783,14 @@ defmodule Server.Office.Needs do
   end
 
   defp rule_of(_event), do: nil
+
+  @doc """
+  Whether a `tool_denied` event is a hook's refusal, which no permission setting lifts. The adapter
+  sees a hook's deny and the permission check's through the same check, so the one tell is Claude
+  Code's wording of a hook refusal; this is the one place that reads it.
+  """
+  def hook_refusal?(%{detail: %{"reason" => "PreToolUse:" <> _}}), do: true
+  def hook_refusal?(_event), do: false
 
   # nothing moved it past the quiet window and nobody is on it
   defp stalled(open, listed) do
