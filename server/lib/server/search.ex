@@ -17,6 +17,8 @@ defmodule Server.Search do
   alias Server.Recall.Embedding
   alias Server.Repo
 
+  require Logger
+
   # The default cut — five is the brief's cap; search shows a few more since it's an explicit query.
   @cap 10
 
@@ -44,11 +46,12 @@ defmodule Server.Search do
   def history(query, limit \\ @cap, opts \\ []) when is_binary(query) do
     do_history(query, limit, opts)
   rescue
-    DBConnection.ConnectionError ->
+    e in DBConnection.ConnectionError ->
+      Logger.warning("Search.history connection error: #{Exception.message(e)}")
       {:error, :timeout}
 
     e in Postgrex.Error ->
-      if e.postgres.code == :query_canceled, do: {:error, :timeout}, else: reraise(e, __STACKTRACE__)
+      if e.postgres && e.postgres.code == :query_canceled, do: {:error, :timeout}, else: reraise(e, __STACKTRACE__)
   end
 
   @doc """
