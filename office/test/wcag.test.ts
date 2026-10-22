@@ -3,7 +3,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { contrast, ROLE } from "../kit/palette"
-import { SKIN_ROLES } from "../kit/sprites"
+import { lookOf, paints, SKIN_ROLES } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
 import { RailRoom, W, H } from "../rooms/rail"
 import { WideRoom, WIDE_H } from "../rooms/wide"
@@ -73,6 +73,16 @@ describe("WCAG: skin tones against the rooms", () => {
     for (const skin of SKIN_ROLES) for (const bg of backgrounds) {
       expect({ skin, bg, ratio: contrast(ROLE[skin], bg) >= 3 }).toMatchObject({ ratio: true })
     }
+  })
+})
+
+describe("WCAG: the letters a model-drawn part may use", () => {
+  // the letters Server.PartCheck lets a model-drawn part use (server/lib/server/part_check.ex @legal); `.` and `_` paint nothing
+  const LEGAL = ["y", "c", "g", "e", "w", "r", "o"]
+  test("every letter reads at 3:1 against every room background", () => {
+    const paint = paints(ROLE.prose, lookOf("yu")) // the shirt and look do not matter for gear letters
+    for (const letter of LEGAL) for (const bg of [ROLE.ground, ROLE.panel, ROLE.raised, ROLE.edge])
+      expect({ letter, bg, ok: contrast(paint[letter]!, bg) >= 3 }).toMatchObject({ ok: true })
   })
 })
 
