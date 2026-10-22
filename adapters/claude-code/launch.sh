@@ -84,6 +84,8 @@ perms_json=""
 # (`mod.ts`, loaded by --plugin-dir below). The band carries the status, so the operator's own
 # statusLine stays out of a citizen's window.
 settings_json="{\"statusLine\":{\"type\":\"command\",\"command\":\"true\"}$perms_json}"
+# The operator's own settings turn remote control on at startup; only uqbar's study keeps it.
+[ "$TLON_AUTHOR" = "uqbar" ] || settings_json="${settings_json%\}},\"remoteControlAtStartup\":false}"
 
 # A sandboxed seat, on any provider (`Server.Harness` sets TLON_SANDBOX_FILE, the profile's sandbox settings) never
 # waits on a prompt: its bash runs fenced (strict, so it can neither reach a host off the allowlist
@@ -124,13 +126,16 @@ fi
 plugins=(--plugin-dir "$plugin")
 case "${TLON_PROVIDER:-anthropic}" in anthropic | "") plugins+=(--plugin-dir "$adapter/plan") ;; esac
 
+# Seat transcripts land in the operator's /resume picker; the name tells them from his own chats.
+name="$TLON_AUTHOR #$TLON_THREAD"
+
 if [ "${TLON_LAUNCH_DRYRUN:-}" = "1" ]; then
   printf 'identity: TLON_THREAD=%s TLON_AUTHOR=%s\n' "$TLON_THREAD" "$TLON_AUTHOR"
   printf 'mcp-config: %s\n' "$mcp_json"
   printf 'settings:   %s\n' "$settings_json"
   printf 'system:     %s\n' "$sys_prompt"
   printf 'provider:   %s\n' "${TLON_PROVIDER:-anthropic}"
-  printf 'exec: claude --permission-mode %s --append-system-prompt <…> --mcp-config <…> --settings <…> %s %s\n' "$mode" "${plugins[*]}" "$*"
+  printf 'exec: claude --name %s --permission-mode %s --append-system-prompt <…> --mcp-config <…> --settings <…> %s %s\n' "$name" "$mode" "${plugins[*]}" "$*"
   exit 0
 fi
 
@@ -154,4 +159,4 @@ if command -v jq >/dev/null 2>&1 && command -v flock >/dev/null 2>&1; then
 fi
 
 # The provider's endpoint (gateway.sh): an ollama model never draws on the Claude plan.
-exec "$adapter/gateway.sh" "${TLON_PROVIDER:-anthropic}" claude --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" "${plugins[@]}" "$@"
+exec "$adapter/gateway.sh" "${TLON_PROVIDER:-anthropic}" claude --name "$name" --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" "${plugins[@]}" "$@"

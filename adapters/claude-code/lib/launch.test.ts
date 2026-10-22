@@ -31,6 +31,45 @@ test("a sandboxed seat may use menard's tools without a prompt", async () => {
   expect(settings.permissions.allow).toContain("mcp__plugin_menard_menard");
 });
 
+// The dry run of a seat that needs no sandbox: its settings and the exec line it would run.
+async function dryRun(author: string) {
+  const proc = Bun.spawn(["bash", launcher], {
+    env: {
+      ...process.env,
+      TLON_LAUNCH_DRYRUN: "1",
+      TLON_SANDBOX_FILE: "",
+      TLON_MCP_URL: "http://127.0.0.1:1/mcp",
+      TLON_THREAD: "42",
+      TLON_AUTHOR: author,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const out = await new Response(proc.stdout).text();
+  expect(await proc.exited).toBe(0);
+  const settings = JSON.parse(out.split("\n").find((l) => l.startsWith("settings:"))!.slice("settings:".length));
+  const exec = out.split("\n").find((l) => l.startsWith("exec:"))!;
+  return { settings, exec };
+}
+
+// The operator's own ~/.claude/settings.json turns remote control on at startup; --settings outranks
+// it, so every seat but uqbar's study opens without a /rc session.
+test("a seat starts with remote control off", async () => {
+  const { settings } = await dryRun("pierre");
+  expect(settings.remoteControlAtStartup).toBe(false);
+});
+
+test("uqbar keeps the operator's remote control", async () => {
+  const { settings } = await dryRun("uqbar");
+  expect(settings).not.toHaveProperty("remoteControlAtStartup");
+});
+
+// Seat transcripts land in the operator's /resume picker; a name tells them apart from his own chats.
+test("a seat is named for its author and thread", async () => {
+  const { exec } = await dryRun("pierre");
+  expect(exec).toContain("--name pierre #42");
+});
+
 // A seat's own workline is a linked worktree: commit writes its gitdir and the common .git, which
 // sit outside the worktree, so its cwd alone (".") is not enough to write.
 test("a sandboxed seat may write the worktree it starts in and its gitdirs", async () => {
