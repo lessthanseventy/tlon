@@ -213,4 +213,47 @@ defmodule Server.Jobs.KeepUpTest do
 
     assert [_] = notes("/r/orphan")
   end
+
+  # the git origin url (nil: no origin) and what `gh pr list` says, for every call of a pass
+  defp pass(remote, gh_error) do
+    fn
+      "git", ["-C", _, "remote", "get-url", "origin"], _ ->
+        if remote, do: {remote <> "\n", 0}, else: {"error: No such remote 'origin'\n", 2}
+
+      "git", ["-C", _, "symbolic-ref" | _], _ ->
+        {"feature\n", 0}
+
+      "gh", ["pr", "list" | _], _ ->
+        {gh_error, 1}
+
+      _, _, _ ->
+        {"", 0}
+    end
+  end
+
+  describe "a repo with no GitHub to read" do
+    test "a repo with no remote is skipped: no gh read, no rollout item" do
+      KeepUp.keep_up("/r/no-remote", pass(nil, "no git remotes found"))
+
+      assert notes("/r/no-remote") == []
+    end
+
+    test "a remote-less repo is said once across passes, not every pass" do
+      first = ExUnit.CaptureLog.capture_log(fn -> KeepUp.keep_up("/r/quiet", pass(nil, "x")) end)
+      again = ExUnit.CaptureLog.capture_log(fn -> KeepUp.keep_up("/r/quiet", pass(nil, "x")) end)
+
+      assert first =~ "/r/quiet has no GitHub remote"
+      refute again =~ "/r/quiet"
+    end
+
+    test "a repo GitHub can't resolve is one rollout item, not one per read" do
+      remote = "https://github.com/launchscout/a11y-with-phoenix-guide.git"
+      gh_error = "GraphQL: Could not resolve to a Repository with the name 'launchscout/a11y-with-phoenix-guide'"
+
+      KeepUp.keep_up("/r/unresolvable", pass(remote, gh_error))
+      KeepUp.keep_up("/r/unresolvable", pass(remote, gh_error))
+
+      assert [_one] = notes("/r/unresolvable")
+    end
+  end
 end

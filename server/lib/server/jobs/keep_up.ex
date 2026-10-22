@@ -32,13 +32,32 @@ defmodule Server.Jobs.KeepUp do
 
   # one repo's fault (gh missing from PATH, a git that won't run) doesn't skip the others; the faults
   # fail the job after every repo had its pass, so they reach the operator as a failed job
-  defp keep_up(repo) do
-    reland(repo)
-    red_checks(repo)
-    drifted(repo, Server.Workline.Publish.follow_main(repo))
+  @doc false
+  def keep_up(repo, run \\ &System.cmd/3) do
+    if github_remote?(repo, run) do
+      reland(repo, run)
+      red_checks(repo, run)
+      drifted(repo, Server.Workline.Publish.follow_main(repo, run))
+    else
+      no_remote(repo)
+    end
+
     []
   rescue
     e -> fault("keep_up #{repo}: #{Exception.message(e)}")
+  end
+
+  # a repo with no origin has no GitHub to keep up with: not a fault, so no rollout item. Said once
+  # in the log, not every pass, which is what a repo nobody can act on would otherwise fill it with.
+  defp github_remote?(repo, run) do
+    match?({_, 0}, run.("git", ["-C", repo, "remote", "get-url", "origin"], stderr_to_stdout: true))
+  end
+
+  defp no_remote(repo) do
+    if !:persistent_term.get({__MODULE__, :no_remote, repo}, false) do
+      :persistent_term.put({__MODULE__, :no_remote, repo}, true)
+      require(Logger) && Logger.info("keep_up #{repo} has no GitHub remote, so it is skipped")
+    end
   end
 
   defp fault(why) do
@@ -46,33 +65,34 @@ defmodule Server.Jobs.KeepUp do
     [why]
   end
 
-  defp reland(repo) do
-    for %{number: n, slug: slug} <- read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo)),
+  defp reland(repo, run) do
+    for %{number: n, slug: slug} <- read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo, run)),
         %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
       why = "its PR ##{n} conflicts with main"
 
-      with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to rebase it"),
+      with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to rebase it", run),
            do: Server.Workline.reland(t, why)
     end
   end
 
   # a gh read that failed is said, and acted on as nothing: never a PR set read as empty in silence.
-  # Said once: a keyed note for the operator, logged only when it is new or its reason changed (a
-  # repo GitHub no longer resolves fails every pass, and filled the log), cleared once it reads.
+  # One keyed note per repo, not per read: a repo GitHub can't resolve fails every read the same way,
+  # and two notes for it was two rollout items a pass. Logged only when it is new (a repo GitHub no
+  # longer resolves fails every pass, and filled the log); the note carries the latest read's reason.
   defp read(repo, what, {:error, why}) do
-    key = "keep_up:#{repo}:#{what}"
+    key = "keep_up:#{repo}"
     text = "keep_up can't read #{what} of #{repo}: #{why}"
 
-    if !Enum.any?(Server.Rollout.pending(), &(&1[:key] == key and &1.text == text)) do
+    if !Enum.any?(Server.Rollout.pending(), &(&1[:key] == key)) do
       require(Logger) && Logger.warning("keep_up #{repo}: #{what} unread — #{why}")
-      Server.Rollout.note(key, text)
     end
 
+    Server.Rollout.note(key, text)
     []
   end
 
-  defp read(repo, what, prs) do
-    Server.Rollout.clear("keep_up:#{repo}:#{what}")
+  defp read(repo, _what, prs) do
+    Server.Rollout.clear("keep_up:#{repo}")
     prs
   end
 
