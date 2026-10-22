@@ -50,7 +50,7 @@
 #   reopen <id>                    reopen a closed thread; a queued workline re-joins the merge queue if its approval stands
 #   reap                           the worktree sweep now: strays removed, the ones holding work kept with why
 #   canvas                         repaint the GitHub contribution-graph canvas now (Server.Canvas.Paint)
-#   toys                           refill the toy's generated pools that are a day old, on every staffed workspace (Server.ToyPool)
+#   toys                           refill the toy's generated pools that are a day old, and the day's invented accessory, on every staffed workspace (Server.ToyPool)
 #   delete-thread <id>             operator hard delete (messages go too; facts survive unlinked)
 #   forget-fact <id>               operator tombstone — out of recall, row kept
 #   resolve-issue <id> [why…]      close a stack issue (BLOCKERS), recording the resolution

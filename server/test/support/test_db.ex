@@ -45,6 +45,7 @@ defmodule Server.TestDB do
     "fun_with_flags_toggles",
     "generator_call",
     "toy_pool",
+    "generated_part",
     "need_dismissal",
     "need_routing",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so

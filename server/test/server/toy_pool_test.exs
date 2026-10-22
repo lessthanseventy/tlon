@@ -5,7 +5,7 @@ defmodule Server.ToyPoolTest do
 
   alias Server.{Persona, ToyPool}
 
-  @reply ~s({"backstory": "b", "quirks": {"desk_object": "a", "hobby": "b", "catchphrase": "c", "pet_peeve": "d"}, "voice": "v", "visitors": [{"name": "Mabel", "look_seed": 3, "line": "Cookies, anyone?"}], "reactions": {"zoo": ["Is that a goat?"], "duck": ["Hm."]}, "puns": ["I'd tell a UDP joke, but you might not get it."]})
+  @reply ~s({"backstory": "b", "quirks": {"desk_object": "a", "hobby": "b", "catchphrase": "c", "pet_peeve": "d"}, "voice": "v", "visitors": [{"name": "Mabel", "look_seed": 3, "line": "Cookies, anyone?"}], "reactions": {"zoo": ["Is that a goat?"], "duck": ["Hm."]}, "puns": ["I'd tell a UDP joke, but you might not get it."], "part": {"slot": "hand", "front": {"11": "..........yy"}, "side": {"11": ".yy........."}, "back": {"11": "..........yy"}}})
 
   setup do
     Server.TestDB.clean!()
@@ -128,26 +128,26 @@ defmodule Server.ToyPoolTest do
     results = ToyPool.refresh_all_due(ws.id)
 
     assert Enum.sort(Enum.map(results, &elem(&1, 0))) ==
-             Enum.sort([:visitors, :puns, {:reactions, "lonnrot"}, {:reactions, "yu"}])
+             Enum.sort([:visitors, :puns, {:reactions, "lonnrot"}, {:reactions, "yu"}, :part])
 
     assert Enum.all?(results, &match?({_, {:ok, _}}, &1))
     assert [%{"name" => "Mabel"}] = ToyPool.visitors(ws.id)
     assert ToyPool.reactions(ws.id, "yu", "zoo") == ["Is that a goat?"]
 
     lines = calls |> File.read!() |> String.split("\n", trim: true)
-    assert length(lines) == 4
+    assert length(lines) == 5
     assert Enum.uniq(lines) == ["https://ollama.com deepseek-v4.1-flash"]
   end
 
   test "a daily run: a second the same day calls nothing, a day later every pool is refilled", %{ws: ws, calls: calls} do
-    assert [_, _, _] = ToyPool.refresh_all_due(ws.id)
-    assert count(calls) == 3
+    assert [_, _, _, _] = ToyPool.refresh_all_due(ws.id)
+    assert count(calls) == 4
     ToyPool.refresh_all_due(ws.id)
-    assert count(calls) == 3
+    assert count(calls) == 4
 
     for kind <- [:visitors, :puns, {:reactions, "lonnrot"}], do: ToyPool.age!(ws.id, kind, 1)
     ToyPool.refresh_all_due(ws.id)
-    assert count(calls) == 6
+    assert count(calls) == 7
   end
 
   test "day is every stored pool of the workspace, empty until generated", %{ws: ws} do
