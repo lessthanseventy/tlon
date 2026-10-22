@@ -4,8 +4,9 @@
 # NUL-separated shape. A seat's limit is 9000 (#522).
 set -euo pipefail
 f=${1:-/proc/1/cmdline}
-total=$(tr -cd "\0" <"$f" | wc -c)
-gawk -v RS='\0' -v total="$total" '
+total=$(tr -cd '\000' <"$f" | wc -c)
+# NUL ends an arg and becomes the record separator; a newline inside an arg becomes \001 so it stays one record.
+tr '\n\000' '\001\n' <"$f" | awk -v total="$total" '
   /^--/ { opt = $0; k = 0; next }
   { k++ }
   k == 1 && opt ~ /^--(ro-bind|bind|tmpfs)$/ {
@@ -14,4 +15,4 @@ gawk -v RS='\0' -v total="$total" '
     else if (p != "/dev/null") { split(p, c, "/"); p = "/" c[2] "/" c[3] "/" c[4] "/" c[5] }
     g[p]++
   }
-  END { print "total " total; for (p in g) print g[p], p }' "$f" | { read -r first; echo "$first"; sort -rn; }
+  END { print "total " total; for (p in g) print g[p], p }' | { read -r first; echo "$first"; sort -rn; }
