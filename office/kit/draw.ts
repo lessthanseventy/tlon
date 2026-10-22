@@ -145,9 +145,13 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
       for (let k = 0; k < wisps; k++) sc.px(mx + ((sc.tick >> 3) + k) % 2, my - 2 - k * 2, 1, 1, haze)
     })
     else if (actor.mug > sc.tick) sc.item(actor.y + 0.6, () => {
-      // a mug, in hand or on the desk beside them, steaming
-      const mx = sitting ? left + 12 : left - 1, my = sitting ? top + 4 : top + 12
-      sc.px(mx, my, 2, 2, ROLE.prose); sc.px(mx + 2, my, 1, 1, ROLE.prose)
+      // a mug, in hand or on the desk beside them, steaming. Carried, it is at the hand on the side
+      // they face, its handle in their grip: a pixel off their left side, it trailed behind a walk
+      // to the right like a ghost
+      const toLeft = !sitting && actor.face === "left", toRight = !sitting && actor.face === "right"
+      const mx = sitting ? left + 12 : toLeft ? left + 1 : left + 9, my = sitting ? top + 4 : top + 11
+      // the coffee's dark top keeps it apart from a pale hand
+      sc.px(mx, my, 2, 2, ROLE.prose); sc.px(mx, my, 2, 1, ROLE.structure); sc.px(toRight ? mx - 1 : mx + 2, my, 1, 1, ROLE.prose)
       if ((sc.tick >> 2) % 3) sc.px(mx + ((sc.tick >> 3) % 2), my - 2, 1, 1, tint(ROLE.prose, ROLE.ground, 0.6))
     })
     if (actor.snack > sc.tick && !sitting) sc.item(actor.y + 0.6, () => sc.px(left + 10, top + 12 - ((sc.tick >> 3) % 4 === 0 ? 2 : 0), 2, 2, ROLE.alarm)) // a snack, a bite now and then
