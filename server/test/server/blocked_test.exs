@@ -58,7 +58,18 @@ defmodule Server.BlockedTest do
     end
   end
 
-  describe "release/0" do
+  describe "release/1" do
+    test "a blocker closed after the cut stays blocked: the fix is not in that release", %{ws: ws, ticket: tk} do
+      t = seat(ws, "yu")
+      {:ok, _} = Blocked.declare(tk.id, t.id, "yu", "ro")
+      {:ok, _} = Tickets.update(Tickets.get(tk.id), %{status: "done"})
+      before_close = DateTime.add(DateTime.utc_now(), -60)
+
+      assert Blocked.release(before_close) == 0
+      assert Blocked.blocked?(t.id)
+      assert Blocked.release(DateTime.add(DateTime.utc_now(), 60)) == 1
+    end
+
     test "a closed blocker clears the block and wakes the lead with a post that names it", %{ws: ws, ticket: tk} do
       t = seat(ws, "yu")
       {:ok, _} = Blocked.declare(tk.id, t.id, "yu", "ro")
