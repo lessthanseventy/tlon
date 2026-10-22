@@ -17,11 +17,12 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/corkboard/:ws    Office.Corkboard.notes (the coworkers' notes to each other; asking may pin the next, and may post to #random: Office.Random)
       GET    /api/office/focus            Office.Focus.latest (the newest "show thread N" request)
       POST   /api/office/focus            Office.Focus.request {"thread_id"} — the desktop asks the office TUI to open a thread
-      GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide); ?by=surface is Office.Needs.grouped (phone, machine, clipboard, counts)
+      GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide); ?by=surface is Office.Needs.grouped (phone, machine, clipboard, uqbar, settled, counts)
       POST   /api/office/needs/heard      Office.Needs.hear {"keys": [...]} (the machine opened: those items leave it)
       POST   /api/office/talk/:ws         Office.Banter.talk {"situation", "a", "b"} (two coworkers together in the room: what they say, written now; 429 when they talked a moment ago)
       POST   /api/office/needs/dismiss    Office.Needs.dismiss {"key"} (put an item away; a blocking one is refused, 409)
       POST   /api/office/needs/retire     Office.Needs.retire_stranded {"key"} (a stranded checkout taken down, its branch kept)
+      POST   /api/office/needs/overrule   Office.Needs.overrule {"key"} (a settled item goes back to Uqbar's queue; one not settled, 409)
       GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky, info — seated, landed, live — each with its actions)
       POST   /api/usage/claude            {"five_hour"?, "seven_day"?: {"percent", "resets_at"}} → Usage.report (the office's meter; the mod posts it)
       DELETE /api/office/rollout/:id      Rollout.dismiss (a rollout note the operator has done)
@@ -213,11 +214,15 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
-  defp route(conn, "POST", "office", ["needs", verb]) when verb in ["dismiss", "retire"] do
+  defp route(conn, "POST", "office", ["needs", verb]) when verb in ["dismiss", "retire", "overrule"] do
     case body(conn) do
       {%{"key" => key}, conn} when is_binary(key) ->
         result =
-          if verb == "dismiss", do: Server.Office.Needs.dismiss(key), else: Server.Office.Needs.retire_stranded(key)
+          case verb do
+            "dismiss" -> Server.Office.Needs.dismiss(key)
+            "retire" -> Server.Office.Needs.retire_stranded(key)
+            "overrule" -> Server.Office.Needs.overrule(key)
+          end
 
         reply(conn, with(:ok <- result, do: {:ok, key}), &%{key: &1})
 

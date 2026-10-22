@@ -375,12 +375,24 @@ defmodule Server.MCP.GatewayTest do
       assert is_list(flat) and Enum.all?(flat, &is_binary(&1["surface"]))
 
       {200, g} = get_json("/api/office/needs?by=surface")
-      assert %{"phone" => 1, "machine" => 1, "clipboard" => 0} = g["counts"]
+      assert %{"phone" => 1, "machine" => 1, "clipboard" => 0, "uqbar" => 0, "settled" => 0} = g["counts"]
+      assert %{"uqbar" => [], "settled" => []} = g
       assert [%{"key" => key, "surface" => "machine"}] = g["machine"]
 
       assert {200, %{"ok" => true}} = post_json("/api/office/needs/heard", %{keys: [key]})
       assert {200, %{"counts" => %{"machine" => 0}}} = get_json("/api/office/needs?by=surface")
       assert {400, _} = post_json("/api/office/needs/heard", %{keys: "nope"})
+    end
+
+    test "POST /api/office/needs/overrule sends a settled item back to Uqbar; one not settled is refused",
+         %{thread: t} do
+      {:ok, a} = Server.Attention.ask(t.id, "tertius", "start now?", ["go", "hold"])
+      key = "ask:#{a.id}"
+      assert {409, _} = post_json("/api/office/needs/overrule", %{key: key})
+      :ok = Server.Office.Needs.settle(key, "dup", "uqbar")
+      assert {200, %{"key" => ^key}} = post_json("/api/office/needs/overrule", %{key: key})
+      assert Server.Repo.aggregate("need_routing", :count) == 0
+      assert {400, _} = post_json("/api/office/needs/overrule", %{nope: 1})
     end
 
     test "POST /api/office/asks/:id answers that ask by its key; a key it doesn't offer is refused", %{thread: t} do
