@@ -549,11 +549,11 @@ defmodule Server.Release.PM do
   end
 
   # when `refs/heads/live` last moved (its reflog), not the live commit's own time: a ticket closes
-  # seconds after the fix commit it merged
+  # seconds after the fix commit it merged. A missing reflog falls back to now (fails open).
   defp pointer_moved(root) do
-    with {out, 0} <- git(root, ["log", "-g", "-1", "--format=%gt", "refs/heads/live"]),
-         {unix, _} <- Integer.parse(String.trim(out)) do
-      DateTime.from_unix!(unix)
+    with {out, 0} <- git(root, ["log", "-g", "-1", "--date=unix", "--format=%gd", "refs/heads/live"]),
+         [_, unix] <- Regex.run(~r/@\{(\d+)\}/, out) do
+      unix |> String.to_integer() |> DateTime.from_unix!()
     else
       _ -> DateTime.utc_now()
     end
