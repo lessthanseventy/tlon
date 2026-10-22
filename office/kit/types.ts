@@ -3,6 +3,14 @@
 
 /** a routine whose current due is unmet; `window_remaining` seconds, negative once past its window */
 export type Due = { routine_id: number; title: string; due_at: string; window_remaining: number }
+/** one landing in the merge queue (`Server.Office.Room.merge_queue/1`): `train` is its place in the
+ * running gate's train, "solo" for one that never rides (a PR, a reland), null for one waiting its own
+ * turn; `gate` is on the running gate's items only, `pid` its check's when the checks queue names it */
+export type MergeItem = {
+  thread_id: number; title: string; state: "landing" | "queued"
+  train?: { lead: number; pos: number; size: number; split: boolean } | "solo" | null
+  gate?: { pid: number | null; started_at: string | null } | null
+}
 /** a workspace's life summary on the snapshot (`Server.Life.status`, trimmed); full detail is `GET /api/life/:ws` */
 export type LifeSummary = { level: number; xp: number; due: Due[] }
 export type LifeQuest = { id: number; title: string; due_at: string | null; xp: number }
@@ -69,7 +77,7 @@ export type Agents = {
     /** the machine's checks queue: the check running now (a workline's reads "#<id> verify|landing …") and who waits */
     checks?: { running: string | null; waiting: string[] }
     /** approved worklines landing one at a time, the one being gated first */
-    merge_queue?: { thread_id: number; title: string; state: "landing" | "queued" }[]
+    merge_queue?: MergeItem[]
   } | null
   /** the days this month each workspace has something scheduled, by id (the wall calendar) */
   calendar: Record<string, number[]>

@@ -2,7 +2,7 @@
 // always-up service at 127.0.0.1:4040 unless TLON_URL says otherwise. No checkout, no release
 // beside it: a compiled TUI runs anywhere the server answers.
 import { AsyncLocalStorage } from "node:async_hooks"
-import { EMPTY, type Agents, type CorkNote, type LifeStatus, type Thread, type ThreadView } from "../kit/types"
+import { EMPTY, type Agents, type CorkNote, type LifeStatus, type MergeItem, type Thread, type ThreadView } from "../kit/types"
 import { toysOf, type Toys } from "../kit/door"
 import type { Note } from "../kit/margin"
 import type { Target } from "./terminal"
@@ -276,7 +276,7 @@ export type Health = { state: "ok" | "warn"; problems: string[]; version: string
   /** one full check at a time (scripts/checks-queue.sh): who has it, who waits */
   checks?: { running: string | null; waiting: string[] }
   /** approved worklines landing one at a time: the one being gated first */
-  merge_queue?: { thread_id: number; title: string; state: "landing" | "queued" }[] }
+  merge_queue?: MergeItem[] }
 export type Memory = { pinned: { id: number; text: string }[]; habits: { id: number; text: string; rationale: string | null; by: string | null }[]; coverage: { facts: number; embedded: number; pinned_count: number; pinned_tokens: number; budget: number } }
 export type BoardTicket = { id: number; title: string; body: string | null; status: "backlog" | "todo" | "doing" | "done"; priority: string; project_id: number | null; blocked_by: number[] }
 export type WorkspaceCard = { id: number; name: string; type: string; scope: string; icon: string | null; repos: { id: number; path: string; remote: string | null }[] }
