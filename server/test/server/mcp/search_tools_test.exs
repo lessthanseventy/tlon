@@ -42,7 +42,13 @@ defmodule Server.MCP.SearchToolsTest do
       )
 
       Application.put_env(:server, :search_timeout, 1)
-      on_exit(fn -> Application.delete_env(:server, :search_timeout) end)
+
+      # its 20,000 rows, left for the next setup's row-by-row delete (a per-row FK trigger), took that
+      # past its 15s timeout under a loaded gate; one TRUNCATE clears them at once
+      on_exit(fn ->
+        Application.delete_env(:server, :search_timeout)
+        Server.Repo.query!("TRUNCATE message CASCADE")
+      end)
 
       {:reply, resp, _} = Tool.SearchHistory.execute(%{query: "ticket review"}, %Frame{})
       assert %{isError: true, content: [%{"text" => text}]} = resp
