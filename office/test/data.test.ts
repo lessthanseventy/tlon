@@ -64,7 +64,7 @@ test("a fake source answers every call; a write says it's a toy", async () => {
   try {
     const all = await data.status()
     expect(all.ok).toBe(true); expect(all.bench.length).toBeGreaterThan(3)
-    expect(await data.needs()).toEqual([])
+    expect((await data.needs()).items).toEqual([])
     expect(await data.ticketFile(1, "x")).toContain("toy")
   } finally { data.useFake(null) }
 })

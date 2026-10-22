@@ -14,7 +14,7 @@ const base = () => (process.env.TLON_URL ?? "http://127.0.0.1:4040").replace(/\/
 let fake: Toy | null = null
 /** the sandbox's world instead of the server (`office --sandbox`) */
 /** a new source: what was held belongs to the old one */
-export const useFake = (t: Toy | null) => { fake = t; lastGood = null; lastNeeds = []; down = null }
+export const useFake = (t: Toy | null) => { fake = t; lastGood = null; lastNeeds = noNeeds; down = null }
 
 async function call(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<{ status: number; json: any }> {
   if (fake) {
@@ -108,16 +108,33 @@ export type Need = {
   ask?: string
   /** tool_denied: the Claude Code allow rule the refused command needs, yours to add to your own settings */
   rule?: string
+  /** who acts on it (`Needs.surface/1`): phone, an answer is owed; machine, information; clipboard, the crew owns it */
+  surface?: Surface
+  /** clipboard: the thread's lead, and the workline or ticket tracking it */
+  owner?: string | null
+  tracking?: string | null
 }
-let lastNeeds: Need[] = []
-/** everything waiting on the operator, blocking first; a server that can't answer keeps the last list, so the flag never vanishes mid-outage */
-export async function needs(): Promise<Need[]> {
+export type Surface = "phone" | "machine" | "clipboard"
+/** the inbox by who acts: `items` is every one, phone first, for the callers that want the one list */
+export type Needs = { items: Need[]; phone: Need[]; machine: Need[]; clipboard: Need[]; counts: Record<Surface, number> }
+const SURFACES: Surface[] = ["phone", "machine", "clipboard"]
+const inboxOf = (g: Record<Surface, Need[]>): Needs => ({ ...g, items: SURFACES.flatMap((s) => g[s]), counts: { phone: g.phone.length, machine: g.machine.length, clipboard: g.clipboard.length } })
+const noNeeds = inboxOf({ phone: [], machine: [], clipboard: [] })
+let lastNeeds: Needs = noNeeds
+/** everything waiting on the operator, by surface; a server that can't answer keeps the last inbox, so the phone never goes quiet mid-outage. A server with only the flat list is grouped by each item's surface, none on the phone */
+export async function needs(): Promise<Needs> {
   try {
-    const r = await call("GET", "/office/needs")
-    if (r.status === 200) lastNeeds = r.json
+    const r = await call("GET", "/office/needs?by=surface")
+    if (r.status !== 200) return lastNeeds
+    if (Array.isArray(r.json)) {
+      const on = (s: Surface) => (r.json as Need[]).filter((n) => (n.surface ?? "phone") === s)
+      lastNeeds = inboxOf({ phone: on("phone"), machine: on("machine"), clipboard: on("clipboard") })
+    } else lastNeeds = { ...inboxOf(r.json), counts: r.json.counts }
     return lastNeeds
   } catch { return lastNeeds }
 }
+/** the machine opened: these items are heard and leave it */
+export const hear = (keys: string[]) => write("marking heard", "/office/needs/heard", { keys }, () => "heard")
 /** a landing GitHub isn't merging: back in the merge queue — rebased, gated, merged at that head */
 export const rebaseLanding = (tid: number) => write(`requeuing #${tid}'s PR`, `/threads/${tid}/rebase`, {}, () => `#${tid}'s PR back in the merge queue`)
 /** a landing GitHub isn't merging: its PR closed, the workline back to build on its branch */
