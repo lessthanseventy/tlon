@@ -746,5 +746,32 @@ defmodule Server.Office.NeedsTest do
     test "an unlisted kind is not routed" do
       assert_raise FunctionClauseError, fn -> Needs.surface("brand_new") end
     end
+
+    test "every item on the list carries its kind's surface", %{ws: ws} do
+      {:ok, q} = Channel.open_thread(%{title: "q", workspace_id: ws.id})
+      {:ok, _} = Server.Attention.ask(q.id, "daneri", "A or B?")
+      {:ok, m} = Channel.open_thread(%{title: "m", workspace_id: ws.id})
+      {:ok, _} = Channel.post(%{thread_id: m.id, author: "daneri", body: "@andrew fyi"})
+      {:ok, i} = Channel.open_thread(%{title: "i", workspace_id: ws.id})
+      {:ok, _} = Server.Dossier.raise_issue(%{thread_id: i.id, summary: "flaky", found_by: "cruz"})
+
+      items = Needs.list()
+      assert Enum.sort(Enum.map(items, & &1.kind)) == ~w(issue mention question)
+      for item <- items, do: assert(item.surface == Needs.surface(item.kind))
+    end
+
+    test "a clipboard row names its owner and the workline tracking it", %{ws: ws} do
+      {:ok, t} =
+        Server.Workline.open(%{title: "w", slug: "own-#{System.unique_integer([:positive])}", workspace_id: ws.id})
+
+      {:ok, _} = Server.Staff.register_agent(%{name: "cruz", mandate: "build", engine: "e"})
+      {:ok, _} = Channel.assign_lead(t.id, "cruz")
+      {:ok, _} = Server.Dossier.raise_issue(%{thread_id: t.id, summary: "flaky", found_by: "cruz"})
+
+      assert [%{kind: "issue", surface: "clipboard", owner: "cruz", tracking: tracking}] =
+               Enum.filter(Needs.list(), &(&1.kind == "issue"))
+
+      assert tracking == t.slug
+    end
   end
 end
