@@ -91,7 +91,15 @@ settings_json="{\"statusLine\":{\"type\":\"command\",\"command\":\"true\"}$perms
 # dontAsk refuses anything else instead of asking a pane nobody watches. Auto mode (a seat set to ask) is the fallback.
 mode=auto
 if [ -n "${TLON_SANDBOX_FILE:-}" ] && [ -f "$TLON_SANDBOX_FILE" ]; then
-  sandbox="$(jq -c '. * {enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false, failIfUnavailable: true, network: {strictAllowlist: true}}' "$TLON_SANDBOX_FILE")"
+  # The seat writes the checkout it starts in, and a commit there writes its gitdir and the
+  # common .git, which for a linked worktree sit outside it: the profile's list can't name them.
+  writable=("$PWD")
+  for flag in --absolute-git-dir --git-common-dir; do
+    gitdir="$(git -C "$PWD" rev-parse --path-format=absolute "$flag" 2>/dev/null || true)"
+    [ -n "$gitdir" ] && writable+=("$gitdir")
+  done
+  sandbox="$(jq -c --args '. * {enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false, failIfUnavailable: true, network: {strictAllowlist: true}}
+    | .filesystem.allowWrite = (reduce ((.filesystem.allowWrite // []) + $ARGS.positional)[] as $d ([]; if index([$d]) then . else . + [$d] end))' "${writable[@]}" <"$TLON_SANDBOX_FILE")"
   settings_json="$(jq -c --argjson sb "$sandbox" '. + {sandbox: $sb} | .permissions.allow = ["Read", "Glob", "Grep", "Edit", "Write", "NotebookEdit", "Bash", "WebFetch", "Agent", "TodoWrite", "Skill", "mcp__tlon", "mcp__lsp", "mcp__tlon-citizen", "mcp__plugin_menard_menard"]' <<<"$settings_json")"
   mode=dontAsk
 fi
