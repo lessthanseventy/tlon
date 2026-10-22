@@ -208,6 +208,17 @@ defmodule Server.Office.RoomTest do
       assert l.id == loose.id
     end
 
+    test "an initiative is no loose ticket; each epic row names the initiative it sits under", %{ws: ws, mk: mk} do
+      kids = mk.(%{title: "Kids", kind: "initiative"})
+      toy = mk.(%{title: "Toy", kind: "epic", epic_id: kids.id})
+      bare = mk.(%{title: "Bare", kind: "epic"})
+
+      %{epics: rows, loose: []} = Room.board(ws.id)
+      by = Map.new(rows, &{&1.id, &1})
+      assert by[toy.id].initiative == %{id: kids.id, title: "Kids"}
+      assert by[bare.id].initiative == nil
+    end
+
     test "next is the lowest-sort free child: skips done, blocked and held", %{ws: ws, mk: mk} do
       e = mk.(%{title: "E", kind: "epic"})
       done = mk.(%{title: "done", epic_id: e.id, sort: 1})

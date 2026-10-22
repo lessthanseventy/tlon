@@ -397,7 +397,7 @@ defmodule Server.Office do
   # An epic is a row (progress, its next free child) while any child is unfinished; a child names its epic.
   defp tickets(ws_ids) do
     add_progress(
-      for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), t.status != "doing" or t.kind == "epic" do
+      for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), t.status != "doing" or t.kind != "ticket" do
         %{
           id: t.id,
           workspace_id: ws,
