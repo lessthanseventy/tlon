@@ -40,6 +40,10 @@ describe("the answering machine and the sheriff's clipboard, drawn", () => {
     expect(full.hits[0]!.tip).toContain("cruz · fix-sink · the sink leaks")
     expect(full.hits[0]!.tip).toContain("nobody · untracked · a stray")
   })
+  test("a row Uqbar passed up carries its recommendation in the tip", () => {
+    const rows = [{ owner: "cruz", tracking: "fix-sink", title: "the sink leaks", recommendation: "rebase it" }]
+    expect(paint(0, (sc) => drawClipboard(sc, 20, 40, rows)).hits[0]!.tip).toContain("the sink leaks (tip: rebase it)")
+  })
 })
 
 describe("the inbox by surface", () => {

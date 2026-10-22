@@ -23,7 +23,7 @@ export function drawMachine(sc: Scene, x: number, y: number, n: number) {
   sc.hits.push({ x: x - 1, y: y - 10, w: 12, h: 11, tip: n ? `the answering machine: ${n} new messages` : "the answering machine: nothing new", act: { kind: "machine" } })
 }
 
-export type ClipRow = { owner?: string | null; tracking?: string | null; title: string }
+export type ClipRow = { owner?: string | null; tracking?: string | null; title: string; recommendation?: string | null }
 
 /** the sheriff's clipboard by the door: a sheet line for each thing the crew owns (four at most); `z` its depth, a wall's when it hangs on one */
 export function drawClipboard(sc: Scene, x: number, y: number, rows: ClipRow[], z = y + 12) {
@@ -35,7 +35,7 @@ export function drawClipboard(sc: Scene, x: number, y: number, rows: ClipRow[], 
     for (let i = 0; i < Math.min(4, rows.length); i++) px(x + 2, y + 3 + i * 2, 5, 1, ROLE.inactive)
   })
   if (rows.length) sc.overhead.push(() => sc.text(`${rows.length}`, x + 4, y - 4, ROLE.body, 9))
-  const lines = rows.map((r) => `${clipLabel(r)} · ${r.title}`)
+  const lines = rows.map((r) => `${clipLabel(r)} · ${r.title}${r.recommendation ? ` (tip: ${r.recommendation})` : ""}`)
   const tip = rows.length ? `the sheriff's clipboard: ${rows.length} on the clipboard, the crew's to fix — ${lines.join("; ")}` : "the sheriff's clipboard: nothing on it"
   sc.hits.push({ x: x - 3, y: y - 8, w: 15, h: 20, tip, act: { kind: "clipboard" } })
 }
