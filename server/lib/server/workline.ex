@@ -512,14 +512,21 @@ defmodule Server.Workline do
   only if that rebase gives the tree the train gated there (a main that moved some other way gives
   another: the lead then lands alone, gated alone, and a later car waits for its own turn). Red twice, or a car
   that won't stack: `lead` lands alone, gated alone, and every other car keeps its own turn, so the
-  culprit is found and bounced by itself. Alone, it is `land_queued/2`. Opts as `land_queued/2`.
+  culprit is found and bounced by itself. Alone, it is `land_queued/2`. Opts as `land_queued/2`, and
+  `on_cars: fn ids, split -> _ end`, told the thread ids taking the gate before it runs (the lead's
+  alone when nothing rides) and again with `[lead]`, `true` when red twice splits the lead off.
   """
   def land_train(%Thread{} = lead, others, opts \\ []) do
     cars = Enum.filter([lead | others], &rideable?/1)
+    on_cars = Keyword.get(opts, :on_cars, fn _, _ -> :ok end)
 
-    if length(cars) < 2 or hd(cars).id != lead.id,
-      do: land_queued(lead, opts),
-      else: train(cars, opts)
+    if length(cars) < 2 or hd(cars).id != lead.id do
+      on_cars.([lead.id], false)
+      land_queued(lead, opts)
+    else
+      on_cars.(Enum.map(cars, & &1.id), false)
+      train(cars, Keyword.put(opts, :on_cars, on_cars))
+    end
   end
 
   @doc """
@@ -2230,8 +2237,12 @@ defmodule Server.Workline do
     stack = fn -> merger.stack(repo, slugs, gate: gate) end
 
     case with({:error, {:gate, _}} <- stack.(), do: stack.()) do
-      {:ok, %{cars: stacked}} -> ride(Enum.zip(cars, stacked), repo, merger, opts)
-      {:error, _} -> land_queued(lead, opts)
+      {:ok, %{cars: stacked}} ->
+        ride(Enum.zip(cars, stacked), repo, merger, opts)
+
+      {:error, _} ->
+        opts[:on_cars].([lead.id], true)
+        land_queued(lead, opts)
     end
   end
 end
