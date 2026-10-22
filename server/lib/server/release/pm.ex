@@ -242,8 +242,9 @@ defmodule Server.Release.PM do
   Say on the root thread that the service runs a new release, once per release: the release
   pointer (`refs/heads/live` — a cut moves it only after building it, so a boot runs what it
   names) against the newest one said. The notice reads `release <sha> is live — N changes`
-  (`— back from <sha>` on a rollback, nothing more on the first), payload `%{"live" => sha, "notes" => [subject]}` (the subjects it moved over, at most 12; none on the first or a rollback). No
-  pointer or no root thread says nothing. `:ok`. `opts`: `root:`.
+  (`— back from <sha>` on a rollback, nothing more on the first), payload `%{"live" => sha, "notes" => [subject]}` (the subjects it moved over, at most 12; none on the first or a rollback). It also wakes the
+  threads blocked on a ticket closed since (`Server.Blocked.release/0`): a fix reaches the seats at a
+  cut. No pointer or no root thread says nothing. `:ok`. `opts`: `root:`.
   """
   def note_live(opts \\ []) do
     root = root(opts)
@@ -263,6 +264,7 @@ defmodule Server.Release.PM do
       body = "release #{short(sha)} is live" <> since_last(root, prev, sha)
       payload = %{"live" => sha, "notes" => notes(root, prev, sha)}
       _ = Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: body, payload: payload})
+      Server.Blocked.release()
     end
 
     :ok

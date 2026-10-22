@@ -417,6 +417,26 @@ defmodule Server.Release.PMTest do
     end
   end
 
+  describe "note_live/1 wakes the threads blocked on a ticket closed since" do
+    test "a new release going live wakes them", ctx do
+      %{ws: ws, repo: repo, main: main} = ctx
+      {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "worktrees are read-only"})
+      {:ok, agent} = Server.Staff.register_agent(%{name: "yu", mandate: "build", engine: "fresh"})
+      {:ok, t} = Channel.open_thread(%{title: "work", workspace_id: ws.id, agent_id: agent.id})
+      {:ok, _} = Server.Blocked.declare(ticket.id, t.id, "yu", "ro")
+
+      assert :ok = PM.note_live(root: repo)
+      assert Server.Blocked.blocked?(t.id)
+
+      {:ok, _} = Server.Tickets.update(Server.Tickets.get(ticket.id), %{status: "done"})
+      git!(repo, ["branch", "-f", "live", main])
+      assert :ok = PM.note_live(root: repo)
+
+      refute Server.Blocked.blocked?(t.id)
+      assert List.last(Channel.thread_messages(t)).body =~ "@yu the blocker ##{ticket.id}"
+    end
+  end
+
   defp workline_merged!(ws, title, at) do
     {:ok, t} =
       Server.Workline.open(%{title: title, slug: "w#{System.unique_integer([:positive])}", workspace_id: ws.id})
