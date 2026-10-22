@@ -211,12 +211,37 @@ function progressOf(a: Agents, tk: Ticket): { done: number; total: number; next:
 
 const groupTitle = (a: Agents, tk: Ticket) => {
   const p = progressOf(a, tk)
-  return `${tk.title} ${p.done}/${p.total}${p.next ? ` → #${p.next.id} ${p.next.title}` : ""}`
+  const flying = epicChildren(a, tk.id).filter((k) => k.status === "doing" && k.thread_id != null).length
+  return `${tk.title} ${p.done}/${p.total}${p.next ? ` → #${p.next.id} ${p.next.title}` : ""}${flying ? ` · ${flying} in flight` : ""}`
 }
 
 /** what opening a group lists: an initiative's epics or an epic's tickets, a group with its progress */
 export const groupRows = (a: Agents, id: number): { id: number; title: string; kind: string }[] =>
   epicChildren(a, id).map((k) => ({ id: k.id, title: isGroup(k) ? groupTitle(a, k) : k.title, kind: k.kind ?? "ticket" }))
+
+export type TreeRow = { act: Act; depth: number; group: boolean; open: boolean; title: string; flight?: number }
+
+/** the TICKETS column as a tree: groups expand in place; `order` sorts each level on its own */
+export function treeRows(a: Agents, open: Set<number>, order: <T extends { id: number }>(xs: T[]) => T[]): TreeRow[] {
+  const out: TreeRow[] = []
+  const walk = (tks: Ticket[], depth: number) => {
+    for (const tk of order(tks)) {
+      const g = isGroup(tk)
+      const isOpen = g && open.has(tk.id)
+      out.push({
+        act: g ? { kind: "epic", id: tk.id } : { kind: "ticket", id: tk.id },
+        depth,
+        group: g,
+        open: isOpen,
+        title: g ? groupTitle(a, tk) : tk.title,
+        flight: tk.status === "doing" && tk.thread_id != null ? tk.thread_id : undefined,
+      })
+      if (isOpen) walk(epicChildren(a, tk.id), depth + 1)
+    }
+  }
+  walk((a.tickets as Ticket[]).filter((t) => t.epic_id == null), 0)
+  return out
+}
 
 /** the whiteboard's columns — a board draws them as stickies, a column card as rows */
 export function boardColumns(a: Agents, ctx: BoardCtx = {}): { name: string; items: BoardItem[] }[] {
