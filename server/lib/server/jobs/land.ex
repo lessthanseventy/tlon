@@ -94,7 +94,8 @@ defmodule Server.Jobs.Land do
   Branch mode has no stray-path rule, which the stacked tip, carrying every car's `work/<slug>/`,
   would always break; each car met it at its own verify.
   """
-  def gate_train(thread, _repo, ref), do: gate_on(thread, [{"LAND_REF", ref}])
+  def gate_train(thread, _repo, ref, label \\ nil),
+    do: gate_on(thread, [{"LAND_REF", ref} | if(label, do: [{"CHECKS_LABEL", label}], else: [])])
 
   @doc """
   A PR's landing gate: the same full check, by the same script in its branch mode (`LAND_REF`, the

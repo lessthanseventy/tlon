@@ -10,6 +10,7 @@
 # A PR's landing gate (Server.Jobs.Land.gate_pr/4) is the same check in branch mode: WORKLINE_GATE=1,
 # thread id `-`, LAND_REF the rebased ref to check out instead of work/<slug>, no stray-path rule and no
 # evidence recorded. RUN_TASK there runs that mise task in place of `check` (Server.Jobs.RunTask).
+# RULES_ONLY=1 stops after the workline's own rules, before the suite (a verify train's per-car pass).
 set -uo pipefail
 
 tid="${1:?usage: workline-verify.sh <thread-id> <slug> [checkout]}"
@@ -108,6 +109,9 @@ $stray"
   "$cli" red-verify "$tid" "$finding" || note "$tid" "verify FAILED for workline $slug — $finding" || true
   exit 1
 fi
+# RULES_ONLY: a verify train's per-car pass (Server.VerifyTrain) — the workline's own rules, and the
+# suite is the train's, run once on the stacked cars
+[ -n "${RULES_ONLY:-}" ] && exit 0
 mise trust -q "$fresh" >/dev/null 2>&1
 # a Hex home of its own
 seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$fresh/.hex"
