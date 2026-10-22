@@ -10,13 +10,14 @@ defmodule Server.FlagsTest do
 
   test "a flag nobody flipped is off, and the office map says so" do
     refute Flags.enabled?(:build_mode)
-    assert Flags.office() == %{build_mode: false, judged_supersede: false}
+    refute Flags.enabled?(:uqbar_routing)
+    assert Flags.office() == %{build_mode: false, judged_supersede: false, uqbar_routing: false}
   end
 
   test "set/2 flips a flag on and off by name" do
     assert {:ok, %{name: :build_mode, enabled: true}} = Flags.set("build_mode", true)
     assert Flags.enabled?(:build_mode)
-    assert Flags.office() == %{build_mode: true, judged_supersede: false}
+    assert Flags.office() == %{build_mode: true, judged_supersede: false, uqbar_routing: false}
 
     assert {:ok, %{name: :build_mode, enabled: false}} = Flags.set("build_mode", false)
     refute Flags.enabled?(:build_mode)
@@ -29,6 +30,6 @@ defmodule Server.FlagsTest do
 
   test "the office snapshot carries the flags" do
     {:ok, _} = Flags.set("build_mode", true)
-    assert Server.Office.status().flags == %{build_mode: true, judged_supersede: false}
+    assert Server.Office.status().flags == %{build_mode: true, judged_supersede: false, uqbar_routing: false}
   end
 end
