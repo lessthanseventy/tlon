@@ -243,7 +243,7 @@ defmodule Server.Release.PM do
   pointer (`refs/heads/live` — a cut moves it only after building it, so a boot runs what it
   names) against the newest one said. The notice reads `release <sha> is live — N changes`
   (`— back from <sha>` on a rollback, nothing more on the first), payload `%{"live" => sha, "notes" => [subject]}` (the subjects it moved over, at most 12; none on the first or a rollback). It also wakes the
-  threads blocked on a ticket closed since (`Server.Blocked.release/0`): a fix reaches the seats at a
+  threads blocked on a ticket closed before the pointer moved (`Server.Blocked.release/1`): a fix reaches the seats at a
   cut. No pointer or no root thread says nothing. `:ok`. `opts`: `root:`.
   """
   def note_live(opts \\ []) do
@@ -264,7 +264,7 @@ defmodule Server.Release.PM do
       body = "release #{short(sha)} is live" <> since_last(root, prev, sha)
       payload = %{"live" => sha, "notes" => notes(root, prev, sha)}
       _ = Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: body, payload: payload})
-      Server.Blocked.release()
+      Server.Blocked.release(pointer_moved(root))
     end
 
     :ok
@@ -545,6 +545,17 @@ defmodule Server.Release.PM do
     case git(root, ["merge-base", "--is-ancestor", prev, sha]) do
       {_, 0} -> root |> commits(prev, sha) |> Enum.map(& &1.subject) |> Enum.take(-@notes_max)
       _ -> []
+    end
+  end
+
+  # when `refs/heads/live` last moved (its reflog), not the live commit's own time: a ticket closes
+  # seconds after the fix commit it merged
+  defp pointer_moved(root) do
+    with {out, 0} <- git(root, ["log", "-g", "-1", "--format=%gt", "refs/heads/live"]),
+         {unix, _} <- Integer.parse(String.trim(out)) do
+      DateTime.from_unix!(unix)
+    else
+      _ -> DateTime.utc_now()
     end
   end
 end

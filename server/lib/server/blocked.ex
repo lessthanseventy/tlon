@@ -89,16 +89,17 @@ defmodule Server.Blocked do
   end
 
   @doc """
-  Clear every block whose ticket is closed and tell the lead of each open thread so, as a post
-  that wakes it. The number of blocks cleared.
+  Clear every block whose ticket was closed at or before `cut_at`, the moment the release pointer
+  moved: a ticket closed after it is not in that release, so its threads keep waiting for the next.
+  Tells the lead of each open thread, as a post that wakes it. The number of blocks cleared.
   """
-  def release do
+  def release(cut_at \\ DateTime.utc_now()) do
     ties =
       Repo.all(
         from tt in TicketThread,
           join: tk in Ticket,
           on: tk.id == tt.ticket_id,
-          where: tt.kind == "blocked_on" and tk.status == "done",
+          where: tt.kind == "blocked_on" and tk.status == "done" and tk.closed_at <= ^cut_at,
           select: {tt, tk}
       )
 

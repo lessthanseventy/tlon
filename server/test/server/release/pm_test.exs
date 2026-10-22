@@ -437,6 +437,24 @@ defmodule Server.Release.PMTest do
     end
   end
 
+  describe "note_live/1 and a blocker closed after the pointer moved" do
+    test "stays blocked until the next release", ctx do
+      %{ws: ws, repo: repo, main: main} = ctx
+      {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "ro"})
+      {:ok, agent} = Server.Staff.register_agent(%{name: "yu", mandate: "build", engine: "fresh"})
+      {:ok, t} = Channel.open_thread(%{title: "work", workspace_id: ws.id, agent_id: agent.id})
+      {:ok, _} = Server.Blocked.declare(ticket.id, t.id, "yu", "ro")
+
+      git!(repo, ["branch", "-f", "live", main])
+      {:ok, _} = Server.Tickets.update(Server.Tickets.get(ticket.id), %{status: "done"})
+      later = DateTime.utc_now() |> DateTime.add(120) |> DateTime.truncate(:second)
+      Repo.update_all(from(x in Server.Ticket, where: x.id == ^ticket.id), set: [closed_at: later])
+
+      assert :ok = PM.note_live(root: repo)
+      assert Server.Blocked.blocked?(t.id)
+    end
+  end
+
   defp workline_merged!(ws, title, at) do
     {:ok, t} =
       Server.Workline.open(%{title: title, slug: "w#{System.unique_integer([:positive])}", workspace_id: ws.id})
