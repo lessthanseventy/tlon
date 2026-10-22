@@ -445,10 +445,11 @@ defmodule Server.Release.PMTest do
       {:ok, t} = Channel.open_thread(%{title: "work", workspace_id: ws.id, agent_id: agent.id})
       {:ok, _} = Server.Blocked.declare(ticket.id, t.id, "yu", "ro")
 
-      git!(repo, ["branch", "-f", "live", main])
+      cut = DateTime.utc_now() |> DateTime.add(-120) |> DateTime.to_iso8601()
+      git!(repo, ["branch", "-f", "live", main], [{"GIT_COMMITTER_DATE", cut}])
       {:ok, _} = Server.Tickets.update(Server.Tickets.get(ticket.id), %{status: "done"})
-      later = DateTime.utc_now() |> DateTime.add(120) |> DateTime.truncate(:second)
-      Repo.update_all(from(x in Server.Ticket, where: x.id == ^ticket.id), set: [closed_at: later])
+      closed = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.truncate(:second)
+      Repo.update_all(from(x in Server.Ticket, where: x.id == ^ticket.id), set: [closed_at: closed])
 
       assert :ok = PM.note_live(root: repo)
       assert Server.Blocked.blocked?(t.id)
