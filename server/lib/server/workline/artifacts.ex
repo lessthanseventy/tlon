@@ -49,7 +49,8 @@ defmodule Server.Workline.Artifacts.Git do
     branch = "work/#{thread.slug}"
 
     with {sha, 0} <- git(thread, ["rev-parse", "--verify", "--quiet", branch]),
-         {code, 0} <- git(thread, ["diff", "--name-only", "HEAD...#{branch}", "--", ".", ":!work/#{thread.slug}"]) do
+         {code, 0} <-
+           git(thread, ["diff", "--name-only", "#{base(thread)}...#{branch}", "--", ".", ":!work/#{thread.slug}"]) do
       if String.trim(code) == "",
         do: {:error, "#{branch} has no code yet — only the workline's docs"},
         else: {:ok, "#{branch} @ #{String.slice(String.trim(sha), 0, 12)}"}
@@ -117,7 +118,7 @@ defmodule Server.Workline.Artifacts.Git do
   branch reads as no change.
   """
   def change(thread) do
-    range = "HEAD...work/#{thread.slug}"
+    range = "#{base(thread)}...work/#{thread.slug}"
     only = ["--", ".", ":!work/#{thread.slug}"]
 
     lines =
@@ -161,22 +162,29 @@ defmodule Server.Workline.Artifacts.Git do
   `work/<slug>/` docs left out. `[]` when there is no branch to diff (so nothing can auto-land on it).
   """
   def changed_paths(thread) do
-    case git(thread, ["diff", "--name-only", "HEAD...work/#{thread.slug}", "--", ".", ":!work/#{thread.slug}"]) do
+    case git(thread, [
+           "diff",
+           "--name-only",
+           "#{base(thread)}...work/#{thread.slug}",
+           "--",
+           ".",
+           ":!work/#{thread.slug}"
+         ]) do
       {out, 0} -> String.split(out, "\n", trim: true)
       _ -> []
     end
   end
 
   @doc """
-  The workline branch's change against the main tree's HEAD (`git diff --shortstat HEAD...work/<slug>`):
+  The workline branch's change against origin's main (`git diff --shortstat origin/main...work/<slug>`):
   `{:ok, shortstat}`, or `{:error, why}` when there is no branch to diff.
   """
   def diffstat(thread) do
     branch = "work/#{thread.slug}"
 
     # the change, not the workline's own docs (its spec, plan and review ride on the branch too)
-    case git(thread, ["diff", "--shortstat", "HEAD..." <> branch, "--", ".", ":!work/#{thread.slug}"]) do
-      {out, 0} -> {:ok, if(String.trim(out) == "", do: "no change against HEAD", else: String.trim(out))}
+    case git(thread, ["diff", "--shortstat", base(thread) <> "..." <> branch, "--", ".", ":!work/#{thread.slug}"]) do
+      {out, 0} -> {:ok, if(String.trim(out) == "", do: "no change against main", else: String.trim(out))}
       {_out, _} -> {:error, "no branch #{branch} to diff"}
     end
   end
@@ -204,6 +212,16 @@ defmodule Server.Workline.Artifacts.Git do
     case Server.repo_for_thread(thread) do
       {:ok, repo} -> repo
       {:error, _} -> root()
+    end
+  end
+
+  # what a workline's change is measured from: origin's main, never the main checkout's HEAD, which
+  # can sit on any branch (a session working there) and then counts main's own commits as the
+  # workline's. A repo with no origin (a test's) falls back to HEAD.
+  defp base(thread) do
+    case git(thread, ["rev-parse", "--verify", "--quiet", "origin/main"]) do
+      {_, 0} -> "origin/main"
+      _ -> "HEAD"
     end
   end
 end
