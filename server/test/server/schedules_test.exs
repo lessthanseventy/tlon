@@ -219,7 +219,9 @@ defmodule Server.SchedulesTest do
     s =
       schedule!(ws, %{
         cron: "@daily",
-        body: "echo 'checks queue: waiting'; sleep 0.7; echo 'checks queue: your turn'; sleep 0.7; echo done"
+        body:
+          "echo 'checks queue: waiting'; sleep 0.7; echo 'checks queue: waiting'; sleep 0.7; " <>
+            "echo 'checks queue: your turn'; sleep 0.7; echo done"
       })
 
     {:ok, run} = Schedules.run_now(s)

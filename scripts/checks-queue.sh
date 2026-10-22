@@ -67,6 +67,9 @@ take_ticket() {
 if entry="$(take_ticket 2>/dev/null)" && [ -n "$entry" ]; then
   trap 'rm -f "$entry"' EXIT
   told=0
+  # a waiter says so again every heartbeat: a scheduled run's timeout restarts at each line
+  # (Server.Schedules), so a long wait is not mistaken for a hung check
+  heartbeat="${CHECKS_HEARTBEAT:-600}" next_word=0
   while :; do
     head=""
     for f in "$wait_dir"/[0-9]*-[0-9]*; do # padded tickets: glob order is arrival order
@@ -75,14 +78,13 @@ if entry="$(take_ticket 2>/dev/null)" && [ -n "$entry" ]; then
       rm -f "$f" # a dead waiter's ticket: whoever notices removes it
     done
     if [ "$head" = "$entry" ] && flock -n 9; then break; fi
-    if [ "$told" = 0 ]; then
+    if [ "$SECONDS" -ge "$next_word" ]; then
       echo "checks queue: waiting — $(cat "$holder" 2>/dev/null || echo 'another check is running')" >&2
-      told=1
+      told=1 next_word=$((SECONDS + heartbeat))
     fi
     sleep "$poll"
   done
   rm -f "$entry"
-  # a scheduled run restarts its timeout here (Server.Schedules): the wait was not the check
   [ "$told" = 1 ] && echo "checks queue: your turn" >&2
 else
   echo "checks queue: can't write $wait_dir or $seq_file — falling back to a plain lock, no queue order" >&2

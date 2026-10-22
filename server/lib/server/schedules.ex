@@ -25,7 +25,7 @@ defmodule Server.Schedules do
   alias Server.ScheduleRun
 
   @script_timeout_ms 30 * 60 * 1000
-  @your_turn "checks queue: your turn"
+  @queue_word "checks queue:"
   @output_cap 4000
 
   @doc "A new schedule. `{:ok, schedule}` or `{:error, changeset}`."
@@ -290,9 +290,9 @@ defmodule Server.Schedules do
 
   # the command in `sh -c`, output merged, nothing on its stdin (a command that reads it ends
   # rather than waits); one that outlives the timeout is killed with every process it started
-  # (its tree, read off `pgrep -P`) and reported as exit 124. The clock restarts at the checks
-  # queue's `your turn` line (scripts/checks-queue.sh): a gate's wait behind other checks is not
-  # its run, and a busy queue would otherwise kill it before it starts.
+  # (its tree, read off `pgrep -P`) and reported as exit 124. The clock restarts at each line from
+  # the checks queue (scripts/checks-queue.sh: a heartbeat while waiting, then `your turn`): a
+  # gate's wait behind other checks is not its run, and a busy queue would otherwise kill it first.
   defp shell(cmd, dir) do
     args = ["-c", "exec </dev/null\n" <> cmd]
     port = Port.open({:spawn_executable, "/bin/sh"}, [:binary, :exit_status, :stderr_to_stdout, args: args, cd: dir])
@@ -308,7 +308,7 @@ defmodule Server.Schedules do
     receive do
       {^port, {:data, d}} ->
         deadline =
-          if String.contains?(String.slice(out, -byte_size(@your_turn), byte_size(@your_turn)) <> d, @your_turn),
+          if String.contains?(String.slice(out, -byte_size(@queue_word), byte_size(@queue_word)) <> d, @queue_word),
             do: System.monotonic_time(:millisecond) + timeout,
             else: deadline
 
