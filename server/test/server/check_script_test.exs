@@ -12,7 +12,7 @@ defmodule Server.CheckScriptTest do
     repo = Path.join(tmp, "repo")
     File.mkdir_p!(bin)
     File.mkdir_p!(repo)
-    stub!(bin, "mise", ~s(exit "${FAKE_GATE:-0}"))
+    stub!(bin, "mise", ~s(echo ran >>"$MISE_LOG"; exit "${FAKE_GATE:-0}"))
     # the verdict already on a commit is FAKE_STATUS; every other call is recorded
     stub!(
       bin,
@@ -31,7 +31,25 @@ defmodule Server.CheckScriptTest do
       )
 
     {sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: repo)
-    %{bin: bin, repo: repo, log: Path.join(tmp, "gh.log"), sha: String.trim(sha)}
+
+    %{
+      bin: bin,
+      repo: repo,
+      log: Path.join(tmp, "gh.log"),
+      runs: Path.join(tmp, "mise.log"),
+      cache: Path.join(tmp, "cache"),
+      sha: String.trim(sha)
+    }
+  end
+
+  defp runs(ctx),
+    do: if(File.exists?(ctx.runs), do: ctx.runs |> File.read!() |> String.split("\n", trim: true) |> length(), else: 0)
+
+  # a second commit with the same tree: what a rebase onto an unmoved main makes
+  defp same_tree_commit(ctx) do
+    {_, 0} = System.cmd("git", ["commit", "-q", "--allow-empty", "-m", "two"], cd: ctx.repo)
+    {sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: ctx.repo)
+    String.trim(sha)
   end
 
   defp stub!(bin, name, body) do
@@ -40,7 +58,15 @@ defmodule Server.CheckScriptTest do
   end
 
   defp check(ctx, env \\ []) do
-    env = [{"PATH", "#{ctx.bin}:#{System.get_env("PATH")}"}, {"GH_LOG", ctx.log}, {"TLON_CHECK_STATUS", nil} | env]
+    env = [
+      {"PATH", "#{ctx.bin}:#{System.get_env("PATH")}"},
+      {"GH_LOG", ctx.log},
+      {"MISE_LOG", ctx.runs},
+      {"XDG_CACHE_HOME", ctx.cache},
+      {"TLON_CHECK_STATUS", nil}
+      | env
+    ]
+
     System.cmd("bash", [@script], cd: ctx.repo, env: env, stderr_to_stdout: true)
   end
 
@@ -61,6 +87,41 @@ defmodule Server.CheckScriptTest do
     assert {out, 0} = check(ctx, [{"FAKE_STATUS", "success"}, {"FAKE_GATE", "3"}])
     assert out =~ "already success for #{String.slice(ctx.sha, 0, 12)}"
     assert gh_calls(ctx) == ""
+  end
+
+  describe "the tree cache" do
+    test "a tree that passed under another commit is not run again, and the new commit still gets its tlon/check",
+         ctx do
+      assert {_, 0} = check(ctx)
+      two = same_tree_commit(ctx)
+
+      assert {out, 0} = check(ctx, [{"FAKE_GATE", "3"}])
+      assert runs(ctx) == 1
+      assert out =~ "already passed"
+      assert gh_calls(ctx) =~ ~r"statuses/#{two} .*state=success"
+    end
+
+    test "a red run records nothing: the same tree runs again", ctx do
+      assert {_, 3} = check(ctx, [{"FAKE_GATE", "3"}])
+      same_tree_commit(ctx)
+      assert {_, 0} = check(ctx)
+      assert runs(ctx) == 2
+    end
+
+    test "a dirty tree neither takes a recorded green nor records one", ctx do
+      assert {_, 0} = check(ctx)
+      same_tree_commit(ctx)
+      File.write!(Path.join(ctx.repo, "untracked"), "x")
+      assert {_, 3} = check(ctx, [{"FAKE_GATE", "3"}])
+      assert runs(ctx) == 2
+    end
+
+    test "TLON_CHECK_FORCE=1 runs a tree that already passed", ctx do
+      assert {_, 0} = check(ctx)
+      same_tree_commit(ctx)
+      assert {_, 3} = check(ctx, [{"FAKE_GATE", "3"}, {"TLON_CHECK_FORCE", "1"}])
+      assert runs(ctx) == 2
+    end
   end
 
   test "a commit whose last verdict was a failure is gated again", ctx do

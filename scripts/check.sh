@@ -20,8 +20,21 @@ if [ "${TLON_CHECK_FORCE:-0}" != 1 ] && [ "${TLON_CHECK_STATUS:-1}" != 0 ] && [ 
   echo "tlon/check: already success for ${before:0:12} — not run again (TLON_CHECK_FORCE=1 runs it)"
   exit 0
 fi
-mise run check:all
-code=$?
+# A clean tree that already passed is not run again, whatever commit holds it now: a rebase onto a
+# main that hasn't moved (a verify, then its landing's gate) makes a new commit with the same tree.
+# Recorded green only, under the verify cache, which a seat's sandbox can read but never write.
+tree="$(git rev-parse 'HEAD^{tree}' 2>/dev/null)"
+green="${XDG_CACHE_HOME:-$HOME/.cache}/tlon-verify/green"
+if [ "${TLON_CHECK_FORCE:-0}" != 1 ] && [ -n "$tree" ] && [ -z "$(git status --porcelain 2>/dev/null)" ] && [ -f "$green/$tree" ]; then
+  echo "check: tree ${tree:0:12} already passed ($(cat "$green/$tree")) — not run again (TLON_CHECK_FORCE=1 runs it)"
+  code=0
+else
+  mise run check:all
+  code=$?
+  if [ "$code" -eq 0 ] && [ -n "$tree" ] && [ "$(state)" = "$before" ] && [ -z "$(git status --porcelain 2>/dev/null)" ]; then
+    { mkdir -p "$green" && printf '%s %s\n' "$(git rev-parse HEAD)" "$(date -Is)" >"$green/$tree"; } 2>/dev/null || true
+  fi
+fi
 
 sha="$(git rev-parse HEAD 2>/dev/null)"
 say() { echo "tlon/check: $*"; }
