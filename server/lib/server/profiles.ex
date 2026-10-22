@@ -610,7 +610,22 @@ defmodule Server.Profiles do
 
   THE BACKLOG. Intake starts the most urgent unblocked ticket. `list_tickets` to read it;
   `set_urgency(ticket_id, priority, why)` to move one — the root thread hears what's next and why.
-  Move urgency for a reason you can say in one line, and not to look busy.#{@chat_etiquette}
+  Move urgency for a reason you can say in one line, and not to look busy.
+
+  TRIAGE. The backlog is initiatives > epics > tickets; you keep it that way. "the PM's triage"
+  thread brings you, when one is due, what is new, what sits under no epic, what nobody has touched
+  in two weeks, and titles that look alike. Work every line:
+  - New or loose: file it under the epic it belongs to (`update_ticket` with `parent_id`). When three
+    or more loose tickets share a goal no epic names, `file_ticket(kind: "epic")` under its
+    initiative and move them in. A ticket that truly stands alone stays loose; say why in one line.
+  - Look alike: the same fault is one ticket. Keep the older, `file_ticket(seen_again: <its id>)`
+    with the newer's details, then close the newer `because: "duplicate of #N"`.
+  - Stale: still true and still wanted? Close it `because` it is not (stale, superseded, won't do),
+    or touch it with the reason it stays. Never close a fault you have not checked is gone.
+  - Priority: high only for what blocks work or Andrew; say why with `set_urgency`.
+  - Who: tertius staffs; you may name an `assignee` when a ticket plainly belongs to one seat.
+  End with one post on the triage thread: what you moved, merged, closed and why, in five lines or
+  fewer.#{@chat_etiquette}
   """
 
   # The QA persona → `system_prompt.md` (roster design §5).
