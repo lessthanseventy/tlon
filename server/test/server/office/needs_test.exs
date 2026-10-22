@@ -812,7 +812,7 @@ defmodule Server.Office.NeedsTest do
       for n <- [191, 207], do: mention(ws, n)
 
       g = Needs.grouped()
-      assert g.counts == %{phone: 0, machine: 2, clipboard: 4}
+      assert g.counts == %{phone: 0, machine: 2, clipboard: 4, uqbar: 0, settled: 0}
       assert {length(g.phone), length(g.machine), length(g.clipboard)} == {0, 2, 4}
       assert Enum.all?(g.clipboard, &(&1.surface == "clipboard"))
     end
@@ -848,6 +848,108 @@ defmodule Server.Office.NeedsTest do
       tomorrow = DateTime.add(DateTime.utc_now(), 25 * 3600, :second)
       assert Needs.grouped(tomorrow).machine == []
       assert [_] = Needs.grouped().machine
+    end
+  end
+
+  describe "routing — a conditional need reaches the operator only through Uqbar" do
+    setup do
+      {:ok, true} = FunWithFlags.enable(:uqbar_routing)
+      on_exit(fn -> FunWithFlags.disable(:uqbar_routing) end)
+      :ok
+    end
+
+    defp question(ws) do
+      {:ok, q} = Channel.open_thread(%{title: "q", workspace_id: ws.id})
+      {:ok, _} = Server.Attention.ask(q.id, "daneri", "A or B?")
+      [%{key: key} = item] = Enum.filter(Needs.list(), &(&1.kind == "question"))
+      {key, item}
+    end
+
+    defp route_row(key, state, at, extra \\ %{}) do
+      row =
+        Map.merge(%{key: key, state: state, why: "w", recommendation: nil, at: DateTime.truncate(at, :second)}, extra)
+
+      Server.Repo.insert_all("need_routing", [row])
+    end
+
+    defp later(s), do: DateTime.add(DateTime.utc_now(), s, :second)
+
+    test "with no verdict, a conditional need waits with Uqbar, off the phone and its count", %{ws: ws} do
+      {key, _} = question(ws)
+      g = Needs.grouped()
+      assert g.phone == []
+      assert [%{key: ^key, route: "uqbar"}] = g.uqbar
+      assert g.counts.uqbar == 1 and g.counts.phone == 0
+    end
+
+    test "the 2026-10-10 state, flag on and no rows: the issues wait with Uqbar", %{ws: ws} do
+      for n <- 13..16, do: issue(ws, n)
+      for n <- [191, 207], do: mention(ws, n)
+      g = Needs.grouped()
+      assert {g.counts.phone, g.counts.machine, g.counts.clipboard, g.counts.uqbar} == {0, 2, 0, 4}
+    end
+
+    test "passed up, it is on its surface with Uqbar's recommendation", %{ws: ws} do
+      {key, _} = question(ws)
+      route_row(key, "passed_up", later(1), %{recommendation: "approve it"})
+      g = Needs.grouped()
+      assert [%{key: ^key, route: "pass_up", recommendation: "approve it"}] = g.phone
+      assert g.uqbar == []
+    end
+
+    test "settled, it leaves every surface and sits in the digest for a day", %{ws: ws} do
+      {key, _} = question(ws)
+      route_row(key, "settled", later(1), %{why: "dup of #12"})
+      g = Needs.grouped()
+      assert g.phone == [] and g.uqbar == [] and g.clipboard == []
+      assert [%{key: ^key, why: "dup of #12"}] = g.settled
+      assert g.counts.settled == 1
+      assert Needs.grouped(later(25 * 3600)).settled == []
+    end
+
+    test "a verdict older than the item is for an earlier item under the key: ignored", %{ws: ws} do
+      {key, item} = question(ws)
+      route_row(key, "settled", DateTime.add(item.at, -60, :second))
+      assert [%{key: ^key}] = Needs.grouped().uqbar
+    end
+
+    test "an always kind is on the phone with no verdict; information is never routed", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "busy", workspace_id: ws.id})
+      {:ok, _} = Server.Staff.register_agent(%{name: "bauer", mandate: "build", engine: "e"})
+      {:ok, _} = Channel.assign_lead(t.id, "bauer")
+      hour_ago = DateTime.add(DateTime.utc_now(), -3600, :second)
+      Server.Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [created_at: hour_ago])
+
+      for _ <- 1..2,
+          do:
+            {:ok, _} =
+              Server.Dossier.record_event(%{
+                thread_id: t.id,
+                kind: "tool_denied",
+                correlation: "tool_denied:#{t.id}",
+                detail: %{"agent" => "bauer", "tool" => "Bash"}
+              })
+
+      mention(ws, 1)
+      g = Needs.grouped()
+      assert [%{kind: "tool_denied", route: "pass_up", recommendation: nil}] = g.phone
+      assert [%{kind: "mention", route: "info"}] = g.machine
+      assert g.uqbar == []
+    end
+
+    test "flag off, every conditional need passes up and nothing is with Uqbar, whatever the rows say",
+         %{ws: ws} do
+      FunWithFlags.disable(:uqbar_routing)
+      {key, _} = question(ws)
+      route_row(key, "settled", later(1))
+      g = Needs.grouped()
+      assert [%{key: ^key, route: "pass_up"}] = g.phone
+      assert g.uqbar == [] and g.settled == []
+    end
+
+    test "the flat list stays unrouted", %{ws: ws} do
+      question(ws)
+      refute Map.has_key?(hd(Needs.list()), :route)
     end
   end
 end

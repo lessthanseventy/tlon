@@ -99,7 +99,7 @@ defmodule Server.Office.Needs do
   The machine holds only what is not yet heard (`hear/1`) and is under a day old at `now`.
   """
   def grouped(now \\ DateTime.utc_now()) do
-    items = list()
+    {routes, items} = Enum.split_with(routed(), &(&1.route in ~w(uqbar settled)))
     heard = Map.new(Repo.all(from h in "need_heard", select: {h.key, type(h.at, :utc_datetime)}))
     prune("need_heard", heard, items)
     since = DateTime.add(now, -@machine_hours * 3600, :second)
@@ -108,7 +108,14 @@ defmodule Server.Office.Needs do
     machine =
       Enum.reject(Map.get(by, "machine", []), &(put_away?(&1, heard[&1.key]) or DateTime.before?(&1.at, since)))
 
-    groups = %{phone: Map.get(by, "phone", []), machine: machine, clipboard: Map.get(by, "clipboard", [])}
+    groups = %{
+      phone: Map.get(by, "phone", []),
+      machine: machine,
+      clipboard: Map.get(by, "clipboard", []),
+      uqbar: Enum.filter(routes, &(&1.route == "uqbar")),
+      settled: Enum.filter(routes, &(&1.route == "settled" and DateTime.after?(&1.settled_at, since)))
+    }
+
     Map.put(groups, :counts, Map.new(groups, fn {surface, items} -> {surface, length(items)} end))
   end
 
@@ -899,4 +906,40 @@ defmodule Server.Office.Needs do
       end
     end
   end
+
+  # `list/0` with each item's route: Uqbar's verdict (a `need_routing` row no older than the item)
+  # or its kind's rule; with the flag off, every conditional item passes up and rows are not read
+  defp routed do
+    items = list()
+
+    rows =
+      Map.new(
+        Repo.all(
+          from r in "need_routing",
+            select: {r.key, %{state: r.state, why: r.why, rec: r.recommendation, at: type(r.at, :utc_datetime)}}
+        )
+      )
+
+    prune("need_routing", rows, items)
+    on? = Server.Flags.enabled?(:uqbar_routing)
+
+    for item <- items do
+      row = rows[item.key]
+      row = if on? && row && DateTime.compare(row.at, item.at) != :lt, do: row
+
+      Map.merge(item, %{
+        route: route(pass_up_rule(item), row && row.state, on?),
+        recommendation: row && row.rec,
+        why: row && row.why,
+        settled_at: row && row.at
+      })
+    end
+  end
+
+  defp route(:info, _, _), do: "info"
+  defp route(:always, _, _), do: "pass_up"
+  defp route(_, _, false), do: "pass_up"
+  defp route(_, "passed_up", _), do: "pass_up"
+  defp route(_, "settled", _), do: "settled"
+  defp route(_, nil, _), do: "uqbar"
 end
