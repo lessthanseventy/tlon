@@ -1187,15 +1187,17 @@ defmodule Server.Profiles do
 
   @doc """
   What a pane launched from `p` was launched with, as a short hash: its launch command (model,
-  effort, deny list and the rest of its env) and the bytes `materialise!/2` writes for it (sandbox,
-  system prompt, tmux.conf). A live pane stamped with another one is running a launch its profile
+  effort, deny list and the rest of its env), the scripts that command names (`launch_bytes/1`:
+  launch.sh), and the bytes `materialise!/2` writes for it (sandbox, system prompt, tmux.conf). A live pane stamped with another one is running a launch its profile
   no longer gives (`Server.Staffing`'s stale-launch sweep).
   """
   def fingerprint(%Profile{} = p) do
     r = render(p)
+    command = Server.Harness.driver(p.harness).launch_command(p)
 
     [
-      Server.Harness.driver(p.harness).launch_command(p),
+      command,
+      launch_bytes(command),
       if(r.sandbox, do: Jason.encode!(r.sandbox), else: ""),
       r.system_prompt || "",
       @coworker_tmux_conf
@@ -1204,6 +1206,18 @@ defmodule Server.Profiles do
     |> then(&:crypto.hash(:sha256, &1))
     |> Base.encode16(case: :lower)
     |> binary_part(0, 16)
+  end
+
+  @doc """
+  The bytes of every script a launch `command` names (each word that is a path to a file): the
+  command's text names `launch.sh` only by path, so an edit to the script is a changed launch only
+  if its contents are in the stamp.
+  """
+  def launch_bytes(command) do
+    command
+    |> String.split()
+    |> Enum.filter(&(String.starts_with?(&1, "/") and File.regular?(&1)))
+    |> Enum.map_join(<<0>>, &File.read!/1)
   end
 
   defp profiles_root do
