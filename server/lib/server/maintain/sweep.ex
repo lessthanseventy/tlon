@@ -118,8 +118,9 @@ defmodule Server.Maintain.Sweep do
     working = MapSet.new(open_tied.(~w(promoted relates)))
     started = open_tied.(~w(promoted))
 
-    # a claimed ticket is worked by hand (`Server.Tickets.claim/2`): no thread works it
-    for ticket <- Repo.all(from t in Server.Ticket, where: t.status == "doing"),
+    # a claimed ticket is worked by hand (`Server.Tickets.claim/2`): no thread works it. An epic or
+    # initiative is doing because a child is, never because a thread works it: not this sweep's
+    for ticket <- Repo.all(from t in Server.Ticket, where: t.status == "doing" and t.kind == "ticket"),
         not MapSet.member?(working, ticket.id),
         not Server.Tickets.claimed?(ticket) do
       note = "Back to the backlog #{Date.utc_today()}: no open thread was working on it."

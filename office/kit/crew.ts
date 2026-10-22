@@ -193,17 +193,38 @@ export function cardState(a: Agents, th: Thread, ctx: BoardCtx = {}): CardState 
   return { kind: "idle", why: `${th.lead} is not at a desk` }
 }
 
-/** an epic's unstarted children, in the snapshot's order */
+/** an epic's unstarted children (an initiative's: its epics), in the snapshot's order */
 export const epicChildren = (a: Agents, id: number): Ticket[] => (a.tickets as Ticket[]).filter((t) => t.epic_id === id)
+
+const isGroup = (t: Ticket) => t.kind === "epic" || t.kind === "initiative"
+
+/** a group's progress: an epic's own; an initiative's, its epics' summed, its next step the first epic's that has one */
+function progressOf(a: Agents, tk: Ticket): { done: number; total: number; next: { id: number; title: string } | null } {
+  if (tk.kind !== "initiative") return { done: tk.done ?? 0, total: tk.total ?? 0, next: tk.next ?? null }
+  const epics = epicChildren(a, tk.id).filter((e) => e.kind === "epic")
+  return {
+    done: epics.reduce((n, e) => n + (e.done ?? 0), 0),
+    total: epics.reduce((n, e) => n + (e.total ?? 0), 0),
+    next: epics.find((e) => e.next)?.next ?? null,
+  }
+}
+
+const groupTitle = (a: Agents, tk: Ticket) => {
+  const p = progressOf(a, tk)
+  return `${tk.title} ${p.done}/${p.total}${p.next ? ` → #${p.next.id} ${p.next.title}` : ""}`
+}
+
+/** what opening a group lists: an initiative's epics or an epic's tickets, a group with its progress */
+export const groupRows = (a: Agents, id: number): { id: number; title: string; kind: string }[] =>
+  epicChildren(a, id).map((k) => ({ id: k.id, title: isGroup(k) ? groupTitle(a, k) : k.title, kind: k.kind ?? "ticket" }))
 
 /** the whiteboard's columns — a board draws them as stickies, a column card as rows */
 export function boardColumns(a: Agents, ctx: BoardCtx = {}): { name: string; items: BoardItem[] }[] {
   const cols: BoardItem[][] = COLS.map(() => [])
   for (const tk of a.tickets as Ticket[]) {
     if (tk.epic_id != null) continue
-    if (tk.kind === "epic") {
-      const next = tk.next ? ` → #${tk.next.id} ${tk.next.title}` : ""
-      cols[0]!.push({ act: { kind: "epic", id: tk.id }, title: `${tk.title} ${tk.done ?? 0}/${tk.total ?? 0}${next}`, who: null, stage: "epic", asks: false, archetype: null, high: tk.priority === "high" })
+    if (isGroup(tk)) {
+      cols[0]!.push({ act: { kind: "epic", id: tk.id }, title: groupTitle(a, tk), who: null, stage: tk.kind!, asks: false, archetype: null, high: tk.priority === "high" })
       continue
     }
     cols[0]!.push({ act: { kind: "ticket", id: tk.id }, title: tk.title, who: null, stage: tk.routed ? "with the manager" : "ticket", asks: false, archetype: null, high: tk.priority === "high", routed: !!tk.routed })

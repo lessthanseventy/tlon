@@ -17,7 +17,7 @@ import { load as loadWhim, save as saveWhim } from "../kit/whimsy-file"
 import { resolve as resolveWhim, type State as WhimState } from "../kit/whimsy"
 import { resetToPreset, whimsyRows, whimsyTitle } from "./whimsy-card"
 import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
-import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, BOARD_LEGEND, STATE_GLYPH, statusGlyph, statusTone, statusWord, viewOf, type Act, type SeatStatus, type BoardCtx, type CardState } from "../kit/crew"
+import { boardColumns, busiest, cardState, COLS, crewOf, groupRows, needsYou, BOARD_LEGEND, STATE_GLYPH, statusGlyph, statusTone, statusWord, viewOf, type Act, type SeatStatus, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
 import { queueItems, type QueueItem } from "../kit/rack"
 import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES_BLURB, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
@@ -1306,12 +1306,16 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     }
     case "epic": {
       const id = mode.id, ep = a.tickets.find((t) => t.id === id)
-      if (!ep) return { title: `EPIC #${id}`, rows: [{ segs: [dim("finished or gone")] }], actions: [back1] }
-      const kids = epicChildren(a, id)
+      const word = ep?.kind === "initiative" ? "INITIATIVE" : "EPIC"
+      if (!ep) return { title: `${word} #${id}`, rows: [{ segs: [dim("finished or gone")] }], actions: [back1] }
+      const kids = groupRows(a, id)
       return {
-        title: `EPIC #${id} · ${ep.done ?? 0}/${ep.total ?? 0}`,
+        title: `${word} #${id}${ep.kind === "epic" ? ` · ${ep.done ?? 0}/${ep.total ?? 0}` : ""}`,
         rows: [{ segs: [plain(ep.title)] }, { segs: [dim(`${ep.priority} priority${ep.next ? ` · next #${ep.next.id} ${ep.next.title}` : ""}`)] },
-          ...kids.map((k) => ({ segs: [key(`#${k.id} `), plain(k.title), dim(`  ${k.routed ? "with the manager" : "ticket"}`)], open: () => open({ kind: "ticket", id: k.id, from: mode }), ref: JSON.stringify({ kind: "ticket", id: k.id }) }))],
+          ...kids.map((k) => {
+            const to = k.kind === "ticket" ? ({ kind: "ticket", id: k.id } as const) : ({ kind: "epic", id: k.id } as const)
+            return { segs: [key(`#${k.id} `), plain(k.title), dim(`  ${k.kind}`)], open: () => open({ ...to, from: mode }), ref: JSON.stringify(to) }
+          })],
         actions: [back1],
       }
     }
@@ -1319,6 +1323,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const id = mode.id
       const tk = a.tickets.find((t) => t.id === id), full = tickets.find((t) => t.id === id)
       if (!tk) return { title: `TICKET #${id}`, rows: [{ segs: [dim("started or gone")] }], actions: [back1] }
+      // an epic or initiative reached as a ticket (a find, a link) is a group: its card, never "start it"
+      if (tk.kind === "epic" || tk.kind === "initiative") { mode = { kind: "epic", id, from: mode.from }; return detail() }
       const rows: Row[] = [{ segs: [plain(tk.title)] }, { segs: [dim(`${tk.priority} priority${tk.routed ? " · with the manager to staff" : ""}`)] }]
       const parent = tk.epic_id != null ? a.tickets.find((t) => t.id === tk.epic_id) : undefined
       if (parent) rows.push({ segs: [dim("epic "), key(`#${parent.id} `), plain(parent.title)] })
