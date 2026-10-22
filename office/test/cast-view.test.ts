@@ -49,8 +49,10 @@ const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
 const until = async (what: string, ok: () => boolean) => {
   const t0 = performance.now(), deadline = t0 + 15_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what} after ${performance.now() - t0}ms; pane:\n${screen()}`)
+  // one read decides: a second could see a screen that has moved on since
+  let seen = ok()
+  while (!seen && performance.now() < deadline) { await Bun.sleep(50); seen = ok() }
+  if (!seen) throw new Error(`never saw ${what} after ${performance.now() - t0}ms; pane:\n${screen()}`)
 }
 
 test("` opens the cast: a row per seat, } the office tab, esc home", async () => {
@@ -86,6 +88,7 @@ test("the cast opened again after ctrl+] still lists the bench", async () => {
   expect(screen()).toContain("bo")
   expect(screen()).not.toContain("nobody on the bench")
   keys("C-]")
+  await until("home", () => !screen().includes("THE CAST"))
 }, 40_000)
 
 test("⏎ on voice is the persona picker: its reroll asks, y posts it", async () => {
