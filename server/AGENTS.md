@@ -73,6 +73,12 @@ and every layer the spine design's re-laid §9 asked for
   `event` with a closed `kind`, `issue`, `todo`, `question`, `habit`. Read capped-and-counted.
 - **the container tier** — `Server.Workspaces` (roster + paths), `Server.Projects` (repos),
   `Server.Tickets`, `Server.Notes`.
+- **blocked on a ticket** (`Server.Blocked`, the `blocked_on` tool) — a seat stopped by a fault an open
+  ticket already covers says so instead of asking the operator: a `blocked_on` tie
+  (`Server.TicketThread`), the sighting appended to the ticket. Its thread gets no continuation nudge and
+  is never `stalled`; the ticket is one `blocked` Need however many threads wait. The block clears, and
+  the lead is woken to retry, when the ticket is closed and `Server.Release.PM.note_live/1` sees a
+  release go live (a fix reaches seats at a cut).
 - **the switchboard** (`Server.Switchboard` + `Server.Bus` + `Server.Arbiter`) — delivery WAKES the
   addressee (§5b.2): a posted message is a durable row first, then broadcast over `Phoenix.PubSub`, and
   the switchboard pokes the thread's lead / the @mentioned coworker / a reply's author through the
