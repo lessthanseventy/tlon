@@ -167,7 +167,16 @@ defmodule Server.MCP.Tool.FileTicket do
     field :priority, :enum, values: ["low", "med", "high"], default: "med"
     field :labels, {:list, :string}, default: [], description: "Freeform labels"
     field :assignee, :string, description: "Who it's for (an agent handle or the operator), optional"
-    field :epic_id, :integer, description: "File the ticket as a child of this epic (a ticket of kind epic), optional"
+
+    field :kind, :enum,
+      values: ["ticket", "epic", "initiative"],
+      default: "ticket",
+      description:
+        "ticket (work), epic (holds tickets) or initiative (holds epics); an epic or initiative is never work"
+
+    field :epic_id, :integer,
+      description: "File it under this parent, optional: an epic for a ticket, an initiative for an epic"
+
     field :issue_id, :integer, description: "The open issue this ticket fixes, optional: the ticket owns it"
 
     field :blocked_by, {:list, :integer},
@@ -318,6 +327,9 @@ defmodule Server.MCP.Tool.UpdateTicket do
     field :assignee, :string
     field :blocked_by, {:list, :integer}, description: "Replace the tickets it waits on; `[]` clears them"
 
+    field :parent_id, :integer,
+      description: "Move it under this parent (an epic for a ticket, an initiative for an epic); 0 takes it out of any"
+
     field :fixed_by, :string, description: "Closing it (status done) as fixed: the commit (sha) on main that fixed it"
 
     field :because, :string,
@@ -347,6 +359,7 @@ defmodule Server.MCP.Tool.UpdateTicket do
 
   defp change(ticket, params, closed_why, frame) do
     {blocked_by, params} = Map.pop(params, :blocked_by)
+    {parent_id, params} = Map.pop(params, :parent_id)
     attrs = params |> Map.drop([:id, :fixed_by, :because]) |> Map.reject(fn {_k, v} -> is_nil(v) end)
 
     attrs =
@@ -362,7 +375,7 @@ defmodule Server.MCP.Tool.UpdateTicket do
 
     case Tickets.bad_blockers(blocked_by || [], ticket.id) do
       [] ->
-        result = update(ticket, attrs, blocked_by)
+        result = with {:ok, _} <- move(ticket, parent_id), do: update(ticket, attrs, blocked_by)
         if closed_why, do: Server.Dossier.resolve_owned(ticket.id, "its ticket ##{ticket.id} was closed: #{closed_why}")
         reply(frame, result, &MCP.Brief.ticket/1)
 
@@ -370,6 +383,10 @@ defmodule Server.MCP.Tool.UpdateTicket do
         fail(frame, "blocked_by: no such ticket #{Enum.map_join(bad, ", ", &"##{&1}")}")
     end
   end
+
+  defp move(ticket, nil), do: {:ok, ticket}
+  defp move(ticket, 0), do: Tickets.move(ticket.id, nil)
+  defp move(ticket, parent_id), do: Tickets.move(ticket.id, parent_id)
 
   defp update(ticket, attrs, blocked_by) do
     with {:ok, _} = result <- Tickets.update(ticket, attrs) do

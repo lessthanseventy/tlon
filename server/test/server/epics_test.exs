@@ -62,7 +62,7 @@ defmodule Server.EpicsTest do
       c = file(ws, "child")
       {:ok, _} = Tickets.link(e1.id, c.id, "parent")
       assert {:error, cs} = Tickets.link(e2.id, c.id, "parent")
-      assert {"already has a parent epic", _} = cs.errors[:to_id]
+      assert {"already has a parent", _} = cs.errors[:to_id]
     end
 
     test "the DB refuses a second parent even if the changeset check is raced past", %{ws: ws} do
@@ -91,9 +91,9 @@ defmodule Server.EpicsTest do
       plain = file(ws, "plain")
       other = file(ws, "other")
       assert {:error, cs} = Tickets.link(outer.id, inner.id, "parent")
-      assert {"an epic cannot have a parent", _} = cs.errors[:to_id]
+      assert {"an epic's parent can only be an initiative", _} = cs.errors[:to_id]
       assert {:error, cs} = Tickets.link(plain.id, other.id, "parent")
-      assert {"only an epic can be a parent", _} = cs.errors[:from_id]
+      assert {"only an epic or an initiative can be a parent", _} = cs.errors[:from_id]
     end
   end
 
@@ -257,7 +257,7 @@ defmodule Server.EpicsTest do
       {:ok, _} = Tickets.adopt(e1.id, [b.id])
       assert {:error, {id, cs}} = Tickets.adopt(e2.id, [a.id, b.id])
       assert id == b.id
-      assert {:to_id, {"already has a parent epic", _}} = List.keyfind(cs.errors, :to_id, 0)
+      assert {:to_id, {"already has a parent", _}} = List.keyfind(cs.errors, :to_id, 0)
       assert Tickets.epic_of(a.id) == nil
     end
 

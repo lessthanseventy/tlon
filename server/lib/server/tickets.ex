@@ -72,15 +72,16 @@ defmodule Server.Tickets do
   end
 
   @doc """
-  Re-derive the status of the epic `epic_id` from its children (`Ticket.epic_status/1`), announcing a change.
-  A no-op for nil or a ticket that is not an epic. Called after every write that can move a child's status or
-  membership; it writes the epic directly, never through `update/2`, so it cannot recurse.
+  Re-derive the status of the epic or initiative `epic_id` from its children (`Ticket.epic_status/1`),
+  announcing a change, then its own parent's: an initiative follows its epics. A no-op for nil or a plain
+  ticket. Called after every write that can move a child's status or membership; it writes directly, never
+  through `update/2`, so it cannot recurse.
   """
   @spec refresh_epic(integer() | nil) :: :ok
   def refresh_epic(nil), do: :ok
 
   def refresh_epic(epic_id) do
-    with %Ticket{kind: "epic"} = epic <- get(epic_id) do
+    with %Ticket{kind: kind} = epic when kind in ~w(epic initiative) <- get(epic_id) do
       statuses =
         Repo.all(
           from l in TicketLink,
@@ -94,9 +95,37 @@ defmodule Server.Tickets do
 
       if derived != epic.status,
         do: epic |> Ticket.derive_changeset(derived) |> Repo.update() |> Bus.announce(:ticket_updated)
+
+      refresh_epic(epic_of(epic_id))
     end
 
     :ok
+  end
+
+  @doc """
+  Move ticket `id` under the parent `to` (an epic for a ticket, an initiative for an epic), or out of any
+  with nil. One transaction: a parent the law refuses leaves it where it was. Both parents re-derive.
+  `{:ok, ticket}` | `{:error, changeset}`.
+  """
+  def move(id, to) do
+    from = epic_of(id)
+
+    fn ->
+      if from, do: Repo.delete_all(from(l in TicketLink, where: l.to_id == ^id and l.kind == "parent"))
+
+      with to when not is_nil(to) <- to,
+           {:error, cs} <- %{from_id: to, to_id: id, kind: "parent"} |> TicketLink.changeset() |> Repo.insert() do
+        Repo.rollback(cs)
+      end
+
+      get(id)
+    end
+    |> Repo.transaction()
+    |> tap(fn
+      {:ok, _} -> Enum.each([from, to], &refresh_epic/1)
+      _ -> :ok
+    end)
+    |> announce_ticket(id)
   end
 
   @doc "The epic a ticket belongs to (its `parent` link's `from`), or nil."
@@ -185,6 +214,7 @@ defmodule Server.Tickets do
   `{:ok, %{started: thread}}`, or `{:error, reason}`. An epic is never work: `{:error, :epic}`.
   """
   def route(%Ticket{kind: "epic"}), do: {:error, :epic}
+  def route(%Ticket{kind: "initiative"}), do: {:error, :initiative}
 
   def route(%Ticket{} = ticket) do
     case {Server.Workspaces.manager(ticket.workspace_id), Server.Channel.machine_thread(ticket.workspace_id)} do
@@ -225,6 +255,7 @@ defmodule Server.Tickets do
   """
   def start_thread(ticket, agent_id \\ nil)
   def start_thread(%Ticket{kind: "epic"}, _agent_id), do: {:error, :epic}
+  def start_thread(%Ticket{kind: "initiative"}, _agent_id), do: {:error, :initiative}
 
   def start_thread(%Ticket{} = ticket, agent_id) do
     operator = Server.OperatorConfig.operator()
@@ -269,6 +300,7 @@ defmodule Server.Tickets do
   work. Finish it with its status.
   """
   def claim(%Ticket{kind: "epic"}, _who), do: {:error, :epic}
+  def claim(%Ticket{kind: "initiative"}, _who), do: {:error, :initiative}
 
   def claim(%Ticket{} = ticket, who) do
     with :ok <- startable(ticket),

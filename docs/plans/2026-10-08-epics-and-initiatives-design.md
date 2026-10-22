@@ -1,7 +1,9 @@
 # Epics and initiatives — the backlog stops being one flat list
 
-**Status:** approved by Andrew 2026-10-08 ("yeah do it"). Initiatives start as a label; they get
-their own level only if a label stops being enough.
+**Status:** approved by Andrew 2026-10-08 ("yeah do it"). Initiatives started as a label and became
+their own level on 2026-10-21, at Andrew's ask: a ticket of `kind: "initiative"` holding epics by
+`parent` links as an epic holds tickets, never work, its status derived from its epics'. The label
+rows below are the original shape.
 
 ## 1 · The problem
 

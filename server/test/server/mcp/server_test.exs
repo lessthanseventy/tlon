@@ -1489,6 +1489,32 @@ defmodule Server.MCP.ServerTest do
     refute ws.id |> Server.Tickets.in_workspace() |> Enum.any?(&(&1.title == "bad"))
   end
 
+  test "file_ticket files an initiative and an epic under it; update_ticket's parent_id moves a ticket, 0 makes it loose" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "InitWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "triage", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Triager", mandate: "pm", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    init = token |> call(session, 2, "file_ticket", %{"title" => "Kids", "kind" => "initiative"}) |> decode_tool_json()
+
+    epic =
+      token
+      |> call(session, 3, "file_ticket", %{"title" => "Toy", "kind" => "epic", "epic_id" => init["id"]})
+      |> decode_tool_json()
+
+    assert epic["epic_id"] == init["id"]
+    {:ok, other} = Server.Tickets.file(%{workspace_id: ws.id, title: "Hall", kind: "epic"})
+    {:ok, t} = Server.Tickets.file(%{workspace_id: ws.id, title: "a step", epic_id: epic["id"]})
+
+    moved = token |> call(session, 4, "update_ticket", %{"id" => t.id, "parent_id" => other.id}) |> decode_tool_json()
+    assert moved["epic_id"] == other.id
+    assert call(token, session, 5, "update_ticket", %{"id" => t.id, "parent_id" => init["id"]})["isError"]
+    assert Server.Tickets.epic_of(t.id) == other.id
+    loose = token |> call(session, 6, "update_ticket", %{"id" => t.id, "parent_id" => 0}) |> decode_tool_json()
+    assert loose["epic_id"] == nil
+  end
+
   test "file_ticket and update_ticket set blocked_by; a missing or own id is refused and nothing is filed" do
     {:ok, ws} = Server.Workspaces.register(%{name: "BlockWS"})
     {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})

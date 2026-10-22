@@ -349,7 +349,7 @@ defmodule Server.Office.Room do
       |> Repo.all()
       |> Map.new()
 
-    {epics, tickets} = Enum.split_with(all, &(&1.kind == "epic"))
+    {epics, tickets} = all |> Enum.reject(&(&1.kind == "initiative")) |> Enum.split_with(&(&1.kind == "epic"))
     {kids, loose} = Enum.split_with(tickets, &Map.has_key?(parent_of, &1.id))
     kids_of = Enum.group_by(kids, &parent_of[&1.id])
 
@@ -375,6 +375,7 @@ defmodule Server.Office.Room do
           done: Enum.count(children, &(&1.status == "done")),
           total: length(children),
           next: next && %{id: next.id, title: next.title},
+          initiative: with(%Ticket{} = i <- by_id[parent_of[e.id]], do: %{id: i.id, title: i.title}),
           children: Enum.map(children, &board_ticket(&1, by_id[parent_of[&1.id]], blocked))
         }
       end

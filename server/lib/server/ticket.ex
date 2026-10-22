@@ -11,9 +11,10 @@ defmodule Server.Ticket do
   so promotion is one KIND of tie rather than a second mechanism. `sort` orders it within its
   status column (the board's order, persisted); `closed_at` stamps when it reached `done`.
 
-  `kind` is `ticket` or `epic`. An epic holds other tickets through `parent` links (stored `from = epic, to =
-  child`; one parent per ticket, no epic under an epic — `Server.TicketLink`), is never work (`Server.Intake` skips it,
-  `Server.Tickets.start_thread/2` refuses it), and its `status` is derived from its children (`Server.Tickets.refresh_epic/1`).
+  `kind` is `ticket`, `epic` or `initiative`. An epic holds tickets and an initiative holds epics, through
+  `parent` links (stored `from = parent, to = child`; one parent each — `Server.TicketLink`). Neither is ever work
+  (`Server.Intake` takes only tickets, `Server.Tickets.start_thread/2` refuses them), and each one's `status` is
+  derived from its children's (`Server.Tickets.refresh_epic/1`).
 
   `status` (backlog|todo|doing|done) and `priority` (low|med|high) are DB-CHECK'd closed sets,
   re-validated app-side because tickets arrive from MCP callers (a bad value should fail as a
@@ -26,7 +27,7 @@ defmodule Server.Ticket do
 
   @statuses ~w(backlog todo doing done)
   @priorities ~w(low med high)
-  @kinds ~w(ticket epic)
+  @kinds ~w(ticket epic initiative)
 
   schema "ticket" do
     field :title, :string
@@ -76,7 +77,7 @@ defmodule Server.Ticket do
   @doc "Update a ticket's mutable fields (status/priority/title/body/labels/assignee/project). An epic's status is derived, so it is not cast. Re-stamps `updated_at`."
   def update_changeset(%__MODULE__{} = ticket, attrs) do
     ticket
-    |> cast(attrs, if(ticket.kind == "epic", do: List.delete(@mutable, :status), else: @mutable))
+    |> cast(attrs, if(ticket.kind == "ticket", do: @mutable, else: List.delete(@mutable, :status)))
     |> validate_required([:title])
     |> validate_sets()
     |> stamp_closed()

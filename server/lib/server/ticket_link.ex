@@ -11,7 +11,9 @@ defmodule Server.TicketLink do
   because tickets arrive from MCP callers, where a bad value should come back as a changeset
   rather than a raised constraint.
 
-  A `parent` link runs `epic → child`; the changeset refuses a non-epic parent, an epic child and a second parent.
+  A `parent` link runs `initiative → epic → ticket`, one level at a time: an epic's children are tickets, an
+  initiative's are epics, and an initiative has no parent. The changeset refuses any other pairing and a
+  second parent.
   """
   use Ecto.Schema
 
@@ -43,7 +45,7 @@ defmodule Server.TicketLink do
     |> validate_not_self()
     |> validate_parent_law()
     |> unique_constraint([:from_id, :to_id, :kind], name: :ticket_link_from_id_to_id_kind_index)
-    |> unique_constraint(:to_id, name: :ticket_link_one_parent, message: "already has a parent epic")
+    |> unique_constraint(:to_id, name: :ticket_link_one_parent, message: "already has a parent")
     |> foreign_key_constraint(:from_id)
     |> foreign_key_constraint(:to_id)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
@@ -55,34 +57,35 @@ defmodule Server.TicketLink do
       else: changeset
   end
 
-  # The epics law needs the two tickets, so it looks them up here; a missing ticket is left to the FK constraint.
+  # The parent law needs the two tickets, so it looks them up here; a missing ticket is left to the FK constraint.
   defp validate_parent_law(changeset) do
     with "parent" <- get_field(changeset, :kind),
          from_id when is_integer(from_id) <- get_field(changeset, :from_id),
-         to_id when is_integer(to_id) <- get_field(changeset, :to_id) do
+         to_id when is_integer(to_id) <- get_field(changeset, :to_id),
+         %Ticket{} = parent <- Repo.get(Ticket, from_id),
+         %Ticket{} = child <- Repo.get(Ticket, to_id) do
       changeset
-      |> only_an_epic_parents(Repo.get(Ticket, from_id))
-      |> an_epic_has_no_parent(Repo.get(Ticket, to_id))
+      |> pairing(parent.kind, child.kind)
       |> one_parent(from_id, to_id)
     else
       _ -> changeset
     end
   end
 
-  defp only_an_epic_parents(changeset, %Ticket{kind: kind}) when kind != "epic",
-    do: add_error(changeset, :from_id, "only an epic can be a parent")
+  defp pairing(changeset, "epic", "ticket"), do: changeset
+  defp pairing(changeset, "initiative", "epic"), do: changeset
 
-  defp only_an_epic_parents(changeset, _), do: changeset
+  defp pairing(changeset, "ticket", _),
+    do: add_error(changeset, :from_id, "only an epic or an initiative can be a parent")
 
-  defp an_epic_has_no_parent(changeset, %Ticket{kind: "epic"}),
-    do: add_error(changeset, :to_id, "an epic cannot have a parent")
-
-  defp an_epic_has_no_parent(changeset, _), do: changeset
+  defp pairing(changeset, _, "initiative"), do: add_error(changeset, :to_id, "an initiative cannot have a parent")
+  defp pairing(changeset, _, "epic"), do: add_error(changeset, :to_id, "an epic's parent can only be an initiative")
+  defp pairing(changeset, "initiative", _), do: add_error(changeset, :to_id, "an initiative holds epics, not tickets")
 
   defp one_parent(changeset, from_id, to_id) do
     other_parent? =
       Repo.exists?(from l in __MODULE__, where: l.kind == "parent" and l.to_id == ^to_id and l.from_id != ^from_id)
 
-    if other_parent?, do: add_error(changeset, :to_id, "already has a parent epic"), else: changeset
+    if other_parent?, do: add_error(changeset, :to_id, "already has a parent"), else: changeset
   end
 end
