@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { arrivals, pickVisitor, RING_FIRST, seasonal } from "../kit/door"
+import { arrivals, pickVisitor, RING_FIRST, seasonal, toysOf } from "../kit/door"
 import { EMPTY, type Agents } from "../kit/types"
 
 const snap = (sha: string | null, ok = true): Agents => ({ ...EMPTY, ok, release: sha ? { sha, cut_at: "2026-10-12T00:00:00Z" } : null })
@@ -39,5 +39,15 @@ describe("what the snapshots say arrived", () => {
   test("more letters in the box is the carrier; fewer, or the same, is not", () => {
     expect(arrivals(snap("a"), snap("a"), [need("decide")], [need("decide"), need("blocking")])).toEqual(["carrier"])
     expect(arrivals(snap("a"), snap("a"), [need("decide"), need("decide")], [need("decide")])).toEqual([])
+  })
+})
+
+describe("the toys payload's parts", () => {
+  const good = { id: "gen:2026-10-22", day: "2026-10-22", slot: "hand", front: { "11": "..........yy" }, side: { "11": ".yy........." }, back: { "11": "..........yy" } }
+  test("only a well-formed part survives; an old payload has none", () => {
+    const bad = [{ ...good, front: { "11": "..yy" } }, { ...good, slot: "eyes" }, { ...good, id: "tophat" }]
+    const t = toysOf({ visitors: [], puns: [], reactions: {}, parts: [good, ...bad] })!
+    expect(t.parts).toEqual([{ id: good.id, day: good.day, slot: "hand", front: { 11: "..........yy" }, side: { 11: ".yy........." }, back: { 11: "..........yy" } }])
+    expect(toysOf({ visitors: [], puns: [], reactions: {} })!.parts).toEqual([])
   })
 })

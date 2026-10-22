@@ -2,6 +2,7 @@
 // figure()'s 12-wide rows (sprites.ts). A part has dials (crown height, brim width, hue…); a Look
 // names a part and its dial values, so the library is data and `figure()` has no branch per part.
 // In an overlay `.` leaves the pixel alone and `_` clears it (the hair a hat hides).
+// Data parts (`gen:` ids) are drawn by the server's model, loaded by `useDataParts`, and kept out of PARTS/idsIn.
 
 /** row index → that row's 12 chars; a row left out (or undefined) is untouched */
 export type View = { [row: number]: string | undefined }
@@ -176,6 +177,12 @@ export const PARTS: Record<string, Part> = {
 export const PART_IDS = Object.keys(PARTS)
 export const idsIn = (slot: Slot) => PART_IDS.filter((id) => PARTS[id]!.slot === slot)
 
+/** a part the server's model drew: fixed rows per view, in one slot, id `gen:<day>`; kept out of PARTS/idsIn so rollLook's modulus (and every look) never moves */
+export type DataPart = { id: string; day: string; slot: Slot; front: View; side: View; back: View }
+let dataParts: DataPart[] = []
+export function useDataParts(list: DataPart[]) { dataParts = list }
+const dataIdsIn = (slot: Slot) => dataParts.filter((p) => p.slot === slot).map((p) => p.id)
+
 /** a spec's dials with the defaults filled in; a value the part doesn't offer falls back to its first option */
 export function dialsOf(p: Part, set: DialVals | undefined): DialVals {
   return Object.fromEntries(Object.entries(p.dials).map(([k, opts]) => [k, opts.includes(set?.[k] as never) ? set![k]! : opts[0]!]))
@@ -184,7 +191,10 @@ const drawn = new Map<string, Required<Gear>>()
 /** a spec's pixels, or undefined for a part the library no longer has (a stale looks.json) */
 export function gearOf(spec: PartSpec): Required<Gear> | undefined {
   const p = PARTS[spec.id]
-  if (!p) return undefined
+  if (!p) {
+    const x = dataParts.find((d) => d.id === spec.id)
+    return x && { front: x.front, side: x.side, back: x.back }
+  }
   const d = dialsOf(p, spec.dials), key = spec.id + JSON.stringify(d)
   let g = drawn.get(key)
   if (!g) drawn.set(key, (g = p.draw(d)))
@@ -192,7 +202,7 @@ export function gearOf(spec: PartSpec): Required<Gear> | undefined {
 }
 /** the next part in a slot after `cur`, then none, then the first again: what the look card cycles */
 export function nextPart(slot: Slot, cur: PartSpec | undefined): PartSpec | undefined {
-  const ids = idsIn(slot), i = cur ? ids.indexOf(cur.id) : -1
+  const ids = [...idsIn(slot), ...dataIdsIn(slot)], i = cur ? ids.indexOf(cur.id) : -1
   return i + 1 < ids.length ? { id: ids[i + 1]! } : undefined
 }
 

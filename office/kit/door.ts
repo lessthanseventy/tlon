@@ -2,6 +2,7 @@
 // the visit, rooms/wide.ts draws the door, tui/main.ts feeds it snapshots.
 import type { Scene } from "./draw"
 import { mailbox } from "./mailbox"
+import type { DataPart, Slot, View } from "./parts"
 import { ROLE } from "./palette"
 import type { Agents } from "./types"
 
@@ -9,7 +10,17 @@ export type VisitorKind = "carrier" | "pizza" | "cookies" | "tourist" | "trick" 
 /** a visitor the server generated (`GET /api/office/toys/:ws`): a name, a seed for their look, what they say at the door */
 export type Guest = { name: string; look_seed: string | number; line: string }
 /** the server's pooled toys: visitors, puns, and per-seat per-event reaction lines — each empty until generated (`Server.ToyPool`) */
-export type Toys = { visitors: Guest[]; puns: string[]; reactions: Record<string, Record<string, string[]>> }
+export type Toys = { visitors: Guest[]; puns: string[]; reactions: Record<string, Record<string, string[]>>; parts: DataPart[] }
+const PART_SLOTS: readonly unknown[] = ["head", "neck", "hand"]
+const rowsOf = (x: unknown): View | null => {
+  if (!x || typeof x !== "object") return null
+  const v: View = {}
+  for (const [k, r] of Object.entries(x)) {
+    if (!/^\d+$/.test(k) || typeof r !== "string" || r.length !== 12) return null
+    v[Number(k)] = r
+  }
+  return Object.keys(v).length ? v : null
+}
 /** a toys payload from an older or newer server, narrowed to what is usable; null when it is neither */
 export function toysOf(j: unknown): Toys | null {
   if (!j || typeof j !== "object") return null
@@ -21,7 +32,13 @@ export function toysOf(j: unknown): Toys | null {
     const ok = strs(lines)
     if (ok.length) (reactions[seat] ??= {})[ev] = ok
   }
-  return { visitors, puns: strs(o.puns), reactions }
+  const parts = (Array.isArray(o.parts) ? o.parts : []).flatMap((p): DataPart[] => {
+    const q = p as Record<string, unknown> | null
+    const front = rowsOf(q?.front), side = rowsOf(q?.side), back = rowsOf(q?.back)
+    const ok = q && typeof q.id === "string" && q.id.startsWith("gen:") && typeof q.day === "string" && PART_SLOTS.includes(q.slot)
+    return ok && front && side && back ? [{ id: q.id as string, day: q.day as string, slot: q.slot as Slot, front, side, back }] : []
+  })
+  return { visitors, puns: strs(o.puns), reactions, parts }
 }
 /** the first scheduled ring; later ones are RING_MIN + a draw of RING_SPAN (15 to 45 minutes at 100 ms) */
 export const RING_FIRST = 6_000, RING_MIN = 9_000, RING_SPAN = 18_000
