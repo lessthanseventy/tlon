@@ -137,7 +137,7 @@ export const publishedByHand = (tid: number, url: string) => write(`waiting on $
 export const retryRelease = (id: number) => write("retrying the cut", `/release/retry/${id}`, {}, (j) => `cut of ${String(j.queued).slice(0, 7)} queued`)
 export const dismissRollout = (id: number) => send("DELETE", "clearing the note", `/office/rollout/${id}`, () => "done")
 /** put an inbox item away without acting on it; one that work waits on is refused */
-export const dismissNeed = (key: string) => write("putting it away", "/office/needs/dismiss", { key }, () => "put away")
+export const dismissNeed = (key: string) => write("dismissing it", "/office/needs/dismiss", { key }, () => "dismissed")
 /** a stranded checkout taken down, its branch kept */
 export const retireStranded = (key: string) => write("taking the checkout down", "/office/needs/retire", { key }, () => "checkout removed; branch kept")
 /** file a ticket from an issue that owns it, routed to the manager; its landing resolves the issue */

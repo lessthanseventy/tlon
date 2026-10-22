@@ -67,8 +67,8 @@ export const KEYS = [
   { id: "need.B.tool_denied", scope: "card:need", key: "B", label: "back to build…", mode: "tool_denied", verb: "build" },
   { id: "need.u.tool_denied", scope: "card:need", key: "u", label: "hand it to Uqbar", mode: "tool_denied", verb: "hand to Uqbar" },
   { id: "need.P.quota", scope: "card:need", key: "|", label: "pencils down", mode: "quota", verb: "pause" },
-  { id: "need.d.quota", scope: "card:need", key: "d", label: "wait for the reset (put away until it clears)", mode: "quota", verb: "remove" },
-  { id: "need.d.decide", scope: "card:need", key: "d", label: "put away", mode: "decide-level, ask or stalled", verb: "remove" },
+  { id: "need.d.quota", scope: "card:need", key: "d", label: "wait for the reset (dismissed until it clears)", mode: "quota", verb: "remove" },
+  { id: "need.d.decide", scope: "card:need", key: "d", label: "dismiss", mode: "decide-level, ask or stalled", verb: "remove" },
   { id: "need.v", scope: "card:need", key: "v", label: "read the thread", mode: "any other", verb: "read" },
   { id: "need.t", scope: "card:need", key: "z", label: "look over their shoulder", verb: "zoom" },
   // card:thread
