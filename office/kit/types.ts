@@ -42,7 +42,9 @@ export type CorkNote = { id: number; author: string; kind: "encourage" | "tease"
 /** a filed ticket nobody has started yet */
 export type Ticket = { id: number; workspace_id: number; project_id: number | null; title: string; priority: string; routed?: boolean
   /** "epic" rows group the tickets whose `epic_id` is theirs, "initiative" rows the epics whose `epic_id` is theirs; `done`/`total`/`next` are an epic's progress and its next free child */
-  kind?: "ticket" | "epic" | "initiative"; epic_id?: number | null; done?: number; total?: number; next?: { id: number; title: string } | null }
+  kind?: "ticket" | "epic" | "initiative"; epic_id?: number | null; done?: number; total?: number; next?: { id: number; title: string } | null
+  /** a child started on a thread: its status is "doing" and `thread_id` is that thread (Server.Office.tickets) */
+  status?: string; thread_id?: number | null }
 export type Agents = {
   ok: boolean
   roster: Seat[]
