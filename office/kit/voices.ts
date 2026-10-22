@@ -66,6 +66,7 @@ export const NINA = {
   event_meteor: ["Rude. Somebody tell the sky.", "That crater is in my sunbeam."],
   event_power: ["The dark is for sleeping. Carry on.", "Who turned off my lamps?"],
   event_duck: ["A duck. In MY hall.", "That bird has no manners. And no collar."],
+  event_gary: ["A raccoon in a lid. I can see his eyes, you know.", "He wants the yogurt. I want the yogurt. We're not friends."],
   // a worker fussing over her
   fuss: {
     pat: ["Gentle. I'm priceless.", "Head pats are a privilege, peasant.", "prrr... you may continue."],

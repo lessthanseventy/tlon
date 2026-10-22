@@ -11,12 +11,12 @@ import { DRINK, FALL_ODDS, FALL_WET, layPrint, prune, STRIDE, WET, type Print } 
 import { homeLevel } from "./life"
 import { looksGen, overrideFor } from "./looks"
 import type { CatSpecies, Pets } from "./pets"
-import { CAT_NAME, lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
+import { CAT_NAME, heightOf, lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temperament"
 import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type Guest, type Toys, type VisitorKind } from "./door"
-import { CHAINS, EVENTS, EVENT_KINDS, blackoutAt, flickerAt, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type Geo, type Prop } from "./events"
+import { CHAINS, EVENTS, EVENT_KINDS, GARY_ACT, GARY_SPIN, blackoutAt, flickerAt, garyLeads, garyRoll, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type GaryRoll, type Geo, type Prop } from "./events"
 import { SHERIFF } from "./scharlach"
 import { DEFAULT, meanGap, resolve, type Dials } from "./whimsy"
 import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
@@ -138,7 +138,7 @@ export type Party = { agent: string; until: number }
 export const readTicks = (text: string) => Math.min(400, Math.max(100, 40 + text.length * 2))
 
 /** the server's names for the scenes, as its reaction pool keys them */
-const SERVER_EVENT: Record<EventKind, string> = { drill: "fire_drill", zoo: "zoo", meteor: "meteor", power: "power_cut", duck: "duck" }
+const SERVER_EVENT: Record<EventKind, string> = { drill: "fire_drill", zoo: "zoo", meteor: "meteor", power: "power_cut", duck: "duck", gary: "gary" }
 
 export class Sim<L extends { people: Seat[] }> {
   protected cat: Cat
@@ -496,7 +496,9 @@ export class Sim<L extends { people: Seat[] }> {
 
   /** fired at an event's start (`beat` null) and at each beat — step 7's cast reacts here; default none */
   onEvent: ((kind: EventKind, beat: Beat | null) => void) | null = null
-  private running: { kind: EventKind; since: number; idle: string[]; sheriff: string | null } | null = null
+  /** fired when Gary SLAPs `victim`; the TUI ticks Scharlach's ledger from it */
+  onSlap: ((victim: string) => void) | null = null
+  private running: { kind: EventKind; since: number; idle: string[]; sheriff: string | null; gary?: { outcome: GaryRoll; peek: boolean; victim: string | null } } | null = null
   private lastEvent: EventKind | null = null
   /** a seat's own line for an event; null (the default) leaves the room to the scripts' generic beats */
   reactLine: ((who: string, kind: EventKind) => string | null) | null = null
@@ -518,7 +520,8 @@ export class Sim<L extends { people: Seat[] }> {
     const k = kind ?? pickEvent(Math.random(), this.lastEvent, on)
     const crew = [...this.actors.values()].filter((x) => !x.leaving && !x.seat.thinking).map((x) => x.seat.agent).sort()
     const sheriff = crew.includes(SHERIFF) ? SHERIFF : null
-    this.running = { kind: k, since: this.tick, idle: crew.filter((n) => n !== sheriff), sheriff }
+    // Gary's one roll is drawn here, once per visit, so a seeded run replays it
+    this.running = { kind: k, since: this.tick, idle: crew.filter((n) => n !== sheriff), sheriff, ...(k === "gary" ? { gary: { outcome: garyRoll(Math.random()), peek: this.dials.gary === "peek", victim: null } } : {}) }
     this.lastEvent = k
     this.onEvent?.(k, null)
     this.reactPets(k)
@@ -543,7 +546,10 @@ export class Sim<L extends { people: Seat[] }> {
   props(): Prop[] {
     const r = this.running, g = this.eventGeo()
     if (!r || !g) return []
-    const props = propsAt(r.kind, this.tick - r.since, g, this.dials.severity), host = r.idle[0] ? this.actors.get(r.idle[0]) : undefined
+    const props = propsAt(r.kind, this.tick - r.since, g, this.dials.severity, r.gary), host = r.idle[0] ? this.actors.get(r.idle[0]) : undefined
+    if (this.dials.gary === "lead") props.push(...garyLeads(r.kind, this.tick - r.since, g))
+    const victim = r.gary?.victim ? this.actors.get(r.gary.victim) : undefined
+    if (victim && this.tick - r.since < GARY_ACT + GARY_SPIN) props.push({ kind: "stars", x: victim.x, y: victim.y - heightOf(victim.look), step: Math.floor(this.tick / 4) % 2 })
     if (host && this.blackout()) props.push({ kind: "candle", x: host.x + 4, y: host.y, step: Math.floor(this.tick / 4) % 2 })
     const sheriff = r.sheriff ? this.actors.get(r.sheriff) : undefined
     if (sheriff && this.chasing(r, this.tick - r.since)) props.push({ kind: "net", x: sheriff.x - 8, y: sheriff.y })
@@ -638,6 +644,29 @@ export class Sim<L extends { people: Seat[] }> {
       return
     }
     this.beats(t)
+    if (r.gary && !r.gary.peek && r.gary.outcome === "slap" && t === GARY_ACT) this.slap(r.gary)
+  }
+
+  /** the SLAP lands on whoever is nearest the dumpster (ties by name); the TUI hears of it through `onSlap` */
+  private slap(gary: { victim: string | null }) {
+    const g = this.eventGeo()
+    const d = g && propsAt("gary", 0, g).find((p) => p.kind === "dumpster")
+    if (!d) return
+    const dist = (x: Actor) => Math.hypot(x.x - d.x, x.y - d.y)
+    const near = [...this.actors.values()].filter((x) => !x.leaving).sort((p, q) => dist(p) - dist(q) || (p.seat.agent < q.seat.agent ? -1 : 1))[0]
+    if (!near) return
+    gary.victim = near.seat.agent
+    this.onSlap?.(near.seat.agent)
+  }
+
+  /** the SLAPped coworker spins with stars for GARY_SPIN ticks, after the walk has set their facing */
+  private spin(): boolean {
+    const r = this.running, v = r?.gary?.victim ? this.actors.get(r.gary.victim) : undefined
+    const t = r ? this.tick - r.since - GARY_ACT : -1
+    if (!v || t < 0 || t >= GARY_SPIN) return false
+    v.face = (["down", "left", "up", "right"] as const)[Math.floor(t / 4) % 4]!
+    v.emote = "*"; v.emoteUntil = this.tick + 2
+    return true
   }
 
   /** somewhere to run to, anywhere a person can stand: zig-zagging between them is the panic */
@@ -937,6 +966,7 @@ export class Sim<L extends { people: Seat[] }> {
         changed = true
       }
     }
+    if (this.spin()) changed = true
     this.rivalGames()
     if (this.highFives()) changed = true
     return changed

@@ -16,7 +16,7 @@ import type { EventKind } from "../kit/events"
 import { load as loadWhim, save as saveWhim } from "../kit/whimsy-file"
 import { resolve as resolveWhim, type State as WhimState } from "../kit/whimsy"
 import { resetToPreset, whimsyRows, whimsyTitle } from "./whimsy-card"
-import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
+import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, tickSlap, type Ledger } from "../kit/scharlach"
 import { boardColumns, busiest, cardState, COLS, crewOf, groupRows, needsYou, BOARD_LEGEND, STATE_GLYPH, statusGlyph, statusTone, statusWord, viewOf, type Act, type SeatStatus, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
 import { queueItems, type QueueItem } from "../kit/rack"
@@ -347,7 +347,7 @@ const boardCtx = (): BoardCtx => {
   const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
   return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])), checking: checkingId(), checkWaiting: checkWaitingIds(), merging: all.health?.merge_queue ?? [] }
 }
-const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); r.setWhimsy(resolveWhim(whim)); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow); r.reactLine = reactFor } return r }
+const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); r.setWhimsy(resolveWhim(whim)); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow); r.reactLine = reactFor; r.onSlap = () => { ledger = tickSlap(ledger) } } return r }
 /** the dial moved: remember it and hand every room the resolved dials */
 function setWhim(s: WhimState) {
   whim = s
