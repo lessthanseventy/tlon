@@ -24,6 +24,45 @@ defmodule Server.IntakeTest do
 
   defp file(ws, title, pri \\ "med"), do: elem(Tickets.file(%{workspace_id: ws.id, title: title, priority: pri}), 1)
 
+  describe "Andrew's work first: the office's self-repair never holds more than half of what is in flight" do
+    defp plumbing(ws, title, pri \\ "med"),
+      do: elem(Tickets.file(%{workspace_id: ws.id, title: title, priority: pri, labels: ["sandbox"]}), 1)
+
+    defp in_flight!(t), do: {:ok, _} = Tickets.update(t, %{status: "doing"})
+
+    test "with nothing in flight, his work goes before an older self-repair ticket", %{ws: ws} do
+      _fix = plumbing(ws, "seat Bash dies")
+      mine = file(ws, "the toy's doorbell")
+      assert Intake.next(ws.id).id == mine.id
+    end
+
+    test "once his work holds more of what is in flight, the board order is back", %{ws: ws} do
+      ws |> file("the hall") |> in_flight!()
+      fix = plumbing(ws, "seat Bash dies")
+      _mine = file(ws, "the toy's doorbell")
+      assert Intake.next(ws.id).id == fix.id
+    end
+
+    test "self-repair holding as much as his work: his goes next", %{ws: ws} do
+      ws |> file("the hall") |> in_flight!()
+      ws |> plumbing("smoke tools disagree") |> in_flight!()
+      _fix = plumbing(ws, "seat Bash dies")
+      mine = file(ws, "the toy's doorbell")
+      assert Intake.next(ws.id).id == mine.id
+    end
+
+    test "high priority goes first whatever it is about", %{ws: ws} do
+      fix = plumbing(ws, "every seat's Bash is dead", "high")
+      _mine = file(ws, "the toy's doorbell")
+      assert Intake.next(ws.id).id == fix.id
+    end
+
+    test "with none of his work waiting, self-repair still runs", %{ws: ws} do
+      fix = plumbing(ws, "seat Bash dies")
+      assert Intake.next(ws.id).id == fix.id
+    end
+  end
+
   test "routes the most urgent ticket nothing blocks", %{ws: ws, route: route} do
     _low = file(ws, "later", "low")
     high = file(ws, "now", "high")
