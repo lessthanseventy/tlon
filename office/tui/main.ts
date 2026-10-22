@@ -24,6 +24,7 @@ import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
+import { phoneBar, ringFrame } from "../kit/surfaces"
 import { soulFor, soulLines, soulNote, useSouls } from "../kit/souls"
 import { loadSouls, soulsSignature } from "./souls"
 import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
@@ -468,9 +469,9 @@ async function tickLedger() {
 }
 /** what changed since the last look that you'd want to hear about even with the office in the back */
 function tellNews(before: Agents, beforeNeeds: data.Need[]) {
-  // only what stops work rings: a new blocking item; several at once are one notification
+  // only an answer owed rings: a new item on the phone; several at once are one notification
   const was = new Set(beforeNeeds.map((n) => n.key))
-  const fresh = needs.filter((n) => n.level === "blocking" && !was.has(n.key))
+  const fresh = bySurface.phone.filter((n) => !was.has(n.key))
   if (fresh.length) out("\x07") // something new waits on you: the terminal's bell
   if (fresh.length === 1) notify(needTitle(fresh[0]!), fresh[0]!.text)
   else if (fresh.length > 1) notify(`${fresh.length} things wait on you`, fresh.map(needTitle).join(" · "))
@@ -2033,12 +2034,10 @@ function draw() {
   const a = view()
   let o = `${ESC}[?2026h${ESC}[?25l`
   // header: the workspace, and what waits elsewhere
-  const blocking = needs.filter((n) => n.level === "blocking").length, deciding = needs.length - blocking, usage = usageHeader(all, Date.now())
+  const phone = phoneBar(bySurface.counts), usage = usageHeader(all, Date.now())
   const head: (Seg & { go?: () => void })[] = [{ s: " OFFICE ", fg: ROLE.ground, bg: ROLE.attention }, key(" ‹ "), { s: wsName(), fg: ROLE.body, bold: true }, key(" › "),
     ...(all.ok ? [] : [{ s: `  ${downHeader(all, Date.now())}`, fg: ROLE.alarm }]),
-    ...(blocking ? badge({ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }) : []),
-    ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body, go: inbox }] : []),
-    ...(needs.length ? [{ ...dim("  (i)"), go: inbox }] : []),
+    ...(phone ? badge({ s: `  ${ringFrame(Math.floor(Date.now() / 1000), phone.ringing)} ${phone.text} `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }) : []),
     ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: toggleShift }] : []),
     ...(all.pause === "pencils_down" || all.pause === "lights_out" ? badge({ s: all.pause === "lights_out" ? "  ◼ lights out " : "  ✎ pencils down ", fg: ROLE.ground, bg: ROLE.attention, bold: true, go: () => ask2("back to work", () => void did(data.pause("back_to_work"))) }) : []),
     ...(queuesHeader() ? [{ s: `  ${queuesHeader()}`, fg: ROLE.live, go: () => open({ kind: "health" }) }] : []),
@@ -2702,6 +2701,7 @@ async function main() {
   let sec = 0
   every(() => { looks.tick(1); if (focused && ++sec % 5 === 0) stampLooked(); if (!reader && !zoom && notes.some((n) => { const a = looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
   every(() => { if ((mode.kind === "pet" && petDraft) || mode.kind === "store") { previewTick += 10; draw() } }, 1000)
+  every(() => { if (bySurface.counts.phone > 0) draw() }, 1000) // the phone rings: its glyph shakes once a second
   every(() => { if (followPalette() || followLooks() || followSouls() || followPets() || followHall() || followStore() || followCast()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started

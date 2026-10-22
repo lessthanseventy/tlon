@@ -41,7 +41,7 @@ test("a digit opens its footnote, and the pane lists it", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the inbox in the header", () => screen().includes("1 blocking"))
+  await until("the phone in the header", () => screen().includes("1 waiting on you"))
   keys("U")
   await until("the entry's footnotes", () => screen().includes("FOOTNOTES"))
   expect(screen()).toMatch(/2 +footnote ² — the rack/)
