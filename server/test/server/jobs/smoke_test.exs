@@ -18,6 +18,18 @@ defmodule Server.Jobs.SmokeTest do
   setup do
     Server.TestDB.clean!()
     start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+    state = Path.join(System.tmp_dir!(), "xdg-state-#{System.pid()}-#{System.unique_integer([:positive])}")
+    previous_state = System.get_env("XDG_STATE_HOME")
+    System.put_env("XDG_STATE_HOME", state)
+
+    on_exit(fn ->
+      if previous_state,
+        do: System.put_env("XDG_STATE_HOME", previous_state),
+        else: System.delete_env("XDG_STATE_HOME")
+
+      File.rm_rf(state)
+    end)
+
     script = Path.join(System.tmp_dir!(), "smoke-stub-#{System.pid()}-#{System.unique_integer([:positive])}.sh")
     File.write!(script, @stub)
     Application.put_env(:server, :smoke_script, script)
@@ -168,5 +180,37 @@ defmodule Server.Jobs.SmokeTest do
     {:ok, _} = Smoke.start(t, nil)
     assert %{success: 1} = Oban.drain_queue(queue: :smoke)
     assert Enum.any?(bodies(t.id), &(&1 =~ "smoke FAILED: no build"))
+  end
+
+  test "the log lands in the smoke's state dir, not the OS tmp dir", %{thread: t} do
+    {:ok, job} = Smoke.start(t, nil)
+    task = Task.async(fn -> Oban.drain_queue(queue: :smoke) end)
+
+    wait_for(fn -> Enum.any?(bodies(t.id), &(&1 =~ "http://127.0.0.1:4999")) end)
+
+    log = Server.Repo.reload(job).meta["log"]
+    assert Path.dirname(log) == Path.join([System.get_env("XDG_STATE_HOME"), "tlon", "smoke"])
+    refute Path.dirname(log) == System.tmp_dir!()
+    assert File.exists?(log)
+
+    assert :ok = Smoke.stop(t.id)
+    assert %{success: 1} = Task.await(task, 10_000)
+  end
+
+  test "each run prunes smoke logs older than 7 days and keeps fresh ones", %{thread: t} do
+    dir = Path.join([System.get_env("XDG_STATE_HOME"), "tlon", "smoke"])
+    File.mkdir_p!(dir)
+    stale = Path.join(dir, "old.log")
+    fresh = Path.join(dir, "new.log")
+    File.write!(stale, "old\n")
+    File.write!(fresh, "new\n")
+    File.touch!(stale, System.os_time(:second) - 8 * 86_400)
+
+    File.write!(Smoke.script(), "#!/usr/bin/env bash\necho 'smoke FAILED: no build'\nexit 1\n")
+    {:ok, _} = Smoke.start(t, nil)
+    assert %{success: 1} = Oban.drain_queue(queue: :smoke)
+
+    refute File.exists?(stale)
+    assert File.exists?(fresh)
   end
 end

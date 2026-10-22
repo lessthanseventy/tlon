@@ -11,9 +11,14 @@ defmodule Server.Jobs.Smoke do
 
   alias Server.Channel
 
+  @log_ttl 7 * 86_400
+
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"thread_id" => tid, "ref" => ref}} = job) do
-    log = Path.join(System.tmp_dir!(), "tlon-smoke-job-#{job.id}.log")
+    dir = Path.join([state_home(), "tlon", "smoke"])
+    File.mkdir_p!(dir)
+    prune(dir)
+    log = Path.join(dir, "smoke-job-#{job.id}.log")
     {exe, args} = launch([Server.Smoke.script(), ref])
 
     port =
@@ -95,5 +100,19 @@ defmodule Server.Jobs.Smoke do
   defp post(%Oban.Job{args: %{"thread_id" => tid} = args}, body) do
     to = if args["by"], do: "@#{args["by"]} ", else: ""
     {:ok, _} = Channel.post(%{thread_id: tid, author: "tlon", body: to <> body})
+  end
+
+  defp state_home, do: System.get_env("XDG_STATE_HOME") || Path.join(System.user_home!(), ".local/state")
+
+  defp prune(dir) do
+    cutoff = System.os_time(:second) - @log_ttl
+
+    for name <- File.ls!(dir) do
+      path = Path.join(dir, name)
+
+      with {:ok, %File.Stat{mtime: mtime}} <- File.stat(path, time: :posix), true <- mtime < cutoff do
+        File.rm(path)
+      end
+    end
   end
 end
