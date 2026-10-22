@@ -637,6 +637,8 @@ function act(x: Act) {
     case "archive": return open({ kind: "archive" })
     case "tray": return open({ kind: "tray" })
     case "beacon": return open({ kind: "triage" })
+    case "machine": return hearMachine()
+    case "clipboard": return open({ kind: "needs" })
     case "needs": return inbox()
     case "rack": return open({ kind: "health" })
     case "dog": { const r = room(); if (r instanceof WideRoom) r.patDog(); changed(); return open({ kind: "pet", who: "dog" }) }
@@ -836,6 +838,12 @@ function needActions(n: data.Need): Action[] {
 
 /** what waits on you: one at a time when anything does — the whole list is a key away */
 function inbox() { open(needs.length ? { kind: "decide", i: 0 } : { kind: "needs" }) }
+/** the answering machine played: the inbox opens, and what was on the machine is heard */
+function hearMachine() {
+  const keys = bySurface.machine.map((n) => n.key)
+  open({ kind: "needs" })
+  if (keys.length) void did(data.hear(keys))
+}
 /** a need's one-line name: what kind, and where */
 const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", stalled: "stalled", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", stranded: "stranded work", issue: "issue", publish_failed: "not on GitHub", release_failed: "cut failed", pr_blocked: "PR not merging", quota: "out of quota", no_seat: "no seat", tool_denied: "tool refused" }
 const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, stalled: ROLE.attention, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, stranded: ROLE.attention, issue: ROLE.alarm, publish_failed: ROLE.alarm, release_failed: ROLE.alarm, pr_blocked: ROLE.alarm, quota: ROLE.attention, no_seat: ROLE.attention, tool_denied: ROLE.alarm }
@@ -2067,7 +2075,7 @@ function draw() {
   if (building) {
     frame = renderHome({ home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(needs) })
     imageDirty = true
-  } else if (fresh || roomChanged) { frame = room0.render(a, { picked: lit ?? picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx() }, measureFor(g), world?.now()); roomChanged = false }
+  } else if (fresh || roomChanged) { frame = room0.render(a, { picked: lit ?? picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx(), machine: bySurface.counts.machine, clipboard: bySurface.clipboard.filter((n) => n.workspace_id == null || n.workspace_id === ws) }, measureFor(g), world?.now()); roomChanged = false }
   const seen = clipFrame(frame!, vp)
   if (!building) addMargin(seen, vp)
   if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(seen, g, vp); sentImage = true; imageDirty = false }

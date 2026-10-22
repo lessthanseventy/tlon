@@ -6,11 +6,13 @@ import { tipOf, type BoardCtx } from "./crew"
 import { ROLE, tint } from "./palette"
 import { FUSS, type Actor, type Cat, type Fussing } from "./sim"
 import { ACTIVITY, ARROW, BUBBLE, SPECIES_ART, figure, GLYPH, heightOf, paints, PLANE, shirtOf, THOUGHT, type Dir } from "./sprites"
+import type { ClipRow } from "./surfaces"
 import type { Agents } from "./types"
 
 /** what a room draws besides the snapshot: the picked thread, a ticket being handed out, an open card */
 /** what the surface has open, and `tray`: how much of the in-tray you have not read */
-export type Focus = { picked: number | null; armed: number | null; person: string | null; tray?: number; board?: BoardCtx }
+/** `machine` the answering machine's unheard count; `clipboard` the rows the crew owns (`Server.Office.Needs.grouped/1`) */
+export type Focus = { picked: number | null; armed: number | null; person: string | null; tray?: number; board?: BoardCtx; machine?: number; clipboard?: ClipRow[] }
 
 /** is this coworker the one picked: the picked person when there is one, else everyone on the picked thread */
 export const isPicked = (focus: Focus, agent: string, threadId: number) =>
