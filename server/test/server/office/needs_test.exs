@@ -947,6 +947,50 @@ defmodule Server.Office.NeedsTest do
       assert g.uqbar == [] and g.settled == []
     end
 
+    test "only Uqbar's seat records a verdict", %{ws: ws} do
+      {key, _} = question(ws)
+      assert {:error, :forbidden} = Needs.settle(key, "dup", "daneri")
+      assert {:error, :forbidden} = Needs.pass_up(key, "w", "r", "daneri")
+      assert Server.Repo.aggregate("need_routing", :count) == 0
+      assert {:error, :not_found} = Needs.settle("nope", "w", "uqbar")
+    end
+
+    test "an always or information kind takes no verdict", %{ws: ws} do
+      mention(ws, 1)
+      [%{key: key}] = Enum.filter(Needs.list(), &(&1.kind == "mention"))
+      assert {:error, :always} = Needs.settle(key, "w", "uqbar")
+    end
+
+    test "settled leaves every surface for the digest; overruled, it is back with Uqbar", %{ws: ws} do
+      {key, _} = question(ws)
+      assert :ok = Needs.settle(key, "dup of #12", "uqbar")
+      g = Needs.grouped()
+      assert g.phone == [] and g.uqbar == []
+      assert [%{key: ^key, why: "dup of #12"}] = g.settled
+
+      assert :ok = Needs.overrule(key)
+      g = Needs.grouped()
+      assert [%{key: ^key, route: "uqbar"}] = g.uqbar
+      assert g.phone == [] and g.settled == []
+      assert {:error, :not_settled} = Needs.overrule(key)
+    end
+
+    test "passed up, it reaches its surface with the recommendation; a passed-up key is not overruled", %{ws: ws} do
+      {key, _} = question(ws)
+      assert {:error, :no_recommendation} = Needs.pass_up(key, "outward", "", "uqbar")
+      assert :ok = Needs.pass_up(key, "outward", "approve", "uqbar")
+      assert [%{key: ^key, recommendation: "approve", why: "outward"}] = Needs.grouped().phone
+      assert {:error, :not_settled} = Needs.overrule(key)
+    end
+
+    test "a second verdict replaces the first", %{ws: ws} do
+      {key, _} = question(ws)
+      :ok = Needs.settle(key, "first", "uqbar")
+      :ok = Needs.pass_up(key, "second", "do it", "uqbar")
+      assert [%{key: ^key, why: "second"}] = Needs.grouped().phone
+      assert Server.Repo.aggregate("need_routing", :count) == 1
+    end
+
     test "the flat list stays unrouted", %{ws: ws} do
       question(ws)
       refute Map.has_key?(hd(Needs.list()), :route)

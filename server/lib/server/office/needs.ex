@@ -189,6 +189,34 @@ defmodule Server.Office.Needs do
   end
 
   @doc """
+  Uqbar's verdict that the item behind `key` is handled without the operator: it leaves every
+  surface for the day's digest (`grouped/1`'s `settled`). `by` is the caller's handle: only `uqbar`.
+  `:ok`, or `{:error, :forbidden | :not_found | :always}` (an always or information item takes no
+  verdict).
+  """
+  def settle(key, why, by), do: record(key, by, %{state: "settled", why: why, recommendation: nil})
+
+  @doc """
+  Uqbar's verdict that the item behind `key` needs the operator: it reaches its surface carrying
+  `recommendation`, which must be given. `settle/3`'s errors, or `{:error, :no_recommendation}`.
+  """
+  def pass_up(_key, _why, recommendation, _by) when recommendation in [nil, ""], do: {:error, :no_recommendation}
+
+  def pass_up(key, why, recommendation, by),
+    do: record(key, by, %{state: "passed_up", why: why, recommendation: recommendation})
+
+  @doc """
+  The operator reverses a settle: the item goes back to Uqbar's queue, not to the operator. `:ok`,
+  or `{:error, :not_settled}`.
+  """
+  def overrule(key) do
+    case Repo.delete_all(from r in "need_routing", where: r.key == ^key and r.state == "settled") do
+      {0, _} -> {:error, :not_settled}
+      _ -> :ok
+    end
+  end
+
+  @doc """
   The stranded checkout behind `key` taken down (`Server.Worktree.retire/2`): its branch stays. Only
   one the list still shows as stranded — `{:error, :not_stranded}` otherwise. `:ok` or `{:error, why}`.
   """
@@ -942,4 +970,23 @@ defmodule Server.Office.Needs do
   defp route(_, "passed_up", _), do: "pass_up"
   defp route(_, "settled", _), do: "settled"
   defp route(_, nil, _), do: "uqbar"
+
+  defp record(_key, by, _row) when by != "uqbar", do: {:error, :forbidden}
+
+  defp record(key, _by, row) do
+    case Enum.find(all(), &(&1.key == key)) do
+      nil ->
+        {:error, :not_found}
+
+      item ->
+        if pass_up_rule(item) in [:always, :info] do
+          {:error, :always}
+        else
+          row = Map.merge(row, %{key: key, at: DateTime.truncate(DateTime.utc_now(), :second)})
+          opts = [on_conflict: {:replace, [:state, :why, :recommendation, :at]}, conflict_target: :key]
+          Repo.insert_all("need_routing", [row], opts)
+          :ok
+        end
+    end
+  end
 end
