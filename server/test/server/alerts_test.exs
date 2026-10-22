@@ -129,10 +129,10 @@ defmodule Server.AlertsTest do
     assert [
              %{label: "Get it fixed", path: "/api/issues/5/fix"},
              %{label: "Resolve…", path: "/api/issues/5/resolve", input: "resolution"},
-             %{label: "Put away"}
+             %{label: "Dismiss"}
            ] = issue.actions
 
-    assert [%{path: "/api/office/needs/retire", body: %{key: "stranded:/r:w"}}, %{label: "Put away"}] = stranded.actions
+    assert [%{path: "/api/office/needs/retire", body: %{key: "stranded:/r:w"}}, %{label: "Dismiss"}] = stranded.actions
   end
 
   test "a landing GitHub never got republishes, or takes the url of the PR opened by hand" do
@@ -151,7 +151,7 @@ defmodule Server.AlertsTest do
 
     assert [
              %{label: "Retry the cut", method: "POST", path: "/api/release/retry/41"},
-             %{label: "Put away", body: %{key: "release_failed:7"}}
+             %{label: "Dismiss", body: %{key: "release_failed:7"}}
            ] = a.actions
   end
 

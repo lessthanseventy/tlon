@@ -137,7 +137,7 @@ defmodule Server.Alerts do
 
   # a quota put away stays away until the reset clears it
   defp put_away_label("quota"), do: "Wait for the reset"
-  defp put_away_label(_kind), do: "Put away"
+  defp put_away_label(_kind), do: "Dismiss"
 
   # a review gate has a build behind it, so it can also go back: to build for the code, to plan for its shape
   defp actions(%{kind: "gate", thread_id: t, stage: "review"}),
@@ -162,9 +162,9 @@ defmodule Server.Alerts do
       call("Nudge the lead", "/messages", t, %{
         body: "Nothing has moved here for a while: advance the stage if its work is done, or say what is blocking you."
       }),
-      "Hand it to…" |> call("/hand-off", t, %{}) |> Map.put(:input, "agent"),
-      "Close it…" |> call("/close", t, %{}) |> Map.put(:input, "abandoned"),
-      "Tell the lead…" |> call("/messages", t) |> Map.put(:input, "body")
+      "Reassign…" |> call("/hand-off", t, %{}) |> Map.put(:input, "agent"),
+      "Close the thread…" |> call("/close", t, %{}) |> Map.put(:input, "abandoned"),
+      "Message the lead…" |> call("/messages", t) |> Map.put(:input, "body")
     ]
 
   # the rule is the operator's to add to their own Claude Code settings (the one place the permission
@@ -222,7 +222,7 @@ defmodule Server.Alerts do
         body: %{archetype: kind},
         input: "name"
       },
-      "Hand it to…" |> call("/hand-off", t, %{}) |> Map.put(:input, "agent")
+      "Reassign…" |> call("/hand-off", t, %{}) |> Map.put(:input, "agent")
     ]
 
   # pencils down stops the turns that would hit the limit; a crew put on takes the work

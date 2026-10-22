@@ -355,7 +355,7 @@ defmodule Server.Office.NeedsTest do
       assert [%{actions: [hire, hand | _]}] = Server.Alerts.build([need], [], DateTime.utc_now())
       assert %{label: "Hire a planner…", body: %{archetype: "planner"}, input: "name"} = hire
       assert hire.path == "/api/workspaces/#{ws.id}/coworkers"
-      assert %{label: "Hand it to…", input: "agent"} = hand
+      assert %{label: "Reassign…", input: "agent"} = hand
       assert hand.path == "/api/threads/#{t.id}/hand-off"
 
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "planck", archetype: "planner"})
@@ -720,9 +720,9 @@ defmodule Server.Office.NeedsTest do
       assert [%{actions: [nudge, hand, close | _]}] = Server.Alerts.build([need], [], DateTime.utc_now())
       assert %{label: "Nudge the lead", path: path, body: %{body: body}} = nudge
       assert path == "/api/threads/#{t.id}/messages" and body =~ "Nothing has moved"
-      assert %{label: "Hand it to…", input: "agent", path: hand_path} = hand
+      assert %{label: "Reassign…", input: "agent", path: hand_path} = hand
       assert hand_path == "/api/threads/#{t.id}/hand-off"
-      assert %{label: "Close it…", input: "abandoned", path: close_path} = close
+      assert %{label: "Close the thread…", input: "abandoned", path: close_path} = close
       assert close_path == "/api/threads/#{t.id}/close"
     end
   end
