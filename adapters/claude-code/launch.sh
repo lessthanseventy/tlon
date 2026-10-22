@@ -92,7 +92,7 @@ settings_json="{\"statusLine\":{\"type\":\"command\",\"command\":\"true\"}$perms
 mode=auto
 if [ -n "${TLON_SANDBOX_FILE:-}" ] && [ -f "$TLON_SANDBOX_FILE" ]; then
   sandbox="$(jq -c '. * {enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false, failIfUnavailable: true, network: {strictAllowlist: true}}' "$TLON_SANDBOX_FILE")"
-  settings_json="$(jq -c --argjson sb "$sandbox" '. + {sandbox: $sb} | .permissions.allow = ["Read", "Glob", "Grep", "Edit", "Write", "NotebookEdit", "Bash", "WebFetch", "Agent", "TodoWrite", "Skill", "mcp__tlon", "mcp__lsp", "mcp__tlon-citizen", "mcp__menard"]' <<<"$settings_json")"
+  settings_json="$(jq -c --argjson sb "$sandbox" '. + {sandbox: $sb} | .permissions.allow = ["Read", "Glob", "Grep", "Edit", "Write", "NotebookEdit", "Bash", "WebFetch", "Agent", "TodoWrite", "Skill", "mcp__tlon", "mcp__lsp", "mcp__tlon-citizen", "mcp__plugin_menard_menard"]' <<<"$settings_json")"
   mode=dontAsk
 fi
 
