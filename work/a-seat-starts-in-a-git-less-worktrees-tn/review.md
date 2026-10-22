@@ -1,18 +1,16 @@
 # APPROVE — a-seat-starts-in-a-git-less-worktrees-tn
 
-Verdict: **approve**. The blocking gap from my first review is fixed and verify is green.
+Verdict: **approve**. The #563 fix (e353685) is unchanged from the a6bb510 I approved last round — byte-identical on `spawn.ex`, `worktree.ex` and `spawn_test.exs`. The only change since 019ea48 is dropping the two redundant #562 office commits (aef3025, ae862ad), now on origin/main as 9749a44/dcb4452. `mise run check` is green on e50d577.
 
-## What changed since the last review (6584456 → ae862ad)
+## The fix, re-affirmed
 
-One commit, one line — exactly the fix I required. `ae862ad` adds `await until("home", () => !screen().includes("THE CAST"))` after the trailing `keys("C-]")` at `office/test/cast-view.test.ts:90`. It mirrors the wait at :83 after the earlier `C-]`, so the cast is closed and the screen settled before the next test ("⏎ on voice is the persona picker", :93) sends its opening `` ` ``. That trailing-unawaited-`C-]` was the second cause of the cast-view flake (the one that red'd verify on the persona-picker test at 00:51:49); the first cause was aef3025's `until()` double-read, already on the branch. Both halves of #562 ride this line now, as scharlach required. Verify passed on the branch (it came back to review, which is the gate's own green).
+`Worktree.add` tags `{:not_a_checkout, wt}` when `git worktree add` refuses and the dir exists with no `.git`. `cwd_export` propagates that as `{:error, refused}` and returns `{:ok, ""}` for other errors (unchanged behavior). `mint_and_export`'s `with` short-circuits on the refusal before `Tokens.mint`, so `Spawn.join/env` refuse loud instead of dropping `TLON_CWD` and the pane starting somewhere else. The red-green test in `spawn_test.exs` covers the `join` path. Sound, surgical; `cwd_export` has the one caller, so the return-type change is safe.
 
-## #563 (a6bb510) — sound, unchanged
+## No conflict with origin/main
 
-Re-affirmed on this pass: `Worktree.add` → `{:error, {:not_a_checkout, wt}}` propagates unchanged through `do_ensure`/`worktree_for_thread`, `cwd_export` re-tags it `{:error, refused}`, and `mint_and_export`'s `with` short-circuits before minting — so `Spawn.join/env` refuse loud instead of dropping `TLON_CWD`. `cwd_export` has the one caller; the return-type change is safe. Red-green test is right; stray dir cleaned by `with_project`'s `on_exit rm_rf!`.
+origin/main advanced ~30 commits past this branch's base (69fe9b5), including `9bad5e0 boot: a seat starts in its worktree or not at all` (#522, in `tmux.ex`). That is a different layer — the boot line's own refusal of a gone / no-`.git` cwd — and touches no file e353685 does. They compose: e353685 refuses at spawn (the MCP call errors before the pane boots), 9bad5e0 is the boot-line safety net for an empty or gone `TLON_CWD`. Neither subsumes the other. origin/main did not touch `spawn.ex` or `worktree.ex` in the gap (the net diff vs origin/main is exactly e353685's footprint), so the landing rebase will apply clean.
 
-## Follow-ups (non-blocking, still open)
+## Follow-ups (non-blocking, carried from the first review)
 
-Carried from the first review — both already tracked, neither sits in lines this change touches:
-
-1. **Refusal leaks a staffed thread.** `mint_and_export` runs `ensure` (opens thread, registers/assigns agent) before `cwd_export` refuses, so a `not_a_checkout` refusal leaves a staffed thread behind (freshly opened for `env`; re-assigned lead for `join` with `assign: true`). The reorder is out of scope for this change.
-2. **Other `Worktree.ensure` errors still drop `TLON_CWD` silently** — `not_a_repo` / generic git refusal still return `""` from `cwd_export`, pane starts in tmux's default dir. Filed as #566.
+1. **Refusal leaks a staffed thread** — `ensure` (opens the thread, registers/assigns the agent) runs before `cwd_export` refuses, so a `not_a_checkout` refusal leaves a staffed thread behind. The reorder is out of scope for this change; the ticket is filed once this workline merges, with a regression pin asserting the thread's agent after a refused `Spawn.join`.
+2. **Other `Worktree.ensure` errors still drop `TLON_CWD` silently** — `not_a_repo` / generic git refusal return `{:ok, ""}` from `cwd_export`, so the pane starts in tmux's default dir. Filed as #566.
