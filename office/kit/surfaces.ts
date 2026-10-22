@@ -35,7 +35,23 @@ export function drawClipboard(sc: Scene, x: number, y: number, rows: ClipRow[], 
     for (let i = 0; i < Math.min(4, rows.length); i++) px(x + 2, y + 3 + i * 2, 5, 1, ROLE.inactive)
   })
   if (rows.length) sc.overhead.push(() => sc.text(`${rows.length}`, x + 4, y - 4, ROLE.body, 9))
-  const lines = rows.map((r) => `${r.owner ?? "nobody"} · ${r.tracking ?? "untracked"} · ${r.title}`)
+  const lines = rows.map((r) => `${clipLabel(r)} · ${r.title}`)
   const tip = rows.length ? `the sheriff's clipboard: ${rows.length} on the clipboard, the crew's to fix — ${lines.join("; ")}` : "the sheriff's clipboard: nothing on it"
   sc.hits.push({ x: x - 3, y: y - 8, w: 15, h: 20, tip, act: { kind: "clipboard" } })
 }
+
+const SECTION = {
+  phone: { label: "PHONE", note: "an answer is owed: work waits on you" },
+  machine: { label: "MACHINE", note: "for your information: heard once you play the machine" },
+  clipboard: { label: "CLIPBOARD", note: "the crew owns these: nothing for you to do" },
+} as const
+
+/** the inbox's sections in the order who acts: phone, machine, clipboard — the empty ones left out */
+export function inboxSections<T>(g: Record<keyof typeof SECTION, T[]>) {
+  return (["phone", "machine", "clipboard"] as const)
+    .filter((s) => g[s].length)
+    .map((s) => ({ surface: s, label: `${SECTION[s].label} · ${g[s].length}`, note: SECTION[s].note, items: g[s] }))
+}
+
+/** a clipboard row's who and what: its owner and what tracks it, or that nobody does */
+export const clipLabel = (r: { owner?: string | null; tracking?: string | null }) => `${r.owner ?? "nobody"} · ${r.tracking ?? "untracked"}`

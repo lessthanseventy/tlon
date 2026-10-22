@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Scene } from "../kit/draw"
-import { drawClipboard, drawMachine, phoneBar, ringFrame } from "../kit/surfaces"
+import { clipLabel, drawClipboard, drawMachine, inboxSections, phoneBar, ringFrame } from "../kit/surfaces"
 
 describe("the phone in the top bar", () => {
   test("nothing owed is no segment at all", () => {
@@ -39,5 +39,17 @@ describe("the answering machine and the sheriff's clipboard, drawn", () => {
     expect(full.hits[0]!.tip).toContain("2 on the clipboard")
     expect(full.hits[0]!.tip).toContain("cruz · fix-sink · the sink leaks")
     expect(full.hits[0]!.tip).toContain("nobody · untracked · a stray")
+  })
+})
+
+describe("the inbox by surface", () => {
+  const n = (key: string, more: object = {}) => ({ key, title: key, ...more })
+  test("sections run phone, machine, clipboard, and only the ones with something in them", () => {
+    const s = inboxSections({ phone: [n("a")], machine: [], clipboard: [n("c")] })
+    expect(s.map((x) => [x.label, x.items.map((i) => i.key)])).toEqual([["PHONE · 1", ["a"]], ["CLIPBOARD · 1", ["c"]]])
+  })
+  test("a clipboard row says who has it and what tracks it, or that nobody does", () => {
+    expect(clipLabel({ owner: "cruz", tracking: "fix-sink" })).toBe("cruz · fix-sink")
+    expect(clipLabel({})).toBe("nobody · untracked")
   })
 })

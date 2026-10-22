@@ -2,7 +2,22 @@ defmodule Server.Office.Needs do
   @moduledoc """
   Everything waiting on the operator, as ONE list — derived from the state that already says so,
   never a second record that could drift from it. Each item is
-  `%{key, kind, level, thread_id, workspace_id, title, text, at, options}`:
+  `%{key, kind, level, surface, thread_id, workspace_id, title, text, at, options}`.
+
+  **Who acts** — `surface`, a pure function of `kind` (`surface/1`, no catch-all: a kind missing
+  from `kinds/0` raises, so a new one can't reach the list unrouted):
+
+    * **phone** — an answer is owed; the office's one count, ringing while it is above zero:
+      `gate`, `question`, `dialog`, `ask`, `seats`, `quota`, `no_seat`, `tool_denied`;
+    * **machine** — information for the operator: `mention`, `rollout`. It holds an item until the
+      operator plays it (`hear/1`, kept in `need_heard` until something newer comes under its key)
+      or for a day;
+    * **clipboard** — the crew owns it; each row also carries `owner` (the thread's lead) and
+      `tracking` (the workline's slug, else the ticket an issue names): `issue`, `stalled`,
+      `verify_failed`, `pr_blocked`, `publish_failed`, `release_failed`, `job_failed`, `stranded`.
+
+  `grouped/1` is the list by surface, with counts; `list/0` stays the one flat list. `level` orders
+  items within a surface and decides what `dismiss/1` refuses:
 
     * **blocking** — work has stopped until the operator acts:
       `gate` (a workline at its gate: approve), `question` (a coworker asked: reply), `dialog` (a pane
