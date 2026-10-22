@@ -572,6 +572,32 @@ defmodule Server.WorklineLandingTest do
       assert id == b.id
     end
 
+    test "it tells on_cars which cars took the gate: the train, the lead alone when the rest can't ride, the lead split off when red twice" do
+      cars = fn ids, split -> send(self(), {:cars, ids, split}) end
+      green = fn _, _ -> {:ok, :green} end
+      a = queued!("tell-a")
+      b = queued!("tell-b")
+
+      Workline.land_train(a, [b], merge: Train, gate: green, run: gh("OPEN"), on_cars: cars)
+      assert_received {:cars, ids, false}
+      assert ids == [a.id, b.id]
+
+      c = queued!("tell-c")
+      parked = Repo.update!(Thread.workline_stage_changeset(queued!("tell-d"), %{awaiting: "andrew"}))
+      Workline.land_train(c, [parked], merge: Train, gate: green, run: gh("OPEN"), on_cars: cars)
+      assert_received {:cars, ids, false}
+      assert ids == [c.id]
+
+      e = queued!("tell-e")
+      f = queued!("tell-f")
+      Process.put(:stack_results, [{:error, {:gate, "red"}}, {:error, {:gate, "red"}}])
+      Workline.land_train(e, [f], merge: Train, gate: green, run: gh("OPEN"), on_cars: cars)
+      assert_received {:cars, ids, false}
+      assert ids == [e.id, f.id]
+      assert_received {:cars, ids, true}
+      assert ids == [e.id]
+    end
+
     test "alone, it is land_queued" do
       a = queued!("solo")
       assert {:ok, _} = Workline.land_train(a, [], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
