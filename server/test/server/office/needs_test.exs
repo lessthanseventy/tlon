@@ -449,11 +449,41 @@ defmodule Server.Office.NeedsTest do
       assert Enum.any?(labels, &(&1 =~ "by hand")) and "Hand it to Uqbar" in labels
       assert Enum.any?(labels, &(&1 =~ "Back to build"))
 
+      # #579: Uqbar is handed the decision, never the thread — a post to it, the lead untouched
+      hand = Enum.find(actions, &(&1.label == "Hand it to Uqbar"))
+      assert hand.path == "/api/threads/#{t.id}/messages"
+      assert hand.body.body =~ "@uqbar" and hand.body.body =~ "release:smoke"
+      refute Enum.any?(actions, &(&1.path =~ "hand-off"))
+
       # the operator adds the rule to their own Claude Code settings (the server never writes them):
       # the verb says which rule, and posting it is the movement that clears the item
       allowed = Enum.find(actions, &(&1.label =~ "Allowed it"))
       assert allowed.path == "/api/threads/#{t.id}/messages"
       assert allowed.body.body =~ "Bash(mise run release:smoke)"
+    end
+
+    test "a hook's refusal offers no allow rule: no setting lifts it", %{ws: ws} do
+      t = workline(ws, "review", 3)
+
+      for _ <- 1..2 do
+        {:ok, _} =
+          Server.Dossier.record_event(%{
+            thread_id: t.id,
+            kind: "tool_denied",
+            correlation: "tool_denied:#{t.id}",
+            detail: %{
+              "agent" => "nolan",
+              "tool" => "Bash",
+              "summary" => "Bash · python3 x.py",
+              "reason" => "PreToolUse:Bash hook error: python3 does not run here"
+            }
+          })
+      end
+
+      assert [%{kind: "tool_denied", hook: true, rule: "Bash(python3 x.py)"}] = Needs.list()
+      labels = for a <- Server.Alerts.list(), a.thread_id == t.id, x <- a.actions, do: x.label
+      refute Enum.any?(labels, &(&1 =~ "Allowed it"))
+      assert "Hand it to Uqbar" in labels
     end
 
     test "a refusal of another tool, or with no reason, is said as it came", %{ws: ws} do

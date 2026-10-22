@@ -169,10 +169,12 @@ defmodule Server.Alerts do
 
   # the rule is the operator's to add to their own Claude Code settings (the one place the permission
   # check honours one); saying so on the thread is the movement that clears the item and wakes the lead
+  # a hook's refusal has no allow rule to add: no setting lifts it. Uqbar is handed the decision as a
+  # post, never the thread: its lead stays.
   defp actions(%{kind: "tool_denied", thread_id: t} = need) do
     allowed =
       case need[:rule] do
-        nil ->
+        rule when is_nil(rule) or need.hook ->
           []
 
         rule ->
@@ -187,7 +189,7 @@ defmodule Server.Alerts do
       [
         "I did it by hand…" |> call("/messages", t) |> Map.put(:input, "body"),
         send_back("build", t),
-        call("Hand it to Uqbar", "/hand-off", t, %{agent: "uqbar"})
+        call("Hand it to Uqbar", "/messages", t, %{body: "@uqbar decide this tool refusal for me: #{need.text}"})
       ]
   end
 
