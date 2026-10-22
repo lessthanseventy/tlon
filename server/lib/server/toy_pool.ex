@@ -2,7 +2,7 @@ defmodule Server.ToyPool do
   @moduledoc """
   The toy's generated pools, per workspace, written by `Server.Generator` and stored in `toy_pool`:
   doorbell visitors (name, look seed, one line), each seat's in-voice reaction lines per event, and
-  pun/joke ideas for the canvas brief, refilled daily by `refresh_all_due/1` (the `toys:refresh`
+  pun/joke ideas for the canvas brief (and the part library kept by `Server.GeneratedParts`), refilled daily by `refresh_all_due/1` (the `toys:refresh`
   task, a script schedule). Every read is the stored pool or `[]` — the render path never calls the
   model, and a caller with `[]` uses its handwritten lines.
   """
@@ -85,8 +85,9 @@ defmodule Server.ToyPool do
   end
 
   @doc """
-  Everything stored for `ws` in one read, for the office to show: `%{visitors, puns, reactions}`,
-  `reactions` being `%{seat => %{event => [line]}}`. Empty parts are `[]` / `%{}` until generated.
+  Everything stored for `ws` in one read, for the office to show: `%{visitors, puns, reactions, parts}`,
+  `reactions` being `%{seat => %{event => [line]}}`, `parts` the invented-accessory library
+  (`Server.GeneratedParts.library/1`). Empty parts are `[]` / `%{}` until generated.
   """
   def day(ws) do
     reactions =
@@ -100,7 +101,7 @@ defmodule Server.ToyPool do
         fn {"reactions:" <> seat, %{"items" => by_event}} -> {seat, by_event} end
       )
 
-    %{visitors: visitors(ws), puns: puns(ws), reactions: reactions}
+    %{visitors: visitors(ws), puns: puns(ws), reactions: reactions, parts: Server.GeneratedParts.library(ws)}
   end
 
   defp read(ws, key) do
