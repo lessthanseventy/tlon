@@ -9,7 +9,8 @@ import { soreLine } from "./seat-voices"
 import { soulFor } from "./souls"
 import { DRINK, FALL_ODDS, FALL_WET, layPrint, prune, STRIDE, WET, type Print } from "./bathroom"
 import { homeLevel } from "./life"
-import { looksGen, overrideFor } from "./looks"
+import { looksGen, overrideFor, today, wearerOf, wearing } from "./looks"
+import { useDataParts, type DataPart } from "./parts"
 import type { CatSpecies, Pets } from "./pets"
 import { CAT_NAME, heightOf, lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, CorkNote, Seat } from "./types"
@@ -34,7 +35,7 @@ const TOGETHER = new Set<string>(["pingpong", "foosball", "pool", "arcade", "cou
 export type Spot = { x: number; y: number; aisle: number; pose: Pose; face: Dir; kind: Kind; with?: Pt }
 export type Pt = { x: number; y: number }
 export type Actor = {
-  seat: Seat; look: Look; lookGen?: number; x: number; y: number; path: Pt[]
+  seat: Seat; look: Look; lookGen?: number; worn?: string; x: number; y: number; path: Pt[]
   spot: Spot; spotKey: string; pose: Pose; face: Dir; moving: boolean
   until: number; emote: string | null; emoteUntil: number; leaving: boolean
   /** the tick their `doing` last changed (a long one makes them sweat); the tick a just-finished turn's stretch ends */
@@ -710,7 +711,12 @@ export class Sim<L extends { people: Seat[] }> {
   }
   /** the server's generated toys, used only while the weirdness dial is past `curated` */
   private toys: Toys | null = null
-  setToys(t: Toys | null) { this.toys = t }
+  private dayPart: DataPart | null = null
+  setToys(t: Toys | null) {
+    this.toys = t
+    useDataParts(t?.parts ?? [])
+    this.dayPart = t?.parts.at(-1) ?? null
+  }
   private pooled(): Toys {
     return this.dials.weirdness !== "curated" && this.toys ? this.toys : { visitors: [], puns: [], reactions: {}, parts: [] }
   }
@@ -875,6 +881,13 @@ export class Sim<L extends { people: Seat[] }> {
     if (this.party && this.tick > this.party.until) this.party = null
     for (const [who, pin] of this.pins) if (this.tick > pin.until) this.pins.delete(who)
     const live = new Set(l.people.map(keyOf))
+    // one actor wears today's invented part, and only on its own day: a view over the look, never saved
+    const wearer = this.dayPart?.day === today() ? wearerOf(today(), l.people.map((r) => r.agent)) : undefined
+    const lookFor = (agent: string): Look => {
+      const base = { ...lookOf(agent), ...overrideFor(agent) }
+      return agent === wearer && this.dayPart ? wearing(base, this.dayPart) : base
+    }
+    const wornBy = (agent: string) => (agent === wearer ? this.dayPart!.id : "")
     for (const r of l.people) {
       const k = keyOf(r)
       const actor = this.actors.get(k)
@@ -883,11 +896,11 @@ export class Sim<L extends { people: Seat[] }> {
         // a turn just ended at the desk: a good stretch before getting up
         if (actor.seat.thinking && !r.thinking && actor.spot.kind === "desk" && !actor.moving) { actor.stretch = this.tick + STRETCH; actor.finished = this.tick; this.noticed(actor, "done") }
         if (actor.seat.thinking && !r.thinking) actor.cooled = this.tick
-        if (actor.lookGen !== looksGen()) { actor.look = { ...lookOf(r.agent), ...overrideFor(r.agent) }; actor.lookGen = looksGen() } // undefined !== 0 on a fixture built without it: fine, it just computes once
+        if (actor.lookGen !== looksGen() || actor.worn !== wornBy(r.agent)) { actor.look = lookFor(r.agent); actor.lookGen = looksGen(); actor.worn = wornBy(r.agent) } // undefined !== 0 on a fixture built without it: fine, it just computes once
         actor.seat = r; actor.leaving = false; continue
       }
       const at = this.seeded ? plan.exit : plan.home(l, r.agent) ?? plan.lounge[this.actors.size % plan.lounge.length]!
-      this.actors.set(k, { seat: r, look: { ...lookOf(r.agent), ...overrideFor(r.agent) }, lookGen: looksGen(), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0, cooled: this.tick, warmth: r.thinking ? 1 : r.warmth ?? (r.warm ? 1 : 0) })
+      this.actors.set(k, { seat: r, look: lookFor(r.agent), lookGen: looksGen(), worn: wornBy(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0, cooled: this.tick, warmth: r.thinking ? 1 : r.warmth ?? (r.warm ? 1 : 0) })
     }
     if (a.ok) this.seeded = true
     // a wave on the way in (whoever walks in from the exit) and on the way out
