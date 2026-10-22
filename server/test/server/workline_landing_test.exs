@@ -598,6 +598,21 @@ defmodule Server.WorklineLandingTest do
       assert ids == [e.id]
     end
 
+    test "the landing job records the cars it took in its meta, keeping what was there" do
+      a = queued!("meta-a")
+      b = queued!("meta-b")
+      job = %{thread_id: a.id} |> Server.Jobs.Land.new(meta: %{"kept" => 1}) |> Repo.insert!()
+
+      Server.Jobs.Land.record_cars(job.id).([a.id, b.id], false)
+      assert %{"cars" => [a_id, b_id], "split" => false, "kept" => 1} = Repo.get!(Oban.Job, job.id).meta
+      assert [a_id, b_id] == [a.id, b.id]
+
+      parked = Repo.update!(Thread.workline_stage_changeset(a, %{awaiting: "andrew"}))
+      assert :ok = Server.Jobs.Land.perform(%{Repo.get!(Oban.Job, job.id) | attempt: 1})
+      assert %{"cars" => [only], "split" => false} = Repo.get!(Oban.Job, job.id).meta
+      assert only == parked.id
+    end
+
     test "alone, it is land_queued" do
       a = queued!("solo")
       assert {:ok, _} = Workline.land_train(a, [], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
