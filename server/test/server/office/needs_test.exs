@@ -747,6 +747,25 @@ defmodule Server.Office.NeedsTest do
       assert_raise FunctionClauseError, fn -> Needs.surface("brand_new") end
     end
 
+    test "every kind has a pass-up rule; a hook's tool refusal is Uqbar's, a permission refusal always passes up" do
+      for k <- Needs.kinds() do
+        rule = Needs.pass_up_rule(k)
+        assert rule in [:always, :info] or match?({:when, [_ | _]}, rule), "#{k} has no rule"
+      end
+
+      for k <- ~w(seats quota tool_denied), do: assert(Needs.pass_up_rule(k) == :always)
+      for k <- ~w(mention rollout), do: assert(Needs.pass_up_rule(k) == :info)
+      assert Needs.pass_up_rule("pr_blocked") == {:when, [:host_command]}
+      assert Needs.pass_up_rule("issue") == {:when, [:irreversible, :host_command]}
+
+      assert Needs.pass_up_rule("gate") ==
+               {:when, [:irreversible, :outward, :costly, :host_command, :auto_land_risk]}
+
+      assert Needs.pass_up_rule(%{kind: "tool_denied", hook: true}) == {:when, [:irreversible, :host_command]}
+      assert Needs.pass_up_rule(%{kind: "tool_denied", hook: false}) == :always
+      assert_raise FunctionClauseError, fn -> Needs.pass_up_rule("brand_new") end
+    end
+
     test "every item on the list carries its kind's surface", %{ws: ws} do
       {:ok, q} = Channel.open_thread(%{title: "q", workspace_id: ws.id})
       {:ok, _} = Server.Attention.ask(q.id, "daneri", "A or B?")

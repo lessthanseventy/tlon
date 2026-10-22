@@ -12,7 +12,8 @@ defmodule Server.Flags do
   # :build_mode — the office TUI's `B` (floor step 3), off until the life room ships
   # :judged_supersede — a model-judged supersede is applied (Server.Recall.Supersede.judged/5), not
   # only proposed
-  @known [:build_mode, :judged_supersede]
+  # :uqbar_routing — conditional needs route through Uqbar (Server.Office.Needs); off, they all pass up
+  @known [:build_mode, :judged_supersede, :uqbar_routing]
 
   @spec enabled?(atom()) :: boolean()
   def enabled?(flag) when flag in @known, do: FunWithFlags.enabled?(flag)

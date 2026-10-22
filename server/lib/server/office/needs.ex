@@ -83,6 +83,8 @@ defmodule Server.Office.Needs do
   @phone ~w(gate question dialog ask seats quota no_seat tool_denied)
   @machine ~w(mention rollout)
   @clipboard ~w(issue stalled verify_failed pr_blocked publish_failed release_failed job_failed stranded)
+  @broad [:irreversible, :outward, :costly, :host_command, :auto_land_risk]
+  @narrow [:irreversible, :host_command]
 
   @doc "Every item waiting on the operator, across the workspaces."
   def list do
@@ -131,6 +133,20 @@ defmodule Server.Office.Needs do
   def surface(kind) when kind in @phone, do: "phone"
   def surface(kind) when kind in @machine, do: "machine"
   def surface(kind) when kind in @clipboard, do: "clipboard"
+
+  @doc """
+  When an item (or a bare kind) reaches the operator: `:always`, `:info` (never routed), or
+  `{:when, reasons}` — only when Uqbar passes it up for one of them. A tool refusal by a hook is
+  Uqbar's (no setting the operator holds can lift it); any other refusal widens a permission, so
+  always passes up. No catch-all: a kind not in `kinds/0` raises.
+  """
+  def pass_up_rule(kind) when is_binary(kind), do: pass_up_rule(%{kind: kind})
+  def pass_up_rule(%{kind: "tool_denied", hook: true}), do: {:when, @narrow}
+  def pass_up_rule(%{kind: k}) when k in ~w(seats quota tool_denied), do: :always
+  def pass_up_rule(%{kind: k}) when k in @machine, do: :info
+  def pass_up_rule(%{kind: k}) when k in ~w(gate question dialog ask no_seat), do: {:when, @broad}
+  def pass_up_rule(%{kind: k}) when k in ~w(issue stalled verify_failed job_failed stranded), do: {:when, @narrow}
+  def pass_up_rule(%{kind: k}) when k in ~w(pr_blocked publish_failed release_failed), do: {:when, [:host_command]}
 
   @doc """
   The operator puts an item away without acting on it (the inbox's `d`): it leaves the list until
