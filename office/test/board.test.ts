@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { BOARD_LEGEND, boardColumns, cardState, epicChildren, groupRows, STATE_GLYPH } from "../kit/crew"
+import { BOARD_LEGEND, boardColumns, cardState, epicChildren, groupRows, STATE_GLYPH, treeRows } from "../kit/crew"
 import { EMPTY, type Agents, type Seat, type Thread, type Ticket } from "../kit/types"
 
 const thread = (id: number, over: Partial<Thread> = {}): Thread => ({ id, title: `t${id}`, stage: "build", awaiting: null, workspace_id: 1, lead: "ireneo", seat: "idle", ...over })
@@ -128,6 +128,58 @@ describe("initiatives on the TICKETS column", () => {
       { id: 60, title: "Hall 1/2", kind: "epic" },
     ])
     expect(groupRows(a, 50)).toEqual([{ id: 52, title: "sandbox mode", kind: "ticket" }])
+  })
+})
+
+describe("the TICKETS column as an expandable tree", () => {
+  const tk = (id: number, over: Partial<Ticket> = {}): Ticket => ({ id, workspace_id: 1, project_id: null, title: `k${id}`, priority: "normal", kind: "ticket", epic_id: null, ...over })
+  const kids = tk(585, { title: "kids", kind: "initiative" })
+  const toy = tk(586, { title: "Toy", kind: "epic", epic_id: 585, done: 0, total: 2, next: { id: 590, title: "sandbox mode" } })
+  const a = {
+    ...snap([]),
+    tickets: [kids, toy, tk(590, { epic_id: 586, title: "sandbox mode" }), tk(591, { epic_id: 586, title: "in flight", status: "doing", thread_id: 40 }), tk(7, { title: "loose" })],
+  }
+  const shape = (rows: ReturnType<typeof treeRows>) => rows.map((r) => [r.act.kind === "ticket" || r.act.kind === "epic" ? r.act.id : -1, r.depth, r.open])
+  const ident = <T,>(xs: T[]) => xs
+
+  test("collapsed, only the top level shows", () => {
+    expect(shape(treeRows(a, new Set(), ident))).toEqual([
+      [585, 0, false],
+      [7, 0, false],
+    ])
+  })
+
+  test("opening an initiative lists its epics one level down, collapsed", () => {
+    expect(shape(treeRows(a, new Set([585]), ident))).toEqual([
+      [585, 0, true],
+      [586, 1, false],
+      [7, 0, false],
+    ])
+  })
+
+  test("opening an epic lists its children; an in-flight child is marked with its thread", () => {
+    const rows = treeRows(a, new Set([585, 586]), ident)
+    expect(shape(rows)).toEqual([
+      [585, 0, true],
+      [586, 1, true],
+      [590, 2, false],
+      [591, 2, false],
+      [7, 0, false],
+    ])
+    expect(rows[3]!.flight).toBe(40)
+    expect(rows[2]!.flight).toBeUndefined()
+    expect(rows[1]!.title).toBe("Toy 0/2 → #590 sandbox mode · 1 in flight")
+  })
+
+  test("the order applies to each level on its own", () => {
+    const reverse = <T,>(xs: T[]) => [...xs].reverse()
+    expect(shape(treeRows(a, new Set([585, 586]), reverse))).toEqual([
+      [7, 0, false],
+      [585, 0, true],
+      [586, 1, true],
+      [591, 2, false],
+      [590, 2, false],
+    ])
   })
 })
 
