@@ -37,8 +37,9 @@ mise trust -q "$dir" >/dev/null 2>&1
 seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$dir/.hex"
 export HEX_HOME="$dir/.hex"
 (cd server && mix deps.get >/dev/null) || { echo "check-main: mix deps.get failed"; exit 1; }
-mise run check >"$log" 2>&1
-code=$?
+# the queue's own lines pass through: the schedule restarts its timeout at `your turn`
+mise run check 2>&1 | tee "$log" | grep --line-buffered "^checks queue:"
+code=${PIPESTATUS[0]}
 # the verdict: every suite's counts, and on a red gate where it broke
 grep -E "(pass|fail)$|Result:|ERROR|check-names:|passed ·" "$log"
 if [ "$code" -ne 0 ]; then

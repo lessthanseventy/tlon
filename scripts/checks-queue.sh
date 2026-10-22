@@ -82,6 +82,8 @@ if entry="$(take_ticket 2>/dev/null)" && [ -n "$entry" ]; then
     sleep "$poll"
   done
   rm -f "$entry"
+  # a scheduled run restarts its timeout here (Server.Schedules): the wait was not the check
+  [ "$told" = 1 ] && echo "checks queue: your turn" >&2
 else
   echo "checks queue: can't write $wait_dir or $seq_file — falling back to a plain lock, no queue order" >&2
   flock 9

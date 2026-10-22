@@ -211,6 +211,22 @@ defmodule Server.SchedulesTest do
     assert {_, 1} = System.cmd("pgrep", ["-f", "sleep #{marker}"])
   end
 
+  test "the timeout restarts when the script's turn in the checks queue comes, so waiting there is not counted",
+       %{ws: ws} do
+    Application.put_env(:server, :schedule_script_timeout_ms, 1000)
+    on_exit(fn -> Application.delete_env(:server, :schedule_script_timeout_ms) end)
+
+    s =
+      schedule!(ws, %{
+        cron: "@daily",
+        body: "echo 'checks queue: waiting'; sleep 0.7; echo 'checks queue: your turn'; sleep 0.7; echo done"
+      })
+
+    {:ok, run} = Schedules.run_now(s)
+    assert %{status: "ok", output: out} = Schedules.perform(run.id)
+    assert out =~ "done"
+  end
+
   test "a standing script posts each run's output to its one thread, without waking a lead", %{ws: ws} do
     s = schedule!(ws, %{cron: "@daily", body: "echo tick", standing: true})
     {:ok, r1} = Schedules.run_now(s)
