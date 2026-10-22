@@ -32,6 +32,16 @@ defmodule Server.Jobs.VerifyTest do
     assert_enqueued(worker: Server.Jobs.Verify, args: %{thread_id: t.id, slug: "clock-fix"})
   end
 
+  test "companions: other verifies waiting in the same repo, first come first, never itself" do
+    {:ok, a} = Workline.open(%{title: "a", slug: "comp-a", stage: "verify"})
+    {:ok, b} = Workline.open(%{title: "b", slug: "comp-b", stage: "verify"})
+    {:ok, c} = Workline.open(%{title: "c", slug: "comp-c", stage: "verify"})
+    lead = %{thread_id: a.id, slug: a.slug} |> Server.Jobs.Verify.new() |> Server.Repo.insert!()
+    for t <- [b, c], do: %{thread_id: t.id, slug: t.slug} |> Server.Jobs.Verify.new() |> Server.Repo.insert!()
+
+    assert Enum.map(Server.Jobs.Verify.companions(a, lead.id), & &1.id) == [b.id, c.id]
+  end
+
   describe "finish/5 — a run is done when it recorded a result; one killed before that is tried again" do
     setup do
       {:ok, t} = Workline.open(%{title: "lazy", slug: "lazy-compile", stage: "verify"})
@@ -101,6 +111,12 @@ defmodule Server.Jobs.VerifyTest do
 
       assert {:cancel, _} = perform_job(Server.Jobs.Verify, %{thread_id: t.id, slug: t.slug})
       assert Server.Repo.aggregate(Server.Message, :count) == n
+    end
+
+    test "a workline a train already took past verify is cancelled before anything runs", %{t: t} do
+      {:ok, _} = t |> Server.Thread.workline_stage_changeset(%{stage: "review"}) |> Server.Repo.update()
+      assert {:cancel, why} = perform_job(Server.Jobs.Verify, %{thread_id: t.id, slug: t.slug})
+      assert why =~ "review"
     end
 
     test "the verifier is tried three times, not once" do

@@ -208,6 +208,29 @@ defmodule Server.WorklineVerifyScriptTest do
       refute out =~ "could not record"
     end
 
+    # a verify train (Server.VerifyTrain) checks the stacked cars once; each car's own rules run first
+    test "RULES_ONLY: a workline's own rules, then exit before the suite", ctx do
+      sh = fn cmd -> {_, 0} = System.cmd("sh", ["-c", cmd], cd: ctx.repo, stderr_to_stdout: true) end
+
+      sh.(
+        "git checkout -qb work/pr-7-feature main && mkdir -p work/pr-7-feature && echo s >work/pr-7-feature/spec.md && " <>
+          "git add work && git commit -qm spec && git push -q origin main && git checkout -q main"
+      )
+
+      env = [{"LAND_REF", nil}, {"RULES_ONLY", "1"}]
+
+      assert {_, 0} = gate(ctx, env)
+      refute File.exists?(Path.join(ctx.tmp, "gate.log"))
+
+      sh.(
+        "git checkout -q work/pr-7-feature && echo x >ROOTFILE && git add ROOTFILE && git commit -qm stray && git checkout -q main"
+      )
+
+      assert {out, 1} = gate(ctx, env)
+      assert out =~ "ROOTFILE"
+      refute File.exists?(Path.join(ctx.tmp, "gate.log"))
+    end
+
     test "RUN_TASK names the mise task to run in place of the full check", ctx do
       assert {_, 0} = gate(ctx)
       assert File.read!(Path.join(ctx.tmp, "gate.log.args")) == "run check\n"

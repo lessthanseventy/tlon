@@ -6,7 +6,8 @@ defmodule Server.Jobs.Verify do
   origin/main in a throwaway checkout, so a fix that reached main after the branch was cut counts. Enqueued by `Server.Workline` on the
   flip. Where it cannot run — no checkout beside this release, no `mise` on the service's PATH — it
   says so on the thread, with the command to run by hand, rather than leaving the stage parked in
-  silence.
+  silence. Verifies waiting beside it in the same repo ride one check with it (`Server.VerifyTrain`);
+  a job whose workline a train already carried past verify is cancelled.
   """
   use Oban.Worker,
     queue: :verify,
@@ -26,12 +27,45 @@ defmodule Server.Jobs.Verify do
     tree = with %Server.Thread{} = t <- thread, {:ok, path} <- Server.worktree_for_thread(t), do: path
 
     cond do
-      match?(%Server.Thread{state: "closed"}, thread) -> {:cancel, "thread ##{tid} is closed"}
-      !File.exists?(script) -> by_hand(tid, slug, "no tlon checkout at #{Server.Profiles.tlon_root()}")
-      !System.find_executable("mise") -> by_hand(tid, slug, "no mise on the service's PATH")
-      !is_binary(tree) -> by_hand(tid, slug, "no checkout of work/#{slug} (#{inspect(tree)})")
-      true -> run(script, tid, slug, tree, job)
+      match?(%Server.Thread{state: "closed"}, thread) ->
+        {:cancel, "thread ##{tid} is closed"}
+
+      # a verify train that carried it, or a send-back, moved it on: nothing left to verify
+      match?(%Server.Thread{stage: s} when s != "verify", thread) ->
+        {:cancel, "thread ##{tid} is at #{thread.stage} now"}
+
+      !File.exists?(script) ->
+        by_hand(tid, slug, "no tlon checkout at #{Server.Profiles.tlon_root()}")
+
+      !System.find_executable("mise") ->
+        by_hand(tid, slug, "no mise on the service's PATH")
+
+      !is_binary(tree) ->
+        by_hand(tid, slug, "no checkout of work/#{slug} (#{inspect(tree)})")
+
+      true ->
+        train_or_run(thread, script, tree, job)
     end
+  end
+
+  @doc """
+  The worklines whose verify waits behind job `job_id` that can ride `thread`'s verify train: first
+  come first, at most `Server.VerifyTrain.cars/0` less one, in the same repo, never `thread` itself.
+  Each keeps its own job, which finds its workline moved on and is cancelled.
+  """
+  def companions(thread, job_id) do
+    repo = Server.Workline.Artifacts.Git.root(thread)
+
+    from(j in Oban.Job,
+      where: j.worker == "Server.Jobs.Verify" and j.state in ["available", "scheduled"] and j.id != ^job_id,
+      order_by: [asc: j.id],
+      select: fragment("(? ->> 'thread_id')::int", j.args)
+    )
+    |> Server.Repo.all()
+    |> Enum.uniq()
+    |> Enum.map(&Server.Repo.get(Server.Thread, &1))
+    |> Enum.filter(&(&1 && &1.id != thread.id && Server.Workline.Artifacts.Git.root(&1) == repo))
+    |> Enum.take(Server.VerifyTrain.cars() - 1)
   end
 
   defp run(script, tid, slug, tree, job) do
@@ -89,5 +123,13 @@ defmodule Server.Jobs.Verify do
       })
 
     :ok
+  end
+
+  # verifies waiting beside this one ride one check (Server.VerifyTrain); alone, it runs as it always has
+  defp train_or_run(thread, script, tree, job) do
+    case Server.VerifyTrain.run(thread, companions(thread, job.id)) do
+      :alone -> run(script, thread.id, thread.slug, tree, job)
+      _ -> :ok
+    end
   end
 end
