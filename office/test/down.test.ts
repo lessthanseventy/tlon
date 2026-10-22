@@ -24,10 +24,10 @@ test("a down channel keeps the last snapshot and the inbox, held and dated", asy
   process.env.TLON_URL = `http://127.0.0.1:${server.port}`
   const data = await import("../tui/data")
   expect((await data.status()).ok).toBe(true)
-  expect(await data.needs()).toHaveLength(1)
+  expect((await data.needs()).items).toHaveLength(1)
   // a restart onto another build can answer 401/404 for a moment: still not "nothing waits on you"
   needsStatus = 404
-  expect(await data.needs()).toEqual([need])
+  expect((await data.needs()).items).toEqual([need])
   needsStatus = 200
   server.stop(true)
 
@@ -36,7 +36,7 @@ test("a down channel keeps the last snapshot and the inbox, held and dated", asy
   expect(held.note).toContain("channel down")
   expect(held.heldAt).toBeGreaterThan(Date.now() - 60_000)
   expect(viewOf(held, 1).threads.map((t) => t.title)).toEqual(["the held thread"])
-  expect(await data.needs()).toEqual([need])
+  expect((await data.needs()).items).toEqual([need])
 })
 
 test("the header says how old the view is and what brings the channel back", () => {

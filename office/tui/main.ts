@@ -268,7 +268,8 @@ let homeNow = loadHome()
 let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.Triage | null = null, rack: data.Health | null = null
 /** the office corkboard: the crew's chatter to each other, newest first */
 let cork: CorkNote[] = []
-/** everything waiting on you (`Server.Office.Needs`), blocking first */
+/** everything waiting on you (`Server.Office.Needs`) by who acts; `needs` is every item, phone first */
+let bySurface: data.Needs = { items: [], phone: [], machine: [], clipboard: [], counts: { phone: 0, machine: 0, clipboard: 0 } }
 let needs: data.Need[] = []
 /** Scharlach's demerit ledger: ticks when a coworker's build goes red (the sheriff's workspace's triage) */
 let ledger: Ledger = newLedger()
@@ -437,7 +438,8 @@ async function refreshOnce() {
   settleWorkspace()
   draw()
   let knobs: data.Settings | null
-  ;[needs, knobs] = await rest
+  ;[bySurface, knobs] = await rest
+  needs = bySurface.items
   settings = knobs ?? settings
   if (all.ok && lastOk.ok) tellNews(lastOk, lastOkNeeds)
   if (all.ok) { lastOk = all; lastOkNeeds = needs }
