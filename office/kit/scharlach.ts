@@ -32,6 +32,9 @@ export function tickRed(l: Ledger, agent: string): Ledger {
   return { demerits, ticked: l.ticked }
 }
 
+/** Gary SLAPped someone: Scharlach logs the demerit against himself, for failing to prevent it */
+export const tickSlap = (l: Ledger): Ledger => tickRed(l, SHERIFF)
+
 /**
  * Tick the ledger for each red thread's lead. A thread already ticked this red does not re-tick; a
  * thread whose red clears is forgotten, so a fresh red on it ticks again. `threads` maps a thread id

@@ -17,6 +17,8 @@ export type Dials = {
   doorbell: "off" | "normal" | "busy"
   souls: boolean
   moods: boolean
+  /** what Gary does when `events.gary` is on: peeks out of the lid, makes his visit, or also walks at the head of the zoo */
+  gary: "peek" | "visit" | "lead"
 }
 export type State = { mode: "office" | "sandbox"; preset: Preset; overrides: Partial<Dials> }
 
@@ -24,10 +26,10 @@ const allOn = Object.fromEntries(EVENT_KINDS.map((k) => [k, true])) as Record<Ev
 const allOff = Object.fromEntries(EVENT_KINDS.map((k) => [k, false])) as Record<EventKind, boolean>
 
 export const PRESETS: Record<Preset, Dials> = {
-  business: { banter: false, frequency: "never", severity: 1, chain: false, events: allOff, weirdness: "curated", pets: false, doorbell: "off", souls: false, moods: false },
-  casual: { banter: true, frequency: "some", severity: 1, chain: false, events: allOn, weirdness: "curated", pets: true, doorbell: "normal", souls: true, moods: false },
-  party: { banter: true, frequency: "lots", severity: 2, chain: false, events: allOn, weirdness: "invented", pets: true, doorbell: "busy", souls: true, moods: false },
-  rimworld: { banter: true, frequency: "lots", severity: 3, chain: true, events: allOn, weirdness: "invented", pets: true, doorbell: "busy", souls: true, moods: true },
+  business: { banter: false, frequency: "never", severity: 1, chain: false, events: allOff, weirdness: "curated", pets: false, doorbell: "off", souls: false, moods: false, gary: "peek" },
+  casual: { banter: true, frequency: "some", severity: 1, chain: false, events: allOn, weirdness: "curated", pets: true, doorbell: "normal", souls: true, moods: false, gary: "peek" },
+  party: { banter: true, frequency: "lots", severity: 2, chain: false, events: allOn, weirdness: "invented", pets: true, doorbell: "busy", souls: true, moods: false, gary: "visit" },
+  rimworld: { banter: true, frequency: "lots", severity: 3, chain: true, events: allOn, weirdness: "invented", pets: true, doorbell: "busy", souls: true, moods: true, gary: "lead" },
 }
 export const DEFAULT: State = { mode: "office", preset: "casual", overrides: {} }
 
@@ -70,6 +72,7 @@ export function parse(text: string): State {
   if (r.doorbell === "off" || r.doorbell === "normal" || r.doorbell === "busy") o.doorbell = r.doorbell
   if (typeof r.souls === "boolean") o.souls = r.souls
   if (typeof r.moods === "boolean") o.moods = r.moods
+  if (r.gary === "peek" || r.gary === "visit" || r.gary === "lead") o.gary = r.gary
   if (r.events && typeof r.events === "object") {
     const e: Partial<Record<EventKind, boolean>> = {}
     for (const k of EVENT_KINDS) if (typeof r.events[k] === "boolean") e[k] = r.events[k]

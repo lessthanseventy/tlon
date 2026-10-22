@@ -35,7 +35,7 @@ describe("the dials gate the room", () => {
     expect(r.eventNow()).toBeNull()
   }, 40_000)
   test("a toggled-off event never plays, keyed or not", () => {
-    const only = { ...PRESETS.casual.events, drill: false, zoo: false, meteor: false, power: false }
+    const only = { ...PRESETS.casual.events, drill: false, zoo: false, meteor: false, power: false, gary: false }
     const s = setDial(setDial(DEFAULT, "frequency", "lots"), "events", only)
     const { kinds, r } = play(s, 45_000)
     expect(kinds.length).toBeGreaterThan(0)
@@ -76,6 +76,6 @@ describe("the dials gate the room", () => {
   test("pickEvent draws from the enabled set only", () => {
     for (const roll of [0, 0.5, 0.99]) expect(pickEvent(roll, null, ["duck", "zoo"])).toMatch(/duck|zoo/)
     expect(pickEvent(0.5, "duck", ["duck"])).toBe("duck")
-    expect(EVENT_KINDS.length).toBe(5)
+    expect(EVENT_KINDS.length).toBe(6)
   })
 })

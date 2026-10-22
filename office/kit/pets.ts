@@ -45,6 +45,7 @@ export const ARGOS = {
   event_meteor: ["Sky rock! Sky rock! Can I fetch it?", "The heavens threw a ball! Bark!"],
   event_power: ["Dark! Was that me?", "Who ate the lights? Not me. Probably not me."],
   event_duck: ["A DUCK. I love him.", "Duck! DUCK! New friend! DUCK!"],
+  event_gary: ["GARY! The bin man! He smells AMAZING!", "A fish bone! Can I have the fish bone? Please?"],
   fuss: {
     pat: ["Yes! The head! The good head!", "Thank you, {name}! Thank you thank you!"],
     scratch: ["Ohh, the ear. The leg's going. Can't stop it.", "There! THERE! O, {name}, there!"],

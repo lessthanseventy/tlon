@@ -10,8 +10,8 @@ import { focus, measure, office, seeded } from "./golden"
 const geo: Geo = { doorX: 600, hallY: 190, ceilY: 12, leftX: 60, windowX: 200, cork: { x: 400, y: 40 } }
 
 describe("the events table", () => {
-  test("five kinds, each a bounded script whose beats fall inside it", () => {
-    expect(EVENT_KINDS).toEqual(["drill", "zoo", "meteor", "power", "duck"])
+  test("six kinds, each a bounded script whose beats fall inside it", () => {
+    expect(EVENT_KINDS).toEqual(["drill", "zoo", "meteor", "power", "duck", "gary"])
     for (const k of EVENT_KINDS) {
       const s = EVENTS[k]
       expect(s.ticks).toBeGreaterThanOrEqual(500)

@@ -200,6 +200,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["An unscheduled impact. I am filing a report.", "That was not in the safety binder."],
     power: ["Remain calm. I have a torch and a log.", "Outage recorded at the time of occurrence."],
     duck: ["An unregistered waterfowl. I will see it out.", "Visitor without a badge. Noted."],
+    gary: ["That dumpster is not zoned for occupancy. Noted.", "Stand clear of the lid. I will be logging this."],
   },
   tertius: {
     drill: ["Drill. Right. Coat's by the door.", "Seen drills. This is one of them."],
@@ -207,6 +208,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["Well. That's new.", "Mm. Somebody will have to sweep that."],
     power: ["Lights. Right. Wait it out.", "It always comes back."],
     duck: ["A duck. Alright.", "Don't feed it. Nobody listens."],
+    gary: ["Gary's out. Guard your yogurt.", "Seen him worse. Just don't stand nearest."],
   },
   hronir: {
     drill: ["In my day we just left by the stairs.", "Drills. We called it going home."],
@@ -214,6 +216,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["Used to be you'd hear it coming.", "Hmph. They don't make meteors like they used to."],
     power: ["We had candles for this. Real ones.", "Dark. Same as the old server room."],
     duck: ["A duck. Used to have two.", "Hmph. At least this one is on time."],
+    gary: ["In my day the bins stayed shut.", "Hmph. A fish bone. Proper sword, that."],
   },
   lonnrot: {
     drill: ["A drill — or is it? I shall observe the exits.", "Note who leaves first. It is telling."],
@@ -221,6 +224,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["The window faced the impact. That is not a coincidence.", "I shall want to examine the crater."],
     power: ["Darkness. Convenient for someone.", "The lamps went out together. I have marked the time."],
     duck: ["The duck is concealing something.", "A visitor, unexplained. I am following it."],
+    gary: ["The yogurt is the motive. The lid is the alibi.", "Eyes in the gap under the lid. I shall keep my distance."],
   },
   yu: {
     drill: ["Is it the real one? I'll just double check.", "Sorry — which way is out, exactly?"],
@@ -228,6 +232,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["That was probably fine. …Probably.", "I'd like to be certain that was outside."],
     power: ["Did I save? I should have saved.", "It's fine. It's fine. Where did my work go?"],
     duck: ["Is the duck okay? Should someone check?", "Sorry — I'd like to be sure it knows the way out."],
+    gary: ["Is the thing in the dumpster allowed to do that?", "Sorry — he said my yogurt. Is that my yogurt?"],
   },
   beatriz: {
     drill: ["Drill logged. Two minutes, tops.", "I've got the headcount. Everyone's on the sheet."],
@@ -235,6 +240,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["Impact, time-stamped. Moving on.", "I'll block out time for the cleanup."],
     power: ["Outage. I'll note the duration.", "Laptop at forty percent. We're fine."],
     duck: ["One duck. Tracked.", "Not on the calendar. Noted anyway."],
+    gary: ["One gremlin, one sandwich at risk. Tracked.", "Slap odds are one in three. I'll note it."],
   },
   nolan: {
     drill: ["The alarm! A grand entrance, darling.", "Places, everyone. This is our scene."],
@@ -242,6 +248,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["Now THAT is a dramatic reveal.", "Lightning, thunder, a crater. Bravo."],
     power: ["Blackout. Pure theatre. I adore it.", "Lights out — the audience gasps."],
     duck: ["A duck! A cameo, unannounced.", "The duck has presence. I'll allow it."],
+    gary: ["A villain in a lid crown! Enter, stage left.", "The cape is banana peel. I am in love."],
   },
   emma: {
     drill: ["Out we go. I'll finish when we're back.", "Steady. Walk, don't run."],
@@ -249,6 +256,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["That was close. I'll get back to it.", "Fine. Not my crater."],
     power: ["I'll pick it up where I left off.", "Quiet. I can finish this in the dark."],
     duck: ["Hello, duck. I have work to do.", "It'll find its own way out."],
+    gary: ["I'll keep working. He can have the sandwich.", "Not looking up. If I don't look, he can't slap."],
   },
   ireneo: {
     drill: ["I remember the last drill. Every step of it.", "I recall the exits. All four."],
@@ -256,6 +264,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["I remember the last meteor. Exactly this angle.", "As I noted at the time — it was a Thursday."],
     power: ["I remember the previous outage, to the second.", "I recall that exact dark. It lasted four minutes."],
     duck: ["I remember this duck. It had a limp.", "I recall the duck. We exchanged nods."],
+    gary: ["I remember Gary's last slap. It was left cheek.", "I recall the sock he left. It was argyle."],
   },
   daneri: {
     drill: ["An alarm for me, surely. Magnificent.", "They evacuate for genius. As is proper."],
@@ -263,6 +272,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["The heavens salute my merge. Naturally.", "A meteor. It had to be worthy of me."],
     power: ["Even the lamps bow to my work.", "Darkness. I shall write by my own brilliance."],
     duck: ["A duck has come to witness greatness.", "It arrives, as all do, to admire the work."],
+    gary: ["He wears a crown; I wear my commits. Equals.", "Slap me if you dare. The diff will outlive us both."],
   },
   sonny: {
     drill: ["Out we go! Fresh air is great, actually.", "Everybody smiling? Great, let's go!"],
@@ -270,6 +280,7 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     meteor: ["Wow, a shooting star! Make a wish!", "That was fun — is everybody okay?"],
     power: ["Cosy! Candlelight, everyone!", "Dark, but we've got each other."],
     duck: ["A duck! Hi, duck! Here's a flower.", "Look at him go! What a day."],
+    gary: ["Gary! Hi, Gary! I'd share my yogurt!", "He's just a little guy with a fish bone. Aww."],
   },
 }
 
@@ -280,6 +291,7 @@ const GENERIC_REACT: Record<EventKind, readonly string[]> = {
   meteor: ["Was that a meteor?"],
   power: ["Lights are out."],
   duck: ["There's a duck."],
+  gary: ["Something is in the dumpster."],
 }
 
 /** a seat's line for an event, skipping what it said lately while anything else is unsaid */
