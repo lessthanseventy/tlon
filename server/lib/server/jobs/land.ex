@@ -38,7 +38,7 @@ defmodule Server.Jobs.Land do
     queued =
       if args["reland"],
         do: &Server.Workline.reland_queued/2,
-        else: &Server.Workline.land_train(&1, companions(&1, job_id), &2)
+        else: &Server.Workline.land_train(&1, companions(&1, job_id), [{:on_cars, record_cars(job_id)} | &2])
 
     if thread, do: land(thread, queued, args, attempt, max), else: :ok
   end
@@ -65,6 +65,26 @@ defmodule Server.Jobs.Land do
     |> Enum.map(&Server.Repo.get(Server.Thread, &1))
     |> Enum.filter(&(&1 && &1.id != thread.id && Server.Workline.Artifacts.Git.root(&1) == repo))
     |> Enum.take(@train_cars - 1)
+  end
+
+  @doc """
+  `Server.Workline.land_train/3`'s `on_cars` for job `job_id`: the cars taking its gate written into
+  the job's own `meta` (`"cars"`, `"split"`), what the rack reads as the train, never recomputed.
+  """
+  def record_cars(nil), do: fn _, _ -> :ok end
+
+  def record_cars(job_id) do
+    fn ids, split ->
+      cars = %{"cars" => ids, "split" => split}
+
+      Server.Repo.update_all(
+        from(j in Oban.Job,
+          where: j.id == ^job_id,
+          update: [set: [meta: fragment("? || ?", j.meta, type(^cars, :map))]]
+        ),
+        []
+      )
+    end
   end
 
   @doc """
