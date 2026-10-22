@@ -79,6 +79,14 @@ defmodule Server.OperatorConfig do
       doc: "a workline quiet this long gets a nudge, and shows on your list as stalled"
     },
     %{
+      key: "uqbar_route_minutes",
+      type: "int",
+      min: 5,
+      max: 1440,
+      default: 30,
+      doc: "a need Uqbar has not routed in this long reaches you as passed up"
+    },
+    %{
       key: "max_session_hours",
       type: "int",
       min: 1,

@@ -86,6 +86,8 @@ defmodule Server.Office.Needs do
   @broad [:irreversible, :outward, :costly, :host_command, :auto_land_risk]
   @narrow [:irreversible, :host_command]
 
+  @no_verdict %{state: nil, rec: nil, why: nil, at: nil}
+
   @doc "Every item waiting on the operator, across the workspaces."
   def list do
     items = all()
@@ -961,19 +963,27 @@ defmodule Server.Office.Needs do
 
     prune("need_routing", rows, items)
     on? = Server.Flags.enabled?(:uqbar_routing)
+    expired = DateTime.add(DateTime.utc_now(), -Server.OperatorConfig.setting("uqbar_route_minutes") * 60, :second)
 
-    for item <- items do
-      row = rows[item.key]
-      row = if on? && row && DateTime.compare(row.at, item.at) != :lt, do: row
-
-      Map.merge(item, %{
-        route: route(pass_up_rule(item), row && row.state, on?),
-        recommendation: row && row.rec,
-        why: row && row.why,
-        settled_at: row && row.at
-      })
-    end
+    for item <- items, do: route_item(item, rows[item.key], on?, expired)
   end
+
+  # a row older than the item is for an earlier item under its key; fail-open: Uqbar's silence never
+  # hides a decision past `expired`
+  defp route_item(item, row, on?, expired) do
+    row = verdict_row(row, item, on?)
+    route = route(pass_up_rule(item), row.state, on?)
+    verdict = %{route: route, recommendation: row.rec, why: row.why, settled_at: row.at}
+
+    if route == "uqbar" and not DateTime.after?(item.at, expired),
+      do: Map.merge(item, %{verdict | route: "pass_up", why: "Uqbar did not route it in time"}),
+      else: Map.merge(item, verdict)
+  end
+
+  defp verdict_row(%{at: at} = row, item, true),
+    do: if(DateTime.compare(at, item.at) == :lt, do: @no_verdict, else: row)
+
+  defp verdict_row(_row, _item, _on?), do: @no_verdict
 
   defp route(:info, _, _), do: "info"
   defp route(:always, _, _), do: "pass_up"
