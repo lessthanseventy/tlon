@@ -93,7 +93,8 @@ defmodule Server.Office.Needs do
   sends a settled item back to Uqbar, not to themselves. Fail-open: an item Uqbar has not routed
   within the `uqbar_route_minutes` knob passes up as "Uqbar did not route it in time", measured from
   the item's own time, so an overruled item past it reaches the operator at once. With the setting off,
-  rows are not read and every conditional item passes up.
+  rows are not read and every conditional item passes up. Uqbar is paged on its study when a key
+  enters the group (`Server.Office.NeedsPage`).
 
   Only what someone actually asked for, or the machine actually needs, is here: the corkboard's
   suggestions are banter written in a coworker's voice, not their request, so they stay in its
