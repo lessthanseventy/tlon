@@ -1,8 +1,7 @@
 Verdict: approve. No free reviewer is at the builder's grade (greybeard); reviewed by tzinacan (deepseek-flash). Weigh accordingly.
 
-Diff read (needs.ex, needs_test.exs); not run by me — verify owns the gate.
+Re-review after 7c6036b (prefix moved into `Brief.parked_prefix/2`). Diff read, not run by me; verify owns the gate.
 
-- The gate item's age now comes from the parked notice ("⏸ workline <slug> is parked at <stage> — …", latest by id), falling back to thread created_at. The prefix matches `Server.Workline.Brief.gate_message/2` exactly (checked).
-- Tests cover both directions: an old workline that just parked stays with Uqbar; a park older than uqbar_route_minutes fails open with the right why.
-
-Non-blocking: see follow-ups.
+- `gate_message/2` builds on `parked_prefix(slug, stage)`; the text is unchanged. `Needs.gated_at/1` matches `prefix <> "%"`, latest by id, author "tlon", falling back to thread created_at.
+- Tests cover both directions (hour-old workline that just parked stays with Uqbar; park older than uqbar_route_minutes fails open), plus a Brief test pinning the shared prefix.
+- Nit, non-blocking: `_`/`%` in a slug act as LIKE wildcards; it can only widen the match to a near-identical notice, so harmless.
