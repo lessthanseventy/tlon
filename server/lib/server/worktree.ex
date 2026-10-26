@@ -221,25 +221,30 @@ defmodule Server.Worktree do
         out
         |> String.split("\n", trim: true)
         |> Enum.filter(&String.starts_with?(&1, "+"))
-        |> Enum.any?(fn "+ " <> sha -> not landed?(repo_path, base, String.trim(sha)) end)
+        |> Enum.map(fn "+ " <> sha -> String.trim(sha) end)
+        |> case do
+          [] -> false
+          shas -> not landed?(repo_path, base, branch, shas)
+        end
 
       _ ->
         true
     end
   end
 
-  # A rebase merge can fold a commit's files into a neighbouring commit, so its patch-id differs from
-  # the one on main while its files are identical there: the change is merged all the same.
-  defp landed?(repo_path, base, sha) do
-    case git(repo_path, ["diff-tree", "--no-commit-id", "--name-only", "-r", sha]) do
-      {out, 0} ->
-        case String.split(out, "\n", trim: true) do
-          [] -> false
-          files -> match?({_, 0}, git(repo_path, ["diff", "--quiet", sha, base, "--" | files]))
-        end
+  # A rebase merge can fold a commit's files into a neighbouring commit, and a later commit can
+  # rewrite an earlier one's file, so no single commit need match main. The branch has landed when
+  # its TIP is identical to main over every file its "+" commits touched; a file main changed after
+  # the landing still reads unmerged.
+  defp landed?(repo_path, base, tip, shas) do
+    results = Enum.map(shas, &git(repo_path, ["diff-tree", "-z", "--no-commit-id", "--name-only", "-r", &1]))
 
-      _ ->
-        false
+    with true <- Enum.all?(results, &match?({_, 0}, &1)),
+         files when files != [] <-
+           results |> Enum.flat_map(fn {out, 0} -> String.split(out, "\0", trim: true) end) |> Enum.uniq() do
+      match?({_, 0}, git(repo_path, ["diff", "--quiet", tip, base, "--" | files]))
+    else
+      _ -> false
     end
   end
 
