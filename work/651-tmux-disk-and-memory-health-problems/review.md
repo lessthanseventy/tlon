@@ -1,10 +1,9 @@
-APPROVE — 634a59f (health need: stable first-seen `at`).
+APPROVE — 4409a49 (rebased onto eb73e4c; health need with stable first-seen `at`).
 
-Read the diff only; did not run the suite from this seat.
+Re-review after the rebase. Read the diff only; did not run the suite from this seat (the server verified it).
 
-- Fix is right: `health/0` stamped `at: utc_now` on every read, so any verdict or dismissal was older than its item. `health_since/1` keeps first-seen per problem in persistent_term and drops it when the problem clears, so a reappearing problem gets a fresh time and resurfaces past an old dismissal.
-- persistent_term is written only when the problem set changes (rare). Concurrent first reads can race to write the same value, which is harmless.
-- Tests pin settle, dismiss and fail-open on health items. The fail-open test pokes `{Needs, :health_since}` with atom keys matching `vital_problems/1` (:tmux/:disk/:mem). The module is `async: false` and on_exit erases the term, so the global state stays contained.
-- The test.exs reorder puts the comment back above its own config line.
+- My earlier approval covered `health_since/1`: first-seen per problem kept in persistent_term, dropped when the problem clears, written only when the problem set changes. That code is unchanged by the rebase.
+- The one conflict was in needs.ex, between upstream's `gated_at/1` and this branch's `health/0`. Both are present and independent: `gated_at` dates gates from the parked notice, `health_since` dates health items. No interaction.
+- The rest of the diff since 59b602d is upstream main arriving through the rebase (staffing `leaf_window`, `clear_context` tmux-fault handling, the contrast test changes). It is not this workline's change and I did not review it as such.
 
-No blocking findings.
+No blocking findings, no follow-ups.
