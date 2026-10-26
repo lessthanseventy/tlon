@@ -18,12 +18,16 @@ defmodule Server.Office.NeedsPage do
 
   @doc "Page each workspace's Uqbar for its newly unrouted needs. `:ok`."
   def run(now \\ DateTime.utc_now()) do
-    now
-    |> Needs.grouped()
-    |> Map.fetch!(:uqbar)
-    |> Enum.reject(&is_nil(&1.workspace_id))
-    |> Enum.group_by(& &1.workspace_id)
-    |> Enum.each(fn {ws, items} -> page(ws, items, now) end)
+    if Server.OperatorConfig.setting("uqbar_routing") do
+      now
+      |> Needs.grouped()
+      |> Map.fetch!(:uqbar)
+      |> Enum.reject(&is_nil(&1.workspace_id))
+      |> Enum.group_by(& &1.workspace_id)
+      |> Enum.each(fn {ws, items} -> page(ws, items, now) end)
+    else
+      :ok
+    end
   end
 
   defp page(ws, items, now) do
