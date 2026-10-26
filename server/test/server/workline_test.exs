@@ -228,6 +228,20 @@ defmodule Server.WorklineTest do
     assert Channel.thread_lead(thread.id) == "menard"
   end
 
+  describe "limit_hit?/1" do
+    test "a review whose newest grade names a limit is limit-hit; a clean, missing or no grade is not" do
+      migrates = open!(%{slug: "lh-migrates", stage: "review"})
+      graded!(migrates, %{"limits" => ["a database migration"]})
+      assert Workline.limit_hit?(migrates)
+
+      clean = open!(%{slug: "lh-clean", stage: "review"})
+      graded!(clean, @low)
+      refute Workline.limit_hit?(clean)
+
+      refute Workline.limit_hit?(open!(%{slug: "lh-ungraded", stage: "review"}))
+    end
+  end
+
   describe "review staffing by grade and model (roster design §3)" do
     defp to_review(names_grades) do
       {:ok, ws} = Server.Workspaces.register(%{name: "Graded #{System.unique_integer([:positive])}"})

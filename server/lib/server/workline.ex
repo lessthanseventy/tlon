@@ -897,6 +897,23 @@ defmodule Server.Workline do
 
   defp auto_land_risk, do: Server.OperatorConfig.setting("auto_land_risk")
 
+  @doc """
+  The limits the newest risk grade since the workline entered review hit (`Grade.limits/1`): `[]`
+  when none, ungraded, or the grader failed.
+  """
+  def grade_limits(%Thread{} = thread) do
+    case grade(thread) do
+      %{"limits" => [_ | _] = limits} -> limits
+      _ -> []
+    end
+  end
+
+  @doc """
+  Whether the newest risk grade hit a limit: such a gate is the operator's alone. An ungraded
+  workline, or a failed grade, is not limit-hit.
+  """
+  def limit_hit?(%Thread{} = thread), do: grade_limits(thread) != []
+
   # the newest grade since the workline last entered review: nil if none, or the grader failed
   defp grade(thread) do
     case since_review(thread, "workline:#{thread.slug}:grade") do
