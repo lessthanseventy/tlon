@@ -23,25 +23,6 @@ defmodule Server.Bootstrap do
   # Each workspace's standing machine thread — where the operator talks to the bench.
   @standing_title "lobby"
 
-  @default %{
-    name: "Machine",
-    type: "code",
-    scope: "machine",
-    repos: [],
-    roster: [
-      %{"archetype" => "surveyor", "name" => "tertius"},
-      %{"archetype" => "builder", "name" => "hronir"},
-      %{"archetype" => "reviewer", "name" => "reviewer"},
-      %{"archetype" => "planner", "name" => "planner"},
-      %{
-        "archetype" => "librarian",
-        "name" => "quain",
-        "grade" => "senior",
-        "model" => "ollama-cloud/deepseek-v4.1-flash"
-      }
-    ]
-  }
-
   @doc """
   Seed-if-empty + repair. Returns `{:ok, default_workspace}` — the oldest workspace, which
   is the default home for adrift threads. Idempotent; an operator's workspaces and
@@ -49,7 +30,7 @@ defmodule Server.Bootstrap do
   """
   @spec ensure() :: {:ok, Workspace.t()} | {:error, Ecto.Changeset.t()}
   def ensure do
-    # the machine's declared workspaces first: when it declares any, its first is the default, never @default
+    # the machine's declared workspaces first: when it declares any, its first is the default, never default/0
     _ = Server.Seed.ensure_workspaces()
 
     with {:ok, workspace} <- default_workspace() do
@@ -111,7 +92,7 @@ defmodule Server.Bootstrap do
   defp default_workspace do
     case Repo.one(from w in Workspace, order_by: [asc: w.id], limit: 1) do
       nil ->
-        with {:ok, ws} <- Workspaces.register(@default) do
+        with {:ok, ws} <- Workspaces.register(default()) do
           _ = Server.Librarian.ensure_schedules(ws.id, "quain")
           {:ok, ws}
         end
@@ -197,4 +178,25 @@ defmodule Server.Bootstrap do
   # The workspace's git-tracked globs become the default project's repos (name defaults to the glob).
   defp workspace_repos(%Workspace{} = ws),
     do: Enum.map(Workspaces.repos(ws.id), &%{"path" => &1.path, "name" => &1.path})
+
+  defp default do
+    %{
+      name: "Machine",
+      type: "code",
+      scope: "machine",
+      repos: [],
+      roster: [
+        %{"archetype" => "surveyor", "name" => "tertius"},
+        %{"archetype" => "builder", "name" => "hronir"},
+        %{"archetype" => "reviewer", "name" => "reviewer"},
+        %{"archetype" => "planner", "name" => "planner"},
+        %{
+          "archetype" => "librarian",
+          "name" => "quain",
+          "grade" => "senior",
+          "model" => Server.OperatorConfig.oneshot_model()
+        }
+      ]
+    }
+  end
 end

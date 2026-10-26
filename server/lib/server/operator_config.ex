@@ -128,6 +128,13 @@ defmodule Server.OperatorConfig do
       doc: "a meeting's alarm goes up this long before it starts"
     },
     %{key: "banter", type: "bool", default: true, doc: "the model writing coworkers' small talk and the pets' lines"},
+    %{
+      key: "oneshot_model",
+      type: "string",
+      default: "ollama-cloud/deepseek-v4.1-flash",
+      choice: "model",
+      doc: "the provider/model every one-shot runs on: banter, titles, the judge, the oracle, the toys"
+    },
     %{key: "weather_location", type: "string", default: "", doc: "where the office's weather comes from"},
     %{
       key: "intake_every_minutes",
@@ -260,6 +267,13 @@ defmodule Server.OperatorConfig do
   @spec banter?(String.t()) :: boolean()
   def banter?(path \\ path()), do: setting("banter", path)
 
+  @doc """
+  The `provider/model` every one-shot (`Server.ModelCli.prompt/4`'s default slot) runs on — the
+  `oneshot_model` knob, one of `Server.Profiles.model_choices/0`.
+  """
+  @spec oneshot_model(String.t()) :: String.t()
+  def oneshot_model(path \\ path()), do: setting("oneshot_model", path)
+
   @doc "Every runtime knob with its current `value` (the default where the file is silent); `boot` ones take on a restart."
   @spec knobs(String.t()) :: [map()]
   def knobs(path \\ path()) do
@@ -331,6 +345,13 @@ defmodule Server.OperatorConfig do
   defp valid(_knob, nil), do: {:ok, nil}
   defp valid(%{type: "int", min: lo, max: hi}, v) when is_integer(v) and v >= lo and v <= hi, do: {:ok, v}
   defp valid(%{type: "bool"}, v) when is_boolean(v), do: {:ok, v}
+
+  defp valid(%{choice: "model"}, v) when is_binary(v) do
+    if String.trim(v) in Enum.map(Server.Profiles.model_choices(), &Server.Profiles.model_name/1),
+      do: {:ok, String.trim(v)},
+      else: :invalid
+  end
+
   defp valid(%{type: "string"}, v) when is_binary(v), do: {:ok, String.trim(v)}
   defp valid(_knob, _v), do: :invalid
 
@@ -338,6 +359,7 @@ defmodule Server.OperatorConfig do
     do: "a whole number #{lo}–#{hi}#{if k[:nullable], do: " or null (off)"}"
 
   defp expects(%{type: "bool"}), do: "true or false"
+  defp expects(%{choice: "model"}), do: "a provider/model from the model choices"
   defp expects(%{type: "string"}), do: "text"
 
   defp paused_gates(oban), do: Keyword.update(oban, :queues, [], &Enum.map(&1, fn q -> paused_gate(q) end))
