@@ -121,22 +121,15 @@ defmodule Server.SearchTest do
       assert %{shown: _} = Search.history(~s("weird -query* AND OR))
     end
 
-    test "a many-term query over a busy channel stays fast: document frequencies are counted once, not per row",
-         %{thread: thread} do
-      Repo.query!(
-        """
-        INSERT INTO message (thread_id, author, body, created_at)
-        SELECT $1, 'a', 'thread ' || g || ' review of lonnrot verify pass and some filler words', now()
-        FROM generate_series(1, 3000) g
-        """,
-        [thread.id]
-      )
+    # The shape, not the clock: a timing bound flakes on a shared box under a parallel check.
+    test "a many-term query counts document frequencies once, not per candidate row", %{thread: thread} do
+      for n <- 1..3,
+          do: {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "thread #{n} review lonnrot verify"})
 
-      {micros, %{shown: shown}} =
-        :timer.tc(fn -> Search.history("thread 242 review lonnrot verify", 10, query_embedding: [1.0, 0.0]) end)
+      {sql, params} = captured_history_query(fn -> Search.history("thread review lonnrot verify", 10) end)
+      %{rows: [[[%{"Plan" => plan}]]]} = Repo.query!("EXPLAIN (ANALYZE, FORMAT JSON) " <> sql, params)
 
-      assert length(shown) == 10
-      assert micros < 1_000_000
+      assert [%{"Actual Loops" => 1}] = plan |> plan_nodes() |> Enum.filter(&(&1["Subplan Name"] == "CTE idf"))
     end
 
     test "the meaning pass scores only the newest embedded messages, not the whole channel", %{thread: thread} do
@@ -152,23 +145,52 @@ defmodule Server.SearchTest do
       assert Enum.sort(Enum.map(shown, & &1.message_id)) == Enum.sort([mid.id, new.id])
     end
 
+    # Slow by a held lock, not a bulk seed: a seeded scan outlives its cancelled client and holds up
+    # the next test's cleanup, while a lock-waiter ends as soon as the lock is let go.
     test "a query that outruns its time answers {:error, :timeout}, never raises", %{thread: thread} do
-      Repo.query!(
-        """
-        INSERT INTO message (thread_id, author, body, created_at)
-        SELECT $1, 'a', 'ticket ' || g || ' review lonnrot verify filler words here', now()
-        FROM generate_series(1, 20000) g
-        """,
-        [thread.id]
-      )
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "ticket review"})
+      test = self()
 
-      assert {:error, :timeout} = Search.history("ticket review", 10, query_embedding: [1.0, 0.0], timeout: 1)
+      holder =
+        Task.async(fn ->
+          Repo.transaction(fn ->
+            Repo.query!("LOCK TABLE message IN ACCESS EXCLUSIVE MODE")
+            send(test, :locked)
+            receive do: (:release -> :ok)
+          end)
+        end)
+
+      assert_receive :locked
+      assert {:error, :timeout} = Search.history("ticket review", 10, timeout: 50)
+      send(holder.pid, :release)
+      Task.await(holder)
     end
 
     test "an empty/whitespace query returns nothing, not an error" do
       assert %{shown: [], more: 0} = Search.history("   ")
     end
   end
+
+  # The ranking query history/3 sent, read off the repo's telemetry so the test explains the real SQL.
+  defp captured_history_query(fun) do
+    test = self()
+    id = {__MODULE__, make_ref()}
+
+    :telemetry.attach(
+      id,
+      [:server, :repo, :query],
+      fn _, _, meta, _ -> send(test, {:sql, meta.query, meta.params}) end,
+      nil
+    )
+
+    fun.()
+    :telemetry.detach(id)
+
+    assert_received {:sql, "-- idf is MATERIALIZED" <> _ = sql, params}
+    {sql, params}
+  end
+
+  defp plan_nodes(node), do: [node | Enum.flat_map(Map.get(node, "Plans", []), &plan_nodes/1)]
 
   defp embed!(message, vector) do
     message |> Ecto.Changeset.change(embedding: vector, embedding_model: "test") |> Repo.update!()
