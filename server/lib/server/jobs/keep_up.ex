@@ -35,8 +35,11 @@ defmodule Server.Jobs.KeepUp do
   @doc false
   def keep_up(repo, run \\ &System.cmd/3) do
     if github_remote?(repo, run) do
-      reland(repo, run)
-      red_checks(repo, run)
+      conflicting = read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo, run))
+      failing = read(repo, "red PRs", Server.Workline.Publish.failing(repo, run))
+      if conflicting != :error and failing != :error, do: Server.Rollout.clear("keep_up:#{repo}")
+      reland(repo, unread(conflicting), run)
+      red_checks(repo, unread(failing), run)
       drifted(repo, Server.Workline.Publish.follow_main(repo, run))
     else
       no_remote(repo)
@@ -69,8 +72,8 @@ defmodule Server.Jobs.KeepUp do
     [why]
   end
 
-  defp reland(repo, run) do
-    for %{number: n, slug: slug} <- read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo, run)),
+  defp reland(repo, prs, run) do
+    for %{number: n, slug: slug} <- prs,
         %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
       why = "its PR ##{n} conflicts with main"
 
@@ -92,13 +95,10 @@ defmodule Server.Jobs.KeepUp do
     end
 
     Server.Rollout.note(key, text)
-    []
+    :error
   end
 
-  defp read(repo, _what, prs) do
-    Server.Rollout.clear("keep_up:#{repo}")
-    prs
-  end
+  defp read(_repo, _what, prs), do: prs
 
   @doc false
   # a landing is done when GitHub says its PR is MERGED, never at the local gate
@@ -152,15 +152,9 @@ defmodule Server.Jobs.KeepUp do
 
   @doc false
   def red_checks(repo, run \\ &System.cmd/3) do
-    for %{number: n, slug: slug} <- read(repo, "red PRs", Server.Workline.Publish.failing(repo, run)),
-        %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
-      why = "its PR ##{n}'s checks went red"
-
-      with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to fix it", run) do
-        Server.Sheriff.report(t, "#{why}, so GitHub will never merge it; the workline is back at build")
-        Server.Workline.reland(t, why, "#{why}. Fix work/#{t.slug} until its checks pass, test")
-      end
-    end
+    failing = read(repo, "red PRs", Server.Workline.Publish.failing(repo, run))
+    if failing != :error, do: Server.Rollout.clear("keep_up:#{repo}")
+    red_checks(repo, unread(failing), run)
   end
 
   @doc false
@@ -241,5 +235,20 @@ defmodule Server.Jobs.KeepUp do
       end
     end)
     |> Enum.uniq()
+  end
+
+  defp unread(:error), do: []
+  defp unread(prs), do: prs
+
+  defp red_checks(repo, prs, run) do
+    for %{number: n, slug: slug} <- prs,
+        %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
+      why = "its PR ##{n}'s checks went red"
+
+      with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to fix it", run) do
+        Server.Sheriff.report(t, "#{why}, so GitHub will never merge it; the workline is back at build")
+        Server.Workline.reland(t, why, "#{why}. Fix work/#{t.slug} until its checks pass, test")
+      end
+    end
   end
 end
