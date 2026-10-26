@@ -44,7 +44,7 @@ test("esc from a ticket or epic returns to the list it was opened from", async (
   await until("the workspace in the header", () => screen().includes("Toy"))
   keys("t")
   await until("the tickets column", () => screen().includes("TICKETS ·"))
-  keys("Enter")
+  keys("Space")
   await until("the epic", () => screen().includes("EPIC #10"))
   keys("Down", "Down", "Down", "Enter")
   await until("the child ticket", () => screen().includes("TICKET #11"))
