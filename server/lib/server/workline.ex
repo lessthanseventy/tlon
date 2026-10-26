@@ -1448,7 +1448,7 @@ defmodule Server.Workline do
   # spawned (the builder kept the leaf and did verify's job; the reviewer's brief went nowhere).
   # The brief that follows spawns the new lead, as `Server.Staffing.hand_off/2` does.
   defp close_leaf(%Thread{workspace_id: ws} = thread) when not is_nil(ws) do
-    with %{index: index} <- ws |> Server.Tmux.list_windows() |> Server.Tmux.leaf_tab(thread.id),
+    with %{index: index} <- Server.Staffing.leaf_window(thread, "close_leaf"),
          do: Server.Tmux.kill_window(ws, index)
   end
 

@@ -444,8 +444,8 @@ defmodule Server.StaffingTest do
       review = ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
       build = ws |> staffed_thread("borges") |> at_stage("build") |> parked!()
 
-      refute Staffing.seat_for?(build)
-      assert Staffing.seat_for?(review)
+      refute Staffing.seat_for?(build, [])
+      assert Staffing.seat_for?(review, [])
     end
   end
 
@@ -631,5 +631,21 @@ defmodule Server.StaffingTest do
     refute Server.Repo.get!(Server.Session, idle.id).ended_at
     assert length(Channel.thread_messages(thread)) == before
     refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
+  end
+
+  test "roll_leaf with a tmux that errors logs a warning naming the thread and ends no session", %{ws: ws} do
+    thread = staffed_thread(ws, "borges")
+    live = session!("borges", thread.id, 30)
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      send(self(), {:tmux, args})
+      if "list-windows" in args, do: {"protocol version mismatch", 1}, else: {"", 0}
+    end)
+
+    log = capture_log(fn -> assert :ok = Staffing.roll_leaf(thread) end)
+
+    assert log =~ "thread #{thread.id}" and log =~ "skipped: tmux protocol version mismatch"
+    refute Server.Repo.get!(Server.Session, live.id).ended_at
+    refute_received {:tmux, ["-L", _, "kill-window" | _]}
   end
 end

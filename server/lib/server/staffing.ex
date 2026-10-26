@@ -207,8 +207,7 @@ defmodule Server.Staffing do
   Whether a seat that comes free may go to `thread`: no thread nearer to done is parked waiting
   for it. The arbiter asks before it spawns under the cap.
   """
-  def seat_for?(%Thread{workspace_id: ws} = thread, tabs \\ nil) do
-    tabs = tabs || Tmux.list_windows(ws)
+  def seat_for?(%Thread{workspace_id: ws} = thread, tabs) do
     mine = priority(thread)
     not Enum.any?(parked(ws, tabs), &(&1.id != thread.id and priority(&1) < mine))
   end
@@ -327,7 +326,7 @@ defmodule Server.Staffing do
   """
   def hand_off(thread_id, handle, author \\ Server.OperatorConfig.operator()) do
     with {:ok, thread} <- Channel.assign_lead(thread_id, handle) do
-      with %{index: index} <- thread.workspace_id |> Tmux.list_windows() |> Tmux.leaf_tab(thread.id),
+      with %{index: index} <- leaf_window(thread, "hand_off"),
            do: Tmux.kill_window(thread.workspace_id, index)
 
       body = "Handing this to @#{handle}: pick it up from the brief."
@@ -341,14 +340,30 @@ defmodule Server.Staffing do
   wake spawns a fresh, brief-seeded session there. The lead's other threads are untouched. `:ok`.
   """
   def roll_leaf(%Thread{} = thread) do
-    Staff.end_thread_sessions(thread.id)
+    # a tmux fault is not "no window": ending the sessions with the old window alive would strand it
+    case leaf_window(thread, "roll_leaf") do
+      {:error, _} ->
+        :ok
 
-    with %{index: index} = tab <- thread.workspace_id |> Tmux.list_windows() |> Tmux.leaf_tab(thread.id) do
-      Tmux.kill_window(thread.workspace_id, index)
-      if tab.agent, do: record_retired(thread.id, tab.agent, "two turns ended without the stage's artifact")
+      tab ->
+        Staff.end_thread_sessions(thread.id)
+        close_rolled(thread, tab)
     end
+  end
 
-    :ok
+  @doc """
+  The window `thread`'s leaf holds, `nil` when it has none, `{:error, why}` when tmux can't say —
+  logged as `what` skipped, so a fault is never read as an absent window.
+  """
+  def leaf_window(%Thread{} = thread, what) do
+    case Tmux.list_windows(thread.workspace_id) do
+      {:error, why} ->
+        Logger.warning("#{what} thread #{thread.id} skipped: tmux #{why}")
+        {:error, why}
+
+      tabs ->
+        Tmux.leaf_tab(tabs, thread.id)
+    end
   end
 
   @doc """
@@ -392,24 +407,29 @@ defmodule Server.Staffing do
   The next message addressed to them spawns a fresh, brief-seeded session. `:ok`.
   """
   def clear_context(workspace_id, agent) do
-    ids = from(t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
+    case Tmux.list_windows(workspace_id) do
+      {:error, why} ->
+        # ending the sessions with their windows still alive would strand them
+        Logger.warning("clear_context #{workspace_id} #{agent} skipped: tmux #{why}")
 
-    from(s in Session,
-      join: a in Agent,
-      on: a.id == s.agent_id,
-      where: a.name == ^agent and is_nil(s.ended_at) and s.thread_id in subquery(ids)
-    )
-    |> Repo.all()
-    |> Enum.each(&Staff.end_session/1)
+      tabs ->
+        ids = from(t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
 
-    seats = MapSet.new([agent])
-    standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
+        from(s in Session,
+          join: a in Agent,
+          on: a.id == s.agent_id,
+          where: a.name == ^agent and is_nil(s.ended_at) and s.thread_id in subquery(ids)
+        )
+        |> Repo.all()
+        |> Enum.each(&Staff.end_session/1)
 
-    tabs = with {:error, _} <- Tmux.list_windows(workspace_id), do: []
+        seats = MapSet.new([agent])
+        standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
 
-    for tab <- tabs,
-        match?({_, ^agent}, owner(tab, standing, seats)),
-        do: Tmux.kill_window(workspace_id, tab.index)
+        for tab <- tabs,
+            match?({_, ^agent}, owner(tab, standing, seats)),
+            do: Tmux.kill_window(workspace_id, tab.index)
+    end
 
     :ok
   end
@@ -771,4 +791,12 @@ defmodule Server.Staffing do
         end)
     end
   end
+
+  defp close_rolled(thread, %{index: index} = tab) do
+    Tmux.kill_window(thread.workspace_id, index)
+    if tab.agent, do: record_retired(thread.id, tab.agent, "two turns ended without the stage's artifact")
+    :ok
+  end
+
+  defp close_rolled(_thread, nil), do: :ok
 end

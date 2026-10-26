@@ -122,6 +122,17 @@ defmodule Server.WorkspacesTest do
       assert Server.Projects.get(own.id).workspace_id == keep.id
     end
 
+    test "the office's held-windows key for the removed workspace is erased" do
+      {:ok, _keep} = Workspaces.register(%{name: "keep"})
+      {:ok, doomed} = Workspaces.register(%{name: "doomed"})
+      key = {Server.Office, :windows, doomed.id}
+      :persistent_term.put(key, {[], 0})
+
+      {:ok, _} = Workspaces.remove(doomed)
+
+      assert :persistent_term.get(key, :gone) == :gone
+    end
+
     test "the last workspace is refused — threads must always have a home" do
       {:ok, only} = Workspaces.register(%{name: "only"})
 
