@@ -47,10 +47,14 @@ defmodule Server.Jobs.KeepUp do
     e -> fault("keep_up #{repo}: #{Exception.message(e)}")
   end
 
-  # a repo with no origin has no GitHub to keep up with: not a fault, so no rollout item. Said once
-  # in the log, not every pass, which is what a repo nobody can act on would otherwise fill it with.
+  # a repo whose origin is not on GitHub (none, GitLab, a bare path) has no GitHub to keep up with:
+  # not a fault, so no rollout item. Said once in the log, not every pass, which is what a repo
+  # nobody can act on would otherwise fill it with.
   defp github_remote?(repo, run) do
-    match?({_, 0}, run.("git", ["-C", repo, "remote", "get-url", "origin"], stderr_to_stdout: true))
+    case run.("git", ["-C", repo, "remote", "get-url", "origin"], stderr_to_stdout: true) do
+      {url, 0} -> url =~ ~r{^(https?://|ssh://)?(git@)?github\.com[/:]}
+      _ -> false
+    end
   end
 
   defp no_remote(repo) do
