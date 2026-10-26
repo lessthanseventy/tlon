@@ -42,6 +42,49 @@ defmodule Server.PRLanding do
   end
 
   @doc """
+  `scripts/land.sh`'s preflight, run here so a sandboxed seat reaches the queue over MCP (`land_pr`)
+  rather than epmd: GitHub says what PR `pr` is, and one closed, not onto main, from a fork, from main
+  or a protected branch is refused; else `queue/4` by its branch. `opts`: `:run` (gh).
+  """
+  def request(repo, pr, opts \\ []) do
+    run = Keyword.get(opts, :run, &System.cmd/3)
+
+    with {:ok, info} <- view(repo, pr, run),
+         :ok <- landable(info),
+         :ok <- unprotected(repo, info["headRefName"], run) do
+      queue(repo, pr, info["headRefName"], get_in(info, ["author", "login"]))
+    end
+  end
+
+  defp view(repo, pr, run) do
+    fields = "headRefName,baseRefName,state,isCrossRepository,author"
+
+    with {out, 0} <- run.("gh", ["pr", "view", to_string(pr), "--json", fields], cd: repo, stderr_to_stdout: true),
+         {:ok, %{"headRefName" => _} = info} <- Jason.decode(out) do
+      {:ok, info}
+    else
+      _ -> {:error, "gh could not read the PR"}
+    end
+  end
+
+  defp landable(%{"state" => state}) when state != "OPEN", do: {:error, "it is #{state}, not open"}
+  defp landable(%{"baseRefName" => base}) when base != "main", do: {:error, "it targets #{base}, not main"}
+  defp landable(%{"isCrossRepository" => true}), do: {:error, "its branch is on a fork — the merge queue can't push it"}
+  defp landable(%{"headRefName" => "main"}), do: {:error, "its branch is main — refused"}
+  defp landable(_), do: :ok
+
+  defp unprotected(repo, branch, run) do
+    args = ["api", "repos/{owner}/{repo}/branches/#{branch}", "--jq", ".protected"]
+    {out, code} = run.("gh", args, cd: repo, stderr_to_stdout: true)
+
+    case {code, String.trim(out)} do
+      {0, "false"} -> :ok
+      {0, "true"} -> {:error, "its branch #{branch} is protected — refused"}
+      {_, said} -> {:error, "can't tell whether its branch #{branch} is protected (gh said: #{said}) — refused"}
+    end
+  end
+
+  @doc """
   The merge queue's turn for a PR (`Server.Jobs.Land`'s args `%{"pr", "branch", "pr_author", "on_thread"}`).
   `opts`: `:repo` (default the tlon checkout), `:gate` (`fn repo, ref -> {:ok, _} | {:error, why} end`),
   `:run` (gh), `:last` (the queue's last attempt: a gate cut off is said then, else only retried).
