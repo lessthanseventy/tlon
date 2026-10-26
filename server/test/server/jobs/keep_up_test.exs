@@ -263,5 +263,25 @@ defmodule Server.Jobs.KeepUpTest do
 
       assert [_one] = notes("/r/unresolvable")
     end
+
+    test "a failed read is not cleared by the other read succeeding" do
+      run = fn
+        "git", ["-C", _, "remote", "get-url", "origin"], _ ->
+          {"https://github.com/acme/app.git\n", 0}
+
+        "git", ["-C", _, "symbolic-ref" | _], _ ->
+          {"feature\n", 0}
+
+        "gh", ["pr", "list" | _] = args, _ ->
+          if Enum.any?(args, &(&1 =~ "mergeStateStatus")), do: {"gh: HTTP 502", 1}, else: {"[]", 0}
+
+        _, _, _ ->
+          {"", 0}
+      end
+
+      KeepUp.keep_up("/r/half", run)
+
+      assert [_one] = notes("/r/half")
+    end
   end
 end
