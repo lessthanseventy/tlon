@@ -155,6 +155,7 @@ defmodule Server.MCP.ServerTest do
                "get_notes",
                "push_branch",
                "review_branch",
+               "land_pr",
                "operator_inbox",
                # Uqbar's, refused to every other seat
                "settle_need",

@@ -27,7 +27,8 @@ control loop, not two, and no second way to run anything:
   tlon (`review_branch`) approves its head, or that head rebased onto main with the same patches; its turn
   rebases it onto origin/main, gates it, pushes it with lease, comments the review on the PR, posts
   `tlon/check` and merges at exactly that head (`gh pr merge --rebase --match-head-commit`). The outcome is
-  posted on the review's thread. The service must be up.
+  posted on the review's thread. The service must be up. A sandboxed seat (no epmd) calls the `land_pr(pr)`
+  MCP tool instead: the same preflight and queue, over MCP.
 - `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
 - `mise run server:release` / `server:restart` / `server:stop` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to rebuild/stop/inspect/watch it (`server:stop` takes the coworker panes down with it, mid-turn ones too: emergencies only).
 - `mise run release:cut` / `release:status` — what the service runs is the **release pointer** (`refs/heads/live`, built in `.release/`), not main: a merge ships when a cut moves the pointer (fast-forward, merged work only; `-- --rollback` to go back). The cut is how new code runs: the restart waits for quiet, and panes whose launch changed roll themselves between turns. `scripts/release.sh`. `release:status` also reads whether main is releasable (`Server.Release.Candidate`: `check:main` and `release:smoke` passed on exactly that commit — each run ends `ran-on: <check> <sha>`, which a scheduled run records — and nothing mid-flight). The `pm` coworker proposes cuts (`Server.Release.PM`): under `auto_land_risk` it cuts them itself, else they reach you as one gate on the root thread.

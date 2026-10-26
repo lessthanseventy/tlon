@@ -33,3 +33,31 @@ defmodule Server.MCP.Tool.ReviewBranch do
     end
   end
 end
+
+defmodule Server.MCP.Tool.LandPR do
+  @moduledoc """
+  Hand a reviewed PR to the merge queue (`Server.PRLanding.request/3`) over MCP: what `mise run land --
+  <pr>` does, for a seat whose sandbox can't reach the service's epmd. Refused unless the PR is open
+  onto main from its own unprotected branch and that branch's review on tlon (`review_branch`, by
+  neither the PR's author nor a builder of it) approves its head. The outcome posts on the review's thread.
+  """
+  use Server.MCP.Tool
+
+  schema do
+    field :pr, :integer, required: true, description: "The GitHub PR number to land"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    case Server.PRLanding.request(Server.Profiles.tlon_root(), params[:pr]) do
+      {:ok, _job} ->
+        ok(frame, %{"queued" => params[:pr], "next" => "its outcome is posted on its review's thread"})
+
+      {:error, why} when is_binary(why) ->
+        fail(frame, "refused: #{why}")
+
+      {:error, why} ->
+        fail(frame, "not queued: #{inspect(why)}")
+    end
+  end
+end
