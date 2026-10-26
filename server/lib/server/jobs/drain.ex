@@ -5,12 +5,14 @@ defmodule Server.Jobs.Drain do
   only on boot before; on Oban's cron it runs every minute, so a message posted while its
   recipient was cold is delivered the moment a session appears — and a wake its addressee never
   acted on (`Server.Switchboard.redeliver_unheard/1`) is offered again. Idempotent — `drain/0` claims
-  atomically, so a concurrent live delivery can never double-poke.
+  atomically, so a concurrent live delivery can never double-poke. The same pass pages Uqbar for
+  needs newly in its group (`Server.Office.NeedsPage`).
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 30]
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
+    _ = Server.Office.NeedsPage.run()
     _ = Server.Wake.report_overdue()
     _ = Server.Switchboard.redeliver_unheard()
     _ = Server.Switchboard.drain()
