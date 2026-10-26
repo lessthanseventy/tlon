@@ -35,7 +35,8 @@ branch count as affected, with no main run (recorded `baseline: "absent"`).
 ### 3. The A/B
 In `scripts/workline-verify.sh`, after the existing gate is green (and before `advance`), for each affected
 role (cap below): `mise run bench:roles -- --suite canary --role R --out FILE` once in `$fresh`
-(branch, rebased — the throwaway checkout) and once in `$root` (main). New `--out FILE` on
+(branch, rebased — the throwaway checkout) and once in a throwaway worktree of origin/main beside it
+(never `$root`: the root checkout holds whatever branch the operator has out). New `--out FILE` on
 `server.bench_roles` writes the run records as JSON and does **not** touch `bench/roles/results/` or the
 README (a throwaway checkout's would vanish; main's would be dirtied). Same model both sides
 (`--model` unset: the routed one). Canary tasks only — the full suite is never invoked from verify.
@@ -53,7 +54,8 @@ green. A bench that errors (harness down, quota) records `status: "error"` and d
 - at most **3 roles** (alphabetical; extras listed `status: "skipped: over cap"` in the row),
 - canary tier only (`Roles.tiers("canary")`), so ≤ 2–3 tasks × 2 sides × 3 roles,
 - per-task timeout stays the runner's (`timeout_s/1`: 300 s, builder 900, senior 1800), and the
-  whole bench step has a **15 min** wall clamp (`timeout 900`),
+  whole bench step has a **15 min** wall the task itself keeps (`Server.Bench.Contrast`), each side
+  run as its own process group and the group killed at the wall, so nothing it spawned outlives it,
 - a re-verify of an unchanged branch+main commit pair reuses the recorded row (no re-run).
 Expected cost: cents per role-pair (hronir's measure); the cap, not a dollar meter, is the ceiling.
 
