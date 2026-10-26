@@ -3,6 +3,7 @@
 # on main, never on whatever this checkout has checked out. The nightly schedule runs it.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$root/scripts/lib/record-ran.sh"
 "$root/scripts/git-fetch-origin.sh" "$root" main || { echo "check-main: fetch failed"; exit 1; }
 # The checkout lives in the verify cache, as workline-verify's do, never in TMPDIR: /tmp is every
 # seat's write root, and the suite's hundreds of seeded git repos there cost every seat bwrap
@@ -50,4 +51,6 @@ fi
 # last, past any failure output: the nightly's run records it (Server.ScheduleRun), so "the gate
 # passed on X" is a lookup
 echo "ran-on: gate $sha"
+# a run by hand has no schedule to record it: report it, or release:status never sees it (record_ran: lib/record-ran.sh)
+record_ran gate "$sha" "$code"
 exit "$code"

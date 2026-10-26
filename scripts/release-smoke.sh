@@ -9,7 +9,7 @@
 # TLON_SMOKE_PORT and TLON_SMOKE_DATABASE name the scratch ones (default: a port picked from the pid,
 # and a database named after it, so concurrent smokes never share either); the service's
 # 4040 and `tlon` are refused. TLON_SMOKE_URL smokes a server already up there instead: nothing is
-# built, started or recorded. A run ends `ran-on: smoke <sha>`, which a scheduled run records.
+# built, started or recorded. A run ends `ran-on: smoke <sha>` and reports it to the service (lib/record-ran.sh), so a hand run counts for release:status too.
 # TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped, or
 # until TLON_SMOKE_HOLD_TTL seconds pass (default 7200): a forgotten hold would hold its port and
 # database for good. TLON_SMOKE_FLAGS and TLON_SMOKE_FIXTURES (space-separated names) turn flags on
@@ -19,6 +19,7 @@
 # own, blind to the port a hold serves on.
 set -uo pipefail
 . "$(dirname "$0")/lib/fresh-script.sh"
+. "$(dirname "$0")/lib/record-ran.sh"
 refuse_stale_script "$0"
 
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
@@ -234,7 +235,10 @@ fi
 
 ok=1
 echo "smoke passed${sha:+ on ${sha:0:7}}"
-[ -n "$sha" ] && echo "ran-on: smoke $sha"
+if [ -n "$sha" ]; then
+  echo "ran-on: smoke $sha"
+  record_ran smoke "$sha" 0
+fi
 if [ -n "$hold" ] && [ -n "$node" ]; then
   echo "smoke: holding $url up (dir $office) — TLON_URL=$url mise run office:drive -- <keys>; stop this to tear it down"
   trap 'exit 0' TERM INT

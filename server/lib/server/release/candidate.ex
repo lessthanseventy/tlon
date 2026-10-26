@@ -7,7 +7,7 @@ defmodule Server.Release.Candidate do
     * `smoke` — the same for `release:smoke`;
     * `quiet` — nothing is mid-flight (`Server.Rollout.busy/0`).
 
-  A run names its commit itself (`ran-on: <check> <sha>`, `Server.ScheduleRun`), so a nightly that
+  A run names its commit itself (`ran-on: <check> <sha>`, `Server.ScheduleRun`; a hand run reports it through `record/3`), so a nightly that
   ran on another commit is no evidence for this one. §4's check 3, a track half-shipped where you'd
   see it, is the PM's judgment and not here.
   """
