@@ -78,4 +78,22 @@ defmodule Server.Release.CandidateTest do
     assert Enum.any?(lines, &(&1 =~ ~r/^smoke .*✗/))
     assert List.last(lines) == "releasable: no"
   end
+
+  test "a hand run reported with no schedule counts as the gate and smoke on its commit" do
+    assert {:ok, %{status: "ok"}} = Candidate.record("gate", @a, 0)
+    assert {:ok, %{status: "ok"}} = Candidate.record("smoke", @a, 0)
+    assert Candidate.releasable?(@a, quiet())
+  end
+
+  test "a hand run that exited non-zero is a failed run, and the newest decides" do
+    {:ok, _} = Candidate.record("gate", @a, 0)
+    assert {:ok, %{status: "failed", exit: 2}} = Candidate.record("gate", @a, 2)
+    assert %{gate: %{ok: false, why: why}} = by_check(Candidate.check(@a, quiet()))
+    assert why =~ "failed"
+  end
+
+  test "record refuses a check it doesn't know and a sha that is not a full commit id" do
+    assert {:error, :bad_check} = Candidate.record("lint", @a, 0)
+    assert {:error, :bad_sha} = Candidate.record("gate", "abc123", 0)
+  end
 end

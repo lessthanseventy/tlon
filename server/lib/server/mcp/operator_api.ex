@@ -125,6 +125,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/issues/:id/fix          a ticket filed from it, owning it, routed → Dossier.fix_issue
       POST   /api/habits/:id/approve      Server.approve_habit (…/reject: Server.reject_habit)
 
+      POST   /api/release/ran            {"check": "gate"|"smoke", "sha", "exit"} → Candidate.record: a hand run, what release:status reads; 201
       POST   /api/schedules               {"workspace_id", "kind": "agent"|"workline"|"script", "body",
                                           "cron" | "at", "title"?, "agent"?, "standing"?, "dir"?}
                                           → Schedules.create; 201
@@ -378,6 +379,16 @@ defmodule Server.MCP.OperatorAPI do
     do: with_thread(conn, id, &json(conn, 200, Office.thread_view(&1, int_param(conn, "before"))))
 
   defp route(conn, "GET", "settings", []), do: json(conn, 200, settings())
+
+  # a gate or smoke run by hand reports its `ran-on` result: what `release:status` reads
+  defp route(conn, "POST", "release", ["ran"]) do
+    {b, conn} = body(conn)
+
+    case Server.Release.Candidate.record(b["check"], b["sha"], b["exit"]) do
+      {:ok, run} -> json(conn, 201, %{id: run.id, status: run.status})
+      {:error, why} -> json(conn, 422, %{error: "expected {check: gate|smoke, sha: <40 hex>, exit: int}: #{why}"})
+    end
+  end
 
   defp route(conn, "POST", "restart", []) do
     {b, conn} = body(conn)

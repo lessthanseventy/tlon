@@ -26,6 +26,37 @@ defmodule Server.Release.Candidate do
     [ran(:gate, "check:main", sha), ran(:smoke, "release:smoke", sha), quiet(busy.())]
   end
 
+  @doc """
+  Records a hand-run `check` (`"gate"` or `"smoke"`) that exited `code` on the commit `sha`, with no
+  schedule behind it: the run `release:status` reads, as the nightly's is. `check-main.sh` and
+  `release-smoke.sh` report theirs here when they end.
+  """
+  @spec record(term(), term(), term()) :: {:ok, %ScheduleRun{}} | {:error, :bad_check | :bad_sha | :bad_exit}
+  def record(check, sha, code) do
+    cond do
+      check not in ~w(gate smoke) ->
+        {:error, :bad_check}
+
+      not (is_binary(sha) and sha =~ ~r/\A[0-9a-f]{40}\z/) ->
+        {:error, :bad_sha}
+
+      not is_integer(code) ->
+        {:error, :bad_exit}
+
+      true ->
+        now = DateTime.truncate(DateTime.utc_now(), :second)
+
+        Repo.insert(%ScheduleRun{
+          status: if(code == 0, do: "ok", else: "failed"),
+          exit: code,
+          check_name: check,
+          sha: sha,
+          started_at: now,
+          finished_at: now
+        })
+    end
+  end
+
   @doc "Whether every check on `sha` passes."
   @spec releasable?(String.t(), keyword()) :: boolean()
   def releasable?(sha, opts \\ []), do: Enum.all?(check(sha, opts), & &1.ok)
