@@ -92,8 +92,15 @@ defmodule Server.Release.Candidate do
     end
   end
 
-  defp newest(q),
-    do: Repo.one(from r in q, where: not is_nil(r.finished_at), order_by: [desc: r.finished_at, desc: r.id], limit: 1)
+  # an interrupted run is no verdict: the next run is
+  defp newest(q) do
+    Repo.one(
+      from r in q,
+        where: not is_nil(r.finished_at) and r.status != "interrupted",
+        order_by: [desc: r.finished_at, desc: r.id],
+        limit: 1
+    )
+  end
 
   defp quiet([]), do: %{check: :quiet, ok: true, why: "nothing mid-flight"}
   defp quiet(busy), do: %{check: :quiet, ok: false, why: Enum.join(busy, "; ")}

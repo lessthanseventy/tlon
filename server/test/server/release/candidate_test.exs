@@ -53,6 +53,22 @@ defmodule Server.Release.CandidateTest do
     refute Candidate.releasable?(@b, quiet())
   end
 
+  test "an interrupted run is no verdict: the sha reads as no gate yet, not red", %{s: s} do
+    ran!(s, "gate", @a, "interrupted")
+    ran!(s, "smoke", @a, "ok")
+
+    assert %{gate: %{ok: false, why: why}} = by_check(Candidate.check(@a, quiet()))
+    assert why =~ "no check:main on aaaaaaa"
+    refute why =~ "interrupted"
+  end
+
+  test "an interrupted run does not unseat an earlier pass on the same commit", %{s: s} do
+    ran!(s, "gate", @a, "ok")
+    ran!(s, "gate", @a, "interrupted")
+
+    assert %{gate: %{ok: true}} = by_check(Candidate.check(@a, quiet()))
+  end
+
   test "the newest finished run on the commit decides", %{s: s} do
     ran!(s, "gate", @a, "ok")
     ran!(s, "gate", @a, "failed")
