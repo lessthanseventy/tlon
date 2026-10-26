@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Server.BenchRoles do
-  @shortdoc "Run the per-role bench — --suite canary|full [--role R]… [--model provider/model[:effort]]"
+  @shortdoc "Run the per-role bench — --suite canary|full [--role R]… [--model provider/model[:effort]] [--out FILE] | --fingerprint"
   @moduledoc """
   #{@shortdoc}.
 
@@ -11,6 +11,11 @@ defmodule Mix.Tasks.Server.BenchRoles do
 
   `--oracle` grades the real solution instead of a model, on every task sourced from a commit: it
   proves each fixture green on the reference, spends nothing, and writes no results.
+
+  `--out FILE` writes the run's records to FILE as JSON instead — `bench/roles/results/` and the README
+  are left alone — so a checkout that will be thrown away (verify's) or must stay clean (main's) can be
+  benched. `--fingerprint` runs nothing: it prints `role => sha256(system prompt)` for every role (to
+  `--out FILE` when given), the hash a steering edit moves (`Server.Bench.Roles.fingerprint/1`).
   """
   use Mix.Task
   use Boundary, classify_to: Server
@@ -19,13 +24,27 @@ defmodule Mix.Tasks.Server.BenchRoles do
 
   @impl Mix.Task
   def run(argv) do
-    {opts, _rest} = OptionParser.parse!(argv, strict: [suite: :string, role: :keep, model: :string, oracle: :boolean])
+    {opts, _rest} =
+      OptionParser.parse!(argv,
+        strict: [suite: :string, role: :keep, model: :string, oracle: :boolean, fingerprint: :boolean, out: :string]
+      )
+
     suite = suite!(opts[:suite] || "canary")
     roles = roles!(Keyword.get_values(opts, :role))
     model = opts[:model] && model!(opts[:model])
     Logger.configure(level: :warning)
 
-    if opts[:oracle], do: oracle!(suite, roles), else: run(suite, roles, model)
+    cond do
+      opts[:fingerprint] -> fingerprint!(opts[:out])
+      opts[:oracle] -> oracle!(suite, roles)
+      true -> run(suite, roles, model, opts[:out])
+    end
+  end
+
+  defp fingerprint!(out) do
+    Mix.Task.run("app.config")
+    fp = Roles.fingerprint(&Roles.Runner.profile(&1, nil))
+    if out, do: File.write!(out, JSON.encode!(fp)), else: Mix.shell().info(JSON.encode!(fp))
   end
 
   defp oracle!(suite, roles) do
@@ -40,10 +59,10 @@ defmodule Mix.Tasks.Server.BenchRoles do
     if graded == [] or !Enum.all?(graded), do: Mix.raise("oracle: reference solution not green on every sourced task")
   end
 
-  defp run(suite, roles, model) do
+  defp run(suite, roles, model, out) do
     Mix.Task.run("app.config")
 
-    for r <- Roles.Runner.run(suite, roles, model: model) do
+    for r <- Roles.Runner.run(suite, roles, model: model, out: out) do
       tiers = Enum.map_join(r.tiers, " ", fn {tier, t} -> "#{tier} #{t.passed}/#{t.total}" end)
       Mix.shell().info("#{r.role} #{r.model}: #{tiers} · #{r.wall_s}s · #{r.usage.input}/#{r.usage.output} tokens")
     end

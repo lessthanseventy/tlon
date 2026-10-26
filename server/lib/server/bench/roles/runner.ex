@@ -21,7 +21,8 @@ defmodule Server.Bench.Roles.Runner do
 
   @doc """
   Run `suite` for `roles` (role names), each on its routed model or `opts[:model]` (a model map).
-  Returns the records written. `opts[:judge]` swaps the judge, `opts[:dir]` the bench dir.
+  Returns the records written. `opts[:judge]` swaps the judge, `opts[:dir]` the bench dir, `opts[:out]`
+  a file the records go to instead of the results dir and README (`persist/3`).
   """
   def run(suite, roles, opts \\ []) do
     dir = opts[:dir] || Path.join(Profiles.tlon_root(), "bench/roles")
@@ -56,10 +57,17 @@ defmodule Server.Bench.Roles.Runner do
         )
       end
 
-    Roles.append!(Path.join([dir, "results", "#{Date.utc_today()}.json"]), records)
-    File.write!(Path.join(dir, "README.md"), dir |> Path.join("results") |> Roles.history() |> Roles.readme())
+    persist(records, dir, opts[:out])
     records
   end
+
+  @doc "Where a run's records go: `out` when given (nothing else touched), else the day's results file and the README."
+  def persist(records, dir, nil) do
+    Roles.append!(Path.join([dir, "results", "#{Date.utc_today()}.json"]), records)
+    File.write!(Path.join(dir, "README.md"), dir |> Path.join("results") |> Roles.history() |> Roles.readme())
+  end
+
+  def persist(records, _dir, out), do: Roles.append!(out, records)
 
   @doc "The profile a coworker of `role` would run as, on `override` when given."
   def profile(role, override) do
