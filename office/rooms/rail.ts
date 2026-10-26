@@ -6,7 +6,7 @@
 import type { Frame, Measure } from "../kit/canvas"
 import { drawActors, drawCat, drawParty, isPicked, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, execDesk } from "../kit/furniture"
-import { boardColumns, isManager, needsYou, peopleOf, seating, STATE_GLYPH, tipOf, type Act } from "../kit/crew"
+import { boardColumns, isManager, needsYou, peopleOf, seating, STATE_GLYPH, stickyItems, tipOf, type Act } from "../kit/crew"
 import { ROLE, tint } from "../kit/palette"
 import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
 import { BIG_PLANT, COFFEE, COOLER, SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -167,7 +167,7 @@ export class RailRoom extends Sim<Layout> {
     type Sticky = { tip: string; act: Act; colour: string; mark?: string; blink?: boolean }
     // a header opens the column it is named for
     const folded = boardColumns(a, focus.board)
-    const cols: Sticky[][] = folded.map((col) => col.items.map((it): Sticky => {
+    const cols: Sticky[][] = folded.map((col, c) => c === 0 ? stickyItems(a).map((s): Sticky => ({ tip: s.text, act: s.act, colour: ROLE.prose })) : col.items.map((it): Sticky => {
       if (it.act.kind === "ticket")
         return { tip: `ticket #${it.act.id} ${it.title}\n${it.routed ? "with the manager to staff" : "click: send to the manager, or click a coworker to hand it over"}`, act: it.act, colour: it.routed ? ROLE.meta : ROLE.prose, mark: it.high ? ROLE.alarm : undefined, blink: it.act.id === focus.armed }
       const id = it.act.kind === "thread" ? it.act.tid : 0
@@ -177,7 +177,7 @@ export class RailRoom extends Sim<Layout> {
     cols.forEach((list, c) => {
       const x0 = 5 + c * COL_W
       if (c) px(x0 - 2, 4, 1, 25, ROLE.edge)
-      text(`${folded[c]!.name} ${list.length}`, x0 + 9, 10, ROLE.key, 10)
+      text(`${folded[c]!.name} ${folded[c]!.items.length}`, x0 + 9, 10, ROLE.key, 10)
       // the header opens the column as a list, where the titles have room
       hits.push({ x: x0 - 1, y: 3, w: COL_W, h: 8, tip: `${folded[c]!.name.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
       const shown = c === 0 ? [...list.slice(0, PER_COL - 1), null] : list.slice(0, PER_COL)

@@ -243,6 +243,17 @@ export function treeRows(a: Agents, open: Set<number>, order: <T extends { id: n
   return out
 }
 
+/** the whiteboard's TICKETS sticky: a line per top-level group (an initiative's progress summed), then the loose tickets */
+export function stickyItems(a: Agents): { text: string; act: Act }[] {
+  const top = (a.tickets as Ticket[]).filter((t) => t.epic_id == null)
+  const lines = top.filter(isGroup).map((g) => {
+    const p = progressOf(a, g)
+    return { text: g.kind === "initiative" ? `${g.title} ${p.done}/${p.total}` : groupTitle(a, g), act: { kind: "epic", id: g.id } as Act }
+  })
+  const loose = top.filter((t) => !isGroup(t)).length
+  return loose ? [...lines, { text: `${loose} loose`, act: { kind: "column", col: 0 } }] : lines
+}
+
 /** the whiteboard's columns — a board draws them as stickies, a column card as rows */
 export function boardColumns(a: Agents, ctx: BoardCtx = {}): { name: string; items: BoardItem[] }[] {
   const cols: BoardItem[][] = COLS.map(() => [])
