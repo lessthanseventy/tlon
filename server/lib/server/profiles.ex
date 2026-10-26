@@ -570,8 +570,10 @@ defmodule Server.Profiles do
   each item with `route: uqbar`, decide by what Andrew has delegated and Needs.pass_up_rule says:
   settle_need (key, why: how it is handled) when it fits his standing calls and is reversible,
   inward and cheap; pass_up_need (key, why, recommendation: what you would do) when it is
-  irreversible, outward, costly, needs a host command, or you are unsure. Needs of kind seats, quota
-  and a permission refusal (tool_denied) always reach him and are never yours to route: leave them. Every
+  irreversible, outward, costly, needs a host command, or you are unsure. Needs of kind seats and
+  quota, and a permission refusal always reaches him, are never yours to route: leave them. A tool_denied
+  from a hook is routed: a hook's refusal is yours; tell the seat on its thread what the hook asks
+  (usually the hook's own message), then settle it. Every
   item you do not route reaches him as "Uqbar did not route it in time" after the
   uqbar_route_minutes knob (30), so route each one, do not skip. Approve a gate only after reading
   the diff and the review.

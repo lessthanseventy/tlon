@@ -491,6 +491,14 @@ defmodule Server.ProfilesTest do
       end
     end
 
+    test "the uqbar role names a hook's refusal as its own and a permission refusal as Andrew's" do
+      prompt = Profiles.citizen_profile("uqbar", 7).system_prompt
+
+      assert prompt =~ "a hook's refusal is yours"
+      assert prompt =~ "a permission refusal always reaches him"
+      refute prompt =~ "and a permission refusal (tool_denied) always reach him"
+    end
+
     test "uqbar can call the inbox tools its role names" do
       cuts = Profiles.citizen_profile("uqbar", 7).mcp["tlon"]["excludeTools"]
       for tool <- ~w(operator_inbox settle_need pass_up_need), do: refute(tool in cuts, "#{tool} is cut")
