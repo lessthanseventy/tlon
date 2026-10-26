@@ -61,7 +61,11 @@ export const PARTS: Record<string, Part> = {
 
   // the weird end: the same head slot, drawn to be a little much
   duck: part("head", { beak: ["r", "g"] }, (d) => hat(3, ["yy", "yyyyy"], `yyy${d.beak}${d.beak}yyy`)),
-  fishbowl: part("head", { glass: ["c", "w"] }, (d) => hat(3, [rep(d.glass, 6), `${d.glass}....${d.glass}`, `${d.glass}....${d.glass}`], rep(d.glass, 8))),
+  // a bowl is see-through: the head shows inside it, so nothing is cleared (unlike a hat)
+  fishbowl: part("head", { glass: ["c", "w"] }, (d) => {
+    const v = (shift: number): View => ({ 0: mid(rep(d.glass, 4), shift), 1: mid(`${d.glass}......${d.glass}`, shift), 2: mid(`${d.glass}......${d.glass}`, shift), 3: mid(rep(d.glass, 10), shift) })
+    return { front: v(0), side: v(1), back: v(0) }
+  }),
   cone: part("head", { stripe: ["w", "y"] }, (d) => hat(3, ["rr", rep(d.stripe, 4), rep("r", 6)], rep("r", 10))),
   stormcloud: part("head", { cloud: ["w", "c"] }, (d) => {
     const g = hat(3, [rep(d.cloud, 2), rep(d.cloud, 6)], rep(d.cloud, 8)), rain: View = { 4: at(2, "c..c..c"), 5: at(3, "c..c") }
@@ -124,7 +128,7 @@ export const PARTS: Record<string, Part> = {
 
   snail: part("neck", { shell: ["y", "r"] }, (d) => {
     const v: View = { 10: at(8, rep(d.shell, 2)), 11: at(7, `ww${rep(d.shell, 2)}`) }
-    return { front: v, side: { 10: at(1, rep(d.shell, 2)), 11: at(0, `ww${rep(d.shell, 2)}`) }, back: v }
+    return { front: v, side: { 10: at(5, rep(d.shell, 2)), 11: at(4, `ww${rep(d.shell, 2)}`) }, back: v }
   }),
 
   // back: behind the body from the front and the side, over it from behind
