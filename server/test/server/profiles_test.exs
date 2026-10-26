@@ -491,6 +491,11 @@ defmodule Server.ProfilesTest do
       end
     end
 
+    test "uqbar can call the inbox tools its role names" do
+      cuts = Profiles.citizen_profile("uqbar", 7).mcp["tlon"]["excludeTools"]
+      for tool <- ~w(operator_inbox settle_need pass_up_need), do: refute(tool in cuts, "#{tool} is cut")
+    end
+
     test "model_label names a citizen's model too, so its commits are stamped" do
       Server.TestDB.clean!()
       {:ok, ws} = Server.Workspaces.register(%{name: "Citizens"})

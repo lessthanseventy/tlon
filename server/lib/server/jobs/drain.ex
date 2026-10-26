@@ -12,10 +12,10 @@ defmodule Server.Jobs.Drain do
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
-    _ = Server.Office.NeedsPage.run()
     _ = Server.Wake.report_overdue()
     _ = Server.Switchboard.redeliver_unheard()
     _ = Server.Switchboard.drain()
+    _ = Server.Office.NeedsPage.run()
     :ok
   end
 end

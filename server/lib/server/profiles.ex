@@ -1059,8 +1059,10 @@ defmodule Server.Profiles do
   # The outside citizens a window is launched for (`Server.Outside`): on the Claude plan, unsandboxed,
   # as the operator's own sessions run. A long-lived delegate compacts before a turn at half full
   # (`compact_at`, percent of its context window), so it never runs deep into it.
+  @uqbar_mcp update_in(@tlon_mcp, ["tlon", "excludeTools"], &(&1 -- ["operator_inbox"]))
+
   @citizens %{
-    "uqbar" => %{model: @opus, mcp: @tlon_mcp, system_prompt: @uqbar_role, compact_at: 50},
+    "uqbar" => %{model: @opus, mcp: @uqbar_mcp, system_prompt: @uqbar_role, compact_at: 50},
     # it reads and answers; it never writes (the reviewer's fence, a deny that holds in every mode)
     "aleph" => %{
       model: @fable,
