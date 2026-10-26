@@ -3,26 +3,51 @@ defmodule Server.Bench.Contrast do
   The canary A/B a steering change earns on verify: the same role, the same canary tasks, once from
   main's checkout and once from the branch's, and what the contrast was (pass count, tokens, turns).
   Evidence, not a gate: a regression is named for the reviewer (`line/1` ends `REGRESSION`) and never
-  turns verify red. Pure rows here; `run/3` shells out to `mix server.bench_roles`.
+  turns verify red. Pure rows here; `run/3` shells out to `mix server.bench_roles`, each side in its
+  own process group under one 15-minute wall (`sh/3`), so nothing a side spawned outlives it.
   """
 
   alias Server.Workline.Grade
 
   @max_roles 3
+  @wall_ms 15 * 60_000
 
   @doc """
-  The rows for a change touching `paths`; `dirs` = `%{main: root, branch: checkout}`. `[]` when it
-  touches no steering. `opts[:exec]` swaps the shell-out (`(dir, args) -> {output, exit}`; the default
-  runs `mix` in `<dir>/server`). The wall clock is the caller's: verify clamps the whole step.
+  The rows for a change touching `paths`; `dirs` = `%{main: checkout, branch: checkout}` (main's a
+  throwaway worktree of origin/main, never the root checkout). `[]` when it touches no steering.
+  `opts[:exec]` swaps the shell-out (`(dir, args, timeout_ms) -> {output, exit | :timeout}`; the
+  default runs `mix` in `<dir>/server` through `sh/3`). `opts[:wall_ms]` is the run's one clock
+  (15 minutes): every call gets what is left of it, and a side that hits it is an error row.
   """
   def run(paths, dirs, opts \\ []) do
-    exec = opts[:exec] || (&mix/2)
+    exec = opts[:exec] || (&mix/3)
+    deadline = System.monotonic_time(:millisecond) + (opts[:wall_ms] || @wall_ms)
     steering = Grade.steering(paths)
     profiles? = Enum.any?(steering, &match?({:profiles, _}, &1))
     unmeasured = for {:unmeasurable, p} <- steering, do: p
     extra = if unmeasured == [], do: [], else: [unmeasurable(unmeasured)]
 
-    if profiles?, do: bench(dirs, exec) ++ extra, else: extra
+    if profiles?, do: bench(dirs, {exec, deadline}) ++ extra, else: extra
+  end
+
+  @doc """
+  `argv` run in `dir` as its own process group: `{output, exit}`. Past `timeout_ms` the whole group
+  is killed and the exit is `:timeout` — a bench's mix, and the claude runs it spawned, never outlive
+  the wall. The VM starts a port program as the leader of a new group (so a `setsid` here would fork
+  it away and return at once), which is what makes the port's pid the group's.
+  """
+  def sh([exe | args], dir, timeout_ms) do
+    port =
+      Port.open({:spawn_executable, System.find_executable(exe) || exe}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        args: args,
+        cd: dir
+      ])
+
+    {:os_pid, pid} = Port.info(port, :os_pid)
+    collect(port, pid, [], System.monotonic_time(:millisecond) + timeout_ms)
   end
 
   @doc "Roles whose prompt hash differs between main and the branch (or is new on it), sorted."
@@ -105,25 +130,55 @@ defmodule Server.Bench.Contrast do
   defp why({:error, w}), do: w
   defp why(_), do: ""
 
-  # one `mix server.bench_roles <args> --out FILE` in `dir`, its JSON read back
-  defp json(exec, dir, args) do
+  # one `mix server.bench_roles <args> --out FILE` in `dir` with what is left of the wall, its JSON read back
+  defp json({exec, deadline}, dir, args) do
     out = Path.join(System.tmp_dir!(), "contrast-#{System.unique_integer([:positive])}.json")
+    call = "#{Path.basename(dir)}: bench_roles #{Enum.join(args, " ")}"
+    wall = "the #{div(@wall_ms, 60_000)}-minute wall"
+    left = deadline - System.monotonic_time(:millisecond)
 
     try do
-      case exec.(dir, ["server.bench_roles" | args] ++ ["--out", out]) do
-        {_, 0} ->
-          {:ok, out |> File.read!() |> JSON.decode!()}
+      if left <= 0 do
+        {:error, "#{call} not run: #{wall} is spent"}
+      else
+        case exec.(dir, ["server.bench_roles" | args] ++ ["--out", out], left) do
+          {_, 0} ->
+            {:ok, out |> File.read!() |> JSON.decode!()}
 
-        {text, code} ->
-          tail = text |> to_string() |> String.slice(-200, 200)
-          {:error, "#{Path.basename(dir)}: bench_roles #{Enum.join(args, " ")} exit #{code}: #{tail}"}
+          {_, :timeout} ->
+            {:error, "#{call} hit #{wall}: its process group killed"}
+
+          {text, code} ->
+            tail = text |> to_string() |> String.slice(-200, 200)
+            {:error, "#{call} exit #{code}: #{tail}"}
+        end
       end
     after
       File.rm(out)
     end
   end
 
-  defp mix(dir, args) do
-    System.cmd("mise", ["exec", "--", "mix" | args], cd: Path.join(dir, "server"), stderr_to_stdout: true)
+  defp mix(dir, args, timeout_ms), do: sh(["mise", "exec", "--", "mix" | args], Path.join(dir, "server"), timeout_ms)
+
+  # a side still writing past the deadline is cut too: its data is left unread
+  defp collect(port, pid, acc, deadline) do
+    left = deadline - System.monotonic_time(:millisecond)
+
+    receive do
+      {^port, {:data, data}} when left > 0 -> collect(port, pid, [acc | data], deadline)
+      {^port, {:exit_status, code}} -> {IO.iodata_to_binary(acc), code}
+    after
+      max(left, 0) ->
+        System.cmd("kill", ["-KILL", "--", "-#{pid}"], stderr_to_stdout: true)
+        close(port)
+        {IO.iodata_to_binary(acc), :timeout}
+    end
+  end
+
+  # the child may have exited between the kill and this, closing the port itself
+  defp close(port) do
+    Port.close(port)
+  catch
+    :error, :badarg -> :ok
   end
 end

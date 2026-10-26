@@ -46,9 +46,9 @@ defmodule Server.Bench.ContrastTest do
   end
 
   describe "run/3 with a stubbed executor" do
-    # exec.(dir, args) -> {output, exit}; --out FILE is written the way the real task writes it
+    # exec.(dir, args, timeout_ms) -> {output, exit}; --out FILE is written the way the real task writes it
     defp exec(fps, runs) do
-      fn dir, args ->
+      fn dir, args, _ ->
         out = args |> Enum.chunk_every(2, 1, :discard) |> Enum.find_value(fn [k, v] -> k == "--out" && v end)
         side = if dir == "/main", do: :main, else: :branch
 
@@ -66,12 +66,12 @@ defmodule Server.Bench.ContrastTest do
     @dirs %{main: "/main", branch: "/b"}
 
     test "no steering path: nothing runs" do
-      assert Contrast.run(["server/lib/server/thread.ex"], @dirs, exec: fn _, _ -> flunk("ran") end) == []
+      assert Contrast.run(["server/lib/server/thread.ex"], @dirs, exec: fn _, _, _ -> flunk("ran") end) == []
     end
 
     test "a skill or AGENTS.md alone is one unmeasurable row, nothing runs" do
       assert [%{kind: :unmeasurable, paths: ["AGENTS.md"]}] =
-               Contrast.run(["AGENTS.md"], @dirs, exec: fn _, _ -> flunk("ran") end)
+               Contrast.run(["AGENTS.md"], @dirs, exec: fn _, _, _ -> flunk("ran") end)
     end
 
     test "a profiles edit benches only the roles whose prompt moved, both sides" do
@@ -86,9 +86,25 @@ defmodule Server.Bench.ContrastTest do
     end
 
     test "a main without --fingerprint is an error row, not a crash" do
-      ex = fn _, _ -> {"unknown option", 1} end
+      ex = fn _, _, _ -> {"unknown option", 1} end
       assert [%{kind: :error, why: why}] = Contrast.run(["server/lib/server/profiles.ex"], @dirs, exec: ex)
       assert why =~ "unknown option"
+    end
+
+    test "every call draws on the run's one wall; a side that hits it is an error row naming the wall" do
+      me = self()
+
+      ex = fn _, _, left ->
+        send(me, {:left, left})
+        {"", :timeout}
+      end
+
+      assert [%{kind: :error, why: why}] =
+               Contrast.run(["server/lib/server/profiles.ex"], @dirs, exec: ex, wall_ms: 200)
+
+      assert_received {:left, left}
+      assert left in 1..200
+      assert why =~ "wall"
     end
 
     test "roles over the cap are named skipped, after the rows that ran" do
@@ -96,6 +112,29 @@ defmodule Server.Bench.ContrastTest do
       runs = Map.new(for s <- [:main, :branch], r <- ~w(a b c), do: {{s, r}, [rec("c", 1, 1)]})
       rows = Contrast.run(["server/lib/server/profiles.ex"], @dirs, exec: exec(fps, runs))
       assert [%{role: "a"}, %{role: "b"}, %{role: "c"}, %{kind: :skipped, roles: ["d"]}] = rows
+    end
+  end
+
+  describe "sh/3: one side as its own process group" do
+    @describetag :tmp_dir
+
+    test "output and exit come back", %{tmp_dir: tmp} do
+      assert {"hi\n", 3} = Contrast.sh(["sh", "-c", "echo hi; exit 3"], tmp, 5_000)
+    end
+
+    test "past its timeout the whole group is killed, grandchildren included", %{tmp_dir: tmp} do
+      pgid = Path.join(tmp, "pgid")
+      assert {out, :timeout} = Contrast.sh(["sh", "-c", "echo $$ >#{pgid}; sleep 300 & echo started; wait"], tmp, 300)
+      assert out =~ "started"
+      assert group_gone?(pgid |> File.read!() |> String.trim())
+    end
+
+    defp group_gone?(pgid, tries \\ 20) do
+      case System.cmd("pgrep", ["-g", pgid]) do
+        {_, 1} -> true
+        _ when tries > 0 -> Process.sleep(100) && group_gone?(pgid, tries - 1)
+        {alive, _} -> flunk("still alive in group #{pgid}: #{alive}")
+      end
     end
   end
 
