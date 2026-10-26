@@ -37,9 +37,9 @@ config :server, Server.Web.Endpoint,
 config :server, :orphans, proc_dir: "/nonexistent"
 config :server, bootstrap: false
 config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 200]
-config :server, health_reading: fn -> %{tmux: true, disk_pct: nil, mem_pct: nil} end
 config :server, generator_cmd: "/nonexistent/tlon-test-generator"
 config :server, grader_retry_ms: 0
+config :server, health_reading: fn -> %{tmux: true, disk_pct: nil, mem_pct: nil} end
 
 # Test transcripts are written moments before they are imported; nothing here is a live session.
 # Imported sessions are titled by a model CLI in prod; here there is none, so the first-line fallback
@@ -54,8 +54,8 @@ config :server, machine_seed_path: "/nonexistent/tlon-test-seed.exs"
 config :server, operator_config_path: "/nonexistent/tlon-test-config.json"
 # The PM's release desk acts on the tlon checkout (Server.Release.PM): a test hands it a throwaway
 # repo, so one that forgets can never cut a release of the real one.
-config :server, release_root: "/nonexistent/tlon-test-release"
 # the stale-launch sweep retires unstamped fake windows; its own tests turn it on
+config :server, release_root: "/nonexistent/tlon-test-release"
 config :server, retire_stale_launch: false
 config :server, souls_dir: Path.join(System.tmp_dir!(), "tlon-test-souls-unset")
 # The consult mirror is off in tests: the pure maybe_mirror tests call it directly, and the
