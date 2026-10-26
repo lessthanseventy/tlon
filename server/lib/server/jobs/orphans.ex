@@ -77,7 +77,7 @@ defmodule Server.Jobs.Orphans do
     if ids != [] do
       Server.Repo.update_all(from(r in Server.ScheduleRun, where: r.id in ^ids and r.status == "running"),
         set: [
-          status: "failed",
+          status: "interrupted",
           output: "interrupted: the server restarted before the run finished",
           finished_at: DateTime.truncate(now, :second)
         ]
