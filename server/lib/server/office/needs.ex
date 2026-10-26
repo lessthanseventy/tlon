@@ -1077,7 +1077,7 @@ defmodule Server.Office.Needs do
   # moment is the parked notice (`Server.Workline.Brief.gate_message/2`) posted when `awaiting`
   # was set; without one, the thread's birth is all there is.
   defp gated_at(%Thread{stage: stage, slug: slug} = t) do
-    notice = "⏸ workline #{slug} is parked at #{stage} — %"
+    notice = Server.Workline.Brief.parked_prefix(slug, stage) <> "%"
 
     Repo.one(
       from m in Message,

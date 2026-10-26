@@ -35,9 +35,16 @@ defmodule Server.Workline.Brief do
   workline's proof (`Server.Workline.proof/2`) when one is given.
   """
   def gate_message(%Thread{} = t, proof \\ nil) do
-    "⏸ workline #{t.slug} is parked at #{t.stage} — this transition is the operator's. " <>
+    parked_prefix(t.slug, t.stage) <>
+      "this transition is the operator's. " <>
       "Approve with: mise run server:cli -- approve #{t.id} (tlon-cli approve #{t.id})." <> proof_lines(proof)
   end
+
+  @doc """
+  What the parked-gate notice opens with: `Server.Office.Needs` dates a gate by the newest
+  notice on the thread that starts this way, so the wording lives here and nowhere else.
+  """
+  def parked_prefix(slug, stage), do: "⏸ workline #{slug} is parked at #{stage} — "
 
   defp proof_lines(nil), do: ""
 

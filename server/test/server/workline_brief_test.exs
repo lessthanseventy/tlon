@@ -98,6 +98,14 @@ defmodule Server.WorklineBriefTest do
     assert notice =~ "approve 42"
   end
 
+  # Needs.gated_at/1 finds the park notice by this prefix: the notice must open with it, or a
+  # reword silently ages gates from their thread's birth again
+  test "the gate notice opens with the parked prefix Needs matches it by" do
+    t = thread("review", %{id: 42, awaiting: "andrew"})
+    assert String.starts_with?(Brief.gate_message(t), Brief.parked_prefix("composer-wrap", "review"))
+    assert String.starts_with?(Brief.gate_message(t, nil), Brief.parked_prefix(t.slug, t.stage))
+  end
+
   test "a flip posts the next stage's brief as a funes message on the thread" do
     {:ok, thread} = Workline.open(%{title: "loud advance", slug: "brief-post"})
     {:ok, advanced} = Workline.advance(thread, artifacts: AllPresent)
