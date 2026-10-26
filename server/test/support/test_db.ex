@@ -9,6 +9,30 @@ defmodule Server.TestDB do
   """
   alias Server.Repo
 
+  @doc """
+  Point the operator settings at a throwaway file with the nudge spacing off (0), so a test that
+  nudges a workline it just opened is not held back by `continuation_gap_minutes`. Returns the
+  file's path; the app env and the file are restored when the test exits.
+  """
+  def continuation_gap_off! do
+    path =
+      Path.join(System.tmp_dir!(), "continuation-config-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+
+    previous = Application.get_env(:server, :operator_config_path)
+    Application.put_env(:server, :operator_config_path, path)
+    :ok = Server.OperatorConfig.put("continuation_gap_minutes", 0, path)
+
+    ExUnit.Callbacks.on_exit(fn ->
+      File.rm(path)
+
+      if previous,
+        do: Application.put_env(:server, :operator_config_path, previous),
+        else: Application.delete_env(:server, :operator_config_path)
+    end)
+
+    path
+  end
+
   # fact → thread+session, event/issue/message/habit → thread, session → agent+thread,
   # thread → agent AND workspace AND project (2026-08-30). project → workspace. So: the leaf
   # rows, then message/session, then thread, then project, then its parents agent + workspace.

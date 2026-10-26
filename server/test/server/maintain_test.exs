@@ -25,6 +25,7 @@ defmodule Server.MaintainTest do
 
   setup do
     Server.TestDB.clean!()
+    Server.TestDB.continuation_gap_off!()
     :ok
   end
 
@@ -170,6 +171,7 @@ defmodule Server.MaintainTest do
     path = Path.join(System.tmp_dir!(), "maintain-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
+    File.write!(path, ~s({"continuation_gap_minutes": 0}))
 
     on_exit(fn ->
       File.rm(path)
@@ -208,11 +210,11 @@ defmodule Server.MaintainTest do
     Repo.update_all(from(m in Message, where: m.thread_id == ^w.id), set: [created_at: two_hours_ago])
     nudged? = fn -> Enum.any?(Repo.all(Message), &(&1.thread_id == w.id and &1.body =~ "↻ continue")) end
 
-    File.write!(path, ~s({"quiet_workline_minutes": 180}))
+    File.write!(path, ~s({"quiet_workline_minutes": 180, "continuation_gap_minutes": 0}))
     sweep()
     refute nudged?.()
 
-    File.write!(path, ~s({"quiet_workline_minutes": 60}))
+    File.write!(path, ~s({"quiet_workline_minutes": 60, "continuation_gap_minutes": 0}))
     sweep()
     assert nudged?.()
   end
