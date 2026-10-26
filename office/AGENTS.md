@@ -54,7 +54,7 @@ linked window at a time, ctrl+] to the room).
   world, `data.useFake` the one seam in `data.ts`; the play keys are the shifted letters `D E T F N W P C`, which no other key uses, so they never shadow a card.
   The sandbox keeps its looks, souls, hall, cast, pets and store in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire or adopt never reaches the machine's files.
   The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, taken)` is seeded, no model, no I/O; a lock is kept by `pass` baking it into the overrides —
-  `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `l` lists it), → hire, space locks a row so a pass keeps it. `hall.json`
+  `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `l` lists it), → hire, space locks a row so a pass keeps it, `e` edits the lit row (name, pitch and soul by prompt; archetype/grade/specialty cycle the roster vocabulary; a slot cycles its part) as an edit over the seed. `hall.json`
   (`TLON_HALL`, polled like `looks.json`) holds seed + locks + edits + pile, never the rendered card; an edited name that fails `Server.Soul`'s name check is dropped on load, so it never reaches a file name. → hires — onto the toy's bench in the
   sandbox, through `data.hire` (`POST /api/workspaces/:id/coworkers`) on a live office — and keeps the candidate's look in `looks.json` and its soul in the souls dir (never over one already there).
   The cast editor, the god view (`` ` `` from home; `tui/cast.ts` its rows, pure): one row per bench seat, one cell per field —

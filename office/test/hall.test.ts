@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall, seatedNames } from "../kit/hall"
+import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall, seatedNames, editField, cyclePartRow } from "../kit/hall"
 
 const VOCAB = { archetypes: ["builder", "reviewer", "planner"], grades: ["junior", "senior", "greybeard"], specialties: ["office", "server"] }
 const LEGAL = /^[a-z0-9][a-z0-9_-]*$/
@@ -237,4 +237,51 @@ test("a name seated off shift, or in another workspace, is taken: the hall never
   }
   expect(seatedNames(a).sort()).toEqual(["asterion", "elsewhere-seat", "tertius"])
   expect(seatedNames({ bench: [{ name: "only" }] })).toEqual(["only"])
+})
+
+describe("hall e: edit the card", () => {
+  const ctx = (taken: string[] = []) => ({ taken, vocab: VOCAB })
+  const h0 = () => ({ ...emptyHall(), seed: "hall:4" })
+
+  test("a text field is stored as an edit over the seed, and the card shows it", () => {
+    const r = editField(h0(), ctx(), "name", "ashe-2")
+    expect("error" in r).toBe(false)
+    const h = r as ReturnType<typeof emptyHall>
+    expect(h.seed).toBe("hall:4")
+    expect(candidateOf(h, ctx()).name).toBe("ashe-2")
+  })
+  test("a name must be legal and not taken", () => {
+    expect(editField(h0(), ctx(), "name", "Bad Name")).toEqual({ error: expect.stringContaining("name") })
+    expect(editField(h0(), ctx(["funes"]), "name", "funes")).toEqual({ error: expect.stringContaining("bench") })
+  })
+  test("archetype, grade and specialty must come from the roster's vocabulary", () => {
+    expect(candidateOf(editField(h0(), ctx(), "grade", "senior") as ReturnType<typeof emptyHall>, ctx()).grade).toBe("senior")
+    expect(editField(h0(), ctx(), "grade", "wizard")).toEqual({ error: expect.stringContaining("grade") })
+    expect(editField(h0(), ctx(), "archetype", "nope")).toEqual({ error: expect.stringContaining("archetype") })
+  })
+  test("pitch and soul take any non-blank text; blank is refused", () => {
+    const h = editField(editField(h0(), ctx(), "pitch", "Quiet and good.") as ReturnType<typeof emptyHall>, ctx(), "soul", "## Wants\nsleep\n") as ReturnType<typeof emptyHall>
+    const c = candidateOf(h, ctx())
+    expect(c.pitch).toBe("Quiet and good.")
+    expect(c.soul).toBe("## Wants\nsleep\n")
+    expect(editField(h0(), ctx(), "pitch", "   ")).toEqual({ error: expect.stringContaining("pitch") })
+  })
+  test("an edited field survives a pass only when locked, like any other", () => {
+    const rolled = roll("hall:5", ctx()).grade, edit = VOCAB.grades.find(g => g !== rolled)!
+    const e = editField(h0(), ctx(), "grade", edit) as ReturnType<typeof emptyHall>
+    expect(candidateOf(pass(e, ctx()), ctx()).grade).toBe(rolled)
+    expect(candidateOf(pass({ ...e, locks: { fields: ["grade"] } }, ctx()), ctx()).grade).toBe(edit)
+  })
+  test("cyclePartRow steps a slot to its next part, round to none, stored as a parts override", () => {
+    let h = h0()
+    const seen: (string | undefined)[] = []
+    for (let i = 0; i < 40; i++) {
+      h = cyclePartRow(h, ctx(), "head")
+      seen.push(candidateOf(h, ctx()).look.parts?.head?.id)
+      if (seen[i] === undefined) break
+    }
+    expect(seen.at(-1)).toBeUndefined()
+    expect(seen.length).toBeGreaterThan(1)
+    expect(h.overrides.parts?.head).toBeNull()
+  })
 })

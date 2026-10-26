@@ -4,7 +4,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { hash, lookOf, rollLook, type Look } from "./sprites"
-import { SLOTS, type PartSpec, type Slot } from "./parts"
+import { nextPart, SLOTS, type PartSpec, type Slot } from "./parts"
 import { SOUL_SECTIONS } from "./souls"
 
 export type Vocab = { archetypes: string[]; grades: string[]; specialties: string[] }
@@ -221,4 +221,27 @@ function freshName(seed: string, taken: readonly string[], parts: Parts): string
     const n = spoken(`${seed}n${i}`, parts)
     if (n.length >= 4 && n.length <= 10 && !taken.includes(n) && !(BORGES as readonly string[]).includes(n)) return n
   }
+}
+
+/**
+ * `e` on a text row: the value, checked against what the hire needs, stored as an edit over the seed.
+ * A refusal says why and changes nothing.
+ */
+export function editField(h: Hall, o: Ctx, f: Field | "pitch" | "soul", value: string): Hall | { error: string } {
+  const v = f === "soul" ? value : value.trim()
+  if (f === "name") {
+    if (!SOUL_NAME.test(v)) return { error: "name must match ^[a-z0-9][a-z0-9_-]*$" }
+    if (o.taken.includes(v)) return { error: `${v} is already on the bench or the pile` }
+  } else if (f === "pitch" || f === "soul") {
+    if (!v.trim()) return { error: `${f} can't be blank` }
+  } else if (!o.vocab[({ archetype: "archetypes", grade: "grades", specialty: "specialties" } as const)[f]].includes(v)) {
+    return { error: `${f} must be one of ${o.vocab[({ archetype: "archetypes", grade: "grades", specialty: "specialties" } as const)[f]].join(", ")}` }
+  }
+  return { ...h, overrides: { ...h.overrides, [f]: v } }
+}
+
+/** `e` on a slot row: the slot's next part, then none, then the first again, stored as a parts edit */
+export function cyclePartRow(h: Hall, o: Ctx, slot: Slot): Hall {
+  const next = nextPart(slot, candidateOf(h, o).look.parts?.[slot])
+  return { ...h, overrides: { ...h.overrides, parts: { ...h.overrides.parts, [slot]: next ?? null } } }
 }
