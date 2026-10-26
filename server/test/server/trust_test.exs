@@ -31,20 +31,20 @@ defmodule Server.TrustTest do
   end
 
   test "a record counts finished builds, and as first time only a merge never sent back to build" do
-    built("hronir", "merged")
-    built("hronir", "merged", 1)
+    built("hronir", "landed")
+    built("hronir", "landed", 1)
     built("hronir", "build")
-    built("ashe", "merged")
+    built("ashe", "landed")
 
     assert Trust.record("hronir") == %{led: 2, first_time: 1}
   end
 
   test "earned at eight finished builds and four in five first time; the step names who earned it, and stops at 4" do
-    for _ <- 1..7, do: built("hronir", "merged")
-    built("hronir", "merged", 2)
-    t = built("hronir", "merged")
-    built("ashe", "merged")
-    lone = built("ashe", "merged")
+    for _ <- 1..7, do: built("hronir", "landed")
+    built("hronir", "landed", 2)
+    t = built("hronir", "landed")
+    built("ashe", "landed")
+    lone = built("ashe", "landed")
 
     assert Trust.record("hronir") == %{led: 9, first_time: 8}
     assert Trust.builder(t) == "hronir"

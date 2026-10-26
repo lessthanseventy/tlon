@@ -103,7 +103,7 @@ defmodule Server.WorklineSendBackTest do
       {:awaiting, parked} = Workline.advance(Repo.get!(Thread, merged.id), artifacts: AllPresent)
       {:ok, _} = Workline.approve(parked, artifacts: AllPresent, merge: Merges)
       landed = Repo.get!(Thread, merged.id)
-      assert {:error, {:not_movable, "merged"}} = Workline.send_back(landed, "build", "x", "andrew")
+      assert {:error, {:not_movable, "landed"}} = Workline.send_back(landed, "build", "x", "andrew")
 
       landing = at_review("landing")
       %{thread_id: landing.id} |> Server.Jobs.Land.new() |> Repo.insert!()
@@ -169,7 +169,7 @@ defmodule Server.WorklineSendBackTest do
     test "only backwards, only to a working stage" do
       thread = at_review("forward")
       assert {:error, {:not_behind, "review"}} = Workline.send_back(thread, "review", "x", "hronir")
-      assert {:error, {:not_behind, "merged"}} = Workline.send_back(thread, "merged", "x", "hronir")
+      assert {:error, {:not_behind, "landed"}} = Workline.send_back(thread, "landed", "x", "hronir")
       assert {:error, {:not_behind, "intent"}} = Workline.send_back(thread, "intent", "x", "hronir")
     end
   end

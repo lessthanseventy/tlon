@@ -464,7 +464,7 @@ defmodule Server.Release.PMTest do
       thread_id: t.id,
       kind: "stage_advanced",
       correlation: "workline:#{t.slug}",
-      detail: %{"from" => "review", "to" => "merged"},
+      detail: %{"from" => "review", "to" => "landed"},
       created_at: DateTime.truncate(at, :second)
     })
 

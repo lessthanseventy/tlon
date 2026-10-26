@@ -408,7 +408,7 @@ defmodule Server.Release.PM do
         join: t in Thread,
         on: t.id == e.thread_id,
         where:
-          e.kind == "stage_advanced" and fragment("(?::jsonb ->> 'to') = 'merged'", e.detail) and
+          e.kind == "stage_advanced" and fragment("(?::jsonb ->> 'to') = 'landed'", e.detail) and
             e.created_at > ^from and e.created_at <= ^to,
         order_by: [asc: t.id],
         distinct: true,
