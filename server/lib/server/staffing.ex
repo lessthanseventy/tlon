@@ -417,6 +417,7 @@ defmodule Server.Staffing do
       {:error, why} ->
         # ending the sessions with their windows still alive would strand them
         Logger.warning("clear_context #{workspace_id} #{agent} skipped: tmux #{why}")
+        {:error, why}
 
       tabs ->
         ids = from(t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
@@ -435,9 +436,9 @@ defmodule Server.Staffing do
         for tab <- tabs,
             match?({_, ^agent}, owner(tab, standing, seats)),
             do: Tmux.kill_window(workspace_id, tab.index)
-    end
 
-    :ok
+        :ok
+    end
   end
 
   @doc "Is this tab a leaf whose thread is no longer open+staffed? Untagged coworker and crew windows never are."

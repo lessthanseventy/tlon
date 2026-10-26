@@ -649,6 +649,22 @@ defmodule Server.StaffingTest do
     refute_received {:tmux, ["-L", _, "kill-window" | _]}
   end
 
+  test "clear_context with a tmux that errors returns the error and ends no session, so the operator is not told a clear happened",
+       %{ws: ws} do
+    thread = staffed_thread(ws, "borges")
+    live = session!("borges", thread.id, 30)
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      if "list-windows" in args, do: {"protocol version mismatch", 1}, else: {"", 0}
+    end)
+
+    capture_log(fn ->
+      assert {:error, "protocol version mismatch"} = Staffing.clear_context(ws.id, "borges")
+    end)
+
+    refute Server.Repo.get!(Server.Session, live.id).ended_at
+  end
+
   test "with no tmux server up, roll_leaf and clear_context still end the sessions; nothing is logged", %{ws: ws} do
     thread = staffed_thread(ws, "borges")
     live = session!("borges", thread.id, 30)
