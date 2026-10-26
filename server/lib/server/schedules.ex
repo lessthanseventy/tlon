@@ -27,6 +27,7 @@ defmodule Server.Schedules do
   @script_timeout_ms 30 * 60 * 1000
   @queue_word "checks queue:"
   @output_cap 4000
+  @interrupted_exits [143, 137]
 
   @doc "A new schedule. `{:ok, schedule}` or `{:error, changeset}`."
   def create(attrs), do: attrs |> Schedule.create_changeset() |> Repo.insert()
@@ -206,13 +207,22 @@ defmodule Server.Schedules do
   defp work(%Schedule{kind: "script"} = s) do
     {code, out} = shell(s.body, dir_for(s))
     tail = String.slice(out, -@output_cap, @output_cap)
-    result = Map.merge(%{status: if(code == 0, do: "ok", else: "failed"), exit: code, output: tail}, ran_on(out))
+    interrupted = code in @interrupted_exits
+
+    status =
+      cond do
+        code == 0 -> "ok"
+        interrupted -> "interrupted"
+        true -> "failed"
+      end
+
+    result = Map.merge(%{status: status, exit: code, output: tail}, ran_on(out))
 
     result =
       if s.standing do
         case thread_for(s) do
           {:ok, t} ->
-            note(t.id, "⏰ #{s.title} — exit #{code}\n```\n#{String.slice(tail, -1500, 1500)}\n```")
+            note(t.id, "⏰ #{s.title} — #{outcome(code, interrupted)}\n```\n#{String.slice(tail, -1500, 1500)}\n```")
             Map.put(result, :thread_id, t.id)
 
           _ ->
@@ -222,8 +232,9 @@ defmodule Server.Schedules do
         result
       end
 
-    # the note above wakes no one, by design; a red run is the sheriff's to triage
-    if code != 0 do
+    # the note above wakes no one, by design; a red run is the sheriff's to triage. A stop or a kill is
+    # the operator's, not a red: the next run is the verdict.
+    if code != 0 and not interrupted do
       source = %{id: result[:thread_id], title: s.title, workspace_id: s.workspace_id}
 
       Server.Sheriff.report(
@@ -393,4 +404,7 @@ defmodule Server.Schedules do
       found -> with [_, check, sha] <- List.last(found), do: %{check_name: check, sha: sha}
     end
   end
+
+  defp outcome(code, true), do: "interrupted (exit #{code})"
+  defp outcome(code, false), do: "exit #{code}"
 end

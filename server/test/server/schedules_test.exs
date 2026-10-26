@@ -181,6 +181,21 @@ defmodule Server.SchedulesTest do
     assert %{status: "failed", exit: 3, output: "nope\n"} = Schedules.perform(run.id)
   end
 
+  test "a script killed by a signal is interrupted, not failed, and the sheriff hears nothing", %{ws: ws} do
+    s = schedule!(ws, %{cron: "@daily", body: "echo started; kill -TERM $$", standing: true})
+    {:ok, run} = Schedules.run_now(s)
+    assert %{status: "interrupted", exit: 143, thread_id: tid} = Schedules.perform(run.id)
+
+    refute Repo.exists?(from t in Server.Thread, where: t.title == ^Server.Sheriff.beat_title())
+    assert Repo.exists?(from m in Server.Message, where: m.thread_id == ^tid and like(m.body, "%interrupted%"))
+  end
+
+  test "other non-zero exits stay failed", %{ws: ws} do
+    s = schedule!(ws, %{cron: "@daily", body: "exit 130"})
+    {:ok, run} = Schedules.run_now(s)
+    assert %{status: "failed", exit: 130} = Schedules.perform(run.id)
+  end
+
   test "a script that names the commit it checked records it on its run", %{ws: ws} do
     sha = String.duplicate("a1", 20)
     named = schedule!(ws, %{cron: "@daily", body: "echo ran-on: gate #{sha}; echo after"})
