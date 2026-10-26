@@ -945,9 +945,20 @@ defmodule Server.Office.NeedsTest do
 
   describe "routing — a conditional need reaches the operator only through Uqbar" do
     setup do
-      {:ok, true} = FunWithFlags.enable(:uqbar_routing)
-      on_exit(fn -> FunWithFlags.disable(:uqbar_routing) end)
-      :ok
+      path = Path.join(System.tmp_dir!(), "needs-routing-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+      :ok = Server.OperatorConfig.put("uqbar_routing", true, path)
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+
+      on_exit(fn ->
+        File.rm(path)
+
+        if prior,
+          do: Application.put_env(:server, :operator_config_path, prior),
+          else: Application.delete_env(:server, :operator_config_path)
+      end)
+
+      %{config: path}
     end
 
     defp question(ws) do
@@ -1029,9 +1040,9 @@ defmodule Server.Office.NeedsTest do
       assert g.uqbar == []
     end
 
-    test "flag off, every conditional need passes up and nothing is with Uqbar, whatever the rows say",
-         %{ws: ws} do
-      FunWithFlags.disable(:uqbar_routing)
+    test "setting off, every conditional need passes up and nothing is with Uqbar, whatever the rows say",
+         %{ws: ws, config: config} do
+      :ok = Server.OperatorConfig.put("uqbar_routing", false, config)
       {key, _} = question(ws)
       route_row(key, "settled", later(1))
       g = Needs.grouped()
@@ -1126,16 +1137,12 @@ defmodule Server.Office.NeedsTest do
       assert [%{key: ^fresh}] = g.uqbar
     end
 
-    test "the fail-open window is the operator's uqbar_route_minutes knob", %{ws: ws} do
+    test "the fail-open window is the operator's uqbar_route_minutes knob", %{ws: ws, config: config} do
       key = aged_question(ws, 15)
-      path = Path.join(Path.expand("tmp"), "needs-route-#{System.pid()}-#{System.unique_integer([:positive])}.json")
-      prior = Application.get_env(:server, :operator_config_path)
-      Application.put_env(:server, :operator_config_path, path)
-      on_exit(fn -> Application.put_env(:server, :operator_config_path, prior) end)
 
-      File.write!(path, ~s({"uqbar_route_minutes": 10}))
+      :ok = Server.OperatorConfig.put("uqbar_route_minutes", 10, config)
       assert [%{key: ^key}] = Needs.grouped().phone
-      File.write!(path, ~s({"uqbar_route_minutes": 30}))
+      :ok = Server.OperatorConfig.put("uqbar_route_minutes", 30, config)
       assert [%{key: ^key}] = Needs.grouped().uqbar
     end
 

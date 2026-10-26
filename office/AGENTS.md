@@ -88,7 +88,7 @@ linked window at a time, ctrl+] to the room).
   `i` (or a click on the count) opens the inbox by surface with each item's own actions: PHONE, MACHINE,
   then SETTLED BY UQBAR (the day's digest: `u` overrules one, back to Uqbar), CLIPBOARD, then WITH UQBAR
   (waiting on Uqbar's verdict, never counted on the phone). Those two groups fill only under the
-  server's `uqbar_routing` flag, shipped off: keep it off until Uqbar's judgement (its playbook) lands. A
+  server's `uqbar_routing` setting (the settings screen, `S`; default off). A
   passed-up row shows Uqbar's `tip:`. A click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
   office than main offers `R` to reload itself. Work that lands dark hides behind a server flag,
   read only from the snapshot (`flagOn` in `kit/types.ts`): `B`, build mode, is there only with
