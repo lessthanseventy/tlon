@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall, seatedNames, editField, cyclePartRow } from "../kit/hall"
+import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall, seatedNames, editField, setLook } from "../kit/hall"
 
 const VOCAB = { archetypes: ["builder", "reviewer", "planner"], grades: ["junior", "senior", "greybeard"], specialties: ["office", "server"] }
 const LEGAL = /^[a-z0-9][a-z0-9_-]*$/
@@ -80,6 +80,13 @@ describe("hall.json", () => {
     for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true })
   })
   const tmp = () => join(mk(), "hall.json")
+  test("a hand-edited hall.json whose look is not an object loads without it", () => {
+    const p = tmp()
+    writeFileSync(p, JSON.stringify({ seed: "hall:1", overrides: { look: "nope", soul: "## Wants\nx\n" } }))
+    const h = loadHall(p)
+    expect(h.overrides.look).toBeUndefined()
+    expect(h.overrides.soul).toBe("## Wants\nx\n")
+  })
   test("round trip keeps seed, locks, overrides and the pile", () => {
     const p = tmp()
     const s = { seed: "hall:5", locks: { slots: ["eyes" as const] }, overrides: { name: "borges" }, pile: [{ seed: "hall:2", overrides: {} }] }
@@ -272,16 +279,19 @@ describe("hall e: edit the card", () => {
     expect(candidateOf(pass(e, ctx()), ctx()).grade).toBe(rolled)
     expect(candidateOf(pass({ ...e, locks: { fields: ["grade"] } }, ctx()), ctx()).grade).toBe(edit)
   })
-  test("cyclePartRow steps a slot to its next part, round to none, stored as a parts override", () => {
-    let h = h0()
-    const seen: (string | undefined)[] = []
-    for (let i = 0; i < 40; i++) {
-      h = cyclePartRow(h, ctx(), "head")
-      seen.push(candidateOf(h, ctx()).look.parts?.head?.id)
-      if (seen[i] === undefined) break
-    }
-    expect(seen.at(-1)).toBeUndefined()
-    expect(seen.length).toBeGreaterThan(1)
-    expect(h.overrides.parts?.head).toBeNull()
+  test("setLook stores the whole edited look as the look override, hair, dials and all", () => {
+    const base = candidateOf(h0(), ctx()).look
+    const edited = { ...base, hair: base.hair === "bald" ? "mop" as const : "bald" as const, body: "tall" as const, parts: { head: { id: "x", dials: { n: 2 } } } }
+    const h = setLook(h0(), edited as typeof base)
+    expect(candidateOf(h, ctx()).look).toEqual(edited)
+    expect(JSON.parse(JSON.stringify(h)).overrides.look.parts.head.dials).toEqual({ n: 2 })
+  })
+  test("a pass drops an edited look unless its slot is locked", () => {
+    const base = candidateOf(h0(), ctx()).look
+    const edited = { ...base, body: "tall" as const, parts: { head: { id: "x" } } }
+    const h = setLook(h0(), edited as typeof base)
+    expect(candidateOf(pass(h, ctx()), ctx()).look.body).not.toBe("tall")
+    const kept = candidateOf(pass({ ...h, locks: { slots: ["head"] } }, ctx()), ctx())
+    expect(kept.look.parts?.head).toEqual({ id: "x" })
   })
 })

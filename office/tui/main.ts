@@ -32,8 +32,8 @@ import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverride
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { bedScene, lifeHeader, lifeRows, streakFrames } from "../kit/life"
 import { usageHeader } from "../kit/usage"
-import { dialsOf, nextDial, nextPart, PARTS, SLOTS, type Slot } from "../kit/parts"
-import { BLANK_SOUL, bringBack, candidateOf, cyclePartRow, dropPile, editField, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
+import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
+import { BLANK_SOUL, bringBack, candidateOf, dropPile, editField, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, setLook, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow, type RowEdit } from "./hall"
 import { castSignature, loadCast, saveCast, setTrait, type Cast } from "../kit/cast"
 import { CAST_FIELDS, castRows, nextTrait, rerollTrait } from "./cast"
@@ -74,7 +74,7 @@ type Mode =
   | { kind: "tray" } | { kind: "triage" } | { kind: "issue"; id: number; from?: Mode } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number; from?: Mode }
-  | { kind: "look"; name: string; from?: Mode } | { kind: "look-editor"; name: string; view: "front" | "side" | "back"; from?: Mode }
+  | { kind: "look"; name: string; from?: Mode; hall?: true } | { kind: "look-editor"; name: string; view: "front" | "side" | "back"; from?: Mode; hall?: true }
   | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" } | { kind: "cast"; tab: "people" | "office" }
   | { kind: "help"; from: Mode; title: string; keys: Hint[] }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
@@ -202,11 +202,11 @@ function followCast(): boolean {
   castSeen = seen; cast = loadCast(CAST)
   return true
 }
-/** `e` on the lit row: cycle a vocab field or a slot's part in place, ask for a name, the pitch or the soul */
+/** `e` on the lit row: cycle a vocab field in place, ask for a name, the pitch or the soul, open the look card on a slot */
 function hallEdit(what: RowEdit) {
   const ctx = hallCtx(), c = candidateOf(hall, ctx)
   const apply = (r: Hall | { error: string }) => { if ("error" in r) status = r.error; else hallSet(r); draw() }
-  if ((SLOTS as readonly string[]).includes(what)) { hallSet(cyclePartRow(hall, ctx, what as Slot)); return draw() }
+  if ((SLOTS as readonly string[]).includes(what)) return open({ kind: "look", name: c.name, hall: true })
   if (what === "archetype" || what === "grade" || what === "specialty") {
     const opts = ctx.vocab[({ archetype: "archetypes", grade: "grades", specialty: "specialties" } as const)[what]]
     return apply(editField(hall, ctx, what, opts[(opts.indexOf(c[what]) + 1) % opts.length]!))
@@ -633,7 +633,7 @@ function open(m: Mode) {
   if (m.kind === "thread") { picked = m.tid; cardReply = { tid: m.tid, ed: cardReply?.tid === m.tid ? cardReply.ed : new Editor(), focused: !asks(m.tid) } }
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   if (m.kind === "pet" && m.who === "cat") { petDraft = structuredClone((petsNow ?? resolvePets(loadPets())).cat); previewTick = 0 }
-  if (m.kind === "look") lookDraft = { ...baseLook(m.name), ...overrideFor(m.name) }
+  if (m.kind === "look") lookDraft = m.hall ? structuredClone(candidateOf(hall, hallCtx()).look) : { ...baseLook(m.name), ...overrideFor(m.name) }
   const tid = openThread()
   void Promise.all([tid !== null ? loadThread(tid) : null, loadCard()]).then(draw)
   draw()
@@ -1888,7 +1888,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     }
     case "look": {
       const m = mode, name = m.name
-      const draft = (lookDraft ??= { ...baseLook(name), ...overrideFor(name) })
+      const draft = (lookDraft ??= m.hall ? structuredClone(candidateOf(hall, hallCtx()).look) : { ...baseLook(name), ...overrideFor(name) })
       const field = (label: string, value: string, cycle: () => void): Row => ({ segs: [dim(label.padEnd(12)), plain(value)], open: () => { cycle(); draw() } })
       const rows: Row[] = [
         { segs: [dim("look at the room — a saved change shows there live, with no restart")] },
@@ -1913,14 +1913,14 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `LOOK · ${name.toUpperCase()}`, rows,
         actions: [
-          // ⏎ is the lit row (it cycles a field); save has its own key
-          { ...bind("look.s"), run: () => { saveLook(name, draft); lookDraft = null; back(); roomChanged = true; draw() } },
+          // ⏎ is the lit row (it cycles a field); save has its own key. A hall candidate has no looks.json entry until hired: its draft goes into hall.json
+          { ...bind("look.s"), run: () => { if (m.hall) hallSet(setLook(hall, draft as Look)); else { saveLook(name, draft); roomChanged = true } lookDraft = null; back(); draw() } },
           { ...bind("look.r"), run: () => { Object.assign(draft, rollLook(`${name}:${rolls++}`)); draw() } },
           { ...bind("look.e"), run: () => {
             editBuf = { front: draft.custom?.front ? [...draft.custom.front] : blankBuf(), side: draft.custom?.side ? [...draft.custom.side] : blankBuf(), back: draft.custom?.back ? [...draft.custom.back] : blankBuf() }
             editEntry = { front: [...editBuf.front], side: [...editBuf.side], back: [...editBuf.back] }
             editCursor = { x: 0, y: 0 }; editScroll = 0
-            mode = { kind: "look-editor", name, view: "front", from: m.from }; sel = 0; snapSel = true; draw()
+            mode = { kind: "look-editor", name, view: "front", from: m.from, hall: m.hall }; sel = 0; snapSel = true; draw()
           } },
           back1,
         ],
@@ -2308,12 +2308,12 @@ function editorKey(k: string) {
   if (k === "right") { editCursor.x = Math.min(11, editCursor.x + 1); return draw() }
   if (k === "m") { editMirror = !editMirror; return draw() }
   if (k === "1" || k === "2" || k === "3") {
-    mode = { kind: "look-editor", name, view: k === "1" ? "front" : k === "2" ? "side" : "back", from: mode.from }
+    mode = { kind: "look-editor", name, view: k === "1" ? "front" : k === "2" ? "side" : "back", from: mode.from, hall: mode.hall }
     return draw()
   }
   if (k === "esc") {
     if (editEntry) editBuf[view] = [...editEntry[view]]
-    mode = { kind: "look", name, from: mode.from }; sel = 0; snapSel = true; return draw()
+    mode = { kind: "look", name, from: mode.from, hall: mode.hall }; sel = 0; snapSel = true; return draw()
   }
   if (k === "enter") {
     if (lookDraft) {
@@ -2321,7 +2321,7 @@ function editorKey(k: string) {
       if (custom) lookDraft.custom = custom
       else delete lookDraft.custom
     }
-    mode = { kind: "look", name, from: mode.from }; sel = 0; snapSel = true; return draw()
+    mode = { kind: "look", name, from: mode.from, hall: mode.hall }; sel = 0; snapSel = true; return draw()
   }
   if (k === ".") return paintAt(".")
   if ((LEGEND_CHARS as readonly string[]).includes(k)) return paintAt(k)
