@@ -172,6 +172,21 @@ defmodule Server.StaffingTest do
     refute Server.Repo.get!(Server.Session, kept.id).ended_at
   end
 
+  # a switch restaffs thread T from hronir to borges; hronir's session lingers though T's one leaf is borges's
+  for {label, agent_col} <- [{"tagged", "borges"}, {"untagged", ""}] do
+    test "a #{label} leaf on a restaffed thread keeps the new lead's session and ends the old lead's", %{ws: ws} do
+      thread = staffed_thread(ws, "borges")
+      old_lead = session!("hronir", thread.id, 1_200)
+      new_lead = session!("borges", thread.id, 1_200)
+
+      tmux("0\tt#{thread.id}\t#{thread.id}\tdone\t999999991\t#{unquote(agent_col)}\t#{old()}\n")
+      assert :ok = Staffing.pass(ws.id)
+
+      assert Server.Repo.get!(Server.Session, old_lead.id).ended_at
+      refute Server.Repo.get!(Server.Session, new_lead.id).ended_at
+    end
+  end
+
   test "a mid-turn session from before the tmux server whose window matches is ended, logged, and not told to carry on; one after it stays",
        %{ws: ws} do
     here = staffed_thread(ws, "borges")

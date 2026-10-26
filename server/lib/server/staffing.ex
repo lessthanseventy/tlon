@@ -118,9 +118,14 @@ defmodule Server.Staffing do
     |> Enum.each(fn {s, _} -> Staff.end_session(s) end)
   end
 
+  # An untagged leaf (no @funes_agent: hand-made or older) can only be the thread's lead's, so it
+  # vouches for the lead alone — not for a former lead's session still on the thread.
   defp windowed?(tabs, thread_id, name, standing) do
     Enum.any?(tabs, fn tab ->
-      leaf? = (tab.thread_id == thread_id or tab.name == "t#{thread_id}") and tab.agent in [nil, name]
+      leaf? =
+        (tab.thread_id == thread_id or tab.name == "t#{thread_id}") and
+          (tab.agent == name or (is_nil(tab.agent) and Channel.thread_lead(thread_id) == name))
+
       own? = thread_id == standing and tab.thread_id == nil and (tab.agent || tab.name) == name
       leaf? or own?
     end)
