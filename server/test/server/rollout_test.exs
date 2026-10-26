@@ -118,6 +118,12 @@ defmodule Server.RolloutTest do
       assert Enum.any?(busy, &(&1 =~ "landing of #145"))
     end
 
+    test "a seat's running check (run_task) is named, and the window is shut" do
+      running!("Server.Jobs.RunTask", :tasks, %{thread_id: 150, agent: "lonnrot", task: "check"})
+      assert [line] = Rollout.busy(%{})
+      assert line =~ "the check of #150 for lonnrot is running"
+    end
+
     test "other queues don't hold the window" do
       running!("Server.Jobs.Drain", :default, %{})
       assert Rollout.busy(%{}) == []
