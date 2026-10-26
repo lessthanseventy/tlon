@@ -154,12 +154,16 @@ defmodule Server.Switchboard do
     length(ids)
   end
 
-  # A tlon-authored notice (a stage wake) @mentions no one, so its addressee is only whoever leads the
+  # A tlon-authored post that names nobody (a stage wake) has no addressee but whoever leads the
   # thread NOW: after a handoff that is a lead it was never meant for. Staffing re-wakes a lead that
-  # moved on, so such a notice is never handed back.
-  defp unheard?(%Message{author: "tlon"}), do: false
+  # moved on, so it is never handed back. One that @mentions or replies to a seat keeps its retry.
+  defp unheard?(%Message{author: "tlon"} = message) do
+    reply_author(message) ++ mentioned_agents(message) != [] and unheard_by_addressees?(message)
+  end
 
-  defp unheard?(message) do
+  defp unheard?(message), do: unheard_by_addressees?(message)
+
+  defp unheard_by_addressees?(message) do
     heard_by = DateTime.add(message.delivered_at, @heard_after)
 
     case recipients(message) do
