@@ -97,6 +97,57 @@ defmodule Server.PRLandingTest do
     end
   end
 
+  describe "request/3: `mise run land`'s gh preflight, server-side, then the queue (the land_pr tool)" do
+    # gh stubbed: `pr view --json …` answers the PR, `api …/branches/<b>` its protection.
+    defp pr_gh(pr, protected \\ "false") do
+      fn "gh", args, _opts ->
+        case args do
+          ["pr", "view" | _] -> {Jason.encode!(pr), 0}
+          ["api" | _] -> {protected, 0}
+        end
+      end
+    end
+
+    defp feature_pr(over \\ %{}) do
+      Map.merge(
+        %{
+          "headRefName" => "feature",
+          "baseRefName" => "main",
+          "state" => "OPEN",
+          "isCrossRepository" => false,
+          "author" => %{"login" => "andrew"}
+        },
+        over
+      )
+    end
+
+    test "an open PR onto main from its own branch is queued by its branch", ctx do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      approve(ctx, origin(ctx, "feature"))
+      assert {:ok, _} = PRLanding.request(ctx.repo, 7, run: pr_gh(feature_pr()))
+      assert [%{"pr" => 7, "branch" => "feature", "pr_author" => "andrew"}] = jobs()
+    end
+
+    test "refused before it is queued: closed, not onto main, a fork, main itself, protected, unreadable", ctx do
+      approve(ctx, origin(ctx, "feature"))
+
+      for {run, said} <- [
+            {pr_gh(feature_pr(%{"state" => "MERGED"})), "MERGED"},
+            {pr_gh(feature_pr(%{"baseRefName" => "next"})), "next"},
+            {pr_gh(feature_pr(%{"isCrossRepository" => true})), "fork"},
+            {pr_gh(feature_pr(%{"headRefName" => "main"})), "main"},
+            {pr_gh(feature_pr(), "true"), "protected"},
+            {pr_gh(feature_pr(), "boom"), "protected"},
+            {fn _, _, _ -> {"nope", 1} end, "gh could not read"}
+          ] do
+        assert {:error, why} = PRLanding.request(ctx.repo, 7, run: run)
+        assert why =~ said
+      end
+
+      assert jobs() == []
+    end
+  end
+
   describe "land/2: the merge queue's turn" do
     test "approved at its head: rebased, gated, pushed, the review commented, tlon/check posted, merged at that head",
          ctx do
