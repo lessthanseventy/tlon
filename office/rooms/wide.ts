@@ -16,7 +16,7 @@ import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
 import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
 import { ARRIVE, LEAVE, drawAleph, gone, STEP as ALEPH_STEP, type Visit } from "../kit/aleph"
-import { boardColumns, COLS, isManager, peopleOf, seating, STATE_GLYPH, weekTrend, type BoardCtx, type CardState } from "../kit/crew"
+import { boardColumns, COLS, isManager, peopleOf, seating, STATE_GLYPH, stickyItems, weekTrend, type BoardCtx, type BoardItem, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawCloset, drawFire, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
 import { ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
@@ -794,8 +794,10 @@ export class WideRoom extends Sim<Layout> {
       const head = trend && measure(full, 10) <= colW - 4 ? full : `${COLS[c]} ${col.items.length}`
       sc.text(head, cx + 3, 3 + lh - 0.5, ROLE.key, measure(head, 10) <= colW - 4 ? 10 : 9, "left")
       sc.hits.push({ x: cx, y: 3, w: colW, h: lh + 1, tip: `${COLS[c]!.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
+      // the TICKETS column is stickies of its groups and loose tickets; the header still counts tickets
+      const list = c === 0 ? stickyItems(a).map((s): BoardItem => ({ act: s.act, title: s.text, who: null, stage: "", asks: false, archetype: null, high: false })) : col.items
       // as many lines as fit at the surface's text size; the rest are a "+n more" (and the column's list)
-      const room = Math.max(1, Math.floor((38 - 3 - lh) / lh)), shown = col.items.slice(0, col.items.length > room ? room - 1 : room)
+      const room = Math.max(1, Math.floor((38 - 3 - lh) / lh)), shown = list.slice(0, list.length > room ? room - 1 : room)
       shown.forEach((it, i) => {
         const y = 3 + lh * (i + 2)
         const id = it.act.kind === "ticket" || it.act.kind === "epic" ? it.act.id : it.act.kind === "thread" ? it.act.tid : 0
@@ -805,11 +807,11 @@ export class WideRoom extends Sim<Layout> {
         // BUILD holds plain threads too (no workline stage): a violet tick sets them apart
         if (it.stage === "doing") px(cx + 1, y - 4, 1, 3, ROLE.assistant)
         if (it.act.kind === "thread") this.cards.set(it.act.tid, { x: cx + colW - 13, y: y - 8 })
-        sc.text(fit(measure, `#${id} ${it.title}`, colW - 9, 9), cx + 7, y, colour, 9, "left")
+        sc.text(fit(measure, `${it.act.kind === "column" ? "" : `#${id} `}${it.title}`, colW - 9, 9), cx + 7, y, colour, 9, "left")
         const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""
         sc.hits.push({ x: cx + 1, y: y - lh + 1, w: colW - 2, h: lh, tip: `#${id} ${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act })
       })
-      if (col.items.length > shown.length) sc.text(`+${col.items.length - shown.length} more`, cx + 7, 3 + lh * (shown.length + 2), ROLE.inactive, 9, "left")
+      if (list.length > shown.length) sc.text(`+${list.length - shown.length} more`, cx + 7, 3 + lh * (shown.length + 2), ROLE.inactive, 9, "left")
     })
     // the pen in its tray: a new ticket
     sc.blit(["kk.aa.ll"], x1 - 12, 39, { k: ROLE.key, a: ROLE.alarm, l: ROLE.live })

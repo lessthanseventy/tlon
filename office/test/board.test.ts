@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { BOARD_LEGEND, boardColumns, cardState, epicChildren, groupRows, STATE_GLYPH, treeRows } from "../kit/crew"
+import { BOARD_LEGEND, boardColumns, cardState, epicChildren, groupRows, STATE_GLYPH, treeRows, stickyItems } from "../kit/crew"
 import { EMPTY, type Agents, type Seat, type Thread, type Ticket } from "../kit/types"
 
 const thread = (id: number, over: Partial<Thread> = {}): Thread => ({ id, title: `t${id}`, stage: "build", awaiting: null, workspace_id: 1, lead: "ireneo", seat: "idle", ...over })
@@ -188,4 +188,30 @@ test("the whiteboard's legend words every mark the board can draw", () => {
   for (const g of Object.values(STATE_GLYPH)) expect(marks).toContain(g)
   expect(marks).toContain("■")
   for (const [, words] of BOARD_LEGEND) expect(words.length).toBeGreaterThan(5)
+})
+
+describe("the whiteboard's TICKETS sticky", () => {
+  const tk = (id: number, over: Partial<Ticket> = {}): Ticket => ({ id, workspace_id: 1, project_id: null, title: `k${id}`, priority: "normal", kind: "ticket", epic_id: null, ...over })
+
+  test("one line per initiative with its progress, then the loose tickets", () => {
+    const a = {
+      ...snap([]),
+      tickets: [
+        tk(585, { title: "kids", kind: "initiative" }),
+        tk(586, { title: "Toy", kind: "epic", epic_id: 585, done: 0, total: 2, next: null }),
+        tk(590, { title: "sandbox mode", epic_id: 586 }),
+        tk(600, { title: "other", kind: "initiative" }),
+        tk(7, { title: "one" }), tk(8, { title: "two" }), tk(9, { title: "three" }),
+      ],
+    }
+    const lines = stickyItems(a)
+    expect(lines.map((s) => s.text)).toEqual(["kids 0/2", "other 0/0", "3 loose"])
+    expect(lines[0]!.act).toEqual({ kind: "epic", id: 585 })
+    expect(lines[2]!.act).toEqual({ kind: "column", col: 0 })
+  })
+
+  test("a loose epic gets a line of its own, and no loose line without loose tickets", () => {
+    const a = { ...snap([]), tickets: [tk(700, { title: "solo", kind: "epic", done: 1, total: 3, next: null })] }
+    expect(stickyItems(a).map((s) => s.text)).toEqual(["solo 1/3"])
+  })
 })
