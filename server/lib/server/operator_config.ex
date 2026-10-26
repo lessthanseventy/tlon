@@ -133,7 +133,7 @@ defmodule Server.OperatorConfig do
       type: "string",
       default: "ollama-cloud/deepseek-v4.1-flash",
       choice: "model",
-      doc: "the provider/model every one-shot runs on: banter, titles, the judge, the oracle, the toys"
+      doc: "the provider/model every one-shot runs on: banter, titles, the judge, the toys"
     },
     %{key: "weather_location", type: "string", default: "", doc: "where the office's weather comes from"},
     %{
