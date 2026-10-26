@@ -1145,7 +1145,7 @@ const stamp = (at: string) => {
   const d = new Date(at), p = (n: number) => String(n).padStart(2, "0")
   return `${d.toDateString().slice(4, 10)} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
-const runGlyph = (r: { status: string }): Seg => (r.status === "ok" ? { s: "✓", fg: ROLE.live } : r.status === "failed" ? { s: "✗", fg: ROLE.alarm } : { s: "…", fg: ROLE.key })
+const runGlyph = (r: { status: string }): Seg => (r.status === "ok" ? { s: "✓", fg: ROLE.live } : r.status === "failed" ? { s: "✗", fg: ROLE.alarm } : r.status === "interrupted" ? { s: "⊘", fg: ROLE.inactive } : { s: "…", fg: ROLE.key })
 const KIND_OF: Record<data.ScheduleKind, string> = { agent: "agent", workline: "workline", script: "script" }
 /** a schedule as one row: on or paused, what, when, next, how the last run went */
 function scheduleSegs(s: data.Schedule): Seg[] {
