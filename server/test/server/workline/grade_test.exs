@@ -329,6 +329,24 @@ defmodule Server.Workline.GradeTest do
     end
   end
 
+  describe "steering/1" do
+    test "a persona file is canary-able, the law and skills are steering the bench can't load" do
+      assert Grade.steering(["server/lib/server/profiles.ex", "server/lib/server/soul.ex"]) ==
+               [{:profiles, "server/lib/server/profiles.ex"}, {:profiles, "server/lib/server/soul.ex"}]
+
+      assert Grade.steering(["AGENTS.md", "server/AGENTS.md", "skills/tdd/SKILL.md"]) ==
+               [
+                 {:unmeasurable, "AGENTS.md"},
+                 {:unmeasurable, "server/AGENTS.md"},
+                 {:unmeasurable, "skills/tdd/SKILL.md"}
+               ]
+    end
+
+    test "anything else is not steering" do
+      assert Grade.steering(["server/lib/server/thread.ex", "office/kit/pets.ts"]) == []
+    end
+  end
+
   defp last_grade(thread) do
     import Ecto.Query
 
