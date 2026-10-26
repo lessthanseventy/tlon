@@ -1295,7 +1295,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const shown = tree ?? items
       const reorder = (dir: "up" | "down"): Action => ({ ...bind(dir === "up" ? "column.K" : "column.J", `move ${dir}`), run: () => { if (it?.act.kind === "ticket") void did(data.ticketReorder(it.act.id, dir)).then(() => { sel = Math.max(0, Math.min(sel + (dir === "up" ? -1 : 1), shown.length - 1)); draw() }) } })
       return {
-        title: `${col.name} · ${items.length}${colSort.name === "board" ? "" : ` · by ${colSort.name}`}`,
+        // tickets carry no owner, so the tree has no who order to name
+        title: `${col.name} · ${items.length}${colSort.name === "board" || (tree && colSort.name === "who") ? "" : ` · by ${colSort.name}`}`,
         rows: tree ? tree.map((x) => {
           const id = (x.act as { id: number }).id
           return {
