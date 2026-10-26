@@ -81,7 +81,7 @@ defmodule Server.Jobs.OrphansTest do
     for id <- [orphan_a, orphan_b], do: assert(%{state: "discarded"} = Server.Repo.get!(Oban.Job, id))
   end
 
-  test "a discarded run's row closes as failed, saying it was interrupted" do
+  test "a discarded run's row closes as interrupted" do
     ws = %{name: "Machine"} |> Server.Workspaces.register() |> elem(1)
     {:ok, s} = Server.Schedules.create(%{workspace_id: ws.id, kind: "script", title: "t", body: "true", cron: "@daily"})
 
@@ -96,7 +96,7 @@ defmodule Server.Jobs.OrphansTest do
 
     Orphans.requeue("funes@here")
 
-    assert %{status: "failed", output: "interrupted: " <> _, finished_at: %DateTime{}} =
+    assert %{status: "interrupted", output: "interrupted: " <> _, finished_at: %DateTime{}} =
              Server.Repo.get!(Server.ScheduleRun, run.id)
   end
 
