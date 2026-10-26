@@ -197,6 +197,30 @@ defmodule Server.WorktreeTest do
       assert Worktree.stranded(repo, "landed") == nil
     end
 
+    # Commit A writes work.txt, commit B rewrites it; main lands only the final contents. A's own
+    # version of the file never matches main, but the branch tip does: it has landed.
+    test "nil when a later commit rewrites an earlier commit's file and the tip is on origin/main", %{
+      repo: repo,
+      git: git
+    } do
+      {_, 0} = git.(["checkout", "-qb", "work/superseded"])
+      File.write!(Path.join(repo, "work.txt"), "first\n")
+      {_, 0} = git.(["add", "work.txt"])
+      {_, 0} = git.(["commit", "-qm", "first draft"])
+      File.write!(Path.join(repo, "work.txt"), "final\n")
+      {_, 0} = git.(["add", "work.txt"])
+      {_, 0} = git.(["commit", "-qm", "rewrite"])
+      {_, 0} = git.(["checkout", "-q", "-"])
+
+      File.write!(Path.join(repo, "work.txt"), "final\n")
+      {_, 0} = git.(["add", "work.txt"])
+      {_, 0} = git.(["commit", "-qm", "squash-merged"])
+      {_, 0} = git.(["update-ref", "refs/remotes/origin/main", "HEAD"])
+
+      {:ok, _} = Worktree.ensure(repo, "superseded")
+      assert Worktree.stranded(repo, "superseded") == nil
+    end
+
     test "still names a branch whose change is NOT on origin/main, even if other files match", %{
       repo: repo,
       git: git
