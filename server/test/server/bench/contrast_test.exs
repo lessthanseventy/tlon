@@ -100,11 +100,27 @@ defmodule Server.Bench.ContrastTest do
       end
 
       assert [%{kind: :error, why: why}] =
-               Contrast.run(["server/lib/server/profiles.ex"], @dirs, exec: ex, wall_ms: 200)
+               Contrast.run(["server/lib/server/profiles.ex"], @dirs, exec: ex, wall_ms: 60_000)
 
       assert_received {:left, left}
-      assert left in 1..200
+      assert left in 1..60_000
       assert why =~ "wall"
+    end
+
+    test "a run whose wall is already spent never calls exec; each side is a not-run error row" do
+      me = self()
+
+      ex = fn _, _, _ ->
+        send(me, :exec_called)
+        {"", 0}
+      end
+
+      assert [%{kind: :error, why: why}] =
+               Contrast.run(["server/lib/server/profiles.ex"], @dirs, exec: ex, wall_ms: 0)
+
+      refute_received :exec_called
+      assert why =~ "not run"
+      assert why =~ "is spent"
     end
 
     test "roles over the cap are named skipped, after the rows that ran" do
