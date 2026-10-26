@@ -82,7 +82,14 @@ for stale in "$vroot"/*/; do
 done
 git -C "$repo" worktree prune
 fresh="$(mktemp -d -p "$vroot" "XXXXXX")" && cd "$fresh" || exit 1
-trap 'git -C "$repo" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"; git -C "$repo" worktree prune' EXIT
+drop_tree() { git -C "$repo" worktree remove --force "$1" >/dev/null 2>&1; rm -rf "$1"; }
+mainwt=""
+cleanup() {
+  drop_tree "$fresh"
+  [ -z "$mainwt" ] || drop_tree "$mainwt"
+  git -C "$repo" worktree prune
+}
+trap cleanup EXIT
 git -C "$repo" worktree add -q --detach "$fresh" "$ref" || exit 1
 # --no-update-refs: rebase.updateRefs (set on this machine) would move every branch pointing into
 # the range — a coworker's work/<slug> not checked out anywhere
@@ -175,15 +182,30 @@ fail=0
 task=check; [ -n "${LAND_REF:-}" ] && task="${RUN_TASK:-check}"
 run_gate "mise run $task" mise run "$task" || fail=1
 
-# A steering edit earns a canary A/B (#632): the roles it moved benched from main's checkout and
-# the branch's, each contrast a bench_contrast CHECKS row and one note — evidence for the reviewer,
-# never a red. A workline's own verify only, once its gate is green, in a tree that has the task
-# (a menard thread's doesn't). Only rows are kept: mix's compile lines share its stdout. The whole
-# step is clamped to 15 minutes, and hitting the wall is itself a row.
+# A steering edit earns a canary A/B (#632): the roles it moved benched from origin/main and the
+# branch's rebased checkout, each contrast a bench_contrast CHECKS row and one note — evidence for the
+# reviewer, never a red. A workline's own verify only, once its gate is green, in a tree that has the
+# task (a menard thread's doesn't). Only rows are kept: mix's compile lines share its stdout.
+# Main's side is a throwaway worktree of origin/main beside $fresh, as check-main.sh makes — never the
+# root checkout, which holds whatever branch the operator has out and is the tree the service reads.
+# It is made whenever the step runs: whether the diff is steering is the task's call
+# (Server.Workline.Grade.steering/1), not a second classifier here.
+# The task clamps itself to 15 minutes and kills each side's process group at its wall
+# (Server.Bench.Contrast); the timeout here is a backstop a minute past it, for a VM that hangs
+# before its own wall fires.
 if [ "$fail" -eq 0 ] && [ -z "${WORKLINE_GATE:-}" ] && [ -f "$fresh/server/lib/mix/tasks/server.bench_contrast.ex" ]; then
   rows="$(mktemp)"
-  (cd "$fresh/server" && "${clean[@]}" MISE_YES=1 timeout 900 mise exec -- mix server.bench_contrast --branch "$fresh" --main "$root" >"$rows" 2>/dev/null)
-  [ $? -eq 124 ] && echo "bench_contrast error: the canary A/B hit verify's 15-minute wall" >>"$rows"
+  mainwt="$(mktemp -d -p "$vroot" main-XXXXXX)"
+  if git -C "$repo" worktree add -q --detach "$mainwt" origin/main; then
+    mise trust -q "$mainwt" >/dev/null 2>&1
+    copy_deps "$fresh" "$mainwt" server
+    (cd "$mainwt/server" && "${clean[@]}" MISE_YES=1 mise exec -- mix deps.get >/dev/null 2>&1)
+    (cd "$fresh/server" && "${clean[@]}" MISE_YES=1 timeout -k 30 960 mise exec -- mix server.bench_contrast --branch "$fresh" --main "$mainwt" >"$rows" 2>/dev/null)
+    [ $? -eq 124 ] && echo "bench_contrast error: the canary A/B's VM hung past its wall and was killed" >>"$rows"
+  else
+    echo "bench_contrast error: no worktree of origin/main for main's side" >>"$rows"
+  fi
+  drop_tree "$mainwt"; mainwt=""
   contrast="$(grep '^bench_contrast ' "$rows")"
   rm -f "$rows"
   if [ -n "$contrast" ]; then
