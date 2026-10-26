@@ -744,6 +744,24 @@ defmodule Server.MCP.GatewayTest do
       assert {404, _} = post_json("/api/workspaces/#{ws.id}/coworkers/999999/clear", %{})
     end
 
+    test "a clear that tmux cannot carry out is refused, not reported as cleared" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      {:ok, seat} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder"})
+      {:ok, th} = Channel.open_thread(%{title: "t", workspace_id: ws.id})
+      {:ok, s} = Server.Staff.start_session(%{agent_id: seat.agent_id, thread_id: th.id})
+
+      Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+        if "list-windows" in args, do: {"protocol version mismatch", 1}, else: {"", 0}
+      end)
+
+      on_exit(fn -> Application.delete_env(:server, :tmux_cmd) end)
+
+      assert {409, %{"error" => "protocol version mismatch"}} =
+               post_json("/api/workspaces/#{ws.id}/coworkers/#{seat.agent_id}/clear", %{})
+
+      refute Server.Repo.get!(Server.Session, s.id).ended_at
+    end
+
     test "habits are approved or rejected; a thread moves between its workspace's projects" do
       {:ok, h} = Server.Dossier.propose_habit(%{text: "gate first", proposed_by: "hronir"})
       {200, %{"state" => "approved"}} = post_json("/api/habits/#{h.id}/approve", %{})

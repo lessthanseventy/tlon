@@ -1066,8 +1066,17 @@ defmodule Server.MCP.OperatorAPI do
   # a seated coworker's context cleared: its sessions end, its windows close; the next message spawns it fresh
   defp clear(conn, ws, agent_id) do
     case Enum.find(Workspaces.bench_all(ws.id), &(&1.agent_id == agent_id)) do
-      nil -> json(conn, 404, %{error: "no coworker #{agent_id} on #{ws.name}"})
-      c -> reply(conn, {:ok, Server.Staffing.clear_context(ws.id, c.name)}, fn _ -> %{cleared: c.name} end)
+      nil ->
+        json(conn, 404, %{error: "no coworker #{agent_id} on #{ws.name}"})
+
+      c ->
+        result =
+          case Server.Staffing.clear_context(ws.id, c.name) do
+            :ok -> {:ok, c.name}
+            {:error, _} = error -> error
+          end
+
+        reply(conn, result, fn name -> %{cleared: name} end)
     end
   end
 
