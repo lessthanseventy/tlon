@@ -49,13 +49,13 @@ describe("a workline card's state", () => {
     expect(cardState(snap([t]), t, { checkWaiting: [9] })?.kind).toBe("running")
   })
   test("landed, its PR not merged yet (the server's `landing`): waiting on GitHub, on the REVIEW column — whoever leads it", () => {
-    const t = thread(7, { stage: "merged", seat: "desk", landing: true })
+    const t = thread(7, { stage: "landed", seat: "desk", landing: true })
     expect(cardState(snap([t]), t)).toEqual({ kind: "merging", why: "landing · merging on GitHub" })
-    expect(cardState(snap([]), thread(7, { stage: "merged", lead: null, landing: true }))?.kind).toBe("merging")
+    expect(cardState(snap([]), thread(7, { stage: "landed", lead: null, landing: true }))?.kind).toBe("merging")
     expect(col(snap([t]), "REVIEW")).toEqual([7])
   })
   test("merged and reopened (not landing): never drawn as waiting on GitHub, and off the board", () => {
-    const t = thread(7, { stage: "merged", seat: "desk" })
+    const t = thread(7, { stage: "landed", seat: "desk" })
     expect(cardState(snap([t]), t)?.kind).toBe("running")
     expect(boardColumns(snap([t])).flatMap((c) => c.items)).toEqual([])
   })

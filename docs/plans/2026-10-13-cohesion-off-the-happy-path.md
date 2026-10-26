@@ -123,7 +123,7 @@ One concept, several names or glyphs, each surface choosing its own:
   **"staffing"** is tertius assigning a thread and the per-minute tmux pass. **"triage"** is
   blockers/failed checks/unled in the TUI and "what awaits the operator" on the web.
   **"calendar"** is Oban schedules in the TUI and `.ics` meetings in `Server.Calendar`.
-- **Stages**: the reader shows the full ring `intent…verify…review→merged`; the board folds intent
+- **Stages**: the reader shows the full ring `intent…verify…review→landed`; the board folds intent
   into SPEC and verify into BUILD (`kit/crew.ts:106-108`); the mod band shows the raw stage.
 - **`verify_failed`** is blocking in Needs and sticky in alerts (`alerts.ex:98`).
 - **"Waiting on you" has two sources**: header/inbox read `/api/office/needs`; the home card reads

@@ -100,7 +100,7 @@ export function execDesk(sc: Scene, a: Agents, measure: Measure, d: DeskAt & { k
       for (let i = 0; i < Math.min(routed, 5); i++) sc.px(d.x + 3, d.y + 17 - i, 5, 1, i % 2 ? ROLE.prose : ROLE.inactive)
       sc.text(routed ? `${routed} to staff` : "inbox clear", d.x + d.w / 2, d.y + 29, routed ? ROLE.body : ROLE.inactive, 10)
     } else {
-      const at = th?.stage ? (th.stage === "merged" ? STAGES.length : STAGES.indexOf(th.stage)) : -1
+      const at = th?.stage ? (th.stage === "landed" ? STAGES.length : STAGES.indexOf(th.stage)) : -1
       STAGES.forEach((_, i) => sc.px(d.x + 5 + i * 5, d.y + 25, 4, 3,
         i < at ? ROLE.live : i === at ? (needsYou(th) ? (f % 2 ? ROLE.attention : ROLE.raised) : f % 2 ? ROLE.live : ROLE.edge) : ROLE.edge))
       // the stage in words beside the track, so it isn't said by colour alone
