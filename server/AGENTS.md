@@ -204,6 +204,13 @@ and every layer the spine design's re-laid §9 asked for
   The gate tests its pure parts, and that every builder fixture's check is red before any work. The
   `senior` builder set is real merged worklines (`task.json` `source.commit`: the workdir is `git archive <sha>^ server`,
   the hidden check that workline's own tests); `--oracle` proves each green on the real diff.
+  A workline whose diff edits a persona (`Server.Workline.Grade.steering/1`: `profiles.ex`, `soul.ex`)
+  gets a canary A/B on verify (`mix server.bench_contrast`, `Server.Bench.Contrast`): the roles whose
+  prompt hash moved (`--fingerprint`, both checkouts) run the canary suite from main's checkout and
+  the branch's (`--out`, so neither tree's results are touched), at most 3 roles under a 15-minute
+  clamp; each contrast is a `bench_contrast` CHECKS row and a thread note, a regression named for
+  the reviewer, never a red. A skill or AGENTS.md edit is recorded `unmeasurable`: the bench never
+  loads them.
 
 Still deferred: the engine-credit half of presence (clocked-out from spent credits/rate-limit), the
 human-notification path, and the `Sense` collectors. (A mention of a coworker who isn't on the

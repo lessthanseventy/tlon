@@ -5,6 +5,6 @@ description = "bench: LongMemEval (agent-memory-benchmark's harness, ollama.com 
 run = "bench/longmemeval/run.sh"
 
 ["bench:roles"]
-description = "bench: can each coworker role do its job on its routed model — frozen tasks per role, graded, usage recorded; results in bench/roles/results/, table in bench/roles/README.md — `-- --suite canary|full [--role R] [--model provider/model[:effort]] [--oracle]` (`--oracle` grades the real solution of each commit-sourced task, no model)"
+description = "bench: can each coworker role do its job on its routed model — frozen tasks per role, graded, usage recorded; results in bench/roles/results/, table in bench/roles/README.md — `-- --suite canary|full [--role R] [--model provider/model[:effort]] [--oracle] [--out FILE] [--fingerprint]` (`--oracle` grades the real solution of each commit-sourced task, no model; `--out` writes the records to FILE and touches nothing else; `--fingerprint` prints each role's prompt hash and runs nothing)"
 dir = "server"
 run = "mix server.bench_roles"

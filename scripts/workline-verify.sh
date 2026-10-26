@@ -175,6 +175,26 @@ fail=0
 task=check; [ -n "${LAND_REF:-}" ] && task="${RUN_TASK:-check}"
 run_gate "mise run $task" mise run "$task" || fail=1
 
+# A steering edit earns a canary A/B (#632): the roles it moved benched from main's checkout and
+# the branch's, each contrast a bench_contrast CHECKS row and one note — evidence for the reviewer,
+# never a red. A workline's own verify only, once its gate is green, in a tree that has the task
+# (a menard thread's doesn't). Only rows are kept: mix's compile lines share its stdout. The whole
+# step is clamped to 15 minutes, and hitting the wall is itself a row.
+if [ "$fail" -eq 0 ] && [ -z "${WORKLINE_GATE:-}" ] && [ -f "$fresh/server/lib/mix/tasks/server.bench_contrast.ex" ]; then
+  rows="$(mktemp)"
+  (cd "$fresh/server" && "${clean[@]}" MISE_YES=1 timeout 900 mise exec -- mix server.bench_contrast --branch "$fresh" --main "$root" >"$rows" 2>/dev/null)
+  [ $? -eq 124 ] && echo "bench_contrast error: the canary A/B hit verify's 15-minute wall" >>"$rows"
+  contrast="$(grep '^bench_contrast ' "$rows")"
+  rm -f "$rows"
+  if [ -n "$contrast" ]; then
+    while IFS= read -r line; do
+      "$cli" record-verify "$tid" "$slug" 0 bench_contrast "$line" || unrecorded=1
+    done <<<"$contrast"
+    note "$tid" "verify: canary A/B for the steering this branch edits —
+$contrast" || true
+  fi
+fi
+
 if [ -n "${WORKLINE_GATE:-}" ]; then
   [ "$fail" -eq 0 ] && exit 0
   printf '%s\n' "$gate_tail"

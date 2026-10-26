@@ -164,6 +164,14 @@ defmodule Server.WorklineVerifyScriptTest do
       for s <- ~w(workline-verify.sh git-fetch-origin.sh lib/seed-hex.sh),
           do: File.cp!(Path.join(Path.dirname(@script), s), Path.join(repo, "scripts/#{s}"))
 
+      # the CLI the script records and advances through, in a workline's verify: every call logged
+      File.write!(Path.join(repo, "scripts/tlon-cli.sh"), ~S"""
+      #!/bin/sh
+      printf '%s\n' "$*" >>"$CLI_LOG"
+      """)
+
+      File.chmod!(Path.join(repo, "scripts/tlon-cli.sh"), 0o755)
+
       sh.(repo, """
       git config user.email t@t && git config user.name t && git add -A && git commit -qm one && git branch -M main &&
       git push -q origin main && git checkout -qb land/feature && echo f >f && git add f && git commit -qm f &&
@@ -172,6 +180,8 @@ defmodule Server.WorklineVerifyScriptTest do
 
       File.write!(Path.join(tmp, "bin/mise"), ~S"""
       #!/bin/sh
+      # exec: the canary A/B task, printing CONTRAST_OUT (with mix's compile noise) when set
+      [ "$1" = exec ] && { echo "$*" >>"$GATE_LOG.exec"; [ -z "${CONTRAST_OUT:-}" ] || { echo "Compiling 2 files (.ex)"; cat "$CONTRAST_OUT"; }; exit 0; }
       [ "$1" = run ] || exit 0
       echo "$(git rev-parse HEAD) $CHECKS_LABEL ${TLON_TEST_DATABASE:-}" >"$GATE_LOG"
       echo "$PWD" >"$GATE_LOG.cwd"
@@ -200,6 +210,89 @@ defmodule Server.WorklineVerifyScriptTest do
         env: env,
         stderr_to_stdout: true
       )
+    end
+
+    # a workline's own verify (thread 7, work/pr-7-feature): records through the CLI stub and advances
+    defp verify(ctx, env \\ []) do
+      env =
+        [
+          {"PATH", "#{ctx.tmp}/bin:#{System.get_env("PATH")}"},
+          {"TMPDIR", ctx.tmp},
+          {"XDG_CACHE_HOME", Path.join(ctx.tmp, "cache")},
+          {"GATE_LOG", Path.join(ctx.tmp, "gate.log")},
+          {"CLI_LOG", Path.join(ctx.tmp, "cli.log")}
+        ] ++ env
+
+      System.cmd("bash", [Path.join(ctx.repo, "scripts/workline-verify.sh"), "7", "pr-7-feature", ctx.repo],
+        env: env,
+        stderr_to_stdout: true
+      )
+    end
+
+    # the workline's branch, one commit past main: `files` (path => content) under server/
+    defp workline!(ctx, files) do
+      writes = Enum.map_join(files, " && ", fn {p, c} -> "mkdir -p #{Path.dirname(p)} && echo '#{c}' >#{p}" end)
+
+      {_, 0} =
+        System.cmd(
+          "sh",
+          [
+            "-c",
+            "git checkout -qb work/pr-7-feature main && #{writes} && git add -A && git commit -qm w && git checkout -q main"
+          ],
+          cd: ctx.repo
+        )
+    end
+
+    @task_file "server/lib/mix/tasks/server.bench_contrast.ex"
+
+    test "canary A/B: a tree without the task runs none; a run that prints no row records and notes nothing", ctx do
+      workline!(ctx, %{"server/x.ex" => "x"})
+      assert {_, 0} = verify(ctx)
+      refute File.exists?(Path.join(ctx.tmp, "gate.log.exec"))
+      cli = File.read!(Path.join(ctx.tmp, "cli.log"))
+      refute cli =~ "bench_contrast"
+      refute cli =~ "\nnote "
+      assert cli |> String.trim() |> String.split("\n") |> List.last() == "advance 7 verify"
+    end
+
+    test "canary A/B: a tree with the task but no steering: it runs, prints nothing, nothing is recorded", ctx do
+      workline!(ctx, %{@task_file => "t"})
+      assert {_, 0} = verify(ctx)
+      assert File.read!(Path.join(ctx.tmp, "gate.log.exec")) =~ "mix server.bench_contrast --branch "
+      refute File.read!(Path.join(ctx.tmp, "cli.log")) =~ "bench_contrast"
+    end
+
+    test "canary A/B: each row is a bench_contrast CHECKS row (exit 0) and one note, before the advance; mix's noise is not",
+         ctx do
+      workline!(ctx, %{@task_file => "t"})
+      rows = Path.join(ctx.tmp, "rows")
+
+      File.write!(rows, """
+      bench_contrast qa: main 2/2 · branch 1/2 · tokens 10/12 · turns 6/8 · m1..b1 · REGRESSION
+      bench_contrast unmeasurable: AGENTS.md — a seat reads it, the bench never loads it
+      """)
+
+      assert {_, 0} = verify(ctx, [{"CONTRAST_OUT", rows}])
+
+      log = ctx.tmp |> Path.join("cli.log") |> File.read!()
+      # the gate's row, one row per line, the note (its body repeats the rows), the advance
+      [_gate, qa, agents, note, body1, body2, advance] = String.split(log, "\n", trim: true)
+
+      assert qa ==
+               "record-verify 7 pr-7-feature 0 bench_contrast bench_contrast qa: main 2/2 · branch 1/2 · tokens 10/12 · turns 6/8 · m1..b1 · REGRESSION"
+
+      assert agents =~ "record-verify 7 pr-7-feature 0 bench_contrast bench_contrast unmeasurable: AGENTS.md"
+      assert note =~ "note 7 verify: canary A/B"
+      assert body1 =~ "REGRESSION" and body2 =~ "unmeasurable: AGENTS.md"
+      refute log =~ "Compiling"
+      assert advance == "advance 7 verify"
+    end
+
+    test "canary A/B: a red gate runs no canary", ctx do
+      workline!(ctx, %{@task_file => "t"})
+      assert {_, _} = verify(ctx, [{"FAKE_GATE", "1"}, {"CONTRAST_OUT", Path.join(ctx.tmp, "nowhere")}])
+      refute File.exists?(Path.join(ctx.tmp, "gate.log.exec"))
     end
 
     test "green: the full check runs on the ref, named as the PR on the rack, and nothing is recorded", ctx do
