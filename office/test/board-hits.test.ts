@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Hit } from "../kit/types"
+import type { Hit } from "../kit/canvas"
 import { RailRoom } from "../rooms/rail"
 import { viewOf } from "../kit/crew"
 import { WideRoom, WIDE_H } from "../rooms/wide"
