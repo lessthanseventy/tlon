@@ -1,22 +1,19 @@
-# Review — #631 one `oneshot_model` knob that every one-shot reads
+# Review — #631 one `oneshot_model` knob that every one-shot reads (round 2)
 
-**Verdict: approve.** One commit, 8b7fe01, read in full against the brief (#13279) and tertius's default ruling (#13303). The server's own gate passed on exactly this sha (`mise run check`, exit 0, 06:09Z); I did not re-run it.
+**Verdict: approve.** Branch head cd62d2d8325e, read as the diff since my first verdict (f6451f4) excluding `work/631-…/`: three hunks, four files counting pr.md. The server's own gate passed on exactly this sha (`mise run check`, exit 0, 07:56Z); I did not re-run it.
 
 ## Findings
 
-1. **Spec: every named site reads the knob, nothing else.** Generator, Writer (both pools and the `banter_cmd` stand-in default), Recall.Judge, Import.ClaudeSessions, Oracle `defaults(:ollama)` and Bootstrap's quain seed all call `Server.OperatorConfig.oneshot_model()`. The kimi literal and `deepseek-v4-pro:high` are gone, as the brief accepted.
+1. **Andrew's send-back (#13398) is done to the letter.** `server/lib/server/mcp/tools/oracle.ex:55` reads `defp defaults(:ollama), do: {"claude", "ollama-cloud/deepseek-v4-pro:high"}` again; the knob's doc at `operator_config.ex:136` drops "the oracle"; `docs/models.md:42` names the oracle as the exception and says why ("the other family's second opinion, not a one-shot"). No other source line changed.
 
-2. **Done-criterion holds.** `grep -rn ollama-cloud server/lib` outside `profiles.ex` leaves the knob's default (operator_config.ex:134), the `warmth_seconds` doc example (lines 17, 251) and `ollama_window.ex`. The latter two are the provider's name, not a model default. Nothing to chase.
+2. **Done-criterion holds with the one allowed literal.** `grep -rn ollama-cloud server/lib` outside `profiles.ex`: the knob's default (operator_config.ex:134), the oracle line (oracle.ex:55, allowed by #13398), the `warmth_seconds` doc example (lines 17, 251) and provider-name mentions in `ollama_window.ex`. Nothing is a stray model default.
 
-3. **Default stays `ollama-cloud/deepseek-v4.1-flash`**, per #13303; haiku is the operator's live setting after landing. The docs paragraph says exactly that. pr.md names the hand-back.
+3. **My round-1 follow-up on the oracle moduledoc is resolved by the revert**, not by an edit: with the oracle back on its own ollama model, "the cost lands on the bucket the caller is NOT draining" is true again. Not re-raised.
 
-4. **Validation is sound on both doors.** `valid(%{choice: "model"}, v)` sits before the plain `string` clause, so it wins for this knob; `value/2` runs the same check on the file, so a hand-edited `"nope/none"` falls back to the default rather than reaching `ModelCli`. `put_settings` rejects with "must be a provider/model from the model choices". Both paths are in the new operator_config test; the writer test pins `[haiku, haiku, knob]` / `[knob, knob, knob]` against a non-default knob.
+4. **Round-1 findings stand unchanged**: every one-shot site (Generator, Writer both pools, Recall.Judge, Import.ClaudeSessions, Bootstrap quain seed) reads the knob; validation runs on both the file and `put_settings`; default stays `ollama-cloud/deepseek-v4.1-flash` per #13303; QA passed on the settings room (#13368).
 
-5. **`Profiles.model_name/1` made public** with a doc and spec, no behaviour change; its one prior caller (line 1101) still compiles.
-
-6. **Nit, no action:** Writer's claude-pool fallback retries the knob's model after a failed haiku call. With the knob set to haiku that is a second try on the same model. Harmless.
+5. **Nit, no action:** pr.md line 10-11 says the grep "leaves only the profiles ring, the knob's default and ollama_window", omitting the oracle literal that this very commit restores. ireneo's thread message #13402 has the accurate list; the PR body is one clause behind it.
 
 ## Follow-ups (non-blocking)
 
-- Oracle's moduledoc still promises the other bucket; see follow_ups.
-- The office settings room edits `oneshot_model` as free text; see follow_ups.
+- Office settings edits `oneshot_model` as free text (carried from round 1); see follow_ups.
