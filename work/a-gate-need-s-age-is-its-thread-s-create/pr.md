@@ -13,6 +13,11 @@ that notice's `created_at`; only a thread with no notice falls back to its birth
 `verdict_row` compare against the same `at`, so they follow. Question items already use their own
 message's time and were not affected.
 
+The notice's wording has one source: `Brief.parked_prefix/2`, which `gate_message/2` builds on and
+`Needs.gated_at/1` matches with a trailing `%`, so a reword cannot silently age gates from their
+thread's birth again.
+
 Checked: two new tests in `needs_test.exs` (an hour-old workline that has just parked routes to
-Uqbar; a park 31 minutes old fails open), red before the fix, green after; `needs_test.exs` (77)
-and `needs_page_test.exs` (7) green; full `mise run check` on the head via run_task.
+Uqbar; a park 31 minutes old fails open), red before the fix, green after; a `workline_brief_test.exs`
+test that the gate notice opens with the shared prefix; `needs_test.exs` (77), `workline_brief_test.exs`
+(12) and `needs_page_test.exs` (7) green; full `mise run check` on the head via run_task.
