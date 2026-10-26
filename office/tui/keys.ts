@@ -140,6 +140,7 @@ export const KEYS = [
   // card:column
   { id: "column.n", scope: "card:column", key: "n", label: "new ticket", verb: "new" },
   { id: "column.s", scope: "card:column", key: "s", label: "sort: … → …", verb: "sort" },
+  { id: "column.space", scope: "card:column", key: "space", label: "open card", verb: "open" },
   { id: "column.right", scope: "card:column", key: "right", label: "next column (← →)" },
   { id: "column.K", scope: "card:column", key: "K", label: "move up", verb: "move up" },
   { id: "column.J", scope: "card:column", key: "J", label: "move down", verb: "move down" },
