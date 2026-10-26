@@ -18,8 +18,8 @@ defmodule Server.WakeTest do
   # A seat whose pane is up: a live session on the thread and a window tagged with its name.
   defp live_seat!(thread, name) do
     {:ok, a} = Server.Staff.register_agent(%{name: name, mandate: "m", engine: "e"})
-    {:ok, _} = Server.Staff.start_session(%{agent_id: a.id, thread_id: thread.id})
-    windows!("1\tt#{thread.id}\t#{thread.id}\t\t100\t#{name}\t0")
+    {:ok, _} = Server.Staff.start_session(%{agent_id: a.id, thread_id: thread.id, pane_ref: "%1"})
+    windows!("1\tt#{thread.id}\t#{thread.id}\t\t100\t#{name}\t0\t\t%1")
   end
 
   defp windows!(out), do: Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {out, 0} end)
@@ -49,6 +49,21 @@ defmodule Server.WakeTest do
     :ok = Server.Staff.mark_thinking(t.id, "nolan", stale)
     assert Wake.report_overdue() == 1
     assert Wake.take(t.id, "nolan") == []
+  end
+
+  test "a windowless live session beside a windowed superseded one is not a seat: nothing is paged",
+       %{thread: t} do
+    {:ok, a} = Server.Staff.register_agent(%{name: "vera", mandate: "m", engine: "e"})
+    {:ok, old} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id, pane_ref: "%474"})
+    Repo.update_all(from(s in Server.Session, where: s.id == ^old.id), set: [ended_at: DateTime.utc_now()])
+    {:ok, _live} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id})
+    windows!("1\tt#{t.id}\t#{t.id}\t\t100\tvera\t0\t\t%474")
+
+    {:ok, w} = Wake.queue(t.id, "vera", "ping")
+    at = DateTime.utc_now() |> DateTime.add(-600) |> DateTime.truncate(:second)
+    Repo.update_all(from(x in Wake, where: x.id == ^w.id), set: [inserted_at: at])
+
+    assert Wake.report_overdue() == 0
   end
 
   describe "the sheriff's page" do
