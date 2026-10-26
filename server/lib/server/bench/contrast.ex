@@ -46,7 +46,9 @@ defmodule Server.Bench.Contrast do
         cd: dir
       ])
 
-    {:os_pid, pid} = Port.info(port, :os_pid)
+    # nil when the side already exited and the port closed with it: its exit is in the mailbox and
+    # there is nothing left to kill
+    pid = with {:os_pid, pid} <- Port.info(port, :os_pid), do: pid
     collect(port, pid, [], System.monotonic_time(:millisecond) + timeout_ms)
   end
 
@@ -169,7 +171,7 @@ defmodule Server.Bench.Contrast do
       {^port, {:exit_status, code}} -> {IO.iodata_to_binary(acc), code}
     after
       max(left, 0) ->
-        System.cmd("kill", ["-KILL", "--", "-#{pid}"], stderr_to_stdout: true)
+        if pid, do: System.cmd("kill", ["-KILL", "--", "-#{pid}"], stderr_to_stdout: true)
         close(port)
         {IO.iodata_to_binary(acc), :timeout}
     end
