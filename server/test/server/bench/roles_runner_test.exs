@@ -25,6 +25,34 @@ defmodule Server.Bench.Roles.RunnerTest do
     refute db in String.split(dbs, "\n", trim: true)
   end
 
+  test "persist/3 writes to --out and leaves the results dir and README alone" do
+    dir = Path.join(System.tmp_dir!(), "persist-#{System.pid()}-#{System.unique_integer([:positive])}")
+    out = Path.join(dir, "out.json")
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    Runner.persist([%{"role" => "qa"}], dir, out)
+
+    assert out |> File.read!() |> JSON.decode!() == [%{"role" => "qa"}]
+    refute File.exists?(Path.join(dir, "README.md"))
+    refute File.exists?(Path.join(dir, "results"))
+  end
+
+  test "persist/3 with no --out appends the day's results file and regenerates the README" do
+    dir = Path.join(System.tmp_dir!(), "persist-#{System.pid()}-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    Runner.persist(
+      [%{"role" => "qa", "started_at" => "2026-10-26T00:00:00Z", "tiers" => %{}, "usage" => %{}}],
+      dir,
+      nil
+    )
+
+    assert [_] = Path.wildcard(Path.join(dir, "results/*.json"))
+    assert File.read!(Path.join(dir, "README.md")) =~ "| qa |"
+  end
+
   test "a sourced task gets half an hour, a plain builder fifteen minutes" do
     assert Runner.timeout_s(%{set: "senior", source: %{"commit" => "x"}}) == 1800
     assert Runner.timeout_s(%{set: "builder", source: nil}) == 900
