@@ -18,6 +18,28 @@ defmodule Server.Smoke.FixturesTest do
     assert [%{kind: "tool_denied", level: "blocking"}] = Server.Office.Needs.list()
   end
 
+  test "ticket_tree seeds an initiative, its epic, a free child, a child in flight and a loose ticket" do
+    assert "ticket_tree" in Fixtures.names()
+    assert :ok = Fixtures.apply("ticket_tree", "tlon_smoke_4100")
+
+    by_title = Map.new(Server.Tickets.in_workspace(Server.Bootstrap.default_workspace_id()), &{&1.title, &1})
+    initiative = by_title["fixture: an initiative"]
+    epic = by_title["fixture: an epic"]
+    free = by_title["fixture: a free child"]
+    in_flight = by_title["fixture: a child in flight"]
+
+    assert %{kind: "initiative"} = initiative
+    assert %{kind: "epic"} = epic
+    assert %{kind: "ticket", status: "backlog"} = free
+    assert %{kind: "ticket", status: "doing"} = in_flight
+    assert %{kind: "ticket"} = by_title["fixture: a loose ticket"]
+
+    assert Server.Tickets.epic_of(epic.id) == initiative.id
+    assert Server.Tickets.epic_of(free.id) == epic.id
+    assert Server.Tickets.epic_of(in_flight.id) == epic.id
+    assert [{"promoted", _thread}] = Server.Tickets.threads_of(in_flight.id)
+  end
+
   test "an unknown name raises" do
     assert_raise ArgumentError, ~r/unknown fixture "nope"/, fn -> Fixtures.apply("nope", "tlon_smoke_4100") end
   end
