@@ -14,8 +14,9 @@ defmodule Server.Workline.Continuation do
   query, never a column. Silent on a plain thread, a merged one, one parked at a gate, one whose
   artifact is there, one with a prompt open on the operator, one blocked on an open ticket
   (`Server.Blocked`), one whose smoke is still building
-  (`Server.Smoke.building/2`), and while the office is paused
-  (`Server.Pause`).
+  (`Server.Smoke.building/2`), one whose lead is clocked out (`Server.Presence.clocked_out?/1`),
+  one inside `continuation_gap_minutes` of its last nudge (or its opening, when it has had none)
+  or of the lead's last post on it, and while the office is paused (`Server.Pause`).
   """
 
   import Ecto.Query
