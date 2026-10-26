@@ -197,6 +197,16 @@ defmodule Server.Jobs.KeepUpTest do
       assert Rollout.pending() == []
     end
 
+    test "a pass on a GitHub repo reads its PRs, closes the red one and sends the workline back", %{thread: t} do
+      KeepUp.keep_up("/repo", fn
+        "git", ["-C", _, "remote", "get-url", "origin"], _ -> {"git@github.com:acme/app.git\n", 0}
+        cmd, args, opts -> gh(@red).(cmd, args, opts)
+      end)
+
+      assert_received {:ran, ["gh", "pr", "close", "9", "--comment", _]}
+      assert %Server.Thread{stage: "build", state: "open"} = Repo.get!(Server.Thread, t.id)
+    end
+
     test "a PR whose workline has not landed is left alone", %{thread: t} do
       Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [stage: "review"])
       KeepUp.red_checks("/repo", gh(@red))
@@ -244,6 +254,36 @@ defmodule Server.Jobs.KeepUpTest do
       end
 
       assert notes("/r/elsewhere") == []
+    end
+
+    test "a repo whose origin is not GitHub still has its main followed" do
+      run = fn
+        "git", ["-C", _, "remote", "get-url", "origin"], _ -> {"git@gitlab.com:acme/app.git\n", 0}
+        "git", ["-C", _, "symbolic-ref" | _], _ -> {"main\n", 0}
+        "git", ["-C", _, "merge-base" | _], _ -> {"", 1}
+        "git", ["-C", _, "rev-list" | _], _ -> {"2\n", 0}
+        _, _, _ -> {"", 0}
+      end
+
+      KeepUp.keep_up("/r/gitlab-drift", run)
+
+      assert [%{text: text}] = Enum.filter(Rollout.pending(), &(&1.text =~ "/r/gitlab-drift"))
+      assert text =~ "local main has 2 commit"
+    end
+
+    test "a GitHub remote in any of its forms is read" do
+      for remote <- [
+            "https://x-access-token:abc@github.com/acme/app.git",
+            "ssh://git@ssh.github.com:443/acme/app.git",
+            "git://github.com/acme/app.git"
+          ] do
+        KeepUp.keep_up("/r/gh-form", fn
+          "git", ["-C", _, "remote", "get-url", "origin"], _ -> {remote <> "\n", 0}
+          cmd, args, opts -> gh([]).(cmd, args, opts)
+        end)
+
+        assert_received {:ran, ["gh", "pr", "list" | _]}, remote
+      end
     end
 
     test "a remote-less repo is said once across passes, not every pass" do
