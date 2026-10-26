@@ -339,7 +339,7 @@ defmodule Server.MaintainTest do
           thread_id: th.id,
           kind: "stage_advanced",
           correlation: "workline:t",
-          detail: %{"from" => "review", "to" => "merged"}
+          detail: %{"from" => "review", "to" => "landed"}
         })
 
       assert Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded")) == []

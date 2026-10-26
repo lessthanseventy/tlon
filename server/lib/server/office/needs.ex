@@ -533,7 +533,7 @@ defmodule Server.Office.Needs do
       from e in Server.Event,
         where:
           e.thread_id == ^id and e.kind == "stage_advanced" and
-            fragment("(?::jsonb ->> 'to') = 'merged'", e.detail) and e.created_at > ^since
+            fragment("(?::jsonb ->> 'to') = 'landed'", e.detail) and e.created_at > ^since
     )
   end
 
