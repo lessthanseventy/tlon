@@ -50,6 +50,8 @@ defmodule Server.Workline.Continuation do
          false <- Server.Blocked.blocked?(thread_id),
          false <- verifying?(thread),
          nil <- smoke_building(thread),
+         false <- lead_clocked_out?(thread),
+         false <- too_soon?(thread, opts),
          after_id = last_advance_id(thread_id),
          sent = sent_since(thread_id, after_id),
          {:budget, true, _} <- {:budget, sent < max, {thread, why, sent, after_id}} do
@@ -153,6 +155,36 @@ defmodule Server.Workline.Continuation do
   # QA runs smokes at review; at any other stage a lingering smoke job must not silence the lead.
   defp smoke_building(%Thread{stage: "review", id: id}), do: Server.Smoke.building(id)
   defp smoke_building(_thread), do: nil
+
+  defp lead_clocked_out?(%Thread{agent_id: nil}), do: false
+  defp lead_clocked_out?(%Thread{agent_id: id}), do: Server.Presence.clocked_out?(Repo.get!(Server.Agent, id))
+
+  # at most one nudge per gap: measured from the last continuation, or from the thread's opening
+  # when it has had none (a workline opened straight at a stage has no advance to count from);
+  # and none while the lead spoke on the thread inside the window
+  defp too_soon?(thread, opts) do
+    gap = Server.OperatorConfig.setting("continuation_gap_minutes") * 60
+    now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
+    since = DateTime.add(now, -gap)
+
+    gap > 0 and
+      (DateTime.compare(last_continuation_at(thread), since) == :gt or lead_spoke_since?(thread, since))
+  end
+
+  defp last_continuation_at(thread) do
+    Repo.one(
+      from m in Message,
+        where: m.thread_id == ^thread.id and m.author == "tlon" and fragment("? \\? 'continue_after'", m.payload),
+        select: max(m.created_at)
+    ) || thread.created_at
+  end
+
+  defp lead_spoke_since?(%Thread{agent_id: nil}, _since), do: false
+
+  defp lead_spoke_since?(%Thread{id: id, agent_id: agent_id}, since) do
+    name = Repo.get!(Server.Agent, agent_id).name
+    Repo.exists?(from m in Message, where: m.thread_id == ^id and m.author == ^name and m.created_at > ^since)
+  end
 
   defp last_advance_id(thread_id) do
     Repo.one(

@@ -71,6 +71,14 @@ defmodule Server.OperatorConfig do
       doc: "nudges a stuck workline gets before it stops on you"
     },
     %{
+      key: "continuation_gap_minutes",
+      type: "int",
+      min: 0,
+      max: 120,
+      default: 10,
+      doc: "minutes between nudges on a workline, and after its lead last spoke (0: no spacing)"
+    },
+    %{
       key: "quiet_workline_minutes",
       type: "int",
       min: 10,
