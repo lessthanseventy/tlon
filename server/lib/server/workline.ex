@@ -286,6 +286,10 @@ defmodule Server.Workline do
   `skip_qa: reason` lands a review past an owed QA pass (parked or not): the skip is recorded as its
   QA verdict ("skipped by the operator: <reason>") and posted on the thread. Without it, or with a
   blank reason, an owed QA refuses as before.
+
+  `as: handle` is the caller's seat (tlon-cli passes `TLON_AUTHOR`); nil is the operator. `as: "uqbar"`
+  on a gate whose grade hit a limit (`limit_hit?/1`) is refused `{:error, :limit_hit}` before anything
+  else, a `skip_qa` included. An approval is recorded `by` the caller, not the gate's holder.
   """
   def approve(thread, opts \\ [])
 
@@ -293,6 +297,9 @@ defmodule Server.Workline do
     reason = opts |> Keyword.get(:skip_qa) |> to_string() |> String.trim()
 
     cond do
+      Keyword.get(opts, :as) == "uqbar" and limit_hit?(thread) ->
+        {:error, :limit_hit}
+
       reason != "" and qa_owed(thread, opts) ->
         landing(thread.id, fn ->
           skip_qa(thread, reason)
@@ -339,7 +346,7 @@ defmodule Server.Workline do
          :ok <- reviewed_current(thread),
          :ok <- qa_cleared(thread, opts) do
       if queue?(thread, checker, opts),
-        do: queue(thread, "approved", thread.awaiting || operator()),
+        do: queue(thread, "approved", Keyword.get(opts, :as) || thread.awaiting || operator()),
         else: approve_now(thread, checker, opts)
     end
   end
