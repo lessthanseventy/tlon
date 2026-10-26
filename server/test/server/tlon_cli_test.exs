@@ -24,4 +24,30 @@ defmodule Server.TlonCliTest do
     assert {out, 0} = System.cmd("bash", [@cli, "quiet"], env: [{"TLON_CLI_SERVER", server}], stderr_to_stdout: true)
     assert out == "scratch server: rpc\n"
   end
+
+  describe "job retry|dismiss — the operator API's two job calls, for Uqbar" do
+    setup do
+      dir = Path.join(System.tmp_dir!(), "tlon-cli-job-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+      server = Path.join(dir, "server")
+      File.write!(server, "#!/bin/sh\necho \"$2\"\n")
+      File.chmod!(server, 0o755)
+      %{env: [{"TLON_CLI_SERVER", server}]}
+    end
+
+    test "retry runs Needs.retry_job, dismiss runs Needs.dismiss_job, on the job id", %{env: env} do
+      assert {out, 0} = System.cmd("bash", [@cli, "job", "retry", "42"], env: env, stderr_to_stdout: true)
+      assert out =~ "Server.Office.Needs.retry_job(42)"
+      assert {out, 0} = System.cmd("bash", [@cli, "job", "dismiss", "42"], env: env, stderr_to_stdout: true)
+      assert out =~ "Server.Office.Needs.dismiss_job(42)"
+    end
+
+    test "anything but retry|dismiss <numeric id> is a usage error", %{env: env} do
+      for args <- [["job", "retry"], ["job", "retry", "x"], ["job", "cancel", "1"]] do
+        assert {out, 2} = System.cmd("bash", [@cli | args], env: env, stderr_to_stdout: true)
+        assert out =~ "usage: tlon-cli.sh job retry|dismiss <job-id>"
+      end
+    end
+  end
 end

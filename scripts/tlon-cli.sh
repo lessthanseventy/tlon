@@ -27,6 +27,7 @@
 #   ticket-start <ticket> [agent-id]            start a ticket, handed to that coworker or the lead
 #   ticket-route <ticket>                       send a ticket to the workspace's manager to staff
 #   ticket-claim <ticket> [who]                 claim a ticket worked by hand (who: uqbar), so intake leaves it alone
+#   job retry|dismiss <job-id>                  run a failed background job again, or put it (and its same-failure runs) away
 #   hire <ws> <name> <archetype> [model [effort [ask]]]  seat a new coworker on a workspace's bench
 #   persona <ws> <name> [--reroll]               a seat's persona as JSON (made once at hire); --reroll draws a new seed
 #   soul <ws> [name]                             draft SOUL.md for a seat (or the whole bench); never over an existing file
@@ -329,6 +330,15 @@ case "$cmd" in
     tk="${1:-}"; who="${2:-uqbar}"
     int "$tk" || { echo 'usage: tlon-cli.sh ticket-claim <ticket-id> [who]' >&2; exit 2; }
     exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> case Server.Tickets.claim(t, \"$(esc "$who")\") do {:ok, _} -> IO.puts(\"ticket #$tk claimed by $(esc "$who")\"); {:error, why} -> IO.puts(\"refused: #{if is_binary(why), do: why, else: inspect(why)}\"); raise(\"refused\") end end"
+    ;;
+
+  job)
+    # The operator API's POST /api/office/jobs/:id/retry and DELETE /api/office/jobs/:id, as the
+    # functions they call (Needs.retry_job/1, Needs.dismiss_job/1), for Uqbar's shell.
+    verb="${1:-}"; jid="${2:-}"
+    { { [ "$verb" = retry ] || [ "$verb" = dismiss ]; } && int "$jid"; } ||
+      { echo 'usage: tlon-cli.sh job retry|dismiss <job-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "Server.Office.Needs.${verb}_job($jid); IO.puts(\"job $jid: $verb done\")"
     ;;
 
   hire)
