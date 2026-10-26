@@ -354,9 +354,9 @@ export type ScheduleKind = "agent" | "workline" | "script"
 export type Schedule = {
   id: number; kind: ScheduleKind; title: string; body: string; cron: string | null; at: string | null; agent: string | null
   standing: boolean; thread_id: number | null; dir: string | null; enabled: boolean; next_at: string | null; days: number[]
-  last: { status: "running" | "ok" | "failed"; exit: number | null; at: string; thread_id: number | null } | null
+  last: { status: "running" | "ok" | "failed" | "interrupted"; exit: number | null; at: string; thread_id: number | null } | null
 }
-export type Run = { id: number; status: "running" | "ok" | "failed"; exit: number | null; output: string | null; thread_id: number | null; started_at: string; finished_at: string | null }
+export type Run = { id: number; status: "running" | "ok" | "failed" | "interrupted"; exit: number | null; output: string | null; thread_id: number | null; started_at: string; finished_at: string | null }
 export type ScheduleAttrs = { kind?: ScheduleKind; body?: string; title?: string; cron?: string | null; at?: string | null; agent?: string | null; standing?: boolean; dir?: string | null; enabled?: boolean }
 
 /** a workspace's schedules, with when each next fires and the days this month it does */
