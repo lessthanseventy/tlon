@@ -823,7 +823,9 @@ defmodule Server.Office.NeedsTest do
     test "the table: phone owes an answer, the machine is information, the clipboard is the crew's" do
       phone = ~w(gate question dialog ask seats quota no_seat tool_denied)
       machine = ~w(mention rollout)
-      clipboard = ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed health stranded)
+
+      clipboard =
+        ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed health stranded)
 
       for k <- phone, do: assert(Needs.surface(k) == "phone")
       for k <- machine, do: assert(Needs.surface(k) == "machine")
