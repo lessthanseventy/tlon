@@ -526,7 +526,7 @@ defmodule Server.Office.Needs do
 
   # a landing's PR waits on GitHub's checks before it merges; until then its commits are on no main,
   # and that is the merge going as it should, not work left behind
-  defp just_landed?(%Thread{stage: "merged", id: id}) do
+  defp just_landed?(%Thread{stage: "landed", id: id}) do
     since = DateTime.add(DateTime.utc_now(), -@landing_grace_s, :second)
 
     Repo.exists?(
@@ -746,7 +746,7 @@ defmodule Server.Office.Needs do
   # merged here and never reached GitHub: with no PR, nothing polls its landing or wakes for it
   defp unpublished do
     for e <- newest_failed("workline:%:publish"),
-        %Thread{stage: "merged"} = t <- [Repo.get(Thread, e.thread_id)] do
+        %Thread{stage: "landed"} = t <- [Repo.get(Thread, e.thread_id)] do
       repo = Server.Workline.Artifacts.Git.root(t)
       branch = "work/#{t.slug}"
 
@@ -839,7 +839,7 @@ defmodule Server.Office.Needs do
 
       candidates =
         for %Thread{stage: stage} = t <- open,
-            stage not in [nil, "merged"],
+            stage not in [nil, "landed"],
             is_nil(t.awaiting),
             not MapSet.member?(listed, t.id),
             not MapSet.member?(blocked, t.id),

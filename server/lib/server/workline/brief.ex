@@ -12,12 +12,12 @@ defmodule Server.Workline.Brief do
   alias Server.Thread
 
   @doc """
-  The brief for the stage the workline just ENTERED (merged → a completion note). `last_reviewed:`
+  The brief for the stage the workline just ENTERED (landed → a completion note). `last_reviewed:`
   the commit a previous review read: a returning reviewer is pointed at what changed since.
   """
   def stage_message(thread, opts \\ [])
 
-  def stage_message(%Thread{stage: "merged"} = t, _opts) do
+  def stage_message(%Thread{stage: "landed"} = t, _opts) do
     "⤵ workline #{t.slug} landed — its PR waits on GitHub's checks, and the thread closes when GitHub merges it. Nothing to do. History: work/#{t.slug}/ + this thread."
   end
 

@@ -123,7 +123,7 @@ defmodule Server.Jobs.KeepUpTest do
       {:ok, ws} = Workspaces.register(%{name: "Watched"})
       {:ok, _} = Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
       {:ok, t} = Server.Workline.open(%{title: "lamp", slug: "lamp", stage: "review", workspace_id: ws.id})
-      Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [stage: "merged"])
+      Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [stage: "landed"])
       %{thread: t}
     end
 
@@ -165,7 +165,7 @@ defmodule Server.Jobs.KeepUpTest do
 
       KeepUp.red_checks("/repo", run)
 
-      assert %Server.Thread{stage: "merged"} = Repo.get!(Server.Thread, t.id)
+      assert %Server.Thread{stage: "landed"} = Repo.get!(Server.Thread, t.id)
       assert [] = Repo.all(from m in Message, where: like(m.body, "🚨%"))
     end
 
@@ -179,7 +179,7 @@ defmodule Server.Jobs.KeepUpTest do
 
       assert log =~ "red PRs unread" and log =~ "HTTP 502"
       refute_received {:ran, ["gh", "pr", "close" | _]}
-      assert %Server.Thread{stage: "merged"} = Repo.get!(Server.Thread, t.id)
+      assert %Server.Thread{stage: "landed"} = Repo.get!(Server.Thread, t.id)
     end
 
     test "a gh that keeps failing the same way is said once, as one note, and the note clears once it reads" do

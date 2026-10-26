@@ -217,7 +217,7 @@ defmodule Server.MCP.Tool.SendBack do
       %Server.Thread{} ->
         fail(frame, "send_back refused: that thread is not a workline")
 
-      {:error, {:not_movable, "merged"}} ->
+      {:error, {:not_movable, "landed"}} ->
         fail(frame, "send_back refused: it merged; a merged workline relands instead")
 
       {:error, {:not_movable, stage}} ->

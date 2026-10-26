@@ -135,7 +135,7 @@ defmodule Server.WorklineReviewHeadTest do
     same = at_review(root, "same")
     {:ok, _} = Workline.review_verdict(same, "approve", "lonnrot", artifacts: AllPresent)
     on_branch(root, "same", "work/same/review.md", "approve")
-    assert {:ok, %{stage: "merged"}} = Workline.approve(parked(same), artifacts: AllPresent, merge: Merges)
+    assert {:ok, %{stage: "landed"}} = Workline.approve(parked(same), artifacts: AllPresent, merge: Merges)
 
     moved = at_review(root, "moved")
     {:ok, _} = Workline.review_verdict(moved, "approve", "lonnrot", artifacts: AllPresent)
@@ -166,7 +166,7 @@ defmodule Server.WorklineReviewHeadTest do
     git(root, ["rebase", "-q", "main"])
     git(root, ["checkout", "-q", "main"])
 
-    assert {:ok, %{stage: "merged"}} = Workline.land_queued(queued, merge: Merges)
+    assert {:ok, %{stage: "landed"}} = Workline.land_queued(queued, merge: Merges)
   end
 
   test "commits main took on its own drop out: the rest, rebased, is the same change", %{root: root} do
@@ -181,7 +181,7 @@ defmodule Server.WorklineReviewHeadTest do
     git(root, ["rebase", "-q", "main"])
     git(root, ["checkout", "-q", "main"])
 
-    assert {:ok, %{stage: "merged"}} = Workline.land_queued(queued, merge: Merges)
+    assert {:ok, %{stage: "landed"}} = Workline.land_queued(queued, merge: Merges)
   end
 
   test "a rebase that resolved a conflict goes back to build, saying so", %{root: root} do
@@ -334,7 +334,7 @@ defmodule Server.WorklineReviewHeadTest do
     {:ok, t} = Workline.open(%{title: "t unpublished", slug: "unpublished", stage: "review", workspace_id: ws.id})
     {:awaiting, gate} = Workline.advance(t, artifacts: AllPresent)
 
-    {:ok, %{stage: "merged"}} = Workline.approve(gate, artifacts: AllPresent, merge: Merges)
+    {:ok, %{stage: "landed"}} = Workline.approve(gate, artifacts: AllPresent, merge: Merges)
 
     told =
       Repo.all(
@@ -357,7 +357,7 @@ defmodule Server.WorklineReviewHeadTest do
     git(root, ["checkout", "-q", "main"])
     {:ok, t} = Workline.open(%{title: "t stuck", slug: "stuck-local", stage: "review", workspace_id: ws.id})
     {:awaiting, gate} = Workline.advance(t, artifacts: AllPresent)
-    {:ok, %{stage: "merged"}} = Workline.approve(gate, artifacts: AllPresent, merge: Merges)
+    {:ok, %{stage: "landed"}} = Workline.approve(gate, artifacts: AllPresent, merge: Merges)
 
     assert [need] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "publish_failed"))
     assert need.thread_id == t.id and need.level == "blocking"

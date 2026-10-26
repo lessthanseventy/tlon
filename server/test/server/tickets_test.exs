@@ -128,7 +128,7 @@ defmodule Server.TicketsTest do
       assert {:ok, _} = Channel.close_thread(at_build)
       assert %{status: "doing"} = Tickets.get(dropped.id)
 
-      {:ok, merged} = landing |> Server.Thread.workline_stage_changeset(%{stage: "merged"}) |> Server.Repo.update()
+      {:ok, merged} = landing |> Server.Thread.workline_stage_changeset(%{stage: "landed"}) |> Server.Repo.update()
       assert {:ok, _} = Channel.close_thread(merged)
       assert %{status: "done"} = Tickets.get(shipped.id)
     end
@@ -201,7 +201,7 @@ defmodule Server.TicketsTest do
       {:ok, ws} = Workspaces.create(%{name: "Reland"})
       {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "the garden tile"})
       {:ok, thread} = Tickets.start_thread(t)
-      {:ok, merged} = thread |> Server.Thread.workline_stage_changeset(%{stage: "merged"}) |> Server.Repo.update()
+      {:ok, merged} = thread |> Server.Thread.workline_stage_changeset(%{stage: "landed"}) |> Server.Repo.update()
       {:ok, _} = Channel.close_thread(merged)
       assert %{status: "done"} = Tickets.get(t.id)
 

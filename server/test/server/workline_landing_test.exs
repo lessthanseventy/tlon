@@ -88,7 +88,7 @@ defmodule Server.WorklineLandingTest do
     assert_received {:ran, ["gh", "pr", "merge", @url, "--rebase", "--match-head-commit", "b"]}
     assert_received {:ran, ["gh", "api", "-X", "DELETE", "repos/{owner}/{repo}/git/refs/heads/work/lamp"]}
     refute_received {:ran, ["gh", "pr", "merge", _, "--rebase", "--auto" | _]}
-    assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
+    assert %Thread{stage: "landed", state: "open"} = Repo.get!(Thread, t.id)
     refute Server.Tickets.get(ticket.id).status == "done"
     assert %{state: "open"} = Repo.get!(Server.Issue, issue.id)
     assert Workline.landed_since(DateTime.add(DateTime.utc_now(), -60)) == []
@@ -103,7 +103,7 @@ defmodule Server.WorklineLandingTest do
     KeepUp.landings(gh("MERGED"))
 
     assert_received {:ran, ["gh", "pr", "view", @url | _]}
-    assert %Thread{stage: "merged", state: "closed"} = Repo.get!(Thread, t.id)
+    assert %Thread{stage: "landed", state: "closed"} = Repo.get!(Thread, t.id)
     assert Server.Tickets.get(ticket.id).status == "done"
     assert %{state: "closed", resolution: "fixed by " <> @url} = Repo.get!(Server.Issue, issue.id)
     assert [%{thread_id: tid}] = Workline.landed_since(since)
@@ -157,7 +157,7 @@ defmodule Server.WorklineLandingTest do
     assert id == t.id
 
     KeepUp.landings(gh("MERGED"))
-    assert %Thread{stage: "merged", state: "closed"} = Repo.get!(Thread, t.id)
+    assert %Thread{stage: "landed", state: "closed"} = Repo.get!(Thread, t.id)
   end
 
   test "its PR opened by hand: the url put in is its landing, polled until GitHub says MERGED" do
@@ -176,7 +176,7 @@ defmodule Server.WorklineLandingTest do
     assert {:error, _} = Workline.published_by_hand(t, @url)
 
     KeepUp.landings(gh("MERGED"))
-    assert %Thread{stage: "merged", state: "closed"} = Repo.get!(Thread, t.id)
+    assert %Thread{stage: "landed", state: "closed"} = Repo.get!(Thread, t.id)
   end
 
   describe "a landing GitHub isn't merging is a pr_blocked Need, with its answers" do
@@ -239,7 +239,7 @@ defmodule Server.WorklineLandingTest do
       assert [%{thread_id: tid, text: text}] = blocked()
       assert tid == t.id and text =~ "conflicts with origin/main"
       refute_received {:ran, ["gh", "pr", "close" | _]}
-      assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
+      assert %Thread{stage: "landed", state: "open"} = Repo.get!(Thread, t.id)
     end
 
     test "BLOCKED again at a head it was already requeued at: the Need, not a second requeue" do
@@ -316,7 +316,7 @@ defmodule Server.WorklineLandingTest do
       assert_received {:ran, ["gh", "pr", "merge", @url, "--rebase", "--match-head-commit", "c2"]}
       refute_received {:ran, ["gh", "pr", "update-branch" | _]}
       refute_received {:ran, ["gh", "pr", "merge", _, "--rebase", "--auto" | _]}
-      assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
+      assert %Thread{stage: "landed", state: "open"} = Repo.get!(Thread, t.id)
       assert blocked() == []
     end
 
@@ -431,7 +431,7 @@ defmodule Server.WorklineLandingTest do
       KeepUp.landings(gh("MERGED"))
 
       Server.Attention.respond(t.id, "andrew", "one more thing about this")
-      assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
+      assert %Thread{stage: "landed", state: "open"} = Repo.get!(Thread, t.id)
       refute landing?(t)
 
       flush_ran()
@@ -453,7 +453,7 @@ defmodule Server.WorklineLandingTest do
       log = ExUnit.CaptureLog.capture_log(fn -> KeepUp.landings(down) end)
 
       assert log =~ "unread" and log =~ "HTTP 502"
-      assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
+      assert %Thread{stage: "landed", state: "open"} = Repo.get!(Thread, t.id)
       refute Server.Tickets.get(ticket.id).status == "done"
       assert Enum.map(Workline.waiting_on_github(), & &1.event.kind) == Enum.map(waiting, & &1.event.kind)
       refute Enum.any?(Workline.waiting_on_github(), &(&1.event.kind == "check_failed"))
@@ -515,8 +515,8 @@ defmodule Server.WorklineLandingTest do
       refute_received {:stack, _}
       assert_received {:merge, "car-a"}
       assert_received {:merge, "car-b"}
-      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
-      assert %Thread{stage: "merged"} = Repo.get!(Thread, b.id)
+      assert %Thread{stage: "landed"} = Repo.get!(Thread, a.id)
+      assert %Thread{stage: "landed"} = Repo.get!(Thread, b.id)
       assert Enum.any?(Server.Channel.thread_messages(Repo.get!(Thread, a.id)), &(&1.body =~ "merge train"))
     end
 
@@ -531,7 +531,7 @@ defmodule Server.WorklineLandingTest do
       assert_received {:stack, _}
       assert_received {:merge, "red-a"}
       refute_received {:merge, "red-b"}
-      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
+      assert %Thread{stage: "landed"} = Repo.get!(Thread, a.id)
       assert %Thread{stage: "review"} = Repo.get!(Thread, b.id)
     end
 
@@ -542,7 +542,7 @@ defmodule Server.WorklineLandingTest do
 
       assert {:ok, _} = Workline.land_train(a, [b], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
 
-      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
+      assert %Thread{stage: "landed"} = Repo.get!(Thread, a.id)
       assert %Thread{stage: "review"} = Repo.get!(Thread, b.id)
     end
 
@@ -556,7 +556,7 @@ defmodule Server.WorklineLandingTest do
       assert_received {:merge, "drift-a"}
       assert_received {:merge, "drift-a"}
       refute_received {:merge, "drift-b"}
-      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
+      assert %Thread{stage: "landed"} = Repo.get!(Thread, a.id)
       assert %Thread{stage: "review"} = Repo.get!(Thread, b.id)
     end
 
@@ -617,7 +617,7 @@ defmodule Server.WorklineLandingTest do
       a = queued!("solo")
       assert {:ok, _} = Workline.land_train(a, [], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
       refute_received {:stack, _}
-      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
+      assert %Thread{stage: "landed"} = Repo.get!(Thread, a.id)
     end
   end
 end

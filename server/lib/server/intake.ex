@@ -31,7 +31,7 @@ defmodule Server.Intake do
   defp in_flight(ws) do
     open =
       from(t in Thread,
-        where: t.workspace_id == ^ws and t.state == "open" and not is_nil(t.stage) and t.stage != "merged"
+        where: t.workspace_id == ^ws and t.state == "open" and not is_nil(t.stage) and t.stage != "landed"
       )
 
     all = Repo.aggregate(open, :count)

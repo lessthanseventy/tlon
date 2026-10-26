@@ -489,8 +489,8 @@ defmodule Server.MCP.Tool.Finish do
   defp why_closed(%{abandoned: why}) when is_binary(why), do: {:abandoned, why}
   defp why_closed(_params), do: nil
 
-  defp unmerged_workline?(%Server.Thread{stage: stage}) when stage not in [nil, "merged"], do: :workline
-  defp unmerged_workline?(%Server.Thread{stage: "merged", state: "open"}), do: :workline
+  defp unmerged_workline?(%Server.Thread{stage: stage}) when stage not in [nil, "landed"], do: :workline
+  defp unmerged_workline?(%Server.Thread{stage: "landed", state: "open"}), do: :workline
   defp unmerged_workline?(_thread), do: false
 end
 
