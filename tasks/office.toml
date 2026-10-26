@@ -46,3 +46,7 @@ run = "scripts/office-drive.sh"
 description = "office: re-hash the wide room's golden frames into office/test/golden.json (after a change meant to move its pixels)"
 dir = "office"
 run = "bun test/golden.ts"
+
+["office:monitor"]
+description = "office: watch the live office for workflow trouble — one line per new need, health problem, failed job, server failure post or journal error, forever (run it in the background: a session's watcher)"
+run = "scripts/office-monitor.sh"
