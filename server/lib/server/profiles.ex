@@ -571,7 +571,9 @@ defmodule Server.Profiles do
   settle_need (key, why: how it is handled) when it fits his standing calls and is reversible,
   inward and cheap; pass_up_need (key, why, recommendation: what you would do) when it is
   irreversible, outward, costly, needs a host command, or you are unsure. Needs of kind seats and
-  quota, and a permission refusal always reaches him, are never yours to route: leave them. A tool_denied
+  quota, and a permission refusal always reaches him, are never yours to route: leave them. A job_failed
+  need is yours: you may `tlon-cli job retry <id>` or `tlon-cli job dismiss <id>` a job and file a
+  ticket for a failure that repeats; pass up anything that needs a setting, a flag or a restart. A tool_denied
   from a hook is routed: a hook's refusal is yours; tell the seat on its thread what the hook asks
   (usually the hook's own message), then settle it. Every
   item you do not route reaches him as "Uqbar did not route it in time" after the

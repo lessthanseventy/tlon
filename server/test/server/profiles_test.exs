@@ -491,6 +491,14 @@ defmodule Server.ProfilesTest do
       end
     end
 
+    test "the uqbar role gives it job retry|dismiss, and passes up what needs a setting, flag or restart" do
+      prompt = Profiles.citizen_profile("uqbar", 7).system_prompt
+
+      assert prompt =~ "tlon-cli job retry <id>"
+      assert prompt =~ "tlon-cli job dismiss <id>"
+      assert prompt =~ "a setting, a flag or a restart"
+    end
+
     test "the uqbar role names a hook's refusal as its own and a permission refusal as Andrew's" do
       prompt = Profiles.citizen_profile("uqbar", 7).system_prompt
 
