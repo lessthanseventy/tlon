@@ -9,12 +9,11 @@ defmodule Server.Bench.Contrast do
   alias Server.Workline.Grade
 
   @max_roles 3
-  @timeout_s 900
 
   @doc """
   The rows for a change touching `paths`; `dirs` = `%{main: root, branch: checkout}`. `[]` when it
   touches no steering. `opts[:exec]` swaps the shell-out (`(dir, args) -> {output, exit}`; the default
-  runs `mix` in `<dir>/server` under `timeout #{@timeout_s}`).
+  runs `mix` in `<dir>/server`). The wall clock is the caller's: verify clamps the whole step.
   """
   def run(paths, dirs, opts \\ []) do
     exec = opts[:exec] || (&mix/2)
@@ -125,9 +124,6 @@ defmodule Server.Bench.Contrast do
   end
 
   defp mix(dir, args) do
-    System.cmd("timeout", ["#{@timeout_s}", "mise", "exec", "--", "mix" | args],
-      cd: Path.join(dir, "server"),
-      stderr_to_stdout: true
-    )
+    System.cmd("mise", ["exec", "--", "mix" | args], cd: Path.join(dir, "server"), stderr_to_stdout: true)
   end
 end
