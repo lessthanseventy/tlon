@@ -238,6 +238,14 @@ defmodule Server.Jobs.KeepUpTest do
       assert notes("/r/no-remote") == []
     end
 
+    test "a repo whose origin is not GitHub is skipped: no gh read, no rollout item" do
+      for remote <- ["git@gitlab.com:acme/app.git", "https://gitlab.com/acme/app.git", "/srv/git/app.git"] do
+        KeepUp.keep_up("/r/elsewhere", pass(remote, "none of the git remotes point to a known GitHub host"))
+      end
+
+      assert notes("/r/elsewhere") == []
+    end
+
     test "a remote-less repo is said once across passes, not every pass" do
       first = ExUnit.CaptureLog.capture_log(fn -> KeepUp.keep_up("/r/quiet", pass(nil, "x")) end)
       again = ExUnit.CaptureLog.capture_log(fn -> KeepUp.keep_up("/r/quiet", pass(nil, "x")) end)
