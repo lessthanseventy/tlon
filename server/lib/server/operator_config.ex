@@ -87,6 +87,13 @@ defmodule Server.OperatorConfig do
       doc: "a workline quiet this long gets a nudge, and shows on your list as stalled"
     },
     %{
+      key: "uqbar_routing",
+      type: "bool",
+      default: false,
+      doc:
+        "Uqbar is the first stop for what would wait on you: it settles what fits your standing calls and passes up the rest"
+    },
+    %{
       key: "uqbar_route_minutes",
       type: "int",
       min: 5,

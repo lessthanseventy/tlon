@@ -73,7 +73,7 @@ defmodule Server.Office.Needs do
   never because it was looked at.
 
   **Routing through Uqbar** (`grouped/1` only; `list/0` stays flat and unrouted). Under the
-  `uqbar_routing` flag, shipped off, Uqbar is the first stop: an item reaches the operator only when
+  `uqbar_routing` setting (`Server.OperatorConfig`, default off), Uqbar is the first stop: an item reaches the operator only when
   Uqbar passes it up or its rule always does. `pass_up_rule/1`, a pure function of the item, with no
   catch-all:
 
@@ -92,7 +92,7 @@ defmodule Server.Office.Needs do
   from an item's text), applying while it is no older than the item; the operator's `overrule/1`
   sends a settled item back to Uqbar, not to themselves. Fail-open: an item Uqbar has not routed
   within the `uqbar_route_minutes` knob passes up as "Uqbar did not route it in time", measured from
-  the item's own time, so an overruled item past it reaches the operator at once. With the flag off,
+  the item's own time, so an overruled item past it reaches the operator at once. With the setting off,
   rows are not read and every conditional item passes up.
 
   Only what someone actually asked for, or the machine actually needs, is here: the corkboard's
@@ -1000,7 +1000,7 @@ defmodule Server.Office.Needs do
       )
 
     prune("need_routing", rows, items)
-    on? = Server.Flags.enabled?(:uqbar_routing)
+    on? = Server.OperatorConfig.setting("uqbar_routing")
     expired = DateTime.add(DateTime.utc_now(), -Server.OperatorConfig.setting("uqbar_route_minutes") * 60, :second)
 
     for item <- items, do: route_item(item, rows[item.key], on?, expired)
