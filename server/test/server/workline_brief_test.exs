@@ -121,7 +121,7 @@ defmodule Server.WorklineBriefTest do
   end
 
   test "reaching merged posts a landing note — it waits on GitHub — not a brief" do
-    note = Brief.stage_message(thread("merged"))
+    note = Brief.stage_message(thread("landed"))
     assert note =~ "landed" and note =~ "GitHub"
     refute note =~ "advance_stage"
   end

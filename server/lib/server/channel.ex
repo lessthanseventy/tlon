@@ -105,7 +105,7 @@ defmodule Server.Channel do
   `{:abandoned, why}`, its ticket back to the backlog. Without one it is `{:error, :why_closed}` and
   nothing changes. Any other thread closes as `close_thread/1` does, the why ignored.
   """
-  def close_as(%Thread{state: "open", stage: stage} = thread, why) when stage not in [nil, "merged"] do
+  def close_as(%Thread{state: "open", stage: stage} = thread, why) when stage not in [nil, "landed"] do
     case why do
       {kind, text} when kind in [:superseded, :abandoned] and is_binary(text) ->
         if String.trim(text) == "", do: {:error, :why_closed}, else: close_unmerged(thread, kind, String.trim(text))
@@ -585,7 +585,7 @@ defmodule Server.Channel do
   end
 
   # an unmerged workline back from closed takes back only the tickets nothing else took meanwhile
-  defp reclaim_tickets({:ok, %Thread{stage: stage} = t}) when stage not in [nil, "merged"] do
+  defp reclaim_tickets({:ok, %Thread{stage: stage} = t}) when stage not in [nil, "landed"] do
     case Server.Tickets.reopened_for(t.id) do
       [] ->
         :ok

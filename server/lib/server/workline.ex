@@ -4,7 +4,7 @@ defmodule Server.Workline do
   `docs/plans/2026-08-27-ai-native-sdlc-workline-design.md`). A workline is a thread paired
   with a git folder `work/<slug>/`; its thread carries the stage:
 
-      intent → spec → plan → build → verify → review → merged
+      intent → spec → plan → build → verify → review → landed
 
   `advance/2` is the single mutation point and carries the invariant: NO advance without the
   stage's owed artifact (checked through the `Server.Workline.Artifacts` behaviour, recorded
@@ -31,7 +31,7 @@ defmodule Server.Workline do
 
   require Logger
 
-  @stages ~w(intent spec plan build verify review merged)
+  @stages ~w(intent spec plan build verify review landed)
   @owed %{
     "intent" => {:file, "intent.md"},
     "spec" => {:file, "spec.md"},
@@ -70,7 +70,7 @@ defmodule Server.Workline do
   # Any-stage entry (Slice 4D): a workline may open at any stage except the terminal one. Opening
   # LATER than intent sets the starting position — it does not retroactively owe the earlier stages'
   # artifacts; advances FROM there still owe theirs. `merged` is terminal, never an entry.
-  @openable @stages -- ["merged"]
+  @openable @stages -- ["landed"]
 
   @doc """
   Open a workline: a machine-scoped thread + the `work/<slug>/` name, at stage `:stage` (default
@@ -587,7 +587,7 @@ defmodule Server.Workline do
   """
   def reland(thread, why, todo \\ nil)
 
-  def reland(%Thread{stage: "merged"} = thread, why, todo) do
+  def reland(%Thread{stage: "landed"} = thread, why, todo) do
     Server.Channel.reopen_if_closed(thread.id)
     Server.Tickets.undone_for(thread.id)
 
@@ -607,7 +607,7 @@ defmodule Server.Workline do
   its thread closed (its ticket done), and the issues its tickets own resolved naming `ref`, the PR.
   Only an open `merged` workline; anything else is left as it is.
   """
-  def merged(%Thread{stage: "merged", state: "open"} = thread, ref) do
+  def merged(%Thread{stage: "landed", state: "open"} = thread, ref) do
     record_landing(thread, "work_landed", %{"summary" => "merged: #{ref}", "evidence" => ref})
     {:ok, closed} = Server.Channel.close_thread(thread)
     post_brief(closed, "✓ merged: #{ref}")
@@ -623,7 +623,7 @@ defmodule Server.Workline do
   `check_failed` when GitHub won't merge it as it stands (`landing_blocked/2`).
   """
   def waiting_on_github do
-    for t <- Repo.all(from t in Thread, where: t.state == "open" and t.stage == "merged"),
+    for t <- Repo.all(from t in Thread, where: t.state == "open" and t.stage == "landed"),
         waiting = pending_landing(t),
         do: waiting
   end
@@ -708,7 +708,7 @@ defmodule Server.Workline do
     end
   end
 
-  defp pending_landing(%Thread{stage: "merged", state: "open"} = thread) do
+  defp pending_landing(%Thread{stage: "landed", state: "open"} = thread) do
     case last_landing(thread) do
       %Server.Event{kind: kind, detail: %{"url" => url}} = e when kind != "work_landed" ->
         %{thread: thread, url: url, event: e}
@@ -1018,7 +1018,7 @@ defmodule Server.Workline do
     held = thread.id |> tied_follow_ups() |> Enum.filter(&("held" in &1.labels))
 
     note =
-      if thread.stage == "merged",
+      if thread.stage == "landed",
         do: "",
         else: "\n\nIts workline (##{thread.id}) closed without merging: check this still applies."
 
@@ -1047,7 +1047,7 @@ defmodule Server.Workline do
   end
 
   defp advanceable(%Thread{stage: nil}, _checker), do: {:error, :not_a_workline}
-  defp advanceable(%Thread{stage: "merged"}, _checker), do: {:error, :terminal}
+  defp advanceable(%Thread{stage: "landed"}, _checker), do: {:error, :terminal}
 
   # Only a gate's hold waits for approve. Off a gate the hold is a question or a stuck flag about the
   # missing artifact, which the artifact answers — or a green verify would sit behind it.
@@ -1225,7 +1225,7 @@ defmodule Server.Workline do
   """
   def owed_status(thread, opts \\ [])
   def owed_status(%Thread{stage: nil}, _opts), do: :none
-  def owed_status(%Thread{stage: "merged"}, _opts), do: :none
+  def owed_status(%Thread{stage: "landed"}, _opts), do: :none
 
   def owed_status(%Thread{} = thread, opts) do
     checker = Keyword.get(opts, :artifacts, Git)
@@ -1400,7 +1400,7 @@ defmodule Server.Workline do
       from t in Thread,
         where:
           t.agent_id == ^agent_id and t.id != ^thread.id and t.state == "open" and not is_nil(t.stage) and
-            t.stage != "merged" and is_nil(t.awaiting)
+            t.stage != "landed" and is_nil(t.awaiting)
     )
   end
 
@@ -1509,7 +1509,7 @@ defmodule Server.Workline do
   """
   def republish(thread, run \\ &System.cmd/3)
 
-  def republish(%Thread{stage: "merged"} = thread, run) do
+  def republish(%Thread{stage: "landed"} = thread, run) do
     if publish_failed?(thread),
       do: publish(thread, Git.root(thread), "⤴ republished", "work/#{thread.slug}", run),
       else: {:error, "#{thread.slug} has no failed publish to retry"}
@@ -1523,7 +1523,7 @@ defmodule Server.Workline do
   when GitHub merges it. `{:ok, thread}` | `{:error, why}` — a workline whose last publish did not fail
   is refused.
   """
-  def published_by_hand(%Thread{stage: "merged", state: "open"} = thread, url) when is_binary(url) do
+  def published_by_hand(%Thread{stage: "landed", state: "open"} = thread, url) when is_binary(url) do
     url = String.trim(url)
 
     cond do

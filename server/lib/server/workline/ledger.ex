@@ -41,8 +41,8 @@ defmodule Server.Workline.Ledger do
     %{
       worklines: worklines,
       summary: %{
-        open: Enum.count(worklines, &(&1.stage != "merged")),
-        merged: Enum.count(worklines, &(&1.stage == "merged")),
+        open: Enum.count(worklines, &(&1.stage != "landed")),
+        landed: Enum.count(worklines, &(&1.stage == "landed")),
         gated: Enum.count(worklines, & &1.awaiting)
       }
     }
@@ -60,7 +60,7 @@ defmodule Server.Workline.Ledger do
         "##{w.id} #{w.slug} · #{w.stage}#{gate}#{born} · #{length(w.transitions)} advances · opened #{date(w.opened_at)}"
       end)
 
-    Enum.join(lines, "\n") <> "\n#{s.open} open · #{s.merged} merged · #{s.gated} gated"
+    Enum.join(lines, "\n") <> "\n#{s.open} open · #{s.landed} landed · #{s.gated} gated"
   end
 
   defp date(%DateTime{} = at), do: Calendar.strftime(at, "%Y-%m-%d")

@@ -15,7 +15,7 @@ defmodule Server.Workline.Docs do
     "build" => "plan.md",
     "verify" => "plan.md",
     "review" => "review.md",
-    "merged" => "review.md"
+    "landed" => "review.md"
   }
 
   @doc "The workline's doc names, from its branch and the main checkout."

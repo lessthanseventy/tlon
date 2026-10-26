@@ -130,7 +130,7 @@ defmodule Server.MaintainTest do
     assert :ok = sweep()
 
     assert Thread |> Repo.all() |> Enum.filter(&(&1.slug == "maint-done-line")) == []
-    assert Repo.get!(Thread, thread.id).stage == "merged"
+    assert Repo.get!(Thread, thread.id).stage == "landed"
   end
 
   test "the default bands leave a fresh workline alone" do
@@ -331,7 +331,7 @@ defmodule Server.MaintainTest do
       File.write!(Path.join(wt, "b.txt"), "landing\n")
       {_, 0} = System.cmd("git", ["-C", wt, "add", "b.txt"])
       {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "landing"])
-      {:ok, th} = th |> Server.Thread.workline_stage_changeset(%{stage: "merged"}) |> Server.Repo.update()
+      {:ok, th} = th |> Server.Thread.workline_stage_changeset(%{stage: "landed"}) |> Server.Repo.update()
       {:ok, _} = Server.Channel.close_thread(th)
 
       {:ok, landed} =

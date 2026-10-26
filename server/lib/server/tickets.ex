@@ -178,7 +178,7 @@ defmodule Server.Tickets do
   """
   def done_for(thread_id) do
     case Repo.get(Server.Thread, thread_id) do
-      %Server.Thread{stage: stage} when not is_nil(stage) and stage != "merged" -> :ok
+      %Server.Thread{stage: stage} when not is_nil(stage) and stage != "landed" -> :ok
       _ -> thread_id |> promoted(&(&1 != "done")) |> Enum.each(&__MODULE__.update(&1, %{status: "done"}))
     end
   end

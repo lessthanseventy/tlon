@@ -85,7 +85,7 @@ defmodule Server.WorklineTest do
   end
 
   test "any-stage entry refuses the terminal stage and any non-stage" do
-    assert {:error, {:invalid_stage, "merged"}} = Workline.open(%{title: "t", slug: "no-merged", stage: "merged"})
+    assert {:error, {:invalid_stage, "landed"}} = Workline.open(%{title: "t", slug: "no-landed", stage: "landed"})
     assert {:error, {:invalid_stage, "garbage"}} = Workline.open(%{title: "t", slug: "no-garbage", stage: "garbage"})
   end
 
@@ -138,7 +138,7 @@ defmodule Server.WorklineTest do
     {:awaiting, thread} = Workline.advance(thread, artifacts: AllPresent)
     {:ok, thread} = Workline.approve(thread, artifacts: AllPresent)
 
-    assert thread.stage == "merged"
+    assert thread.stage == "landed"
     assert {:error, :terminal} = Workline.advance(thread, artifacts: AllPresent)
   end
 
@@ -292,7 +292,7 @@ defmodule Server.WorklineTest do
     thread = open!(%{slug: "landing", stage: "review"})
     {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
     assert {:ok, merged} = Workline.approve(parked, artifacts: AllPresent, merge: Merges, run: @no_github)
-    assert merged.stage == "merged"
+    assert merged.stage == "landed"
     assert %Server.Thread{state: "closed"} = Server.Repo.get(Server.Thread, thread.id)
   end
 
@@ -342,7 +342,7 @@ defmodule Server.WorklineTest do
       {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
       {:ok, queued} = parked |> Server.Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
 
-      assert {:ok, %{stage: "merged"}} =
+      assert {:ok, %{stage: "landed"}} =
                Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end, run: @no_github)
 
       assert %Server.Thread{state: "closed"} = Repo.get(Server.Thread, thread.id)

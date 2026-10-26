@@ -31,7 +31,7 @@ defmodule Server.Trust do
           on: t.id == m.thread_id,
           where:
             m.author == "tlon" and like(m.body, ^(leads_line(name, "build") <> "%")) and
-              (t.stage == "merged" or t.state == "closed"),
+              (t.stage == "landed" or t.state == "closed"),
           distinct: t.id,
           order_by: [desc: t.id],
           limit: @window,
@@ -39,7 +39,7 @@ defmodule Server.Trust do
       )
 
     bounced = bounced(Enum.map(threads, & &1.id))
-    %{led: length(threads), first_time: Enum.count(threads, &(&1.stage == "merged" and &1.id not in bounced))}
+    %{led: length(threads), first_time: Enum.count(threads, &(&1.stage == "landed" and &1.id not in bounced))}
   end
 
   @doc "Whether `record` has earned a seat a step of the operator's standing approval."

@@ -78,7 +78,7 @@ defmodule Server.Jobs.KeepUp do
 
   defp reland(repo, prs, run) do
     for %{number: n, slug: slug} <- prs,
-        %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
+        %Server.Thread{stage: "landed"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
       why = "its PR ##{n} conflicts with main"
 
       with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to rebase it", run),
@@ -246,7 +246,7 @@ defmodule Server.Jobs.KeepUp do
 
   defp red_checks(repo, prs, run) do
     for %{number: n, slug: slug} <- prs,
-        %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
+        %Server.Thread{stage: "landed"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
       why = "its PR ##{n}'s checks went red"
 
       with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to fix it", run) do

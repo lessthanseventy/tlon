@@ -140,7 +140,7 @@ defmodule Server.Shifts do
 
   # restaffed only when the lead actually changed: with nobody of the kind on shift, restaff says so
   # itself and the workline waits
-  defp change_over(%Thread{stage: stage} = thread, acc, to) when stage not in [nil, "merged"] do
+  defp change_over(%Thread{stage: stage} = thread, acc, to) when stage not in [nil, "landed"] do
     before = Channel.thread_lead(thread.id)
     {:ok, _} = Server.Workline.restaff_now(thread)
 

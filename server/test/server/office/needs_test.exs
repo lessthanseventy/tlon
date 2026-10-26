@@ -797,7 +797,7 @@ defmodule Server.Office.NeedsTest do
 
       idle =
         Server.Repo.all(
-          from t in Server.Thread, where: t.state == "open" and not is_nil(t.stage) and t.stage != "merged"
+          from t in Server.Thread, where: t.state == "open" and not is_nil(t.stage) and t.stage != "landed"
         )
 
       listed = MapSet.new(Needs.list(), & &1.thread_id)

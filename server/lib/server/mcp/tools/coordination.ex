@@ -273,7 +273,7 @@ defmodule Server.MCP.Tool.CloseThread do
 
   # a plain thread is anyone's to close (the coordination this verb exists for); a workline in flight
   # is its lead's, the lead above it's or the manager's
-  defp may_close?(%Server.Thread{stage: stage}, _identity) when stage in [nil, "merged"], do: true
+  defp may_close?(%Server.Thread{stage: stage}, _identity) when stage in [nil, "landed"], do: true
 
   defp may_close?(thread, identity), do: Server.MCP.Tool.steers?(thread, identity)
 

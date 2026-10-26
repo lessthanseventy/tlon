@@ -30,7 +30,7 @@ defmodule Server.WorklineLedgerTest do
 
     assert report.summary.open == 2
     assert report.summary.gated == 1
-    assert report.summary.merged == 0
+    assert report.summary.landed == 0
 
     line_a = Enum.find(report.worklines, &(&1.slug == "line-a"))
     assert line_a.stage == "spec"
