@@ -482,6 +482,15 @@ defmodule Server.ProfilesTest do
                "TLON_COMPACT_AT"
     end
 
+    test "the uqbar role names the inbox loop: route: uqbar needs are settled or passed up" do
+      prompt = Profiles.citizen_profile("uqbar", 7).system_prompt
+
+      for word <-
+            ~w(operator_inbox settle_need pass_up_need recommendation seats quota tool_denied) ++ ["route: uqbar"] do
+        assert prompt =~ word, "role is missing #{word}"
+      end
+    end
+
     test "model_label names a citizen's model too, so its commits are stamped" do
       Server.TestDB.clean!()
       {:ok, ws} = Server.Workspaces.register(%{name: "Citizens"})
