@@ -1,13 +1,19 @@
-# Review — workline 251-the-switchboard-never-re-delivers-a, round 2 (0c06dd7)
+# Review — workline 251-the-switchboard-never-re-delivers-a, round 3 (a3100f8)
 
-**Verdict: request_changes.**
+**Verdict: approve.**
 
 ## Last round's finding
 
-Fixed. `unheard?/1` for a tlon-authored message now reads `reply_author(message) ++ mentioned_agents(message) != [] and unheard_by_addressees?(message)` (switchboard.ex:161), exactly the escalated patch; `++` binds before `!=`, so an addressee-less post is skipped and one that @mentions or replies to a seat keeps the 10–30 min retry. Two tests cover both arms (addressee-less notice → 0 redelivered; "@Sandra ✓ `mise run check` passed" → 1). CHECKS: `mise run check` exit 0 on this head (20:08Z); no bench_contrast row in the brief.
+Fixed. `git diff 277c5f9..HEAD -- . ':!work/251-…'` is empty: a3100f8 touches only pr.md, and the file now reads exactly the replacement I escalated (message #14257): "no longer hands back a tlon-authored post that names nobody", the fixed-addressee carve-out named, and "58 tests, 0 failures". The PR body and the code agree on the point the review turned on.
+
+## The change, as it stands
+
+`unheard?/1` for a tlon-authored message is `reply_author(message) ++ mentioned_agents(message) != [] and unheard_by_addressees?(message)` (switchboard.ex:161); every other author goes through `unheard_by_addressees?/1` unchanged. Two tests cover both arms: the addressee-less "▶ VERIFY" notice is never handed back (0, delivered_at untouched), "@Sandra ✓ check passed" still is (1). That is the ticket's fault — the post that resolves to whoever leads *now* — and no wider.
+
+CHECKS: `mise run check` exit 0 at 20:26:48Z on the branch at a3100f8 (the `tlon/check` status line says "not posted" because the server's checkout was dirty during the run; the gate itself passed). No bench_contrast row in the brief.
 
 ## Findings
 
-1. **pr.md describes the first fix, not this one.** It says "`Switchboard.redeliver_unheard/1` no longer hands back tlon-authored messages" and "the one-clause fix … 57 tests, 0 failures". After 0c06dd7 a tlon post that names a seat is handed back, and the suite is 58. The PR body is GitHub's permanent record of the change and states the opposite of the code on the point the review turned on. Replacement text posted on the thread (message #14257); one commit, no code.
+None blocking.
 
-Not verified by me beyond reading the diff and callers: I ran nothing.
+Not verified by me beyond reading the diff, the callers and the CHECKS rows: I ran nothing.
