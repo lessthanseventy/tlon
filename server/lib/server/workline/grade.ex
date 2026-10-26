@@ -52,6 +52,14 @@ defmodule Server.Workline.Grade do
   end
 
   @doc """
+  The steering a change touches, `[{kind, path}]`: `:profiles` — a file whose edit moves a seat's
+  system prompt, which the role bench loads and can A/B — or `:unmeasurable` — a skill or an
+  AGENTS.md/CLAUDE.md, which a seat reads but the bench's fixture workdir never loads. Which roles a
+  `:profiles` edit moves is `Server.Bench.Contrast`'s question (a prompt fingerprint), not a path's.
+  """
+  def steering(paths), do: for(p <- paths, kind = steering_kind(p), do: {kind, p})
+
+  @doc """
   The grader's prompt: the ticket, the plan, the diff, and every changed file in full as the branch
   has it — so a claim about the code around a hunk is read, not guessed. Files are added while they
   fit `@file_budget` characters; one that doesn't is named as left out.
@@ -319,5 +327,11 @@ defmodule Server.Workline.Grade do
         correlation: "workline:#{thread.slug}:grade",
         detail: detail
       })
+  end
+
+  defp steering_kind(p) when p in ["server/lib/server/profiles.ex", "server/lib/server/soul.ex"], do: :profiles
+
+  defp steering_kind(p) do
+    if Path.basename(p) in ~w(AGENTS.md CLAUDE.md) or p =~ ~r{(^|/)skills/}, do: :unmeasurable
   end
 end
