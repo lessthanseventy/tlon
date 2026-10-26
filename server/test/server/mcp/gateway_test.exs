@@ -135,6 +135,15 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
+  test "POST /api/release/ran records a hand-run check on a commit; a bad one is a 422" do
+    sha = String.duplicate("c", 40)
+    assert {201, %{"status" => "ok"}} = request_json(:post, "/api/release/ran", %{check: "gate", sha: sha, exit: 0})
+    assert %{ok: true} = Enum.find(Server.Release.Candidate.check(sha, busy: fn -> [] end), &(&1.check == :gate))
+
+    assert {422, %{"error" => _}} = request_json(:post, "/api/release/ran", %{check: "gate", sha: "nope", exit: 0})
+    assert {422, %{"error" => _}} = request_json(:post, "/api/release/ran", %{check: "gate", sha: sha})
+  end
+
   test "POST /api/usage/claude keeps the plan's limits for the office snapshot; a bad report is a 422" do
     Server.Usage.clear()
     assert {200, %{"usage" => %{"claude" => nil}}} = get_json("/api/office")

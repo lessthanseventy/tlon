@@ -58,6 +58,8 @@ defmodule Server.TestDB do
     Server.Todo,
     Server.Question,
     Server.Habit,
+    # a hand-run gate's result has no schedule to cascade it away (Release.Candidate.record/3)
+    Server.ScheduleRun,
     # playbook.source_thread_id → thread, so before Thread
     Server.Playbook,
     Server.Message,
