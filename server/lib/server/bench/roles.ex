@@ -38,6 +38,13 @@ defmodule Server.Bench.Roles do
   @doc "The role table: role name => `%{archetype, grade, set}`."
   def roles, do: @roles
 
+  @doc "role => sha256 of the system prompt `profile_fun.(role)` would run it with — what a steering edit moves."
+  def fingerprint(profile_fun) do
+    Map.new(@roles, fn {role, _} ->
+      {role, :sha256 |> :crypto.hash(profile_fun.(role).system_prompt || "") |> Base.encode16(case: :lower)}
+    end)
+  end
+
   @doc "The tiers a suite runs: `canary` its own, `full` every one."
   def tiers("canary"), do: ["canary"]
   def tiers("full"), do: @tiers
