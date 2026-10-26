@@ -5,8 +5,9 @@ routed by the server (`Server.Profiles`); this is for the operator and anyone la
 
 ## Picking a model — the routing, as tasks
 
-Two subscriptions, two buckets. The **$100 Claude plan** is the scarce, high-value bucket (5-hour +
-weekly caps); the **ollama.com Pro plan** is the all-night workhorse. ollama.com now meters plans in
+Two subscriptions, two buckets. The **$200 Claude plan** (5-hour + weekly caps) staffs every seat — a
+seat runs its grade's Claude model (`Server.OperatorConfig`), unless retargeted; the **ollama.com Pro plan**
+carries the server's one-shots (banter, the judge, titles, the toys) and the launchers below. ollama.com now meters plans in
 monthly usage credits spent at per-model per-token rates; accounts still on a legacy plan (this one, as of
 2026-10) get a short session window and a weekly cap instead. Either way "cost" means *which capped bucket
 am I draining*, so the rule is: **push work down to the cheapest bucket that can still do it well.**
