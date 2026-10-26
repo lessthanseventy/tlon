@@ -37,6 +37,7 @@ config :server, Server.Web.Endpoint,
 config :server, :orphans, proc_dir: "/nonexistent"
 config :server, bootstrap: false
 config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 200]
+config :server, health_reading: fn -> %{tmux: true, disk_pct: nil, mem_pct: nil} end
 config :server, generator_cmd: "/nonexistent/tlon-test-generator"
 config :server, grader_retry_ms: 0
 
