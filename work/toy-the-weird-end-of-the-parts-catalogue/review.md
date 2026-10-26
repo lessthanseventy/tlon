@@ -1,40 +1,27 @@
-# Review — toy-the-weird-end-of-the-parts-catalogue
+# Review — toy-the-weird-end-of-the-parts-catalogue (round 2)
 
-**Verdict: request_changes**
+**Verdict: approve**
 
-Ten parts as data in `office/kit/parts.ts`, `figure()` untouched, dials only. The library invariants and the 69k-figure stable-looks golden are green. One real defect: the fishbowl deletes the head it is supposed to cover.
+Round 1's one blocking finding is fixed; the snail follow-up is fixed too. No new issues.
 
 ## Blocking
 
-**`fishbowl` erases the head inside the glass.** It draws through `hat()`, which turns every `.` in a crown row into `_` (clear). The bowl's interior is written as dots — `${d.glass}....${d.glass}` — so the wearer's hair at rows 1–2 is deleted and the *room* shows through the bowl. Rendered with `figure({...lookOf("yu"), head:{id:"fishbowl"}}, …)`, front:
+None. Round 1's blocker — `fishbowl` erasing the head inside the glass — is resolved.
 
-```
-             plain          fishbowl
-  row 1  ...h..h..h..     ...c....c...   hair gone (spiky/curly/long/parted)
-  row 2  ..hhhhhhhh..     ...c....c...   hair gone (every style)
-  row 3  ..hhhhhhhh..     ..cccccccc..
-```
+## What changed since b4d0d38
 
-A see-through helmet should show the head *under* the glass. `halo` and `ufo` right below get this right and say why in a comment ("hover over the hair rather than sit on it: nothing is cleared"); the bowl should be built the same way — a view of `mid()` rows where `.` leaves the pixel:
+- **`fishbowl`** (office/kit/parts.ts:64-68) no longer goes through `hat()`; it builds three views from `mid()` rows, which use only `.` and the glass char — never `_`. Walls (`${d.glass}......${d.glass}`, 8 wide) sit at cols 2 and 9 on the front, the 10-wide rim covers row 3, and the hair rows between the walls are left untouched. Side uses `shift 1`, matching `halo`/`ufo`. The comment states the invariant. This is exactly the shape asked for.
+- **`snail`** side view (parts.ts:131) moved from `at(1,…)`/`at(0,…)` to `at(5,…)`/`at(4,…)` — cols 5–6 (row 10) and 4–7 (row 11), on the side torso instead of hanging off the chest to the left. Front/back unchanged on the right shoulder.
 
-```diff
--  fishbowl: part("head", { glass: ["c", "w"] }, (d) => hat(3, [rep(d.glass, 6), `${d.glass}....${d.glass}`, `${d.glass}....${d.glass}`], rep(d.glass, 8))),
-+  // a bowl is see-through: the head shows inside it, so nothing is cleared (unlike a hat)
-+  fishbowl: part("head", { glass: ["c", "w"] }, (d) => {
-+    const v = (shift: number): View => ({ 0: mid(rep(d.glass, 4), shift), 1: mid(`${d.glass}......${d.glass}`, shift), 2: mid(`${d.glass}......${d.glass}`, shift), 3: mid(rep(d.glass, 10), shift) })
-+    return { front: v(0), side: v(1), back: v(0) }
-+  }),
-```
+## Tests
 
-8-wide walls at cols 2 and 9 enclose the hair rows; the rim at 10 covers the 10-wide head row. Rendered over mop/curly/spiky/parted: hair stays, glass surrounds it. Width is yours to tune — the point is that the bowl must not clear.
+Two new tests in office/test/weird-parts.test.ts, both test-first (RED then GREEN per the builder):
+- fishbowl: no view contains `_` — proves nothing is cleared.
+- snail: side-view non-dot cols are all within 3–8 — proves it sits on the torso.
 
-## Checked
+`bun test weird-parts parts stable` → 22 pass, 0 fail. `dials wcag` → 14 pass, 0 fail. The 69125-figure stable sha still matches; `parts.test.ts`'s per-part × per-dial × per-view sweep keeps the new rows in-bounds and 3:1. The server's full verify (mise run check) passed on this branch.
 
-- `bun test test/weird-parts.test.ts test/parts.test.ts test/looks.test.ts test/stable.test.ts test/dials.test.ts` → **33 pass, 0 fail**. `parts.test.ts` sweeps every part × every dial × three views against its slot's paint letters, so the new rows are in-bounds and clear 3:1 by the existing test.
-- `stable.test.ts`'s 69125-figure sha still matches (`lookOf` sets no parts). `rollLook` and `nextPart` read `idsIn`, so the look card cycles the new ids with no other change — head goes 7 → 14, `PART_IDS` 21 → 31.
-- Rendered all ten front and side through `figure()`: duck, cone, plantpot, cloud, ufo, halo, banana phone and horn read as their things; the snail's front/back is on the shoulder.
-- Server verify passed on this branch; I did not re-run the full office suite.
+## Follow-ups (non-blocking, replace round 1's)
 
-## Follow-ups
-
-See the three filed with this review: eyeball the parts in the look card (office law: a frame change is seen, not assumed); the snail's side view hangs in front of the chest; the halo's `glow` and horn's `toot` dials are inert (behaviours #98 named, left to a sim hook).
+1. **Eyeball the parts in the look card.** Office law: a frame change is seen, not assumed. A seat can't render the look card, so the ten new parts front/side are unverified by eye — the tests prove structure, not that a duck reads as a duck. Whoever drives the office next should glance at the card.
+2. **`halo.glow` and `partyhorn.toot` dials are inert.** Ticket #98 named halo flicker and a horn toot on a high-five as behaviours; both dials exist but drive nothing, by design — they wait on a sim hook. File a ticket for the hook if either behaviour is wanted; until then the dials are harmless dead options.
