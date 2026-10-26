@@ -1740,6 +1740,42 @@ defmodule Server.MCP.ServerTest do
     end
   end
 
+  describe "operator_inbox — key and route, for Uqbar's loop" do
+    setup do
+      path = Path.join(System.tmp_dir!(), "inbox-routing-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+      :ok = Server.OperatorConfig.put("uqbar_routing", true, path)
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+
+      on_exit(fn ->
+        File.rm(path)
+
+        if prior,
+          do: Application.put_env(:server, :operator_config_path, prior),
+          else: Application.delete_env(:server, :operator_config_path)
+      end)
+    end
+
+    test "a conditional need carries its key and route: uqbar; a settled one is absent" do
+      {:ok, ws} = Server.Workspaces.create(%{name: "InboxRouteWS"})
+      {:ok, desk} = Channel.open_thread(%{title: "manager desk", workspace_id: ws.id, scope: "machine"})
+      {:ok, agent} = Staff.register_agent(%{name: "tertius", mandate: "manager", engine: "fresh"})
+      token = MCP.Tokens.mint(desk, agent)
+      {:ok, asked} = Channel.open_thread(%{title: "q", workspace_id: ws.id})
+      {:ok, _} = Server.Attention.ask(asked.id, "daneri", "A or B?")
+
+      [%{key: key}] = Enum.filter(Server.Office.Needs.grouped().uqbar, &(&1.thread_id == asked.id))
+
+      items = token |> call(handshake(token), 2, "operator_inbox", %{}) |> decode_tool_json()
+      assert [item] = Enum.filter(items, &(&1["thread_id"] == asked.id))
+      assert item["key"] == key and item["route"] == "uqbar"
+
+      _ = Server.Office.Needs.settle(key, "answered", "uqbar")
+      items = token |> call(handshake(token), 3, "operator_inbox", %{}) |> decode_tool_json()
+      assert Enum.filter(items, &(&1["thread_id"] == asked.id)) == []
+    end
+  end
+
   describe "settle_need / pass_up_need — Uqbar routes a need; any other seat is refused" do
     setup do
       {:ok, ws} = Server.Workspaces.create(%{name: "RouteWS"})
