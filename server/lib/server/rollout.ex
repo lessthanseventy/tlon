@@ -110,13 +110,19 @@ defmodule Server.Rollout do
       for {queue, args} <-
             Server.Repo.all(
               from j in Oban.Job,
-                where: j.queue in ["verify", "landing"] and j.state == "executing",
+                where: j.queue in ["verify", "landing", "tasks"] and j.state == "executing",
                 select: {j.queue, j.args}
             ),
-          do: "the #{if queue == "verify", do: "verify", else: "landing"} of ##{args["thread_id"]} is running"
+          do: job_line(queue, args)
 
     turns ++ jobs
   end
+
+  # A seat's run_task gate is on `tasks`: the server kills it on a cut like any verify or landing.
+  defp job_line("tasks", args), do: "the check of ##{args["thread_id"]} for #{args["agent"]} is running"
+
+  defp job_line(queue, args),
+    do: "the #{if queue == "verify", do: "verify", else: "landing"} of ##{args["thread_id"]} is running"
 
   @doc "Whether a restart cuts nothing off now (`busy/0` is empty)."
   def quiet?, do: busy() == []
