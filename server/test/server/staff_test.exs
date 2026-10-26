@@ -201,6 +201,37 @@ defmodule Server.StaffTest do
       assert reloaded.ended_at == nil
     end
 
+    test "a register with no pane does not supersede a live session that has one", %{
+      thread: thread,
+      agent: agent
+    } do
+      {:ok, held} = Staff.start_session(%{agent_id: agent.id, thread_id: thread.id, pane_ref: "%474"})
+
+      assert {:error, :seat_held} = Staff.start_session(%{agent_id: agent.id, thread_id: thread.id})
+
+      assert Repo.get!(Session, held.id).ended_at == nil
+      assert Repo.aggregate(Session, :count) == 1
+    end
+
+    test "a register with a pane still supersedes a live pane-bound session (a restarted pane)", %{
+      thread: thread,
+      agent: agent
+    } do
+      {:ok, old} = Staff.start_session(%{agent_id: agent.id, thread_id: thread.id, pane_ref: "%474"})
+      {:ok, new} = Staff.start_session(%{agent_id: agent.id, thread_id: thread.id, pane_ref: "%475"})
+
+      assert %DateTime{} = Repo.get!(Session, old.id).ended_at
+      assert Repo.get!(Session, new.id).ended_at == nil
+    end
+
+    test "a paneless register still supersedes a paneless live session", %{thread: thread, agent: agent} do
+      {:ok, old} = Staff.start_session(%{agent_id: agent.id, thread_id: thread.id})
+      {:ok, new} = Staff.start_session(%{agent_id: agent.id, thread_id: thread.id})
+
+      assert %DateTime{} = Repo.get!(Session, old.id).ended_at
+      assert Repo.get!(Session, new.id).ended_at == nil
+    end
+
     test "an agent and a thread are required to start a session", %{thread: thread, agent: agent} do
       assert {:error, cs} = Staff.start_session(%{thread_id: thread.id})
       assert %{agent_id: _} = errors_on(cs)

@@ -233,8 +233,16 @@ function registerNow($): Promise<void> {
     if (!args) return;
     try {
       const claimed = await call($, "register", args);
-      sessionId = (claimed as { session_id?: number } | null)?.session_id ?? null;
       registration = null;
+      if (claimed && typeof claimed === "object" && (claimed as { superseded?: boolean }).superseded) {
+        // a windowed session holds the seat: stand down. 0 is no session's id, so take_wakes answers
+        // superseded (and the poll reclaims the seat once the holder ends) instead of draining its wakes
+        sessionId = 0;
+        superseded = true;
+        submitWakes($, [String((claimed as { text?: string }).text ?? "")]);
+        return;
+      }
+      sessionId = (claimed as { session_id?: number } | null)?.session_id ?? null;
     } catch (e) {
       if (!registerFailed) void note($, `register: ${e instanceof Error ? e.message : String(e)} — trying again every poll`);
       registerFailed = true;

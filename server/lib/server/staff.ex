@@ -102,7 +102,8 @@ defmodule Server.Staff do
   replacement's start is what retires the zombie — ended in the same transaction
   that inserts the new row; the partial unique index is the DB's own guard under
   a concurrent race (§10). Both the ended zombie(s) and the start are announced
-  AFTER commit — rows are durable before any nudge. Returns `{:ok, session}` or
+  AFTER commit — rows are durable before any nudge. A start with no `pane_ref` does not supersede
+  a live session that has one: `{:error, :seat_held}`, nothing written. Returns `{:ok, session}` or
   `{:error, changeset}` on a missing agent/thread; a non-existent agent or thread
   is refused by SQLite's FK and raises (§10).
   """
@@ -113,6 +114,8 @@ defmodule Server.Staff do
     now = DateTime.truncate(DateTime.utc_now(), :second)
 
     fn ->
+      if seat_held?(changeset, thread_id, agent_id), do: Repo.rollback(:seat_held)
+
       superseded = supersede_live(thread_id, agent_id, now)
 
       case Repo.insert(changeset) do
@@ -127,8 +130,8 @@ defmodule Server.Staff do
         Server.Bus.broadcast({:session_started, session})
         {:ok, session}
 
-      {:error, changeset} ->
-        {:error, changeset}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -243,5 +246,20 @@ defmodule Server.Staff do
       from s in Session,
         where: s.thread_id == ^thread_id and s.agent_id == ^agent_id and is_nil(s.ended_at)
     )
+  end
+
+  # A newcomer with no pane cannot take the seat from a live session that has one: nothing can
+  # drain wakes for a paneless session, so it would strand the windowed seat (ticket #391). A
+  # newcomer WITH a pane supersedes as ever, so a restarted pane keeps working.
+  defp seat_held?(_changeset, thread_id, agent_id) when is_nil(thread_id) or is_nil(agent_id), do: false
+
+  defp seat_held?(changeset, thread_id, agent_id) do
+    is_nil(Ecto.Changeset.get_field(changeset, :pane_ref)) and
+      Repo.exists?(
+        from s in Session,
+          where:
+            s.thread_id == ^thread_id and s.agent_id == ^agent_id and is_nil(s.ended_at) and
+              not is_nil(s.pane_ref)
+      )
   end
 end
