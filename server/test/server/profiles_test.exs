@@ -550,6 +550,11 @@ defmodule Server.ProfilesTest do
       refute prompt =~ "{{handle}}"
     end
 
+    test "the reviewer persona weighs a bench_contrast REGRESSION as a finding and knows propose_habit" do
+      prompt = Profiles.archetype(:reviewer).system_prompt
+      assert prompt =~ "bench_contrast" and prompt =~ "REGRESSION" and prompt =~ "propose_habit"
+    end
+
     test "a non-personalized prompt (surveyor/tertius) is byte-identical to the template" do
       # tertius's prompt has NO placeholder — personalize must leave it untouched so Task 4 keeps
       # fetch(\"tertius\") byte-identical.
