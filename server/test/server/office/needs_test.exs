@@ -1208,6 +1208,8 @@ defmodule Server.Office.NeedsTest do
       Application.put_env(:server, :health_reading, fn -> reading end)
 
       on_exit(fn ->
+        :persistent_term.erase({Needs, :health_since})
+
         if prior,
           do: Application.put_env(:server, :health_reading, prior),
           else: Application.delete_env(:server, :health_reading)
@@ -1228,6 +1230,31 @@ defmodule Server.Office.NeedsTest do
 
       health_reading(%{tmux: true, disk_pct: 89, mem_pct: nil})
       assert Needs.grouped().uqbar == []
+    end
+
+    test "Uqbar's settle on a health item sticks: it stays settled on the next read" do
+      health_reading(%{tmux: false, disk_pct: 10, mem_pct: 10})
+      :ok = Needs.settle("health:tmux", "handled", "uqbar")
+      assert [%{key: "health:tmux"}] = Needs.grouped().settled
+    end
+
+    test "a dismissed health item stays dismissed on the next read" do
+      health_reading(%{tmux: true, disk_pct: 95, mem_pct: 10})
+      assert [%{key: "health:disk"}] = Needs.grouped().uqbar
+      :ok = Needs.dismiss("health:disk")
+      assert Needs.list() == []
+      assert Needs.grouped().uqbar == []
+    end
+
+    test "a health item Uqbar has not routed in uqbar_route_minutes passes up" do
+      health_reading(%{tmux: false, disk_pct: 10, mem_pct: 10})
+      assert [%{key: "health:tmux"}] = Needs.grouped().uqbar
+
+      since = DateTime.add(DateTime.utc_now(), -31 * 60, :second)
+      :persistent_term.put({Needs, :health_since}, %{tmux: since})
+
+      assert [%{key: "health:tmux", route: "pass_up", why: "Uqbar did not route it in time"}] =
+               Needs.grouped().clipboard
     end
   end
 end

@@ -54,8 +54,8 @@ config :server, machine_seed_path: "/nonexistent/tlon-test-seed.exs"
 config :server, operator_config_path: "/nonexistent/tlon-test-config.json"
 # The PM's release desk acts on the tlon checkout (Server.Release.PM): a test hands it a throwaway
 # repo, so one that forgets can never cut a release of the real one.
-# the stale-launch sweep retires unstamped fake windows; its own tests turn it on
 config :server, release_root: "/nonexistent/tlon-test-release"
+# the stale-launch sweep retires unstamped fake windows; its own tests turn it on
 config :server, retire_stale_launch: false
 config :server, souls_dir: Path.join(System.tmp_dir!(), "tlon-test-souls-unset")
 # The consult mirror is off in tests: the pure maybe_mirror tests call it directly, and the

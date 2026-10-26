@@ -1096,8 +1096,10 @@ defmodule Server.Office.Needs do
   # from a db read; failed jobs are `failed_jobs/0`)
   defp health do
     reading = Application.get_env(:server, :health_reading, &Server.Office.Room.vitals/0).()
+    problems = Server.Office.Room.vital_problems(reading)
+    since = health_since(problems)
 
-    for {what, text} <- Server.Office.Room.vital_problems(reading) do
+    for {what, text} <- problems do
       %{
         key: "health:#{what}",
         kind: "health",
@@ -1106,10 +1108,21 @@ defmodule Server.Office.Needs do
         workspace_id: nil,
         title: "the box: #{what}",
         text: text,
-        at: DateTime.utc_now(),
+        at: since[what],
         options: nil,
         ref: nil
       }
     end
+  end
+
+  # When each problem was first seen, so its `at` is stable across reads: a verdict or a put-away
+  # is only ever newer than it. Kept only while the problem holds; written only when the set of
+  # problems changes, which is rare, so the persistent_term replacement is not a per-read cost.
+  defp health_since(problems) do
+    now = DateTime.truncate(DateTime.utc_now(), :second)
+    prior = :persistent_term.get({__MODULE__, :health_since}, %{})
+    seen = Map.new(problems, fn {what, _} -> {what, Map.get(prior, what, now)} end)
+    if seen != prior, do: :persistent_term.put({__MODULE__, :health_since}, seen)
+    seen
   end
 end
