@@ -16,8 +16,86 @@ defmodule Server.Workline.ContinuationTest do
 
   setup do
     Server.TestDB.clean!()
+
+    # the spacing is off (0) for the suite; its own tests turn it on
+    path = Path.join(System.tmp_dir!(), "continuation-config-#{System.unique_integer([:positive])}.json")
+    previous = Application.get_env(:server, :operator_config_path)
+    Application.put_env(:server, :operator_config_path, path)
+    :ok = Server.OperatorConfig.put("continuation_gap_minutes", 0, path)
+
+    on_exit(fn ->
+      Application.put_env(:server, :operator_config_path, previous)
+      File.rm(path)
+      Server.Presence.clock_in("claude-code")
+    end)
+
     {:ok, thread} = Workline.open(%{title: "fix the composer", slug: "composer-wrap", stage: "plan"})
-    %{thread: thread}
+    %{thread: thread, config: path}
+  end
+
+  defp opened_minutes_ago(thread, minutes) do
+    at = DateTime.utc_now() |> DateTime.add(-minutes * 60) |> DateTime.truncate(:second)
+    Repo.update_all(from(t in Server.Thread, where: t.id == ^thread.id), set: [created_at: at])
+  end
+
+  describe "spacing" do
+    setup %{thread: t, config: config} do
+      :ok = Server.OperatorConfig.put("continuation_gap_minutes", 10, config)
+      opened_minutes_ago(t, 11)
+      :ok
+    end
+
+    test "three idles a minute apart produce one nudge; one past the gap nudges again", %{thread: t} do
+      now = DateTime.utc_now()
+
+      for min <- 0..2, do: :ok = Continuation.run(t.id, artifacts: Missing, now: DateTime.add(now, min * 60))
+      assert [_] = continuations(t.id)
+
+      :ok = Continuation.run(t.id, artifacts: Missing, now: DateTime.add(now, 11 * 60))
+      assert [_, _] = continuations(t.id)
+    end
+
+    test "a skip does not spend the budget: idles past the gap still reach 3/3 and then stuck", %{thread: t} do
+      now = DateTime.utc_now()
+
+      for min <- 0..4 do
+        :ok = Continuation.run(t.id, artifacts: Missing, max_turns: 3, now: DateTime.add(now, min * 11 * 60))
+      end
+
+      assert [_, _, _] = continuations(t.id)
+      assert Repo.get!(Server.Thread, t.id).awaiting == "andrew"
+    end
+
+    test "a workline just opened straight at build waits out the gap before its first nudge" do
+      {:ok, fresh} = Workline.open(%{title: "straight to build", slug: "straight", stage: "build"})
+      :ok = Continuation.run(fresh.id, artifacts: Missing)
+      assert continuations(fresh.id) == []
+    end
+
+    test "none while the lead posted on the thread inside the window", %{thread: t} do
+      {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "builds", engine: "claude-code"})
+      {:ok, _} = Server.Staff.assign(Repo.get!(Server.Thread, t.id), a)
+      {:ok, _} = Server.Channel.post(%{thread_id: t.id, author: "hronir", body: "still on the build"})
+
+      :ok = Continuation.run(t.id, artifacts: Missing)
+      assert continuations(t.id) == []
+    end
+  end
+
+  test "no nudge while the thread's lead is clocked out; the budget is untouched", %{thread: t} do
+    {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "builds", engine: "claude-code"})
+    {:ok, _} = Server.Staff.assign(Repo.get!(Server.Thread, t.id), a)
+    Application.put_env(:server, :engine_presence, Server.Presence.Engine.Manual)
+    on_exit(fn -> Application.delete_env(:server, :engine_presence) end)
+    Server.Presence.clock_out("claude-code")
+
+    :ok = Continuation.run(t.id, artifacts: Missing)
+    assert continuations(t.id) == []
+
+    Server.Presence.clock_in("claude-code")
+    :ok = Continuation.run(t.id, artifacts: Missing)
+    assert [m] = continuations(t.id)
+    assert m.body =~ "(1/3)"
   end
 
   defp continuations(thread_id) do
