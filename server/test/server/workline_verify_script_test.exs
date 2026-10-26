@@ -180,8 +180,14 @@ defmodule Server.WorklineVerifyScriptTest do
 
       File.write!(Path.join(tmp, "bin/mise"), ~S"""
       #!/bin/sh
-      # exec: the canary A/B task, printing CONTRAST_OUT (with mix's compile noise) when set
-      [ "$1" = exec ] && { echo "$*" >>"$GATE_LOG.exec"; [ -z "${CONTRAST_OUT:-}" ] || { echo "Compiling 2 files (.ex)"; cat "$CONTRAST_OUT"; }; exit 0; }
+      # exec: the canary A/B task, printing CONTRAST_OUT (with mix's compile noise) when set; the
+      # --main dir it was handed and that dir's HEAD, as seen while it runs
+      [ "$1" = exec ] && {
+        echo "$*" >>"$GATE_LOG.exec"
+        while [ $# -gt 1 ]; do [ "$1" = --main ] && echo "$2 $(git -C "$2" rev-parse HEAD)" >>"$GATE_LOG.main"; shift; done
+        [ -z "${CONTRAST_OUT:-}" ] || { echo "Compiling 2 files (.ex)"; cat "$CONTRAST_OUT"; }
+        exit 0
+      }
       [ "$1" = run ] || exit 0
       echo "$(git rev-parse HEAD) $CHECKS_LABEL ${TLON_TEST_DATABASE:-}" >"$GATE_LOG"
       echo "$PWD" >"$GATE_LOG.cwd"
@@ -191,7 +197,7 @@ defmodule Server.WorklineVerifyScriptTest do
       """)
 
       File.chmod!(Path.join(tmp, "bin/mise"), 0o755)
-      %{tmp: tmp, repo: repo, ref: sh.(repo, "git rev-parse land/feature")}
+      %{tmp: tmp, repo: repo, ref: sh.(repo, "git rev-parse land/feature"), main: sh.(repo, "git rev-parse main")}
     end
 
     defp gate(ctx, env \\ []) do
@@ -293,6 +299,20 @@ defmodule Server.WorklineVerifyScriptTest do
       assert body1 =~ "REGRESSION" and body2 =~ "unmeasurable: AGENTS.md"
       refute log =~ "Compiling"
       assert advance == "advance 7 verify"
+    end
+
+    test "canary A/B: main's side is a throwaway worktree of origin/main under the verify cache, never the root checkout, gone after",
+         ctx do
+      workline!(ctx, %{@task_file => "t"})
+      assert {_, 0} = verify(ctx)
+      [main] = ctx.tmp |> Path.join("gate.log.main") |> File.read!() |> String.split("\n", trim: true)
+      [dir, head] = String.split(main, " ")
+      refute dir == ctx.repo
+      assert String.starts_with?(dir, Path.join(ctx.tmp, "cache/tlon-verify/main-"))
+      assert head == ctx.main
+      refute File.exists?(dir)
+      {list, 0} = System.cmd("git", ["-C", ctx.repo, "worktree", "list"])
+      assert [_repo_itself] = String.split(list, "\n", trim: true)
     end
 
     test "canary A/B: a red gate runs no canary", ctx do
