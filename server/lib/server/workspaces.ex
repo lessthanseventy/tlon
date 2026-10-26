@@ -116,6 +116,11 @@ defmodule Server.Workspaces do
     if heir do
       fn -> rehouse_and_delete(workspace, heir) end
       |> Repo.transaction()
+      |> tap(fn
+        # `Server.Office.held_windows/1`'s last-answer key would otherwise outlive the workspace
+        {:ok, _} -> :persistent_term.erase({Server.Office, :windows, workspace.id})
+        _ -> :ok
+      end)
       |> Bus.announce(:workspace_removed)
     else
       {:error, :last_workspace}
