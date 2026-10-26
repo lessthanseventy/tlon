@@ -269,6 +269,7 @@ export const KEYS = [
   { id: "hall.right", scope: "card:hall", key: "right", label: "hire" },
   { id: "hall.space", scope: "card:hall", key: "space", label: "lock / unlock the row" },
   { id: "hall.m", scope: "card:hall", key: "l", label: "the maybe pile", verb: "list" },
+  { id: "hall.e", scope: "card:hall", key: "e", label: "edit the row: text, vocab or part", verb: "edit" },
   // card:store
   { id: "store.left", scope: "card:store", key: "left", label: "previous species" },
   { id: "store.right", scope: "card:store", key: "right", label: "next species" },

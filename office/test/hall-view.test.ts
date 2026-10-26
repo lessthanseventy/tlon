@@ -12,7 +12,7 @@ test("the card has one row per field then one per slot", () => {
   expect(rows).toHaveLength(HALL_ROWS)
   expect(rows.map(r => r.lock)).toEqual([
     ...(["name", "archetype", "grade", "specialty"] as const).map(key => ({ kind: "fields" as const, key })),
-    null, ...SLOTS.map(s => ({ kind: "slots" as const, key: s })),
+    null, ...SLOTS.map(s => ({ kind: "slots" as const, key: s })), null,
   ])
 })
 test("rows say what they hold, and a locked one says so", () => {
@@ -34,4 +34,11 @@ test("stepRow wraps both ways", () => {
   expect(stepRow(0, -1)).toBe(HALL_ROWS - 1)
   expect(stepRow(HALL_ROWS - 1, 1)).toBe(0)
   expect(stepRow(3, 1)).toBe(4)
+})
+test("the soul has a row of its own, last, that says what it holds and is not lockable", () => {
+  const rows = hallRows(cand(), {})
+  const last = rows[rows.length - 1]!
+  expect(last.lock).toBeNull()
+  expect(text(last)).toContain("soul")
+  expect(text(hallRows({ ...cand(), soul: "## Wants\nsleep\n" }, {}).at(-1)!)).toContain("sleep")
 })
