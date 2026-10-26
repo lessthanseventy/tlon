@@ -6,7 +6,25 @@ defmodule Server.Bench.Contrast do
   turns verify red. Pure rows here; `run/3` shells out to `mix server.bench_roles`.
   """
 
+  alias Server.Workline.Grade
+
   @max_roles 3
+  @timeout_s 900
+
+  @doc """
+  The rows for a change touching `paths`; `dirs` = `%{main: root, branch: checkout}`. `[]` when it
+  touches no steering. `opts[:exec]` swaps the shell-out (`(dir, args) -> {output, exit}`; the default
+  runs `mix` in `<dir>/server` under `timeout #{@timeout_s}`).
+  """
+  def run(paths, dirs, opts \\ []) do
+    exec = opts[:exec] || (&mix/2)
+    steering = Grade.steering(paths)
+    profiles? = Enum.any?(steering, &match?({:profiles, _}, &1))
+    unmeasured = for {:unmeasurable, p} <- steering, do: p
+    extra = if unmeasured == [], do: [], else: [unmeasurable(unmeasured)]
+
+    if profiles?, do: bench(dirs, exec) ++ extra, else: extra
+  end
 
   @doc "Roles whose prompt hash differs between main and the branch (or is new on it), sorted."
   def affected(main_fp, branch_fp) do
@@ -64,4 +82,53 @@ defmodule Server.Bench.Contrast do
     do: "bench_contrast skipped: #{Enum.join(r, ", ")} — over the #{@max_roles}-role cap"
 
   def line(%{kind: :error, why: w}), do: "bench_contrast error: #{w}"
+
+  defp bench(dirs, exec) do
+    with {:ok, main_fp} <- json(exec, dirs.main, ["--fingerprint"]),
+         {:ok, branch_fp} <- json(exec, dirs.branch, ["--fingerprint"]) do
+      {roles, over} = main_fp |> affected(branch_fp) |> cap()
+
+      rows =
+        for role <- roles do
+          args = ["--suite", "canary", "--role", role]
+
+          case {json(exec, dirs.main, args), json(exec, dirs.branch, args)} do
+            {{:ok, m}, {:ok, b}} -> row(role, m, b)
+            {m, b} -> error(String.trim("#{role}: #{why(m)} #{why(b)}"))
+          end
+        end
+
+      rows ++ if(over == [], do: [], else: [skipped(over)])
+    else
+      {:error, why} -> [error(why)]
+    end
+  end
+
+  defp why({:error, w}), do: w
+  defp why(_), do: ""
+
+  # one `mix server.bench_roles <args> --out FILE` in `dir`, its JSON read back
+  defp json(exec, dir, args) do
+    out = Path.join(System.tmp_dir!(), "contrast-#{System.unique_integer([:positive])}.json")
+
+    try do
+      case exec.(dir, ["server.bench_roles" | args] ++ ["--out", out]) do
+        {_, 0} ->
+          {:ok, out |> File.read!() |> JSON.decode!()}
+
+        {text, code} ->
+          tail = text |> to_string() |> String.slice(-200, 200)
+          {:error, "#{Path.basename(dir)}: bench_roles #{Enum.join(args, " ")} exit #{code}: #{tail}"}
+      end
+    after
+      File.rm(out)
+    end
+  end
+
+  defp mix(dir, args) do
+    System.cmd("timeout", ["#{@timeout_s}", "mise", "exec", "--", "mix" | args],
+      cd: Path.join(dir, "server"),
+      stderr_to_stdout: true
+    )
+  end
 end

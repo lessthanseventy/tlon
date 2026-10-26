@@ -45,6 +45,60 @@ defmodule Server.Bench.ContrastTest do
     assert line == "bench_contrast qa: main 2/2 · branch 1/2 · tokens 110/110 · turns 6/8 · m1..b1 · REGRESSION"
   end
 
+  describe "run/3 with a stubbed executor" do
+    # exec.(dir, args) -> {output, exit}; --out FILE is written the way the real task writes it
+    defp exec(fps, runs) do
+      fn dir, args ->
+        out = args |> Enum.chunk_every(2, 1, :discard) |> Enum.find_value(fn [k, v] -> k == "--out" && v end)
+        side = if dir == "/main", do: :main, else: :branch
+
+        body =
+          if "--fingerprint" in args,
+            do: fps[side],
+            else: runs[{side, Enum.at(args, Enum.find_index(args, &(&1 == "--role")) + 1)}]
+
+        File.write!(out, JSON.encode!(body))
+        {"", 0}
+      end
+    end
+
+    @fp %{"qa" => "a", "planner" => "a"}
+    @dirs %{main: "/main", branch: "/b"}
+
+    test "no steering path: nothing runs" do
+      assert Contrast.run(["server/lib/server/thread.ex"], @dirs, exec: fn _, _ -> flunk("ran") end) == []
+    end
+
+    test "a skill or AGENTS.md alone is one unmeasurable row, nothing runs" do
+      assert [%{kind: :unmeasurable, paths: ["AGENTS.md"]}] =
+               Contrast.run(["AGENTS.md"], @dirs, exec: fn _, _ -> flunk("ran") end)
+    end
+
+    test "a profiles edit benches only the roles whose prompt moved, both sides" do
+      ex =
+        exec(%{main: @fp, branch: %{@fp | "qa" => "z"}}, %{
+          {:main, "qa"} => [rec("m", 2, 3)],
+          {:branch, "qa"} => [rec("b", 1, 3)]
+        })
+
+      assert [%{kind: :contrast, role: "qa", regression: true}] =
+               Contrast.run(["server/lib/server/profiles.ex"], @dirs, exec: ex)
+    end
+
+    test "a main without --fingerprint is an error row, not a crash" do
+      ex = fn _, _ -> {"unknown option", 1} end
+      assert [%{kind: :error, why: why}] = Contrast.run(["server/lib/server/profiles.ex"], @dirs, exec: ex)
+      assert why =~ "unknown option"
+    end
+
+    test "roles over the cap are named skipped, after the rows that ran" do
+      fps = %{main: %{}, branch: Map.new(~w(a b c d), &{&1, "x"})}
+      runs = Map.new(for s <- [:main, :branch], r <- ~w(a b c), do: {{s, r}, [rec("c", 1, 1)]})
+      rows = Contrast.run(["server/lib/server/profiles.ex"], @dirs, exec: exec(fps, runs))
+      assert [%{role: "a"}, %{role: "b"}, %{role: "c"}, %{kind: :skipped, roles: ["d"]}] = rows
+    end
+  end
+
   test "unmeasurable and skipped lines say why nothing was measured" do
     assert Contrast.line(Contrast.unmeasurable(["AGENTS.md"])) ==
              "bench_contrast unmeasurable: AGENTS.md — a seat reads it, the bench never loads it"
