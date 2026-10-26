@@ -190,6 +190,15 @@ defmodule Server.SchedulesTest do
     assert Repo.exists?(from m in Server.Message, where: m.thread_id == ^tid and like(m.body, "%interrupted%"))
   end
 
+  test "a script that exits 137 (SIGKILL, the OOM killer) is failed and the sheriff hears it", %{ws: ws} do
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+    s = schedule!(ws, %{cron: "@daily", body: "echo started; exit 137", standing: true})
+    {:ok, run} = Schedules.run_now(s)
+    assert %{status: "failed", exit: 137} = Schedules.perform(run.id)
+
+    assert Repo.exists?(from t in Server.Thread, where: t.title == ^Server.Sheriff.beat_title())
+  end
+
   test "other non-zero exits stay failed", %{ws: ws} do
     s = schedule!(ws, %{cron: "@daily", body: "exit 130"})
     {:ok, run} = Schedules.run_now(s)

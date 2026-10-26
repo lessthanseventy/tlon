@@ -27,7 +27,7 @@ defmodule Server.Schedules do
   @script_timeout_ms 30 * 60 * 1000
   @queue_word "checks queue:"
   @output_cap 4000
-  @interrupted_exits [143, 137]
+  @interrupted_exits [143]
 
   @doc "A new schedule. `{:ok, schedule}` or `{:error, changeset}`."
   def create(attrs), do: attrs |> Schedule.create_changeset() |> Repo.insert()
