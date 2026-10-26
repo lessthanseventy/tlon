@@ -99,7 +99,10 @@ defmodule Server.Workline.Brief do
         "Land it with submit_review — verdict approve or request_changes, and the whole review.md, verdict " <>
         "first: the server commits it for you, since you never write files. request_changes sends it back to " <>
         "the builder; after approve, call advance_stage to hand it to the merge gate. Its follow_ups replace any an " <>
-        "earlier review of this workline filed (get_brief shows them): list every non-blocking finding still open."
+        "earlier review of this workline filed (get_brief shows them): list every non-blocking finding still open. " <>
+        "If the CHECKS hold a bench_contrast row ending REGRESSION, make it a finding (the branch passes fewer canaries " <>
+        "than main; n is small, so say whether it looks like a flake); a green bench_contrast row is not a finding. " <>
+        "If a contrast is a real signal either way, propose a habit with propose_habit citing that row."
 
   defp playbook(%{stage: "intent"}), do: "Capture the originator's words near-verbatim plus a one-line restatement."
 

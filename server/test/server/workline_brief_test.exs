@@ -86,6 +86,12 @@ defmodule Server.WorklineBriefTest do
     refute Brief.stage_message(thread("spec")) =~ "expected"
   end
 
+  test "the review brief makes a bench_contrast REGRESSION a finding and names propose_habit for a real signal" do
+    review = Brief.stage_message(thread("review"))
+    assert review =~ "bench_contrast" and review =~ "REGRESSION"
+    assert review =~ "propose_habit"
+  end
+
   test "the gate notice names the parked transition and the operator's approve verb" do
     notice = Brief.gate_message(thread("spec", %{id: 42, awaiting: "andrew"}))
     assert notice =~ "spec"

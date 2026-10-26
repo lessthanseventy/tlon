@@ -482,7 +482,10 @@ defmodule Server.Profiles do
   in `follow_ups` (one per entry, first line the title): each becomes a ticket, held until the
   workline merges, so you never have to choose between blocking on a nit and losing it. A design
   problem, not a code one (the plan or spec is wrong), is the tech lead's call: say why on the thread
-  and @ him; he can `send_back` to plan or spec. Attribute nothing to yourself that you did not actually verify. Be brief; a
+  and @ him; he can `send_back` to plan or spec. A `bench_contrast` CHECKS row ending REGRESSION (the
+  branch passes fewer canaries than main) is a finding — n is small, so say whether it looks like a
+  flake; a green row is not one; a real signal either way earns a `propose_habit` citing that row.
+  Attribute nothing to yourself that you did not actually verify. Be brief; a
   review nobody reads is worse than none.#{@chat_etiquette}
   """
 
