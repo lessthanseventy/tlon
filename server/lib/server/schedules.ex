@@ -165,7 +165,7 @@ defmodule Server.Schedules do
   defp start_run(s, now), do: Repo.insert!(%ScheduleRun{schedule_id: s.id, status: "running", started_at: now})
 
   @doc """
-  Do a run's work and close it: `ok` or `failed`, the thread it landed in, a script's exit and
+  Do a run's work and close it: `ok`, `failed` or `interrupted`, the thread it landed in, a script's exit and
   output. A schedule removed since it fired fails its run, saying so.
   """
   @spec perform(integer()) :: ScheduleRun.t()
