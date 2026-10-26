@@ -858,6 +858,20 @@ defmodule Server.SwitchboardTest do
       assert Repo.get!(Message, m.id).delivered_at == m.delivered_at
     end
 
+    test "still hands back a tlon-authored post that @mentions its addressee" do
+      %{thread: thread, sandra_session: ss} = staffed_thread()
+
+      {:ok, m} =
+        Channel.post(%{thread_id: thread.id, author: "tlon", body: "@Sandra ✓ `mise run check` passed on abc123"})
+
+      at = DateTime.utc_now() |> DateTime.shift(minute: -12) |> DateTime.truncate(:second)
+      {:ok, _} = m |> Ecto.Changeset.change(created_at: at, delivered_at: at) |> Repo.update()
+      set_last_active(ss, 12 * 60)
+      flush()
+
+      assert Switchboard.redeliver_unheard() == 1
+    end
+
     test "is let go after 30 minutes — it stops trying" do
       m = woken(45, 45 * 60)
       Switchboard.redeliver_unheard()
