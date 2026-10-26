@@ -25,3 +25,12 @@ describe("every whiteboard line can be hovered and clicked", () => {
     }))
   }
 })
+
+// the TICKETS sticky for loose tickets is a column hit, not a ticket: its tip names no ticket id
+test("the TICKETS column's loose sticky tip names no id", () => seeded(3, () => {
+  const a = { ...office(4), tickets: [{ id: 7, workspace_id: 1, project_id: null, title: "loose", priority: "normal", kind: "ticket" as const, epic_id: null, status: "todo" }] }
+  const g = geometry(696, WIDE_H, 220, 70, 8, { w: 8, h: 16 }, true)
+  const fr = new WideRoom(696).render(viewOf(a, 1), focus, measureFor(g), new Date(2026, 9, 5, 15, 0))
+  const loose = fr.hits.find((x) => x.act?.kind === "column" && x.tip?.includes("loose"))
+  expect(loose?.tip?.split("\n")[0]).toBe("1 loose")
+}))

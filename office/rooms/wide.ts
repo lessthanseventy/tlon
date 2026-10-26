@@ -809,7 +809,7 @@ export class WideRoom extends Sim<Layout> {
         if (it.act.kind === "thread") this.cards.set(it.act.tid, { x: cx + colW - 13, y: y - 8 })
         sc.text(fit(measure, `${it.act.kind === "column" ? "" : `#${id} `}${it.title}`, colW - 9, 9), cx + 7, y, colour, 9, "left")
         const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""
-        sc.hits.push({ x: cx + 1, y: y - lh + 1, w: colW - 2, h: lh, tip: `#${id} ${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act })
+        sc.hits.push({ x: cx + 1, y: y - lh + 1, w: colW - 2, h: lh, tip: `${it.act.kind === "column" ? "" : `#${id} `}${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act })
       })
       if (list.length > shown.length) sc.text(`+${list.length - shown.length} more`, cx + 7, 3 + lh * (shown.length + 2), ROLE.inactive, 9, "left")
     })
