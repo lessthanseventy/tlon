@@ -1,12 +1,10 @@
-APPROVE — #651 health needs. Read the diff (needs.ex, room.ex, tlon-cli job verb, TUI kind/tone, profiles brief); I did not run the suite myself.
+APPROVE — 634a59f (health need: stable first-seen `at`).
 
-Right then. Checked:
-- `health/0` yields keyed `health:tmux|disk|mem` items, level decide, each gone when its predicate is false. `vital_problems/1` is shared with `problems/1`, so the two views can't drift.
-- Wired consistently: `@clipboard`, `pass_up_rule` (narrow), the moduledoc routing table, TUI `NEED_KIND`/`NEED_TONE` and the `Need` kind union.
-- `tlon-cli job`: verb limited to retry|dismiss and id to digits before interpolation, so no injection. `retry_job/1` and `dismiss_job/1` exist in Needs.
-- Test config stubs the reading, so tests don't depend on `df` or tmux.
+Read the diff only; did not run the suite from this seat.
 
-Nits (non-blocking, filed as follow-ups):
-1. server/config/test.exs: the `release_root` line moved below the "stale-launch sweep" comment, which now sits over the wrong config line.
-2. `Room.vitals/0` re-puts a `:persistent_term` every minute, which triggers a global GC scan; ETS or an Agent is the usual home.
-3. `at: DateTime.utc_now()` re-stamps on each poll, so health items always sort newest. Same shape as the other computed items.
+- Fix is right: `health/0` stamped `at: utc_now` on every read, so any verdict or dismissal was older than its item. `health_since/1` keeps first-seen per problem in persistent_term and drops it when the problem clears, so a reappearing problem gets a fresh time and resurfaces past an old dismissal.
+- persistent_term is written only when the problem set changes (rare). Concurrent first reads can race to write the same value, which is harmless.
+- Tests pin settle, dismiss and fail-open on health items. The fail-open test pokes `{Needs, :health_since}` with atom keys matching `vital_problems/1` (:tmux/:disk/:mem). The module is `async: false` and on_exit erases the term, so the global state stays contained.
+- The test.exs reorder puts the comment back above its own config line.
+
+No blocking findings.
