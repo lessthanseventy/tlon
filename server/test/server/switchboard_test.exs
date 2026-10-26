@@ -846,6 +846,18 @@ defmodule Server.SwitchboardTest do
       assert Repo.get!(Message, m.id).delivered_at == m.delivered_at
     end
 
+    test "never hands back a tlon-authored notice — it names no addressee, only whoever leads now" do
+      %{thread: thread, sandra_session: ss} = staffed_thread()
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "tlon", body: "▶ VERIFY — workline x"})
+      at = DateTime.utc_now() |> DateTime.shift(minute: -12) |> DateTime.truncate(:second)
+      {:ok, m} = m |> Ecto.Changeset.change(created_at: at, delivered_at: at) |> Repo.update()
+      set_last_active(ss, 12 * 60)
+      flush()
+
+      assert Switchboard.redeliver_unheard() == 0
+      assert Repo.get!(Message, m.id).delivered_at == m.delivered_at
+    end
+
     test "is let go after 30 minutes — it stops trying" do
       m = woken(45, 45 * 60)
       Switchboard.redeliver_unheard()
