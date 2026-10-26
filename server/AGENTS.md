@@ -206,9 +206,10 @@ and every layer the spine design's re-laid §9 asked for
   the hidden check that workline's own tests); `--oracle` proves each green on the real diff.
   A workline whose diff edits a persona (`Server.Workline.Grade.steering/1`: `profiles.ex`, `soul.ex`)
   gets a canary A/B on verify (`mix server.bench_contrast`, `Server.Bench.Contrast`): the roles whose
-  prompt hash moved (`--fingerprint`, both checkouts) run the canary suite from main's checkout and
-  the branch's (`--out`, so neither tree's results are touched), at most 3 roles under a 15-minute
-  clamp; each contrast is a `bench_contrast` CHECKS row and a thread note, a regression named for
+  prompt hash moved (`--fingerprint`, both checkouts) run the canary suite from a throwaway worktree
+  of origin/main (never the root checkout) and the branch's rebased checkout (`--out`, so neither
+  tree's results are touched), at most 3 roles under one 15-minute wall that kills a side's whole
+  process group; each contrast is a `bench_contrast` CHECKS row and a thread note, a regression named for
   the reviewer, never a red. A skill or AGENTS.md edit is recorded `unmeasurable`: the bench never
   loads them.
 
