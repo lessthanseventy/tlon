@@ -99,31 +99,37 @@ defmodule Server.Wake do
     length(reported)
   end
 
-  # A wake is for a pane to drain: the seat holds the workline's current stage, runs a live session
-  # on the thread and has a window for it. Without one the wake is let go unpaged
+  # A wake is for a pane to drain: the seat holds the workline's current stage and its LIVE session
+  # is the one in the thread's window (its `pane_ref` is a pane of that window — a windowless live
+  # row beside a windowed dead one is no seat). Without one the wake is let go unpaged
   # (`Server.Switchboard.redeliver_unheard/1` and staffing answer a lead that moved on). A tmux that
   # can't be asked is no proof of a missing window.
   defp seated?(thread, agent) do
-    holds_stage?(thread, agent) and live_session?(thread, agent) and windowed?(thread, agent)
+    holds_stage?(thread, agent) and
+      case live_pane_ref(thread, agent) do
+        nil -> false
+        pane_ref -> windowed?(thread, agent, pane_ref)
+      end
   end
 
   defp holds_stage?(%{stage: nil}, _agent), do: true
   defp holds_stage?(thread, agent), do: Server.Channel.thread_lead(thread.id) == agent
 
-  defp live_session?(thread, agent) do
-    Repo.exists?(
+  defp live_pane_ref(thread, agent) do
+    Repo.one(
       from s in Server.Session,
         join: a in Server.Agent,
         on: a.id == s.agent_id,
-        where: s.thread_id == ^thread.id and a.name == ^agent and is_nil(s.ended_at)
+        where: s.thread_id == ^thread.id and a.name == ^agent and is_nil(s.ended_at),
+        select: s.pane_ref
     )
   end
 
-  defp windowed?(thread, agent) do
+  defp windowed?(thread, agent, pane_ref) do
     case Server.Tmux.list_windows(thread.workspace_id) do
       {:error, :not_up} -> false
       {:error, _} -> true
-      tabs -> Server.Office.windowed?(tabs, thread.id, agent)
+      tabs -> tabs |> Enum.filter(&(&1.pane_id == pane_ref)) |> Server.Office.windowed?(thread.id, agent)
     end
   end
 

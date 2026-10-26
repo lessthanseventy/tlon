@@ -21,7 +21,8 @@ defmodule Server.Tmux do
           pane_pid: integer() | nil,
           agent: String.t() | nil,
           born: integer() | nil,
-          launch: String.t() | nil
+          launch: String.t() | nil,
+          pane_id: String.t() | nil
         }
 
   def session(id), do: "w#{id}"
@@ -71,7 +72,7 @@ defmodule Server.Tmux do
       "--description=tlon coworkers, workspace #{id}"
     ]
 
-  @list_format "\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{pane_pid}\t\#{@funes_agent}\t\#{@funes_born}\t\#{@funes_launch}"
+  @list_format "\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{pane_pid}\t\#{@funes_agent}\t\#{@funes_born}\t\#{@funes_launch}\t\#{pane_id}"
 
   @not_up ~r/no server running|error connecting to|can't find session|no current session/
 
@@ -103,17 +104,18 @@ defmodule Server.Tmux do
 
   @doc """
   Parse `list-windows` output, one window per line, tab-separated: index, name, `@funes_thread`,
-  `@funes_opening`, pane_pid, `@funes_agent`, `@funes_born` — the last two the coworker a window
-  runs and when it was spawned (unix seconds), as the spawn tagged it. Shorter lines still parse,
+  `@funes_opening`, pane_pid, `@funes_agent`, `@funes_born` (the coworker a window runs and when it
+  was spawned, unix seconds, as the spawn tagged it), `@funes_launch`, pane_id (`%N`, what a
+  session's `pane_ref` holds when it registered from that pane). Shorter lines still parse,
   missing fields nil; a malformed line is dropped.
   """
   def parse_windows(out) do
     out
     |> String.split("\n", trim: true)
     |> Enum.flat_map(fn line ->
-      case String.split(line, "\t", parts: 8) do
+      case String.split(line, "\t", parts: 9) do
         [index, name | rest] when name != "" ->
-          [thread, opening, pid, agent, born, launch] = Enum.map(0..5, &Enum.at(rest, &1, ""))
+          [thread, opening, pid, agent, born, launch, pane_id] = Enum.map(0..6, &Enum.at(rest, &1, ""))
 
           [
             %{
@@ -124,7 +126,8 @@ defmodule Server.Tmux do
               pane_pid: int_or_nil(pid),
               agent: if(agent != "", do: agent),
               born: int_or_nil(born),
-              launch: if(launch != "", do: launch)
+              launch: if(launch != "", do: launch),
+              pane_id: if(pane_id != "", do: pane_id)
             }
           ]
 
