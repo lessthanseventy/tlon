@@ -17,14 +17,26 @@ defmodule Server.MCP.Tool.Register do
 
     # The binding came from real rows, so an FK failure here is a bug that raises. The token needs
     # no updating — it is stateless, and later calls resolve this session via Staff.live_session/2.
-    {:ok, session} =
-      Staff.start_session(%{
-        agent_id: identity.agent_id,
-        thread_id: identity.thread_id,
-        pane_ref: params[:pane_ref]
-      })
+    case Staff.start_session(%{
+           agent_id: identity.agent_id,
+           thread_id: identity.thread_id,
+           pane_ref: params[:pane_ref]
+         }) do
+      {:ok, session} ->
+        ok(frame, %{"session_id" => session.id, "agent" => identity.agent, "thread_id" => identity.thread_id})
 
-    ok(frame, %{"session_id" => session.id, "agent" => identity.agent, "thread_id" => identity.thread_id})
+      # a paneless newcomer never takes a windowed seat: it is told to stand down, as a fenced take_wakes is
+      {:error, :seat_held} ->
+        held = Staff.live_session(identity.thread_id, identity.agent_id)
+
+        ok(frame, %{
+          "superseded" => true,
+          "by" => held && held.id,
+          "text" =>
+            "This session was not registered: a windowed session already holds #{identity.agent}'s seat on " <>
+              "thread ##{identity.thread_id}. Do not act or post from here; end your turn and stop."
+        })
+    end
   end
 end
 

@@ -734,6 +734,21 @@ defmodule Server.MCP.ServerTest do
     assert decode_tool_json(call(token, session, 4, "take_wakes", %{})) == []
   end
 
+  test "a paneless register over a pane-bound live session is answered superseded and writes no row",
+       %{agent: agent, token: token} do
+    windowed = handshake(token)
+
+    %{"session_id" => held_id} =
+      decode_tool_json(call(token, windowed, 3, "register", %{"pane_ref" => "%474"}))
+
+    newcomer = handshake(token)
+    reply = decode_tool_json(call(token, newcomer, 3, "register", %{}))
+
+    assert %{"superseded" => true, "by" => ^held_id, "text" => text} = reply
+    assert text =~ "#{agent.name}'s seat"
+    assert Repo.aggregate(Session, :count) == 1
+  end
+
   test "a superseded session's take_wakes is fenced: it is told to stop and the wake stays for the live one",
        %{thread: thread, agent: agent, token: token} do
     twin = handshake(token)
