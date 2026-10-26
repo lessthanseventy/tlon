@@ -212,10 +212,16 @@ defmodule Server.WorklineVerifyScriptTest do
       )
     end
 
-    # a workline's own verify (thread 7, work/pr-7-feature): records through the CLI stub and advances
+    # a workline's own verify (thread 7, work/pr-7-feature): records through the CLI stub and advances.
+    # Branch mode's variables are cleared: under run_task the suite inherits the job's own (#620).
     defp verify(ctx, env \\ []) do
       env =
         [
+          {"WORKLINE_GATE", nil},
+          {"LAND_REF", nil},
+          {"RUN_TASK", nil},
+          {"RULES_ONLY", nil},
+          {"CHECKS_LABEL", nil},
           {"PATH", "#{ctx.tmp}/bin:#{System.get_env("PATH")}"},
           {"TMPDIR", ctx.tmp},
           {"XDG_CACHE_HOME", Path.join(ctx.tmp, "cache")},
