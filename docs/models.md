@@ -38,7 +38,10 @@ just not as a citizen.
 
 Claude Code's own prompt is ~20k tokens a request, so on credits every turn costs more than a bare
 completion; the server's one-shots (banter, the judge, titles) run `--bare` with no tools for that reason
-(`Server.ModelCli`, 79 tokens in). Two things that bite: **glm-5.2 is a reasoning model** (separate
+(`Server.ModelCli`, 79 tokens in). Every one-shot reads **one** knob, `oneshot_model` in `~/.config/tlon/config.json`
+(a `provider/model` from the ring above or the Claude choices; default `ollama-cloud/deepseek-v4.1-flash`): banter,
+the pets, titles, the judge, the oracle's ollama side and the toys. Set it to `anthropic/claude-haiku-5-5` to run them
+on the Claude plan; there is no second copy of the default. Two things that bite: **glm-5.2 is a reasoning model** (separate
 `reasoning` + `content` fields) — give it token headroom or `content` comes back empty while thinking
 eats the budget; and **`kimi-k3` is deliberately absent** — ollama.com serves it as *extra* usage (HTTP
 402), billed per-token on top of the plan, so it's out of the model ring (`Server.Profiles`). Every model

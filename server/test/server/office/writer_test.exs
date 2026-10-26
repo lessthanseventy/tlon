@@ -26,6 +26,33 @@ defmodule Server.Office.WriterTest do
     assert Enum.all?(Writer.pool(ws.id), &match?({"claude", "ollama-cloud/" <> _}, &1))
   end
 
+  test "both pools lean on the oneshot_model knob, with no model of their own beside Haiku", %{ws: ws} do
+    path = Path.join(System.tmp_dir!(), "pool-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+    prior = Application.get_env(:server, :operator_config_path)
+    Application.put_env(:server, :operator_config_path, path)
+
+    on_exit(fn ->
+      if prior,
+        do: Application.put_env(:server, :operator_config_path, prior),
+        else: Application.delete_env(:server, :operator_config_path)
+
+      File.rm(path)
+    end)
+
+    File.write!(path, ~s({"oneshot_model": "ollama-cloud/glm-5.3"}))
+    knob = {"claude", "ollama-cloud/glm-5.3"}
+    haiku = {"claude", "haiku"}
+
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", crew: "claude"})
+    {:ok, pi} = Server.Workspaces.seat(ws.id, %{name: "dahlmann", archetype: "builder", crew: "pi"})
+    {:ok, _} = Server.Workspaces.retarget(ws.id, pi.agent_id, %{model: "ollama-cloud/glm-5.2"})
+    {:ok, _} = Server.Shifts.switch(ws.id, "claude")
+    assert Writer.pool(ws.id) == [haiku, haiku, knob]
+
+    {:ok, _} = Server.Shifts.switch(ws.id, "pi")
+    assert Writer.pool(ws.id) == [knob, knob, knob]
+  end
+
   test "the wackiness dial's tone: business writes nothing, each level up is wilder" do
     path = Path.join(System.tmp_dir!(), "wack-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)

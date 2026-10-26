@@ -1236,9 +1236,11 @@ defmodule Server.Profiles do
 
   defp write_json!(path, map), do: File.write!(path, Jason.encode!(map, pretty: true) <> "\n")
 
-  defp model_name(%{provider: provider, model: model}), do: "#{provider}/#{model}"
-  defp model_name(model) when is_binary(model), do: model
-  defp model_name(model), do: inspect(model)
+  @doc "A model as the `provider/model` string `Server.ModelCli` and the settings file spell it."
+  @spec model_name(term()) :: String.t()
+  def model_name(%{provider: provider, model: model}), do: "#{provider}/#{model}"
+  def model_name(model) when is_binary(model), do: model
+  def model_name(model), do: inspect(model)
 
   defp seat_sandbox(sandbox, name), do: update_in(sandbox, ["filesystem", "allowWrite"], &(&1 ++ [scratch_root(name)]))
 end

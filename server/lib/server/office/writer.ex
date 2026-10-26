@@ -5,9 +5,9 @@ defmodule Server.Office.Writer do
   and in what mood.
 
   The model follows the crew on (`Server.Shifts`), so the flavour text drains the bucket that is
-  already draining: with a Claude coworker on, mostly Haiku, now and then deepseek; with none (the
-  crew on runs elsewhere), only the ollama models, deepseek and kimi. A Haiku call that fails falls
-  back to deepseek. Each call also draws a
+  already draining: with a Claude coworker on, mostly Haiku, now and then the knob's model; with none (the
+  crew on runs elsewhere), only the `oneshot_model` knob's. A Haiku call that fails falls
+  back to it. Each call also draws a
   FLAVOUR, one line on the prompt, so one batch differs from the next in kind, not only in wording.
 
   How wild all of it is follows the operator's `wackiness` knob — the voice half of the toy design's
@@ -18,9 +18,6 @@ defmodule Server.Office.Writer do
   `config :server, banter_cmd:` (a test's stand-in CLI) pins every call to it instead.
   """
 
-  @deepseek {"claude", "ollama-cloud/deepseek-v4.1-flash"}
-  @claude_pool [{"claude", "haiku"}, {"claude", "haiku"}, @deepseek]
-  @ollama_pool [@deepseek, @deepseek, {"claude", "ollama-cloud/kimi-k2.7-code"}]
   @flavours [
     "deadpan and dry: understatement, a straight face",
     "absurd: one surreal tangent that follows its own logic",
@@ -60,7 +57,9 @@ defmodule Server.Office.Writer do
       |> Server.Workspaces.bench()
       |> Enum.any?(&(Server.Presence.provider_of(&1.name, workspace_id) == "anthropic"))
 
-    if claude_on?, do: @claude_pool, else: @ollama_pool
+    oneshot = oneshot()
+
+    if claude_on?, do: [{"claude", "haiku"}, {"claude", "haiku"}, oneshot], else: [oneshot, oneshot, oneshot]
   end
 
   @doc "The flavours a call may draw."
@@ -72,7 +71,7 @@ defmodule Server.Office.Writer do
   """
   def write(prompt, workspace_id) do
     cond do
-      Application.get_env(:server, :banter_cmd) -> Server.ModelCli.prompt(prompt, :banter_cmd, :banter_model, @deepseek)
+      Application.get_env(:server, :banter_cmd) -> Server.ModelCli.prompt(prompt, :banter_cmd, :banter_model, oneshot())
       tone() == nil -> {:error, :business}
       true -> drawn(prompt, workspace_id)
     end
@@ -83,8 +82,10 @@ defmodule Server.Office.Writer do
     ask = prompt <> "\nHOW WILD — #{tone()}.\nTHIS TIME'S FLAVOUR — #{Enum.random(@flavours)}. Lean into it."
 
     case Server.ModelCli.run(ask, cmd, model) do
-      {:error, _} when cmd == "claude" -> Server.ModelCli.run(ask, elem(@deepseek, 0), elem(@deepseek, 1))
+      {:error, _} when cmd == "claude" -> Server.ModelCli.run(ask, "claude", Server.OperatorConfig.oneshot_model())
       result -> result
     end
   end
+
+  defp oneshot, do: {"claude", Server.OperatorConfig.oneshot_model()}
 end

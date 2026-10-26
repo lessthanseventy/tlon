@@ -276,7 +276,7 @@ defmodule Server.Import.ClaudeSessions do
              title_prompt(turns),
              :import_title_cmd,
              :import_title_model,
-             {"claude", "ollama-cloud/deepseek-v4.1-flash"}
+             {"claude", Server.OperatorConfig.oneshot_model()}
            ),
          title when is_binary(title) <- model_title(out) do
       title

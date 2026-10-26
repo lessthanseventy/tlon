@@ -38,7 +38,7 @@ defmodule Server.ModelCli do
 
   @doc """
   `prompt/5` with the command and model named outright, for a caller that picks them itself. A
-  `provider/model` model (`ollama-cloud/deepseek-v4.1-flash`) runs through `gateway.sh` on that
+  `provider/model` model (`anthropic/claude-haiku-5-5`) runs through `gateway.sh` on that
   provider's endpoint; a bare one (`haiku`) on the operator's own Claude login.
   """
   def run(prompt, cmd, model, opts \\ []) do

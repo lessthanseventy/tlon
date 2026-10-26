@@ -49,6 +49,20 @@ defmodule Server.OperatorConfigTest do
     refute Map.has_key?(OperatorConfig.read(path), "auto_land_risk")
   end
 
+  test "oneshot_model is a provider/model from the model choices, one default for every one-shot", %{path: path} do
+    File.write!(path, "{}")
+    assert OperatorConfig.oneshot_model(path) == "ollama-cloud/deepseek-v4.1-flash"
+
+    :ok = OperatorConfig.put_settings(%{"oneshot_model" => "anthropic/claude-haiku-5-5"}, path)
+    assert OperatorConfig.oneshot_model(path) == "anthropic/claude-haiku-5-5"
+
+    assert {:error, "oneshot_model" <> _} = OperatorConfig.put_settings(%{"oneshot_model" => "nope/none"}, path)
+    assert OperatorConfig.oneshot_model(path) == "anthropic/claude-haiku-5-5"
+
+    File.write!(path, ~s({"oneshot_model": "nope/none"}))
+    assert OperatorConfig.oneshot_model(path) == "ollama-cloud/deepseek-v4.1-flash"
+  end
+
   test "Lifeline can never be set to take a held smoke for stuck: its floor is past the smoke's hold", %{path: path} do
     File.write!(path, "{}")
     hold_minutes = div(7200, 60)
