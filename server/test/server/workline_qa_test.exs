@@ -37,6 +37,7 @@ defmodule Server.WorklineQATest do
 
   setup do
     Server.TestDB.clean!()
+    Server.TestDB.continuation_gap_off!()
     start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
     :ok
   end

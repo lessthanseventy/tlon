@@ -18,16 +18,8 @@ defmodule Server.Workline.ContinuationTest do
     Server.TestDB.clean!()
 
     # the spacing is off (0) for the suite; its own tests turn it on
-    path = Path.join(System.tmp_dir!(), "continuation-config-#{System.unique_integer([:positive])}.json")
-    previous = Application.get_env(:server, :operator_config_path)
-    Application.put_env(:server, :operator_config_path, path)
-    :ok = Server.OperatorConfig.put("continuation_gap_minutes", 0, path)
-
-    on_exit(fn ->
-      Application.put_env(:server, :operator_config_path, previous)
-      File.rm(path)
-      Server.Presence.clock_in("claude-code")
-    end)
+    path = Server.TestDB.continuation_gap_off!()
+    on_exit(fn -> Server.Presence.clock_in("claude-code") end)
 
     {:ok, thread} = Workline.open(%{title: "fix the composer", slug: "composer-wrap", stage: "plan"})
     %{thread: thread, config: path}
