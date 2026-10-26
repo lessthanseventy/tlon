@@ -110,6 +110,8 @@ defmodule Server.Office.Needs do
   alias Server.Repo
   alias Server.Thread
 
+  require Logger
+
   @mention_hours 12
   @machine_hours 24
   @landing_grace_s 3600
@@ -392,29 +394,42 @@ defmodule Server.Office.Needs do
 
   @doc """
   The operator has seen a failed job, and every run that failed the same way (one item): they
-  leave the list and the rack's count. `:ok`.
+  leave the list and the rack's count. `:ok`, or `{:error, :not_failed}` for an id that is not a
+  failed job on the list.
   """
   def dismiss_job(id) do
-    same =
-      case Repo.get(Oban.Job, id) do
-        nil -> [id]
-        job -> for j <- Repo.all(failed_jobs_query()), failure(j) == failure(job), do: j.id
-      end
+    case failed_job(id) do
+      nil ->
+        {:error, :not_failed}
 
-    {_, _} =
-      Repo.update_all(
-        from(j in Oban.Job,
-          where: j.id == ^id or j.id in ^same,
-          update: [set: [meta: fragment("coalesce(?, '{}'::jsonb) || '{\"dismissed\": true}'::jsonb", j.meta)]]
-        ),
-        []
-      )
+      job ->
+        same = for j <- Repo.all(failed_jobs_query()), failure(j) == failure(job), do: j.id
 
-    :ok
+        {_, _} =
+          Repo.update_all(
+            from(j in Oban.Job,
+              where: j.id == ^id or j.id in ^same,
+              update: [set: [meta: fragment("coalesce(?, '{}'::jsonb) || '{\"dismissed\": true}'::jsonb", j.meta)]]
+            ),
+            []
+          )
+
+        :ok
+    end
   end
 
-  @doc "Run a failed job again. `:ok`."
-  def retry_job(id), do: Oban.retry_job(id)
+  @doc """
+  Run a failed job again. `:ok`, or `{:error, :not_failed}` for anything else: a completed or
+  cancelled job is never run twice.
+  """
+  def retry_job(id) do
+    case failed_job(id) do
+      nil -> {:error, :not_failed}
+      _job -> Oban.retry_job(id)
+    end
+  end
+
+  defp failed_job(id), do: Repo.one(from j in failed_jobs_query(), where: j.id == ^id)
 
   # a workline sitting at verify whose newest verify run was red, and no re-run queued or running
   defp red_verifies(open) do
@@ -1113,11 +1128,17 @@ defmodule Server.Office.Needs do
         ref: nil
       }
     end
+  rescue
+    e ->
+      Logger.warning("box health unreadable, its items left out of the inbox: #{Exception.message(e)}")
+      []
   end
 
   # When each problem was first seen, so its `at` is stable across reads: a verdict or a put-away
   # is only ever newer than it. Kept only while the problem holds; written only when the set of
   # problems changes, which is rare, so the persistent_term replacement is not a per-read cost.
+  # Held in memory, so a restart of the node starts every held problem's clock again: a put-away
+  # problem that still holds comes back until it is put away once more (open: not yet persisted).
   defp health_since(problems) do
     now = DateTime.truncate(DateTime.utc_now(), :second)
     prior = :persistent_term.get({__MODULE__, :health_since}, %{})

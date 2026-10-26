@@ -338,7 +338,7 @@ case "$cmd" in
     verb="${1:-}"; jid="${2:-}"
     { { [ "$verb" = retry ] || [ "$verb" = dismiss ]; } && int "$jid"; } ||
       { echo 'usage: tlon-cli.sh job retry|dismiss <job-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "Server.Office.Needs.${verb}_job($jid); IO.puts(\"job $jid: $verb done\")"
+    exec "$SERVER" rpc "case Server.Office.Needs.${verb}_job($jid) do :ok -> IO.puts(\"job $jid: $verb done\"); {:error, why} -> IO.puts(\"job $jid: $verb refused: #{inspect(why)}\"); raise(\"refused\") end"
     ;;
 
   hire)
