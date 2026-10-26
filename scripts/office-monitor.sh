@@ -43,7 +43,7 @@ while :; do
 
   while IFS='|' read -r id rest; do
     [ -n "$id" ] && say "msg:$id" "TLON   $rest"
-  done < <(psql -d "$db" -At -c "select id, '#'||thread_id||' '||left(regexp_replace(body,'\s+',' ','g'),200) from message where author='tlon' and created_at > '$since' and body ~* '(fail|refused|red on|stuck|crash|timed out|conflict)' order by id" 2>/dev/null)
+  done < <(psql -d "$db" -At -c "select id, '#'||thread_id||' '||left(regexp_replace(body,'\s+',' ','g'),200) from message where author='tlon' and created_at > '$since' and left(body,200) ~* '(fail|refused|red on|stuck|crash|timed out|conflict)' order by id" 2>/dev/null)
 
   while IFS= read -r l; do
     [ -n "$l" ] && say "log:$l" "LOG    ${l:0:240}"
