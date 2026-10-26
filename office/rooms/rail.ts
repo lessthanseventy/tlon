@@ -194,6 +194,8 @@ export class RailRoom extends Sim<Layout> {
         if (n.mark) px(sx + 4, sy, 1, 1, n.mark)
         hits.push({ x: sx, y: sy, w: 5, h: 4, tip: n.tip, act: n.act })
       })
+      // the blank board under the stickies opens the column too; pushed after them, since the first hit wins
+      hits.push({ x: x0 - 1, y: 11, w: COL_W, h: 12, tip: `${folded[c]!.name.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
       const more = list.length - shown.filter(Boolean).length
       if (more > 0) text(`+${more}`, x0 + 16, 23, ROLE.key, 10)
     })

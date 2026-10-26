@@ -811,6 +811,9 @@ export class WideRoom extends Sim<Layout> {
         const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""
         sc.hits.push({ x: cx + 1, y: y - lh + 1, w: colW - 2, h: lh, tip: `${it.act.kind === "column" ? "" : `#${id} `}${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act })
       })
+      // the blank board under the last line opens the column too; pushed after the lines, since the first hit wins
+      const below = 3 + lh * (shown.length + 1) + 1
+      sc.hits.push({ x: cx, y: below, w: colW, h: 38 - below, tip: `${COLS[c]!.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
       if (list.length > shown.length) sc.text(`+${list.length - shown.length} more`, cx + 7, 3 + lh * (shown.length + 2), ROLE.inactive, 9, "left")
     })
     // the pen in its tray: a new ticket
