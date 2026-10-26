@@ -1,16 +1,25 @@
-# Verdict: request_changes (one doc line; the code is sound)
+# Verdict: approve
 
-Read `git diff origin/main...HEAD` (7c6de97, c54edb5). Ran `menard run test --in server` on workline_continuation_test, maintain_test, workline_qa_test: `{"ok":true,"tests":60,"failed":0}`.
+This is a re-review. The one blocking finding from the review at 83fbfa5 is fixed in 6802a93, and nothing else in the diff changed.
 
-## Blocking
-1. `Server.Workline.Continuation` @moduledoc lists every case where it stays silent ("Silent on a plain thread, … one whose smoke is still building, and while the office is paused") and this change adds two (lead clocked out; inside `continuation_gap_minutes` of the last nudge / thread opening / the lead's last post) without naming them. Repo law: docs stay in sync in the same commit. Add both to that sentence, naming `continuation_gap_minutes` and `Server.Presence.clocked_out?/1`.
+## Round-1 blocking finding: fixed
+1. I read the diff with `git diff 83fbfa5..work/171-space-continuation-nudges-skip-while -- . ':!work/171-…'`. It changes one hunk, in the `Server.Workline.Continuation` @moduledoc. The sentence that lists when it stays silent now names two more cases:
+   - a lead who is clocked out (`Server.Presence.clocked_out?/1`)
+   - a thread inside `continuation_gap_minutes` of its last nudge (or of its opening, if it has had none) or of the lead's last post on it
 
-## Checked and fine
-- Both new skips sit before `{:budget, …}`, so a skip spends nothing; the "reach 3/3 then stuck" test proves it.
-- `last_continuation_at` falls back to `thread.created_at` — covers the opened-straight-at-build case (#329).
-- `fragment("? \\? 'continue_after'", payload)` on a jsonb column: correct.
-- Test helper `TestDB.continuation_gap_off!/0` restores app env and removes its file on exit; suites that nudge fresh worklines opt into it.
+   That is what round 1 asked for, and the wording matches the code.
 
-## Not blocking (follow-ups)
-- A skipped idle is not rescheduled: the lead posts, goes idle, the nudge is withheld, and nothing retries until the quiet sweep (`quiet_workline_minutes`, default 60). Effective spacing after a lead post is up to an hour, not 10 min.
-- The gap is measured from the last continuation regardless of stage, so the first nudge after an advance can wait out the previous stage's gap.
+Since this change is doc-only, my round-1 checks of the code still hold:
+- Both skips run before the budget is spent.
+- Without a nudge, the gap is measured from `thread.created_at`.
+- The jsonb `?` fragment is correct.
+- `TestDB.continuation_gap_off!/0` restores the setting it changes.
+
+The server's verify moved this to review again, so the full check is green on this head.
+
+## Not blocking: already filed
+Both round-1 follow-ups are in #629, which emma filed:
+- When a nudge is skipped as too soon, nothing schedules a retry, so the next chance is the quiet sweep.
+- The gap carries over a stage advance.
+
+I am not filing them again here.
