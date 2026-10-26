@@ -52,6 +52,6 @@ defmodule Server.MCP.Tool.ConsultOracle do
 
   defp other_side(_), do: :claude
 
-  defp defaults(:ollama), do: {"claude", Server.OperatorConfig.oneshot_model()}
+  defp defaults(:ollama), do: {"claude", "ollama-cloud/deepseek-v4-pro:high"}
   defp defaults(:claude), do: {"claude", "opus"}
 end
