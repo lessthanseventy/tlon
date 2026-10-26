@@ -362,6 +362,31 @@ defmodule Server.Office.NeedsTest do
       :ok = Needs.dismiss_job(newest.id)
       assert [%{ref: ^other_ref}] = Needs.list()
     end
+
+    test "retry and dismiss refuse a job that is not failed, and leave it as it was" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+
+      {:ok, job} = %{} |> Oban.Job.new(worker: "Server.Jobs.KeepUp", queue: "default") |> Server.Repo.insert()
+      job = job |> Ecto.Changeset.change(state: "completed") |> Server.Repo.update!()
+
+      assert {:error, :not_failed} = Needs.retry_job(job.id)
+      assert {:error, :not_failed} = Needs.dismiss_job(job.id)
+      assert {:error, :not_failed} = Needs.dismiss_job(-1)
+      assert Server.Repo.get!(Oban.Job, job.id).state == "completed"
+    end
+
+    test "retry runs a failed job again" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+
+      {:ok, job} = %{} |> Oban.Job.new(worker: "Server.Jobs.KeepUp", queue: "default") |> Server.Repo.insert()
+
+      job
+      |> Ecto.Changeset.change(state: "discarded", attempted_at: DateTime.utc_now(), errors: [%{"error" => "boom"}])
+      |> Server.Repo.update!()
+
+      assert :ok = Needs.retry_job(job.id)
+      assert Server.Repo.get!(Oban.Job, job.id).state == "available"
+    end
   end
 
   describe "quota and no seat — each a Need with its answers" do
@@ -1255,6 +1280,37 @@ defmodule Server.Office.NeedsTest do
 
       assert [%{key: "health:tmux", route: "pass_up", why: "Uqbar did not route it in time"}] =
                Needs.grouped().clipboard
+    end
+
+    test "a restart starts a held health item's first-seen again (open: not persisted)" do
+      health_reading(%{tmux: false, disk_pct: 10, mem_pct: 10})
+      since = DateTime.add(DateTime.utc_now(), -3600, :second)
+      :persistent_term.put({Needs, :health_since}, %{tmux: since})
+      assert [%{key: "health:tmux", at: ^since}] = Needs.list()
+
+      :persistent_term.erase({Needs, :health_since})
+      assert [%{key: "health:tmux", at: at}] = Needs.list()
+      assert DateTime.compare(at, since) == :gt
+    end
+
+    test "a health reading that raises leaves the rest of the inbox in place" do
+      prior = Application.get_env(:server, :health_reading)
+      Application.put_env(:server, :health_reading, fn -> raise "vitals went" end)
+
+      on_exit(fn ->
+        if prior,
+          do: Application.put_env(:server, :health_reading, prior),
+          else: Application.delete_env(:server, :health_reading)
+      end)
+
+      {:ok, job} = %{} |> Oban.Job.new(worker: "Server.Jobs.KeepUp", queue: "default") |> Server.Repo.insert()
+
+      job
+      |> Ecto.Changeset.change(state: "discarded", attempted_at: DateTime.utc_now(), errors: [%{"error" => "boom"}])
+      |> Server.Repo.update!()
+
+      assert [%{kind: "job_failed", ref: ref}] = Needs.list()
+      assert ref == job.id
     end
   end
 end

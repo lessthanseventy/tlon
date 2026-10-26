@@ -43,6 +43,15 @@ defmodule Server.TlonCliTest do
       assert out =~ "Server.Office.Needs.dismiss_job(42)"
     end
 
+    test "a refused retry or dismiss prints the refusal and fails, never 'done'", %{env: env} do
+      for verb <- ~w(retry dismiss) do
+        assert {out, 0} = System.cmd("bash", [@cli, "job", verb, "42"], env: env, stderr_to_stdout: true)
+        assert out =~ "{:error, why}"
+        assert out =~ "refused"
+        assert out =~ "raise(\"refused\")"
+      end
+    end
+
     test "anything but retry|dismiss <numeric id> is a usage error", %{env: env} do
       for args <- [["job", "retry"], ["job", "retry", "x"], ["job", "cancel", "1"]] do
         assert {out, 2} = System.cmd("bash", [@cli | args], env: env, stderr_to_stdout: true)
