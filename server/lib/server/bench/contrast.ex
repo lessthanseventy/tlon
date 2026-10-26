@@ -87,20 +87,19 @@ defmodule Server.Bench.Contrast do
     with {:ok, main_fp} <- json(exec, dirs.main, ["--fingerprint"]),
          {:ok, branch_fp} <- json(exec, dirs.branch, ["--fingerprint"]) do
       {roles, over} = main_fp |> affected(branch_fp) |> cap()
-
-      rows =
-        for role <- roles do
-          args = ["--suite", "canary", "--role", role]
-
-          case {json(exec, dirs.main, args), json(exec, dirs.branch, args)} do
-            {{:ok, m}, {:ok, b}} -> row(role, m, b)
-            {m, b} -> error(String.trim("#{role}: #{why(m)} #{why(b)}"))
-          end
-        end
-
-      rows ++ if(over == [], do: [], else: [skipped(over)])
+      Enum.map(roles, &contrast(dirs, exec, &1)) ++ if(over == [], do: [], else: [skipped(over)])
     else
       {:error, why} -> [error(why)]
+    end
+  end
+
+  # one role, both sides; a side that failed to run names itself in the error row
+  defp contrast(dirs, exec, role) do
+    args = ["--suite", "canary", "--role", role]
+
+    case {json(exec, dirs.main, args), json(exec, dirs.branch, args)} do
+      {{:ok, m}, {:ok, b}} -> row(role, m, b)
+      {m, b} -> error(String.trim("#{role}: #{why(m)} #{why(b)}"))
     end
   end
 
