@@ -143,6 +143,23 @@ defmodule Server.WorklineQATest do
     assert Enum.any?(bodies(thread), &(&1 =~ "QA"))
   end
 
+  test "last round's approving review.md does not hand a re-entered review to QA" do
+    {thread, opts} = at_review("stale", ["office/kit/home.ts"])
+    {:ok, _} = Channel.assign_lead(thread.id, "lonnrot")
+    {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", "lonnrot", opts)
+
+    {:ok, verifying} = Workline.advance(Repo.get!(Thread, thread.id), opts)
+    {:ok, reviewing} = Workline.advance(verifying, opts)
+    {:ok, _} = Channel.assign_lead(reviewing.id, "lonnrot")
+
+    # review.md is still the last round's approve; no verdict this round
+    assert {:error, {:artifact_missing, _}} =
+             Workline.advance(Repo.get!(Thread, thread.id), Keyword.put(opts, :review_line, "VERDICT: approve"))
+
+    assert Channel.thread_lead(thread.id) == "lonnrot"
+    refute Enum.any?(bodies(thread), &(&1 =~ "🎭 QA"))
+  end
+
   test "a review.md asking for changes still refuses the advance" do
     {thread, opts} = at_review("changes", ["office/kit/home.ts"])
 
