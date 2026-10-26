@@ -12,6 +12,9 @@ defmodule Server.Jobs.KeepUp do
   again at a head already requeued, is recorded as blocked (`Server.Workline.landing_blocked/2`), a
   `pr_blocked` Need.
 
+  A repo whose origin is not on GitHub has no PRs to read: it is skipped for all of the above except
+  following its main, and said once in the log.
+
   A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
   from PATH, a git that won't run) leaves the other repos their pass, then fails the job with every
   such fault, so it reaches the operator as a failed job (`Server.Office.Needs`), not only a log line.
@@ -34,13 +37,14 @@ defmodule Server.Jobs.KeepUp do
   # fail the job after every repo had its pass, so they reach the operator as a failed job
   @doc false
   def keep_up(repo, run \\ &System.cmd/3) do
+    drifted(repo, Server.Workline.Publish.follow_main(repo, run))
+
     if github_remote?(repo, run) do
       conflicting = read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo, run))
       failing = read(repo, "red PRs", Server.Workline.Publish.failing(repo, run))
       if conflicting != :error and failing != :error, do: Server.Rollout.clear("keep_up:#{repo}")
       reland(repo, unread(conflicting), run)
       red_checks(repo, unread(failing), run)
-      drifted(repo, Server.Workline.Publish.follow_main(repo, run))
     else
       no_remote(repo)
     end
@@ -50,12 +54,12 @@ defmodule Server.Jobs.KeepUp do
     e -> fault("keep_up #{repo}: #{Exception.message(e)}")
   end
 
-  # a repo whose origin is not on GitHub (none, GitLab, a bare path) has no GitHub to keep up with:
-  # not a fault, so no rollout item. Said once in the log, not every pass, which is what a repo
-  # nobody can act on would otherwise fill it with.
+  # a repo whose origin is not on GitHub (none, GitLab, a bare path) has no GitHub PRs to keep up with:
+  # not a fault, so no rollout item. Its main is still followed. Said once in the log, not every
+  # pass, which is what a repo nobody can act on would otherwise fill it with.
   defp github_remote?(repo, run) do
     case run.("git", ["-C", repo, "remote", "get-url", "origin"], stderr_to_stdout: true) do
-      {url, 0} -> url =~ ~r{^(https?://|ssh://)?(git@)?github\.com[/:]}
+      {url, 0} -> url =~ ~r{^(?:(?:https?|git|ssh)://)?(?:[^@/]+@)?(?:ssh\.)?github\.com[/:]}
       _ -> false
     end
   end
