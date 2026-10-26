@@ -34,7 +34,7 @@ each in its own terminal, and join the office as citizens over MCP: a coworker w
 its thread, its brief and what the office knows.
 
 **Worklines.** Real work moves through stages, each owing an artifact before it can move on:
-`intent → spec → plan → build → verify → review → merged`.
+`intent → spec → plan → build → verify → review → landed`.
 
 ![A workline's card: its stages, the coworker on it, and their live session streaming in](docs/screenshots/workline.png)
 

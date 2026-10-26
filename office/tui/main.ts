@@ -1062,7 +1062,7 @@ function liveActions(tid: number): Action[] {
 /** an author's colour: you in pink, the server dim, a coworker in their archetype's */
 const authorColor = (author: string) =>
   author === OPERATOR ? ROLE.attention : author === "tlon" ? ROLE.inactive : shirtOf(all.bench.find((b) => b.name === author)?.archetype)
-const STAGE_RING = ["intent", "spec", "plan", "build", "verify", "review", "merged"]
+const STAGE_RING = ["intent", "spec", "plan", "build", "verify", "review", "landed"]
 
 /** the detail pane's lines under its title, with a one-line foot */
 const paneRows = () => (g ? Math.max(1, (process.stdout.rows ?? 40) - (g.row + g.rows + 2) - 2) : DETAIL - 2)
@@ -1077,7 +1077,7 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
   out.push({
     segs: [
       ...(th?.stage
-        ? STAGE_RING.flatMap((st, i): Seg[] => [...(i ? [dim(" ▸ ")] : []), i === cur ? { s: ` ${st === "merged" && th.landing ? "landing" : st} `, fg: ROLE.ground, bg: th.awaiting ? ROLE.attention : ROLE.key, bold: true } : { s: st, fg: i < cur ? ROLE.live : ROLE.inactive }])
+        ? STAGE_RING.flatMap((st, i): Seg[] => [...(i ? [dim(" ▸ ")] : []), i === cur ? { s: ` ${st === "landed" && th.landing ? "landing" : st} `, fg: ROLE.ground, bg: th.awaiting ? ROLE.attention : ROLE.key, bold: true } : { s: st, fg: i < cur ? ROLE.live : ROLE.inactive }])
         : [dim("thread")]),
       ...(th?.lead ? [dim("  · "), { s: th.lead, fg: authorColor(th.lead), bold: true }] : []),
       ...(th?.live ? [{ s: `  ${statusGlyph("working")} running`, fg: statusTone("working") }] : []),
