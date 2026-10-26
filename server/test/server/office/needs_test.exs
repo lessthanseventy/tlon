@@ -823,7 +823,7 @@ defmodule Server.Office.NeedsTest do
     test "the table: phone owes an answer, the machine is information, the clipboard is the crew's" do
       phone = ~w(gate question dialog ask seats quota no_seat tool_denied)
       machine = ~w(mention rollout)
-      clipboard = ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed stranded)
+      clipboard = ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed health stranded)
 
       for k <- phone, do: assert(Needs.surface(k) == "phone")
       for k <- machine, do: assert(Needs.surface(k) == "machine")
@@ -1185,6 +1185,47 @@ defmodule Server.Office.NeedsTest do
     test "the flat list stays unrouted", %{ws: ws} do
       question(ws)
       refute Map.has_key?(hd(Needs.list()), :route)
+    end
+
+    test "a discarded job is one job_failed item in Uqbar's group until it completes" do
+      {:ok, job} = %{} |> Oban.Job.new(worker: "Server.Jobs.KeepUp", queue: "default") |> Server.Repo.insert()
+
+      job
+      |> Ecto.Changeset.change(state: "discarded", attempted_at: DateTime.utc_now(), errors: [%{"error" => "boom"}])
+      |> Server.Repo.update!()
+
+      key = "job:#{job.id}"
+      assert [%{key: ^key, kind: "job_failed", route: "uqbar"}] = Needs.grouped().uqbar
+
+      job |> Ecto.Changeset.change(state: "completed") |> Server.Repo.update!()
+      assert Needs.grouped().uqbar == []
+    end
+
+    defp health_reading(reading) do
+      prior = Application.get_env(:server, :health_reading)
+      Application.put_env(:server, :health_reading, fn -> reading end)
+
+      on_exit(fn ->
+        if prior,
+          do: Application.put_env(:server, :health_reading, prior),
+          else: Application.delete_env(:server, :health_reading)
+      end)
+    end
+
+    test "no tmux is one health:tmux item in Uqbar's group, gone when tmux is back" do
+      health_reading(%{tmux: false, disk_pct: 10, mem_pct: 10})
+      assert [%{key: "health:tmux", kind: "health", route: "uqbar"}] = Needs.grouped().uqbar
+
+      health_reading(%{tmux: true, disk_pct: 10, mem_pct: 10})
+      assert Needs.grouped().uqbar == []
+    end
+
+    test "a disk or memory at 90% is health:disk or health:mem, and each clears below it" do
+      health_reading(%{tmux: true, disk_pct: 90, mem_pct: 95})
+      assert ~w(health:disk health:mem) == Needs.grouped().uqbar |> Enum.map(& &1.key) |> Enum.sort()
+
+      health_reading(%{tmux: true, disk_pct: 89, mem_pct: nil})
+      assert Needs.grouped().uqbar == []
     end
   end
 end

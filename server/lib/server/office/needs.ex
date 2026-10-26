@@ -57,6 +57,9 @@ defmodule Server.Office.Needs do
       `seats` (threads parked on the leaf cap, per workspace: `ref` the bigger cap it offers),
       `job_failed` (a background job discarded in the last day, its runs failing the same way one
       item: retry or dismiss, `ref` the newest run),
+      `health` (the box itself: `health:tmux` no tmux, `health:disk` and `health:mem` at 90%, from
+      `Room.vitals/0` read at most a minute old; each gone when its predicate is false. No db-down:
+      the list is a db read; failed jobs are `job_failed`),
       `issue` (a blocker raised on an open thread and not resolved: resolve it, `ref` the issue),
       `blocked` (an open ticket that seats declared themselves blocked on, `Server.Blocked`: ONE item
       per ticket however many threads wait, its text naming the ticket and every thread waiting;
@@ -81,7 +84,7 @@ defmodule Server.Office.Needs do
   |---|---|
   | seats, quota, tool_denied (a permission refusal) | always |
   | gate, question, dialog, ask, no_seat | if irreversible, outward, costly, a host command, or an `auto_land_risk` gate |
-  | issue, blocked, stalled, verify_failed, job_failed, stranded, tool_denied (a hook's) | if irreversible or a host command |
+  | issue, blocked, stalled, verify_failed, job_failed, health, stranded, tool_denied (a hook's) | if irreversible or a host command |
   | pr_blocked, publish_failed, release_failed | if it needs a host command |
   | mention, rollout | information: never routed |
 
@@ -113,7 +116,7 @@ defmodule Server.Office.Needs do
   @holds_ttl_s 300
   @phone ~w(gate question dialog ask seats quota no_seat tool_denied)
   @machine ~w(mention rollout)
-  @clipboard ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed stranded)
+  @clipboard ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed health stranded)
   @broad [:irreversible, :outward, :costly, :host_command, :auto_land_risk]
   @narrow [:irreversible, :host_command]
 
@@ -187,7 +190,7 @@ defmodule Server.Office.Needs do
   def pass_up_rule(%{kind: k}) when k in @machine, do: :info
   def pass_up_rule(%{kind: k}) when k in ~w(gate question dialog ask no_seat), do: {:when, @broad}
 
-  def pass_up_rule(%{kind: k}) when k in ~w(issue blocked stalled verify_failed job_failed stranded),
+  def pass_up_rule(%{kind: k}) when k in ~w(issue blocked stalled verify_failed job_failed health stranded),
     do: {:when, @narrow}
 
   def pass_up_rule(%{kind: k}) when k in ~w(pr_blocked publish_failed release_failed), do: {:when, [:host_command]}
@@ -628,7 +631,8 @@ defmodule Server.Office.Needs do
 
     decide =
       mentions(open, operator) ++
-        rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open) ++ blocked() ++ failed_cuts()
+        rollout() ++
+        stranded() ++ seats(open) ++ failed_jobs() ++ health() ++ issues(open) ++ blocked() ++ failed_cuts()
 
     annotate(Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime))
   end
@@ -1086,5 +1090,26 @@ defmodule Server.Office.Needs do
         limit: 1,
         select: m.created_at
     ) || t.created_at
+  end
+
+  # tmux, disk and memory, each its own item while its predicate holds (db-down is not reportable
+  # from a db read; failed jobs are `failed_jobs/0`)
+  defp health do
+    reading = Application.get_env(:server, :health_reading, &Server.Office.Room.vitals/0).()
+
+    for {what, text} <- Server.Office.Room.vital_problems(reading) do
+      %{
+        key: "health:#{what}",
+        kind: "health",
+        level: "decide",
+        thread_id: nil,
+        workspace_id: nil,
+        title: "the box: #{what}",
+        text: text,
+        at: DateTime.utc_now(),
+        options: nil,
+        ref: nil
+      }
+    end
   end
 end

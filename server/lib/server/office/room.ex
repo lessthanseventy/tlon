@@ -26,6 +26,8 @@ defmodule Server.Office.Room do
 
   @cap 5
 
+  @vitals_ttl_ms 60_000
+
   @doc """
   What just happened in a workspace, newest first: messages posted, facts banked, events recorded,
   issues and questions raised. Each `%{kind, at, thread_id, who, text}`; `limit` rows at most.
@@ -263,16 +265,39 @@ defmodule Server.Office.Room do
     end)
   end
 
+  @doc """
+  The three box inputs of `health/0` that need no database (tmux, disk and memory), read at most
+  once a minute: the needs list asks on every poll and `disk_pct/0` forks `df`.
+  """
+  @spec vitals() :: %{tmux: boolean(), disk_pct: integer() | nil, mem_pct: integer() | nil}
+  def vitals do
+    now = System.monotonic_time(:millisecond)
+
+    case :persistent_term.get({__MODULE__, :vitals}, nil) do
+      {at, v} when now - at < @vitals_ttl_ms ->
+        v
+
+      _ ->
+        v = %{tmux: System.find_executable("tmux") != nil, disk_pct: disk_pct(), mem_pct: mem_pct()}
+        :persistent_term.put({__MODULE__, :vitals}, {now, v})
+        v
+    end
+  end
+
+  @doc "What is wrong in a `vitals/0` reading: `[{:tmux | :disk | :mem, text}]`. `health/0`'s limits."
+  @spec vital_problems(map()) :: [{:tmux | :disk | :mem, String.t()}]
+  def vital_problems(v) do
+    for {key, true, text} <- [
+          {:tmux, !v.tmux, "no tmux: coworkers can't run"},
+          {:disk, (v.disk_pct || 0) >= 90, "disk #{v.disk_pct}% full"},
+          {:mem, (v.mem_pct || 0) >= 90, "memory #{v.mem_pct}% used"}
+        ],
+        do: {key, text}
+  end
+
   defp problems(h) do
-    [
-      {!h.db, "the database does not answer"},
-      {h.failed_jobs > 0, "#{h.failed_jobs} job(s) failed today"},
-      {!h.tmux, "no tmux: coworkers can't run"},
-      {(h.disk_pct || 0) >= 90, "disk #{h.disk_pct}% full"},
-      {(h.mem_pct || 0) >= 90, "memory #{h.mem_pct}% used"}
-    ]
-    |> Enum.filter(&elem(&1, 0))
-    |> Enum.map(&elem(&1, 1))
+    db = [{!h.db, "the database does not answer"}, {h.failed_jobs > 0, "#{h.failed_jobs} job(s) failed today"}]
+    for({true, text} <- db, do: text) ++ Enum.map(vital_problems(h), &elem(&1, 1))
   end
 
   defp disk_pct do
