@@ -31,7 +31,7 @@ defmodule Server.Release.Candidate do
   schedule behind it: the run `release:status` reads, as the nightly's is. `check-main.sh` and
   `release-smoke.sh` report theirs here when they end.
   """
-  @spec record(term(), term(), term()) :: {:ok, %ScheduleRun{}} | {:error, :bad_check | :bad_sha | :bad_exit}
+  @spec record(term(), term(), term()) :: {:ok, struct()} | {:error, :bad_check | :bad_sha | :bad_exit}
   def record(check, sha, code) do
     cond do
       check not in ~w(gate smoke) ->
