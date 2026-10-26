@@ -255,7 +255,10 @@ defmodule Server.Workline do
   defp hand_to_qa(thread, opts) do
     line = Keyword.get_lazy(opts, :review_line, fn -> Git.doc_line(thread, "review.md") end) || ""
 
+    # review.md stays on the branch across rounds: with no verdict yet this round, an approval in it
+    # is the last round's and owes nothing
     with true <- line =~ ~r/approve/i and not (line =~ ~r/request.?changes/i),
+         false <- is_nil(since_review(thread, "workline:#{thread.slug}:review")) and reviewed_before?(thread),
          {seat, paths} <- qa_owed(thread, opts),
          false <- Server.Channel.thread_lead(thread.id) == seat.name do
       {:ok, to_qa(thread, seat, paths)}
