@@ -1,7 +1,11 @@
 APPROVE.
 
-Right then: the change does what it says. In `Staffing.windowed?/4`, an untagged leaf (`tab.agent` nil) now vouches only for `Channel.thread_lead(thread_id)`, where before it vouched for every agent's session on the thread. A tagged leaf is unchanged. `thread_lead` returns nil for an unassigned thread, and nil never equals a session name, so an untagged leaf on a leadless thread vouches for nobody. That is the safe direction.
+In `Staffing.windowed?/4`, an untagged leaf (`tab.agent` nil) now vouches only for `Channel.thread_lead(thread_id)`. Before, it vouched for every agent's session on the thread. A tagged leaf is unchanged. The parameterised test covers a tagged and an untagged leaf on a restaffed thread: the old lead's session ends and the new lead's survives.
 
-The new test is parameterised over tagged and untagged leaves. Both cases restaff the thread to borges and assert that hronir's old session ends and borges's survives.
+I read the diff, `Channel.thread_lead` and `still_theirs?/3` only. I did not run the suite; the server's check passed (exit 0).
 
-I read the diff and `Channel.thread_lead` only. I did not run the suite, so green is unverified on my side. The landing gate runs the full suite.
+Non-blocking follow-ups, listed in follow_ups:
+1. Leadless thread or crew role: `still_theirs?/3` treats a nil lead as anyone's and exempts crew roles, but the new `windowed?` does neither. An idle session of that kind, whose only window is an untagged `t<id>` leaf, is now ended after the boot grace. This is rare; it needs a hand-made untagged leaf.
+2. `end_windowless` ends sessions without logging, unlike `end_predating_tmux`.
+
+The earlier per-tab `thread_lead` query follow-up is dropped; it is negligible.
