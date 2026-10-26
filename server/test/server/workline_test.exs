@@ -845,6 +845,42 @@ defmodule Server.WorklineTest do
       queued
     end
 
+    defp parked_lamp!(grade) do
+      thread = open!(%{slug: "lamp", stage: "review"})
+      if grade, do: graded!(thread, grade)
+      {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+      parked
+    end
+
+    test "Uqbar's approval of a limit-hit gate is refused; the gate stays parked" do
+      parked = parked_lamp!(%{"limits" => ["a database migration"]})
+
+      assert {:error, :limit_hit} = Workline.approve(parked, artifacts: AllPresent, land: :queue, as: "uqbar")
+      assert %{awaiting: "andrew"} = Repo.get!(Server.Thread, parked.id)
+      assert Workline.approval(parked) == nil
+    end
+
+    test "--skip-qa goes through the same door: refused for Uqbar on a limit-hit gate, no QA skip recorded" do
+      parked = parked_lamp!(%{"limits" => ["a database migration"]})
+
+      assert {:error, :limit_hit} =
+               Workline.approve(parked, artifacts: AllPresent, land: :queue, as: "uqbar", skip_qa: "in a hurry")
+
+      refute Enum.any?(Channel.thread_messages(parked), &(&1.body =~ "QA skipped"))
+    end
+
+    test "the operator's own approval of a limit-hit gate is accepted, recorded by the operator" do
+      parked = parked_lamp!(%{"limits" => ["a database migration"]})
+      assert {:ok, queued} = Workline.approve(parked, artifacts: AllPresent, land: :queue)
+      assert %{"by" => "andrew"} = Workline.approval(queued)
+    end
+
+    test "Uqbar may approve a no-limit gate, and the ledger says uqbar, not the operator" do
+      parked = parked_lamp!(@low)
+      assert {:ok, queued} = Workline.approve(parked, artifacts: AllPresent, land: :queue, as: "uqbar")
+      assert %{"by" => "uqbar"} = Workline.approval(queued)
+    end
+
     test "approving into the merge queue records who and the branch commit; a closed thread's turn lands nothing and says so; reopen re-queues it",
          %{repo: repo} do
       queued = queued_lamp!()
