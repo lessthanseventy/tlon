@@ -283,7 +283,7 @@ defmodule Server.Office.Needs do
 
   defp wait(%Thread{stage: stage} = t, nil) when not is_nil(stage) do
     if Server.Workline.at_gate?(t),
-      do: item("gate", "blocking", t, gate_text(t, stage), t.created_at, %{stage: stage}),
+      do: item("gate", "blocking", t, gate_text(t, stage), gated_at(t), %{stage: stage}),
       else: question(t)
   end
 
@@ -1070,5 +1070,21 @@ defmodule Server.Office.Needs do
         tracking: "##{ticket.id}"
       }
     end
+  end
+
+  # a gate's age is its park, not its thread's: a workline that took an hour to reach its gate
+  # would otherwise fail open to the operator the moment it parked, never seen by Uqbar. The park
+  # moment is the parked notice (`Server.Workline.Brief.gate_message/2`) posted when `awaiting`
+  # was set; without one, the thread's birth is all there is.
+  defp gated_at(%Thread{stage: stage, slug: slug} = t) do
+    notice = "⏸ workline #{slug} is parked at #{stage} — %"
+
+    Repo.one(
+      from m in Message,
+        where: m.thread_id == ^t.id and m.author == "tlon" and like(m.body, ^notice),
+        order_by: [desc: m.id],
+        limit: 1,
+        select: m.created_at
+    ) || t.created_at
   end
 end

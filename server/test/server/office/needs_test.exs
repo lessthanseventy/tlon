@@ -1146,6 +1146,32 @@ defmodule Server.Office.NeedsTest do
       assert [%{key: ^key}] = Needs.grouped().uqbar
     end
 
+    # a machine-born intent parks at its gate the moment it is flagged: the real park path
+    defp parked_gate(ws) do
+      {:ok, t} =
+        Server.Workline.flag(
+          %{title: "g", slug: "gate-#{System.unique_integer([:positive])}", workspace_id: ws.id},
+          "a breach"
+        )
+
+      hour_ago = DateTime.add(DateTime.utc_now(), -3600, :second)
+      Server.Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [created_at: hour_ago])
+      {"gate:#{t.id}", t}
+    end
+
+    test "a gate's age is its park, not its thread's: an old workline that just parked waits with Uqbar",
+         %{ws: ws} do
+      {key, _} = parked_gate(ws)
+      assert [%{key: ^key, route: "uqbar"}] = Needs.grouped().uqbar
+    end
+
+    test "a gate parked longer than uqbar_route_minutes ago fails open", %{ws: ws} do
+      {key, t} = parked_gate(ws)
+      at = DateTime.utc_now() |> DateTime.add(-31 * 60, :second) |> DateTime.truncate(:second)
+      Server.Repo.update_all(from(m in Server.Message, where: m.thread_id == ^t.id), set: [created_at: at])
+      assert [%{key: ^key, route: "pass_up", why: "Uqbar did not route it in time"}] = Needs.grouped().phone
+    end
+
     test "a verdict outlasts the window: settled stays settled, passed up keeps its own why", %{ws: ws} do
       settled = aged_question(ws, 45)
       passed = aged_question(ws, 45)
