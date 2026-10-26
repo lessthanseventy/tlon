@@ -1,5 +1,1 @@
-**Verdict: approve.** The one blocking item (stale `office/AGENTS.md` line) is fixed in 6ea7444: it now describes the tree, ⏎ fold, `⚙ on #N`, space for the card, and the one-line-per-initiative sticky. I read the 6ea7444 diff; I did not rerun the suites.
-
-Also fixed there, with tests: the loose sticky's tip no longer reads `#0 …` (board-hits test), and the tree card no longer says "by who" (column-tree test).
-
-Left as follow-ups: K/J reorder cursor with open groups, and the dead armed tip path for rail column 0.
+APPROVE. Delta since my last verdict is 98802ee only: a `ticket_tree` smoke fixture (server/lib/server/smoke/fixtures.ex) plus its test. It seeds an initiative, an epic, a free child, a child promoted into a thread (in flight) and a loose ticket, all through the Tickets/Channel contexts. Verified: `menard run test --in server test/server/smoke/fixtures_test.exs` gives ok, 5 tests, 0 failures. The fixture is registered in the catalog, so `Fixtures.names/0` lists it. No changes requested. The full gate is left to verify and the landing.
