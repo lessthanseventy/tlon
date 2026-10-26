@@ -104,6 +104,8 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.PushBranch, name: "push_branch")
   # a reviewer's verdict on a non-workline branch, which `mise run land` requires
   component(Server.MCP.Tool.ReviewBranch, name: "review_branch")
+  # …and the queue it lands through, reached over MCP (a sandboxed seat has no epmd for `mise run land`)
+  component(Server.MCP.Tool.LandPR, name: "land_pr")
   component(Server.MCP.Tool.ReleaseStatus, name: "release_status")
   component(Server.MCP.Tool.CheckCandidate, name: "check_candidate")
   component(Server.MCP.Tool.ProposeRelease, name: "propose_release")
