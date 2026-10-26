@@ -100,7 +100,7 @@ defmodule Server.Rollout do
 
   @doc """
   What a restart would cut off right now, one line each: a coworker mid-turn, a verify or a landing
-  executing (their gate scripts die with the server). `[]` is the change window open. `thinking`
+  executing (their gate scripts die with the server): a verify, landing, seat check, smoke or scheduled run. `[]` is the change window open. `thinking`
   is who is mid-turn, by thread (the live tracker's unless given).
   """
   def busy(thinking \\ Server.Presence.Thinking.thinking_all()) do
@@ -110,7 +110,7 @@ defmodule Server.Rollout do
       for {queue, args} <-
             Server.Repo.all(
               from j in Oban.Job,
-                where: j.queue in ["verify", "landing", "tasks"] and j.state == "executing",
+                where: j.queue in ["verify", "landing", "tasks", "smoke", "schedules"] and j.state == "executing",
                 select: {j.queue, j.args}
             ),
           do: job_line(queue, args)
@@ -121,8 +121,9 @@ defmodule Server.Rollout do
   # A seat's run_task gate is on `tasks`: the server kills it on a cut like any verify or landing.
   defp job_line("tasks", args), do: "the check of ##{args["thread_id"]} for #{args["agent"]} is running"
 
-  defp job_line(queue, args),
-    do: "the #{if queue == "verify", do: "verify", else: "landing"} of ##{args["thread_id"]} is running"
+  defp job_line("schedules", args), do: "the scheduled run #{args["run_id"]} is running"
+
+  defp job_line(queue, args), do: "the #{queue} of ##{args["thread_id"]} is running"
 
   @doc "Whether a restart cuts nothing off now (`busy/0` is empty)."
   def quiet?, do: busy() == []

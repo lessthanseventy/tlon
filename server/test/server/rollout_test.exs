@@ -124,6 +124,14 @@ defmodule Server.RolloutTest do
       assert line =~ "the check of #150 for lonnrot is running"
     end
 
+    test "a running smoke or scheduled run (the nightly gate) holds it too" do
+      running!("Server.Jobs.Smoke", :smoke, %{thread_id: 150, ref: "work/x"})
+      running!("Server.Jobs.RunSchedule", :schedules, %{run_id: 305})
+      busy = Rollout.busy(%{})
+      assert Enum.any?(busy, &(&1 =~ "smoke of #150"))
+      assert Enum.any?(busy, &(&1 =~ "scheduled run 305"))
+    end
+
     test "other queues don't hold the window" do
       running!("Server.Jobs.Drain", :default, %{})
       assert Rollout.busy(%{}) == []
