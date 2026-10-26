@@ -209,7 +209,8 @@ defmodule Server.WorklineVerifyScriptTest do
           {"GATE_LOG", Path.join(ctx.tmp, "gate.log")},
           {"WORKLINE_GATE", "1"},
           {"LAND_REF", "land/feature"},
-          {"CHECKS_LABEL", "PR #7 landing feature"}
+          {"CHECKS_LABEL", "PR #7 landing feature"},
+          {"RUN_TASK", nil}
         ] ++ env
 
       System.cmd("bash", [Path.join(ctx.repo, "scripts/workline-verify.sh"), "-", "pr-7-feature", ctx.repo],
