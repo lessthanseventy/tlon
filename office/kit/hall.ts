@@ -4,7 +4,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { hash, lookOf, rollLook, type Look } from "./sprites"
-import { nextPart, SLOTS, type PartSpec, type Slot } from "./parts"
+import { SLOTS, type PartSpec, type Slot } from "./parts"
 import { SOUL_SECTIONS } from "./souls"
 
 export type Vocab = { archetypes: string[]; grades: string[]; specialties: string[] }
@@ -94,6 +94,8 @@ export function roll(seed: string, o: { taken: readonly string[]; vocab: Vocab }
 
 /** what a hand or a pass stores about a candidate: the seed plus edits, never the rendered result */
 export type Overrides = Partial<Pick<Candidate, "name" | "archetype" | "grade" | "specialty" | "soul" | "pitch" | "drawn">> & {
+  /** the whole edited look (the look card's draft); a pass keeps only its locked slots */
+  look?: Look
   /** a slot's edited part; null clears the slot */
   parts?: Partial<Record<Slot, PartSpec | null>>
 }
@@ -121,8 +123,9 @@ export const BLANK_SOUL = SOUL_SECTIONS.filter(h => h !== "Diary").map(h => `## 
 export const SOUL_NAME = /^[a-z0-9][a-z0-9_-]*$/
 function cleanOverrides(raw: unknown): Overrides {
   if (!raw || typeof raw !== "object") return {}
-  const { name, ...rest } = raw as Overrides
-  return typeof name === "string" && SOUL_NAME.test(name) ? { ...rest, name } : rest
+  const { name, look, ...rest } = raw as Overrides
+  const kept = look && typeof look === "object" && !Array.isArray(look) ? { ...rest, look } : rest
+  return typeof name === "string" && SOUL_NAME.test(name) ? { ...kept, name } : kept
 }
 
 export function loadHall(path: string): Hall {
@@ -150,14 +153,15 @@ export function hallSignature(path: string): string {
 export function applyOverrides(c: Candidate, ov: Overrides): Candidate {
   const out: Candidate = { ...c }
   for (const k of EDITABLE) if (ov[k] !== undefined) (out as Record<string, unknown>)[k] = ov[k]
+  if (ov.look) out.look = ov.look
   if (ov.parts) {
-    const parts = { ...c.look.parts }
+    const parts = { ...out.look.parts }
     for (const s of SLOTS) {
       const p = ov.parts[s]
       if (p === null) delete parts[s]
       else if (p) parts[s] = p
     }
-    out.look = { ...c.look, parts }
+    out.look = { ...out.look, parts }
   }
   return out
 }
@@ -240,8 +244,8 @@ export function editField(h: Hall, o: Ctx, f: Field | "pitch" | "soul", value: s
   return { ...h, overrides: { ...h.overrides, [f]: v } }
 }
 
-/** `e` on a slot row: the slot's next part, then none, then the first again, stored as a parts edit */
-export function cyclePartRow(h: Hall, o: Ctx, slot: Slot): Hall {
-  const next = nextPart(slot, candidateOf(h, o).look.parts?.[slot])
-  return { ...h, overrides: { ...h.overrides, parts: { ...h.overrides.parts, [slot]: next ?? null } } }
+/** the look card's saved draft, stored as the candidate's whole look; the parts edits it supersedes go */
+export function setLook(h: Hall, look: Look): Hall {
+  const { parts: _, ...rest } = h.overrides
+  return { ...h, overrides: { ...rest, look } }
 }
