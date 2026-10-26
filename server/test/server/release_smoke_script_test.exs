@@ -123,7 +123,7 @@ defmodule Server.ReleaseSmokeScriptTest do
       root = Path.join(tmp, "repo")
       File.mkdir_p!(Path.join(root, "scripts/lib"))
 
-      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh lib/seed-hex.sh lib/fresh-script.sh) do
+      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh lib/seed-hex.sh lib/fresh-script.sh lib/record-ran.sh) do
         File.cp!(Path.expand("../../../scripts/#{f}", __DIR__), Path.join([root, "scripts", f]))
       end
 
@@ -282,7 +282,7 @@ defmodule Server.ReleaseSmokeScriptTest do
         &File.mkdir_p!/1
       )
 
-      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh lib/seed-hex.sh lib/fresh-script.sh) do
+      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh lib/seed-hex.sh lib/fresh-script.sh lib/record-ran.sh) do
         File.cp!(Path.expand("../../../scripts/#{f}", __DIR__), Path.join([root, "scripts", f]))
       end
 
