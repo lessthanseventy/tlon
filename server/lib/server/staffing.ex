@@ -356,7 +356,10 @@ defmodule Server.Staffing do
   logged as `what` skipped, so a fault is never read as an absent window.
   """
   def leaf_window(%Thread{} = thread, what) do
-    case Tmux.list_windows(thread.workspace_id) do
+    thread.workspace_id
+    |> Tmux.list_windows()
+    |> listed()
+    |> case do
       {:error, why} ->
         Logger.warning("#{what} thread #{thread.id} skipped: tmux #{why}")
         {:error, why}
@@ -407,7 +410,10 @@ defmodule Server.Staffing do
   The next message addressed to them spawns a fresh, brief-seeded session. `:ok`.
   """
   def clear_context(workspace_id, agent) do
-    case Tmux.list_windows(workspace_id) do
+    workspace_id
+    |> Tmux.list_windows()
+    |> listed()
+    |> case do
       {:error, why} ->
         # ending the sessions with their windows still alive would strand them
         Logger.warning("clear_context #{workspace_id} #{agent} skipped: tmux #{why}")
@@ -799,4 +805,8 @@ defmodule Server.Staffing do
   end
 
   defp close_rolled(_thread, nil), do: :ok
+
+  # a tmux server that is not up has no windows; any other fault stays `{:error, why}`
+  defp listed({:error, :not_up}), do: []
+  defp listed(windows), do: windows
 end

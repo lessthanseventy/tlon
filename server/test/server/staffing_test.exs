@@ -648,4 +648,24 @@ defmodule Server.StaffingTest do
     refute Server.Repo.get!(Server.Session, live.id).ended_at
     refute_received {:tmux, ["-L", _, "kill-window" | _]}
   end
+
+  test "with no tmux server up, roll_leaf and clear_context still end the sessions; nothing is logged", %{ws: ws} do
+    thread = staffed_thread(ws, "borges")
+    live = session!("borges", thread.id, 30)
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      if "list-windows" in args,
+        do: {"no server running on /tmp/tmux-1000/tlon-workspace-#{ws.id}", 1},
+        else: {"", 0}
+    end)
+
+    log =
+      capture_log(fn ->
+        assert :ok = Staffing.roll_leaf(thread)
+        assert :ok = Staffing.clear_context(ws.id, "borges")
+      end)
+
+    refute log =~ "skipped"
+    assert Server.Repo.get!(Server.Session, live.id).ended_at
+  end
 end
