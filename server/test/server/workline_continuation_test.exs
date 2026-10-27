@@ -130,6 +130,8 @@ defmodule Server.Workline.ContinuationTest do
     assert [m] = continuations(review.id)
     assert m.body =~ "submit_review"
     refute m.body =~ "Commit it"
+    # #686: submit_review parks the gate itself; the session it answers is already ended
+    refute m.body =~ "advance_stage"
   end
 
   test "at most max_turns between stage advances; an advance starts the count again", %{thread: t} do
