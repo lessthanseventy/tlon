@@ -27,7 +27,9 @@ and every layer the spine design's re-laid §9 asked for
   crews is unchanged); `Workspaces.bench/1` is the crew on plus `all` (`bench_all/1` everyone), so
   staffing picks only from it. A switch restaffs the going crew's worklines the workline's own way;
   their plain threads wait for them. Nothing switches by itself: Claude's usage limit on a pane
-  offers the other crews in the lobby, and a taken offer offers the way back at the reset.
+  offers the other crews in the lobby, and a taken offer offers the way back at the reset. A
+  provider's `Request rejected (429)` usage-limit line (a pane, or a one-shot's stderr through
+  `Server.ModelCli`) is a `quota` Need at once, under the same key as the provider's balance poll.
 - **pause** (`Server.Pause`) — the office's stop controls, in the settings file's `"pause"` key so a
   restart keeps them: pencils down (intake and continuation nudges off, every live thread told to
   finish its turn, commit and stop, as a notice; only the operator's own posts wake anyone — every

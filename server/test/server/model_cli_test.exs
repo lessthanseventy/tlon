@@ -109,6 +109,48 @@ defmodule Server.ModelCliTest do
              ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, "echo nope >&2; exit 2"), "m"})
   end
 
+  describe "a one-shot refused by its provider" do
+    setup %{dir: dir} do
+      Server.TestDB.clean!()
+      {:ok, ws} = Server.Workspaces.register(%{name: "One-shot"})
+      {:ok, seat} = Server.Workspaces.seat(ws.id, %{name: "glmer", archetype: "builder"})
+      glm = %{"provider" => "ollama-cloud", "model" => "glm-5.2", "thinking" => "medium"}
+      {:ok, _} = Server.Workspaces.set_policy(ws.id, seat.agent_id, %{model: glm})
+      %{ws: ws, dir: dir}
+    end
+
+    @line "API Error: Request rejected (429) · you (x) have reached your session usage limit, upgrade for higher limits: https://ollama.com/upgrade"
+
+    test "the usage-limit 429 on stderr raises the provider's quota item at once, in the workspaces seating it",
+         %{dir: dir, ws: ws} do
+      cli = cli(dir, "echo '#{@line}' >&2; exit 1")
+
+      assert {:error, {:model_cli_exit, 1, _}} =
+               ModelCli.prompt("hi", :test_cmd, :test_model, {cli, "ollama-cloud/glm-5.2"})
+
+      assert [need] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "quota"))
+      assert need.key == "quota:#{ws.id}:ollama-cloud" and need.text =~ @line
+    end
+
+    test "a catalog notice, another failure, or a Claude-plan call raises nothing", %{dir: dir} do
+      notice = ~s(echo '"kimi-k3" isn'"'"'t described by this version'"'"'s model catalog' >&2; exit 1)
+      assert {:error, _} = ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, notice), "ollama-cloud/kimi-k3"})
+
+      assert {:error, _} =
+               ModelCli.prompt(
+                 "hi",
+                 :test_cmd,
+                 :test_model,
+                 {cli(dir, "echo boom >&2; exit 1"), "ollama-cloud/glm-5.2"}
+               )
+
+      assert {:error, _} =
+               ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, "echo '#{@line}' >&2; exit 1"), "haiku"})
+
+      assert Enum.filter(Server.Office.Needs.list(), &(&1.kind == "quota")) == []
+    end
+  end
+
   test "a missing CLI and a failing one are told apart", %{dir: dir} do
     assert {:error, {:model_cli_missing, _}} = ModelCli.prompt("hi", :test_cmd, :test_model, {"/nonexistent/cli", "m"})
 
