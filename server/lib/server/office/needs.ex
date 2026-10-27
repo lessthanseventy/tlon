@@ -482,7 +482,7 @@ defmodule Server.Office.Needs do
 
     from(m in Message,
       where:
-        m.thread_id in ^ids and m.kind not in ["suggestion", "margin", "notice"] and m.author != ^operator and
+        m.thread_id in ^ids and m.kind not in ["suggestion", "margin", "notice", "side project"] and m.author != ^operator and
           ilike(m.body, ^like) and
           m.created_at > ^since,
       order_by: [desc: m.id]
@@ -946,7 +946,7 @@ defmodule Server.Office.Needs do
     last =
       Repo.one(
         from m in Message,
-          where: m.thread_id == ^t.id and m.kind not in ["notice", "suggestion", "margin"],
+          where: m.thread_id == ^t.id and m.kind not in ["notice", "suggestion", "margin", "side project"],
           order_by: [desc: m.id],
           limit: 1
       )

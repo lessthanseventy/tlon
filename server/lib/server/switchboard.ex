@@ -196,7 +196,7 @@ defmodule Server.Switchboard do
     end
   end
 
-  defp reaches_nobody?(%Message{kind: kind}) when kind in ["notice", "suggestion", "margin"], do: true
+  defp reaches_nobody?(%Message{kind: kind}) when kind in ["notice", "suggestion", "margin", "side project"], do: true
 
   defp reaches_nobody?(%Message{} = message) do
     author = String.downcase(message.author)
@@ -265,7 +265,7 @@ defmodule Server.Switchboard do
   # minus the message's own author — you are never woken by your own words. The
   # lead stays informed without being cc'd because coworkers report back to the
   # thread (their top-level posts wake the lead).
-  defp recipients(%Message{kind: kind}) when kind in ["notice", "suggestion", "margin"], do: []
+  defp recipients(%Message{kind: kind}) when kind in ["notice", "suggestion", "margin", "side project"], do: []
 
   defp recipients(%Message{} = message) do
     # Match author↔agent case-INSENSITIVELY throughout (as @mentions already do), so
