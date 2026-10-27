@@ -106,6 +106,29 @@ defmodule Server.MCP.SpawnTest do
       assert File.exists?(Path.join(wt, ".git"))
     end
 
+    test "a spawn brings a checkout with no work of its own up to origin/main" do
+      %{repo: repo, git: git, ws: ws, project: p} = Server.TestRepoDir.with_project()
+      remote = repo <> "-origin.git"
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+      on_exit(fn -> File.rm_rf!(remote) end)
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["remote", "add", "origin", remote])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+      {:ok, thread} = Channel.open_thread(%{title: "ff", workspace_id: ws.id, project_id: p.id})
+      assert {:ok, _} = Spawn.join(thread.id, "codex")
+      wt = Server.Worktree.path(repo, "t#{thread.id}")
+
+      File.write!(Path.join(repo, "NEW"), "more\n")
+      {_, 0} = git.(["add", "NEW"])
+      {_, 0} = git.(["commit", "-qm", "main moves"])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+
+      assert {:ok, _} = Spawn.join(thread.id, "codex")
+      assert File.exists?(Path.join(wt, "NEW"))
+    end
+
     test "a thread whose worktree dir is not a checkout is refused, never started somewhere else" do
       %{repo: repo, ws: ws, project: p} = Server.TestRepoDir.with_project()
       {:ok, thread} = Channel.open_thread(%{title: "stale", workspace_id: ws.id, project_id: p.id})

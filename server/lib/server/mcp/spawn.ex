@@ -172,9 +172,15 @@ defmodule Server.MCP.Spawn do
         else: Server.worktree_for_thread(thread)
 
     case dir do
-      {:ok, path} -> {:ok, "\nexport TLON_CWD=\"#{path}\""}
-      {:error, {:not_a_checkout, _} = refused} -> {:error, refused}
-      {:error, _} -> {:ok, ""}
+      {:ok, path} ->
+        if agent.name not in Server.Outside.names(), do: Server.catch_up_worktree(thread, path)
+        {:ok, "\nexport TLON_CWD=\"#{path}\""}
+
+      {:error, {:not_a_checkout, _} = refused} ->
+        {:error, refused}
+
+      {:error, _} ->
+        {:ok, ""}
     end
   end
 
