@@ -176,6 +176,27 @@ defmodule Server.Office.CorkboardTest do
       assert side_messages(ws) == []
     end
 
+    test "a failed side-project call holds the workspace off for an hour, not the next poll", %{
+      ws: ws,
+      prompts: prompts
+    } do
+      cli = Application.get_env(:server, :generator_cmd)
+      File.write!(cli, ~s(#!/bin/sh\ncat >> "#{prompts}"\necho 'not json'\n))
+
+      calls = fn -> (prompts |> File.read() |> elem(1) |> String.split("THE SIDE PROJECT") |> length()) - 1 end
+      rewind = fn -> :sys.replace_state(Corkboard, fn s -> Map.update!(s, ws.id, &%{&1 | side_at: 0}) end) end
+
+      Corkboard.notes(ws.id)
+      Enum.find_value(1..60, fn _ -> Process.sleep(50) && Map.get(:sys.get_state(Corkboard), ws.id).side_hold > 0 end)
+      assert calls.() == 1
+
+      rewind.()
+      Corkboard.notes(ws.id)
+      Process.sleep(300)
+      assert calls.() == 1
+      assert side_messages(ws) == []
+    end
+
     test "the prompt carries the counter: number 3 after two earlier ones", %{ws: ws, prompts: prompts} do
       old = DateTime.add(DateTime.utc_now(), -2 * 86_400)
       {:ok, a} = Corkboard.post_side_project(ws.id, "daneri", "first stanza", 1)
