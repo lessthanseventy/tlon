@@ -28,6 +28,8 @@ defmodule Server.OperatorConfig do
   standing approval (`Server.Workline`): a reviewed-and-approved workline whose risk grade
   (`Server.Workline.Grade`, 1–5 per axis) has no axis over it, no limit hit and no decision left to
   them joins the merge queue without waiting on them; absent, every review waits for its approval.
+  `auto_pause_at` (default 90) is the plan-meter percent at which `Server.Pause.auto/1` puts the office
+  on pencils down.
 
   Best-effort on read: a missing or corrupt file is just "no overrides".
   """
@@ -61,6 +63,14 @@ defmodule Server.OperatorConfig do
       default: nil,
       nullable: true,
       doc: "an approved workline graded at most this lands without you (off: every review waits)"
+    },
+    %{
+      key: "auto_pause_at",
+      type: "int",
+      min: 1,
+      max: 100,
+      default: 90,
+      doc: "plan meter percent (5-hour or weekly) at which the office goes to pencils down by itself"
     },
     %{
       key: "continuation_turns",

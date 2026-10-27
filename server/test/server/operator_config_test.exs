@@ -31,6 +31,7 @@ defmodule Server.OperatorConfigTest do
     assert %{value: 3, default: 6, type: "int"} = knobs["max_leaves"]
     assert %{value: true, type: "bool"} = knobs["banter"]
     assert %{value: nil, type: "int"} = knobs["auto_land_risk"]
+    assert %{value: 90, type: "int", min: 1, max: 100} = knobs["auto_pause_at"]
     assert OperatorConfig.setting("continuation_turns", path) == 3
   end
 
