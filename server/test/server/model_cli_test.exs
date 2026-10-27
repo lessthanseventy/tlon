@@ -129,7 +129,7 @@ defmodule Server.ModelCliTest do
                ModelCli.prompt("hi", :test_cmd, :test_model, {cli, "ollama-cloud/glm-5.2"})
 
       assert [need] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "quota"))
-      assert need.key == "quota:#{ws.id}:ollama-cloud" and need.text =~ @line
+      assert need.key == "quota:#{ws.id}:ollama-cloud" and need.text =~ "reached your session usage limit"
     end
 
     test "a catalog notice, another failure, or a Claude-plan call raises nothing", %{dir: dir} do

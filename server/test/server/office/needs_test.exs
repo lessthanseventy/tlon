@@ -416,7 +416,7 @@ defmodule Server.Office.NeedsTest do
       assert body == %{workspace_id: ws.id, shift: "night"}
     end
 
-    test "an ollama seat's pane 429 is one quota item under quota:<ws>:ollama-cloud, with the raw line — the balance poll adds no second" do
+    test "an ollama seat's pane 429 is one quota item under quota:<ws>:ollama-cloud, with the provider's words — the balance poll adds no second" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Ollama pane"})
       {:ok, seat} = Server.Workspaces.seat(ws.id, %{name: "glmer", archetype: "builder", crew: "day"})
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "claudia", archetype: "builder", crew: "night"})
@@ -429,13 +429,13 @@ defmodule Server.Office.NeedsTest do
       assert :ok = Server.Shifts.quota_check(ws.id, "glmer", "1/w1", line)
       assert [need] = Enum.filter(Needs.list(), &(&1.kind == "quota"))
       assert need.key == "quota:#{ws.id}:ollama-cloud" and need.level == "blocking"
-      assert need.text =~ line and need.text =~ "ollama-cloud"
+      assert need.text =~ "reached your session usage limit" and need.text =~ "ollama-cloud"
       assert need.options == [%{"key" => "night", "label" => "night crew on"}]
 
       Application.put_env(:server, :engine_presence, Spent)
       on_exit(fn -> Application.delete_env(:server, :engine_presence) end)
       assert [again] = Enum.filter(Needs.list(), &(&1.kind == "quota"))
-      assert again.key == need.key and again.text =~ line
+      assert again.key == need.key and again.text =~ "reached your session usage limit"
 
       assert :ok = Server.Shifts.quota_check(ws.id, "glmer", "1/w1", "back at work")
       Application.delete_env(:server, :engine_presence)

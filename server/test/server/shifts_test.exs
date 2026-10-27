@@ -327,11 +327,10 @@ defmodule Server.ShiftsTest do
 
     defp out(ws), do: Enum.filter(Shifts.out_of_quota(), &(&1.workspace_id == ws.id))
 
-    test "it is a quota item at once, with the raw line as its hint; the pane clearing puts it away", %{ws: ws} do
+    test "it is a quota item at once, with the provider's words as its hint; the pane clearing puts it away", %{ws: ws} do
       line = hd(@ollama_429s)
       assert :ok = Shifts.quota_check(ws.id, "emma", "1/w1", "x\n  ⎿  " <> line)
-      assert [%{provider: "ollama-cloud", hint: hint, until: nil}] = out(ws)
-      assert hint == String.slice(line, 0, 200)
+      assert [%{provider: "ollama-cloud", until: nil}] = out(ws)
       assert Shifts.current(ws.id) == "day"
       assert [] = Server.Attention.open_asks()
 
@@ -340,6 +339,38 @@ defmodule Server.ShiftsTest do
 
       assert :ok = Shifts.quota_check(ws.id, "emma", "1/w1", "back at work")
       assert out(ws) == []
+    end
+
+    test "a one-shot's refusal survives the pane prune: it is no pane's", %{ws: ws} do
+      :ok = Shifts.refused("ollama-cloud", hd(@ollama_429s))
+      :ok = Shifts.prune(ws.id, MapSet.new(["emma/1/w1"]))
+      assert [%{provider: "ollama-cloud", until: %DateTime{}}] = out(ws)
+    end
+
+    test "a one-shot's entry past its until is dropped by the prune", %{ws: ws} do
+      past = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.to_iso8601()
+      entry = %{"provider" => "ollama-cloud", "hint" => "x", "at" => past, "until" => past}
+      put_quota(ws, %{"oneshot/ollama-cloud" => entry})
+      :ok = Shifts.prune(ws.id, MapSet.new(["emma/1/w1"]))
+      assert Server.Repo.get!(Server.Workspace, ws.id).knobs["quota_out"] == %{}
+    end
+
+    test "a malformed until is no quota item and crashes nothing", %{ws: ws} do
+      now = DateTime.to_iso8601(DateTime.utc_now())
+      put_quota(ws, %{"oneshot/ollama-cloud" => %{"provider" => "ollama-cloud", "at" => now, "until" => "soon"}})
+      assert out(ws) == []
+    end
+
+    test "the hint keeps the provider's words, not the username or the ref", %{ws: ws} do
+      assert :ok = Shifts.quota_check(ws.id, "emma", "1/w1", hd(@ollama_429s))
+      assert [%{hint: hint}] = out(ws)
+      assert hint =~ "weekly usage limit"
+      refute hint =~ "andrew"
+      refute hint =~ "ref:"
+    end
+
+    defp put_quota(ws, map) do
+      ws |> Ecto.Changeset.change(knobs: Map.put(ws.knobs || %{}, "quota_out", map)) |> Server.Repo.update!()
     end
 
     test "another status is logged with its raw line and raises nothing", %{ws: ws} do

@@ -8,7 +8,7 @@ Closes #405: a provider's refusal becomes a `quota` Need.
 - Pane door: `Shifts.quota_check/4` now reads non-Claude seats too. One-shot door: `ModelCli` hands a
   failing call's stderr to `Shifts.refused/2` (30-minute entry, per workspace seating that provider).
 - `Needs.quota/0`: a third source, keyed `quota:<ws>:<provider>` like the balance poll's "spent" item,
-  so the operator sees one item; the refusal's raw line is its text (the reset/upgrade hint).
+  so the operator sees one item; the refusal's words (no account name or ref id) are its text (the reset/upgrade hint).
 - `reset_at/2` also reads "resets Sep 28, 9am".
 
 Fixtures are verbatim pane lines from this box's `~/.claude/projects` transcripts. No 402 has been
