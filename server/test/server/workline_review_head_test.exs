@@ -130,6 +130,30 @@ defmodule Server.WorklineReviewHeadTest do
     assert sha == String.trim(head)
   end
 
+  # #686: submit_review used to answer "call advance_stage" to a session the verdict had just ended,
+  # leaving the workline at review with awaiting nil. The tool parks it and says so.
+  test "submit_review's approve parks the gate itself and does not tell the dead session to advance",
+       %{root: root} do
+    thread = at_review(root, "door")
+    lonnrot = Server.Staff.agent_by_name("lonnrot")
+    {:ok, _} = Channel.assign_lead(thread.id, "lonnrot")
+
+    {:ok, claims} =
+      Server.MCP.TokenValidator.validate_token(Server.MCP.Tokens.mint(thread, lonnrot), %{resource: "tlon"})
+
+    frame = %Anubis.Server.Frame{context: %Anubis.Server.Context{auth: %{raw_claims: claims}}}
+
+    {:reply, reply, _} =
+      Server.MCP.Tool.SubmitReview.execute(%{verdict: "approve", body: "approve\n\nreads well"}, frame)
+
+    refute reply.isError
+    %{"text" => text} = Enum.find(reply.content, &(&1["type"] == "text"))
+    answer = JSON.decode!(text)
+    assert answer["verdict"] == "approve"
+    refute answer["next"] =~ "advance_stage"
+    assert %Thread{stage: "review", awaiting: "andrew"} = Repo.get!(Thread, thread.id)
+  end
+
   test "the reviewed code lands, docs committed after it or not; code committed after it goes back to build",
        %{root: root} do
     same = at_review(root, "same")
