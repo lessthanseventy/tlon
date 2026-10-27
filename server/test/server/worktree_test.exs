@@ -115,6 +115,31 @@ defmodule Server.WorktreeTest do
     end
   end
 
+
+  describe "ensure/2 — a checkout's gitfile always resolves (#447)" do
+    test "concurrent ensures of one slug all succeed and leave one working checkout", %{repo: repo} do
+      results =
+        1..8
+        |> Enum.map(fn _ -> Task.async(fn -> Worktree.ensure(repo, "racy") end) end)
+        |> Task.await_many(30_000)
+
+      wt = Worktree.path(repo, "racy")
+      assert Enum.all?(results, &(&1 == {:ok, wt})), inspect(results)
+      assert {_, 0} = System.cmd("git", ["-C", wt, "rev-parse", "--git-dir"], stderr_to_stdout: true)
+      assert File.ls!(Path.join(repo, ".git/worktrees")) == ["racy"]
+    end
+
+    test "an existing checkout whose gitfile names a phantom gitdir is repaired", %{repo: repo} do
+      {:ok, wt} = Worktree.ensure(repo, "broken")
+      gitfile = Path.join(wt, ".git")
+      File.write!(gitfile, String.trim_trailing(File.read!(gitfile)) <> "1\n")
+      assert {_, 128} = System.cmd("git", ["-C", wt, "rev-parse", "--git-dir"], stderr_to_stdout: true)
+
+      assert {:ok, ^wt} = Worktree.ensure(repo, "broken")
+      assert {_, 0} = System.cmd("git", ["-C", wt, "rev-parse", "--git-dir"], stderr_to_stdout: true)
+    end
+  end
+
   describe "Server.worktree_for_thread/1 (facade: thread → project repo → ensured worktree)" do
     setup %{repo: repo} do
       Server.TestDB.clean!()
