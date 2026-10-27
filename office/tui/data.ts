@@ -42,7 +42,7 @@ export async function status(): Promise<Agents> {
     if (status !== 200 || !j) throw new Error(`office ${status}`)
     const a: Agents = {
       ok: true, roster: j.roster ?? [], threads: (j.threads ?? []).map((t: Thread) => (t.standing && t.title === "lobby" ? { ...t, title: "the front desk" } : t)), counts: j.counts ?? {}, awaiting: j.awaiting ?? 0,
-      bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], shifts: j.shifts ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {}, revs: j.revs, release: j.release, usage: j.usage, pause: j.pause, flags: j.flags ?? {}, life: j.life ?? {},
+      bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], shifts: j.shifts ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {}, revs: j.revs, release: j.release, usage: j.usage, pause: j.pause, flags: j.flags ?? {}, life: j.life ?? {}, ticket_open: j.ticket_open,
     }
     lastGood = { a, at: Date.now() }
     down = null
