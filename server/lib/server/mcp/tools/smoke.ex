@@ -21,7 +21,8 @@ defmodule Server.MCP.Tool.StartSmoke do
     field :fixtures, {:list, :string},
       description:
         "Named seed sets to load into the smoke's own database before you drive it (e.g. [\"tool_denied_need\"]): " <>
-          "the candidate build's catalog, Server.Smoke.Fixtures; an unknown name fails the smoke"
+          "the candidate build's catalog, Server.Smoke.Fixtures; a spec may carry params, no spaces " <>
+          ~s{("landed_workline:flag=off", "name:key=value,key=value"); an unknown name fails the smoke}
   end
 
   @impl true

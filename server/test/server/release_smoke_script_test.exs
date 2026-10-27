@@ -109,6 +109,33 @@ defmodule Server.ReleaseSmokeScriptTest do
     assert out =~ "fixtures need a scratch node"
   end
 
+  test "a fixture spec with params reaches the rpc whole, beside another fixture" do
+    url = stub([], FlagStub)
+    bin = Path.join(System.tmp_dir!(), "smoke-rpc-stub-#{System.pid()}-#{System.unique_integer([:positive])}")
+
+    File.write!(bin, """
+    #!/usr/bin/env bash
+    [[ "$2" == 'Server.Smoke.Fixtures.apply("p_set:a=b,c=d")' || "$2" == 'Server.Smoke.Fixtures.apply("plain")' ]]
+    """)
+
+    File.chmod!(bin, 0o755)
+    on_exit(fn -> File.rm(bin) end)
+
+    {out, _} =
+      System.cmd("bash", [@script],
+        env: [
+          {"TLON_SMOKE_URL", url},
+          {"TLON_SMOKE_FIXTURES", "p_set:a=b,c=d plain"},
+          {"TLON_STALE_SCRIPTS_OK", "1"},
+          {"TLON_SMOKE_SERVER_BIN", bin}
+        ],
+        stderr_to_stdout: true
+      )
+
+    assert out =~ "smoke: fixture p_set:a=b,c=d seeded"
+    assert out =~ "smoke: fixture plain seeded"
+  end
+
   test "an office with no machine workspace says the drive won't wait for it" do
     office = ~s({"roster": [], "threads": [], "workspaces": [{"id": 1, "name": "elsewhere"}]})
     assert {out, 1} = smoke(stub({200, office}))

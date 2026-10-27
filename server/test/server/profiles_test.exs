@@ -227,6 +227,14 @@ defmodule Server.ProfilesTest do
       for {k, t} <- Profiles.archetypes(), k != :qa, do: assert("submit_qa" in t.mcp["tlon"]["excludeTools"], "#{k}")
     end
 
+    test "the QA brief lists every fixture of the catalog, how a spec carries params, and that drive_smoke starts a fresh session per call" do
+      prompt = Profiles.archetype(:qa).system_prompt
+
+      for name <- Server.Smoke.Fixtures.names(), do: assert(prompt =~ name, "the brief omits fixture #{name}")
+      assert prompt =~ "name:key=value"
+      assert prompt =~ "fresh session"
+    end
+
     test "the librarian curates the office's memory with its own tools, writes no code, and no other archetype has them" do
       lib = Profiles.instantiate(%{archetype: :librarian, name: "quain"})
       tools = ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
