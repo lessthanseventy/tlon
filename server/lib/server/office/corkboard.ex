@@ -31,6 +31,7 @@ defmodule Server.Office.Corkboard do
   @keep 12
   @keep_ideas 20
   @side_every_s 60
+  @side_hold_s 3600
   @side_voice """
   You write ONE sticky note a coworker pins on the corkboard of a pixel-art office of AI coworkers:
   one small step of their ongoing personal project, in their own voice. Under 120 characters; no
@@ -168,7 +169,7 @@ defmodule Server.Office.Corkboard do
     end
 
     # one seat's side project per poll, and a poll only looks once a minute: a cap or a slow model never fans out
-    if now - entry.side_at >= @side_every_s do
+    if now - entry.side_at >= @side_every_s and now >= entry.side_hold do
       Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:pinned, ws, side_write(ws)}) end)
     end
 
@@ -184,13 +185,19 @@ defmodule Server.Office.Corkboard do
   @impl true
   def handle_cast({:pinned, _ws, nil}, state), do: {:noreply, state}
 
+  # a failed call still spent a Generator slot: hold the workspace off side projects for an hour
+  def handle_cast({:pinned, ws, :failed}, state) do
+    entry = entry(state, ws)
+    {:noreply, Map.put(state, ws, %{entry | side_hold: System.system_time(:second) + @side_hold_s})}
+  end
+
   def handle_cast({:pinned, ws, note}, state) do
     entry = entry(state, ws)
     note = Map.merge(note, %{id: entry.next, at: System.system_time(:second)})
     {:noreply, Map.put(state, ws, %{entry | notes: Enum.take([note | entry.notes], @keep), next: entry.next + 1})}
   end
 
-  defp entry(state, ws), do: Map.get(state, ws, %{notes: [], at: 0, side_at: 0, next: 1})
+  defp entry(state, ws), do: Map.get(state, ws, %{notes: [], at: 0, side_at: 0, side_hold: 0, next: 1})
 
   @doc """
   A coworker's idea for the operator, pinned in the suggestion box (`suggest` MCP tool): something
@@ -292,7 +299,8 @@ defmodule Server.Office.Corkboard do
       section = (Server.Soul.read(name) || %{})["The side project"] || ""
       state = side_state(ws, name)
 
-      if side_due?(%{section: section, last: state.last}, now), do: side_note(ws, name, section, state.n + 1)
+      if side_due?(%{section: section, last: state.last}, now),
+        do: side_note(ws, name, section, state.n + 1) || :failed
     end)
   end
 
