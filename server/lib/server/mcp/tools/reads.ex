@@ -15,7 +15,7 @@ defmodule Server.MCP.Tool.GetBrief do
   @impl true
   def execute(_params, frame) do
     identity = Identity.from_frame(frame)
-    ok(frame, %Thread{id: identity.thread_id} |> Board.brief() |> MCP.Brief.scope())
+    ok(frame, %Thread{id: identity.thread_id} |> Board.brief(viewer: identity.agent) |> MCP.Brief.scope())
   end
 end
 
