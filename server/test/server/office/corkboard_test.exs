@@ -135,6 +135,16 @@ defmodule Server.Office.CorkboardTest do
       end)
     end
 
+    test "the prompt carries the seat's voice", %{ws: ws, prompts: prompts} do
+      File.write!(
+        Path.join(Server.Soul.dir(), "daneri.md"),
+        "## Quirks\ncounts syllables\n\n## The side project\nThe Earth, a poem in stanzas.\n"
+      )
+
+      assert poll_until(ws, fn n -> Enum.any?(n, &(&1.kind == "side project")) end)
+      assert File.read!(prompts) =~ ~r/counts syllables.{0,300}This is number 1/s
+    end
+
     test "a poll pins one side-project note for the seat that has the section, once a day", %{ws: ws} do
       assert Corkboard.notes(ws.id) == []
       notes = poll_until(ws, fn n -> Enum.any?(n, &(&1.kind == "side project")) && n end)
