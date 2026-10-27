@@ -220,7 +220,7 @@ defmodule Server.Workline.Continuation do
   defp land(%Thread{stage: "review"} = thread, opts) do
     if Workline.qa_leads?(thread, opts),
       do: "File what you saw with submit_qa — a pass hands it to the merge gate itself",
-      else: "Land it with submit_review — the server commits review.md (then call advance_stage)"
+      else: "Land it with submit_review — the server commits review.md and, on approve, parks it at the gate itself"
   end
 
   defp land(_thread, _opts), do: "Commit it (then call advance_stage)"

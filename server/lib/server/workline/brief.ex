@@ -105,7 +105,7 @@ defmodule Server.Workline.Brief do
       "You are the reviewer, not the builder: findings against spec compliance, bugs, security — verdict at the top. " <>
         "Land it with submit_review — verdict approve or request_changes, and the whole review.md, verdict " <>
         "first: the server commits it for you, since you never write files. request_changes sends it back to " <>
-        "the builder; after approve, call advance_stage to hand it to the merge gate. Its follow_ups replace any an " <>
+        "the builder; approve parks it at the merge gate itself, and your session ends with the verdict. Its follow_ups replace any an " <>
         "earlier review of this workline filed (get_brief shows them): list every non-blocking finding still open. " <>
         "If the CHECKS hold a bench_contrast row ending REGRESSION, make it a finding (the branch passes fewer canaries " <>
         "than main; n is small, so say whether it looks like a flake); a green bench_contrast row is not a finding. " <>
@@ -148,7 +148,8 @@ defmodule Server.Workline.Brief do
     do: "Exit: none of yours — the server advances it when its check passes on branch work/#{t.slug}."
 
   defp exit_line(%{stage: "review"} = t),
-    do: "Exit: submit_review with a verdict (the server commits #{owed(t)}); after approve, call advance_stage."
+    do:
+      "Exit: submit_review with a verdict (the server commits #{owed(t)} and, on approve, parks it at the gate itself)."
 
   defp exit_line(%{stage: "build"} = t), do: "Exit: commit #{owed(t)}, then call advance_stage."
 

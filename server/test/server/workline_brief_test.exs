@@ -44,18 +44,19 @@ defmodule Server.WorklineBriefTest do
     refute Brief.stage_message(%{t | workspace_id: nil}) =~ "Model for this stage"
   end
 
-  test "every working stage's brief names its owed exit artifact and the advance verb" do
+  test "every working stage's brief names its owed exit artifact and its exit verb" do
+    # review's verb is submit_review: the verdict parks the gate itself (#686), never advance_stage
     owed = %{
-      "spec" => "work/composer-wrap/spec.md",
-      "plan" => "work/composer-wrap/plan.md",
-      "build" => "work/composer-wrap",
-      "review" => "work/composer-wrap/review.md"
+      "spec" => {"work/composer-wrap/spec.md", "advance_stage"},
+      "plan" => {"work/composer-wrap/plan.md", "advance_stage"},
+      "build" => {"work/composer-wrap", "advance_stage"},
+      "review" => {"work/composer-wrap/review.md", "submit_review"}
     }
 
-    for {stage, artifact} <- owed do
+    for {stage, {artifact, verb}} <- owed do
       brief = Brief.stage_message(thread(stage))
       assert brief =~ artifact, "#{stage} brief must name #{artifact}"
-      assert brief =~ "advance_stage", "#{stage} brief must name the advance verb"
+      assert brief =~ verb, "#{stage} brief must name its exit verb #{verb}"
     end
   end
 
@@ -80,7 +81,9 @@ defmodule Server.WorklineBriefTest do
 
   test "the review brief lands the review through submit_review; a late-started stage says its missing docs are expected" do
     review = Brief.stage_message(thread("review"))
-    assert review =~ "submit_review" and review =~ "advance_stage"
+    assert review =~ "submit_review"
+    # #686: the verdict ends the reviewer's session and parks the gate itself — nothing left to call
+    refute review =~ "advance_stage"
     refute review =~ "Exit: commit"
     assert Brief.stage_message(thread("build")) =~ "expected"
     refute Brief.stage_message(thread("spec")) =~ "expected"
