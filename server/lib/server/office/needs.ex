@@ -83,6 +83,7 @@ defmodule Server.Office.Needs do
   | kinds | reaches the operator |
   |---|---|
   | seats, quota, tool_denied (a permission refusal) | always |
+  | gate whose grade hit a limit (a db migration, …: `Server.Workline.limit_hit?/1`) | always |
   | gate, question, dialog, ask, no_seat | if irreversible, outward, costly, a host command, or an `auto_land_risk` gate |
   | issue, blocked, stalled, verify_failed, job_failed, health, stranded, tool_denied (a hook's) | if irreversible or a host command |
   | pr_blocked, publish_failed, release_failed | if it needs a host command |
@@ -184,9 +185,11 @@ defmodule Server.Office.Needs do
   When an item (or a bare kind) reaches the operator: `:always`, `:info` (never routed), or
   `{:when, reasons}` — only when Uqbar passes it up for one of them. A tool refusal by a hook is
   Uqbar's (no setting the operator holds can lift it); any other refusal widens a permission, so
-  always passes up. No catch-all: a kind not in `kinds/0` raises.
+  always passes up. A gate whose grade hit a limit is the operator's alone. No catch-all: a kind
+  not in `kinds/0` raises.
   """
   def pass_up_rule(kind) when is_binary(kind), do: pass_up_rule(%{kind: kind})
+  def pass_up_rule(%{kind: "gate", limits: [_ | _]}), do: :always
   def pass_up_rule(%{kind: "tool_denied", hook: true}), do: {:when, @narrow}
   def pass_up_rule(%{kind: k}) when k in ~w(seats quota tool_denied), do: :always
   def pass_up_rule(%{kind: k}) when k in @machine, do: :info
@@ -288,7 +291,7 @@ defmodule Server.Office.Needs do
 
   defp wait(%Thread{stage: stage} = t, nil) when not is_nil(stage) do
     if Server.Workline.at_gate?(t),
-      do: item("gate", "blocking", t, gate_text(t, stage), gated_at(t), %{stage: stage}),
+      do: item("gate", "blocking", t, gate_text(t, stage), gated_at(t), %{stage: stage, limits: limits(t)}),
       else: question(t)
   end
 
@@ -1147,4 +1150,8 @@ defmodule Server.Office.Needs do
     if seen != prior, do: :persistent_term.put({__MODULE__, :health_since}, seen)
     seen
   end
+
+  # the limits the review's risk grade hit, [] when none; the grade is review-scoped
+  defp limits(%Thread{stage: "review"} = t), do: Server.Workline.grade_limits(t)
+  defp limits(_t), do: []
 end

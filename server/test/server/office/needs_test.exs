@@ -1186,6 +1186,58 @@ defmodule Server.Office.NeedsTest do
       {"gate:#{t.id}", t}
     end
 
+    # a review gate with a recorded risk grade: its review.md committed in a repo of its own (the gate
+    # is read through the real artifact check), `awaiting` set directly, as the park would
+    defp review_gate(ws, grade) do
+      slug = "rg-#{System.unique_integer([:positive])}"
+      repo = Path.join(System.tmp_dir!(), "needs-#{slug}-#{System.pid()}")
+      File.mkdir_p!(Path.join([repo, "work", slug]))
+      File.write!(Path.join([repo, "work", slug, "review.md"]), "VERDICT: approve\n")
+      git = fn args -> {_, 0} = System.cmd("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t" | args]) end
+      git.(["init", "-q"])
+      git.(["add", "."])
+      git.(["commit", "-q", "-m", "review"])
+      prior = Application.get_env(:server, :workline_root)
+      Application.put_env(:server, :workline_root, repo)
+
+      on_exit(fn ->
+        Application.put_env(:server, :workline_root, prior)
+        File.rm_rf!(repo)
+      end)
+
+      {:ok, t} = Server.Workline.open(%{title: "g", slug: slug, stage: "review", workspace_id: ws.id})
+      {:ok, t} = t |> Server.Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Server.Repo.update()
+
+      {:ok, _} =
+        Server.Dossier.record_event(%{
+          thread_id: t.id,
+          kind: "check_passed",
+          correlation: "workline:#{t.slug}:grade",
+          detail: grade
+        })
+
+      "gate:#{t.id}"
+    end
+
+    test "a gate that hit a limit goes straight to the phone, never Uqbar's group; settle refuses it", %{ws: ws} do
+      key = review_gate(ws, %{"limits" => ["a database migration"]})
+
+      assert %{limits: ["a database migration"]} = item = Enum.find(Needs.list(), &(&1.key == key))
+      assert Needs.pass_up_rule(item) == :always
+
+      g = Needs.grouped()
+      assert [%{key: ^key, route: "pass_up"}] = Enum.filter(g.phone, &(&1.key == key))
+      assert g.uqbar == []
+      assert {:error, :always} = Needs.settle(key, "migration is fine", "uqbar")
+      assert {:error, :always} = Needs.pass_up(key, "w", "r", "uqbar")
+    end
+
+    test "a gate with a clean grade still waits with Uqbar and takes a verdict", %{ws: ws} do
+      key = review_gate(ws, %{"limits" => [], "decisions" => [], "scores" => %{}, "reasons" => %{}})
+      assert [%{key: ^key, route: "uqbar"}] = Needs.grouped().uqbar
+      assert :ok = Needs.settle(key, "fine", "uqbar")
+    end
+
     test "a gate's age is its park, not its thread's: an old workline that just parked waits with Uqbar",
          %{ws: ws} do
       {key, _} = parked_gate(ws)
