@@ -4,7 +4,9 @@ defmodule Server.Usage do
   on the plan saw them (the mod's `session.measure` hook posts them, `POST /api/usage/claude`, when a
   window moves a whole point). Each window is `%{percent, resets_at}`; `at` is when the newest report
   came, so a surface can say how old the reading is. In memory, like presence: a restart starts with
-  no reading (`claude/0` is nil) until the next turn on the plan reports.
+  no reading (`claude/0` is nil) until the next turn on the plan reports, so the auto pause below never
+  goes past pencils down. A report with a window at the `auto_pause_at` knob puts the office on
+  pencils down (`Server.Pause.auto/1`).
   """
   use Agent
 
@@ -32,6 +34,7 @@ defmodule Server.Usage do
 
       true ->
         Agent.update(__MODULE__, &Map.merge(&1 || %{}, Map.put(windows, :at, DateTime.utc_now())))
+        Server.Pause.auto(windows)
     end
   end
 
