@@ -56,17 +56,19 @@ defmodule Server.Pause do
   @doc """
   A plan meter reading (`%{five_hour?: w, seven_day?: w}`, `w = %{percent, resets_at}`): at the
   `auto_pause_at` knob, pencils down and the reason on the lobby. Only from :working; a window that
-  already paused the office (`{window, resets_at}`, kept in the settings file) never pauses it again, so
-  the operator's back_to_work sticks. Always `:ok`.
+  already paused the office (its `resets_at`, kept per window in the settings file) never pauses it
+  again, so the operator's back_to_work sticks. Always `:ok`.
   """
   def auto(windows) do
     limit = OperatorConfig.setting("auto_pause_at")
-    latched = OperatorConfig.read()["auto_paused_for"]
+    latched = latched()
 
     with :working <- state(),
          {name, %{percent: p, resets_at: r}} <-
-           Enum.find(windows, fn {name, w} -> w.percent >= limit and latch(name, w) != latched end) do
-      :ok = OperatorConfig.put("auto_paused_for", latch(name, %{resets_at: r}))
+           Enum.find(windows, fn {name, w} ->
+             w.percent >= limit and Map.get(latched, to_string(name), :none) != w.resets_at
+           end) do
+      :ok = OperatorConfig.put("auto_paused_for", Map.put(latched, to_string(name), r))
       {:ok, _} = pencils_down()
       auto_say(name, p, r)
     end
@@ -74,7 +76,13 @@ defmodule Server.Pause do
     :ok
   end
 
-  defp latch(name, %{resets_at: r}), do: "#{name}|#{r}"
+  # One slot per window, so one window firing never forgets the other's override.
+  defp latched do
+    case OperatorConfig.read()["auto_paused_for"] do
+      %{} = m -> m
+      _ -> %{}
+    end
+  end
 
   defp auto_say(name, percent, resets_at) do
     label = if name == :five_hour, do: "5h", else: "weekly"

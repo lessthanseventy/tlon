@@ -227,5 +227,23 @@ defmodule Server.PauseTest do
       Pause.auto(%{seven_day: %{percent: 95, resets_at: nil}})
       assert Enum.any?(bodies(lobby), &(&1 =~ "weekly at 95%"))
     end
+
+    test "each window latches on its own: the weekly firing doesn't forget the 5h override" do
+      both = %{
+        five_hour: %{percent: 91, resets_at: "2026-10-27T14:00:00Z"},
+        seven_day: %{percent: 92, resets_at: "2026-10-30T00:00:00Z"}
+      }
+
+      Pause.auto(both)
+      IO.inspect({Pause.state(), Server.OperatorConfig.read()["auto_paused_for"]}, label: "step")
+      {:ok, :working} = Pause.back_to_work()
+      Pause.auto(both)
+      IO.inspect({Pause.state(), Server.OperatorConfig.read()["auto_paused_for"]}, label: "step")
+      assert Pause.state() == :pencils_down
+      {:ok, :working} = Pause.back_to_work()
+      Pause.auto(both)
+      IO.inspect({Pause.state(), Server.OperatorConfig.read()["auto_paused_for"]}, label: "step")
+      assert Pause.state() == :working
+    end
   end
 end
