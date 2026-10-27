@@ -26,6 +26,19 @@ defmodule Server.ShiftsTest do
 
   @limit "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver).\nsome later output"
 
+  # Verbatim pane lines from this box's ~/.claude/projects transcripts (isApiErrorMessage, error "rate_limit").
+  @claude_limits [
+    "You've hit your session limit · resets 5:30pm (America/Denver)",
+    "You've hit your session limit · resets 1:30pm (America/Denver)",
+    "You've hit your monthly spend limit · raise it at claude.ai/settings/usage?from=cc_cli_limit_message · your weekly limit resets Sep 28, 9am (America/Denver)",
+    "You've hit your monthly spend limit · raise it at claude.ai/settings/usage?from=cc_cli_limit_message · your session limit resets 8am (America/Denver)"
+  ]
+
+  @not_quota [
+    "API Error: Can't reach the API server (EAI_AGAIN)",
+    "The response stopped arriving"
+  ]
+
   defp names(ws), do: ws.id |> Workspaces.bench() |> Enum.map(& &1.name)
   defp lobby(ws), do: Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
   defp labels(ask), do: Enum.map(ask.payload["options"], & &1["label"])
@@ -102,6 +115,11 @@ defmodule Server.ShiftsTest do
     assert Shifts.out_of_quota?("You've hit your limit · resets 9am (America/Denver)")
     refute Shifts.out_of_quota?("  the rate limiter caps requests; when the limit is reached it waits")
     refute Shifts.out_of_quota?("")
+  end
+
+  test ~s("You've hit your session limit" and "monthly spend limit", as this box prints them, read as out of quota) do
+    for line <- @claude_limits, do: assert(Shifts.out_of_quota?(line), line)
+    for line <- @not_quota, do: refute(Shifts.out_of_quota?(line), line)
   end
 
   test "out of quota: the lobby is offered the other crews — nothing switches by itself, and once per line", %{ws: ws} do
