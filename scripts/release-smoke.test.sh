@@ -35,6 +35,12 @@ sleep 0.3; kill -9 "$kpid" 2>/dev/null
 wait "$cpid"; wait "$kpid" 2>/dev/null
 expect "a killed holder does not block the next build" "$(grep -c '^end C' "$log")" "1"
 
+: >"$log"
+leaver() { sleep 30 >/dev/null 2>&1 & }
+( . "$here/lib/smoke-build.sh"; smoke_build_lock "$lock" D >/dev/null; smoke_isolated leaver; smoke_build_unlock )
+timeout 5 bash -c '. "$1/lib/smoke-build.sh"; smoke_build_lock "$2" E >/dev/null && echo got' _ "$here" "$lock" >"$tmp/out-E"
+expect "a build's leftover child does not keep the lock" "$(cat "$tmp/out-E")" "got"
+
 . "$here/lib/smoke-build.sh"
 printf 'boot\n** (DBConnection.ConnectionError) connection not available and request was dropped from queue after 5940ms\n' >"$log"
 expect "a DBConnection tail is named" "$(smoke_pool_cause "$log")" \

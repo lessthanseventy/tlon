@@ -196,7 +196,7 @@ run = "mise exec zig@0.16.0 -- mix release tlon --overwrite"
 # The seams no compiler covers: a script calling a module that no longer exists, a mise task a
 # guide names but mise.toml lost, a pi config file the adapter reads but the flake stopped writing.
 ["check:names"]
-description = "names-exist gate: every Server.* module, mix task, mise task and ~/.pi/agent file the glue names must exist, docs/glossary.md holds, scratch.sh prune keeps exactly the unlanded work, record-ran.sh reports a hand-run gate, and checks-queue.sh runs waiters first come first served (grep, a temp repo and a temp runtime dir, offline, fast)"
+description = "names-exist gate: every Server.* module, mix task, mise task and ~/.pi/agent file the glue names must exist, docs/glossary.md holds, scratch.sh prune keeps exactly the unlanded work, record-ran.sh reports a hand-run gate, checks-queue.sh runs waiters first come first served, and release-smoke.sh builds one at a time machine-wide and names a Postgres pool failure (grep, a temp repo and a temp runtime dir, offline, fast)"
 run = "scripts/check-names.sh && scripts/check-glossary.test.sh && scripts/scratch.test.sh && scripts/record-ran.test.sh && scripts/checks-queue.test.sh && scripts/release-smoke.test.sh && scripts/bwrap-argc.test.sh"
 
 ["check:ignored"]

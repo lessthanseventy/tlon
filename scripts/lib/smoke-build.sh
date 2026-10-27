@@ -22,3 +22,7 @@ smoke_pool_cause() {
     echo "Postgres ran out of connections during the migration (another smoke or gate was building): wait for it, then re-run"
   fi
 }
+
+# smoke_isolated <cmd...>: runs the build's steps without the lock fd, so a child they leave running
+# (an epmd the migrating node starts) cannot keep the machine-wide lock after the smoke exits
+smoke_isolated() { ( "$@" ) 5>&-; }
