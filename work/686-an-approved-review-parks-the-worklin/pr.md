@@ -1,0 +1,9 @@
+# #686: an approved review parks the workline itself, no stall
+
+Closes #686.
+
+Since c716f69 the review verdict ends the reviewer's session first (`Server.Staffing.end_review/1`). `submit_review` then answered `"next" => "call advance_stage"` to a session that no longer existed, so an approved workline sat at review with `awaiting nil` until the stalled-for-1h need reached the operator (#388, #393–#397).
+
+Now the approve branch of `record_verdict` calls `advance/2` itself when no QA is owed: the thread parks on the operator, or queues under a standing approval or auto-land. `{:awaiting, t}` is reported as `{:ok, t}`, the verdict's contract; an advance refused there (review.md not committed, a test with no repo) leaves the verdict standing, the refusal in the ledger as the artifact check. `end_review` stays where it was (b91dcb9's law), `graded/2` is unchanged, `request_changes` is untouched. The tool's next line, the review brief and the review continuation no longer tell the reviewer to call `advance_stage`; the brief's exit verb at review is `submit_review`.
+
+Checked: three new tests — `workline_test` (an approve verdict leaves the thread awaiting the operator; under a standing approval, an already graded one is queued) and `workline_review_head_test` (`SubmitReview.execute` on a real repo parks it and its `next` no longer says `advance_stage`). All three failed before the change and pass after. The review-head helper that advanced after a verdict now reads the parked thread back. workline, review_head, qa, fresh-session, continuation, send_back, brief and mcp suites: 374 pass. `server:check` run by the service on 59f230d.
