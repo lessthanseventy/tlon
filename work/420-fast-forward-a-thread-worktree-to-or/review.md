@@ -1,29 +1,18 @@
-# Review — workline 420-fast-forward-a-thread-worktree-to-or @ e82312e
+# Review — workline 420-fast-forward-a-thread-worktree-to-or @ e82312e (round 3)
 
-**Verdict: approve.** Second round. Every finding of the first review (7c8a114) is fixed, the tech lead's wake-only call is in, and verify's `mise run check` passed on this tip (exit 0, 13:58:31Z; the gate ran on the branch checkout, so `tlon/check` was not posted — expected). No bench_contrast row in the CHECKS shown.
+**Verdict: request_changes.** The grader's blast-radius point (msg #15376) holds, and I can name the pane it lands under. One fix, one test to pin it; the rest are follow-ups.
 
-## The first round's findings, checked against the diff
+## Findings
 
-1. **Status line woke or spawned the lead** — fixed. `say_once/4` now posts `kind: "notice"`, and the test asserts `[%{kind: "notice"}] = told`.
-2. **Ahead line spoke when the branch was not behind main** — fixed. `tell_catch_up({:ahead, n}, …)` runs `rev-list --count HEAD..origin/main` and returns `:ok` on `"0"`; the test commits on top of main and asserts no line, then moves main and asserts exactly one.
-3. **Hook mid-turn under a live pane** — fixed per hronir (msg #15362). `Server.worktree_for_thread/1` is pure again (ensure + mark_thread). The catch-up is `Server.catch_up_worktree/2`, called once from `Spawn.cwd_export/2`, and only when `agent.name not in Server.Outside.names()`: an outside citizen's `dir` is the repo root, and that guard is what keeps `merge --ff-only` off the live main checkout. The facade test does `refute File.exists?(NEW)` after `worktree_for_thread` on a behind checkout, then moves it through `catch_up_worktree`; `spawn_test.exs` moves it through `Spawn.join`.
+1. **A rider join moves the checkout under the lead's live pane.** `cwd_export/2` runs `catch_up_worktree` for every non-outside join, staffing or not. Three production callers join with `assign: false` into the thread's worktree: `Server.Crew.Tmux` (a `spawn_crew` the lead calls mid-turn), `Server.Switchboard` (a benched agent or Aleph named on the thread) and `Coordination.seat/2`. A crew spawn is the lead's own tool call: a clean checkout at an older main gets `merge --ff-only` while the lead is still in its turn, which is the case `catch_up_worktree/2`'s docstring says the wake-only design exists to avoid (`a move would land under a live pane`). Fix: catch up only when the join staffs the thread, `Keyword.get(opts, :assign, true)`, passed into `cwd_export`. Test: in `spawn_test.exs`, after main moves, `Spawn.join(thread.id, "codex", assign: false)` and `refute File.exists?(Path.join(wt, "NEW"))`.
 
-Follow-ups from the first round:
-- `tlon-reported` is reset on `:moved | :level` (`report_once?(wt, "level")`), and the dirty → clean → dirty test asserts the second line.
-- `{:error, why}` from `catch_up/1` is logged at warning.
-- The per-tool-call git cost is gone with the move: zero subprocesses outside a spawn.
+2. **The Outside guard is unpinned.** The existing outside-citizen test has no origin remote, so `catch_up/1` returns `:level` with or without the `not in Server.Outside.names()` guard; deleting the guard passes the suite. Add the remote-that-moved setup to that test and assert the repo's main checkout HEAD did not change.
 
-## Spec compliance
+## Follow-ups (not blocking)
 
-- Detached HEAD → `:detached`, untouched (verify-frozen checkouts stay put).
-- Dirty tree → `:dirty`, told once per state.
-- Branch + clean + `merge-base --is-ancestor HEAD origin/main` → `merge --ff-only -q origin/main`.
-- Own commits → `{:ahead, n}`, untouched, told once per tip (`ahead:<tip>:<n>`), and only when main has moved on.
-- No fetch anywhere in the path; ancestry, not patch identity.
-- No `origin/main` ref → `:level`, so a repo without a remote is a no-op.
+- `tell_catch_up({:ahead, n}, …)` reads `HEAD` and `HEAD..origin/main` through bare `System.cmd`, not `git/2`. Correction to the grade: `System.cmd` does not raise on a non-zero exit, it returns `{out, code}`; it raises only when `git` is missing, and `Worktree.catch_up/1` would have returned `{:error, _}` before this clause. The real cost is the test seam (`:git_cmd` cannot reach these two) and that a failed rev-list reads as `"" != "0"`, so the ahead line is posted with no evidence main moved. Route both through a `Server.Worktree` helper.
+- `{:error, why}` is a log line only; a spawn carries on with a stale checkout and nothing on the thread says so. Reaching it needs `merge --ff-only` to fail on a verified ancestor (a locked index, a merge in progress), so rare; a `say_once` notice would make it visible.
 
-## Checked, not findings
+## Still true from round 2
 
-- `Server.Outside.names()` is evaluated twice in `cwd_export/2`; harmless, and not worth a round.
-- `report_once?` compares before writing, so a level checkout does not rewrite the marker on every wake.
-- pr.md names the design (wake-only, bench agents only), the ticket, and the tests run.
+Spec compliance and the first round's three fixes stand as reviewed at 14cc244. Verify's `mise run check` passed on e82312e; fix 1 changes `spawn.ex`, so the gate runs again.
