@@ -139,6 +139,7 @@ export const KEYS = [
   { id: "person.v", scope: "card:person", key: "v", label: "the conversation", verb: "read" },
   { id: "person.w", scope: "card:person", key: ";", label: "read #…", verb: "read" },
   { id: "person.l", scope: "card:person", key: "\\", label: "look", verb: "look" },
+  { id: "person.space", scope: "card:person", key: "space", label: "the card", verb: "card" },
   // card:column
   { id: "column.n", scope: "card:column", key: "n", label: "new ticket", verb: "new" },
   { id: "column.s", scope: "card:column", key: "s", label: "sort: … → …", verb: "sort" },

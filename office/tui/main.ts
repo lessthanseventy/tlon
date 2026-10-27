@@ -9,7 +9,6 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, unlinkSync
 import { homedir, tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
-import { personaLines } from "../kit/persona"
 import { FLOOR, Looks, marginInk, type Note } from "../kit/margin"
 import { reactLine, seatLine } from "../kit/seat-voices"
 import type { EventKind } from "../kit/events"
@@ -26,7 +25,8 @@ import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build
 import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
 import { clipLabel, inboxSections, phoneBar, ringFrame } from "../kit/surfaces"
-import { soulFor, soulLines, soulNote, useSouls } from "../kit/souls"
+import { soulFor, useSouls } from "../kit/souls"
+import { personCard } from "./person-card"
 import { loadSouls, soulsSignature } from "./souls"
 import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
@@ -159,6 +159,8 @@ const COL_SORTS: Sort<Item>[] = [{ name: "board", cmp: () => 0 }, { name: "title
 let colSort = COL_SORTS[0]!
 /** the TICKETS column's open groups, by id */
 const expanded = new Set<number>()
+/** whether a person card shows its whole soul and persona; closed, it is one line under the conversation */
+let cardOpen = false
 const TRAY_SORTS: Sort<data.Activity[number]>[] = [{ name: "newest", cmp: () => 0 }, { name: "thread", cmp: (a, b) => (a.thread_id ?? Infinity) - (b.thread_id ?? Infinity) }, { name: "who", cmp: (a, b) => (a.who ?? "~").localeCompare(b.who ?? "~") }]
 let traySort = TRAY_SORTS[0]!
 /** step an ordering, keeping the cursor on the row (by its `ref`) it was on */
@@ -632,6 +634,7 @@ function open(m: Mode) {
   if ((m.kind === "person" || m.kind === "thread" || m.kind === "look" || m.kind === "review" || m.kind === "issue") && m.from === undefined && mode.kind !== "home" && mode.kind !== "help" && mode.kind !== m.kind) m = { ...m, from: mode }
   status = ""; readWhys.delete(cardKey(m)); mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") { picked = m.tid; cardReply = { tid: m.tid, ed: cardReply?.tid === m.tid ? cardReply.ed : new Editor(), focused: !asks(m.tid) } }
+  if (m.kind === "person") cardOpen = false
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   if (m.kind === "pet" && m.who === "cat") { petDraft = structuredClone((petsNow ?? resolvePets(loadPets())).cat); previewTick = 0 }
   if (m.kind === "look") lookDraft = m.hall ? structuredClone(candidateOf(hall, hallCtx()).look) : { ...baseLook(m.name), ...overrideFor(m.name) }
@@ -1297,15 +1300,14 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)],
       }
       const soul = soulFor(name)
-      const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text }) => [...(h ? [{ segs: [key(h)] }] : []), ...(soulNote(h) ? [{ segs: [dim(soulNote(h)!)] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
-      const rows: Row[] = [...(c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]), ...soulRows]
-      for (const l of personaLines(b?.persona, Math.max(20, cols() - 40))) rows.push({ segs: [dim(l)] })
+      const cardRows: Row[] = personCard(soul, b?.persona, Math.max(20, cols() - 40), cardOpen).map((l) => ({ segs: [l.tone === "key" ? key(l.text) : l.tone === "plain" ? plain(l.text) : dim(l.text)] }))
+      const rows: Row[] = [...(c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]), ...cardRows]
       // Scharlach's desk dressing: the nameplate (tertius never agreed to the second part), the mug
       // he bought himself, and the demerit ledger he keeps on the rest of the office
-      if (name === SHERIFF) {
+      if (name === SHERIFF && cardOpen) {
         rows.push({ segs: [dim("nameplate: "), plain(NAMEPLATE)] }, { segs: [dim("mug: "), plain(MUG)] }, ...ledgerLines(ledger, a.bench).map((l) => ({ segs: [dim(l)] })))
       }
-      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ ...bind("person.m"), run: () => talk(name) }, { ...bind("person.v"), run: () => openConversation(name) }, ...(c.thread === null ? [] : [{ ...bind("person.w", `read #${c.thread}`), run: () => openReader(c.thread!) }, ...liveActions(c.thread), ...threadActions(c.thread).filter((x) => x.key !== "v")]), ...seatActions(b), { ...bind("person.l"), run: () => open({ kind: "look", name }) }, back1] }
+      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ ...bind("person.m"), run: () => talk(name) }, { ...bind("person.v"), run: () => openConversation(name) }, ...(c.thread === null ? [] : [{ ...bind("person.w", `read #${c.thread}`), run: () => openReader(c.thread!) }, ...liveActions(c.thread), ...threadActions(c.thread).filter((x) => x.key !== "v")]), ...seatActions(b), { ...bind("person.l"), run: () => open({ kind: "look", name }) }, { ...bind("person.space"), run: () => { cardOpen = !cardOpen; scroll = Infinity; draw() } }, back1] }
     }
     case "thread": {
       const tid = mode.tid
