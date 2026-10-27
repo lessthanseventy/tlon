@@ -1,6 +1,8 @@
 defmodule Server.Smoke.FixturesTest do
   use ExUnit.Case, async: false
 
+  import Ecto.Query, only: [from: 2]
+
   alias Server.Smoke.Fixtures
 
   setup do
@@ -116,6 +118,38 @@ defmodule Server.Smoke.FixturesTest do
       )
 
     assert [%{status: "interrupted", exit: 143}] = Server.Schedules.runs(s.id)
+  end
+
+  test "lead_change hands a thread from one lead to another, recording the handoff_opened event" do
+    assert :ok = Fixtures.apply("lead_change", "tlon_smoke_4100")
+
+    assert [%{detail: %{"from" => from, "to" => to}}] =
+             Server.Repo.all(from e in Server.Event, where: e.kind == "handoff_opened")
+
+    assert from != to
+  end
+
+  test "life_routine_overdue seeds a life workspace whose 'in bed by 23:00' routine was stamped last night and is overdue now" do
+    assert :ok = Fixtures.apply("life_routine_overdue", "tlon_smoke_4100")
+    ws = Enum.find(Server.Repo.all(Server.Workspace), &(&1.type == "life"))
+    assert [%{title: "in bed by 23:00", window_remaining: left}] = Server.Life.due(ws.id)
+    assert left < 0
+    assert [%{late: false}] = Server.Repo.all(Server.RoutineRun)
+  end
+
+  test "landed_workline seeds a landed workline; flag=on (default) has its PR waiting on GitHub, flag=off none" do
+    assert :ok = Fixtures.apply("landed_workline", "tlon_smoke_4100")
+
+    assert [%{thread: %{stage: "landed", state: "open"}, url: "https://github.com/" <> _}] =
+             Server.Workline.waiting_on_github()
+
+    Server.TestDB.clean!()
+
+    assert :ok = Fixtures.apply("landed_workline:flag=off", "tlon_smoke_4100")
+    assert [%{stage: "landed", state: "open"}] = Server.Repo.all(from t in Server.Thread, where: t.stage == "landed")
+    assert Server.Workline.waiting_on_github() == []
+
+    assert_raise ArgumentError, ~r/flag=/, fn -> Fixtures.apply("landed_workline:flag=maybe", "tlon_smoke_4100") end
   end
 
   test "an unknown name raises" do

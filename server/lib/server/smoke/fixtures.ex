@@ -65,8 +65,65 @@ defmodule Server.Smoke.Fixtures do
       "health_need" => {%{"what" => "disk"}, &health_need/1},
       "settled_need" => {%{}, &settled_need/1},
       "passed_up_need" => {%{}, &passed_up_need/1},
-      "interrupted_schedule_run" => {%{}, &interrupted_schedule_run/1}
+      "interrupted_schedule_run" => {%{}, &interrupted_schedule_run/1},
+      "lead_change" => {%{}, &lead_change/1},
+      "life_routine_overdue" => {%{}, &life_routine_overdue/1},
+      "landed_workline" => {%{"flag" => "on"}, &landed_workline/1}
     }
+  end
+
+  # Staff.assign from one lead to another: the handoff_opened event the office flies across (it shows
+  # hand-offs of the last three minutes, so drive soon after seeding)
+  defp lead_change(_params) do
+    {:ok, %{id: ws}} = Server.Bootstrap.ensure()
+    [from, to | _] = for seat <- Server.Workspaces.bench_all(ws), do: Server.Staff.agent_by_name(seat.name)
+    {:ok, thread} = Server.Channel.open_thread(%{title: "fixture: a thread changing hands"})
+    {:ok, thread} = Server.Staff.assign(thread, from)
+    {:ok, _} = Server.Staff.assign(thread, to)
+    :ok
+  end
+
+  # a life workspace's 'in bed by 23:00' routine: the dues before last night's were stamped on time, and
+  # the one since has gone unstamped past its window. The routine is backdated so dues have fired.
+  defp life_routine_overdue(_params) do
+    {:ok, %{id: ws}} = Server.Workspaces.create_from("life", "Life")
+    {:ok, routine} = Server.Life.create_routine(ws, %{title: "in bed by 23:00", every: "0 23 * * *", window_minutes: 1})
+    born = DateTime.utc_now() |> DateTime.add(-3 * 86_400, :second) |> DateTime.truncate(:second)
+    Server.Repo.update_all(from(r in Server.Routine, where: r.id == ^routine.id), set: [created_at: born])
+    routine = Server.Repo.reload!(routine)
+
+    now = DateTime.utc_now()
+    current = Server.Life.current_due_at(routine, now)
+    previous = Server.Life.previous_due_at(routine, current)
+    {:ok, _, _} = Server.Life.routine_done(routine.id, DateTime.add(previous, 30, :second))
+    :ok
+  end
+
+  # Workline stage `landed`: open until GitHub merges its PR. flag=on has that PR waiting (the landing
+  # label), flag=off a landed workline whose PR was never opened.
+  defp landed_workline(%{"flag" => flag}) do
+    if flag not in ~w(on off), do: raise(ArgumentError, "landed_workline flag= is on or off, not #{inspect(flag)}")
+    {:ok, %{id: ws}} = Server.Bootstrap.ensure()
+    slug = "fixture-landed-#{flag}"
+
+    {:ok, thread} =
+      Server.Workline.open(%{title: "fixture: a landed workline", slug: slug, stage: "review", workspace_id: ws})
+
+    {:ok, thread} = thread |> Server.Thread.workline_stage_changeset(%{stage: "landed"}) |> Server.Repo.update()
+
+    if flag == "on" do
+      url = "https://github.com/fixture/repo/pull/1"
+
+      {:ok, _} =
+        Server.Dossier.record_event(%{
+          thread_id: thread.id,
+          kind: "check_passed",
+          correlation: "workline:#{slug}:landing",
+          detail: %{"cmd" => "GitHub merge of #{url}", "exit" => 0, "url" => url, "tail" => "published"}
+        })
+    end
+
+    :ok
   end
 
   # Needs.failed_jobs: a background job discarded just now (a retry or dismiss from tlon-cli job)
