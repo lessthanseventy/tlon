@@ -27,9 +27,7 @@ export function storeRows(c: Candidate, locks: readonly StoreRow[], occupant: st
   const lockable = (r: StoreRow, l: string, v: string): StoreViewRow => ({ segs: label(l, v, locks.includes(r)), lock: r })
   const body: StoreViewRow[] = [
     { segs: label("species", labelOf(c.species), false), lock: null },
-    { segs: label("slot", slotOf(c.species) === "dog"
-      ? `the dog slot — pets.json only for now, the room still draws ${occupant}`
-      : `the ${slotOf(c.species)} slot — ${occupant} leaves by the door`, false), lock: null },
+    { segs: label("slot", `the ${slotOf(c.species)} slot — ${occupant} leaves by the door`, false), lock: null },
     lockable("name", "name", c.name),
     ...(["warmth", "wits", "energy"] as const).map((a) => lockable(a, a, dots(c.temperament[a]))),
     lockable("shade", "shade", `${c.shade + 1} of ${SHADES}`),

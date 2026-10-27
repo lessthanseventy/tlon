@@ -1886,7 +1886,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         }
       }
       return {
-        title: "ARGOS", rows: [{ segs: [plain(wideRoom ? "the office dog. good boy." : "Argos lives in the wide room — make the terminal wider to see him.")] }],
+        title: (wideRoom?.dogProfile().name ?? "Argos").toUpperCase(), rows: [{ segs: [plain(wideRoom ? "the office dog. good boy." : "the dog lives in the wide room — make the terminal wider to see him.")] }],
         actions: wideRoom ? [
           { ...bind("pet.p.dog"), run: doIt(() => wideRoom.patDog()) },
           { ...bind("pet.w.dog"), run: doIt(() => wideRoom.dogDo("walk")) },

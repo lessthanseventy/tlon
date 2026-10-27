@@ -16,7 +16,7 @@ import { bucketFor, pick, type Fuss } from "./voices"
  * he is saying until `saidUntil`; `belly` the tick his roll-over for a rub ends; `fuss` someone
  * making a fuss of him
  */
-export type Dog = { x: number; y: number; aisle: number; path: Pt[]; mode: "walk" | "sit" | "sleep"; until: number; face: number; woof: number; host: string | null; creep: boolean; said: string | null; saidFrom: number; saidUntil: number; belly: number; fuss: Fussing | null; cheer?: boolean }
+export type Dog = { name: string; shade: number; x: number; y: number; aisle: number; path: Pt[]; mode: "walk" | "sit" | "sleep"; until: number; face: number; woof: number; host: string | null; creep: boolean; said: string | null; saidFrom: number; saidUntil: number; belly: number; fuss: Fussing | null; cheer?: boolean }
 
 /**
  * What Argos says, by occasion. He is the troglodyte of Borges' "The Immortal" who turned out to be
@@ -204,15 +204,16 @@ export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot, bpm: number | 
   const flipped = dance ? phase === 1 : d.face < 0
   const rows = flipped ? rows0.map((r) => [...r].reverse().join("")) : rows0
   const w = rows[0]!.length, h = rows.length, x = d.x - Math.floor(w / 2), y = d.y - h - (dance ? phase : 0)
+  const coat = d.shade > 0 ? tint(ROLE.body, ROLE.prose, [0, 0.15, 0.3, 0.45][d.shade]!) : ROLE.body
   sc.item(d.y, () => {
     // a dark rim all round: his coat is the furniture's amber, and without it he melts into a desk
     const rim = ROLE.ground, r = { k: rim, e: rim, t: rim, n: rim, i: rim, p: rim, c: rim }
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1], [0, 1]] as const) sc.figure(rows, x + dx, y + dy, r)
-    sc.figure(rows, x, y, { k: ROLE.body, t: ROLE.body, e: tint(ROLE.body, ROLE.structure, 0.4), n: ROLE.fieldInk, i: ROLE.fieldInk, c: ROLE.fieldInk, p: ROLE.attention })
+    sc.figure(rows, x, y, { k: coat, t: coat, e: tint(ROLE.body, ROLE.structure, 0.4), n: ROLE.fieldInk, i: ROLE.fieldInk, c: ROLE.fieldInk, p: ROLE.attention })
     if (d.mode === "sleep" && !belly && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10, "center", true)
     if (d.creep && f % 4 < 2) sc.text("...", d.x, y - 2, ROLE.inactive, 9, "center", true)
     if (d.fuss) drawFuss(sc, d.fuss, { x, y, w, h })
-    sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${DOG_NAME} - click to pat him`, act: { kind: "dog" } })
+    sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${d.name} - click to pat him`, act: { kind: "dog" } })
   })
   if (d.said && sc.tick >= d.saidFrom && sc.tick < d.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(d.said), cx: d.x, top: y })
 }

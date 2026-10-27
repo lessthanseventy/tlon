@@ -339,7 +339,7 @@ describe("Argos and the trail", () => {
   }))
 
   test("one print is not a trail, and no prints leave his day as it was", () => chance(0, () => {
-    const dog = { x: 200, y: 176, aisle: 176, path: [], mode: "sit" as const, until: 0, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
+    const dog = { name: "Argos", shade: 0, x: 200, y: 176, aisle: 176, path: [], mode: "sit" as const, until: 0, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
     const ctx = (prints: { x: number; y: number }[]) => ({
       tick: 100, antic: null, quiet: () => true, actors: new Map(), at: () => [], bed: () => ({ x: 400, y: 112, aisle: 112, pose: "stand" as const, face: "left" as const, kind: "roam" as const }),
       bowl: () => ({ x: 500, y: 162, aisle: 162, pose: "stand" as const, face: "right" as const, kind: "roam" as const }),
@@ -375,5 +375,40 @@ describe("the pets react to events", () => {
   }))
   test("Argos is overjoyed at the zoo", () => {
     expect(ARGOS.event_zoo.some((l) => /ANIMALS/.test(l))).toBe(true)
+  })
+})
+
+describe("an adopted dog in the dog slot", () => {
+  const adopted = () => resolvePets({ dog: { name: "Biscuit", shade: 2 } })
+  type W = { dog: { name: string; shade: number; said: string | null }; talkOut(o: string): boolean }
+
+  test("Argos is the default until a dog is adopted", () => {
+    const room = new WideRoom(560)
+    expect(room.dogProfile()).toEqual({ name: "Argos", shade: 0 })
+  })
+
+  test("setPets gives the room's dog the file's name and shade, and his profile reports them", () => {
+    const room = new WideRoom(560)
+    room.setPets(adopted())
+    expect(room.dogProfile()).toEqual({ name: "Biscuit", shade: 2 })
+  })
+
+  test("his tooltip is his name, not Argos", () => {
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1)
+    room.setPets(adopted())
+    const fr = room.render(a, focus, measure, new Date(2026, 9, 5, 21, 0))
+    const tips = fr.hits.map((h) => h.tip ?? "")
+    expect(tips.some((t) => t.includes("Biscuit - click to pat him"))).toBe(true)
+    expect(tips.some((t) => t.includes("Argos"))).toBe(false)
+  })
+
+  test("the pair's exchange names him: a turn from Biscuit is the dog's, and is said without the name", () => {
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1), r = room as unknown as W
+    room.setPets(adopted())
+    room.hear({ duo: { chat: [["Biscuit: Woof, darling!", "Nina: Calm yourself."]] } })
+    expect(r.talkOut("chat")).toBe(true)
+    const heard: string[] = []
+    chance(0.999, () => { for (let i = 0; i < 120; i++) { room.step(a); if (r.dog.said && !heard.includes(r.dog.said)) heard.push(r.dog.said) } })
+    expect(heard).toEqual(["Woof, darling!"])
   })
 })
