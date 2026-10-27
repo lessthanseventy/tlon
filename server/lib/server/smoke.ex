@@ -15,6 +15,8 @@ defmodule Server.Smoke do
 
   @ref ~r|\A[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9._-])?\z|
   @name ~r/\A[a-z][a-z0-9_]*\z/
+  # a fixture is a name, then optionally `:key=value,key=value` (no spaces: TLON_SMOKE_FIXTURES is split on them)
+  @fixture ~r/\A[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*=[A-Za-z0-9_.-]+(?:,[a-z][a-z0-9_]*=[A-Za-z0-9_.-]+)*)?\z/
 
   @doc """
   Queue the held smoke of `ref` (default the thread's own branch) for `thread`. `fixtures` are
@@ -35,7 +37,7 @@ defmodule Server.Smoke do
       Enum.any?(flags, &(!Regex.match?(@name, &1))) ->
         {:error, "not a flag name: #{inspect(flags)}"}
 
-      Enum.any?(fixtures, &(!Regex.match?(@name, &1))) ->
+      Enum.any?(fixtures, &(!Regex.match?(@fixture, &1))) ->
         {:error, "not a fixture name: #{inspect(fixtures)}"}
 
       held(thread.id) ->
