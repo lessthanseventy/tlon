@@ -35,6 +35,8 @@ defmodule Server.Thread do
     field :channel_id, :integer
     # the last message the memory pass extracted from (Server.Memory.TurnPass); nil = never
     field :memory_pass_last_id, :integer
+    # set while the operator has paused this one thread (Server.Pause); nil = not paused
+    field :paused_at, :utc_datetime
   end
 
   @doc ~s{A new thread, opened now. Title is required; state is not caller-settable. `scope`
