@@ -133,7 +133,12 @@ defmodule Server.Smoke.FixturesTest do
     assert :ok = Fixtures.apply("life_routine_overdue", "tlon_smoke_4100")
     ws = Enum.find(Server.Repo.all(Server.Workspace), &(&1.type == "life"))
     assert [%{title: "in bed by 23:00", window_remaining: left}] = Server.Life.due(ws.id)
-    assert left < 0
+    assert left <= 0
+
+    # the bedroom scene reads today's due, unstamped. (A few minutes after local midnight the due is
+    # yesterday's and falls out of `today`: not worth fighting.)
+    assert [%{title: "in bed by 23:00", done: false, due_at: due_at}] = Server.Life.status(ws.id).today
+    assert DateTime.compare(due_at, DateTime.utc_now()) != :gt
     assert [%{late: false}] = Server.Repo.all(Server.RoutineRun)
   end
 

@@ -15,6 +15,10 @@ Life, Staff), never a raw insert that skips a validation:
 - `tool_denied_need` and `ticket_tree` work as before.
 - The QA brief lists the catalog, the spec syntax, and that `drive_smoke` starts a fresh session per call.
 
+The ticket's `name key=value` strings map 1:1 to `name:key=value` (the colon keeps a spec one word).
+`life_routine_overdue` computes its cron from the server's local clock a few minutes back, so the
+bedroom scene's "today, unstamped" holds at any hour except just after local midnight.
+
 Two choices to look at: Uqbar's verdicts route only with `uqbar_routing` on, so those two fixtures
 write it into a config file private to the smoke node (`:operator_config_path`), not the operator's
 (#640 is still open for Settings edits generally); and `health_need` holds its reading in the node's

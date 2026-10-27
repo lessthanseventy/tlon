@@ -143,7 +143,7 @@ defmodule Server.Jobs.SmokeTest do
       assert {:error, "not a fixture name: " <> _} = Smoke.start(t, nil, "qa1", [], [bad])
     end
 
-    refute_enqueued(worker: Server.Jobs.Smoke)
+    assert [_only_the_good_one] = all_enqueued(worker: Server.Jobs.Smoke)
   end
 
   test "the job hands its fixtures to the script, space-joined", %{thread: t} do
