@@ -16,7 +16,7 @@ import { load as loadWhim, save as saveWhim } from "../kit/whimsy-file"
 import { resolve as resolveWhim, type State as WhimState } from "../kit/whimsy"
 import { resetToPreset, whimsyRows, whimsyTitle } from "./whimsy-card"
 import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, tickSlap, type Ledger } from "../kit/scharlach"
-import { boardColumns, busiest, cardState, COLS, crewOf, groupRows, needsYou, treeRows, BOARD_LEGEND, STATE_GLYPH, statusGlyph, statusTone, statusWord, viewOf, type Act, type SeatStatus, type BoardCtx, type CardState } from "../kit/crew"
+import { boardColumns, busiest, cardState, COLS, crewOf, groupRows, needsYou, openTotal, treeRows, BOARD_LEGEND, STATE_GLYPH, statusGlyph, statusTone, statusWord, viewOf, type Act, type SeatStatus, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
 import { queueItems, type QueueItem } from "../kit/rack"
 import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES_BLURB, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
@@ -1325,12 +1325,12 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const reorder = (dir: "up" | "down"): Action => ({ ...bind(dir === "up" ? "column.K" : "column.J", `move ${dir}`), run: () => { if (it?.act.kind === "ticket") void did(data.ticketReorder(it.act.id, dir)).then(() => { sel = Math.max(0, Math.min(sel + (dir === "up" ? -1 : 1), shown.length - 1)); draw() }) } })
       return {
         // tickets carry no owner, so the tree has no who order to name
-        title: `${col.name} · ${items.length}${colSort.name === "board" || (tree && colSort.name === "who") ? "" : ` · by ${colSort.name}`}`,
+        title: `${col.name} · ${mode.col === 0 ? openTotal(a, items.length) : items.length}${colSort.name === "board" || (tree && colSort.name === "who") ? "" : ` · by ${colSort.name}`}`,
         rows: tree ? tree.map((x) => {
           const id = (x.act as { id: number }).id
           return {
-            segs: [plain("  ".repeat(x.depth)), dim(x.group ? (x.open ? "▾ " : "▸ ") : "  "), key(`#${id} `), plain(x.title), ...(x.flight ? [dim(`  ⚙ on #${x.flight}`)] : [])],
-            open: () => x.flight ? act({ kind: "thread", tid: x.flight }) : x.group ? resort(() => { if (x.open) expanded.delete(id); else expanded.add(id) }) : open({ kind: "ticket", id, from: mode }),
+            segs: [plain("  ".repeat(x.depth)), dim(x.group ? (x.open ? "▾ " : "▸ ") : "  "), ...(x.header ? [] : [key(`#${id} `)]), plain(x.title), ...(x.flight ? [dim(`  ⚙ on #${x.flight}`)] : [])],
+            open: () => x.header ? undefined : x.flight ? act({ kind: "thread", tid: x.flight }) : x.group ? resort(() => { if (x.open) expanded.delete(id); else expanded.add(id) }) : open({ kind: "ticket", id, from: mode }),
             ref: JSON.stringify(x.act),
           }
         }) : items.map((x) => {
@@ -1343,7 +1343,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         }),
         actions: [
           ...(mode.col === 0 ? [{ ...bind("column.n"), run: newTicket }, ...(colSort.name === "board" ? [reorder("up"), reorder("down")] : [])] : []),
-          ...(group?.group ? [{ ...bind("column.space"), run: () => open({ kind: "epic", id: (group.act as { id: number }).id, from: mode }) }] : []),
+          ...(group?.group && !group.header ? [{ ...bind("column.space"), run: () => open({ kind: "epic", id: (group.act as { id: number }).id, from: mode }) }] : []),
           { ...bind("column.s", `sort: ${colSort.name} → ${next(COL_SORTS, colSort).name}`), run: () => resort(() => { colSort = next(COL_SORTS, colSort) }) },
           { ...bind("column.right"), run: () => open({ kind: "column", col: ((mode as { col: number }).col + 1) % COLS.length }) },
           back1,
