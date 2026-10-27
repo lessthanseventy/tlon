@@ -405,6 +405,8 @@ defmodule Server.Office.Room do
     {kids, loose} = Enum.split_with(tickets, &Map.has_key?(parent_of, &1.id))
     kids_of = Enum.group_by(kids, &parent_of[&1.id])
 
+    open = open_counts(tickets, parent_of)
+
     rows =
       for e <- epics do
         children = Map.get(kids_of, e.id, [])
@@ -426,6 +428,7 @@ defmodule Server.Office.Room do
           labels: e.labels,
           done: Enum.count(children, &(&1.status == "done")),
           total: length(children),
+          open: Map.get(open.by_node, e.id, 0),
           next: next && %{id: next.id, title: next.title},
           initiative: with(%Ticket{} = i <- by_id[parent_of[e.id]], do: %{id: i.id, title: i.title}),
           children: Enum.map(children, &board_ticket(&1, by_id[parent_of[&1.id]], blocked))
@@ -434,7 +437,10 @@ defmodule Server.Office.Room do
 
     %{
       epics: Enum.sort_by(rows, &Ticket.urgency(&1.priority)),
-      loose: Enum.map(loose, &board_ticket(&1, nil, blocked))
+      initiatives: for(i <- all, i.kind == "initiative", do: %{id: i.id, open: Map.get(open.by_node, i.id, 0)}),
+      loose: Enum.map(loose, &board_ticket(&1, nil, blocked)),
+      loose_open: open.loose,
+      open_total: open.total
     }
   end
 
@@ -570,4 +576,21 @@ defmodule Server.Office.Room do
       _ -> nil
     end
   end
+
+  # open (not-done) tickets, counted once under every ancestor group and, with no parent, as loose
+  defp open_counts(tickets, parent_of) do
+    tickets
+    |> Enum.reject(&(&1.status == "done"))
+    |> Enum.reduce(%{by_node: %{}, loose: 0, total: 0}, fn t, acc ->
+      acc = %{acc | total: acc.total + 1}
+
+      case parent_of[t.id] do
+        nil -> %{acc | loose: acc.loose + 1}
+        p -> %{acc | by_node: bump_up(acc.by_node, p, parent_of)}
+      end
+    end)
+  end
+
+  defp bump_up(counts, nil, _), do: counts
+  defp bump_up(counts, id, parent_of), do: bump_up(Map.update(counts, id, 1, &(&1 + 1)), parent_of[id], parent_of)
 end

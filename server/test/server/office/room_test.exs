@@ -330,5 +330,30 @@ defmodule Server.Office.RoomTest do
       assert [hi.id, lo.id] == Enum.map(Room.board(ws.id).epics, & &1.id)
       assert %{epics: [], loose: []} = Room.board(elem(Workspaces.register(%{name: "Empty"}), 1).id)
     end
+
+    test "open counts: per node, recursive over open tickets; direct and started-loose tickets count", %{ws: ws, mk: mk} do
+      kids = mk.(%{title: "Kids", kind: "initiative"})
+      toy = mk.(%{title: "Toy", kind: "epic", epic_id: kids.id})
+      a = mk.(%{title: "a", epic_id: toy.id})
+      done = mk.(%{title: "done", epic_id: toy.id})
+      direct = mk.(%{title: "direct"})
+      # the parent law refuses this today; older rows can still hold it
+      now = DateTime.truncate(DateTime.utc_now(), :second)
+
+      Server.Repo.insert_all("ticket_link", [%{from_id: kids.id, to_id: direct.id, kind: "parent", created_at: now}])
+      loose = mk.(%{title: "loose"})
+      started = mk.(%{title: "started"})
+      {:ok, _} = Tickets.update(done, %{status: "done"})
+      {:ok, _} = Tickets.update(started, %{status: "doing"})
+      _ = {a, direct, loose}
+
+      board = Room.board(ws.id)
+      assert [%{id: toy_id, open: 1}] = board.epics
+      assert toy_id == toy.id
+      assert [%{id: kid_id, open: 2}] = board.initiatives
+      assert kid_id == kids.id
+      assert board.loose_open == 2
+      assert board.open_total == 4
+    end
   end
 end
