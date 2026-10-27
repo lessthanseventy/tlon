@@ -2168,13 +2168,25 @@ defmodule Server.Workline do
         Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
 
         case qa_owed(thread, opts) do
-          nil -> {:ok, thread}
+          nil -> park_approved(thread, opts)
           {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
         end
       end
 
     {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []), :review)
     outcome
+  end
+
+  # The verdict ended the reviewer's session, so nobody is left to call advance_stage: the approval
+  # parks the gate itself (#686) — on the operator, or straight into the queue under a standing
+  # approval. An advance refused here (review.md not committed, a test without a repo) leaves the
+  # verdict standing: the refusal is in the ledger as the artifact check.
+  defp park_approved(thread, opts) do
+    case advance(Repo.get!(Thread, thread.id), opts) do
+      {:awaiting, parked} -> {:ok, parked}
+      {:ok, moved} -> {:ok, moved}
+      {:error, _} -> {:ok, thread}
+    end
   end
 
   defp by_hand(thread, url) do
