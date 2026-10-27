@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { BOARD_LEGEND, boardColumns, cardState, epicChildren, groupRows, STATE_GLYPH, treeRows, stickyItems } from "../kit/crew"
+import { BOARD_LEGEND, boardColumns, cardState, epicChildren, groupRows, openTotal, STATE_GLYPH, treeRows, stickyItems } from "../kit/crew"
 import { EMPTY, type Agents, type Seat, type Thread, type Ticket } from "../kit/types"
 
 const thread = (id: number, over: Partial<Thread> = {}): Thread => ({ id, title: `t${id}`, stage: "build", awaiting: null, workspace_id: 1, lead: "ireneo", seat: "idle", ...over })
@@ -89,43 +89,43 @@ describe("who's doing what", () => {
 
 describe("epics on the TICKETS column", () => {
   const tk = (id: number, over: Partial<Ticket> = {}): Ticket => ({ id, workspace_id: 1, project_id: null, title: `k${id}`, priority: "normal", kind: "ticket", epic_id: null, ...over })
-  const toy = tk(50, { title: "Toy", kind: "epic", done: 2, total: 13, next: { id: 52, title: "sandbox mode" } })
+  const toy = tk(50, { title: "Toy", kind: "epic", done: 2, total: 13, open: 11, next: { id: 52, title: "sandbox mode" } })
   const a = { ...snap([]), tickets: [toy, tk(52, { epic_id: 50, title: "sandbox mode" }), tk(53, { epic_id: 50 }), tk(46, { title: "profile" })] }
   test("one row per epic, its children hidden, loose tickets kept", () => {
     const items = boardColumns(a)[0]!.items
-    expect(items.map((x) => x.title)).toEqual(["Toy 2/13 → #52 sandbox mode", "profile"])
+    expect(items.map((x) => x.title)).toEqual(["Toy 11 open → #52 sandbox mode", "profile"])
     expect(items[0]!.act).toEqual({ kind: "epic", id: 50 })
   })
   test("an epic with no free child says so; opening one lists its children", () => {
     const quiet = { ...a, tickets: [{ ...toy, next: null }, ...a.tickets.slice(1)] }
-    expect(boardColumns(quiet)[0]!.items[0]!.title).toBe("Toy 2/13")
+    expect(boardColumns(quiet)[0]!.items[0]!.title).toBe("Toy 11 open")
     expect(epicChildren(a, 50).map((t) => t.id)).toEqual([52, 53])
   })
 })
 
 describe("initiatives on the TICKETS column", () => {
   const tk = (id: number, over: Partial<Ticket> = {}): Ticket => ({ id, workspace_id: 1, project_id: null, title: `k${id}`, priority: "normal", kind: "ticket", epic_id: null, ...over })
-  const kids = tk(585, { title: "kids", kind: "initiative" })
-  const toy = tk(50, { title: "Toy", kind: "epic", epic_id: 585, done: 2, total: 13, next: { id: 52, title: "sandbox mode" } })
-  const hall = tk(60, { title: "Hall", kind: "epic", epic_id: 585, done: 1, total: 2, next: null })
+  const kids = tk(585, { title: "kids", kind: "initiative", open: 12 })
+  const toy = tk(50, { title: "Toy", kind: "epic", epic_id: 585, done: 2, total: 13, open: 11, next: { id: 52, title: "sandbox mode" } })
+  const hall = tk(60, { title: "Hall", kind: "epic", epic_id: 585, done: 1, total: 2, open: 1, next: null })
   const a = { ...snap([]), tickets: [kids, toy, hall, tk(52, { epic_id: 50, title: "sandbox mode" }), tk(46, { title: "profile" })] }
 
-  test("one row per initiative, its epics' progress summed and the first next step; its epics and tickets hidden", () => {
+  test("one row per initiative, the server's open count and the first next step; its epics and tickets hidden", () => {
     const items = boardColumns(a)[0]!.items
-    expect(items.map((x) => x.title)).toEqual(["kids 3/15 → #52 sandbox mode", "profile"])
+    expect(items.map((x) => x.title)).toEqual(["kids 12 open → #52 sandbox mode", "profile"])
     expect(items[0]!.act).toEqual({ kind: "epic", id: 585 })
     expect(items[0]!.stage).toBe("initiative")
   })
 
   test("an epic under no initiative is still its own row", () => {
     const loose = { ...a, tickets: [{ ...toy, epic_id: null }, ...a.tickets.filter((t) => t.id !== 50)] }
-    expect(boardColumns(loose)[0]!.items.map((x) => x.title)).toContain("Toy 2/13 → #52 sandbox mode")
+    expect(boardColumns(loose)[0]!.items.map((x) => x.title)).toContain("Toy 11 open → #52 sandbox mode")
   })
 
   test("opening an initiative lists its epics, each with its progress", () => {
     expect(groupRows(a, 585)).toEqual([
-      { id: 50, title: "Toy 2/13 → #52 sandbox mode", kind: "epic" },
-      { id: 60, title: "Hall 1/2", kind: "epic" },
+      { id: 50, title: "Toy 11 open → #52 sandbox mode", kind: "epic" },
+      { id: 60, title: "Hall 1 open", kind: "epic" },
     ])
     expect(groupRows(a, 50)).toEqual([{ id: 52, title: "sandbox mode", kind: "ticket" }])
   })
@@ -133,27 +133,42 @@ describe("initiatives on the TICKETS column", () => {
 
 describe("the TICKETS column as an expandable tree", () => {
   const tk = (id: number, over: Partial<Ticket> = {}): Ticket => ({ id, workspace_id: 1, project_id: null, title: `k${id}`, priority: "normal", kind: "ticket", epic_id: null, ...over })
-  const kids = tk(585, { title: "kids", kind: "initiative" })
-  const toy = tk(586, { title: "Toy", kind: "epic", epic_id: 585, done: 0, total: 2, next: { id: 590, title: "sandbox mode" } })
+  const kids = tk(585, { title: "kids", kind: "initiative", open: 2 })
+  const toy = tk(586, { title: "Toy", kind: "epic", epic_id: 585, done: 0, total: 2, open: 2, next: { id: 590, title: "sandbox mode" } })
   const a = {
     ...snap([]),
     tickets: [kids, toy, tk(590, { epic_id: 586, title: "sandbox mode" }), tk(591, { epic_id: 586, title: "in flight", status: "doing", thread_id: 40 }), tk(7, { title: "loose" })],
+    ticket_open: { "1": { total: 3, loose: 1 } },
   }
   const shape = (rows: ReturnType<typeof treeRows>) => rows.map((r) => [r.act.kind === "ticket" || r.act.kind === "epic" ? r.act.id : -1, r.depth, r.open])
   const ident = <T,>(xs: T[]) => xs
 
-  test("collapsed, only the top level shows", () => {
-    expect(shape(treeRows(a, new Set(), ident))).toEqual([
+  test("collapsed, only the top level shows; loose tickets sit under an orphans group with the server's count", () => {
+    const rows = treeRows(a, new Set(), ident)
+    expect(shape(rows)).toEqual([
       [585, 0, false],
-      [7, 0, false],
+      [-1, 0, true],
+      [7, 1, false],
     ])
+    expect(rows[1]).toMatchObject({ group: true, header: true, title: "orphans · 1 open" })
+  })
+
+  test("no orphans header without loose tickets", () => {
+    const none = { ...a, tickets: a.tickets.filter((t) => t.id !== 7), ticket_open: { "1": { total: 2, loose: 0 } } }
+    expect(treeRows(none, new Set(), ident).some((r) => r.header)).toBe(false)
+  })
+
+  test("the column's count is the server's open total, never the row count", () => {
+    expect(openTotal(a, 99)).toBe(3)
+    expect(openTotal({ ...a, ticket_open: undefined }, 99)).toBe(99)
   })
 
   test("opening an initiative lists its epics one level down, collapsed", () => {
     expect(shape(treeRows(a, new Set([585]), ident))).toEqual([
       [585, 0, true],
       [586, 1, false],
-      [7, 0, false],
+      [-1, 0, true],
+      [7, 1, false],
     ])
   })
 
@@ -164,21 +179,23 @@ describe("the TICKETS column as an expandable tree", () => {
       [586, 1, true],
       [590, 2, false],
       [591, 2, false],
-      [7, 0, false],
+      [-1, 0, true],
+      [7, 1, false],
     ])
     expect(rows[3]!.flight).toBe(40)
     expect(rows[2]!.flight).toBeUndefined()
-    expect(rows[1]!.title).toBe("Toy 0/2 → #590 sandbox mode · 1 in flight")
+    expect(rows[1]!.title).toBe("Toy 2 open → #590 sandbox mode · 1 in flight")
   })
 
   test("the order applies to each level on its own", () => {
     const reverse = <T,>(xs: T[]) => [...xs].reverse()
     expect(shape(treeRows(a, new Set([585, 586]), reverse))).toEqual([
-      [7, 0, false],
       [585, 0, true],
       [586, 1, true],
       [591, 2, false],
       [590, 2, false],
+      [-1, 0, true],
+      [7, 1, false],
     ])
   })
 })
@@ -197,21 +214,22 @@ describe("the whiteboard's TICKETS sticky", () => {
     const a = {
       ...snap([]),
       tickets: [
-        tk(585, { title: "kids", kind: "initiative" }),
-        tk(586, { title: "Toy", kind: "epic", epic_id: 585, done: 0, total: 2, next: null }),
+        tk(585, { title: "kids", kind: "initiative", open: 2 }),
+        tk(586, { title: "Toy", kind: "epic", epic_id: 585, done: 0, total: 2, open: 2, next: null }),
         tk(590, { title: "sandbox mode", epic_id: 586 }),
-        tk(600, { title: "other", kind: "initiative" }),
+        tk(600, { title: "other", kind: "initiative", open: 0 }),
         tk(7, { title: "one" }), tk(8, { title: "two" }), tk(9, { title: "three" }),
       ],
+      ticket_open: { "1": { total: 5, loose: 3 } },
     }
     const lines = stickyItems(a)
-    expect(lines.map((s) => s.text)).toEqual(["kids 0/2", "other 0/0", "3 loose"])
+    expect(lines.map((s) => s.text)).toEqual(["kids 2 open", "other 0 open", "3 loose"])
     expect(lines[0]!.act).toEqual({ kind: "epic", id: 585 })
     expect(lines[2]!.act).toEqual({ kind: "column", col: 0 })
   })
 
   test("a loose epic gets a line of its own, and no loose line without loose tickets", () => {
-    const a = { ...snap([]), tickets: [tk(700, { title: "solo", kind: "epic", done: 1, total: 3, next: null })] }
-    expect(stickyItems(a).map((s) => s.text)).toEqual(["solo 1/3"])
+    const a = { ...snap([]), tickets: [tk(700, { title: "solo", kind: "epic", done: 1, total: 3, open: 2, next: null })] }
+    expect(stickyItems(a).map((s) => s.text)).toEqual(["solo 2 open"])
   })
 })

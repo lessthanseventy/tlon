@@ -72,6 +72,7 @@ export function viewOf(a: Agents, ws: number | null): Agents {
     awaiting: threads.filter(needsYou).length,
     triage: ws === null ? {} : { [ws]: a.triage[String(ws)] ?? 0 },
     ticket_week: ws === null || !a.ticket_week?.[String(ws)] ? {} : { [ws]: a.ticket_week[String(ws)]! },
+    ticket_open: ws === null || !a.ticket_open?.[String(ws)] ? {} : { [ws]: a.ticket_open[String(ws)]! },
     calendar: ws === null ? {} : { [ws]: a.calendar[String(ws)] ?? [] },
   }
 }
@@ -198,28 +199,32 @@ export const epicChildren = (a: Agents, id: number): Ticket[] => (a.tickets as T
 
 const isGroup = (t: Ticket) => t.kind === "epic" || t.kind === "initiative"
 
-/** a group's progress: an epic's own; an initiative's, its epics' summed, its next step the first epic's that has one */
-function progressOf(a: Agents, tk: Ticket): { done: number; total: number; next: { id: number; title: string } | null } {
-  if (tk.kind !== "initiative") return { done: tk.done ?? 0, total: tk.total ?? 0, next: tk.next ?? null }
-  const epics = epicChildren(a, tk.id).filter((e) => e.kind === "epic")
-  return {
-    done: epics.reduce((n, e) => n + (e.done ?? 0), 0),
-    total: epics.reduce((n, e) => n + (e.total ?? 0), 0),
-    next: epics.find((e) => e.next)?.next ?? null,
-  }
+/** a group's next step: an epic's own; an initiative's, the first epic's that has one */
+function nextOf(a: Agents, tk: Ticket): { id: number; title: string } | null {
+  if (tk.kind !== "initiative") return tk.next ?? null
+  return epicChildren(a, tk.id).find((e) => e.kind === "epic" && e.next)?.next ?? null
 }
 
+/** the TICKETS column's count: the server's open total across the shown workspaces; `rows` only for a server that sends none */
+export function openTotal(a: Agents, rows: number): number {
+  const w = Object.values(a.ticket_open ?? {})
+  return w.length ? w.reduce((n, x) => n + x.total, 0) : rows
+}
+
+const openOf = (a: Agents) => Object.values(a.ticket_open ?? {}).reduce((n, x) => n + x.loose, 0)
+
 const groupTitle = (a: Agents, tk: Ticket) => {
-  const p = progressOf(a, tk)
+  const next = nextOf(a, tk)
   const flying = epicChildren(a, tk.id).filter((k) => k.status === "doing" && k.thread_id != null).length
-  return `${tk.title} ${p.done}/${p.total}${p.next ? ` → #${p.next.id} ${p.next.title}` : ""}${flying ? ` · ${flying} in flight` : ""}`
+  return `${tk.title} ${tk.open ?? 0} open${next ? ` → #${next.id} ${next.title}` : ""}${flying ? ` · ${flying} in flight` : ""}`
 }
 
 /** what opening a group lists: an initiative's epics or an epic's tickets, a group with its progress */
 export const groupRows = (a: Agents, id: number): { id: number; title: string; kind: string }[] =>
   epicChildren(a, id).map((k) => ({ id: k.id, title: isGroup(k) ? groupTitle(a, k) : k.title, kind: k.kind ?? "ticket" }))
 
-export type TreeRow = { act: Act; depth: number; group: boolean; open: boolean; title: string; flight?: number }
+/** `header`: the synthetic orphans group, a label with the loose tickets under it, not a ticket to open */
+export type TreeRow = { act: Act; depth: number; group: boolean; open: boolean; title: string; flight?: number; header?: boolean }
 
 /** the TICKETS column as a tree: groups expand in place; `order` sorts each level on its own */
 export function treeRows(a: Agents, open: Set<number>, order: <T extends { id: number }>(xs: T[]) => T[]): TreeRow[] {
@@ -239,7 +244,13 @@ export function treeRows(a: Agents, open: Set<number>, order: <T extends { id: n
       if (isOpen) walk(epicChildren(a, tk.id), depth + 1)
     }
   }
-  walk((a.tickets as Ticket[]).filter((t) => t.epic_id == null), 0)
+  const top = (a.tickets as Ticket[]).filter((t) => t.epic_id == null)
+  walk(top.filter(isGroup), 0)
+  const orphans = top.filter((t) => !isGroup(t))
+  if (orphans.length) {
+    out.push({ act: { kind: "column", col: 0 }, depth: 0, group: true, open: true, header: true, title: `orphans · ${openOf(a)} open` })
+    walk(orphans, 1)
+  }
   return out
 }
 
@@ -247,10 +258,9 @@ export function treeRows(a: Agents, open: Set<number>, order: <T extends { id: n
 export function stickyItems(a: Agents): { text: string; act: Act }[] {
   const top = (a.tickets as Ticket[]).filter((t) => t.epic_id == null)
   const lines = top.filter(isGroup).map((g) => {
-    const p = progressOf(a, g)
-    return { text: g.kind === "initiative" ? `${g.title} ${p.done}/${p.total}` : groupTitle(a, g), act: { kind: "epic", id: g.id } as Act }
+    return { text: g.kind === "initiative" ? `${g.title} ${g.open ?? 0} open` : groupTitle(a, g), act: { kind: "epic", id: g.id } as Act }
   })
-  const loose = top.filter((t) => !isGroup(t)).length
+  const loose = a.ticket_open ? openOf(a) : top.filter((t) => !isGroup(t)).length
   return loose ? [...lines, { text: `${loose} loose`, act: { kind: "column", col: 0 } }] : lines
 }
 
