@@ -87,15 +87,13 @@ defmodule Server do
   Resolve a thread to the working dir its coworker (and a STACK-zoom lazygit) works in: its
   project's repo, then a lazily-ensured per-thread `git worktree` at `.worktrees/<name>` —
   `Server.Worktree.name_for/1`: the slug, else `t<id>`. Never the main tree (2026-09-08). The
-  checkout is marked with the thread (`Server.Worktree.mark_thread/2`), which its commits are stamped with,
-  and brought up to origin/main when it holds no work of its own (`Server.Worktree.catch_up/1`).
+  checkout is marked with the thread (`Server.Worktree.mark_thread/2`), which its commits are stamped with.
   `{:ok, path}`, `{:error, :no_repo | :no_thread | reason}`.
   """
   def worktree_for_thread(%Server.Thread{} = thread) do
     with {:ok, repo, name} <- repo_and_name(thread),
          {:ok, wt} <- Server.Worktree.ensure(repo, name) do
       Server.Worktree.mark_thread(wt, thread.id)
-      wt |> Server.Worktree.catch_up() |> tell_catch_up(wt, thread)
       {:ok, wt}
     end
   end
@@ -105,6 +103,15 @@ defmodule Server do
       nil -> {:error, :no_thread}
       thread -> worktree_for_thread(thread)
     end
+  end
+
+  @doc """
+  A waking seat's checkout, brought up to origin/main when it holds no work of its own
+  (`Server.Worktree.catch_up/1`), what it could not move told to the thread. Only a spawn calls it:
+  `worktree_for_thread/1` is hit mid-turn by tools and gates, where a move would land under a live pane.
+  """
+  def catch_up_worktree(%Server.Thread{} = thread, wt) do
+    wt |> Server.Worktree.catch_up() |> tell_catch_up(wt, thread)
   end
 
   # A thread's repo + its worktree name, the pair every worktree door resolves first.

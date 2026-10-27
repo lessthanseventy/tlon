@@ -167,14 +167,17 @@ defmodule Server.WorktreeTest do
       {_, 0} = git.(["commit", "-qm", "main moves"])
       {_, 0} = git.(["push", "-q", "origin", "main"])
       {_, 0} = git.(["fetch", "-q", "origin"])
+      # the facade ensures; only a wake (Spawn) catches up, never a tool call under a running pane
       assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      refute File.exists?(Path.join(wt, "NEW"))
+      assert Server.catch_up_worktree(thread, wt) == :ok
       assert File.exists?(Path.join(wt, "NEW"))
 
       File.write!(Path.join(wt, "MINE"), "mine\n")
       {_, 0} = System.cmd("git", ["-C", wt, "add", "MINE"])
       {_, 0} = System.cmd("git", ["-C", wt, "commit", "-qm", "mine"])
       # own commits on top of main: nothing to explain
-      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert Server.catch_up_worktree(thread, wt) == :ok
       assert [] = Enum.filter(Server.Channel.thread_messages(thread), &(&1.body =~ "1 commit"))
 
       File.write!(Path.join(repo, "NEW2"), "more\n")
@@ -182,8 +185,8 @@ defmodule Server.WorktreeTest do
       {_, 0} = git.(["commit", "-qm", "main moves again"])
       {_, 0} = git.(["push", "-q", "origin", "main"])
       {_, 0} = git.(["fetch", "-q", "origin"])
-      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
-      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert Server.catch_up_worktree(thread, wt) == :ok
+      assert Server.catch_up_worktree(thread, wt) == :ok
 
       told = Enum.filter(Server.Channel.thread_messages(thread), &(&1.body =~ "1 commit"))
       assert [%{kind: "notice"}] = told
@@ -203,14 +206,14 @@ defmodule Server.WorktreeTest do
       told = fn -> Enum.count(Server.Channel.thread_messages(thread), &(&1.body =~ "uncommitted")) end
 
       File.write!(Path.join(wt, "SCRATCH"), "x\n")
-      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert Server.catch_up_worktree(thread, wt) == :ok
       assert told.() == 1
 
       File.rm!(Path.join(wt, "SCRATCH"))
-      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert Server.catch_up_worktree(thread, wt) == :ok
 
       File.write!(Path.join(wt, "SCRATCH"), "x\n")
-      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert Server.catch_up_worktree(thread, wt) == :ok
       assert told.() == 2
     end
 
