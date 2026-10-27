@@ -113,6 +113,79 @@ defmodule Server.ReviewFreshSessionTest do
     assert %DateTime{} = Repo.get!(Session, session.id).ended_at
   end
 
+  # A workline at review on a bench with a builder, a reviewer and a qa seat, lonnrot leading.
+  defp benched_review(slug) do
+    roster = [
+      %{"archetype" => "builder", "name" => "hronir"},
+      %{"archetype" => "reviewer", "name" => "lonnrot"},
+      %{"archetype" => "qa", "name" => "nolan"}
+    ]
+
+    {:ok, ws} = Server.Workspaces.register(%{name: "Fates #{slug}", roster: roster})
+    {:ok, thread} = Workline.open(%{title: "fix the #{slug}", slug: slug, stage: "review", workspace_id: ws.id})
+    {:ok, _} = Channel.assign_lead(thread.id, "lonnrot")
+    Repo.get!(Server.Thread, thread.id)
+  end
+
+  defp follow_up_post(thread) do
+    thread
+    |> Channel.thread_messages()
+    |> Enum.map(& &1.body)
+    |> Enum.find(&(&1 =~ "follow-ups from lonnrot's review"))
+  end
+
+  describe "a review's follow-ups are addressed to the lead the verdict hands to" do
+    setup do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      :ok
+    end
+
+    test "request_changes: the builder, never the reviewer whose session just ended" do
+      thread = benched_review("wick")
+
+      assert {:error, {:bounced, _}} =
+               Workline.review_verdict(thread, "request_changes", "lonnrot",
+                 branch_head: nil,
+                 follow_ups: ["a typo in the help"]
+               )
+
+      assert Channel.thread_lead(thread.id) == "hronir"
+      post = follow_up_post(thread)
+      assert post =~ "@hronir" and post =~ "1. a typo in the help"
+      refute post =~ "@lonnrot"
+    end
+
+    test "approve with QA owed: the qa seat" do
+      thread = benched_review("knob")
+
+      assert {:ok, _} =
+               Workline.review_verdict(thread, "approve", "lonnrot",
+                 branch_head: nil,
+                 paths: ["office/kit/room.ts"],
+                 follow_ups: ["the tooltip wraps"]
+               )
+
+      assert Channel.thread_lead(thread.id) == "nolan"
+      assert follow_up_post(thread) =~ "@nolan"
+    end
+
+    test "approve handed to the operator's gate: the operator" do
+      thread = benched_review("lamp")
+
+      assert {:ok, _} =
+               Workline.review_verdict(thread, "approve", "lonnrot",
+                 branch_head: nil,
+                 paths: ["server/lib/server/workline.ex"],
+                 follow_ups: ["clean! could clear stray rows"]
+               )
+
+      assert Channel.thread_lead(thread.id) == "lonnrot"
+      post = follow_up_post(thread)
+      assert post =~ "@#{Server.OperatorConfig.operator()}"
+      refute post =~ "@lonnrot"
+    end
+  end
+
   test "the operator's read of a review-stage thread keeps the conversation", %{rita: rita} do
     {:ok, thread} = Workline.open(%{title: "fix the lamp", slug: "lamp-fix", stage: "review"})
     {:ok, thread} = Staff.assign(thread, rita)

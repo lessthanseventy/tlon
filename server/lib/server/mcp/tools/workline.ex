@@ -45,7 +45,8 @@ defmodule Server.MCP.Tool.SubmitReview do
   denied). On THIS thread, or with `thread_id` one you lead; refused outside the review stage. The `verdict`
   is recorded too (`Server.Workline.review_verdict/3`): `request_changes` sends the workline back
   to build at once; after `approve`, call advance_stage to hand it to the merge gate. A finding that
-  shouldn't block goes in `follow_ups`: posted on the workline for its lead, not filed as tickets.
+  shouldn't block goes in `follow_ups`: posted on the workline, after the verdict, for the lead it
+  hands to (the builder, QA or the operator), not filed as tickets.
   """
   use Server.MCP.Tool
 
@@ -61,7 +62,7 @@ defmodule Server.MCP.Tool.SubmitReview do
 
     field :follow_ups, {:list, :string},
       description:
-        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Posted on the workline for its lead, who fixes what is in the change's own lines and drops or files the rest. Keep it to what matters: a nit nobody would act on is not a follow-up"
+        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Posted on the workline after your verdict, for the lead it hands to, who fixes what is in the change's own lines and drops or files the rest. Keep it to what matters: a nit nobody would act on is not a follow-up"
   end
 
   @impl true
@@ -72,14 +73,14 @@ defmodule Server.MCP.Tool.SubmitReview do
          :ok <- known_verdict(params[:verdict]),
          nil <- Server.Workline.self_review(thread, identity.agent),
          {:ok, rel} <- Review.submit(thread, params[:body], identity.agent) do
-      {:ok, filed} = Server.Workline.follow_ups(thread, identity.agent, params[:follow_ups] || [])
+      follow_ups = Server.Workline.follow_up_items(params[:follow_ups] || [])
 
-      case Server.Workline.review_verdict(thread, params[:verdict], identity.agent) do
+      case Server.Workline.review_verdict(thread, params[:verdict], identity.agent, follow_ups: follow_ups) do
         {:ok, _} ->
           ok(frame, %{
             "committed" => rel,
             "verdict" => "approve",
-            "follow_ups" => length(filed),
+            "follow_ups" => length(follow_ups),
             "next" => "call advance_stage"
           })
 
@@ -87,7 +88,7 @@ defmodule Server.MCP.Tool.SubmitReview do
           ok(frame, %{
             "committed" => rel,
             "verdict" => "request_changes",
-            "follow_ups" => length(filed),
+            "follow_ups" => length(follow_ups),
             "next" => "sent back to build"
           })
 
@@ -115,7 +116,7 @@ defmodule Server.MCP.Tool.SubmitQA do
   Lands on THIS thread, or on `thread_id` — the workline QA'd — when the caller is a `qa` seat on
   that workline's bench: a QA session can be bound to another thread (the lobby) than the one it
   was called to. Refused outside the review stage. A finding that shouldn't block goes in
-  `follow_ups`: posted on the workline for its lead, not filed as tickets.
+  `follow_ups`: posted on the workline, after the verdict, for the lead it hands to, not filed as tickets.
   """
   use Server.MCP.Tool
 
@@ -134,7 +135,7 @@ defmodule Server.MCP.Tool.SubmitQA do
 
     field :follow_ups, {:list, :string},
       description:
-        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Posted on the workline for its lead, who fixes what is in the change's own lines and drops or files the rest"
+        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Posted on the workline after your verdict, for the lead it hands to, who fixes what is in the change's own lines and drops or files the rest"
   end
 
   @impl true
@@ -159,14 +160,10 @@ defmodule Server.MCP.Tool.SubmitQA do
     do: thread.workspace_id |> Server.Workspaces.bench() |> Enum.any?(&(&1.archetype == "qa" and &1.name == agent))
 
   defp verdict(thread, params, agent, frame) do
-    {:ok, filed} =
-      if thread.stage == "review" and params[:verdict] in ~w(pass fail),
-        do: Workline.follow_ups(thread, agent, params[:follow_ups] || [], :qa),
-        else: {:ok, []}
+    follow_ups = Workline.follow_up_items(params[:follow_ups] || [])
+    n = length(follow_ups)
 
-    n = length(filed)
-
-    case Workline.qa_verdict(thread, params[:verdict], agent, params[:report]) do
+    case Workline.qa_verdict(thread, params[:verdict], agent, params[:report], follow_ups: follow_ups) do
       {:error, {:bounced, _}} ->
         ok(frame, %{"verdict" => "fail", "follow_ups" => n, "next" => "sent back to build"})
 
