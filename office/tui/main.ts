@@ -38,7 +38,7 @@ import { hallRows, stepRow, type RowEdit } from "./hall"
 import { castSignature, loadCast, saveCast, setTrait, type Cast } from "../kit/cast"
 import { CAST_FIELDS, castRows, nextTrait, rerollTrait } from "./cast"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, storeNamesTaken, toggleLock as storeToggle, type Store } from "../kit/store"
-import { stepStoreRow, storeRows } from "./store"
+import { adoptAsk, stepStoreRow, storeRows } from "./store"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { NOW_PLAYING_FORMAT, parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
@@ -250,7 +250,7 @@ function storeAdopt() {
   const file = slot ? adopt(c, slot) : null
   if (!slot || !file) { status = `${c.name} can't be adopted here`; return draw() }
   const old = (petsNow ?? resolvePets(loadPets()))[slot].name
-  ask2(slot === "dog" ? `adopt ${c.name} into the dog slot? (the room still draws ${old})` : `${old} leaves by the door. adopt ${c.name}?`, () => {
+  ask2(adoptAsk(old, c.name), () => {
     savePets(file)
     petsSeen = ""; followPets(); roomChanged = true
     storeSet(storePass(store, [...taken, c.name]))

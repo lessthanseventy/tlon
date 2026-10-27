@@ -35,3 +35,6 @@ export function storeRows(c: Candidate, locks: readonly StoreRow[], occupant: st
   ]
   return body.map((r, i) => ({ ...r, segs: [...left(i), { s: "   " }, ...r.segs] }))
 }
+
+/** the adopt confirmation: the slot's occupant leaves, whichever slot it is */
+export const adoptAsk = (occupant: string, adopted: string) => `${occupant} leaves by the door. adopt ${adopted}?`

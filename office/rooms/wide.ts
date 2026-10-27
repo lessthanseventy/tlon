@@ -638,7 +638,8 @@ export class WideRoom extends Sim<Layout> {
   private talkOut(occasion: string): boolean {
     const ex = this.exchange(occasion)
     if (!ex) return false
-    ex.forEach((turn, i) => { const [, who = "", text = turn] = turn.match(/^([^:]{1,30}):\s*(.*)$/s) ?? []; this.turns.push({ who: who === "Nina" || who === this.cat.name ? "cat" : "dog", text, at: this.tick + i * 42 }) })
+    const cats = ["Nina", this.cat.name], speakers = [...cats, "Argos", this.dog.name]
+    ex.forEach((turn, i) => { const who = speakers.find((n) => turn.startsWith(`${n}:`)); this.turns.push({ who: who && cats.includes(who) ? "cat" : "dog", text: who ? turn.slice(who.length + 1).trimStart() : turn, at: this.tick + i * 42 }) })
     return true
   }
   /**

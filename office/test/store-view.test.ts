@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { candidateOf, emptyStore } from "../kit/store"
-import { STORE_VIEW_ROWS, storeRows, stepStoreRow } from "../tui/store"
+import { STORE_VIEW_ROWS, adoptAsk, storeRows, stepStoreRow } from "../tui/store"
 
 const text = (r: { segs: { s: string }[] }) => r.segs.map((s) => s.s).join("")
 const card = (sp: "hamster" | "rock" | "baoaqu" | "cat" = "hamster") => candidateOf({ ...emptyStore(), species: sp }, [])
@@ -35,4 +35,7 @@ test("the dog's slot names who leaves, like the cat's — the room draws the ado
   const t = storeRows(c, [], "Argos", "woof").map(text).join("\n")
   expect(t).toContain("Argos leaves by the door")
   expect(t).not.toContain("pets.json only")
+})
+test("the adopt question is the same for every slot: the occupant leaves, and the room draws the newcomer", () => {
+  expect(adoptAsk("Argos", "Sprout")).toBe("Argos leaves by the door. adopt Sprout?")
 })
