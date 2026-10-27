@@ -79,6 +79,20 @@ defmodule Server.Worktree do
   end
 
   @doc """
+  The checkout's tip when origin/main holds commits it lacks (a branch with its own work that main
+  has moved past), `:no` when it does not or git cannot say.
+  """
+  def moved_past(wt) do
+    with {tip, 0} <- git(wt, ["rev-parse", "HEAD"]),
+         {behind, 0} <- git(wt, ["rev-list", "--count", "HEAD..origin/main"]),
+         true <- String.trim(behind) != "0" do
+      {:ok, String.trim(tip)}
+    else
+      _ -> :no
+    end
+  end
+
+  @doc """
   Whether `key` is news for this checkout: true the first time it is seen, false until a different
   key replaces it. Held in the checkout's git dir (`tlon-reported`), so a report repeats on no wake.
   """

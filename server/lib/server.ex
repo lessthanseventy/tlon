@@ -178,19 +178,19 @@ defmodule Server do
   # often), so the thread knows why its checkout is behind main. A notice: a bare chat post is
   # addressed to the thread's lead and wakes or spawns them for a status line.
   defp tell_catch_up({:ahead, n}, wt, thread) do
-    {tip, _} = System.cmd("git", ["-C", wt, "rev-parse", "HEAD"])
-    {behind, _} = System.cmd("git", ["-C", wt, "rev-list", "--count", "HEAD..origin/main"])
-
     # own commits on top of main are a workline's normal state: only a main that moved on is news
-    if String.trim(behind) == "0",
-      do: :ok,
-      else:
+    case Server.Worktree.moved_past(wt) do
+      {:ok, tip} ->
         say_once(
           wt,
           thread,
-          "ahead:#{String.trim(tip)}:#{n}",
+          "ahead:#{tip}:#{n}",
           "checkout left where it is: #{n} commit#{if n == 1, do: "", else: "s"} of its own beyond origin/main"
         )
+
+      :no ->
+        :ok
+    end
   end
 
   # A checkout that caught up forgets what it reported, so the next stall is news again.
@@ -199,9 +199,9 @@ defmodule Server do
     :ok
   end
 
-  defp tell_catch_up({:error, why}, wt, _thread) do
+  defp tell_catch_up({:error, why}, wt, thread) do
     Logger.warning("catch-up of #{wt} to origin/main failed: #{inspect(why)}")
-    :ok
+    say_once(wt, thread, "error", "checkout could not be moved to origin/main: #{inspect(why)}")
   end
 
   defp tell_catch_up(:dirty, wt, thread),
