@@ -235,14 +235,11 @@ defmodule Server.PauseTest do
       }
 
       Pause.auto(both)
-      IO.inspect({Pause.state(), Server.OperatorConfig.read()["auto_paused_for"]}, label: "step")
       {:ok, :working} = Pause.back_to_work()
       Pause.auto(both)
-      IO.inspect({Pause.state(), Server.OperatorConfig.read()["auto_paused_for"]}, label: "step")
       assert Pause.state() == :pencils_down
       {:ok, :working} = Pause.back_to_work()
       Pause.auto(both)
-      IO.inspect({Pause.state(), Server.OperatorConfig.read()["auto_paused_for"]}, label: "step")
       assert Pause.state() == :working
     end
   end
