@@ -30,7 +30,7 @@ defmodule Server.Office.Corkboard do
   @every_s 480
   @keep 12
   @keep_ideas 20
-  @side_every_s 60
+  @side_every_s 480
   @side_hold_s 3600
   @side_voice """
   You write ONE sticky note a coworker pins on the corkboard of a pixel-art office of AI coworkers:
@@ -168,7 +168,7 @@ defmodule Server.Office.Corkboard do
       Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:pinned, ws, write(ws, board)}) end)
     end
 
-    # one seat's side project per poll, and a poll only looks once a minute: a cap or a slow model never fans out
+    # one seat's side project per poll, spaced past the model timeout so a slow call never overlaps the next
     if now - entry.side_at >= @side_every_s and now >= entry.side_hold do
       Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:pinned, ws, side_write(ws)}) end)
     end
@@ -308,7 +308,10 @@ defmodule Server.Office.Corkboard do
     prompt =
       @side_voice <>
         "\n#{name}'s THE SIDE PROJECT: " <>
-        section <> "\nThis is number #{n}; continue it, do not repeat. Previous: " <> last_side_note(ws, name)
+        section <>
+        "\nHOW #{name} TALKS: " <>
+        (Server.Soul.voice(name) || "(nothing on file)") <>
+        "\nThis is number #{n}; continue it, do not repeat. Previous: " <> last_side_note(ws, name)
 
     with {:ok, out} <- Server.Generator.run(prompt),
          body when is_binary(body) <- parse(out),

@@ -6,7 +6,7 @@ defmodule Server.SoulCallersTest do
   @lib Path.expand("../../lib", __DIR__)
   @allowed ~w(server/soul.ex server/office/banter.ex server/profiles.ex server/diary.ex server/office/corkboard.ex)
 
-  test "Server.Soul.read/voice/tone/diary are called only from banter, profiles and the diary" do
+  test "Server.Soul.read/voice/tone/diary are called only from banter, profiles, the diary and the corkboard" do
     offenders =
       @lib
       |> Path.join("**/*.ex")

@@ -149,8 +149,8 @@ and every layer the spine design's re-laid §9 asked for
   SOUL.md (design §5–6 step 2) to the souls dir the office polls, at hire (`after_hire/2`, off the hire's path and best-effort: a name the guard refuses is refused before the seat is made) or by `tlon-cli soul <ws> [name]`:
   the three §5 samples verbatim, else `Generator`, else a template; created exclusively, so an existing
   file (edited or not) is never touched. Step 3: it is also read (`read/1`, `voice/1`,
-  `tone/1`) — by `Server.Office.Banter` on every line and by `Profiles.instantiate/2` at spawn, and
-  by nothing else (`soul_callers_test.exs`): a soul shapes talk and tone, never a work decision.
+  `tone/1`) — by `Server.Office.Banter` on every line, by `Profiles.instantiate/2` at spawn, by the
+  diary and by the corkboard's side projects (`Server.Office.Corkboard`), and by nothing else (`soul_callers_test.exs`): a soul shapes talk and tone, never a work decision.
 - **the PM** (`Server.Release.PM`, bench archetype `pm`) — what ships: `release_status`,
   `propose_release` (graded commit by commit with `Grade.assess/2`, the max per axis; under
   `auto_land_risk` it cuts, else one gate on the root thread — a window-less `prompt` answered by its
