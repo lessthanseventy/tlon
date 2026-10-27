@@ -52,4 +52,13 @@ expect "any other tail is not" "$(smoke_pool_cause "$log")" ""
 { echo "** (DBConnection.ConnectionError) old"; seq 40; } >"$log"
 expect "only the tail counts" "$(smoke_pool_cause "$log")" ""
 
+# smoke_pick_port: the base, or the first above it nothing listens on; epmd's 4369 and the service's 4040 are never picked
+expect "a free base is itself" "$(smoke_pick_port 4700)" "4700"
+expect "epmd's port is skipped" "$(smoke_pick_port 4369)" "4370"
+expect "the service's port is skipped" "$(smoke_pick_port 4040)" "4041"
+( exec elixir -e ':gen_tcp.listen(4600, []); Process.sleep(:infinity)' ) >/dev/null 2>&1 & lpid=$!
+for i in $(seq 1 100); do smoke_port_taken 4600 && break; sleep 0.1; done
+expect "a base with a listener steps on" "$(smoke_pick_port 4600)" "4601"
+kill "$lpid" 2>/dev/null; wait "$lpid" 2>/dev/null
+
 exit "$bad"

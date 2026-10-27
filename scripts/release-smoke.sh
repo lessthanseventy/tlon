@@ -24,7 +24,7 @@ set -uo pipefail
 refuse_stale_script "$0"
 
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
-port="${TLON_SMOKE_PORT:-$((4100 + $$ % 800))}"
+port="${TLON_SMOKE_PORT:-$(smoke_pick_port $((4100 + $$ % 800)))}"
 db="${TLON_SMOKE_DATABASE:-tlon_smoke_$port}" url="${TLON_SMOKE_URL:-}"
 hold="${TLON_SMOKE_HOLD:-}" ttl="${TLON_SMOKE_HOLD_TTL:-7200}" flags="${TLON_SMOKE_FLAGS:-}"
 fixtures="${TLON_SMOKE_FIXTURES:-}" server_bin="${TLON_SMOKE_SERVER_BIN:-}"

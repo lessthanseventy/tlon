@@ -26,3 +26,20 @@ smoke_pool_cause() {
 # smoke_isolated <cmd...>: runs the build's steps without the lock fd, so a child they leave running
 # (an epmd the migrating node starts) cannot keep the machine-wide lock after the smoke exits
 smoke_isolated() { ( "$@" ) 5>&-; }
+
+# smoke_port_taken <port>: whether something listens on it (ss where it is, else a connect)
+smoke_port_taken() {
+  if command -v ss >/dev/null 2>&1; then
+    [ -n "$(ss -Hltn "sport = :$1")" ]
+  else
+    (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+  fi
+}
+
+# smoke_pick_port <base>: the base, or the first port above it that nothing listens on. epmd's 4369
+# answers no HTTP, so a curl guard passes it and the node boots on it: it and the service's 4040 are never picked
+smoke_pick_port() {
+  local p="$1"
+  while [ "$p" = 4369 ] || [ "$p" = 4040 ] || smoke_port_taken "$p"; do p=$((p + 1)); done
+  echo "$p"
+}
