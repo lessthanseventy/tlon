@@ -24,6 +24,8 @@ defmodule Server.Event do
     field :detail, Server.JSONColumn
     field :created_at, :utc_datetime
     belongs_to :thread, Server.Thread
+    # The session that recorded it (#679): never cast; NULL is "session unknown".
+    belongs_to :session, Server.Session
   end
 
   @doc """

@@ -38,6 +38,9 @@ defmodule Server.Message do
     field :embedding, Server.VectorColumn
     field :embedding_model, :string
     belongs_to :thread, Server.Thread
+    # The session that posted it (#679): put by `post_changeset/2`'s second argument from the
+    # connection's identity, never cast, so attrs cannot assert it. NULL is "session unknown".
+    belongs_to :session, Server.Session
   end
 
   @doc """
