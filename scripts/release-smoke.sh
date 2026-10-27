@@ -20,6 +20,7 @@
 set -uo pipefail
 . "$(dirname "$0")/lib/fresh-script.sh"
 . "$(dirname "$0")/lib/record-ran.sh"
+. "$(dirname "$0")/lib/smoke-build.sh"
 refuse_stale_script "$0"
 
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
@@ -139,6 +140,9 @@ if [ -z "$url" ]; then
   [ -d "$root/office/node_modules" ] && cp -a --reflink=auto "$root/office/node_modules" "$dir/office/"
   (cd "$dir/office" && bun install --frozen-lockfile >/dev/null 2>&1) || fail "bun install failed"
 
+  # the heavy step, one at a time machine-wide: concurrent builds starve Postgres of connections.
+  # Only this step: a built smoke (or a hold, for hours) runs on beside others.
+  smoke_build_lock "$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)/tlon-smoke-build.lock" "pid $$ (${sha:0:7})"
   # chained with &&, not set -e: a subshell tested by `||` ignores set -e, and a failed build
   # would go on to the steps after it
   (
@@ -149,7 +153,12 @@ if [ -z "$url" ]; then
       mix ecto.drop --quiet --force --force-drop &&
       mix ecto.create --quiet &&
       _build/prod/rel/server/bin/server eval 'Server.Release.migrate()'
-  ) >>"$log" 2>&1 || { tail -n 20 "$log"; fail "the build or the migration of ${sha:0:7} failed"; }
+  ) >>"$log" 2>&1 || {
+    tail -n 20 "$log"
+    cause="$(smoke_pool_cause "$log")"
+    fail "${cause:-the build or the migration of ${sha:0:7} failed}"
+  }
+  smoke_build_unlock
 
   # MCP is what serves /api; everything that would talk to a model, the weather or a pane stays off
   TLON_NODE="tlon-smoke-$port@127.0.0.1" TLON_DATABASE="$db" TLON_START_MCP=1 TLON_MCP_PORT="$port" \
