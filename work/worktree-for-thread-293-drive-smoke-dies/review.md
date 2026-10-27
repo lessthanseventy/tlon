@@ -1,18 +1,15 @@
-# Review — worktree-for-thread-293-drive-smoke-dies
+**Verdict: request_changes**
 
-No free reviewer at the builder's grade (senior): this review was done by ulrikke, a reviewer below that grade, so weigh the verdict accordingly.
+Review of 356cd99 (+ 5b7ec5e, b5edbf9) on work/worktree-for-thread-293-drive-smoke-dies: the per-path lock and the gitfile repair are sound. Four edits to the lines this change touches before it lands:
 
-**Verdict: approve.** Branch `work/worktree-for-thread-293-drive-smoke-dies`, commits 356cd99, b5edbf9, 5b7ec5e, against main.
+1. server/lib/server/worktree.ex, `ensure/2` docstring (line 55): "an existing checkout returns its path untouched" is no longer true, since existing checkouts now run `rev-parse` and `repair` if it fails. Change to: "an existing checkout is checked and repaired if its gitfile does not resolve, otherwise returned as is."
+2. server/lib/server/worktree.ex line 65: pass `[node()]` to `:global.trans` so the lock can't wait on a partitioned peer, and key on `Path.expand(repo_path)`:
+   `true -> :global.trans({{__MODULE__, path(Path.expand(repo_path), slug)}, self()}, fn -> do_ensure(repo_path, slug) end, [node()])`
+3. server/lib/server/worktree.ex line 64: drop the ticket ref from the lock comment: "...a gitfile to nowhere" (no "(#447)").
+4. server/test/server/worktree_test.exs: drop "(#447)" from the describe label, and remove the stray double blank line before it.
 
-## What I checked
-- Read the diff of `server/lib/server/worktree.ex`, `server/test/server/worktree_test.exs` and `pr.md`.
-- The lock form is right: `:global.trans({{__MODULE__, path}, self()}, fun)` keys on the checkout path; the requester is the calling process, so concurrent callers serialise.
-- `path/2` is the same path `do_ensure/2` uses, so the lock and the checkout agree.
-- `resolve/2` re-checks `git rev-parse --git-dir` after `add` and on an existing-checkout hit, repairs once, and returns an error if the repair still fails instead of a silent `{:ok, wt}`.
-- Both new tests exercise the reported failures: 8 concurrent ensures, and a gitfile with a stray `1`.
-- I did NOT run the tests myself. The verdict rests on the server's record that `mise run check` passed on 5b7ec5e, plus my reading of the diff.
+Not blocking, filed as ticket 681: `rename/3`, `remove/2` and `retire/2` don't take the lock.
 
-## Non-blocking (also in follow_ups)
-- The `:global` lock covers only `Server.Worktree.ensure` in this BEAM node. Other `git worktree add` callers on the same path (scripts, `scratch:new`) can still race.
-- The lock comment and the `describe` label cite `#447`. AGENTS.md says comments carry the why, not ticket refs; trim on a later touch.
-- `seed_deps` now runs while the lock is held, so concurrent ensures of one slug wait for the copy. Fine for now; revisit if the copy gets slow.
+Verified: the scripts that run `git worktree add` (scratch.sh, check-main.sh, release-smoke.sh, workline-verify.sh) use their own paths, not `.worktrees/<slug>`, so no current race on the #447 path. The `#447` in the commit message stays.
+
+Builder: rebase onto main, make the four edits, run `menard run check --in server`, and push. I re-review on the new head.
