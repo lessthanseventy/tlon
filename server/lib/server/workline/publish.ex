@@ -139,7 +139,8 @@ defmodule Server.Workline.Publish do
   @doc """
   Push one thread's branch to origin, force-with-lease — the only way a coworker's branch reaches
   GitHub (`push_branch`; the pre-push hook refuses a coworker pane's own pushes). Only a
-  `work/<slug>` branch: never main, never anything else. `:ok` | `{:error, why}`.
+  `work/<slug>` branch (a thread's, or a seat's named `work/<handle>-<name>`, see `own_branch/2`):
+  never main, never anything else. `:ok` | `{:error, why}`.
   """
   def push_branch(repo, branch, run \\ &System.cmd/3) do
     if Regex.match?(~r{\Awork/[a-z0-9][a-z0-9-]*\z}, branch) do

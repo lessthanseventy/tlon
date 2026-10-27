@@ -1965,6 +1965,25 @@ defmodule Server.MCP.ServerTest do
     assert pushed["isError"] and hd(pushed["content"])["text"] =~ "lead"
   end
 
+  test "push_branch with branch: pushes only a work/<caller>-* name, and never a workline's own branch", %{
+    thread: thread
+  } do
+    {:ok, uqbar} = Staff.register_agent(%{name: "uqbar", mandate: "keeper", engine: "fresh"})
+    {:ok, _} = Server.Workline.open(%{title: "fix", slug: "uqbar-fix", stage: "build"})
+    token = MCP.Tokens.mint(thread, uqbar)
+    session = handshake(token)
+
+    other = call(token, session, 2, "push_branch", %{"branch" => "work/hronir-x"})
+    assert other["isError"] and hd(other["content"])["text"] =~ "bear your own name"
+
+    workline = call(token, session, 3, "push_branch", %{"branch" => "work/uqbar-fix"})
+    assert workline["isError"] and hd(workline["content"])["text"] =~ "workline"
+
+    # its own free name gets past the name checks (the bare lobby has no repo to push from)
+    own = call(token, session, 4, "push_branch", %{"branch" => "work/uqbar-x"})
+    refute hd(own["content"])["text"] =~ ~r/own name|workline/
+  end
+
   test "review_branch: a reviewer's verdict on a branch@sha is recorded as theirs; a short sha is refused", %{
     token: token
   } do
