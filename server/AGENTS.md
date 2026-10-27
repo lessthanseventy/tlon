@@ -228,8 +228,8 @@ and every layer the spine design's re-laid §9 asked for
 
 Still deferred: the engine-credit half of presence (clocked-out from spent credits/rate-limit), the
 human-notification path, and the `Sense` collectors. (A mention of a coworker who isn't on the
-thread reaches them in their window on the workspace's standing thread; they answer with
-`consult_peer`.)
+thread reaches them in their window on the workspace's standing thread; the mention is the
+invitation — they answer there with `post_message thread_id: N`, `Server.MCP.Tool.may_post?/2`.)
 
 **The life side has a boundary.** `routine`/`routine_run`/`quest` rows and the status answer only to the
 operator's own sessions and to an `assistant` seat on a `home`/`life` workspace (`Server.Life.authorize/2`,
