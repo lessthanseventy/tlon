@@ -108,7 +108,13 @@ defmodule Server.Smoke.FixturesTest do
 
   test "interrupted_schedule_run seeds a script schedule whose last run was cut off with exit 143" do
     assert :ok = Fixtures.apply("interrupted_schedule_run", "tlon_smoke_4100")
-    [s] = Server.Schedules.in_workspace(Server.Bootstrap.default_workspace_id())
+
+    s =
+      Enum.find(
+        Server.Schedules.in_workspace(Server.Bootstrap.default_workspace_id()),
+        &(&1.title == "fixture: a script cut off")
+      )
+
     assert [%{status: "interrupted", exit: 143}] = Server.Schedules.runs(s.id)
   end
 

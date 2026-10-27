@@ -81,7 +81,8 @@ defmodule Server.Smoke.Fixtures do
     job
     |> Ecto.Changeset.change(
       state: "discarded",
-      attempted_at: DateTime.utc_now(),
+      # a verdict is stamped to the second and counts only if it is not older than its item
+      attempted_at: DateTime.add(DateTime.utc_now(), -60, :second),
       errors: [%{"error" => "fixture: boom"}]
     )
     |> Server.Repo.update!()
