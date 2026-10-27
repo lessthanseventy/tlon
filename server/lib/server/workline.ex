@@ -837,19 +837,23 @@ defmodule Server.Workline do
   (what it pressed and the screen text it saw) recorded as evidence (`workline:<slug>:qa`). A fail
   sends it back to build with the finding, as a review requesting changes does; a pass advances it
   to the merge gate. Its `follow_ups:` are posted once it has moved, for the lead it hands to
-  (`follow_ups/4`). `opts` as `advance/2`'s.
+  (`follow_ups/4`). `opts` as `advance/2`'s, plus `session_id:`, the QA seat's connection, stamped
+  on the `qa by` check (#679); the `cmd` string itself is what `Diary.verdict/1` parses, unchanged.
   """
   def qa_verdict(thread, verdict, author, report, opts \\ [])
 
   def qa_verdict(%Thread{stage: "review"} = thread, verdict, author, report, opts) when verdict in ~w(pass fail) do
     {:ok, _} =
-      Dossier.record_check(%{
-        thread_id: thread.id,
-        cmd: "qa by #{author}",
-        exit: if(verdict == "pass", do: 0, else: 1),
-        tail: report,
-        correlation: "workline:#{thread.slug}:qa"
-      })
+      Dossier.record_check(
+        %{
+          thread_id: thread.id,
+          cmd: "qa by #{author}",
+          exit: if(verdict == "pass", do: 0, else: 1),
+          tail: report,
+          correlation: "workline:#{thread.slug}:qa"
+        },
+        session_id: opts[:session_id]
+      )
 
     outcome =
       if verdict == "fail" do

@@ -74,13 +74,16 @@ defmodule Server.MCP.Tool.PostMessage do
     case acting_thread(params, frame, &Server.MCP.Tool.steers?/2) do
       %Server.Thread{id: thread_id} ->
         result =
-          Channel.post(%{
-            thread_id: thread_id,
-            author: identity.agent,
-            body: params[:body],
-            reply_to: params[:reply_to],
-            kind: if(params[:notice], do: "notice", else: "chat")
-          })
+          Channel.post(
+            %{
+              thread_id: thread_id,
+              author: identity.agent,
+              body: params[:body],
+              reply_to: params[:reply_to],
+              kind: if(params[:notice], do: "notice", else: "chat")
+            },
+            session_id: identity.session_id
+          )
 
         with {:ok, _} <- result,
              do: Server.Presence.Thinking.record(thread_id, identity.agent, "post", "Post · " <> params[:body])
@@ -437,7 +440,10 @@ defmodule Server.MCP.Tool.Finish do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    with {:ok, _} <- Channel.post(%{thread_id: identity.thread_id, author: identity.agent, body: params[:summary]}),
+    with {:ok, _} <-
+           Channel.post(%{thread_id: identity.thread_id, author: identity.agent, body: params[:summary]},
+             session_id: identity.session_id
+           ),
          %Server.Thread{} = thread <- Channel.thread(identity.thread_id),
          false <- Channel.standing?(thread),
          {:ok, closed} <- close(thread, params) do
@@ -557,7 +563,7 @@ defmodule Server.MCP.Tool.RecordCheck do
       )
     else
       %{thread_id: identity.thread_id, cmd: params[:cmd], exit: params[:exit], tail: tail}
-      |> Dossier.record_check()
+      |> Dossier.record_check(session_id: identity.session_id)
       |> then(&reply(frame, &1, fn event -> %{"event_id" => event.id, "kind" => event.kind} end))
     end
   end
