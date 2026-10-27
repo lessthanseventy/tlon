@@ -11,7 +11,7 @@ const server = Bun.serve({
   fetch: (req) => {
     const path = new URL(req.url).pathname
     if (path.endsWith("/office") && officeDown) return new Response("down", { status: 503 })
-    if (path.endsWith("/office")) return Response.json({ roster: [], threads: [{ id: 2, title: "lobby", standing: true, workspace_id: 1 }, { id: 3, title: "lobby notes", standing: false, workspace_id: 1 }], revs: { office: "abc123" }, release: { sha: "0f00bar", cut_at: "2026-10-12T20:00:00Z" }, flags: { build_mode: true }, life: { "7": { level: 2, xp: 650, due: [] } }, pause: "pencils_down" })
+    if (path.endsWith("/office")) return Response.json({ roster: [], threads: [{ id: 2, title: "lobby", standing: true, workspace_id: 1 }, { id: 3, title: "lobby notes", standing: false, workspace_id: 1 }], revs: { office: "abc123" }, release: { sha: "0f00bar", cut_at: "2026-10-12T20:00:00Z" }, flags: { build_mode: true }, life: { "7": { level: 2, xp: 650, due: [] } }, pause: "pencils_down", ticket_open: { "1": { total: 3, loose: 1 } } })
     if (req.method === "GET" && path.endsWith("/office/health")) return new Response("boom", { status: 503 })
     if (req.method === "GET" && path.endsWith("/office/archive/1")) return new Response("null", { status: 200, headers: { "content-type": "application/json" } })
     if (req.method === "GET" && path.endsWith("/life/7")) return Response.json(lifeBody)
@@ -40,6 +40,7 @@ test("status carries the server's revs — what `R` compares to know the office 
   expect(all.release).toEqual({ sha: "0f00bar", cut_at: "2026-10-12T20:00:00Z" })
   expect(all.life).toEqual({ "7": { level: 2, xp: 650, due: [] } })
   expect(all.pause).toBe("pencils_down")
+  expect(all.ticket_open).toEqual({ "1": { total: 3, loose: 1 } })
 })
 
 test("the standing thread is the front desk in the room, not \"lobby\"", async () => {
