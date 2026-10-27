@@ -60,8 +60,85 @@ defmodule Server.Smoke.Fixtures do
     %{
       "tool_denied_need" => {%{}, &tool_denied_need/1},
       "ticket_tree" => {%{}, &ticket_tree/1},
-      "quota_refused_need" => {%{"provider" => "ollama-cloud"}, &quota_refused_need/1}
+      "quota_refused_need" => {%{"provider" => "ollama-cloud"}, &quota_refused_need/1},
+      "failed_job" => {%{}, &failed_job/1},
+      "health_need" => {%{"what" => "disk"}, &health_need/1},
+      "settled_need" => {%{}, &settled_need/1},
+      "passed_up_need" => {%{}, &passed_up_need/1},
+      "interrupted_schedule_run" => {%{}, &interrupted_schedule_run/1}
     }
+  end
+
+  # Needs.failed_jobs: a background job discarded just now (a retry or dismiss from tlon-cli job)
+  defp failed_job(_params) do
+    discard_job()
+    :ok
+  end
+
+  defp discard_job do
+    {:ok, job} = %{} |> Oban.Job.new(worker: "Server.Jobs.KeepUp", queue: "default") |> Server.Repo.insert()
+
+    job
+    |> Ecto.Changeset.change(
+      state: "discarded",
+      attempted_at: DateTime.utc_now(),
+      errors: [%{"error" => "fixture: boom"}]
+    )
+    |> Server.Repo.update!()
+  end
+
+  # Needs.health: the box reading the node is asked for says one vital is over its limit. Held in the
+  # node's env, so it lasts until the smoke is torn down.
+  defp health_need(%{"what" => what}) do
+    reading =
+      case what do
+        "disk" -> %{tmux: true, disk_pct: 95, mem_pct: 10}
+        "mem" -> %{tmux: true, disk_pct: 10, mem_pct: 95}
+        "tmux" -> %{tmux: false, disk_pct: 10, mem_pct: 10}
+        _ -> raise ArgumentError, "health_need what= is disk, mem or tmux, not #{inspect(what)}"
+      end
+
+    Application.put_env(:server, :health_reading, fn -> reading end)
+    :ok
+  end
+
+  defp settled_need(_params), do: verdict(&Server.Office.Needs.settle(&1, "fixture: a retry fixes it", "uqbar"))
+
+  defp passed_up_need(_params),
+    do: verdict(&Server.Office.Needs.pass_up(&1, "fixture: needs a human", "retry it", "uqbar"))
+
+  # Uqbar's verdicts route only with `uqbar_routing` on: turn it on in a config file of this node's own,
+  # never the operator's (Settings edits in the smoke land there too)
+  defp verdict(record) do
+    path = Path.join(System.tmp_dir!(), "smoke-config-#{System.unique_integer([:positive])}.json")
+    :ok = Server.OperatorConfig.put("uqbar_routing", true, path)
+    Application.put_env(:server, :operator_config_path, path)
+    :ok = record.("job:#{discard_job().id}")
+  end
+
+  # RUNS ⊘ / 'last ⊘': a script schedule whose one run was cut off by SIGTERM (exit 143)
+  defp interrupted_schedule_run(_params) do
+    {:ok, %{id: ws}} = Server.Bootstrap.ensure()
+
+    {:ok, s} =
+      Server.Schedules.create(%{
+        workspace_id: ws,
+        kind: "script",
+        title: "fixture: a script cut off",
+        body: "exit 143",
+        cron: "0 3 * * *",
+        enabled: false
+      })
+
+    run =
+      Server.Repo.insert!(%Server.ScheduleRun{
+        schedule_id: s.id,
+        status: "running",
+        started_at: DateTime.truncate(DateTime.utc_now(), :second)
+      })
+
+    %{status: "interrupted"} = Server.Schedules.perform(run.id)
+    :ok
   end
 
   # Needs.quota: a non-anthropic provider's one-shot refused with its plan's 429 (a seat on it is the

@@ -136,8 +136,13 @@ defmodule Server.Jobs.SmokeTest do
     refute Map.has_key?(Server.Repo.reload(job).args, "fixtures")
   end
 
-  test "a malformed fixture name is refused", %{thread: t} do
-    assert {:error, "not a fixture name: " <> _} = Smoke.start(t, nil, "qa1", [], ["Bad Name; rm"])
+  test "a fixture spec with params passes as one word; a malformed one is refused", %{thread: t} do
+    assert {:ok, _} = Smoke.start(t, nil, "qa1", [], ["quota_refused_need:provider=ollama-cloud,n=2"])
+
+    for bad <- ["Bad Name; rm", "x:a=b c", "x:a=$(id)", "x:a=\"b\"", "x:=b", "x:a=b;c=d"] do
+      assert {:error, "not a fixture name: " <> _} = Smoke.start(t, nil, "qa1", [], [bad])
+    end
+
     refute_enqueued(worker: Server.Jobs.Smoke)
   end
 
