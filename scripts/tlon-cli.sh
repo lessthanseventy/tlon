@@ -74,6 +74,7 @@
 #                                  builder of it, approves its head
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
 #     approve <id> --skip-qa <why…>  …and land a review past an owed QA pass, recorded with why
+#     (TLON_AUTHOR set → approved as that seat; Uqbar's cannot approve a limit-hit gate)
 set -euo pipefail
 
 # the release the service runs (.release, the release pointer's build), from the main checkout
@@ -616,6 +617,12 @@ case "$cmd" in
       shift
       [ "$#" -gt 0 ] || { echo 'approve --skip-qa needs a reason' >&2; exit 2; }
       opts="[skip_qa: \"$(esc "$*")\"]"
+    fi
+    # an agent's shell has TLON_AUTHOR (Uqbar's = uqbar); the operator's has none. The service
+    # refuses a limit-hit gate to uqbar and records the approval by this handle (workline.ex approve/2).
+    if [ -n "${TLON_AUTHOR:-}" ]; then
+      opts="${opts%]}"; [ "$opts" = "[" ] || opts="$opts, "
+      opts="${opts}as: \"$(esc "$TLON_AUTHOR")\"]"
     fi
     # Complete a workline's parked gate (awaiting: andrew) — the operator's approval verb.
     # approve RE-VERIFIES the owed artifact via git in the SERVICE node — like `advance`,
