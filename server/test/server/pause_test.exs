@@ -191,4 +191,41 @@ defmodule Server.PauseTest do
     assert {:ok, :working} = Pause.back_to_work()
     assert length(bodies(lobby)) == before
   end
+
+  describe "auto/1" do
+    @hot %{five_hour: %{percent: 91, resets_at: "2026-10-27T14:00:00Z"}}
+
+    test "a window at the threshold while working pauses and says why on the lobby", %{lobby: lobby} do
+      assert :ok = Pause.auto(@hot)
+      assert Pause.state() == :pencils_down
+      assert Enum.any?(bodies(lobby), &(&1 =~ "5h at 91%" and &1 =~ "14:00" and &1 =~ "back to work when you say"))
+    end
+
+    test "below the threshold nothing happens" do
+      assert :ok = Pause.auto(%{five_hour: %{percent: 89, resets_at: nil}})
+      assert Pause.state() == :working
+    end
+
+    test "after back_to_work the same {window, resets_at} does not fire again; a new resets_at does" do
+      Pause.auto(@hot)
+      {:ok, :working} = Pause.back_to_work()
+      Pause.auto(@hot)
+      assert Pause.state() == :working
+      Pause.auto(%{five_hour: %{percent: 91, resets_at: "2026-10-27T19:00:00Z"}})
+      assert Pause.state() == :pencils_down
+    end
+
+    test "a manual pause is left as it is, and says nothing", %{lobby: lobby} do
+      {:ok, :lights_out} = Pause.lights_out()
+      before = bodies(lobby)
+      Pause.auto(@hot)
+      assert Pause.state() == :lights_out
+      assert bodies(lobby) == before
+    end
+
+    test "the weekly window counts too", %{lobby: lobby} do
+      Pause.auto(%{seven_day: %{percent: 95, resets_at: nil}})
+      assert Enum.any?(bodies(lobby), &(&1 =~ "weekly at 95%"))
+    end
+  end
 end
