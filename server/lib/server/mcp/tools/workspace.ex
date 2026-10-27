@@ -207,7 +207,7 @@ defmodule Server.MCP.Tool.FileTicket do
          [] <- if(distinct, do: [], else: Server.Recurrence.similar_tickets(workspace_id, params[:title])),
          {:ok, issue} <- ownable(issue_id, workspace_id),
          [] <- Tickets.bad_blockers(blocked_by),
-         {:ok, ticket} <- Tickets.file(Map.put(params, :workspace_id, workspace_id)) do
+         {:ok, ticket} <- Tickets.file(Map.put(params, :workspace_id, workspace_id), session_id: identity.session_id) do
       if issue, do: {:ok, _} = Server.Dossier.own_issue(issue, ticket, "filed by #{identity.agent}")
       :ok = Tickets.set_blockers(ticket.id, blocked_by)
       reply(frame, {:ok, ticket}, &MCP.Brief.ticket/1)

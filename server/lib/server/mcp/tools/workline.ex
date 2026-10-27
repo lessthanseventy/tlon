@@ -149,7 +149,7 @@ defmodule Server.MCP.Tool.SubmitQA do
 
       thread ->
         if thread_id == identity.thread_id or qa_seat?(thread, identity.agent),
-          do: verdict(thread, params, identity.agent, frame),
+          do: verdict(thread, params, identity, frame),
           else: fail(frame, "#{identity.agent} is not a qa seat on thread #{thread_id}'s bench")
     end
   end
@@ -159,11 +159,14 @@ defmodule Server.MCP.Tool.SubmitQA do
   defp qa_seat?(thread, agent),
     do: thread.workspace_id |> Server.Workspaces.bench() |> Enum.any?(&(&1.archetype == "qa" and &1.name == agent))
 
-  defp verdict(thread, params, agent, frame) do
+  defp verdict(thread, params, identity, frame) do
     follow_ups = Workline.follow_up_items(params[:follow_ups] || [])
     n = length(follow_ups)
 
-    case Workline.qa_verdict(thread, params[:verdict], agent, params[:report], follow_ups: follow_ups) do
+    case Workline.qa_verdict(thread, params[:verdict], identity.agent, params[:report],
+           follow_ups: follow_ups,
+           session_id: identity.session_id
+         ) do
       {:error, {:bounced, _}} ->
         ok(frame, %{"verdict" => "fail", "follow_ups" => n, "next" => "sent back to build"})
 
