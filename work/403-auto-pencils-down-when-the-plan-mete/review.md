@@ -1,101 +1,30 @@
 # Review: auto pencils down at a plan-meter threshold (#403)
 
-**Verdict: request_changes.** Branch `work/403-auto-pencils-down-when-the-plan-mete` at 7ee5f33 (code at 1a9328c; 7ee5f33 is pr.md only). Diff read in full: `operator_config.ex`, `pause.ex`, `usage.ex`, the three tests, spec, plan, pr.md. CHECKS: `menard run check --in server` ok 2237/0 and the server's `mise run check` green on the branch. No bench_contrast row (no persona file touched), so nothing to weigh there.
+**Verdict: approve.** Branch `work/403-auto-pencils-down-when-the-plan-mete` at d7bda3f (code at 4ed471d; d7bda3f strips three debug `IO.inspect` lines from the test). Second round: the prior review at 79c73aa requested one change, and the diff since (`git diff 79c73aa..d7bda3f -- server/`) is exactly that change plus its test. CHECKS: the server's `mise run check` green on the branch at 07:52:56Z (exit 0); my own `menard run test --in server test/server/pause_test.exs test/server/usage_test.exs` 18/0 at d7bda3f (recorded). No bench_contrast row in the CHECKS shown; no persona file touched, so none expected.
 
-One blocking finding, by reading, not by running (I cannot write the red test; it is below for the builder to add):
+## 1. The single-slot latch — FIXED
 
-## 1. The latch is one slot, so back_to_work does not stick when both windows are hot — BLOCKING
-
-The witness, `pause.ex`:
+The witness, `pause.ex` at d7bda3f:
 
 ```elixir
-latched = OperatorConfig.read()["auto_paused_for"]
+latched = latched()
 ...
-Enum.find(windows, fn {name, w} -> w.percent >= limit and latch(name, w) != latched end) do
-  :ok = OperatorConfig.put("auto_paused_for", latch(name, %{resets_at: r}))
+Enum.find(windows, fn {name, w} ->
+  w.percent >= limit and Map.get(latched, to_string(name), :none) != w.resets_at
+end) do
+  :ok = OperatorConfig.put("auto_paused_for", Map.put(latched, to_string(name), r))
 ```
 
-`auto_paused_for` holds exactly one `"window|resets_at"` string, and every window is compared against that one string. Trace with both windows over the knob (the ordinary end of a week: weekly at 92%, each 5h window crossing 90%), `Enum.find` iterating a small map in key order, `:five_hour` first:
+`auto_paused_for` is now a map window → last `resets_at` that fired, and each window is compared against its own slot. The ping-pong trace from round one (5h fires, back to work, weekly fires and overwrites, back to work, 5h fires again) no longer holds: step 3 finds `"five_hour"` still latched at R1 and skips it. The test I asked for is in `pause_test.exs` under `auto/1` and asserts `:working` after the second back_to_work with both windows hot. The builder reports it red before and green after; I confirmed green at d7bda3f, not red at 1a9328c (I do not rebuild old shas for a reviewed patch I wrote).
 
-1. Report: 5h|R1 fires, latch = `"five_hour|R1"`, pencils down. Operator: back to work.
-2. Report: 5h|R1 == latch, skipped; weekly|R2 != latch, fires, latch = `"seven_day|R2"`. Operator: back to work.
-3. Report: 5h|R1 != `"seven_day|R2"`, fires again. The 5h override from step 1 is gone.
+Round-trip checked: `OperatorConfig.put/3` writes any JSON value with no knob check and `read/1` decodes with string keys, so the map comes back as written; `to_string(name)` keys match. A window with `resets_at: nil` latches as JSON null and reads back nil, which equals nil, so it does not fire twice; a window never seen misses to `:none` and fires. Both are what the doc promises. `latched/0` falls to `%{}` on any non-map, so a settings file from before this change (a string in that key) cannot crash the report path.
 
-So the office re-pauses on every whole-point move, alternating windows, for as long as both stay over the knob. That is the spec's requirement b ("the operator's back_to_work is the override, and it has to stick") broken in the common case. The existing test covers one window only, which is why it is green.
+## 2. Spec deviation on nullability — still open, not blocking
 
-Fix: one slot per window. A window's `resets_at` only moves forward, so a map window → last resets_at that fired is enough.
+Unchanged from round one. `auto_pause_at` is int 1–100 with 100 as off, because `OperatorConfig.value/2` turns nil into the default and `put_settings/2` deletes the key on nil. Correct as declared in pr.md; the knob-level fix is a follow-up (listed below, carried over).
 
-```diff
---- a/server/lib/server/pause.ex
-+++ b/server/lib/server/pause.ex
-@@
-   `auto_pause_at` knob, pencils down and the reason on the lobby. Only from :working; a window that
--  already paused the office (`{window, resets_at}`, kept in the settings file) never pauses it again, so
--  the operator's back_to_work sticks. Always `:ok`.
-+  already paused the office (its `resets_at`, kept per window in the settings file) never pauses it
-+  again, so the operator's back_to_work sticks. Always `:ok`.
-   """
-   def auto(windows) do
-     limit = OperatorConfig.setting("auto_pause_at")
--    latched = OperatorConfig.read()["auto_paused_for"]
-+    latched = latched()
- 
-     with :working <- state(),
-          {name, %{percent: p, resets_at: r}} <-
--           Enum.find(windows, fn {name, w} -> w.percent >= limit and latch(name, w) != latched end) do
--      :ok = OperatorConfig.put("auto_paused_for", latch(name, %{resets_at: r}))
-+           Enum.find(windows, fn {name, w} ->
-+             w.percent >= limit and Map.get(latched, to_string(name), :none) != w.resets_at
-+           end) do
-+      :ok = OperatorConfig.put("auto_paused_for", Map.put(latched, to_string(name), r))
-       {:ok, _} = pencils_down()
-       auto_say(name, p, r)
-     end
- 
-     :ok
-   end
- 
--  defp latch(name, %{resets_at: r}), do: "#{name}|#{r}"
-+  # One slot per window, so one window firing never forgets the other's override.
-+  defp latched do
-+    case OperatorConfig.read()["auto_paused_for"] do
-+      %{} = m -> m
-+      _ -> %{}
-+    end
-+  end
-```
+## 3. Everything else — unchanged, holds
 
-`:none` as the miss default keeps a first `resets_at: nil` window firing (nil == nil would otherwise read as already latched). The red test, in `pause_test.exs` under `describe "auto/1"`:
+Spec a, c, d met (per-bucket threshold, `:working` only, no auto-resume; #672 filed). Spec e stated in the Usage moduledoc. `Usage.report/1` still `:ok`, reading stored before the compare. Credo clean after d7bda3f.
 
-```elixir
-    test "each window latches on its own: the weekly firing doesn't forget the 5h override" do
-      both = %{
-        five_hour: %{percent: 91, resets_at: "2026-10-27T14:00:00Z"},
-        seven_day: %{percent: 92, resets_at: "2026-10-30T00:00:00Z"}
-      }
-
-      Pause.auto(both)
-      {:ok, :working} = Pause.back_to_work()
-      Pause.auto(both)
-      assert Pause.state() == :pencils_down
-      {:ok, :working} = Pause.back_to_work()
-      Pause.auto(both)
-      assert Pause.state() == :working
-    end
-```
-
-Red on 1a9328c at the last assert (step 3 above); green with the map latch. Nothing shipped yet reads `auto_paused_for`, so the shape change needs no migration.
-
-## 2. Spec deviation on nullability: correct as declared — not blocking
-
-pr.md says the knob is int 1–100, not nullable, because `OperatorConfig.value/2` turns nil into the default. Verified in `operator_config.ex`: `value/2` matches `{:ok, v} when not is_nil(v)` and otherwise returns `knob.default`, and `put_settings/2` deletes the key on nil. So nullable-with-default is unreachable off on main as it stands; `auto_land_risk` only works because its default is nil, and `max_session_hours` has the same latent fault. The builder's call is the right one for this change; the knob fix is a follow-up (filed), after which `auto_pause_at` can go nullable as the spec wanted.
-
-## 3. Everything else checked
-
-- Spec a, c, d met: knob per bucket (whichever crosses first), fires only from `:working` (tested with lights out; manual pencils down takes the same `state()` branch), no auto-resume (#672 exists).
-- Spec e: the Usage moduledoc states the in-memory limit and that this never passes pencils down. OperatorConfig's moduledoc names the knob. The office settings panel reads `knobs/1`, so the knob appears there without a UI change.
-- `Usage.report/1` still returns `:ok` (`auto/1` always does), so the HTTP door's contract is unchanged; the reading is stored before the compare, so a pause never loses a report.
-- `round(percent)` is fine on an integer or float. `resets_at` is printed in UTC and says so.
-- Tests: `usage_test` now cleans the DB and points the config path at a temp file, like `pause_test`; both `async: false`.
-
-Nits, no action required: the lobby gets two lines (the generic pencils-down line from `go/1`, then the reason), where the spec pictured one; folding the reason into `lobby/1` would spare the operator a line. `server/AGENTS.md`'s pause bullet doesn't mention the meter as a trigger; a half-line there when the module is next touched.
+Nits, no action required: the lobby still gets two lines on an auto-pause (the generic one from `go/1`, then the reason). `server/AGENTS.md`'s pause bullet doesn't name the meter as a trigger.
