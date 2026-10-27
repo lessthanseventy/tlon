@@ -98,7 +98,7 @@ defmodule Server.MCP.Spawn do
 
   defp mint_and_export(thread_ref, agent_name, opts) do
     with {:ok, %{thread: thread, agent: agent}} <- ensure(thread_ref, agent_name, opts),
-         {:ok, cwd} <- cwd_export(thread, agent, opts) do
+         {:ok, cwd} <- cwd_export(thread, agent) do
       token = Tokens.mint(thread, agent)
       {:ok, %{thread: thread, agent: agent, token: token, exports: exports(thread, agent, token) <> cwd}}
     end
@@ -165,9 +165,10 @@ defmodule Server.MCP.Spawn do
   # the main tree (2026-09-08). An outside citizen starts in the repo itself, as the operator's own
   # sessions do, and makes its own scratch worktrees. No repo exports nothing; the pane starts wherever.
   # A worktree dir that is not a checkout is refused: git there would fall up to the live main tree.
-  # Only a staffing join catches the checkout up: a rider (`assign: false`) joins while the lead's
-  # pane is mid-turn, and a fast-forward under it is what the catch-up must never do.
-  defp cwd_export(thread, agent, opts) do
+  # Only the thread's lead catches its checkout up. The switchboard's wake spawn joins the lead with
+  # `assign: false` (it never re-seats), so `:assign` is not the tell; a rider (a crew pane, a reviewer
+  # window) is not the lead and joins while the lead's pane is mid-turn, where a move must never land.
+  defp cwd_export(thread, agent) do
     dir =
       if agent.name in Server.Outside.names(),
         do: Server.repo_for_thread(thread),
@@ -175,7 +176,7 @@ defmodule Server.MCP.Spawn do
 
     case dir do
       {:ok, path} ->
-        if Keyword.get(opts, :assign, true) and agent.name not in Server.Outside.names(),
+        if agent.id == thread.agent_id and agent.name not in Server.Outside.names(),
           do: Server.catch_up_worktree(thread, path)
 
         {:ok, "\nexport TLON_CWD=\"#{path}\""}
