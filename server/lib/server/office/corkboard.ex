@@ -30,6 +30,13 @@ defmodule Server.Office.Corkboard do
   @every_s 480
   @keep 12
   @keep_ideas 20
+  @side_every_s 60
+  @side_voice """
+  You write ONE sticky note a coworker pins on the corkboard of a pixel-art office of AI coworkers:
+  one small step of their ongoing personal project, in their own voice. Under 120 characters; no
+  emoji, no hashtags. Never a claim that some code, test or tool is broken or how to fix it.
+  Respond with ONLY a JSON object: {"note": "<the note>"}
+  """
   @voice """
   You write ONE sticky note a coworker pins on the corkboard of a pixel-art office of AI coworkers,
   for the others to read. Under 120 characters; in character for their role; dry, warm, a little
@@ -153,13 +160,25 @@ defmodule Server.Office.Corkboard do
     now = System.system_time(:second)
     entry = entry(state, ws)
 
+    me = self()
+
     if now - entry.at >= @every_s do
-      me = self()
       board = entry.notes
       Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:pinned, ws, write(ws, board)}) end)
     end
 
-    {:reply, entry.notes, Map.put(state, ws, %{entry | at: if(now - entry.at >= @every_s, do: now, else: entry.at)})}
+    # one seat's side project per poll, and a poll only looks once a minute: a cap or a slow model never fans out
+    if now - entry.side_at >= @side_every_s do
+      Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:pinned, ws, side_write(ws)}) end)
+    end
+
+    entry = %{
+      entry
+      | at: if(now - entry.at >= @every_s, do: now, else: entry.at),
+        side_at: if(now - entry.side_at >= @side_every_s, do: now, else: entry.side_at)
+    }
+
+    {:reply, entry.notes, Map.put(state, ws, entry)}
   end
 
   @impl true
@@ -171,7 +190,7 @@ defmodule Server.Office.Corkboard do
     {:noreply, Map.put(state, ws, %{entry | notes: Enum.take([note | entry.notes], @keep), next: entry.next + 1})}
   end
 
-  defp entry(state, ws), do: Map.get(state, ws, %{notes: [], at: 0, next: 1})
+  defp entry(state, ws), do: Map.get(state, ws, %{notes: [], at: 0, side_at: 0, next: 1})
 
   @doc """
   A coworker's idea for the operator, pinned in the suggestion box (`suggest` MCP tool): something
@@ -261,6 +280,49 @@ defmodule Server.Office.Corkboard do
       %{author: author.name, kind: to_string(kind), body: body, re: re}
     else
       _ -> nil
+    end
+  end
+
+  # The first seat on the bench whose soul has a side project that is due: its next step, written
+  # through `Server.Generator` (cheap tier, under the daily cap) and kept on the standing thread.
+  defp side_write(ws) do
+    now = DateTime.utc_now()
+
+    Enum.find_value(Server.Workspaces.bench(ws), fn %{name: name} ->
+      section = (Server.Soul.read(name) || %{})["The side project"] || ""
+      state = side_state(ws, name)
+
+      if side_due?(%{section: section, last: state.last}, now), do: side_note(ws, name, section, state.n + 1)
+    end)
+  end
+
+  defp side_note(ws, name, section, n) do
+    prompt =
+      @side_voice <>
+        "\n#{name}'s THE SIDE PROJECT: " <>
+        section <> "\nThis is number #{n}; continue it, do not repeat. Previous: " <> last_side_note(ws, name)
+
+    with {:ok, out} <- Server.Generator.run(prompt),
+         body when is_binary(body) <- parse(out),
+         {:ok, _} <- post_side_project(ws, name, body, n) do
+      %{author: name, kind: "side project", body: body, re: nil}
+    else
+      _ -> nil
+    end
+  end
+
+  defp last_side_note(ws, name) do
+    with %Thread{id: thread_id} <- Server.Channel.machine_thread(ws),
+         %Message{payload: %{"note" => note}} <-
+           Repo.one(
+             from m in Message,
+               where: m.thread_id == ^thread_id and m.kind == "side project" and m.author == ^name,
+               order_by: [desc: m.id],
+               limit: 1
+           ) do
+      note
+    else
+      _ -> "(nothing yet)"
     end
   end
 
