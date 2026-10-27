@@ -225,14 +225,14 @@ defmodule Server.Shifts do
   ahead, and the providers that refused a call with a spent plan's 429 (a pane's, which stays until
   the pane stops showing it, or a one-shot's, `refused/2`):
   `[%{workspace_id, provider, crew, reset, hint, until, at}]` (`reset` the local label, `hint` the
-  provider's raw line, `until` and `at` UTC, `until` nil for a pane's). A pane that no longer shows
+  provider's words, account name and ref id cut, `until` and `at` UTC, `until` nil for a pane's). A pane that no longer shows
   its limit, or is gone, has left it.
   """
   def out_of_quota(now \\ DateTime.utc_now()) do
     for %Workspace{id: ws, knobs: %{"quota_out" => out}} <- Repo.all(Workspace),
         {_pane, %{"at" => at} = q} <- out,
-        until <- [q["until"] && elem(DateTime.from_iso8601(q["until"]), 1)],
-        is_nil(until) or DateTime.after?(until, now) do
+        until <- [parse_until(q["until"])],
+        is_nil(q["until"]) or (until && DateTime.after?(until, now)) do
       {:ok, at, _} = DateTime.from_iso8601(at)
 
       %{
@@ -342,7 +342,7 @@ defmodule Server.Shifts do
   def prune(workspace_id, panes) do
     for knob <- ["limits_seen", "quota_out"] do
       seen = seen(workspace_id, knob)
-      kept = Map.filter(seen, fn {key, _} -> MapSet.member?(panes, key) end)
+      kept = Map.filter(seen, fn {key, entry} -> kept?(key, entry, panes) end)
       if map_size(kept) != map_size(seen), do: put_seen(workspace_id, kept, knob)
     end
 
@@ -497,7 +497,32 @@ defmodule Server.Shifts do
   defp spent_plan?(_hit), do: false
 
   defp quota_entry(provider, line, extra \\ %{}),
-    do: Map.merge(%{"provider" => provider, "hint" => line, "at" => DateTime.to_iso8601(now_utc())}, extra)
+    do: Map.merge(%{"provider" => provider, "hint" => hint(line), "at" => DateTime.to_iso8601(now_utc())}, extra)
+
+  # knobs reach every coworker's brief: keep the provider's words, not the account name or the ref id
+  defp hint(line) do
+    line
+    |> String.split(" · ", parts: 2)
+    |> List.last()
+    |> String.replace(~r/\s*\(ref:.*$/, "")
+    |> String.replace(~r/\byou \([^)]*\)/, "you")
+    |> String.slice(0, 200)
+  end
 
   defp now_utc, do: DateTime.truncate(DateTime.utc_now(), :second)
+
+  # a one-shot's entry (`refused/2`) is no pane's: its `until` retires it, not a pane going
+  defp kept?("oneshot/" <> _, entry, _panes),
+    do: entry["until"] |> parse_until() |> then(&(&1 && DateTime.after?(&1, now_utc())))
+
+  defp kept?(key, _entry, panes), do: MapSet.member?(panes, key)
+
+  defp parse_until(iso) when is_binary(iso) do
+    case DateTime.from_iso8601(iso) do
+      {:ok, until, _} -> until
+      _ -> nil
+    end
+  end
+
+  defp parse_until(_), do: nil
 end
