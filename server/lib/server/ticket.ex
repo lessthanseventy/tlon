@@ -62,8 +62,8 @@ defmodule Server.Ticket do
   def urgency(%__MODULE__{priority: priority}), do: urgency(priority)
   def urgency(priority), do: Map.get(@urgency, priority, 1)
 
-  @doc "File a ticket. `workspace_id` + `title` required; status defaults to `backlog`. Stamps both times."
-  def file_changeset(attrs) do
+  @doc "File a ticket. `workspace_id` + `title` required; status defaults to `backlog`. Stamps both times, and `session_id` (never cast: attrs cannot assert it)."
+  def file_changeset(attrs, session_id \\ nil) do
     now = DateTime.truncate(DateTime.utc_now(), :second)
 
     %__MODULE__{}
@@ -74,6 +74,7 @@ defmodule Server.Ticket do
     |> foreign_key_constraint(:project_id)
     |> put_change(:created_at, now)
     |> put_change(:updated_at, now)
+    |> put_change(:session_id, session_id)
   end
 
   @doc "Update a ticket's mutable fields (status/priority/title/body/labels/assignee/project). An epic's status is derived, so it is not cast. Re-stamps `updated_at`."

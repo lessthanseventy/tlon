@@ -118,9 +118,9 @@ defmodule Server.Dossier do
   @doc "A fact by id, or nil — the load path for `recheck_fact`, scope-checked by its tool."
   def fact(id), do: Repo.get(Fact, id)
 
-  @doc "Record an append-only event. `{:ok, event}` or `{:error, changeset}`."
-  def record_event(attrs) do
-    attrs |> Event.record_changeset() |> Repo.insert() |> Bus.announce(:event_recorded)
+  @doc "Record an append-only event. `{:ok, event}` or `{:error, changeset}`. `opts[:session_id]` stamps the session that recorded it (#679)."
+  def record_event(attrs, opts \\ []) do
+    attrs |> Event.record_changeset(opts[:session_id]) |> Repo.insert() |> Bus.announce(:event_recorded)
   end
 
   @doc """
@@ -353,20 +353,24 @@ defmodule Server.Dossier do
   `tail` of output. exit 0 lands a `check_passed` event, anything else a `check_failed` —
   the outcome is keyed on the number, never on a self-report. `{:ok, event}` or
   `{:error, changeset}`. The agent runs the command (via `cap`); server only records.
+  `opts` as `record_event/2`'s.
   """
-  def record_check(%{exit: exit} = attrs) do
+  def record_check(%{exit: exit} = attrs, opts \\ []) do
     kind = if exit == 0, do: "check_passed", else: "check_failed"
 
-    record_event(%{
-      thread_id: attrs[:thread_id],
-      kind: kind,
-      correlation: attrs[:correlation],
-      detail:
-        Map.merge(
-          %{"cmd" => attrs[:cmd], "exit" => exit, "tail" => attrs[:tail]},
-          if(attrs[:sha], do: %{"sha" => attrs[:sha]}, else: %{})
-        )
-    })
+    record_event(
+      %{
+        thread_id: attrs[:thread_id],
+        kind: kind,
+        correlation: attrs[:correlation],
+        detail:
+          Map.merge(
+            %{"cmd" => attrs[:cmd], "exit" => exit, "tail" => attrs[:tail]},
+            if(attrs[:sha], do: %{"sha" => attrs[:sha]}, else: %{})
+          )
+      },
+      opts
+    )
   end
 
   @doc """

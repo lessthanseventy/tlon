@@ -20,13 +20,14 @@ defmodule Server.Tickets do
   @doc """
   File a ticket. `{:ok, ticket}` or `{:error, changeset}`. With `epic_id` the ticket is filed as that epic's child in
   the same transaction, so a refused parent (not an epic, an epic under an epic) files nothing.
+  `opts[:session_id]` stamps the session that filed it (#679).
   """
-  def file(attrs) do
+  def file(attrs, opts \\ []) do
     {epic_id, attrs} = attrs |> Map.new() |> Map.pop(:epic_id)
 
     attrs
     |> Map.put_new_lazy(:sort, fn -> next_sort(attrs[:workspace_id] || attrs["workspace_id"]) end)
-    |> Ticket.file_changeset()
+    |> Ticket.file_changeset(opts[:session_id])
     |> insert_under(epic_id)
     |> Bus.announce(:ticket_filed)
   end

@@ -69,10 +69,11 @@ defmodule Server.Channel do
   Post a message to a thread — the capture path. Returns `{:ok, message}` or
   `{:error, changeset}` on a missing thread/author/body. A thread that does not
   exist is refused by SQLite's own foreign key (it raises), never by a mirrored
-  check here (§10).
+  check here (§10). `opts[:session_id]` stamps the session that wrote it (#679): the
+  connection's, passed by an MCP tool; every other caller leaves it NULL.
   """
-  def post(attrs) do
-    with {:ok, message} <- attrs |> Message.post_changeset() |> Repo.insert() do
+  def post(attrs, opts \\ []) do
+    with {:ok, message} <- attrs |> Message.post_changeset(opts[:session_id]) |> Repo.insert() do
       # Announce the durable row (liveness only, §10) — a broadcast with no
       # subscriber is a harmless no-op.
       Server.Bus.broadcast({:message_posted, message})

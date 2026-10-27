@@ -47,8 +47,9 @@ defmodule Server.Message do
   A message posted by a participant. A thread, an author, and a body are required
   (§5b). `delivered_at` is intentionally not castable here: the sender's own write
   path can never assert delivery — only the switchboard's atomic claim can.
+  `session_id` is the connection's session (never cast: attrs cannot assert it).
   """
-  def post_changeset(attrs) do
+  def post_changeset(attrs, session_id \\ nil) do
     %__MODULE__{}
     |> cast(attrs, [
       :thread_id,
@@ -65,6 +66,7 @@ defmodule Server.Message do
     |> validate_inclusion(:kind, ["chat", "prompt", "stall", "notice", "suggestion", "margin", "side project"])
     |> Server.Secrets.validate_no_secret(:body)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
+    |> put_change(:session_id, session_id)
   end
 
   @doc "Close a `prompt`, `stall` or `suggestion`: how it ended — `answered: y`, `answered in the terminal`, `pane moved`, `window closed`."
