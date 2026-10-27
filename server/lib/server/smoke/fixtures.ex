@@ -83,11 +83,20 @@ defmodule Server.Smoke.Fixtures do
     :ok
   end
 
-  # a life workspace's 'in bed by 23:00' routine: the dues before last night's were stamped on time, and
-  # the one since has gone unstamped past its window. The routine is backdated so dues have fired.
+  # a life workspace's 'in bed by 23:00' routine: yesterday's due was stamped on time, and today's, a
+  # few minutes ago by the server's local clock (a fixed 23:00 would be overdue only after 23:00), has
+  # gone unstamped past its window. The routine is backdated so dues have fired.
   defp life_routine_overdue(_params) do
     {:ok, %{id: ws}} = Server.Workspaces.create_from("life", "Life")
-    {:ok, routine} = Server.Life.create_routine(ws, %{title: "in bed by 23:00", every: "0 23 * * *", window_minutes: 1})
+    due = DateTime.add(Server.Schedules.local_now(), -5 * 60, :second)
+
+    {:ok, routine} =
+      Server.Life.create_routine(ws, %{
+        title: "in bed by 23:00",
+        every: "#{due.minute} #{due.hour} * * *",
+        window_minutes: 0
+      })
+
     born = DateTime.utc_now() |> DateTime.add(-3 * 86_400, :second) |> DateTime.truncate(:second)
     Server.Repo.update_all(from(r in Server.Routine, where: r.id == ^routine.id), set: [created_at: born])
     routine = Server.Repo.reload!(routine)
@@ -95,7 +104,7 @@ defmodule Server.Smoke.Fixtures do
     now = DateTime.utc_now()
     current = Server.Life.current_due_at(routine, now)
     previous = Server.Life.previous_due_at(routine, current)
-    {:ok, _, _} = Server.Life.routine_done(routine.id, DateTime.add(previous, 30, :second))
+    {:ok, _, _} = Server.Life.routine_done(routine.id, previous)
     :ok
   end
 
