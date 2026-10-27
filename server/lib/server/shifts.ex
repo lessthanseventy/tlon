@@ -34,6 +34,8 @@ defmodule Server.Shifts do
   # through ollama.com); the status is read off the number
   @provider_limit ~r/^[ \t]*(?:⎿[ \t]*)?(API Error:\s*Request rejected\s*\((\d{3})\).*)$/mu
 
+  @oneshot_minutes 30
+
   @doc "The crew on in the workspace."
   def current(workspace_id), do: Repo.one(from w in Workspace, where: w.id == ^workspace_id, select: w.shift) || "day"
 
@@ -220,8 +222,11 @@ defmodule Server.Shifts do
 
   @doc """
   The panes whose Claude usage limit no other crew could take, per workspace, with the reset still
-  ahead: `[%{workspace_id, crew, reset, until, at}]` (`reset` the local label, `until` and `at` UTC).
-  A pane that no longer shows its limit, or is gone, has left it.
+  ahead, and the providers that refused a call with a spent plan's 429 (a pane's, which stays until
+  the pane stops showing it, or a one-shot's, `refused/2`):
+  `[%{workspace_id, provider, crew, reset, hint, until, at}]` (`reset` the local label, `hint` the
+  provider's raw line, `until` and `at` UTC, `until` nil for a pane's). A pane that no longer shows
+  its limit, or is gone, has left it.
   """
   def out_of_quota(now \\ DateTime.utc_now()) do
     for %Workspace{id: ws, knobs: %{"quota_out" => out}} <- Repo.all(Workspace),
@@ -426,22 +431,43 @@ defmodule Server.Shifts do
 
   # a 429 that names a spent plan ("usage limit") lasts until the plan's reset: a quota item at once.
   # Any other refusal is logged with its raw line, so the first real one of its kind is a fixture.
-  defp on_provider_limit(workspace_id, provider, key, %{status: status, line: line}) do
+  defp on_provider_limit(workspace_id, provider, key, %{line: line} = hit) do
     mark = fingerprint(line)
 
     if seen(workspace_id)[key] != mark do
-      Logger.info("#{provider} refused with HTTP #{status} on #{key}: #{line}")
-
-      if status == 429 and line =~ "usage limit" do
-        now = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
-        remember(workspace_id, key, %{"provider" => provider, "hint" => line, "at" => now}, "quota_out")
-      end
-
+      Logger.info("#{provider} refused with HTTP #{hit.status} on #{key}: #{line}")
+      if spent_plan?(hit), do: remember(workspace_id, key, quota_entry(provider, line), "quota_out")
       remember(workspace_id, key, mark)
     end
 
     :ok
   end
+
+  @doc """
+  A one-shot model call's failure text (`Server.ModelCli`), refused by `provider`: a spent plan's 429
+  is a quota entry, for `@oneshot_minutes` and renewed by each refusal, in each workspace seating a
+  coworker on that provider (a one-shot has no pane to clear it); any other refusal is logged with
+  its raw line. A Claude-plan call is left to the pane door. `:ok`.
+  """
+  def refused(provider, text) do
+    with {:ok, hit} <- provider_limit(text) do
+      Logger.info("#{provider} refused a one-shot with HTTP #{hit.status}: #{hit.line}")
+      if provider != "anthropic" and spent_plan?(hit), do: note_oneshot(provider, hit.line)
+    end
+
+    :ok
+  end
+
+  defp note_oneshot(provider, line) do
+    until = now_utc() |> DateTime.add(@oneshot_minutes * 60) |> DateTime.to_iso8601()
+
+    for %Workspace{id: ws} <- Repo.all(Workspace),
+        seats_on?(ws, provider),
+        do: remember(ws, "oneshot/#{provider}", quota_entry(provider, line, %{"until" => until}), "quota_out")
+  end
+
+  defp seats_on?(workspace_id, provider),
+    do: Enum.any?(Workspaces.bench_all(workspace_id), &(Server.Presence.provider_of(&1.name, workspace_id) == provider))
 
   # the next `Sep 28, 9am` after now: this year's, else next year's
   defp dated_at(now, month, day, h, m, ap) do
@@ -466,4 +492,12 @@ defmodule Server.Shifts do
         {NaiveDateTime.add(now, 5 * 3600), :estimated}
     end
   end
+
+  defp spent_plan?(%{status: 429, line: line}), do: line =~ "usage limit"
+  defp spent_plan?(_hit), do: false
+
+  defp quota_entry(provider, line, extra \\ %{}),
+    do: Map.merge(%{"provider" => provider, "hint" => line, "at" => DateTime.to_iso8601(now_utc())}, extra)
+
+  defp now_utc, do: DateTime.truncate(DateTime.utc_now(), :second)
 end

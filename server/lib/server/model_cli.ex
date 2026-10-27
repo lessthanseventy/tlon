@@ -73,10 +73,15 @@ defmodule Server.ModelCli do
       {out, 0} -> {:ok, out}
       {_out, 124} -> {:error, {:model_cli_timeout, timeout}}
       {out, code} when code in [126, 127] -> {:error, {:model_cli_missing, why(err, out)}}
-      {out, code} -> {:error, {:model_cli_exit, code, why(err, out)}}
+      {out, code} -> {:error, {:model_cli_exit, code, refused(provider, why(err, out))}}
     end
   rescue
     e in ErlangError -> {:error, {:model_cli_missing, Exception.message(e)}}
+  end
+
+  defp refused(provider, why) do
+    Server.Shifts.refused(provider, why)
+    why
   end
 
   defp why(err, out) do

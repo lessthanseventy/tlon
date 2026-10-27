@@ -40,7 +40,8 @@ defmodule Server.Office.Needs do
       on the bench leads it: hire one, or hand it to someone; `archetype` the kind), `quota` (per
       workspace: Claude's usage limit with no other crew to put on, until its reset —
       `Server.Shifts.out_of_quota/1` — or a provider's plan spent with a seat on it —
-      `Server.Presence.Engine.spent/0`: `options` the other crews to put on; put away, it waits for
+      `Server.Presence.Engine.spent/0`, or a call it refused with a 429 usage limit, one item per
+      provider, the refusal's raw line as its text: `options` the other crews to put on; put away, it waits for
       the reset), `tool_denied` (a seat's permission check refused its tool twice or more since the
       workline last moved — the adapter's `tool_denied` event, the call and the check's reason — and
       nobody is working it: allowed (`rule`, the Claude Code allow rule for a refused Bash command, is
