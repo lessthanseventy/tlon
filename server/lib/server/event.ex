@@ -30,12 +30,14 @@ defmodule Server.Event do
 
   @doc """
   Record an event. `kind` is required and the closed set is the DB's own CHECK
-  (§10) — a kind outside it raises, never re-checked here.
+  (§10) — a kind outside it raises, never re-checked here. `session_id` is the
+  connection's session (never cast: attrs cannot assert it).
   """
-  def record_changeset(attrs) do
+  def record_changeset(attrs, session_id \\ nil) do
     %__MODULE__{}
     |> cast(attrs, [:thread_id, :kind, :correlation, :detail])
     |> validate_required([:kind])
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
+    |> put_change(:session_id, session_id)
   end
 end
