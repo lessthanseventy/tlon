@@ -86,4 +86,36 @@ defmodule Server.Import.MemoryTest do
     assert fact.text =~ "Reproduce with a test first."
     assert Repo.aggregate(Thread, :count) == 1
   end
+
+  # a memory whose text is under the junk filter's five alphanumerics (frontmatter included)
+  defp placeholder(dir, name) do
+    path = Path.join(dir, name <> ".md")
+    File.write!(path, "---\nname: #{name}\ndescription: x\nmetadata:\n  type: feedback\n---\n\n…\n")
+    path
+  end
+
+  test "a placeholder memory is skipped and logged, not raised on, and the import goes on", ctx do
+    short = placeholder(ctx.dir, "too-short")
+    good = memory(ctx.dir, "store-is-postgres", "project", "The store is Postgres.")
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:ok, %{banked: 1, updated: 0}} = Memory.import_files([short, good], ctx.tlon)
+      end)
+
+    assert log =~ "too-short"
+    refute Repo.get_by(Fact, intent: "memory:too-short")
+    assert Repo.get_by!(Fact, intent: "memory:store-is-postgres")
+  end
+
+  test "a placeholder memory does not overwrite an existing fact's text", ctx do
+    path = memory(ctx.dir, "fix-or-file", "feedback", "Fix it now, or file it.")
+    assert {:ok, %{banked: 1}} = Memory.import_files([path], ctx.tlon)
+
+    placeholder(ctx.dir, "fix-or-file")
+    assert {:ok, %{banked: 0, updated: 0}} = Memory.import_files([path], ctx.tlon)
+
+    assert [fact] = Repo.all(from f in Fact, where: f.intent == "memory:fix-or-file")
+    assert fact.text =~ "Fix it now, or file it."
+  end
 end

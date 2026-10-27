@@ -19,6 +19,8 @@ defmodule Server.Import.Memory do
   alias Server.Repo
   alias Server.Thread
 
+  require Logger
+
   @thread_title "Claude Code memory"
   # a brief's budget is a few thousand tokens; one memory must not be able to eat it
   @text_cap 2_000
@@ -29,7 +31,7 @@ defmodule Server.Import.Memory do
 
     paths
     |> Enum.map(&parse/1)
-    |> Enum.reject(&is_nil/1)
+    |> Enum.reject(&(is_nil(&1) or refused?(&1)))
     |> Enum.reduce(%{banked: 0, updated: 0}, fn memory, tally ->
       case upsert(memory, thread) do
         :banked -> Map.update!(tally, :banked, &(&1 + 1))
@@ -103,6 +105,17 @@ defmodule Server.Import.Memory do
         project_id: project.id,
         created_at: DateTime.truncate(DateTime.utc_now(), :second)
       })
+  end
+
+  # The junk filter `Fact.bank_changeset` holds every door to. Checked before either path, so a
+  # refused memory is skipped rather than raising on the insert or overwriting an existing fact.
+  defp refused?(memory) do
+    if Fact.junk?(memory.text) do
+      Logger.warning("memory import: skipped #{memory.name} — its text is a placeholder, not a fact")
+      true
+    else
+      false
+    end
   end
 
   defp upsert(memory, thread) do
