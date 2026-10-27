@@ -414,6 +414,30 @@ defmodule Server.WorklineTest do
       assert_enqueued(worker: Server.Jobs.Grade, args: %{thread_id: thread.id})
     end
 
+    # #686: the verdict ends the reviewer's session, so nobody is left to call advance_stage — the
+    # approval parks the gate itself, instead of sitting at review with awaiting nil until the stall need
+    test "an approving review parks the gate on the operator itself — its session is gone" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      thread = open!(%{slug: "parks-itself", stage: "review"})
+
+      assert {:ok, %Server.Thread{stage: "review", awaiting: "andrew"}} =
+               Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+
+      assert %Server.Thread{stage: "review", awaiting: "andrew"} = Repo.get!(Server.Thread, thread.id)
+    end
+
+    test "under a standing approval, an approving review of a change already graded queues it itself" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      thread = open!(%{slug: "parks-queued", stage: "review"})
+      graded!(thread, @low)
+
+      assert {:ok, %Server.Thread{stage: "review", awaiting: nil}} =
+               Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent, auto_land_risk: 2)
+
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+      assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "standing approval"))
+    end
+
     test "standing approval: an approved review graded at or under the threshold joins the queue itself" do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       thread = open!(%{slug: "auto-low", stage: "review"})
