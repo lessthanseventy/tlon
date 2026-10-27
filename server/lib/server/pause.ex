@@ -15,6 +15,13 @@ defmodule Server.Pause do
   The state is the operator's settings file's `"pause"` key (`Server.OperatorConfig`), not a
   workspace's: both levers it pulls, intake and the queues, are the whole office's. A restart keeps
   it, and the boot starts the queues paused under lights out (`OperatorConfig.boot_oban/2`).
+
+  One thread can be paused on its own (`pause_thread/1`, the mark `thread.paused_at`; it stays
+  `"open"` to every query): its lead hears the same finish-this-turn notice, only the operator's
+  posts wake it, it owes no continuation, stalled Need or wake alert, and staffing a child of it is
+  refused. The office's pause leaves it alone both ways: pencils down tells it nothing again and back
+  to work does not resume it. `resume_thread/1` clears the mark, drains what was held and wakes the
+  lead.
   """
   import Ecto.Query
 
@@ -23,6 +30,9 @@ defmodule Server.Pause do
   alias Server.Tmux
 
   @told "✎ pencils down — finish this turn"
+
+  # differs from @told so stopped_threads/0 never counts a thread pause as the office's
+  @thread_told "✎ paused — finish this turn"
 
   @resumed "▶ back to work:"
 
@@ -99,6 +109,50 @@ defmodule Server.Pause do
          do: _ = Channel.post(%{thread_id: id, author: "tlon", body: body, kind: "notice"})
   end
 
+  @doc "Whether the operator has paused this one thread."
+  def thread_paused?(thread_id),
+    do: Server.Repo.exists?(from t in Server.Thread, where: t.id == ^thread_id and not is_nil(t.paused_at))
+
+  @doc "Every thread paused on its own, as a set: one query for a list of candidates."
+  def paused_thread_ids do
+    from(t in Server.Thread, where: not is_nil(t.paused_at), select: t.id) |> Server.Repo.all() |> MapSet.new()
+  end
+
+  @doc """
+  Pause one thread: its lead is told to finish the turn, and nothing but the operator's posts wakes
+  it until `resume_thread/1`. `{:ok, thread}`; already paused, nothing is said again.
+  `{:error, :not_found | :not_open}`.
+  """
+  def pause_thread(thread_id) do
+    with {:ok, %Server.Thread{paused_at: nil} = thread} <- open_thread(thread_id) do
+      now = DateTime.truncate(DateTime.utc_now(), :second)
+      {:ok, thread} = thread |> Ecto.Changeset.change(paused_at: now) |> Server.Repo.update()
+      tell(thread_id, @thread_told)
+      {:ok, thread}
+    end
+  end
+
+  @doc """
+  Undo `pause_thread/1`: clear the mark, wake the lead, deliver what was held. `{:ok, thread}`; not
+  paused, nothing is said. The mark goes first, or the wake itself is held.
+  """
+  def resume_thread(thread_id) do
+    with {:ok, %Server.Thread{paused_at: %DateTime{}} = thread} <- open_thread(thread_id) do
+      {:ok, thread} = thread |> Ecto.Changeset.change(paused_at: nil) |> Server.Repo.update()
+      wake(thread_id)
+      Server.Switchboard.drain()
+      {:ok, thread}
+    end
+  end
+
+  defp open_thread(thread_id) do
+    case Server.Repo.get(Server.Thread, thread_id) do
+      nil -> {:error, :not_found}
+      %Server.Thread{state: "open"} = thread -> {:ok, thread}
+      _ -> {:error, :not_open}
+    end
+  end
+
   defp go(want) do
     from = state()
 
@@ -114,17 +168,18 @@ defmodule Server.Pause do
     {:ok, want}
   end
 
-  defp tell_live_threads do
-    body =
-      @told <>
-        ", commit what you have, and stop; don't start anything new. You'll hear when it's back to work."
+  defp tell_live_threads, do: for(tid <- live_threads(), do: tell(tid, @told))
 
-    for tid <- live_threads(), do: _ = Channel.post(%{thread_id: tid, author: "tlon", body: body, kind: "notice"})
+  defp tell(tid, head) do
+    body = head <> ", commit what you have, and stop; don't start anything new. You'll hear when it's back to work."
+    _ = Channel.post(%{thread_id: tid, author: "tlon", body: body, kind: "notice"})
   end
 
   # Runs before the lobby's back-to-work notice, which is this pause's lower bound next time.
-  defp wake_stopped_threads do
-    for tid <- stopped_threads(), lead = Channel.thread_lead(tid), lead != nil do
+  defp wake_stopped_threads, do: for(tid <- stopped_threads(), do: wake(tid))
+
+  defp wake(tid) do
+    with lead when lead != nil <- Channel.thread_lead(tid) do
       body = "@#{lead} ▶ back to work — pick up where you stopped, from the brief."
       _ = Channel.post(%{thread_id: tid, author: "tlon", body: body})
     end
@@ -144,7 +199,7 @@ defmodule Server.Pause do
         on: t.id == m.thread_id,
         where:
           m.id > ^since and m.author == "tlon" and m.kind == "notice" and like(m.body, ^"#{@told}%") and
-            t.state == "open",
+            t.state == "open" and is_nil(t.paused_at),
         distinct: true,
         select: t.id
     )
@@ -155,7 +210,7 @@ defmodule Server.Pause do
       from t in Server.Thread,
         join: s in Server.Session,
         on: s.thread_id == t.id and is_nil(s.ended_at),
-        where: t.state == "open",
+        where: t.state == "open" and is_nil(t.paused_at),
         distinct: true,
         select: t.id
     )
