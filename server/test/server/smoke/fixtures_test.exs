@@ -40,6 +40,28 @@ defmodule Server.Smoke.FixturesTest do
     assert [{"promoted", _thread}] = Server.Tickets.threads_of(in_flight.id)
   end
 
+  test "a fixture string carries its params: name:key=value,key=value" do
+    assert {"quota_refused_need", %{}} = Fixtures.parse("quota_refused_need")
+    assert {"x", %{"provider" => "ollama-cloud", "n" => "2"}} = Fixtures.parse("x:provider=ollama-cloud,n=2")
+
+    for bad <- ["", "X", "x:", "x:a", "x:a=", "x:a=b c", "x:a=b,,c=d", "x:A=b"] do
+      assert_raise ArgumentError, ~r/not a fixture/, fn -> Fixtures.parse(bad) end
+    end
+  end
+
+  test "an unknown param raises, seeding nothing" do
+    assert_raise ArgumentError, ~r/unknown param/, fn ->
+      Fixtures.apply("quota_refused_need:nope=1", "tlon_smoke_4100")
+    end
+  end
+
+  test "quota_refused_need seeds a non-anthropic provider's 429 as a quota Need (provider= picks it)" do
+    assert :ok = Fixtures.apply("quota_refused_need", "tlon_smoke_4100")
+
+    assert [%{kind: "quota", title: "ollama-cloud is spent"}] =
+             Enum.filter(Server.Office.Needs.list(), &(&1.kind == "quota"))
+  end
+
   test "an unknown name raises" do
     assert_raise ArgumentError, ~r/unknown fixture "nope"/, fn -> Fixtures.apply("nope", "tlon_smoke_4100") end
   end
