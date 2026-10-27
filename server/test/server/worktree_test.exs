@@ -115,7 +115,7 @@ defmodule Server.WorktreeTest do
     end
   end
 
-  describe "ensure/2 — a checkout's gitfile always resolves (#447)" do
+  describe "ensure/2 — a checkout's gitfile always resolves" do
     test "concurrent ensures of one slug all succeed and leave one working checkout", %{repo: repo} do
       results =
         1..8

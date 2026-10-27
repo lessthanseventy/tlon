@@ -52,17 +52,26 @@ defmodule Server.Worktree do
   def path(repo_path, slug), do: Path.join([repo_path, ".worktrees", slug])
 
   @doc """
-  Lazily ensure the worktree exists. Idempotent — an existing checkout returns its path untouched.
+  Lazily ensure the worktree exists. Idempotent — an existing checkout is checked and repaired if its gitfile does not resolve, otherwise returned as is.
   Creates branch `work/<slug>` off `main` (HEAD where there is none) when absent, reuses it when
   present. `{:ok, abs_path}` or `{:error, :bad_slug | :not_a_repo | reason}`.
   """
   def ensure(repo_path, slug) do
     cond do
-      not Regex.match?(@slug, to_string(slug)) -> {:error, :bad_slug}
-      not git_repo?(repo_path) -> {:error, :not_a_repo}
+      not Regex.match?(@slug, to_string(slug)) ->
+        {:error, :bad_slug}
+
+      not git_repo?(repo_path) ->
+        {:error, :not_a_repo}
+
       # two `git worktree add`s on one path race: the loser takes `<name>1`, overwrites the
-      # winner's gitfile with it, fails, and removes its own admin dir — a gitfile to nowhere (#447)
-      true -> :global.trans({{__MODULE__, path(repo_path, slug)}, self()}, fn -> do_ensure(repo_path, slug) end)
+      # winner's gitfile with it, fails, and removes its own admin dir — a gitfile to nowhere
+      true ->
+        :global.trans(
+          {{__MODULE__, path(Path.expand(repo_path), slug)}, self()},
+          fn -> do_ensure(repo_path, slug) end,
+          [node()]
+        )
     end
   end
 
