@@ -77,6 +77,7 @@ defmodule Server.MCP.Tool.StaffChild do
     params = Map.put(params, :lead, params[:lead] || picked(params, parent))
 
     with :ok <- paused(),
+         :ok <- parent_active(parent),
          :ok <- briefed(params[:brief]),
          :ok <- routes_here(parent, identity.agent_id),
          :ok <- ticket_free(params[:ticket_id]),
@@ -142,6 +143,12 @@ defmodule Server.MCP.Tool.StaffChild do
   defp paused do
     with {:error, line} <- Server.Pause.at_work(), do: {:paused, line}
   end
+
+  # a pause is a lever on one lead: nothing new is staffed under a paused thread
+  defp parent_active(%{id: id}),
+    do: if(Server.Pause.thread_paused?(id), do: {:paused, "thread ##{id} is paused: resume it first"}, else: :ok)
+
+  defp parent_active(_unbound), do: :ok
 
   defp briefed(brief) when is_binary(brief), do: if(String.trim(brief) == "", do: :blank, else: :ok)
   defp briefed(_), do: :blank
