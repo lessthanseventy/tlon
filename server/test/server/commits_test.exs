@@ -129,6 +129,16 @@ defmodule Server.CommitsTest do
     assert {:ok, [%{subject: "on the branch"}]} = Commits.list(repo, 3)
   end
 
+  test "branch fencing: Uqbar's pane (TLON_THREAD of its study) commits on a named work/uqbar-* branch", %{
+    repo: repo,
+    git: git
+  } do
+    {_, 0} = git.(["switch", "-c", "work/uqbar-x"], [])
+    File.write!(Path.join(repo, "u"), "u\n")
+    {_, 0} = git.(["add", "u"], [])
+    assert {_, 0} = git.(["commit", "-qm", "uqbar's fix"], [{"TLON_THREAD", "269"}])
+  end
+
   test "an unreadable repo is an error, and for_thread turns no-repo into an empty section", %{repo: repo} do
     assert {:error, _} = Commits.list(Path.join(repo, "nope"), 1)
     assert Commits.for_thread(%Server.Thread{id: 1}) == %{shown: [], more: 0}
