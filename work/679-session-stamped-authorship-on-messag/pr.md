@@ -7,8 +7,9 @@ record.
 ## What changed
 
 - **One additive migration**: nullable `session_id` FK to `session` on `message`, `ticket` and
-  `event`. No backfill; a row from before, a system author's (`tlon`) or a pre-`register` call's is
-  NULL and renders `session unknown`.
+  `event`, `on_delete: :nilify_all`. No backfill; a row from before, a system author's (`tlon`) or a
+  pre-`register` call's is NULL and renders `session unknown`, and so does one whose session a
+  thread's purge deleted: a ticket, a check or a post on another thread outlives it.
 - **Stamped from the connection, never a parameter.** `Channel.post/2`, `Dossier.record_event/2`,
   `Dossier.record_check/2` and `Tickets.file/2` take `session_id:` as an opt, put after cast; the
   field is in no cast list, so attrs or tool params cannot assert it. The `post_message`, `finish`,
@@ -27,7 +28,8 @@ record.
 - `test/server/workline_qa_test.exs`: a QA pass's check event carries the QA seat's session and
   the `qa by` line and QA brief render the label.
 - `test/server/session_stamp_schema_test.exs`, `session_stamp_test.exs`, `authorship_test.exs`:
-  schema fields present, smuggled `session_id` attrs ignored, NULL/no-pane/ended-session labels.
+  schema fields present, smuggled `session_id` attrs ignored, NULL/no-pane/ended-session labels,
+  and `delete_thread` on a session's thread leaves its ticket, check and off-thread post at NULL.
 - `menard run check --in server` green (format, warnings-as-errors, credo, the suite).
 
 ## Landing
