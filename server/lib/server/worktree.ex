@@ -344,16 +344,18 @@ defmodule Server.Worktree do
   # a checkout whose gitfile names a gitdir that is not there is unusable to every git command;
   # `worktree repair` re-points it at the admin dir that is
   defp resolve(repo_path, wt) do
-    with {_, 0} <- git(wt, ["rev-parse", "--git-dir"]),
-         do: {:ok, wt}
-  else
-    _ ->
-      git(repo_path, ["worktree", "repair", wt])
+    case git(wt, ["rev-parse", "--git-dir"]) do
+      {_, 0} ->
+        {:ok, wt}
 
-      case git(wt, ["rev-parse", "--git-dir"]) do
-        {_, 0} -> {:ok, wt}
-        {out, _} -> {:error, "worktree gitfile does not resolve: #{String.slice(out, 0, 200)}"}
-      end
+      _ ->
+        git(repo_path, ["worktree", "repair", wt])
+
+        case git(wt, ["rev-parse", "--git-dir"]) do
+          {_, 0} -> {:ok, wt}
+          {out, _} -> {:error, "worktree gitfile does not resolve: #{String.slice(out, 0, 200)}"}
+        end
+    end
   end
 
   # A fresh checkout starts with the main checkout's installed deps wherever its lockfile is the
