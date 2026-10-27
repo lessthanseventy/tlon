@@ -101,6 +101,33 @@ defmodule Server.Doctor do
     ErlangError -> nil
   end
 
+  @git_fetch_urls [
+    {~s|url."https://github.com/".insteadOf|, "url.https://github.com/.insteadof", "git@github.com:"},
+    {~s|url."git@github.com:".pushInsteadOf|, "url.git@github.com:.pushinsteadof", "git@github.com:"}
+  ]
+
+  @doc """
+  Whether the checkout at `root` fetches over HTTPS and pushes over SSH, as one report line: `ok`, or
+  the `insteadOf` lines missing from its shared `.git/config` and the task that sets them. A sandboxed
+  seat cannot read `~/.ssh`, so a fetch over SSH dies there; the repo is public, so HTTPS needs no
+  credentials.
+  """
+  @spec git_fetch_urls(Path.t()) :: String.t()
+  def git_fetch_urls(root \\ Server.Profiles.tlon_root()) do
+    {config, _} =
+      System.cmd("git", ["-C", root, "config", "--local", "--get-regexp", "^url\\."], stderr_to_stdout: true)
+
+    set = config |> String.split("\n", trim: true) |> MapSet.new()
+
+    case for({name, key, value} <- @git_fetch_urls, "#{key} #{value}" not in set, do: name) do
+      [] ->
+        "ok"
+
+      missing ->
+        "missing #{Enum.join(missing, ", ")} — fetch over SSH is refused in a sandbox; `mise run server:setup` sets them"
+    end
+  end
+
   @doc """
   Export every table as JSONL into `dir` (created if missing), one `<table>.jsonl` per table —
   `mix server.doctor --export <dir>`. Returns the paths written, in table order; an empty table

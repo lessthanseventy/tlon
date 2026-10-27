@@ -19,9 +19,9 @@ dir = "server"
 run = "mix server.eval"
 
 ["server:setup"]
-description = "server: fetch deps, create + migrate a repo-local scratch db, and point git at the repo's hooks (a coworker commits only on work/*)"
+description = "server: fetch deps, create + migrate a repo-local scratch db, point git at the repo's hooks (a coworker commits only on work/*), and fetch origin over HTTPS while pushes stay on SSH"
 dir = "server"
-run = "git config core.hooksPath scripts/git-hooks && mix deps.get && mix ecto.create --quiet && mix ecto.migrate"
+run = "git config core.hooksPath scripts/git-hooks && git config url.\"https://github.com/\".insteadOf git@github.com: && git config url.\"git@github.com:\".pushInsteadOf git@github.com: && mix deps.get && mix ecto.create --quiet && mix ecto.migrate"
 
 ["server:doctor"]
 description = "server: the 2am report against the scratch db"
