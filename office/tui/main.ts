@@ -542,9 +542,10 @@ async function loadFeed() {
 const seenLines = new Set<string>()
 async function chatter() {
   if (ws === null) return
-  room().hear(await data.pets(ws, room().petProfile()))
   const here = ws
   const dials = resolveWhim(whim), banter = dials.banter
+  // the server writes these lines lazily, spending model tokens only when asked: with banter off, don't ask
+  if (banter) room().hear(await data.pets(ws, room().petProfile()))
   // generated visitors, puns and reactions reach the room only past `curated`; the room ignores a pool it is not given
   room().setToys(dials.weirdness === "curated" ? null : await data.toys(here))
   // two together in the room: with souls on the server writes what they say now (from their souls), said turn by turn;
@@ -558,13 +559,13 @@ async function chatter() {
     })
     room().converse(said); heard(said); changed()
   })
-  cork = await data.corkboard(ws)
+  cork = banter ? await data.corkboard(ws) : []
   room().pinboard(cork)
   ideas = await data.suggestions(ws)
   room().suggestionBox(ideas)
   // a conversation the server wrote arrives as lines sharing one `at`: said as one, turn by turn
   const convos = new Map<number, { who: string; line: string }[]>()
-  for (const b of await data.banter(ws)) {
+  for (const b of banter ? await data.banter(ws) : []) {
     const k = `${b.at} ${b.agent} ${b.line}`
     if (seenLines.has(k)) continue
     seenLines.add(k)
