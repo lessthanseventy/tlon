@@ -217,6 +217,72 @@ defmodule Server.WorktreeTest do
       assert told.() == 2
     end
 
+    test "a catch-up that errors is told to the thread once", %{repo: repo, git: git, ws: ws, project: p} do
+      remote = repo <> "-origin.git"
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+      on_exit(fn -> File.rm_rf!(remote) end)
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["remote", "add", "origin", remote])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+
+      {:ok, thread} = Server.Channel.open_thread(%{title: "t", workspace_id: ws.id, project_id: p.id, slug: "broken"})
+      assert {:ok, wt} = Server.worktree_for_thread(thread)
+
+      File.write!(Path.join(repo, "NEW"), "more\n")
+      {_, 0} = git.(["add", "NEW"])
+      {_, 0} = git.(["commit", "-qm", "main moves"])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+
+      Application.put_env(:server, :git_cmd, fn cmd, args, opts ->
+        if "merge" in args, do: {"fatal: Unable to create index.lock", 128}, else: System.cmd(cmd, args, opts)
+      end)
+
+      on_exit(fn -> Application.delete_env(:server, :git_cmd) end)
+
+      assert Server.catch_up_worktree(thread, wt) == :ok
+      assert Server.catch_up_worktree(thread, wt) == :ok
+
+      assert [%{kind: "notice"}] =
+               Enum.filter(Server.Channel.thread_messages(thread), &(&1.body =~ "could not be moved"))
+    end
+
+    test "own commits are not told when git cannot say whether main moved", %{
+      repo: repo,
+      git: git,
+      ws: ws,
+      project: p
+    } do
+      remote = repo <> "-origin.git"
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+      on_exit(fn -> File.rm_rf!(remote) end)
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["remote", "add", "origin", remote])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+
+      {:ok, thread} = Server.Channel.open_thread(%{title: "t", workspace_id: ws.id, project_id: p.id, slug: "mute"})
+      assert {:ok, wt} = Server.worktree_for_thread(thread)
+      File.write!(Path.join(wt, "MINE"), "mine\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "MINE"])
+      {_, 0} = System.cmd("git", ["-C", wt, "commit", "-qm", "mine"])
+      File.write!(Path.join(repo, "NEW"), "more\n")
+      {_, 0} = git.(["add", "NEW"])
+      {_, 0} = git.(["commit", "-qm", "main moves"])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+
+      Application.put_env(:server, :git_cmd, fn cmd, args, opts ->
+        if "HEAD..origin/main" in args, do: {"fatal: boom", 128}, else: System.cmd(cmd, args, opts)
+      end)
+
+      on_exit(fn -> Application.delete_env(:server, :git_cmd) end)
+
+      assert Server.catch_up_worktree(thread, wt) == :ok
+      assert [] = Enum.filter(Server.Channel.thread_messages(thread), &(&1.body =~ "1 commit"))
+    end
+
     test "no repo-bearing project anywhere → {:error, :no_repo}" do
       thread = struct!(Server.Thread, %{id: 3, workspace_id: nil, project_id: nil, slug: "x", title: "t"})
       assert {:error, :no_repo} = Server.worktree_for_thread(thread)
