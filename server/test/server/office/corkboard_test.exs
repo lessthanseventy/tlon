@@ -4,6 +4,8 @@ defmodule Server.Office.CorkboardTest do
   # from the real notes agents work from.
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   alias Server.Office.Corkboard
 
   @crew [
@@ -85,6 +87,105 @@ defmodule Server.Office.CorkboardTest do
     assert Corkboard.parse(~s(ok {"note": "  ship it  "})) == "ship it"
     assert Corkboard.parse(~s({"note": ""})) == nil
     assert Corkboard.parse("nope") == nil
+  end
+
+  describe "side projects on the lazy writer" do
+    setup do
+      Server.TestDB.clean!()
+      {:ok, ws} = Server.Workspaces.register(%{name: "Sidey"})
+      {:ok, _} = Server.Channel.open_thread(%{title: "standing", scope: "machine", workspace_id: ws.id})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "reviewer"})
+      dir = Path.join(System.tmp_dir!(), "side-#{System.pid()}-#{System.unique_integer([:positive])}")
+      souls = Path.join(dir, "souls")
+      File.mkdir_p!(souls)
+      File.write!(Path.join(souls, "daneri.md"), "## The side project\nThe Earth, a poem in stanzas.\n")
+      File.write!(Path.join(souls, "yu.md"), "## Voice\nterse\n")
+      prompts = Path.join(dir, "prompts")
+      cli = Path.join(dir, "model")
+      File.write!(cli, ~s(#!/bin/sh\ncat >> "#{prompts}"\necho '{"note": "Stanza: the sea, again."}'\n))
+      File.chmod!(cli, 0o755)
+      Application.put_env(:server, :generator_cmd, cli)
+      Application.put_env(:server, :banter_cmd, cli)
+      Application.put_env(:server, :souls_dir, souls)
+
+      on_exit(fn ->
+        Application.put_env(:server, :generator_cmd, "/nonexistent/tlon-test-generator")
+        Application.delete_env(:server, :banter_cmd)
+        Application.put_env(:server, :souls_dir, Path.join(System.tmp_dir!(), "tlon-test-souls-unset"))
+        Application.delete_env(:server, :generator_daily_cap)
+        File.rm_rf!(dir)
+      end)
+
+      start_supervised!(Corkboard)
+      %{ws: ws, prompts: prompts}
+    end
+
+    defp side_messages(ws),
+      do:
+        Server.Repo.all(
+          from m in Server.Message,
+            where: m.kind == "side project" and m.thread_id == ^Server.Channel.machine_thread(ws.id).id
+        )
+
+    defp poll_until(ws, fun) do
+      Enum.find_value(1..60, fn _ ->
+        Process.sleep(50)
+        fun.(Corkboard.notes(ws.id))
+      end)
+    end
+
+    test "a poll pins one side-project note for the seat that has the section, once a day", %{ws: ws} do
+      assert Corkboard.notes(ws.id) == []
+      notes = poll_until(ws, fn n -> Enum.any?(n, &(&1.kind == "side project")) && n end)
+
+      assert %{author: "daneri", body: "Stanza: the sea, again.", re: nil} =
+               Enum.find(notes, &(&1.kind == "side project"))
+
+      assert [%{author: "daneri"}] = side_messages(ws)
+
+      Enum.each(1..10, fn _ ->
+        Corkboard.notes(ws.id)
+        Process.sleep(30)
+      end)
+
+      assert [_] = side_messages(ws)
+      assert Enum.count(Corkboard.notes(ws.id), &(&1.kind == "side project")) == 1
+    end
+
+    test "a seat without the section pins none", %{ws: ws} do
+      Server.Repo.delete_all(Server.Message)
+      File.rm!(Path.join(Server.Soul.dir(), "daneri.md"))
+
+      Enum.each(1..10, fn _ ->
+        Corkboard.notes(ws.id)
+        Process.sleep(30)
+      end)
+
+      assert side_messages(ws) == []
+    end
+
+    test "a capped generator or banter off: notes/1 still answers and no side note appears", %{ws: ws} do
+      Application.put_env(:server, :generator_daily_cap, 0)
+
+      Enum.each(1..10, fn _ ->
+        assert is_list(Corkboard.notes(ws.id))
+        Process.sleep(30)
+      end)
+
+      assert side_messages(ws) == []
+    end
+
+    test "the prompt carries the counter: number 3 after two earlier ones", %{ws: ws, prompts: prompts} do
+      old = DateTime.add(DateTime.utc_now(), -2 * 86_400)
+      {:ok, a} = Corkboard.post_side_project(ws.id, "daneri", "first stanza", 1)
+      {:ok, b} = Corkboard.post_side_project(ws.id, "daneri", "second stanza", 2)
+      Server.Repo.update_all(from(m in Server.Message, where: m.id in ^[a.id, b.id]), set: [created_at: old])
+
+      poll_until(ws, fn _ -> match?([_, _, _], side_messages(ws)) end)
+      assert File.read!(prompts) =~ "number 3"
+      assert File.read!(prompts) =~ "second stanza"
+    end
   end
 
   describe "notes/1" do
