@@ -76,7 +76,7 @@ export const KEYS = [
   // card:thread
   { id: "thread.v", scope: "card:thread", key: "v", label: "read it all", verb: "read" },
   { id: "thread.r", scope: "card:thread", key: "r", label: "reply", verb: "reply" },
-  { id: "thread.n", scope: "card:thread", key: "\"", label: "answer with a note", mode: "an open prompt", verb: "note" },
+  { id: "thread.n", scope: "card:thread", key: "\"", label: "answer with a note", mode: "an open prompt — on a pane dialog the note is typed after the key", verb: "note" },
   { id: "thread.u", scope: "card:thread", key: "u", label: "hand to Uqbar", verb: "hand to Uqbar" },
   { id: "thread.a", scope: "card:thread", key: ":", label: "call in the Aleph", verb: "call in" },
   { id: "thread.A", scope: "card:thread", key: "A", label: "approve: …", verb: "approve" },
