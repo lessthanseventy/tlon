@@ -1,24 +1,25 @@
-# Review — #460 push_branch takes a named work/<caller>-* branch
+# Review — #460 push_branch takes a named work/<caller>-* branch (round 2)
 
-**Verdict: approve.** Head ffbd0c9 (2 commits on 3cdc19c), 57 lines across 7 files. Spec (tertius, msg #15103) met point by point; nothing widened beyond it.
+**Verdict: approve.** Head 6364eb7 (3 code commits on 3cdc19c), 83 lines across 7 files plus pr.md. The three changes andrew named in the send-back (msg #15152) are each in the delta since 9c657d2 and each does what was asked; nothing else moved except the check order emma declared.
 
-Evidence: the server's `mise run check` row at 09:46Z passed on ffbd0c9 (CHECKS). I read the diff and the seams it touches; I ran nothing myself.
+Evidence: the server's `mise run check` row at 10:23Z (exit 0, server 2251 tests / office 924 pass) in CHECKS, run on the branch after 6364eb7 landed at 10:11Z. I read the diff and the seams it leans on; I ran nothing myself.
 
-## Findings
+## The send-back, item by item
 
-1. **Authorization is where the spec put it, and nowhere else.** `Publish.own_branch/2` admits only `"work/#{agent}-"` with at least one byte after the prefix. `work/uqbar-`, `work/uqbar`, `work/uqbarx-fix`, `work/hronir-fix`, `main` and `uqbar-fix` are each refused by the test. `agent` is the token's `sub` (`Identity.from_frame`), a plain handle string, so the guard clause matches for a real caller and a missing `sub` falls to the refusing clause. A named branch still goes through `push_branch/3`'s `\Awork/[a-z0-9][a-z0-9-]*\z`, so case or path tricks after the prefix are refused downstream.
+1. **Docs name the door.** `PushBranch` moduledoc: "With `branch`, a named `work/<caller's handle>-<name>` instead … never another's prefix, never a workline's slug." `Publish.push_branch/3` @doc: "a thread's, or a seat's named `work/<handle>-<name>`, see `own_branch/2`". Both true of the code beneath them.
 
-2. **No collision with workline branches.** A thread branch is `work/<ticket>-<slug>` and a named one is `work/<handle>-<name>`; no handle is numeric and no roster handle contains a hyphen, so neither prefix can read as the other.
+2. **Tool-level test exists and exercises the wiring.** `server_test.exs`: a token minted for a registered `uqbar`, through the real handshake. `work/hronir-x` → isError, "bear your own name" (so `Identity.from_frame(frame).agent` reaches `own_branch`). `work/uqbar-fix` with a workline of that slug open → isError, "workline". `work/uqbar-x` → neither refusal text (the bare lobby has no repo, so the push itself is not reached; the name checks are what's under test, and that is what it asserts).
 
-3. **The one caller it was built for reaches a repo.** Thread 269 has no project; `Projects.repo_for_thread/1` falls to the workspace's first repo-bearing project, so `Server.repo_for_thread` returns the tlon checkout, not `:no_repo`.
+3. **A workline's branch is refused by name.** `not_a_workline("work/" <> slug)` refuses when `Repo.get_by(Server.Thread, slug: slug)` finds a thread. I checked the two facts this rests on: `Worktree.branch(name_for(thread))` is exactly `"work/#{slug}"` for any thread with a slug (`worktree.ex` L24-44), so slug equality is branch equality; and `thread_slug_index` is `UNIQUE … WHERE slug IS NOT NULL` (baseline migration L87), so `get_by` cannot raise on a duplicate. A slugless thread's branch is `work/t<id>`, which can never pass `own_branch`'s `work/<handle>-` prefix, so no gap there. The clause only matches `"work/" <> _`, and `own_branch` has already guaranteed that prefix, so no FunctionClauseError path.
 
-4. **Hooks and plugin gate untouched, as specified.** The new commits_test proves the pre-commit passes `work/uqbar-x` with `TLON_THREAD=269` set.
+4. **Order of checks.** `branch_to_push` now runs before `repo_for_thread`: a bad name is refused before a repo is resolved. Harmless and it makes the lobby test possible.
 
-5. **Docs in the same change.** Uqbar's role text names the whole door (switch -c in a scratch, push_branch with `branch:`, review_branch, land); AGENTS.md's push_branch sentence names it. The AGENTS.md edit makes this a limit gate: the operator's call, as tertius said.
+5. **Still inside the fence.** `push_branch/3`'s `\Awork/[a-z0-9][a-z0-9-]*\z` is untouched; a named branch passes `own_branch`, then `not_a_workline`, then that anchor. Hooks and plugin gate untouched; the pre-commit test on `work/uqbar-x` with `TLON_THREAD=269` stands from round 1.
 
 6. **bench_contrast** reads `unmeasurable` (AGENTS.md is never loaded by the bench). Not green, not a regression: no finding, no habit.
 
-## Not blocking
+## Open from round 1
 
-- `Server.MCP.Tool.PushBranch`'s moduledoc still says it pushes "the caller's own thread branch, work/<slug>"; `push_branch/3`'s @doc says "Push one thread's branch". Both are now a half-truth. Listed as a follow-up.
-- The `branch:` path of the tool has no tool-level test; the rule is tested in Publish and the wiring is two lines I read. Listed as a follow-up.
+Both follow-ups (moduledoc/@doc, tool-level test) are fixed in this delta. Nothing non-blocking remains.
+
+AGENTS.md is in the diff, so the merge gate is the operator's, as graded.
