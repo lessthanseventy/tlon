@@ -704,13 +704,23 @@ defmodule Server.Office.Needs do
   # (`Server.Shifts.out_of_quota/1`), or a provider's plan spent (`Server.Presence.Engine.spent/0`,
   # every wake to its seats held); each offers the other crews, if any
   defp quota do
+    {claude, refused} = Enum.split_with(Server.Shifts.out_of_quota(), &(&1.provider == "anthropic"))
+
     claude =
-      for {ws, [q | _]} <- Enum.group_by(Server.Shifts.out_of_quota(), & &1.workspace_id) do
+      for {ws, [q | _]} <- Enum.group_by(claude, & &1.workspace_id) do
         text =
           "Claude's usage limit is reached on the #{q.crew} crew and no other crew can take over: " <>
             "it resets #{q.reset}, and every wake to it waits until then"
 
         quota_item(ws, "anthropic", "Claude's usage limit", text, q.at)
+      end
+
+    # a provider's own refusal read off a pane: the earlier, sharper word on the same fact the balance
+    # poll (`spent`) reports, so it keeps that item's key and wins the one slot
+    refused =
+      for {{ws, provider}, [q | _]} <- Enum.group_by(refused, &{&1.workspace_id, &1.provider}) do
+        text = "#{provider} refused a call: #{q.hint}"
+        quota_item(ws, provider, "#{provider} is spent", text, q.at)
       end
 
     spent =
@@ -725,7 +735,7 @@ defmodule Server.Office.Needs do
         quota_item(ws, provider, "#{provider} is spent", text, DateTime.truncate(DateTime.utc_now(), :second))
       end
 
-    claude ++ spent
+    Enum.uniq_by(claude ++ refused ++ spent, & &1.key)
   end
 
   defp quota_item(ws, provider, title, text, at) do
