@@ -411,6 +411,25 @@ describe("an adopted dog in the dog slot", () => {
     chance(0.999, () => { for (let i = 0; i < 120; i++) { room.step(a); if (r.dog.said && !heard.includes(r.dog.said)) heard.push(r.dog.said) } })
     expect(heard).toEqual(["Woof, darling!"])
   })
+
+  test("a turn with no speaker keeps its words, colon and all, and goes to the dog", () => {
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1), r = room as unknown as W
+    room.hear({ duo: { chat: [["Note: woof"]] } })
+    expect(r.talkOut("chat")).toBe(true)
+    const heard: string[] = []
+    chance(0.999, () => { for (let i = 0; i < 120; i++) { room.step(a); if (r.dog.said && !heard.includes(r.dog.said)) heard.push(r.dog.said) } })
+    expect(heard).toEqual(["Note: woof"])
+  })
+
+  test("a renamed cat's turn is hers, said without her name", () => {
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1), r = room as unknown as W & { cat: { said: string | null } }
+    room.setPets(resolvePets({ cat: { name: "Mimi" } }))
+    room.hear({ duo: { chat: [["Mimi: hush"]] } })
+    expect(r.talkOut("chat")).toBe(true)
+    const heard: string[] = []
+    chance(0.999, () => { for (let i = 0; i < 120; i++) { room.step(a); if (r.cat.said && !heard.includes(r.cat.said)) heard.push(r.cat.said) } })
+    expect(heard).toEqual(["hush"])
+  })
 })
 
 describe("the dog's shade", () => {
