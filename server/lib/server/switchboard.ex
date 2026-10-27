@@ -581,7 +581,7 @@ defmodule Server.Switchboard do
   defp prompt_for(%Message{author: author, thread_id: other} = message, _elsewhere),
     do:
       prompt(message) <>
-        " (It's from thread #{other}, not this window's: if you lead it, answer there with post_message thread_id: #{other}; otherwise ask #{author} with consult_peer.)"
+        " (It's from thread #{other}, not this window's: if you lead it or were @mentioned on it, answer there with post_message thread_id: #{other}; otherwise answer here and @mention #{author}.)"
 
   defp drain_now do
     undelivered =

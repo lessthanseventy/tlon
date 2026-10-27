@@ -45,7 +45,8 @@ defmodule Server.MCP.Tool.PostMessage do
   Post to this connection's thread — talk on your thread, don't work in the void — or with
   `thread_id` to a thread the caller steers (`Server.MCP.Tool.steers?/2`: its lead, the lead above
   it or the manager), so a lead woken in its lobby window answers on its own workline and the
-  manager puts a decision on the thread it staffed. The author is the bound agent; a reply targets
+  manager puts a decision on the thread it staffed, and anyone @mentioned on that thread answers
+  where they were asked (`Server.MCP.Tool.may_post?/2`). The author is the bound agent; a reply targets
   the quoted message's author. With `notice` the post is an FYI that wakes nobody (an
   acknowledgement, a status): it is read on each reader's next turn, and it is never an @operator
   mention that reaches the operator's list.
@@ -60,7 +61,7 @@ defmodule Server.MCP.Tool.PostMessage do
 
     field :thread_id, :integer,
       description:
-        "A thread you lead, lead the parent of, or manage, when your session is bound to another thread (e.g. the lobby)"
+        "A thread you lead, lead the parent of, manage, or were @mentioned on, when your session is bound to another thread (e.g. the lobby)"
 
     field :notice, :boolean,
       description:
@@ -71,7 +72,7 @@ defmodule Server.MCP.Tool.PostMessage do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    case acting_thread(params, frame, &Server.MCP.Tool.steers?/2) do
+    case acting_thread(params, frame, &Server.MCP.Tool.may_post?/2) do
       %Server.Thread{id: thread_id} ->
         result =
           Channel.post(

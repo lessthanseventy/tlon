@@ -416,7 +416,7 @@ defmodule Server.MCP.ServerTest do
 
     r = call(token, session, 4, "post_message", %{"body" => "on it", "thread_id" => line.id})
     assert r["isError"]
-    assert hd(r["content"])["text"] =~ "only its lead"
+    assert hd(r["content"])["text"] =~ "its lead, or someone @mentioned on it"
     {:ok, _} = Channel.assign_lead(line.id, "Carl")
 
     r = call(token, session, 5, "post_message", %{"body" => "on it", "thread_id" => line.id})
@@ -424,6 +424,28 @@ defmodule Server.MCP.ServerTest do
 
     assert [%{author: "Carl", body: "on it"}] =
              Repo.all(from m in Message, where: m.thread_id == ^line.id and m.author == "Carl")
+  end
+
+  test "post_message with thread_id: an agent @mentioned on that thread may answer there; unmentioned may not",
+       %{token: token} do
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    {:ok, line} = Server.Workline.open(%{title: "asked of Carl", slug: "asked-of-carl", stage: "build"})
+
+    {:ok, _} = Channel.post(%{thread_id: line.id, author: "yu", body: "is this sound @Carl?"})
+
+    r = call(token, session, 4, "post_message", %{"body" => "yes", "thread_id" => line.id})
+    refute r["isError"]
+
+    assert [%{author: "Carl", body: "yes"}] =
+             Repo.all(from m in Message, where: m.thread_id == ^line.id and m.author == "Carl")
+
+    {:ok, other} = Server.Workline.open(%{title: "unrelated", slug: "unrelated", stage: "build"})
+    {:ok, _} = Channel.post(%{thread_id: other.id, author: "yu", body: "ping @Carlos only"})
+
+    r = call(token, session, 5, "post_message", %{"body" => "hi", "thread_id" => other.id})
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "its lead, or someone @mentioned on it"
   end
 
   test "post_message with thread_id: the manager and the lead above post on a workline too, no one else" do
@@ -455,7 +477,9 @@ defmodule Server.MCP.ServerTest do
 
     r = post_as.("Carl")
     assert r["isError"]
-    assert hd(r["content"])["text"] =~ "Carl doesn't lead thread ##{line.id}; only its lead can act on it"
+
+    assert hd(r["content"])["text"] =~
+             "Carl doesn't lead thread ##{line.id}; only its lead, or someone @mentioned on it"
 
     for name <- ["tertius", "yu", "ireneo"], do: refute(post_as.(name)["isError"], "#{name} was refused")
 
