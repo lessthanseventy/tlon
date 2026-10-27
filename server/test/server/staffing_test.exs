@@ -467,6 +467,29 @@ defmodule Server.StaffingTest do
       assert target =~ ":3"
     end
 
+    test "a lead mid-turn is refused: nothing changes, no window dies", %{ws: ws} do
+      thread = staffed_thread(ws, "borges")
+      busy = session!("borges", thread.id, 5, true)
+      tmux("0\trufus\t\t\t999999991\n1\thronir\t\t\t999999992\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+
+      assert {:error, :lead_mid_turn} = Staffing.hand_off(thread.id, "hronir")
+      assert Channel.thread_lead(thread.id) == "borges"
+      assert Channel.thread_messages(thread) == []
+      assert is_nil(Server.Repo.reload!(busy).ended_at)
+      refute_received {:tmux, [_, _, "kill-window" | _]}
+    end
+
+    test "a turn stuck past the stale limit reads as idle: it hands off and ends the thread's sessions", %{ws: ws} do
+      thread = staffed_thread(ws, "borges")
+      stuck = session!("borges", thread.id, Server.Presence.Thinking.stale_turn_seconds() + 60, true)
+      tmux("0\trufus\t\t\t999999991\n1\thronir\t\t\t999999992\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+
+      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert Channel.thread_lead(thread.id) == "hronir"
+      assert Server.Repo.reload!(stuck).ended_at
+      assert_receive {:tmux, ["-L", _, "kill-window", "-t", _]}
+    end
+
     test "an unknown coworker is refused and changes nothing", %{ws: ws} do
       thread = staffed_thread(ws, "borges")
       tmux("0\trufus\t\t\t999999991\n")
