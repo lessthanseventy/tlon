@@ -39,6 +39,15 @@ defmodule Server.ShiftsTest do
     "The response stopped arriving"
   ]
 
+  # Verbatim from this box (ollama username and ref redacted).
+  @ollama_429s [
+    "API Error: Request rejected (429) · you (andrew) have reached your weekly usage limit, upgrade for higher limits: https://ollama.com/upgrade or add usage credits: https://ollama.com/settings (ref: 0000)",
+    "API Error: Request rejected (429) · you (andrew) have reached your session usage limit, upgrade for higher limits: https://ollama.com/upgrade or add usage credits: https://ollama.com/settings (ref: 0000)"
+  ]
+
+  # a one-shot's stderr notice (measured 2026-10-27), not a refusal
+  @catalog_notice ~s("kimi-k3" isn't described by this version's model catalog)
+
   defp names(ws), do: ws.id |> Workspaces.bench() |> Enum.map(& &1.name)
   defp lobby(ws), do: Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
   defp labels(ask), do: Enum.map(ask.payload["options"], & &1["label"])
@@ -294,6 +303,62 @@ defmodule Server.ShiftsTest do
   end
 
   defp seen_keys(ws_id), do: Map.keys(Server.Repo.get!(Server.Workspace, ws_id).knobs["limits_seen"])
+
+  test "provider_limit reads the status off Claude Code's \"Request rejected (NNN)\" wrapper, and nothing else" do
+    for line <- @ollama_429s do
+      assert {:ok, %{status: 429, line: got}} = Shifts.provider_limit("❯ x\n  ⎿  " <> line <> "\nmore")
+      assert got == String.slice(line, 0, 200)
+    end
+
+    assert {:ok, %{status: 500}} = Shifts.provider_limit("API Error: Request rejected (500) · upstream failed")
+
+    for line <- @claude_limits ++ @not_quota ++ [@catalog_notice],
+        do: assert(Shifts.provider_limit(line) == :none, line)
+
+    refute Shifts.out_of_quota?(hd(@ollama_429s))
+  end
+
+  describe "an ollama seat's pane prints its plan's 429" do
+    setup %{ws: ws} do
+      emma = Server.Staff.agent_by_name("emma")
+      {:ok, _} = Workspaces.retarget(ws.id, emma.id, %{model: "ollama-cloud/glm-5.2"})
+      :ok
+    end
+
+    defp out(ws), do: Enum.filter(Shifts.out_of_quota(), &(&1.workspace_id == ws.id))
+
+    test "it is a quota item at once, with the raw line as its hint; the pane clearing puts it away", %{ws: ws} do
+      line = hd(@ollama_429s)
+      assert :ok = Shifts.quota_check(ws.id, "emma", "1/w1", "x\n  ⎿  " <> line)
+      assert [%{provider: "ollama-cloud", hint: hint, until: nil}] = out(ws)
+      assert hint == String.slice(line, 0, 200)
+      assert Shifts.current(ws.id) == "day"
+      assert [] = Server.Attention.open_asks()
+
+      assert :ok = Shifts.quota_check(ws.id, "emma", "1/w1", "x\n  ⎿  " <> line)
+      assert [_one] = out(ws)
+
+      assert :ok = Shifts.quota_check(ws.id, "emma", "1/w1", "back at work")
+      assert out(ws) == []
+    end
+
+    test "another status is logged with its raw line and raises nothing", %{ws: ws} do
+      log =
+        capture_log(fn ->
+          assert :ok = Shifts.quota_check(ws.id, "emma", "1/w1", "API Error: Request rejected (402) · extra usage")
+        end)
+
+      assert log =~ "Request rejected (402)"
+      assert out(ws) == []
+    end
+  end
+
+  test "the Claude spend-limit line's \"resets Sep 28, 9am\" is read as that date" do
+    now = ~N[2026-09-20 15:10:00]
+    line = "You've hit your monthly spend limit · your weekly limit resets Sep 28, 9am (America/Denver)"
+    assert Shifts.reset_at(line, now) == {~N[2026-09-28 09:00:00], :exact}
+    assert Shifts.reset_at("resets 5:30pm (America/Denver)", now) == {~N[2026-09-20 17:30:00], :exact}
+  end
 
   test "only a Claude coworker's pane counts: a pi pane printing the words switches nothing", %{ws: ws} do
     emma = Server.Staff.agent_by_name("emma")
