@@ -80,8 +80,8 @@ defmodule Server.Switchboard do
     # The pane is sitting on a dialog (Server.Attention): typing a message into it would answer
     # the dialog with garbage. Hold; the drain re-delivers once the prompt is resolved. A restart
     # waiting for quiet holds every new wake too, so the bench drains instead of starting turns
-    # the restart would cut; the drain after it delivers them. A paused office holds every wake but
-    # the operator's own posts until back to work.
+    # the restart would cut; the drain after it delivers them. A paused office, or a paused thread,
+    # holds every wake but the operator's own posts until back to work or resume.
     if is_nil(message.delivered_at) and
          (Server.Attention.waiting?(message.thread_id) or Server.Rollout.restart_pending?() or
             paused_for?(message)),
@@ -614,6 +614,8 @@ defmodule Server.Switchboard do
     end)
   end
 
-  defp paused_for?(%Message{author: author}),
-    do: Server.Pause.state() != :working and not Server.Channel.operator?(author)
+  defp paused_for?(%Message{author: author, thread_id: thread_id}),
+    do:
+      not Server.Channel.operator?(author) and
+        (Server.Pause.state() != :working or Server.Pause.thread_paused?(thread_id))
 end
