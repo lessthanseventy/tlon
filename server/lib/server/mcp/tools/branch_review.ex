@@ -3,7 +3,9 @@ defmodule Server.MCP.Tool.ReviewBranch do
   A reviewer's verdict on a branch that is not a workline (a session's PR branch), recorded on tlon
   as yours (`Server.BranchReview`): `approve` or `request_changes` of `branch` at `sha`, the full
   commit you read. `mise run land` lands only a branch whose newest verdict approves its head (or
-  that head rebased onto main and nothing else). A workline's review is `submit_review`, not this.
+  that head rebased onto main and nothing else). A review runs on its own thread, in a session its
+  verdict ends: from the workspace's standing thread it is refused. A workline's review is
+  `submit_review`, not this.
   """
   use Server.MCP.Tool
 
@@ -18,6 +20,24 @@ defmodule Server.MCP.Tool.ReviewBranch do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
+    if standing?(identity.thread_id) do
+      fail(
+        frame,
+        "refused: a review runs on its own thread, in a session its verdict ends — open a thread for this PR (open_thread, lead you) and review there"
+      )
+    else
+      record(params, identity, frame)
+    end
+  end
+
+  defp standing?(thread_id) do
+    case Server.Repo.get(Server.Thread, thread_id) do
+      %Server.Thread{} = thread -> Server.Channel.standing?(thread)
+      nil -> false
+    end
+  end
+
+  defp record(params, identity, frame) do
     case Server.BranchReview.record(%{
            branch: params[:branch],
            sha: params[:sha],

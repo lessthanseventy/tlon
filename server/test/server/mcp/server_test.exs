@@ -1995,6 +1995,26 @@ defmodule Server.MCP.ServerTest do
     assert %{verdict: "approve", sha: ^sha, by: "Carl", body: "approve: ok"} = Server.BranchReview.latest("lamp")
   end
 
+  test "review_branch from the standing thread is refused: a review runs on its own thread, ended by its verdict",
+       %{agent: agent} do
+    {:ok, ws} = Server.Workspaces.create(%{name: "Lobby"})
+    token = MCP.Tokens.mint(Channel.machine_thread(ws.id), agent)
+    session = handshake(token)
+    {head, 0} = System.cmd("git", ["-C", Server.Profiles.tlon_root(), "rev-parse", "HEAD"])
+
+    refused =
+      call(token, session, 2, "review_branch", %{
+        "branch" => "lamp",
+        "sha" => String.trim(head),
+        "verdict" => "approve",
+        "body" => "approve: ok"
+      })
+
+    assert refused["isError"]
+    assert hd(refused["content"])["text"] =~ "its own thread"
+    assert Server.BranchReview.latest("lamp") == nil
+  end
+
   test "the librarian's tools over the wire: a stated fact is refused, a proposal is listed, no judge says so" do
     {:ok, ws} =
       Server.Workspaces.register(%{name: "Stacks", roster: [%{"archetype" => "librarian", "name" => "quain"}]})
