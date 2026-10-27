@@ -321,13 +321,18 @@ defmodule Server.Staffing do
   @doc """
   Hand a running thread to another coworker: restaff it, post the handoff as `author` (who handed
   it over: the operator from the office, a coworker through `assign_lead`) — which wakes the new
-  lead, spawning them — and close the old worker's leaf. `{:ok, thread}`, or
-  `Channel.assign_lead/2`'s error with nothing changed.
+  lead, spawning them — and close the old worker's leaf, ending the thread's sessions as
+  `roll_leaf` does. `{:ok, thread}`; `{:error, :lead_mid_turn}` when the old lead has a live turn
+  here (a turn stuck past `Thinking.stale_turn_seconds` reads as idle; `roll_leaf` and `kill_crew`
+  force it); or `Channel.assign_lead/2`'s error. Either error changes nothing.
   """
   def hand_off(thread_id, handle, author \\ Server.OperatorConfig.operator()) do
-    with {:ok, thread} <- Channel.assign_lead(thread_id, handle) do
-      with %{index: index} <- leaf_window(thread, "hand_off"),
-           do: Tmux.kill_window(thread.workspace_id, index)
+    with :ok <- lead_idle(thread_id),
+         {:ok, thread} <- Channel.assign_lead(thread_id, handle) do
+      with %{index: index} <- leaf_window(thread, "hand_off") do
+        Staff.end_thread_sessions(thread.id)
+        Tmux.kill_window(thread.workspace_id, index)
+      end
 
       body = "Handing this to @#{handle}: pick it up from the brief."
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: author, body: body})
@@ -828,4 +833,11 @@ defmodule Server.Staffing do
   # a tmux server that is not up has no windows; any other fault stays `{:error, why}`
   defp listed({:error, :not_up}), do: []
   defp listed(windows), do: windows
+
+  defp lead_idle(thread_id) do
+    case Channel.thread_lead(thread_id) do
+      nil -> :ok
+      lead -> if turn(thread_id, lead) == :busy, do: {:error, :lead_mid_turn}, else: :ok
+    end
+  end
 end
