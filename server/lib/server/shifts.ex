@@ -30,6 +30,10 @@ defmodule Server.Shifts do
   # about limits never reads as out of quota
   @quota_out ~r/^\s*(⎿\s*)?(Claude usage limit reached|(5-hour|weekly|session) limit reached\b|You've hit your (usage |session |weekly |monthly spend )?limit\b)/miu
 
+  # Claude Code's wrapper for a provider's HTTP refusal ("API Error: Request rejected (429) · …"
+  # through ollama.com); the status is read off the number
+  @provider_limit ~r/^[ \t]*(?:⎿[ \t]*)?(API Error:\s*Request rejected\s*\((\d{3})\).*)$/mu
+
   @doc "The crew on in the workspace."
   def current(workspace_id), do: Repo.one(from w in Workspace, where: w.id == ^workspace_id, select: w.shift) || "day"
 
@@ -81,6 +85,17 @@ defmodule Server.Shifts do
     if Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew != "all")), do: current(workspace_id), else: "all"
   end
 
+  @doc """
+  A provider's HTTP refusal in `text`: `{:ok, %{status, line}}` (the raw line, 200 chars at most),
+  else `:none`.
+  """
+  def provider_limit(text) when is_binary(text) do
+    case Regex.run(@provider_limit, text) do
+      [_, line, status] -> {:ok, %{status: String.to_integer(status), line: String.slice(line, 0, 200)}}
+      nil -> :none
+    end
+  end
+
   @doc "Whether a pane's text shows Claude Code's usage limit reached."
   def out_of_quota?(text) when is_binary(text), do: Regex.match?(@quota_out, text)
 
@@ -93,15 +108,23 @@ defmodule Server.Shifts do
   with no coworker tagged on it is never read. `{:offered, crews}` | `:ok`.
   """
   def quota_check(workspace_id, agent, pane, text) do
-    if Server.Presence.provider_of(agent, workspace_id) == "anthropic" do
-      key = "#{agent}/#{pane}"
+    key = "#{agent}/#{pane}"
 
-      case limit_line(text) do
-        nil -> forget(workspace_id, key)
-        {line, after_line} -> on_limit(workspace_id, key, line, after_line)
-      end
-    else
-      :ok
+    case Server.Presence.provider_of(agent, workspace_id) do
+      "anthropic" ->
+        case limit_line(text) do
+          nil -> forget(workspace_id, key)
+          {line, after_line} -> on_limit(workspace_id, key, line, after_line)
+        end
+
+      nil ->
+        :ok
+
+      provider ->
+        case provider_limit(text) do
+          :none -> forget(workspace_id, key)
+          {:ok, hit} -> on_provider_limit(workspace_id, provider, key, hit)
+        end
     end
   end
 
@@ -202,11 +225,20 @@ defmodule Server.Shifts do
   """
   def out_of_quota(now \\ DateTime.utc_now()) do
     for %Workspace{id: ws, knobs: %{"quota_out" => out}} <- Repo.all(Workspace),
-        {_pane, %{"until" => until, "at" => at} = q} <- out,
-        {:ok, until, _} = DateTime.from_iso8601(until),
-        DateTime.after?(until, now) do
+        {_pane, %{"at" => at} = q} <- out,
+        until <- [q["until"] && elem(DateTime.from_iso8601(q["until"]), 1)],
+        is_nil(until) or DateTime.after?(until, now) do
       {:ok, at, _} = DateTime.from_iso8601(at)
-      %{workspace_id: ws, crew: q["crew"], reset: q["reset"], until: until, at: at}
+
+      %{
+        workspace_id: ws,
+        provider: q["provider"] || "anthropic",
+        crew: q["crew"],
+        reset: q["reset"],
+        hint: q["hint"],
+        until: until,
+        at: at
+      }
     end
   end
 
@@ -264,17 +296,12 @@ defmodule Server.Shifts do
   session window). The server's clock is the local one: right while Claude runs on this box.
   """
   def reset_at(text, now) do
-    timed = ~r/resets?\s+(?:at\s+)?(?:(mon|tue|wed|thu|fri|sat|sun)\w*\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i
+    dated =
+      ~r/resets?\s+(?:on\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+(\d{1,2}),?\s+(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i
 
-    case {Regex.run(timed, text), Regex.run(~r/resets?\s+(?:on\s+)?(mon|tue|wed|thu|fri|sat|sun)\w*/i, text)} do
-      {[_, day, h, m, ap | _], _} ->
-        {next_at(now, day, String.to_integer(h), if(m == "", do: 0, else: String.to_integer(m)), ap), :exact}
-
-      {nil, [_, day]} ->
-        {next_at(now, day, 12, 0, "a"), :estimated}
-
-      _ ->
-        {NaiveDateTime.add(now, 5 * 3600), :estimated}
+    case Regex.run(dated, text) do
+      [_, month, day, h, m, ap] -> {dated_at(now, month, day, h, m, ap), :exact}
+      nil -> timed_reset(text, now)
     end
   end
 
@@ -395,5 +422,48 @@ defmodule Server.Shifts do
   defp reset_label(text) do
     {local, how} = reset_at(text, NaiveDateTime.from_erl!(:calendar.local_time()))
     {Calendar.strftime(local, "%a %-I:%M%P") <> if(how == :estimated, do: ", estimated", else: ""), to_utc(local)}
+  end
+
+  # a 429 that names a spent plan ("usage limit") lasts until the plan's reset: a quota item at once.
+  # Any other refusal is logged with its raw line, so the first real one of its kind is a fixture.
+  defp on_provider_limit(workspace_id, provider, key, %{status: status, line: line}) do
+    mark = fingerprint(line)
+
+    if seen(workspace_id)[key] != mark do
+      Logger.info("#{provider} refused with HTTP #{status} on #{key}: #{line}")
+
+      if status == 429 and line =~ "usage limit" do
+        now = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
+        remember(workspace_id, key, %{"provider" => provider, "hint" => line, "at" => now}, "quota_out")
+      end
+
+      remember(workspace_id, key, mark)
+    end
+
+    :ok
+  end
+
+  # the next `Sep 28, 9am` after now: this year's, else next year's
+  defp dated_at(now, month, day, h, m, ap) do
+    mon = Enum.find_index(~w(jan feb mar apr may jun jul aug sep oct nov dec), &(&1 == String.downcase(month))) + 1
+    hour = rem(String.to_integer(h), 12) + if(String.downcase(ap) == "p", do: 12, else: 0)
+    minute = if m == "", do: 0, else: String.to_integer(m)
+    at = fn year -> NaiveDateTime.new!(year, mon, String.to_integer(day), hour, minute, 0) end
+    if NaiveDateTime.after?(at.(now.year), now), do: at.(now.year), else: at.(now.year + 1)
+  end
+
+  defp timed_reset(text, now) do
+    timed = ~r/resets?\s+(?:at\s+)?(?:(mon|tue|wed|thu|fri|sat|sun)\w*\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i
+
+    case {Regex.run(timed, text), Regex.run(~r/resets?\s+(?:on\s+)?(mon|tue|wed|thu|fri|sat|sun)\w*/i, text)} do
+      {[_, day, h, m, ap | _], _} ->
+        {next_at(now, day, String.to_integer(h), if(m == "", do: 0, else: String.to_integer(m)), ap), :exact}
+
+      {nil, [_, day]} ->
+        {next_at(now, day, 12, 0, "a"), :estimated}
+
+      _ ->
+        {NaiveDateTime.add(now, 5 * 3600), :estimated}
+    end
   end
 end
