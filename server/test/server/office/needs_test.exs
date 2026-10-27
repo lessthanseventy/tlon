@@ -416,6 +416,32 @@ defmodule Server.Office.NeedsTest do
       assert body == %{workspace_id: ws.id, shift: "night"}
     end
 
+    test "an ollama seat's pane 429 is one quota item under quota:<ws>:ollama-cloud, with the raw line — the balance poll adds no second" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Ollama pane"})
+      {:ok, seat} = Server.Workspaces.seat(ws.id, %{name: "glmer", archetype: "builder", crew: "day"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "claudia", archetype: "builder", crew: "night"})
+      glm = %{"provider" => "ollama-cloud", "model" => "glm-5.2", "thinking" => "medium"}
+      {:ok, _} = Server.Workspaces.set_policy(ws.id, seat.agent_id, %{model: glm})
+
+      line =
+        "API Error: Request rejected (429) · you (x) have reached your session usage limit, upgrade for higher limits: https://ollama.com/upgrade"
+
+      assert :ok = Server.Shifts.quota_check(ws.id, "glmer", "1/w1", line)
+      assert [need] = Enum.filter(Needs.list(), &(&1.kind == "quota"))
+      assert need.key == "quota:#{ws.id}:ollama-cloud" and need.level == "blocking"
+      assert need.text =~ line and need.text =~ "ollama-cloud"
+      assert need.options == [%{"key" => "night", "label" => "night crew on"}]
+
+      Application.put_env(:server, :engine_presence, Spent)
+      on_exit(fn -> Application.delete_env(:server, :engine_presence) end)
+      assert [again] = Enum.filter(Needs.list(), &(&1.kind == "quota"))
+      assert again.key == need.key and again.text =~ line
+
+      assert :ok = Server.Shifts.quota_check(ws.id, "glmer", "1/w1", "back at work")
+      Application.delete_env(:server, :engine_presence)
+      assert Enum.filter(Needs.list(), &(&1.kind == "quota")) == []
+    end
+
     test "a workline at a stage whose kind the bench lacks, and nobody leads, is no_seat: hire one or hand it on",
          %{ws: ws} do
       {:ok, t} =
