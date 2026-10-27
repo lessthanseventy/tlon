@@ -13,7 +13,7 @@ end
 
 [
   assert.(
-    "every working stage's brief names its owed exit artifact and the advance verb",
+    "every working stage's brief names its owed exit artifact and its exit verb",
     fn ->
       for stage <- ~w(intent spec plan build verify review), do: Brief.stage_message(thread.(stage))
     end,
@@ -23,6 +23,8 @@ end
       |> Enum.all?(fn
         {"build", b} -> b =~ "work/s" and b =~ "advance_stage"
         {"verify", b} -> b =~ "the server" and b =~ "work/s" and not (b =~ "advance_stage")
+        # the verdict parks the gate itself and ends the session (#686): submit_review, never advance_stage
+        {"review", b} -> b =~ "review.md" and b =~ "submit_review" and not (b =~ "advance_stage")
         {stage, b} -> b =~ "#{stage}.md" and b =~ "advance_stage"
       end)
     end
