@@ -156,6 +156,7 @@ defmodule Server.MCP.OperatorAPI do
   alias Server.Office
   alias Server.Office.Room
   alias Server.Repo
+  alias Server.Soul
   alias Server.Staff
   alias Server.Thread
   alias Server.Tickets
@@ -1025,18 +1026,26 @@ defmodule Server.MCP.OperatorAPI do
   defp hire(conn, ws) do
     case body(conn) do
       {%{"name" => name, "archetype" => arch} = b, conn} when is_binary(name) and is_binary(arch) ->
-        with {:ok, c} <- Workspaces.seat(ws.id, %{name: name, archetype: arch}),
+        with :ok <- name_ok(name),
+             {:ok, c} <- Workspaces.seat(ws.id, %{name: name, archetype: arch}),
              {:ok, _} <- Workspaces.retarget(ws.id, c.agent_id, knobs(b)) do
-          Task.Supervisor.start_child(Server.TaskSupervisor, fn -> Server.Persona.ensure(ws.id, c.name) end)
+          Soul.after_hire(ws.id, c.name)
           json(conn, 201, %{seat_id: c.id, agent_id: c.agent_id, name: c.name, archetype: c.archetype})
         else
-          {:error, why} -> refused(conn, why)
+          {:error, :bad_name} ->
+            json(conn, 422, %{error: "a name is lowercase letters, digits, - and _, starting with a letter or digit"})
+
+          {:error, why} ->
+            refused(conn, why)
         end
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"name", "archetype"})})
     end
   end
+
+  # the soul guard's rule, on the door the CLI and the office share — Workspaces.seat stays unguarded
+  defp name_ok(name), do: if(Soul.valid_name?(name), do: :ok, else: {:error, :bad_name})
 
   defp retarget(conn, ws, agent) do
     {b, conn} = body(conn)

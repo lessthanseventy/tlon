@@ -545,6 +545,12 @@ defmodule Server.MCP.GatewayTest do
         post_json("/api/workspaces/#{ws["id"]}/coworkers", %{name: "daneri", archetype: "builder", ask: "allow"})
 
       assert c["name"] == "daneri" and is_integer(c["agent_id"]) and is_integer(c["seat_id"])
+
+      assert {422, _} = post_json("/api/workspaces/#{ws["id"]}/coworkers", %{name: "Sonny", archetype: "builder"})
+      assert Enum.map(Server.Workspaces.bench(ws["id"]), & &1.name) == ["daneri"]
+
+      {201, s} = post_json("/api/workspaces/#{ws["id"]}/coworkers", %{name: "sonny", archetype: "builder"})
+      {200, _} = request_json(:delete, "/api/seats/#{s["seat_id"]}", %{})
       assert Server.Workspaces.policy(ws["id"], c["agent_id"]).ask_default == "allow"
 
       {200, _} =
