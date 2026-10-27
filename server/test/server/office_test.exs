@@ -340,4 +340,20 @@ defmodule Server.OfficeTest do
 
     assert %{opened: 2, closed: 1} = Office.status().ticket_week[ws.id]
   end
+
+  test "the snapshot carries the server's open-ticket counts: per group row, per workspace and for the orphans" do
+    {:ok, ws} = Workspaces.register(%{name: "Counts"})
+    {:ok, ini} = Tickets.file(%{workspace_id: ws.id, title: "I", kind: "initiative"})
+    {:ok, epic} = Tickets.file(%{workspace_id: ws.id, title: "E", kind: "epic", epic_id: ini.id})
+    {:ok, a} = Tickets.file(%{workspace_id: ws.id, title: "a", epic_id: epic.id})
+    {:ok, _} = Tickets.file(%{workspace_id: ws.id, title: "b", epic_id: epic.id})
+    {:ok, _} = Tickets.file(%{workspace_id: ws.id, title: "orphan"})
+    {:ok, _} = Tickets.update(a, %{status: "done"})
+
+    status = Office.status()
+    rows = Map.new(status.tickets, &{&1.id, &1})
+    assert %{open: 1} = rows[epic.id]
+    assert %{open: 1} = rows[ini.id]
+    assert %{total: 2, loose: 1} = status.ticket_open[ws.id]
+  end
 end

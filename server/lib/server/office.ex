@@ -44,13 +44,15 @@ defmodule Server.Office do
     thinking = thinking()
     tabs = Map.new(ws_ids, &{&1, held_windows(&1)})
     roster = roster(benches, thinking, tabs, prompts)
+    boards = Map.new(ws_ids, &{&1, Room.board(&1)})
 
     %{
       roster: roster,
       bench: bench(benches),
       threads: threads(ws_ids, prompts, thinking, roster, tabs),
       projects: projects,
-      tickets: tickets(ws_ids),
+      tickets: tickets(ws_ids, boards),
+      ticket_open: Map.new(boards, fn {ws, b} -> {ws, %{total: b.open_total, loose: b.loose_open}} end),
       notes: notes(projects),
       visits: visits(),
       workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name, shift: &1.shift}),
@@ -396,7 +398,7 @@ defmodule Server.Office do
 
   # An epic is a row (progress, its next free child) while any child is unfinished; a child names its epic.
   # A started child stays on its epic's tree and names its thread; a started loose ticket is its thread's now.
-  defp tickets(ws_ids) do
+  defp tickets(ws_ids, boards) do
     add_progress(
       for ws <- ws_ids,
           t <- Server.Tickets.open_in_workspace(ws),
@@ -415,16 +417,15 @@ defmodule Server.Office do
           thread_id: if(t.status == "doing", do: Server.Tickets.thread_of(t.id))
         }
       end,
-      ws_ids
+      boards
     )
   end
 
-  defp add_progress(rows, ws_ids) do
-    progress =
-      for ws <- ws_ids,
-          e <- Server.Office.Room.board(ws).epics,
-          into: %{},
-          do: {e.id, Map.take(e, [:done, :total, :next])}
+  # an epic's done/total/next and open count, an initiative's open count (the server's, never a client-side sum)
+  defp add_progress(rows, boards) do
+    epics = for {_, b} <- boards, e <- b.epics, into: %{}, do: {e.id, Map.take(e, [:done, :total, :next, :open])}
+    initiatives = for {_, b} <- boards, i <- b.initiatives, into: %{}, do: {i.id, Map.take(i, [:open])}
+    progress = Map.merge(epics, initiatives)
 
     Enum.map(rows, &Map.merge(&1, Map.get(progress, &1.id, %{})))
   end
