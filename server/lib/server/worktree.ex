@@ -60,7 +60,9 @@ defmodule Server.Worktree do
     cond do
       not Regex.match?(@slug, to_string(slug)) -> {:error, :bad_slug}
       not git_repo?(repo_path) -> {:error, :not_a_repo}
-      true -> do_ensure(repo_path, slug)
+      # two `git worktree add`s on one path race: the loser takes `<name>1`, overwrites the
+      # winner's gitfile with it, fails, and removes its own admin dir — a gitfile to nowhere (#447)
+      true -> :global.trans({{__MODULE__, path(repo_path, slug)}, self()}, fn -> do_ensure(repo_path, slug) end)
     end
   end
 
@@ -327,15 +329,31 @@ defmodule Server.Worktree do
 
     # A linked worktree carries a `.git` FILE (`gitdir: …`), not a dir — presence is enough.
     if File.exists?(Path.join(wt, ".git")) do
-      {:ok, wt}
+      resolve(repo_path, wt)
     else
       ignore_worktrees(repo_path)
 
-      with {:ok, wt} <- add(repo_path, wt, slug) do
+      with {:ok, wt} <- add(repo_path, wt, slug),
+           {:ok, wt} <- resolve(repo_path, wt) do
         seed_deps(repo_path, wt)
         {:ok, wt}
       end
     end
+  end
+
+  # a checkout whose gitfile names a gitdir that is not there is unusable to every git command;
+  # `worktree repair` re-points it at the admin dir that is
+  defp resolve(repo_path, wt) do
+    with {_, 0} <- git(wt, ["rev-parse", "--git-dir"]),
+         do: {:ok, wt}
+  else
+    _ ->
+      git(repo_path, ["worktree", "repair", wt])
+
+      case git(wt, ["rev-parse", "--git-dir"]) do
+        {_, 0} -> {:ok, wt}
+        {out, _} -> {:error, "worktree gitfile does not resolve: #{String.slice(out, 0, 200)}"}
+      end
   end
 
   # A fresh checkout starts with the main checkout's installed deps wherever its lockfile is the
