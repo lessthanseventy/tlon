@@ -18,7 +18,7 @@ defmodule Server.MCP.Resource.Brief do
   @impl true
   def read(_params, frame) do
     identity = MCP.Identity.from_frame(frame)
-    brief = %Thread{id: identity.thread_id} |> Board.brief() |> MCP.Brief.scope()
+    brief = %Thread{id: identity.thread_id} |> Board.brief(viewer: identity.agent) |> MCP.Brief.scope()
     {:reply, Response.json(Response.resource(), brief), frame}
   end
 end

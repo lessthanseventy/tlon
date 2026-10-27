@@ -177,12 +177,15 @@ defmodule Server.Board do
   id handle): GOAL (title), the assigned lead, OPENING (the operator's first message, whole),
   TODOS with the derived NEXT, DONE (the
   merged todo + `work_landed` view), LEARNINGS, UNKNOWNS, BLOCKERS and CHECKS each
-  `%{shown, more}`, and RECENT (the message tail).
+  `%{shown, more}`, and RECENT (the message tail). `viewer:` names who reads it: a workline's
+  reviewer (its lead at review) gets the branch, the diff, the spec/plan and the checklist, never the
+  builder's conversation — OPENING, RECENT, DONE and LEARNINGS are hidden, their counts kept.
   """
-  def brief(%Thread{} = thread) do
+  def brief(%Thread{} = thread, opts \\ []) do
     thread = Repo.get!(Thread, thread.id)
     todos = Dossier.open_todos_for_thread(thread)
-    recent = Channel.recent_messages(thread, @cap)
+    reviewing? = reviewing?(thread, opts[:viewer])
+    recent = if reviewing?, do: [], else: Channel.recent_messages(thread, @cap)
     recall_opts = recall_opts(thread)
 
     # WORKLINE — stage, gate, and whether the stage's owed artifact is committed: what the coworker
@@ -199,15 +202,15 @@ defmodule Server.Board do
       goal: thread.title,
       lead: lead_name(thread),
       # OPENING — the operator's first words on the thread, uncut, so a lead never asks for its brief.
-      opening: Channel.opening_operator_message(thread.id),
+      opening: if(!reviewing?, do: Channel.opening_operator_message(thread.id)),
       todos: todos,
       # NEXT is derived, never stored (§5/§6): the head of the open todos, or nil.
       next: List.first(todos.shown),
-      done: done_view(thread),
+      done: hidden_if(reviewing?, done_view(thread)),
       # LEARNINGS is the forgetting engine's token-budgeted working set (relevance × strength,
       # design: `docs/plans/2026-08-19-funes-forgetting-design.md`) — not a recency window; `more`
       # counts what fell out of budget (still on disk, `get_facts` returns the total).
-      learnings: Recall.thread_learnings(thread, recall_opts),
+      learnings: hidden_if(reviewing?, Recall.thread_learnings(thread, recall_opts)),
       # KNOWLEDGE — what the operator pinned and the project learned on OTHER threads, ranked the
       # same way, so a new lead starts from what the office already knows (`Recall.thread_knowledge/2`).
       knowledge: Recall.thread_knowledge(thread, recall_opts),
@@ -300,4 +303,15 @@ defmodule Server.Board do
   defp lead_name(%Thread{agent_id: agent_id}) do
     Repo.one(from a in Agent, where: a.id == ^agent_id, select: a.name)
   end
+
+  # A review reads the artifact, not the builder's back-and-forth: on a workline in review the lead
+  # is the reviewer (`Server.Workline.hand_to/3`), so its own read of the thread hides the conversation.
+  defp reviewing?(%Thread{stage: "review"} = thread, viewer) when is_binary(viewer),
+    do: String.downcase(lead_name(thread) || "") == String.downcase(viewer)
+
+  defp reviewing?(_thread, _viewer), do: false
+
+  # a cap hidden from its reader keeps its count: a cut without a count lies
+  defp hidden_if(true, %{shown: shown, more: more}), do: %{shown: [], more: length(shown) + more}
+  defp hidden_if(false, cap), do: cap
 end
