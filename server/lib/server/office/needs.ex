@@ -864,12 +864,14 @@ defmodule Server.Office.Needs do
   def hook_refusal?(_event), do: false
 
   # nothing moved it past the quiet window and nobody is on it; a thread blocked on a ticket
-  # (`Server.Blocked`) has said it cannot act, and the ticket's `blocked` item says why
+  # (`Server.Blocked`) has said it cannot act, and the ticket's `blocked` item says why; one the
+  # operator paused (`Server.Pause.pause_thread/1`) they stopped themselves
   defp stalled(open, listed) do
     if Server.Pause.state() == :working do
       cutoff = DateTime.add(DateTime.utc_now(), -Server.OperatorConfig.setting("quiet_workline_minutes") * 60, :second)
 
       blocked = Server.Blocked.thread_ids()
+      paused = Server.Pause.paused_thread_ids()
 
       candidates =
         for %Thread{stage: stage} = t <- open,
@@ -877,6 +879,7 @@ defmodule Server.Office.Needs do
             is_nil(t.awaiting),
             not MapSet.member?(listed, t.id),
             not MapSet.member?(blocked, t.id),
+            not MapSet.member?(paused, t.id),
             do: {t, Server.Workline.Artifacts.Git.root(t)}
 
       tips = candidates |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Map.new(&{&1, work_tips(&1)})

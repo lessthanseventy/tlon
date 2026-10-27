@@ -113,6 +113,17 @@ defmodule Server.Workline.ContinuationTest do
     assert continuations(t.id) == []
   end
 
+  test "a thread the operator paused is not nudged until it is resumed", %{thread: t} do
+    {:ok, _} = Server.Pause.pause_thread(t.id)
+    :ok = Continuation.run(t.id, artifacts: Missing)
+
+    assert continuations(t.id) == []
+
+    {:ok, _} = Server.Pause.resume_thread(t.id)
+    :ok = Continuation.run(t.id, artifacts: Missing)
+    assert [_] = continuations(t.id)
+  end
+
   test "at review the continuation says how a reviewer lands it — submit_review, not a commit it cannot make" do
     {:ok, review} = Workline.open(%{title: "review it", slug: "reviewing", stage: "review"})
     :ok = Continuation.run(review.id, artifacts: Missing)

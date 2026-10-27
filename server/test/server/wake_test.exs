@@ -35,6 +35,16 @@ defmodule Server.WakeTest do
     assert Wake.take(t.id, "hronir") == ["pong"]
   end
 
+  test "a wake on a thread the operator paused is let go without a page", %{thread: t} do
+    live_seat!(t, "hronir")
+    {:ok, old} = Wake.queue(t.id, "hronir", "ping")
+    old_at = DateTime.utc_now() |> DateTime.add(-600) |> DateTime.truncate(:second)
+    Repo.update_all(from(w in Wake, where: w.id == ^old.id), set: [inserted_at: old_at])
+    {:ok, _} = Server.Pause.pause_thread(t.id)
+
+    assert Wake.report_overdue() == 0
+  end
+
   test "a wake whose pane is mid-turn (a long tool call) is not overdue; one past the stale-turn clock is",
        %{thread: t} do
     live_seat!(t, "nolan")
