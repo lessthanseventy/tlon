@@ -9,6 +9,7 @@ defmodule Server.ThreadPauseTest do
   alias Server.Channel
   alias Server.Message
   alias Server.Pause
+  alias Server.Switchboard
 
   setup do
     Server.TestDB.clean!()
@@ -89,5 +90,42 @@ defmodule Server.ThreadPauseTest do
     {:ok, :working} = Pause.back_to_work()
     assert tlon_chats(busy) == []
     assert Pause.thread_paused?(busy.id)
+  end
+
+  describe "delivery" do
+    setup do
+      Application.put_env(:server, :arbiter, Server.Arbiter.Test)
+      Application.put_env(:server, :test_pid, self())
+
+      on_exit(fn ->
+        Application.delete_env(:server, :arbiter)
+        Application.delete_env(:server, :test_pid)
+      end)
+    end
+
+    test "a paused thread holds every wake but the operator's; another thread's lead is woken; resume delivers what was held",
+         %{ws: ws, busy: busy} do
+      {:ok, daneri} = Server.Staff.register_agent(%{name: "daneri", mandate: "builder", engine: "local"})
+      {:ok, other} = Channel.open_thread(%{title: "next door", workspace_id: ws.id})
+      {:ok, other} = Server.Staff.assign(other, daneri)
+      {:ok, _} = Server.Staff.start_session(%{thread_id: other.id, agent_id: daneri.id, pane_ref: "%2"})
+
+      {:ok, _} = Pause.pause_thread(busy.id)
+      {:ok, held} = Channel.post(%{thread_id: busy.id, author: "daneri", body: "emma, one more thing"})
+      assert {:pending, _} = Switchboard.deliver(held)
+      refute_received {:woke, "%9", _}
+
+      {:ok, m} = Channel.post(%{thread_id: other.id, author: "emma", body: "daneri, yours"})
+      assert {:delivered, _} = Switchboard.deliver(m)
+      assert_received {:woke, "%2", _}
+
+      {:ok, op} = Channel.post(%{thread_id: busy.id, author: Server.OperatorConfig.operator(), body: "emma, status?"})
+      assert {:delivered, _} = Switchboard.deliver(op)
+      assert_received {:woke, "%9", _}
+
+      {:ok, _} = Pause.resume_thread(busy.id)
+      assert %Message{delivered_at: %DateTime{}} = Server.Repo.get(Message, held.id)
+      assert_received {:woke, "%9", _}
+    end
   end
 end
