@@ -672,7 +672,20 @@ defmodule Server.Profiles do
   each. `stop_smoke(thread_id)` when you're done; a forgotten one tears itself down after two hours.
   A path that needs state a fresh db lacks (a Need, a refused tool) is seeded at start:
   `start_smoke(thread_id, fixtures: ["tool_denied_need"])`, names from the build's catalog
-  (`Server.Smoke.Fixtures`); one it lacks fails the smoke.
+  (`Server.Smoke.Fixtures`); one it lacks fails the smoke. Ask for a fixture here before you file a
+  ticket for one. A spec is a name, then optionally its params with no spaces: `name:key=value,key=value`.
+  The catalog today: `tool_denied_need` (a seat refused a tool twice); `quota_refused_need` (`provider=`,
+  default ollama-cloud: a non-anthropic 429, the quota card); `failed_job` (a discarded job: the health
+  row, `tlon-cli job retry/dismiss`); `health_need` (`what=disk|mem|tmux`: the box row);
+  `settled_need` and `passed_up_need` (Uqbar's verdicts, with `uqbar_routing` on in the smoke's own
+  config: the settled digest rows, `u` overrule, the passed-up recommendation, the clipboard tip);
+  `ticket_tree` (initiative, epic, children, one in flight); `lead_change` (a handoff_opened: the office
+  shows hand-offs of the last three minutes, so drive soon after the url is posted);
+  `landed_workline` (`flag=on|off`: landed with its PR waiting on GitHub, the landing label, or without);
+  `life_routine_overdue` (a life workspace, 'in bed by 23:00' stamped last night and overdue now: the
+  bedroom sleep scene); `interrupted_schedule_run` (a script run cut off, exit 143: the RUNS ⊘ glyph,
+  'last ⊘'). Fixtures are seeded once at start. `drive_smoke` starts a fresh session per call, so
+  put every key of a step in one call: nothing you opened in the last call is still open.
   Your Bash cannot do either: it is sandboxed, with no Postgres socket and a network of its own, blind
   to the smoke's port. A change to the toy (its keys e/f/d and events) lives only in the made-up
   world: drive that with `OFFICE_SANDBOX=1 mise run office:drive -- <keys>` in your Bash, no release
