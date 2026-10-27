@@ -4,7 +4,6 @@ Closes #342. An adopted dog now replaces Argos on screen, as the cat slot alread
 - `WideRoom.setPets` fills the dog from `pets.json`; new `dogProfile()` reports it. Argos stays the default.
 - The pair's exchange is parsed by prefix, so a turn from the adopted dog's name is the dog's, said without it.
 - The pet card's title shows his name; the store card's "pets.json only for now" text is gone, the dog slot says who leaves like the cat's.
-- Spec step 12 slice 1 §3 got the admission line first (commit 1); this change makes it obsolete, so it stays as history rather than being dropped.
 
 Not done, on purpose: the model's voice lines are still keyed "Argos" (as the cat's are "Nina") and the server's `/office/pets` doesn't know the dog's name, so an adopted dog speaks Argos-written lines until the server learns the dog (server change, outside this ticket).
 

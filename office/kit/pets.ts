@@ -204,7 +204,7 @@ export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot, bpm: number | 
   const flipped = dance ? phase === 1 : d.face < 0
   const rows = flipped ? rows0.map((r) => [...r].reverse().join("")) : rows0
   const w = rows[0]!.length, h = rows.length, x = d.x - Math.floor(w / 2), y = d.y - h - (dance ? phase : 0)
-  const coat = d.shade > 0 ? tint(ROLE.body, ROLE.prose, [0, 0.15, 0.3, 0.45][d.shade]!) : ROLE.body
+  const coat = d.shade > 0 ? tint(ROLE.prose, ROLE.body, [0, 0.15, 0.3, 0.45][d.shade]!) : ROLE.body
   sc.item(d.y, () => {
     // a dark rim all round: his coat is the furniture's amber, and without it he melts into a desk
     const rim = ROLE.ground, r = { k: rim, e: rim, t: rim, n: rim, i: rim, p: rim, c: rim }

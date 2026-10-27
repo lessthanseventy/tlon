@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing, furOf } from "../kit/draw"
-import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
+import { ARGOS, cycleAxis, DEFAULT_PETS, dots, drawDog, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
 import { bucketFor, NINA, SWEET } from "../kit/voices"
 import { CAT, DOG, fillArt, SPECIES_ART } from "../kit/sprites"
 import { ROLE } from "../kit/palette"
@@ -410,5 +410,23 @@ describe("an adopted dog in the dog slot", () => {
     const heard: string[] = []
     chance(0.999, () => { for (let i = 0; i < 120; i++) { room.step(a); if (r.dog.said && !heard.includes(r.dog.said)) heard.push(r.dog.said) } })
     expect(heard).toEqual(["Woof, darling!"])
+  })
+})
+
+describe("the dog's shade", () => {
+  test("a higher shade is a lighter coat, walking from the body amber toward prose", () => {
+    const coatAt = (shade: number) => {
+      const paints: Record<string, string>[] = []
+      const sc = { f: 0, tick: 0, hits: [], balloons: [], item: (_y: number, fn: () => void) => fn(), px: () => {}, text: () => {}, figure: (_r: unknown, _x: number, _y: number, p: Record<string, string>) => { paints.push(p) } }
+      const spot = { x: 100, y: 100, aisle: 100, pose: "stand" as const, face: "left" as const, kind: "roam" as const }
+      const dog = { name: "Biscuit", shade, x: 200, y: 176, aisle: 176, path: [], mode: "sit" as const, until: 0, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
+      drawDog(sc as never, dog, spot, spot)
+      return paints.at(-1)!.k!
+    }
+    const lum = (hex: string) => parseInt(hex.slice(1, 3), 16) + parseInt(hex.slice(3, 5), 16) + parseInt(hex.slice(5, 7), 16)
+    const dist = (hex: string) => Math.abs(lum(hex) - lum(ROLE.prose))
+    expect(dist(coatAt(3))).toBeLessThan(dist(coatAt(2)))
+    expect(dist(coatAt(2))).toBeLessThan(dist(coatAt(1)))
+    expect(dist(coatAt(1))).toBeLessThan(dist(ROLE.body))
   })
 })
