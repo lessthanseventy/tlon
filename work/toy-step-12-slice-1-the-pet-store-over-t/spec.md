@@ -43,6 +43,7 @@ the slot is empty — but both slots always hold a pet (`DEFAULT_PETS`), so the 
 Adoption writes `{ name, species, temperament }` into that slot's entry in `pets.json` through the
 existing `savePets` read-merge-write. The room follows through the existing poll of `pets.json`
 (`followPets`); the replaced pet simply stops being drawn. No sim change.
+For now adoption writes `pets.json` only: the room still draws Argos for the dog slot until the wide-room wiring lands (#342).
 
 ## 4 · Species (the pipeline, proven on three)
 A species is **data**: a frame set in `SPECIES_ART` (`sit`, optional `walk`, `sleep`, `play`, the same
