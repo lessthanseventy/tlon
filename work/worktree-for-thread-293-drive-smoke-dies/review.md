@@ -1,15 +1,25 @@
-**Verdict: request_changes**
+**Verdict: approve** — 473cc57 on work/worktree-for-thread-293-drive-smoke-dies (reviewer: lonnrot; the previous round's verdict at 895714d was ulrikke's, not mine, so I read the whole branch diff against main, not only the delta).
 
-Review of 356cd99 (+ 5b7ec5e, b5edbf9) on work/worktree-for-thread-293-drive-smoke-dies: the per-path lock and the gitfile repair are sound. Four edits to the lines this change touches before it lands:
+The previous round's four requests, checked against the diff since 895714d:
 
-1. server/lib/server/worktree.ex, `ensure/2` docstring (line 55): "an existing checkout returns its path untouched" is no longer true, since existing checkouts now run `rev-parse` and `repair` if it fails. Change to: "an existing checkout is checked and repaired if its gitfile does not resolve, otherwise returned as is."
-2. server/lib/server/worktree.ex line 65: pass `[node()]` to `:global.trans` so the lock can't wait on a partitioned peer, and key on `Path.expand(repo_path)`:
-   `true -> :global.trans({{__MODULE__, path(Path.expand(repo_path), slug)}, self()}, fn -> do_ensure(repo_path, slug) end, [node()])`
-3. server/lib/server/worktree.ex line 64: drop the ticket ref from the lock comment: "...a gitfile to nowhere" (no "(#447)").
-4. server/test/server/worktree_test.exs: drop "(#447)" from the describe label, and remove the stray double blank line before it.
+1. Docstring: now reads `an existing checkout is checked and repaired if its gitfile does not resolve, otherwise returned as is`. Fixed.
+2. Lock: `:global.trans({{__MODULE__, path(Path.expand(repo_path), slug)}, self()}, fn -> do_ensure(repo_path, slug) end, [node()])`. Keyed on the expanded path, scoped to this node. Fixed.
+3. Lock comment ends `a gitfile to nowhere`, no ticket ref. Fixed.
+4. Describe label is `ensure/2 — a checkout's gitfile always resolves`. Fixed. The "double blank line" was never in the file; the context lines around the label show one blank, as the builder said.
 
-Not blocking, filed as ticket 681: `rename/3`, `remove/2` and `retire/2` don't take the lock.
+The change itself, read whole:
 
-Verified: the scripts that run `git worktree add` (scratch.sh, check-main.sh, release-smoke.sh, workline-verify.sh) use their own paths, not `.worktrees/<slug>`, so no current race on the #447 path. The `#447` in the commit message stays.
+- `do_ensure` routes an existing checkout through `resolve(repo_path, wt)` and a fresh one through `add` then `resolve`, with `seed_deps` only after both. `resolve` runs `rev-parse --git-dir` in the checkout, and on failure `worktree repair wt` from the repo then re-checks; a repair that doesn't take returns `{:error, "worktree gitfile does not resolve: …"}`. Honest error, no raise, per the module's own contract.
+- Nothing else in server/lib or scripts runs `git worktree add` on `.worktrees/<slug>`: `Server.Workline.Merge` adds a tmp path, the scripts add their own detached dirs. Only `Server.Worktree.ensure` (via `worktree_for_thread` and `Scribe`) writes that path, and both go through the lock.
+- The ticket's "sandbox allowlist names `<slug>1`" symptom is downstream: `adapters/claude-code/launch.sh` reads the gitdir with `rev-parse` at launch, after `Server.MCP.Spawn` has called `worktree_for_thread`, so a repaired gitfile is what the allowlist gets.
 
-Builder: rebase onto main, make the four edits, run `menard run check --in server`, and push. I re-review on the new head.
+Verified by me, in this seat:
+- `menard run test --in server test/server/worktree_test.exs`: `{"ok":true,"tests":36,"failed":0}`.
+- The server's `mise run check` on 473cc57 passed (brief, 16:24:35Z).
+- I did not re-run the concurrency test without the lock; that it went red first is the builder's claim.
+
+No bench_contrast row among the checks the brief shows (five of nine), so no contrast finding from me.
+
+Already filed, not re-listed as a follow-up: ticket 681, `rename/3`, `remove/2`, `retire/2` don't take the lock.
+
+Handing to the merge gate.
