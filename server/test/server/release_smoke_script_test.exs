@@ -399,6 +399,22 @@ defmodule Server.ReleaseSmokeScriptTest do
     end
 
     test "the office drive waits for the title before the find and for the thread after Enter", ctx do
+      args = driven_args(ctx)
+      slash = Enum.find_index(args, &(&1 == "/"))
+      enter = Enum.find_index(args, &(&1 == "Enter"))
+
+      assert Enum.any?(Enum.take(args, slash), &(&1 =~ ~r/^wait:release smoke \d+$/))
+      assert Enum.at(args, enter + 1) =~ ~r/^wait:#7  release smoke \d+$/
+    end
+
+    test "a thread opens with its reply box focused: two Escapes leave it before the card", ctx do
+      args = driven_args(ctx)
+      enter = Enum.find_index(args, &(&1 == "Enter"))
+
+      assert [_wait, "Escape", "Escape", "c" | _] = Enum.drop(args, enter + 1)
+    end
+
+    defp driven_args(ctx) do
       port = free_port()
       office = ~s({"roster": [], "threads": [], "workspaces": [{"id": 1, "name": "machine"}], "id": 7})
 
@@ -443,12 +459,7 @@ defmodule Server.ReleaseSmokeScriptTest do
       File.write!(Path.join(ctx.signal, "go"), "")
       Task.await(smoke, 30_000)
 
-      args = ctx.signal |> Path.join("drive.args") |> File.read!() |> String.split("\n", trim: true)
-      slash = Enum.find_index(args, &(&1 == "/"))
-      enter = Enum.find_index(args, &(&1 == "Enter"))
-
-      assert Enum.any?(Enum.take(args, slash), &(&1 =~ ~r/^wait:release smoke \d+$/))
-      assert Enum.at(args, enter + 1) =~ ~r/^wait:#7  release smoke \d+$/
+      ctx.signal |> Path.join("drive.args") |> File.read!() |> String.split("\n", trim: true)
     end
 
     defp stale_lock_in(ctx) do
