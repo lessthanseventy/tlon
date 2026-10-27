@@ -129,6 +129,29 @@ defmodule Server.MCP.SpawnTest do
       assert File.exists?(Path.join(wt, "NEW"))
     end
 
+    test "the lead's wake spawn (assign: false) catches the checkout up" do
+      %{repo: repo, git: git, ws: ws, project: p} = Server.TestRepoDir.with_project()
+      remote = repo <> "-origin.git"
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+      on_exit(fn -> File.rm_rf!(remote) end)
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["remote", "add", "origin", remote])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+      {:ok, thread} = Channel.open_thread(%{title: "wake", workspace_id: ws.id, project_id: p.id})
+      assert {:ok, _} = Spawn.join(thread.id, "codex")
+      wt = Server.Worktree.path(repo, "t#{thread.id}")
+
+      File.write!(Path.join(repo, "NEW"), "more\n")
+      {_, 0} = git.(["add", "NEW"])
+      {_, 0} = git.(["commit", "-qm", "main moves"])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+
+      assert {:ok, _} = Spawn.join(thread.id, "codex", assign: false)
+      assert File.exists?(Path.join(wt, "NEW"))
+    end
+
     test "a rider join (assign: false) never moves the checkout under the lead's live pane" do
       %{repo: repo, git: git, ws: ws, project: p} = Server.TestRepoDir.with_project()
       remote = repo <> "-origin.git"
