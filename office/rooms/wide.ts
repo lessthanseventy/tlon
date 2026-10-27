@@ -19,7 +19,7 @@ import { ARRIVE, LEAVE, drawAleph, gone, STEP as ALEPH_STEP, type Visit } from "
 import { boardColumns, COLS, isManager, peopleOf, seating, STATE_GLYPH, stickyItems, weekTrend, type BoardCtx, type BoardItem, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawCloset, drawFire, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
-import { ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
+import { type Pets, ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
 import { Sim, type Actor, type Pt, type Spot } from "../kit/sim"
 import type { Live, Rect } from "../kit/tiles"
 import { gamesTile } from "../kit/tiles/games"
@@ -37,7 +37,7 @@ import { DEFAULT_OFFICE } from "../kit/tiles"
 import { NINA, pick } from "../kit/voices"
 import { hueRole, newYearLeft, RELEASE_MIN, Tv } from "../kit/tv"
 import { marqueeWindow, type NowPlaying } from "../kit/stereo"
-import { SCRIBBLES, shirtOf } from "../kit/sprites"
+import { DOG_NAME, SCRIBBLES, shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
 
 export const WIDE_H = 200
@@ -186,7 +186,7 @@ export class WideRoom extends Sim<Layout> {
     this.office = officeTile(this.z)
     this.book = { ...spineHome(corner(this.z).shelf), flying: false, riffle: 0 }
     const bed = this.dogBed()
-    this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
+    this.dog = { name: DOG_NAME, shade: 0, x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
   }
   /** over your chair: where the book waits when its thread has no whiteboard card (its study is talk with you, not work) */
   private yourDesk(a: Agents): Pt | null {
@@ -327,6 +327,10 @@ export class WideRoom extends Sim<Layout> {
     return this.planes.length > 0
   }
   /** Argos says something (after `delay`, when he is answering) */
+  /** pets.json, resolved: the cat slot (`Sim.setPets`), then the dog's name and shade */
+  override setPets(p: Pets) { super.setPets(p); this.dog.name = p.dog.name; this.dog.shade = p.dog.shade ?? 0 }
+  /** the dog slot as configured */
+  dogProfile() { return { name: this.dog.name, shade: this.dog.shade } }
   protected override reactPets(k: EventKind) {
     super.reactPets(k)
     this.dogSay(this.argos(`event_${k}`), 40)
@@ -634,7 +638,7 @@ export class WideRoom extends Sim<Layout> {
   private talkOut(occasion: string): boolean {
     const ex = this.exchange(occasion)
     if (!ex) return false
-    ex.forEach((turn, i) => this.turns.push({ who: turn.startsWith("Nina:") ? "cat" : "dog", text: turn.replace(/^(Nina|Argos):\s*/, ""), at: this.tick + i * 42 }))
+    ex.forEach((turn, i) => { const [, who = "", text = turn] = turn.match(/^([^:]{1,30}):\s*(.*)$/s) ?? []; this.turns.push({ who: who === "Nina" || who === this.cat.name ? "cat" : "dog", text, at: this.tick + i * 42 }) })
     return true
   }
   /**

@@ -30,9 +30,9 @@ test("a dog candidate draws its own art and names the dog slot", () => {
   const text = storeRows(c, [], "Argos", "woof").map((r) => r.segs.map((g) => g.s).join("")).join("\n")
   expect(text).toContain("the dog slot")
 })
-test("the dog's slot says pets.json only, not that he leaves — the room still draws him", () => {
+test("the dog's slot names who leaves, like the cat's — the room draws the adopted dog now", () => {
   const c = candidateOf({ ...emptyStore(), species: "dog" }, [])
   const t = storeRows(c, [], "Argos", "woof").map(text).join("\n")
-  expect(t).not.toContain("leaves by the door")
-  expect(t).toContain("the room still draws Argos")
+  expect(t).toContain("Argos leaves by the door")
+  expect(t).not.toContain("pets.json only")
 })
