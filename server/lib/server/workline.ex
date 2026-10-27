@@ -2097,6 +2097,9 @@ defmodule Server.Workline do
         sha: sha
       })
 
+    # the verdict ends the reviewer's session: a review is a throwaway session, briefed fresh each round
+    Server.Staffing.end_review(thread)
+
     if verdict == "request_changes" do
       bounced =
         bounce(

@@ -352,6 +352,24 @@ defmodule Server.Staffing do
   end
 
   @doc """
+  A review's verdict is in: end the live sessions on its thread and close its leaf window, so the
+  reviewer's session ends with its verdict and the next review there opens fresh on its stage brief.
+  A throwaway session by design, so nothing is recorded for `left_off/2`. `:ok`.
+  """
+  def end_review(%Thread{} = thread) do
+    # a tmux fault is not "no window": ending the sessions with the old window alive would strand it
+    case leaf_window(thread, "end_review") do
+      {:error, _} ->
+        :ok
+
+      tab ->
+        Staff.end_thread_sessions(thread.id)
+        if tab, do: Tmux.kill_window(thread.workspace_id, tab.index)
+        :ok
+    end
+  end
+
+  @doc """
   The window `thread`'s leaf holds, `nil` when it has none, `{:error, why}` when tmux can't say —
   logged as `what` skipped, so a fault is never read as an absent window.
   """
