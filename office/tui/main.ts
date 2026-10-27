@@ -810,13 +810,14 @@ function stuckActions(s: data.Stuck, kind: StuckKind): Action[] {
 }
 /** what a stalled need's nudge says to the lead */
 const NUDGE = "Nothing has moved here for a while: advance the stage if its work is done, or say what is blocking you."
-/** answer an ask with a note: a one-line box naming the options; "<number> <note>" sends "<key> <note>", the form the server splits */
+/** answer with a note: a one-line box naming the options; its first word is an option's number, key or label, the rest goes on as typed — "<key> <note>", the form the server splits */
 function answerWithNote(id: number, options: { key: string; label: string }[], after: () => void = () => {}) {
   const opts = options.slice(0, 9)
   ask(`answer with a note — ${opts.map((o, i) => `${i + 1} ${o.label}`).join(" · ")}`, (s) => {
-    const [n, ...note] = s.trim().split(/\s+/), o = opts[Number(n) - 1]
-    if (!o) { status = "start with the option's number, then the note"; return draw() }
-    void did(data.answer(id, [o.key, ...note].join(" "))).then(after)
+    const m = s.trim().match(/^(\S+)\s*([\s\S]*)$/), w = m?.[1]?.toLowerCase() ?? ""
+    const o = opts[Number(w) - 1] ?? opts.find((x) => x.key.toLowerCase() === w || x.label.toLowerCase() === w)
+    if (!o) { status = "start with the option's number, key or label, then the note"; return draw() }
+    void did(data.answer(id, m![2] ? `${o.key} ${m![2]}` : o.key)).then(after)
   })
 }
 /** what can be done about one waiting item — the inbox's list and its one-at-a-time card share these */
