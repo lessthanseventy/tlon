@@ -415,6 +415,27 @@ defmodule Server.WorklineVerifyScriptTest do
       {after_keep, 0} = System.cmd("git", ["rev-parse", "keep"], cd: ctx.repo)
       assert String.trim(after_keep) == before
     end
+
+    test "a rebase conflict is recorded as the branch's red, not retried: check_failed cmd rebase, exit 1, nothing advanced",
+         ctx do
+      {_, 0} =
+        System.cmd(
+          "sh",
+          [
+            "-c",
+            "git checkout -qb work/pr-7-feature main && echo mine >c && git add c && git commit -qm mine && " <>
+              "git checkout -q main && echo theirs >c && git add c && git commit -qm theirs && git push -q origin main"
+          ],
+          cd: ctx.repo
+        )
+
+      assert {_, 1} = verify(ctx)
+
+      cli = File.read!(Path.join(ctx.tmp, "cli.log"))
+      assert cli =~ ~r/^record-verify 7 pr-7-feature 1 rebase c$/m
+      refute cli =~ ~r/^note /m
+      refute cli =~ ~r/^advance /m
+    end
   end
 
   # scripts/lib/seed-hex.sh, which every gate sources: `seed_hex_home <src> <dest>`

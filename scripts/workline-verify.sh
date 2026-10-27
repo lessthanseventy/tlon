@@ -94,8 +94,16 @@ git -C "$repo" worktree add -q --detach "$fresh" "$ref" || exit 1
 # --no-update-refs: rebase.updateRefs (set on this machine) would move every branch pointing into
 # the range — a coworker's work/<slug> not checked out anywhere
 if ! git -C "$fresh" rebase -q --no-update-refs origin/main >/dev/null 2>&1; then
+  conflicts="$(git -C "$fresh" diff --name-only --diff-filter=U | paste -sd' ' -)"
   git -C "$fresh" rebase --abort >/dev/null 2>&1
-  note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
+  # A conflict is the branch's red, not the environment's fault: recorded as a check_failed, finish/5
+  # sends it back to build. Exiting with nothing recorded is retried into a job_failed Need instead.
+  if [ -n "${WORKLINE_GATE:-}" ]; then
+    note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
+  else
+    "$cli" record-verify "$tid" "$slug" 1 rebase "$conflicts" ||
+      note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
+  fi
   exit 1
 fi
 
