@@ -1,33 +1,22 @@
-# Review: 687-release-smoke-the-port-picker-skips
+# Review: 687-release-smoke-the-port-picker-skips (round 2)
 
-**Verdict: APPROVE** — branch work/687-release-smoke-the-port-picker-skips @ 05f6c59 (2 commits on 2bdf185).
+**Verdict: APPROVE** — branch work/687-release-smoke-the-port-picker-skips @ e255524 (3 commits on 2bdf185, plus my round-1 review.md).
 
-## The witness statement
+## What changed since 7b23201
 
-`scripts/release-smoke.sh:27`
-```
--port="${TLON_SMOKE_PORT:-$((4100 + $$ % 800))}"
-+port="${TLON_SMOKE_PORT:-$(smoke_pick_port $((4100 + $$ % 800)))}"
-```
-`scripts/lib/smoke-build.sh`: `smoke_port_taken` (ss -Hltn, else a /dev/tcp connect) and `smoke_pick_port` (skips 4369 and 4040, steps +1 while a listener is up).
+One commit, e255524, touching only `scripts/release-smoke.test.sh`. `git diff 7b23201..HEAD -- . ':!work/687-…'` is exactly the diff I sent back in msg #15796: the free-base and listener cases move to 14700/14600, the two skip cases become relational (`$p -gt 4369`/`4040` and `! smoke_port_taken "$p"`), and a comment says why the fixed ports stay out of 4100..4899 and 4041. `smoke-build.sh` and `release-smoke.sh` are unchanged from round 1.
 
-## Spec compliance (tertius' pinned shape, msg #15766)
+## Findings from round 1
 
-1. (a) function in `scripts/lib/smoke-build.sh`, which the self-test already sources — yes.
-2. (b) 4369 and 4040 skipped outright, then +1 while a listener is up — yes, both checks sit in the one `while`.
-3. (c) only the computed port steps; an explicit `TLON_SMOKE_PORT` is the `:-` default's short-circuit and is never passed to the picker; line 58's `4040` refusal and line 61's curl guard still cover it — yes.
-4. (d) the pick runs on line 27, `db=tlon_smoke_$port` on line 28 derives from the stepped port — yes.
-5. Tests: the three asked for plus 4040 → 4041. `$$` inside the `$(...)` is still the parent's PID, so the base is unchanged.
-6. Change kept to these lines: 3 files + pr.md, 40 insertions, 1 deletion.
+1. Fixed ports in the smoke's range / server:dev's 4041 (the send-back) — **fixed** by e255524, as prescribed. daneri reports 13 ok with rival listeners on 4700/4370/4041 (msg #15799); I did not re-run the rival case this round.
+2. /dev/tcp fallback and v6-only listeners — **dropped** by my ruling in msg #15794: ss is on every box that smokes, and the fallback is no worse than the old behaviour. Not open.
 
-## What I ran, not eyeballed
+## What I ran
 
-- `scripts/cap.sh bash scripts/release-smoke.test.sh` on the branch: exit 0, 13 ok, 0 FAIL (`.logs/20261027T155619-bash-scripts-release-smoke-test-sh.log`).
-- The ss path against a live `:gen_tcp.listen(14600)`: taken(14600)=yes, taken(14601)=no, pick=14601.
-- The no-ss fallback, under `bash` with ss off PATH: taken(14600)=yes, taken(14601)=no, pick=14601. (Under zsh it reads "not taken" — zsh has no /dev/tcp — but the script runs under bash, so that is not a finding.)
-- CHECKS: `mise run check` exit 0 on verify; no `bench_contrast` row, so nothing to contrast.
+- `scripts/cap.sh bash scripts/release-smoke.test.sh` on the branch at e255524: exit 0, 13 ok, 0 FAIL (`.logs/20261027T161422-bash-scripts-release-smoke-test-sh.log`).
+- CHECKS: `mise run check` exit 0 on this round's verify (22:12:53Z); no `bench_contrast` row, nothing to contrast.
+- Tree clean at HEAD.
 
-## Non-blocking (in follow_ups)
+## Nit, not a finding
 
-7. The self-test's fixed ports 4600/4700/4601 sit inside the smoke's own 4100..4899 pick range; a real smoke running at the same time whose `$$ % 800` lands there fails "a free base is itself" or "steps on". Rare, but a flake with a known cause.
-8. The /dev/tcp fallback connects to 127.0.0.1 only, so a v6-only listener reads free on a box without ss (verified: ss path taken=yes, fallback taken=no). ss is on every Linux here; noting it, not blocking on it.
+`work/687-…/pr.md`'s "Checked:" line still reads "4369 → 4370; 4040 → 4041"; the tests now assert "above the skipped port and free". The description is slightly stale, the code is not. Nobody acts on it within a week, so no follow-up.
