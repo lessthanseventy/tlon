@@ -145,7 +145,8 @@ defmodule Server.MCP.Tool do
         if may_act?.(thread, identity),
           do: thread,
           else:
-            {:error, "#{identity.agent} doesn't lead thread ##{id}; only its lead can act on it from another thread"}
+            {:error,
+             "#{identity.agent} doesn't lead thread ##{id}; only its lead, or someone @mentioned on it, can act on it from another thread"}
 
       true ->
         {:error, "no such thread: #{id}"}
@@ -167,6 +168,13 @@ defmodule Server.MCP.Tool do
        ]) or
       match?(%Server.Coworker{name: name} when name == identity.agent, manager)
   end
+
+  @doc """
+  Whether the caller may post on `thread` from another one: it `steers?/2` it, or a message on it
+  @mentions the caller — the mention is the invitation, whoever wrote it.
+  """
+  @spec may_post?(Server.Thread.t(), Server.MCP.Identity.t()) :: boolean()
+  def may_post?(thread, identity), do: steers?(thread, identity) or mentioned?(thread, identity)
 
   @doc """
   The `workspace_id` of the connection's bound thread — the "current workspace" the
@@ -218,5 +226,20 @@ defmodule Server.MCP.Tool do
   defp leads?(thread, identity) do
     agent = Server.Staff.agent_by_name(identity.agent)
     agent && agent.id == thread.agent_id
+  end
+
+  defp mentioned?(_thread, %{agent: agent}) when not is_binary(agent), do: false
+
+  defp mentioned?(thread, %{agent: agent}) do
+    import Ecto.Query
+
+    me = String.downcase(agent)
+
+    from(m in Server.Message,
+      where: m.thread_id == ^thread.id and ilike(m.body, ^"%@#{agent}%"),
+      select: m.body
+    )
+    |> Server.Repo.all()
+    |> Enum.any?(fn body -> Enum.any?(Server.Mentions.names(body), &(String.downcase(&1) == me)) end)
   end
 end

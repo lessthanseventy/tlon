@@ -719,7 +719,8 @@ defmodule Server.SwitchboardTest do
       assert {:delivered, _} = Switchboard.deliver(m)
 
       assert_received {:woke, "wTertius", prompt}
-      assert prompt =~ "thread #{task.id} from Daneri" and prompt =~ "consult_peer"
+      assert prompt =~ "thread #{task.id} from Daneri" and prompt =~ "post_message thread_id: #{task.id}"
+      refute prompt =~ "consult_peer"
       refute_received {:woke, "wDaneri", _}
     end
 
