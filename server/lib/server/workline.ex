@@ -855,16 +855,18 @@ defmodule Server.Workline do
         session_id: opts[:session_id]
       )
 
+    by = Server.Authorship.label(author, opts[:session_id])
+
     outcome =
       if verdict == "fail" do
         bounce(
           thread,
           "QA found a problem",
-          "QA (#{author}) drove it and found:\n\n#{report}\n\nFix it test-first",
+          "QA (#{by}) drove it and found:\n\n#{report}\n\nFix it test-first",
           author
         )
       else
-        post_brief(thread, "✓ QA passed (#{author}):\n\n#{report}")
+        post_brief(thread, "✓ QA passed (#{by}):\n\n#{report}")
         advance(Repo.get!(Thread, thread.id), opts)
       end
 
