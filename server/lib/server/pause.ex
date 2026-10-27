@@ -53,6 +53,44 @@ defmodule Server.Pause do
   @doc "Undo pencils down or lights out. `{:ok, :working}`."
   def back_to_work, do: go(:working)
 
+  @doc """
+  A plan meter reading (`%{five_hour?: w, seven_day?: w}`, `w = %{percent, resets_at}`): at the
+  `auto_pause_at` knob, pencils down and the reason on the lobby. Only from :working; a window that
+  already paused the office (`{window, resets_at}`, kept in the settings file) never pauses it again, so
+  the operator's back_to_work sticks. Always `:ok`.
+  """
+  def auto(windows) do
+    limit = OperatorConfig.setting("auto_pause_at")
+    latched = OperatorConfig.read()["auto_paused_for"]
+
+    with :working <- state(),
+         {name, %{percent: p, resets_at: r}} <-
+           Enum.find(windows, fn {name, w} -> w.percent >= limit and latch(name, w) != latched end) do
+      :ok = OperatorConfig.put("auto_paused_for", latch(name, %{resets_at: r}))
+      {:ok, _} = pencils_down()
+      auto_say(name, p, r)
+    end
+
+    :ok
+  end
+
+  defp latch(name, %{resets_at: r}), do: "#{name}|#{r}"
+
+  defp auto_say(name, percent, resets_at) do
+    label = if name == :five_hour, do: "5h", else: "weekly"
+
+    reset =
+      with r when is_binary(r) <- resets_at,
+           {:ok, at, _} <- DateTime.from_iso8601(r),
+           do: ", resets #{Calendar.strftime(at, "%H:%M")} UTC",
+           else: (_ -> "")
+
+    body = "#{label} at #{round(percent)}%#{reset} — pencils down, back to work when you say"
+
+    with %Server.Thread{id: id} <- Channel.machine_thread(),
+         do: _ = Channel.post(%{thread_id: id, author: "tlon", body: body, kind: "notice"})
+  end
+
   defp go(want) do
     from = state()
 
