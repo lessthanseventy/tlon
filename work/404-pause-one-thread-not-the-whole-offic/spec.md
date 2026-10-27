@@ -37,8 +37,8 @@ different functions.
   (`{:error, "thread N is paused: resume it first"}`).
 - **Route:** `POST /api/threads/:id/pause` and `/resume` in `operator_api.ex`, returning
   `{thread_id, paused}`; documented in its moduledoc.
-- **Office-wide interplay (draft, awaiting operator):** office back-to-work does not clear a
-  per-thread pause; the thread stays paused until resumed itself.
+- **Office-wide interplay (operator, 2026-10-27):** office back-to-work does not clear a
+  per-thread pause (a separate, deliberate choice); the thread stays paused until resumed itself.
 
 ## Out of scope
 
