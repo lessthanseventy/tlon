@@ -794,7 +794,8 @@ defmodule Server.Workline do
   and asks for the risk grade it is decided on (`Server.Jobs.Grade`); a change that owes QA is
   handed to the qa seat. An approval of a commit already approved this round is that same
   approval, `{:ok, thread}` and nothing recorded: a client retries a call whose connection
-  dropped, and the approval's QA handoff closes the reviewer's window under it. A verdict by the
+  dropped, and the verdict ends the reviewer's session under it (`Server.Staffing.end_review/1`: a
+  review is a throwaway session, briefed fresh each round). A verdict by the
   agent that built the branch is refused, `{:error, {:self_review, why}}` (`self_review/2`).
   `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
   """

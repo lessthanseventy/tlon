@@ -134,7 +134,8 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   and its required check is `tlon/check` — the local gate's commit status, not a CI run (CI runs on
   release tags only). Rebase onto main, never merge it in, never make a merge commit; ship work as a PR
   branch, or a stack of small ones with `gh stack`. Review happens on tlon, before GitHub: branch → PR →
-  a reviewer's verdict on its head (`review_branch`; never the PR's author or a builder of the branch)
+  a reviewer's verdict on its head (`review_branch`; never the PR's author or a builder of the branch;
+  each review on its own thread, in a session its verdict ends — never from the lobby)
   → `mise run land -- <pr>`; GitHub merges only what the merge queue gated, at that head. A workline's
   approval lands its branch the same way — reviewed on its thread (never by its builder), rebased onto
   origin's main and gated (`Server.Workline.Merge`), then published: the branch pushed, a PR opened,

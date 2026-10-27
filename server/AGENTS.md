@@ -175,7 +175,12 @@ and every layer the spine design's re-laid §9 asked for
   reviewer's `review_branch` (branch, the full sha it read, approve | request_changes, the review) is an
   event correlated `branch:<name>:review`; the newest is the branch's verdict (`tlon-cli branch-review <branch>`).
   A verdict by a builder of the branch is refused (`BranchReview.builders/3`), and so is an approval by
-  the PR's author at landing.
+  the PR's author at landing. Every review — a workline's `submit_review` or a branch's `review_branch` —
+  runs in a throwaway session on its own thread, ended by its verdict (`Server.Staffing.end_review/1`:
+  the thread's sessions ended, its leaf window closed); `review_branch` from the standing thread is
+  refused. A workline's reviewer reads the branch, the diff, the spec/plan and the checklist, never the
+  builder's conversation: its `get_brief` hides OPENING, RECENT, DONE and LEARNINGS, counts kept
+  (`Server.Board.brief/2` with `viewer:`); the round-2 pointer `last_reviewed` stays in the stage brief.
   A PR lands only on it (`Server.PRLanding`, `mise run land -- <pr>`): queued in the same merge queue as
   worklines (`Server.Jobs.Land`, args `%{pr, branch, on_thread}`) when the verdict approves its head (or a
   pure rebase of it, `BranchReview.approves/4`), checked again at its turn, rebased onto main on a private
