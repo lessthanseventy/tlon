@@ -838,11 +838,20 @@ defmodule Server.WorklineTest do
 
     defp head(repo), do: repo |> git!(["rev-parse", "work/lamp"]) |> String.trim()
 
-    defp queued_lamp! do
-      thread = open!(%{slug: "lamp", stage: "review"})
+    defp queued_lamp!(attrs \\ %{}) do
+      thread = open!(Map.merge(%{slug: "lamp", stage: "review"}, attrs))
       {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
       {:ok, queued} = Workline.approve(parked, artifacts: AllPresent, land: :queue)
       queued
+    end
+
+    defp sheriff_reports(ws) do
+      import Ecto.Query
+
+      beat =
+        Repo.one!(from t in Server.Thread, where: t.workspace_id == ^ws.id and t.title == ^Server.Sheriff.beat_title())
+
+      Repo.all(from m in Server.Message, where: m.thread_id == ^beat.id and like(m.body, "🚨%"), order_by: m.id)
     end
 
     defp parked_lamp!(grade) do
@@ -1051,6 +1060,62 @@ defmodule Server.WorklineTest do
 
       Repo.update_all(Oban.Job, set: [state: "discarded"])
       assert [] = Workline.requeue_stranded()
+    end
+
+    test "requeue_stranded: at the cap the sheriff is told once, naming the thread and the approval's sha", %{
+      repo: repo
+    } do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Dropped"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+      queued = queued_lamp!(%{workspace_id: ws.id})
+
+      for _ <- 1..3 do
+        Repo.update_all(Oban.Job, set: [state: "discarded"])
+        Workline.requeue_stranded()
+      end
+
+      assert [report] = sheriff_reports(ws)
+      assert report.body =~ "##{queued.id}"
+      assert report.body =~ head(repo)
+      assert report.body =~ "dropped 3 times"
+      assert report.body =~ "no longer requeued"
+
+      # a later tick does not tell it again
+      assert [] = Workline.requeue_stranded()
+      assert [_only] = sheriff_reports(ws)
+    end
+
+    test "requeue_stranded: a fresh approval resets the sheriff's report, so the next cap is reported too", %{
+      repo: repo
+    } do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Reset"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+      queued = queued_lamp!(%{workspace_id: ws.id})
+
+      for _ <- 1..3 do
+        Repo.update_all(Oban.Job, set: [state: "discarded"])
+        Workline.requeue_stranded()
+      end
+
+      assert [_first] = sheriff_reports(ws)
+
+      # a fixed branch approved again: a new approval, its own discards, its own cap
+      hour_ago = DateTime.add(DateTime.utc_now(), -3600)
+      Repo.update_all(Oban.Job, set: [state: "discarded", inserted_at: hour_ago])
+      File.write!(Path.join(repo, "lamp.ex"), "fixed\n")
+      git!(repo, ["add", "lamp.ex"])
+      git!(repo, ["commit", "-q", "-m", "fix"])
+      git!(repo, ["branch", "-f", "work/lamp", "HEAD"])
+      {:awaiting, parked} = Workline.advance(Repo.get!(Server.Thread, queued.id), artifacts: AllPresent)
+      {:ok, _reapproved} = Workline.approve(parked, artifacts: AllPresent, land: :queue)
+
+      for _ <- 1..3 do
+        Repo.update_all(Oban.Job, set: [state: "discarded"])
+        Workline.requeue_stranded()
+      end
+
+      assert [_first, second] = sheriff_reports(ws)
+      assert second.body =~ head(repo)
     end
 
     test "a thread that isn't a workline just reopens" do

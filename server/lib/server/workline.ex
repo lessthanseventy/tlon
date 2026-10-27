@@ -411,8 +411,8 @@ defmodule Server.Workline do
   end
 
   @doc """
-  The approval that still stands on a workline: the newest one recorded (`%{"by", "sha", "at"}`,
-  who approved it into the merge queue, the commit `work/<slug>` was at, and when), while the
+  The approval that still stands on a workline: the newest one recorded (`%{"by", "sha", "at", "id"}`,
+  who approved it into the merge queue, the commit `work/<slug>` was at, when, and its event's id), while the
   branch's code is what it was then (its own docs, `work/<slug>/`, may have moved); nil once the
   code has changed, or when none was recorded. A requeue or reopen under it keeps it rather than
   recording another; the same code approved by someone else records theirs, the newest, so the
@@ -427,13 +427,13 @@ defmodule Server.Workline do
           where: e.thread_id == ^thread.id and e.correlation == ^correlation,
           order_by: [desc: e.id],
           limit: 1,
-          select: {e.detail, e.created_at}
+          select: {e.id, e.detail, e.created_at}
       )
 
-    with {%{"sha" => sha} = detail, at} when is_binary(sha) <- newest,
+    with {id, %{"sha" => sha} = detail, at} when is_binary(sha) <- newest,
          head when is_binary(head) <- branch_head(thread),
          true <- same_code?(thread, sha, head),
-         do: detail |> Map.take(["by", "sha"]) |> Map.put("at", at),
+         do: detail |> Map.take(["by", "sha"]) |> Map.merge(%{"at" => at, "id" => id}),
          else: (_ -> nil)
   end
 
@@ -480,8 +480,9 @@ defmodule Server.Workline do
   Landings that went missing: open worklines at review, waiting on no one, whose approval still
   stands but with no landing queued or running (a `Server.Jobs.Land` Lifeline rescued past its
   attempts or Oban discarded). Each is queued again; returns those threads. One whose landing has
-  been discarded #{@discarded_cap} times under its standing approval is left at review, already reported
-  to the sheriff each time, rather than crashing in a loop; a fixed branch approved again starts over.
+  been discarded #{@discarded_cap} times under its standing approval is left at review rather than crashing
+  in a loop, and the sheriff is told once for that approval (a `dropped` post on the thread marks it); a
+  fixed branch approved again starts over.
   """
   def requeue_stranded do
     stranded =
@@ -489,17 +490,44 @@ defmodule Server.Workline do
 
     for thread <- stranded,
         not Server.Office.Needs.landing?(thread),
-        %{"by" => by, "sha" => sha, "at" => at} <- [approval(thread)],
-        discarded_landings(thread, at) < @discarded_cap,
-        {:ok, queued} <- [
-          queue(
-            thread,
-            "its landing was lost — #{by}'s approval at #{String.slice(sha, 0, 7)} still stands, queued again",
-            by
-          )
-        ] do
+        %{"by" => _, "sha" => _, "at" => _} = approval <- [approval(thread)],
+        {:ok, queued} <- [requeue_or_drop(thread, approval)] do
       queued
     end
+  end
+
+  defp requeue_or_drop(thread, %{"by" => by, "sha" => sha, "at" => at} = approval) do
+    if discarded_landings(thread, at) < @discarded_cap do
+      queue(
+        thread,
+        "its landing was lost — #{by}'s approval at #{String.slice(sha, 0, 7)} still stands, queued again",
+        by
+      )
+    else
+      report_dropped(thread, approval)
+      :dropped
+    end
+  end
+
+  # Told once per approval: the post that says so carries the approval's id, so a later tick finds it
+  # and stays quiet, while a fresh approval (a new id) is reported afresh.
+  defp report_dropped(thread, %{"by" => by, "sha" => sha, "id" => id}) do
+    told? =
+      Repo.exists?(
+        from m in Server.Message,
+          where: m.thread_id == ^thread.id and fragment("?->>'dropped' = ?", m.payload, ^to_string(id))
+      )
+
+    if !told? do
+      what =
+        "its landing was dropped #{@discarded_cap} times and is no longer requeued: #{by}'s approval at " <>
+          "#{String.slice(sha, 0, 7)} (#{sha}) stands, and the work waits at review"
+
+      Server.Channel.post(%{thread_id: thread.id, author: "tlon", body: what, payload: %{"dropped" => to_string(id)}})
+      Server.Sheriff.report(thread, what)
+    end
+
+    :ok
   end
 
   defp discarded_landings(%Thread{id: id}, since) do
