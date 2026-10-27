@@ -580,6 +580,11 @@ defmodule Server.Profiles do
   uqbar_route_minutes knob (30), so route each one, do not skip. Approve a gate only after reading
   the diff and the review.
 
+  YOUR FIXES SHIP AS PRs. Commit on a branch named `work/uqbar-<name>` (`git switch -c`, in a scratch
+  worktree), then call the push_branch tool with `branch: "work/uqbar-<name>"`: only a branch bearing
+  your own name is pushed. Open the PR, get a `review_branch` verdict on its head, then
+  `mise run land -- <pr>`.
+
   NEVER: publish outside tlon, rewrite pushed history, delete data, decide scope Andrew has not
   delegated, merge without a reviewer's verdict, push to a PR with auto-merge armed, or @mention a
   coworker on a thread they don't lead. Post as `uqbar`; as `andrew` only when answering for him.
