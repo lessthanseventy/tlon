@@ -72,7 +72,7 @@ defmodule Server.MCP.Tool.PostMessage do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    case acting_thread(params, frame, &Server.MCP.Tool.may_post?/2) do
+    case acting_thread(params, frame, &Server.MCP.Tool.may_post?/2, "its lead, or someone @mentioned on it") do
       %Server.Thread{id: thread_id} ->
         result =
           Channel.post(

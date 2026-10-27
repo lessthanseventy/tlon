@@ -18,7 +18,8 @@ defmodule Server.MCP.Tool do
     quote do
       use Anubis.Server.Component, type: :tool
 
-      import Server.MCP.Tool, only: [ok: 2, fail: 2, reply: 3, own: 4, acting_thread: 2, acting_thread: 3]
+      import Server.MCP.Tool,
+        only: [ok: 2, fail: 2, reply: 3, own: 4, acting_thread: 2, acting_thread: 3, acting_thread: 4]
 
       alias Server.MCP.Identity, warn: false
 
@@ -131,9 +132,9 @@ defmodule Server.MCP.Tool do
   LEADS. A lead woken in its lobby window is bound to the lobby, and a Claude Code pane can't take
   `switch_thread`'s token (its MCP auth is fixed at launch), so without this it could not move its
   own workline. Anyone else's thread is refused. `%Thread{}` or `{:error, message}`. `may_act?`
-  widens who may name it: `&steers?/2` for a post.
+  widens who may name it (`&may_post?/2` for a post), `who` names them in the refusal.
   """
-  def acting_thread(params, frame, may_act? \\ &leads?/2) do
+  def acting_thread(params, frame, may_act? \\ &leads?/2, who \\ "its lead") do
     identity = Server.MCP.Identity.from_frame(frame)
     id = params[:thread_id]
 
@@ -144,9 +145,7 @@ defmodule Server.MCP.Tool do
       thread = Server.Repo.get(Server.Thread, id) ->
         if may_act?.(thread, identity),
           do: thread,
-          else:
-            {:error,
-             "#{identity.agent} doesn't lead thread ##{id}; only its lead, or someone @mentioned on it, can act on it from another thread"}
+          else: {:error, "#{identity.agent} doesn't lead thread ##{id}; only #{who} can act on it from another thread"}
 
       true ->
         {:error, "no such thread: #{id}"}
