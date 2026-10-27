@@ -1189,8 +1189,8 @@ defmodule Server.Office.NeedsTest do
     # a review gate with a recorded risk grade: its review.md committed in a repo of its own (the gate
     # is read through the real artifact check), `awaiting` set directly, as the park would
     defp review_gate(ws, grade) do
-      slug = "rg-#{System.unique_integer([:positive])}"
-      repo = Path.join(System.tmp_dir!(), "needs-#{slug}-#{System.pid()}")
+      slug = "rg-#{System.pid()}-#{System.unique_integer([:positive])}"
+      repo = Path.join(System.tmp_dir!(), "needs-#{slug}")
       File.mkdir_p!(Path.join([repo, "work", slug]))
       File.write!(Path.join([repo, "work", slug, "review.md"]), "VERDICT: approve\n")
       git = fn args -> {_, 0} = System.cmd("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t" | args]) end
