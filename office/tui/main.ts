@@ -810,6 +810,15 @@ function stuckActions(s: data.Stuck, kind: StuckKind): Action[] {
 }
 /** what a stalled need's nudge says to the lead */
 const NUDGE = "Nothing has moved here for a while: advance the stage if its work is done, or say what is blocking you."
+/** answer an ask with a note: a one-line box naming the options; "<number> <note>" sends "<key> <note>", the form the server splits */
+function answerWithNote(id: number, options: { key: string; label: string }[], after: () => void = () => {}) {
+  const opts = options.slice(0, 9)
+  ask(`answer with a note — ${opts.map((o, i) => `${i + 1} ${o.label}`).join(" · ")}`, (s) => {
+    const [n, ...note] = s.trim().split(/\s+/), o = opts[Number(n) - 1]
+    if (!o) { status = "start with the option's number, then the note"; return draw() }
+    void did(data.answer(id, [o.key, ...note].join(" "))).then(after)
+  })
+}
 /** what can be done about one waiting item — the inbox's list and its one-at-a-time card share these */
 function needActions(n: data.Need): Action[] {
   const tid = n.thread_id ?? null
@@ -820,6 +829,7 @@ function needActions(n: data.Need): Action[] {
     ...(n.kind === "gate" && tid ? [{ ...bind("need.A.gate"), run: () => void did(data.approve(tid)).then(after) }] : []),
     ...(n.kind === "dialog" && n.ref ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.answer(n.ref!, o.key)).then(after) })) : []),
     ...(n.kind === "ask" && n.ref ? (n.options ?? []).slice(0, 9).map((o): Action => ({ key: o.key, label: o.label, run: () => void did(data.answer(n.ref!, o.key)).then(after) })) : []),
+    ...(n.kind === "ask" && n.ref && n.options?.length ? [{ ...bind("need.n.ask"), run: () => answerWithNote(n.ref!, n.options!, after) }] : []),
     ...(n.kind === "ask" && n.ref && n.ask !== "uqbar" ? [{ ...bind("need.u.ask"), run: () => void did(data.handToUqbar(n.ref!)).then(after) }] : []),
     ...(n.kind === "seats" && n.ref ? [{ ...bind("need.1.seats", `raise the cap to ${n.ref}`), run: () => void did(data.settingsEdit("max_leaves", n.ref)).then(after) }] : []),
     ...(n.kind === "job_failed" && n.ref ? [
@@ -958,6 +968,7 @@ function threadActions(tid: number, inReader = false): Action[] {
   const answers = (prompt?.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.answer(prompt!.id, o.key)) }))
   return [
     ...answers,
+    ...(prompt?.options?.length ? [{ ...bind("thread.n"), run: () => answerWithNote(prompt.id, prompt.options!) }] : []),
     ...(inReader ? [] : [{ ...bind("thread.v"), run: () => openReader(tid) }]),
     { ...bind("thread.r"), run: () => reply(tid) },
     ...(studyOf(all.threads, ws) !== null && studyOf(all.threads, ws) !== tid ? [{ ...bind("thread.u"), run: () => void did(handToUqbar(all.threads, ws, tid)) }] : []),
