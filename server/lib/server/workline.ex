@@ -523,8 +523,9 @@ defmodule Server.Workline do
         "its landing was dropped #{@discarded_cap} times and is no longer requeued: #{by}'s approval at " <>
           "#{String.slice(sha, 0, 7)} (#{sha}) stands, and the work waits at review"
 
-      Server.Channel.post(%{thread_id: thread.id, author: "tlon", body: what, payload: %{"dropped" => to_string(id)}})
-      Server.Sheriff.report(thread, what)
+      if Server.Sheriff.report(thread, what) == :ok do
+        Server.Channel.post(%{thread_id: thread.id, author: "tlon", body: what, payload: %{"dropped" => to_string(id)}})
+      end
     end
 
     :ok
