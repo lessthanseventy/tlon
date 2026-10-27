@@ -41,6 +41,21 @@ defmodule Server.AuthorshipTest do
     assert Authorship.session_label(nil) == "session unknown"
   end
 
+  test "deleting a session's thread leaves its stamped rows, session unknown", %{thread: a, agent: agent} do
+    {:ok, s} = Staff.start_session(%{agent_id: agent.id, thread_id: a.id, pane_ref: "%9"})
+    {:ok, b} = Channel.open_thread(%{title: "elsewhere"})
+    {:ok, ws} = Server.Workspaces.register(%{name: "Work"})
+    {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "t"}, session_id: s.id)
+    {:ok, check} = Server.Dossier.record_check(%{thread_id: a.id, cmd: "mix test", exit: 0}, session_id: s.id)
+    {:ok, post} = Channel.post(%{thread_id: b.id, author: "nolan", body: "x"}, session_id: s.id)
+
+    assert {:ok, _} = Channel.delete_thread(a)
+
+    assert %{session_id: nil} = Server.Repo.get!(Server.Ticket, ticket.id)
+    assert %{session_id: nil} = Server.Repo.get!(Server.Event, check.id)
+    assert %{session_id: nil} = Server.Repo.get!(Server.Message, post.id)
+  end
+
   describe "rendered by Server.MCP.Brief" do
     alias Server.MCP.Brief
 
