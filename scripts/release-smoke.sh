@@ -145,7 +145,7 @@ if [ -z "$url" ]; then
   smoke_build_lock "$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)/tlon-smoke-build.lock" "pid $$ (${sha:0:7})"
   # chained with &&, not set -e: a subshell tested by `||` ignores set -e, and a failed build
   # would go on to the steps after it
-  (
+  build_steps() {
     cd "$dir/server" &&
       export MIX_ENV=prod TLON_DATABASE="$db" &&
       mix deps.get &&
@@ -153,7 +153,8 @@ if [ -z "$url" ]; then
       mix ecto.drop --quiet --force --force-drop &&
       mix ecto.create --quiet &&
       _build/prod/rel/server/bin/server eval 'Server.Release.migrate()'
-  ) >>"$log" 2>&1 || {
+  }
+  smoke_isolated build_steps >>"$log" 2>&1 || {
     tail -n 20 "$log"
     cause="$(smoke_pool_cause "$log")"
     fail "${cause:-the build or the migration of ${sha:0:7} failed}"
