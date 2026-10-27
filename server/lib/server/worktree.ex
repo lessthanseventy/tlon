@@ -65,6 +65,41 @@ defmodule Server.Worktree do
   end
 
   @doc """
+  Bring a thread's checkout up to origin/main when it holds no work of its own: on a branch, clean,
+  with HEAD an ancestor of origin/main, `merge --ff-only`. Never fetches (the root's refs are shared
+  and KeepUp keeps origin/main fresh). `:moved | :level | :detached | :dirty | {:ahead, n}` (own
+  commits, left alone) `| {:error, why}`; a checkout with no origin/main is `:level`.
+  """
+  def catch_up(wt) do
+    case git(wt, ["rev-parse", "--abbrev-ref", "HEAD"]) do
+      {"HEAD\n", 0} -> :detached
+      {_, 0} -> if branch_exists?(wt, "refs/remotes/origin/main"), do: catch_up_branch(wt), else: :level
+      {out, _} -> {:error, String.slice(out, 0, 200)}
+    end
+  end
+
+  @doc """
+  Whether `key` is news for this checkout: true the first time it is seen, false until a different
+  key replaces it. Held in the checkout's git dir (`tlon-reported`), so a report repeats on no wake.
+  """
+  def report_once?(wt, key) do
+    case git(wt, ["rev-parse", "--absolute-git-dir"]) do
+      {dir, 0} ->
+        file = Path.join(String.trim(dir), "tlon-reported")
+
+        if File.read(file) == {:ok, key <> "\n"} do
+          false
+        else
+          File.write(file, key <> "\n")
+          true
+        end
+
+      _ ->
+        true
+    end
+  end
+
+  @doc """
   Record the thread a checkout belongs to in its own git dir (`tlon-thread`). The
   prepare-commit-msg hook stamps that thread rather than the pane's, so a commit made in a
   workline's checkout from a pane bound elsewhere (the lobby) still joins the workline's thread.
@@ -206,6 +241,29 @@ defmodule Server.Worktree do
   end
 
   defp dirty?(wt), do: match?({out, 0} when out != "", git(wt, ["status", "--porcelain"]))
+
+  defp forward(wt) do
+    with {head, 0} <- git(wt, ["rev-parse", "HEAD"]),
+         {main, 0} <- git(wt, ["rev-parse", "origin/main"]) do
+      if head == main, do: :level, else: merge_ff(wt)
+    else
+      {out, _} -> {:error, String.slice(out, 0, 200)}
+    end
+  end
+
+  defp merge_ff(wt) do
+    case git(wt, ["merge", "--ff-only", "-q", "origin/main"]) do
+      {_, 0} -> :moved
+      {out, _} -> {:error, String.slice(out, 0, 200)}
+    end
+  end
+
+  defp own_commits(wt) do
+    case git(wt, ["rev-list", "--count", "origin/main..HEAD"]) do
+      {n, 0} -> {:ahead, n |> String.trim() |> String.to_integer()}
+      {out, _} -> {:error, String.slice(out, 0, 200)}
+    end
+  end
 
   # Commits on the branch that no OTHER branch reaches — the "unmerged" that matters for a delete.
   # (`--not --branches` would include the branch itself; excluding it first makes the set honest.)
@@ -424,6 +482,14 @@ defmodule Server.Worktree do
           {_, 0} -> :ok
           {out, _} -> {:kept, "its detached commits could not be named: #{String.slice(out, 0, 200)}"}
         end
+    end
+  end
+
+  defp catch_up_branch(wt) do
+    cond do
+      dirty?(wt) -> :dirty
+      match?({_, 0}, git(wt, ["merge-base", "--is-ancestor", "HEAD", "origin/main"])) -> forward(wt)
+      true -> own_commits(wt)
     end
   end
 end

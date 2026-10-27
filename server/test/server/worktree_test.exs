@@ -149,6 +149,37 @@ defmodule Server.WorktreeTest do
       assert File.exists?(Path.join(wt, ".git"))
     end
 
+    test "a wake fast-forwards a checkout with no work of its own; own commits are told to the thread once",
+         %{repo: repo, git: git, ws: ws, project: p} do
+      remote = repo <> "-origin.git"
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+      on_exit(fn -> File.rm_rf!(remote) end)
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["remote", "add", "origin", remote])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+
+      {:ok, thread} = Server.Channel.open_thread(%{title: "t", workspace_id: ws.id, project_id: p.id, slug: "wake"})
+      assert {:ok, wt} = Server.worktree_for_thread(thread)
+
+      File.write!(Path.join(repo, "NEW"), "more\n")
+      {_, 0} = git.(["add", "NEW"])
+      {_, 0} = git.(["commit", "-qm", "main moves"])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert File.exists?(Path.join(wt, "NEW"))
+
+      File.write!(Path.join(wt, "MINE"), "mine\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "MINE"])
+      {_, 0} = System.cmd("git", ["-C", wt, "commit", "-qm", "mine"])
+      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+
+      told = Enum.filter(Server.Channel.thread_messages(thread), &(&1.body =~ "1 commit"))
+      assert length(told) == 1
+    end
+
     test "no repo-bearing project anywhere → {:error, :no_repo}" do
       thread = struct!(Server.Thread, %{id: 3, workspace_id: nil, project_id: nil, slug: "x", title: "t"})
       assert {:error, :no_repo} = Server.worktree_for_thread(thread)
@@ -390,5 +421,75 @@ defmodule Server.WorktreeTest do
     assert {:ok, target} = File.read_link(Path.join(wt, "modules/desktop/shell/node_modules"))
     assert target == Path.join(repo, "modules/desktop/shell/node_modules")
     for d <- ["deps", "node_modules", "_build"], do: refute(File.exists?(Path.join(wt, d)))
+  end
+
+  describe "catch_up/1 — a thread checkout with no work of its own follows origin/main" do
+    setup %{repo: repo, git: git} do
+      remote = repo <> "-origin.git"
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+      on_exit(fn -> File.rm_rf!(remote) end)
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["remote", "add", "origin", remote])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+      {:ok, wt} = Worktree.ensure(repo, "x")
+      wt_git = fn args -> System.cmd("git", ["-C", wt | args], stderr_to_stdout: true) end
+
+      advance = fn ->
+        File.write!(Path.join(repo, "NEW"), "more\n")
+        {_, 0} = git.(["add", "NEW"])
+        {_, 0} = git.(["commit", "-qm", "main moves"])
+        {_, 0} = git.(["push", "-q", "origin", "main"])
+        {_, 0} = git.(["fetch", "-q", "origin"])
+      end
+
+      head = fn g ->
+        {out, 0} = g.(["rev-parse", "HEAD"])
+        String.trim(out)
+      end
+
+      %{wt: wt, wt_git: wt_git, advance: advance, head: head}
+    end
+
+    test "no commit of its own → HEAD becomes origin/main", ctx do
+      ctx.advance.()
+      refute ctx.head.(ctx.wt_git) == ctx.head.(ctx.git)
+      assert :moved = Worktree.catch_up(ctx.wt)
+      assert ctx.head.(ctx.wt_git) == ctx.head.(ctx.git)
+      assert File.exists?(Path.join(ctx.wt, "NEW"))
+      assert :level = Worktree.catch_up(ctx.wt)
+    end
+
+    test "a commit of its own → untouched, the ahead count said", ctx do
+      File.write!(Path.join(ctx.wt, "MINE"), "mine\n")
+      {_, 0} = ctx.wt_git.(["add", "MINE"])
+      {_, 0} = ctx.wt_git.(["commit", "-qm", "mine"])
+      ctx.advance.()
+      before = ctx.head.(ctx.wt_git)
+      assert {:ahead, 1} = Worktree.catch_up(ctx.wt)
+      assert ctx.head.(ctx.wt_git) == before
+    end
+
+    test "a dirty tree → untouched, and said", ctx do
+      ctx.advance.()
+      before = ctx.head.(ctx.wt_git)
+      File.write!(Path.join(ctx.wt, "README"), "edited\n")
+      assert :dirty = Worktree.catch_up(ctx.wt)
+      assert ctx.head.(ctx.wt_git) == before
+    end
+
+    test "a detached HEAD stays put", ctx do
+      ctx.advance.()
+      before = ctx.head.(ctx.wt_git)
+      {_, 0} = ctx.wt_git.(["checkout", "-q", "--detach"])
+      assert :detached = Worktree.catch_up(ctx.wt)
+      assert ctx.head.(ctx.wt_git) == before
+    end
+
+    test "the same state is reported once", ctx do
+      assert Worktree.report_once?(ctx.wt, "ahead:abc:1")
+      refute Worktree.report_once?(ctx.wt, "ahead:abc:1")
+      assert Worktree.report_once?(ctx.wt, "ahead:def:1")
+    end
   end
 end
