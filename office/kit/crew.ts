@@ -72,7 +72,7 @@ export function viewOf(a: Agents, ws: number | null): Agents {
     awaiting: threads.filter(needsYou).length,
     triage: ws === null ? {} : { [ws]: a.triage[String(ws)] ?? 0 },
     ticket_week: ws === null || !a.ticket_week?.[String(ws)] ? {} : { [ws]: a.ticket_week[String(ws)]! },
-    ticket_open: ws === null || !a.ticket_open?.[String(ws)] ? {} : { [ws]: a.ticket_open[String(ws)]! },
+    ticket_open: !a.ticket_open ? undefined : ws === null || !a.ticket_open[String(ws)] ? {} : { [ws]: a.ticket_open[String(ws)]! },
     calendar: ws === null ? {} : { [ws]: a.calendar[String(ws)] ?? [] },
   }
 }
