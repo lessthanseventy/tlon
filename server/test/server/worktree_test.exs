@@ -173,11 +173,45 @@ defmodule Server.WorktreeTest do
       File.write!(Path.join(wt, "MINE"), "mine\n")
       {_, 0} = System.cmd("git", ["-C", wt, "add", "MINE"])
       {_, 0} = System.cmd("git", ["-C", wt, "commit", "-qm", "mine"])
+      # own commits on top of main: nothing to explain
+      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert [] = Enum.filter(Server.Channel.thread_messages(thread), &(&1.body =~ "1 commit"))
+
+      File.write!(Path.join(repo, "NEW2"), "more\n")
+      {_, 0} = git.(["add", "NEW2"])
+      {_, 0} = git.(["commit", "-qm", "main moves again"])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
       assert {:ok, ^wt} = Server.worktree_for_thread(thread)
       assert {:ok, ^wt} = Server.worktree_for_thread(thread)
 
       told = Enum.filter(Server.Channel.thread_messages(thread), &(&1.body =~ "1 commit"))
-      assert length(told) == 1
+      assert [%{kind: "notice"}] = told
+    end
+
+    test "a dirty checkout is told again after it was cleaned and moved", %{repo: repo, git: git, ws: ws, project: p} do
+      remote = repo <> "-origin.git"
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+      on_exit(fn -> File.rm_rf!(remote) end)
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["remote", "add", "origin", remote])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+
+      {:ok, thread} = Server.Channel.open_thread(%{title: "t", workspace_id: ws.id, project_id: p.id, slug: "redirty"})
+      assert {:ok, wt} = Server.worktree_for_thread(thread)
+      told = fn -> Enum.count(Server.Channel.thread_messages(thread), &(&1.body =~ "uncommitted")) end
+
+      File.write!(Path.join(wt, "SCRATCH"), "x\n")
+      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert told.() == 1
+
+      File.rm!(Path.join(wt, "SCRATCH"))
+      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+
+      File.write!(Path.join(wt, "SCRATCH"), "x\n")
+      assert {:ok, ^wt} = Server.worktree_for_thread(thread)
+      assert told.() == 2
     end
 
     test "no repo-bearing project anywhere → {:error, :no_repo}" do
