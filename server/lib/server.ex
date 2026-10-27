@@ -64,6 +64,8 @@ defmodule Server do
       OperatorConfig
     ]
 
+  require Logger
+
   @doc "Staff a thread with an agent by handle — resolves the agent + thread and assigns."
   defdelegate assign_lead(thread_id, handle), to: Server.Channel
 
@@ -166,16 +168,33 @@ defmodule Server do
   defp cleanup_worktree({repo, name}), do: Server.Worktree.remove(repo, name)
 
   # What a wake's catch-up left to say: a checkout it could not move, once per state (a lobby wakes
-  # often), so the thread knows why its checkout is behind main.
+  # often), so the thread knows why its checkout is behind main. A notice: a bare chat post is
+  # addressed to the thread's lead and wakes or spawns them for a status line.
   defp tell_catch_up({:ahead, n}, wt, thread) do
     {tip, _} = System.cmd("git", ["-C", wt, "rev-parse", "HEAD"])
+    {behind, _} = System.cmd("git", ["-C", wt, "rev-list", "--count", "HEAD..origin/main"])
 
-    say_once(
-      wt,
-      thread,
-      "ahead:#{String.trim(tip)}:#{n}",
-      "checkout left where it is: #{n} commit#{if n == 1, do: "", else: "s"} of its own beyond origin/main"
-    )
+    # own commits on top of main are a workline's normal state: only a main that moved on is news
+    if String.trim(behind) == "0",
+      do: :ok,
+      else:
+        say_once(
+          wt,
+          thread,
+          "ahead:#{String.trim(tip)}:#{n}",
+          "checkout left where it is: #{n} commit#{if n == 1, do: "", else: "s"} of its own beyond origin/main"
+        )
+  end
+
+  # A checkout that caught up forgets what it reported, so the next stall is news again.
+  defp tell_catch_up(moved, wt, _thread) when moved in [:moved, :level] do
+    Server.Worktree.report_once?(wt, "level")
+    :ok
+  end
+
+  defp tell_catch_up({:error, why}, wt, _thread) do
+    Logger.warning("catch-up of #{wt} to origin/main failed: #{inspect(why)}")
+    :ok
   end
 
   defp tell_catch_up(:dirty, wt, thread),
@@ -185,7 +204,7 @@ defmodule Server do
 
   defp say_once(wt, thread, key, body) do
     if Server.Worktree.report_once?(wt, key),
-      do: Server.Channel.post(%{thread_id: thread.id, author: "tlon", body: body})
+      do: Server.Channel.post(%{thread_id: thread.id, author: "tlon", kind: "notice", body: body})
 
     :ok
   end
