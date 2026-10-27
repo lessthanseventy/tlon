@@ -53,6 +53,34 @@ defmodule Server.Office.CorkboardTest do
     end
   end
 
+  test "a side project is due once a day, only for a seat that has the section" do
+    now = ~U[2026-10-14 10:00:00Z]
+    assert Corkboard.side_due?(%{section: "The Earth", last: nil}, now)
+    assert Corkboard.side_due?(%{section: "The Earth", last: ~U[2026-10-13 09:00:00Z]}, now)
+    refute Corkboard.side_due?(%{section: "The Earth", last: ~U[2026-10-14 01:00:00Z]}, now)
+    refute Corkboard.side_due?(%{section: "", last: nil}, now)
+  end
+
+  test "a seat's side-project counter lives on the standing thread and survives a restart" do
+    Server.TestDB.clean!()
+    {:ok, ws} = Server.Workspaces.register(%{name: "Sided"})
+    {:ok, _} = Server.Channel.open_thread(%{title: "standing", scope: "machine", workspace_id: ws.id})
+    start_supervised!(Corkboard)
+
+    assert Corkboard.side_state(ws.id, "daneri") == %{n: 0, last: nil}
+    assert {:ok, _} = Corkboard.post_side_project(ws.id, "daneri", "stanza one", 1)
+    assert {:ok, newer} = Corkboard.post_side_project(ws.id, "daneri", "stanza two", 2)
+    assert {:ok, _} = Corkboard.post_side_project(ws.id, "yu", "elsewhere", 1)
+
+    expect = %{n: 2, last: newer.created_at}
+    assert Corkboard.side_state(ws.id, "daneri") == expect
+
+    stop_supervised!(Corkboard)
+    start_supervised!(Corkboard)
+    assert Corkboard.side_state(ws.id, "daneri") == expect
+    assert %Server.Message{kind: "side project", delivered_at: %DateTime{}} = Server.Repo.get(Server.Message, newer.id)
+  end
+
   test "a reply's note is kept trimmed and short; one with no note is dropped" do
     assert Corkboard.parse(~s(ok {"note": "  ship it  "})) == "ship it"
     assert Corkboard.parse(~s({"note": ""})) == nil

@@ -199,6 +199,53 @@ defmodule Server.Office.Corkboard do
     end
   end
 
+  @doc "Is a side-project note due: the seat has the section, and its last one is a day old (or none)."
+  @spec side_due?(%{section: String.t(), last: DateTime.t() | nil}, DateTime.t()) :: boolean()
+  def side_due?(%{section: s, last: last}, now),
+    do: String.trim(s) != "" and (last == nil or DateTime.diff(now, last) >= 86_400)
+
+  @doc """
+  A seat's side-project state, read off the standing thread so a restart keeps it: `%{n, last}`,
+  how many it has written and when the newest was.
+  """
+  @spec side_state(integer(), String.t()) :: %{n: non_neg_integer(), last: DateTime.t() | nil}
+  def side_state(ws, name) do
+    case Server.Channel.machine_thread(ws) do
+      %Thread{id: thread_id} ->
+        {n, last} =
+          Repo.one(
+            from(m in Message,
+              where: m.thread_id == ^thread_id and m.kind == "side project" and m.author == ^name,
+              select: {count(m.id), max(m.created_at)}
+            )
+          )
+
+        %{n: n, last: last}
+
+      _ ->
+        %{n: 0, last: nil}
+    end
+  end
+
+  @doc """
+  Keep side-project note number `n` of seat `author` on the workspace's standing thread, stored
+  delivered like `suggest/4`, so it wakes nobody. `{:ok, message}` | `{:error, why}`.
+  """
+  def post_side_project(ws, author, body, n) do
+    with %Thread{id: thread_id} <- Server.Channel.machine_thread(ws) || {:error, "no standing thread"} do
+      %{
+        thread_id: thread_id,
+        author: author,
+        kind: "side project",
+        body: "side project, number #{n}: #{body}",
+        payload: %{"note" => body, "n" => n}
+      }
+      |> Message.post_changeset()
+      |> Ecto.Changeset.put_change(:delivered_at, DateTime.truncate(DateTime.utc_now(), :second))
+      |> Repo.insert()
+    end
+  end
+
   defp write(ws, board) do
     ctx = Banter.context(ws)
 
