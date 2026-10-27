@@ -128,7 +128,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `server:roster` | server: who's on the clock — every live session, warm/cold (Staff.roster), against the LIVE service |
 | `server:seed` | server: apply the seed (base facts + baseline projects) to the scratch db — idempotent, keyed on intent |
 | `server:serve` | server: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens |
-| `server:setup` | server: fetch deps, create + migrate a repo-local scratch db, and point git at the repo's hooks (a coworker commits only on work/*) |
+| `server:setup` | server: fetch deps, create + migrate a repo-local scratch db, point git at the repo's hooks (a coworker commits only on work/*), and fetch origin over HTTPS while pushes stay on SSH |
 | `server:spawn` | server: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane |
 | `server:stop` | server: stop the office — the always-up service and every coworker pane in tlon.slice (server:restart brings it back) |
 | `server:test` | server: run the test suite (the TDD loop) |
