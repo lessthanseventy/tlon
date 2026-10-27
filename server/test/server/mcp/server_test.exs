@@ -481,6 +481,14 @@ defmodule Server.MCP.ServerTest do
     assert hd(r["content"])["text"] =~
              "Carl doesn't lead thread ##{line.id}; only its lead, or someone @mentioned on it"
 
+    token = MCP.Tokens.mint(lobby, Staff.agent_by_name("Carl"))
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    r = call(token, session, 4, "push_branch", %{"thread_id" => line.id})
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "only its lead"
+    refute hd(r["content"])["text"] =~ "@mentioned"
+
     for name <- ["tertius", "yu", "ireneo"], do: refute(post_as.(name)["isError"], "#{name} was refused")
 
     assert ["from ireneo", "from tertius", "from yu"] ==
