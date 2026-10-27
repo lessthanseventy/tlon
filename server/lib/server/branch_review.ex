@@ -19,14 +19,18 @@ defmodule Server.BranchReview do
   """
   def record(%{branch: branch, sha: sha, verdict: verdict, by: by, body: body} = attrs) do
     with nil <- malformed(branch, sha, verdict),
-         nil <- if(attrs[:repo], do: not_reviewable(attrs.repo, branch, sha, by)) do
-      Server.Dossier.record_event(%{
-        thread_id: attrs[:thread_id],
-        kind: if(verdict == "approve", do: "check_passed", else: "check_failed"),
-        correlation: correlation(branch),
-        detail: %{"sha" => sha, "verdict" => verdict, "by" => by, "body" => body}
-      })
+         nil <- if(attrs[:repo], do: not_reviewable(attrs.repo, branch, sha, by)),
+         {:ok, event} <-
+           Server.Dossier.record_event(%{
+             thread_id: attrs[:thread_id],
+             kind: if(verdict == "approve", do: "check_passed", else: "check_failed"),
+             correlation: correlation(branch),
+             detail: %{"sha" => sha, "verdict" => verdict, "by" => by, "body" => body}
+           }) do
+      end_review(attrs[:thread_id])
+      {:ok, event}
     else
+      {:error, why} -> {:error, why}
       why -> {:error, why}
     end
   end
@@ -180,4 +184,14 @@ defmodule Server.BranchReview do
         nil
     end
   end
+
+  # the verdict ends the reviewer's throwaway session; a verdict recorded off any thread ends nothing
+  defp end_review(thread_id) when is_integer(thread_id) do
+    case Server.Repo.get(Server.Thread, thread_id) do
+      %Server.Thread{} = thread -> Server.Staffing.end_review(thread)
+      nil -> :ok
+    end
+  end
+
+  defp end_review(_thread_id), do: :ok
 end

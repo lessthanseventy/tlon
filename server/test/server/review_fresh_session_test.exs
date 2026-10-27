@@ -104,6 +104,15 @@ defmodule Server.ReviewFreshSessionTest do
     refute inspect(brief, limit: :infinity) =~ "builder-chatter-7f3a"
   end
 
+  test "a workline review's verdict ends the reviewer's session too", %{rita: rita} do
+    {:ok, thread} = Workline.open(%{title: "fix the lamp", slug: "lamp-fix", stage: "review"})
+    {:ok, thread} = Staff.assign(thread, rita)
+    {:ok, session} = Staff.start_session(%{agent_id: rita.id, thread_id: thread.id, pane_ref: "t#{thread.id}"})
+
+    assert {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", rita.name)
+    assert %DateTime{} = Repo.get!(Session, session.id).ended_at
+  end
+
   test "the operator's read of a review-stage thread keeps the conversation", %{rita: rita} do
     {:ok, thread} = Workline.open(%{title: "fix the lamp", slug: "lamp-fix", stage: "review"})
     {:ok, thread} = Staff.assign(thread, rita)
