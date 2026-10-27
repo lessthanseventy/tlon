@@ -245,6 +245,17 @@ defmodule Server.WorklinePublishTest do
     end
   end
 
+  describe "own_branch/2 — a seat pushes only a branch bearing its own name" do
+    test "work/<agent>-<name> is its own" do
+      assert :ok = Publish.own_branch("uqbar", "work/uqbar-fix-gate")
+    end
+
+    test "another agent's prefix, main, a bare name and a bare prefix are refused" do
+      for b <- ["work/hronir-fix", "main", "uqbar-fix", "work/uqbar-", "work/uqbarx-fix", "work/uqbar"],
+          do: assert({:error, _} = Publish.own_branch("uqbar", b), b)
+    end
+  end
+
   describe "push_branch/3 — the one way a coworker's branch reaches GitHub" do
     test "force-pushes a work/* branch with a lease" do
       run = runner([])

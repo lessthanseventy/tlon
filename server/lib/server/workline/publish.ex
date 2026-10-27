@@ -123,6 +123,20 @@ defmodule Server.Workline.Publish do
   end
 
   @doc """
+  Whether `agent` may push `branch` by name: only `work/<agent>-<something>`, so a seat can push
+  a branch bearing its own name and nothing else. `:ok` | `{:error, why}`.
+  """
+  def own_branch(agent, branch) when is_binary(agent) and is_binary(branch) do
+    prefix = "work/#{agent}-"
+
+    if String.starts_with?(branch, prefix) and byte_size(branch) > byte_size(prefix),
+      do: :ok,
+      else: {:error, "#{branch} is not a #{prefix}* branch — a named branch must bear your own name"}
+  end
+
+  def own_branch(_agent, branch), do: {:error, "#{inspect(branch)} is not a branch bearing the caller's name"}
+
+  @doc """
   Push one thread's branch to origin, force-with-lease — the only way a coworker's branch reaches
   GitHub (`push_branch`; the pre-push hook refuses a coworker pane's own pushes). Only a
   `work/<slug>` branch: never main, never anything else. `:ok` | `{:error, why}`.

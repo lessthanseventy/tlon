@@ -12,17 +12,26 @@ defmodule Server.MCP.Tool.PushBranch do
   schema do
     field :thread_id, :integer,
       description: "The workline you lead, when your session is bound to another thread (e.g. the lobby)"
+
+    field :branch, :string,
+      description: "Push this branch instead of the thread's own; only `work/<your handle>-<name>` is allowed"
   end
 
   @impl true
   def execute(params, frame) do
     with %Server.Thread{} = thread <- acting_thread(params, frame),
          {:ok, repo} <- Server.repo_for_thread(thread),
-         branch = Server.Worktree.branch(Server.Worktree.name_for(thread)),
+         {:ok, branch} <- branch_to_push(params, thread, frame),
          :ok <- Publish.push_branch(repo, branch) do
       ok(frame, %{"pushed" => branch})
     else
       {:error, why} -> fail(frame, to_string(why))
     end
   end
+
+  defp branch_to_push(%{branch: branch}, _thread, frame) when is_binary(branch) do
+    with :ok <- Publish.own_branch(Server.MCP.Identity.from_frame(frame).agent, branch), do: {:ok, branch}
+  end
+
+  defp branch_to_push(_params, thread, _frame), do: {:ok, Server.Worktree.branch(Server.Worktree.name_for(thread))}
 end
