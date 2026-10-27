@@ -55,7 +55,7 @@ defmodule Server.Wake do
   fault to fix, never a pane to type into. A wake whose coworker is mid-turn on its thread (a live
   session's `thinking_since` within the stale-turn clock, `Server.Presence.Thinking`) waits: a pane
   in a long tool call drains only once the call returns. The message it was for is still a row, and
-  `Server.Switchboard.redeliver_unheard/1` offers it again. A wake on a closed thread, or whose seat
+  `Server.Switchboard.redeliver_unheard/1` offers it again. A wake on a closed or paused thread, or whose seat
   posted anywhere since it was queued, is let go unreported; so is one to a seat with no live session
   or no window on the thread, or that no longer holds the thread's stage (nothing to drain it); a seat already paged and silent since is
   paged once per stall. Returns how many were reported.
@@ -80,7 +80,7 @@ defmodule Server.Wake do
       wakes
       |> Enum.uniq_by(&{&1.thread_id, &1.agent})
       |> Enum.filter(fn w ->
-        with %Server.Thread{state: "open"} = thread <- Repo.get(Server.Thread, w.thread_id),
+        with %Server.Thread{state: "open", paused_at: nil} = thread <- Repo.get(Server.Thread, w.thread_id),
              true <- seated?(thread, w.agent),
              false <- took_it?(w),
              false <- paged_and_silent?(thread, w.agent) do

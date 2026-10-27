@@ -647,6 +647,15 @@ defmodule Server.Office.NeedsTest do
       assert [{"blocked", "decide"}] = kinds(ws)
     end
 
+    test "a workline the operator paused is not stalled: they stopped it", %{ws: ws} do
+      t = workline(ws, "build", 4)
+      assert [{"stalled", "blocking"}] = kinds(ws)
+
+      {:ok, _} = Server.Pause.pause_thread(t.id)
+      age(t, 4)
+      assert kinds(ws) == []
+    end
+
     test "a fresh workline is not stalled", %{ws: ws} do
       _ = workline(ws, "build", 0)
       assert kinds(ws) == []

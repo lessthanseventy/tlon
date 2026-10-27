@@ -13,7 +13,7 @@ defmodule Server.Workline.Continuation do
   Each continuation names the `stage_advanced` event it follows in its payload, so the count is a
   query, never a column. Silent on a plain thread, a merged one, one parked at a gate, one whose
   artifact is there, one with a prompt open on the operator, one blocked on an open ticket
-  (`Server.Blocked`), one whose smoke is still building
+  (`Server.Blocked`), one the operator paused (`Server.Pause.pause_thread/1`), one whose smoke is still building
   (`Server.Smoke.building/2`), one whose lead is clocked out (`Server.Presence.clocked_out?/1`),
   one inside `continuation_gap_minutes` of its last nudge (or its opening, when it has had none)
   or of the lead's last post on it, and while the office is paused (`Server.Pause`).
@@ -49,6 +49,7 @@ defmodule Server.Workline.Continuation do
          # any open prompt, a pane's dialog or a pane-less ask_operator decision: the lead is waiting
          nil <- Attention.open_prompt(thread_id),
          false <- Server.Blocked.blocked?(thread_id),
+         false <- Server.Pause.thread_paused?(thread_id),
          false <- verifying?(thread),
          nil <- smoke_building(thread),
          false <- lead_clocked_out?(thread),
