@@ -1,33 +1,45 @@
-# Review — workline 420-fast-forward-a-thread-worktree-to-or @ 7a8c8e4 (round 4)
+# Review — workline 420-fast-forward-a-thread-worktree-to-or @ 94821b8 (round 5)
 
-**Verdict: request_changes.** The two follow-ups from round 3 are fixed and fixed well. The two *blocking findings* of round 3 are untouched: `git diff f779c33..7a8c8e4` changes `server.ex`, `worktree.ex`, `worktree_test.exs` only; `spawn.ex` and the outside-citizen test are byte-identical to e82312e. emma's note (#15384) calls them "the grader's other suggestions" and declines them. They are not the grader's; they are findings 1 and 2 of review.md at f779c33, and finding 1 is the case the tech lead ruled out in #15362 ("a fast-forward mid-turn under a live pane is what I don't want"). Verify's `mise run check` passed on 7a8c8e4 (exit 0, 14:15:31Z); no bench_contrast row among the CHECKS shown.
+**Verdict: request_changes.** One blocking finding, and it is partly mine: the patch I posted in round 4 picked the wrong tell. 94821b8 gates the catch-up on `Keyword.get(opts, :assign, true)`. Every production spawn joins with `assign: false`, including the lead's own wake, so on this branch the feature never fires outside a hand `tlon-cli join` and the test suite. Verify's `mise run check` passed on 94821b8 (exit 0, 14:28:38Z); `menard run test` on spawn_test + worktree_test: 64 tests, 0 failed; no bench_contrast row among the CHECKS shown.
 
-## Fixed since round 3
+## Fixed since round 4
 
-- `tell_catch_up({:ahead, n}, …)` goes through `Worktree.moved_past/1`, which uses `git/2`, and stays quiet on a failed `rev-list` (`:no`). Test "own commits are not told when git cannot say whether main moved" injects a 128 on `HEAD..origin/main` and asserts no line.
-- `{:error, why}` is told once as a notice via `say_once(wt, thread, "error", …)` as well as logged. Test injects `index.lock` on `merge`, calls twice, asserts exactly one notice.
+- Rider join: `cwd_export/3` skips the catch-up when `assign: false`; test "a rider join (assign: false) never moves the checkout under the lead's live pane" joins `codex` (lead), moves main, joins `reviewer` with `assign: false`, refutes `NEW`. Red without the guard. Good test, keep it as is.
+- Outside guard pinned: test puts the repo's own main one commit behind origin/main, joins `uqbar` on the study (whose lead is uqbar: `Outside.study/1` opens it with `agent_id: uqbar`), asserts `rev-parse HEAD` unchanged. Red with the guard removed. Good.
 
-## Still blocking (unchanged from round 3)
+## Blocking
 
-1. **A rider join moves the checkout under the lead's live pane.** `cwd_export/2` (spawn.ex:168) calls `catch_up_worktree` for every non-outside join. Three production callers join with `assign: false`: `Server.Crew.Tmux` (crew/tmux.ex:49, a `spawn_crew` the lead calls mid-turn), `Server.Switchboard` (switchboard.ex:368) and `Coordination.seat/2` (coordination.ex:177). A crew spawn is the lead's own tool call, so a clean checkout at an older main gets `merge --ff-only` while the lead is mid-turn. Patch:
+1. **The wake path is `assign: false`, so the catch-up is dead in production.** The witness, every `Spawn.join` caller in `server/lib`:
+
+```
+switchboard.ex:368   Spawn.join(home.id, agent.name, assign: false)     # maybe_spawn_absent: THE wake spawn, the lead included
+crew/tmux.ex:49      joiner().(thread_id, handle, mandate: "machine", assign: false)   # spawn_crew
+coordination.ex:177  Spawn.join(thread.id, lead, assign: false)         # seating a child's lead
+```
+
+`maybe_spawn_absent` is the only autonomous spawn: it joins the lead onto its own thread (`spawn_home`: `agent.id == thread.agent_id -> thread`) with `assign: false` on purpose, "never the thread's lead because they were named on it", meaning it must not re-seat. #420 is "fast-forward … on wake", and on this branch wake does nothing. Nothing pinned it because every spawn test joins with the default.
+
+The tell is lead identity, not `:assign`. `ensure/3` runs `maybe_assign` before `cwd_export`, so on a staffing join `thread.agent_id` is already the joiner; on the wake spawn it is the lead already; on a rider join (crew pane, reviewer window, coordination child) it is someone else. Patch:
 
 ```
 server/lib/server/mcp/spawn.ex
--         {:ok, cwd} <- cwd_export(thread, agent) do
-+         {:ok, cwd} <- cwd_export(thread, agent, opts) do
+-         {:ok, cwd} <- cwd_export(thread, agent, opts) do
++         {:ok, cwd} <- cwd_export(thread, agent) do
 …
--  defp cwd_export(thread, agent) do
-+  defp cwd_export(thread, agent, opts) do
+-  # Only a staffing join catches the checkout up: a rider (`assign: false`) joins while the lead's
+-  # pane is mid-turn, and a fast-forward under it is what the catch-up must never do.
+-  defp cwd_export(thread, agent, opts) do
++  # Only the thread's lead catches its checkout up. The switchboard's wake spawn joins the lead with
++  # `assign: false` (it never re-seats), so `:assign` is not the tell; a rider (a crew pane, a reviewer
++  # window) is not the lead and joins while the lead's pane is mid-turn, where a move must never land.
++  defp cwd_export(thread, agent) do
 …
--        if agent.name not in Server.Outside.names(), do: Server.catch_up_worktree(thread, path)
-+        if Keyword.get(opts, :assign, true) and agent.name not in Server.Outside.names(),
-+          do: Server.catch_up_worktree(thread, path)
+-        if Keyword.get(opts, :assign, true) and agent.name not in Server.Outside.names(),
++        if agent.id == thread.agent_id and agent.name not in Server.Outside.names(),
 ```
 
-RED test first, a copy of spawn_test.exs:109 that joins with `assign: false` after main moves and does `refute File.exists?(Path.join(wt, "NEW"))`. It fails on 7a8c8e4.
-
-2. **The Outside guard is unpinned.** spawn_test.exs:142 has no origin remote, so `catch_up/1` returns `:level` with or without the `not in Server.Outside.names()` guard; delete the guard and the suite stays green. Pin it: in that test add the remote, push main, `git reset --hard HEAD~1` in the repo so its main is a clean ancestor of origin/main, fetch, join the outside citizen, and assert `rev-parse HEAD` of the repo is unchanged. Without the guard that test fast-forwards the live main checkout, which is the one thing this feature must never do.
+RED test first, in spawn_test.exs next to "a spawn brings a checkout with no work of its own up to origin/main": same setup, first `Spawn.join(thread.id, "codex")` seats codex, main moves, then `assert {:ok, _} = Spawn.join(thread.id, "codex", assign: false)` and `assert File.exists?(Path.join(wt, "NEW"))`. It fails on 94821b8. The rider test stays red-without-guard (reviewer is not the lead), and the outside test stays red-without-guard (uqbar leads the study), so both round-4 pins hold under the new gate.
 
 ## Follow-ups (not blocking)
 
-- `say_once` keys the error path on the constant `"error"`, so a second, different failure after the first is silent until the state changes. Keying on a hash of `why` would re-tell it; low value, note only.
+- `say_once` keys the error path on the constant `"error"`, so a second, different failure after the first is silent until the state changes. Note only.
