@@ -28,7 +28,7 @@ defmodule Server.Shifts do
 
   # Claude Code's own usage-limit line, anchored to how it prints it, so a pane that only talks
   # about limits never reads as out of quota
-  @quota_out ~r/^\s*(⎿\s*)?(Claude usage limit reached|(5-hour|weekly|session) limit reached\b|You've hit your (usage )?limit\b)/miu
+  @quota_out ~r/^\s*(⎿\s*)?(Claude usage limit reached|(5-hour|weekly|session) limit reached\b|You've hit your (usage |session |weekly |monthly spend )?limit\b)/miu
 
   @doc "The crew on in the workspace."
   def current(workspace_id), do: Repo.one(from w in Workspace, where: w.id == ^workspace_id, select: w.shift) || "day"
