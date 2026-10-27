@@ -39,7 +39,11 @@ and every layer the spine design's re-laid §9 asked for
   refused, `Pause.at_work/0`), lights out (that, plus the verify and landing
   queues paused — a boot under it starts them paused — and an Escape into every coworker pane),
   back to work (every still-open thread pencils down stopped woken: a chat @mentioning its lead as it
-  is now). `POST /api/office/pause`, `tlon-cli pause`, the office's finder.
+  is now). `POST /api/office/pause`, `tlon-cli pause`, the office's finder. One thread on its own
+  (`Pause.pause_thread/1`, the `thread.paused_at` mark, `POST /api/threads/:id/pause` and `/resume`):
+  its lead told the same way, every wake but the operator's held until resume, no continuation,
+  stalled Need or wake alert, `staff_child` under it refused; the office's pause and back to work
+  leave it alone.
 - **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral
   instance; warmth is measured from `last_active_at`, never a heartbeat.
 - **panes roll themselves** (`Server.Staffing`, `Server.Arbiter.Tmux.launch_stamp/2`) — a pane keeps the

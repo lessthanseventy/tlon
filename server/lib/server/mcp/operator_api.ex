@@ -120,6 +120,8 @@ defmodule Server.MCP.OperatorAPI do
       PATCH  /api/seats/:id               {"crew": <crew> | "all"} → Shifts.assign: the seat's crew, a new one too (422 otherwise)
       POST   /api/office/shift            {"workspace_id", "shift"} → Shifts.switch: the crew on; its worklines restaffed
       POST   /api/office/pause            {"mode": "pencils_down" | "lights_out" | "back_to_work"} → Server.Pause: {pause}
+      POST   /api/threads/:id/pause       Server.Pause.pause_thread: {thread_id, paused: true} (409 unless open)
+      POST   /api/threads/:id/resume      Server.Pause.resume_thread: {thread_id, paused: false}
       DELETE /api/facts/:id               Dossier.forget_fact (a tombstone: out of recall, row kept)
       POST   /api/issues/:id/resolve      {"resolution"?} → Dossier.resolve_issue
       POST   /api/issues/:id/fix          a ticket filed from it, owning it, routed → Dossier.fix_issue
@@ -595,6 +597,8 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "POST", ["reland"], t), do: landing(conn, t, Server.Workline.reland_landing(t))
   defp on_thread(conn, "POST", ["checks"], t), do: record_check(conn, t)
   defp on_thread(conn, "POST", ["move"], t), do: move(conn, t)
+  defp on_thread(conn, "POST", ["pause"], t), do: thread_pause(conn, Server.Pause.pause_thread(t.id))
+  defp on_thread(conn, "POST", ["resume"], t), do: thread_pause(conn, Server.Pause.resume_thread(t.id))
   defp on_thread(conn, "DELETE", [], t), do: delete_thread(conn, t)
   defp on_thread(conn, _, _, _), do: no_route(conn)
 
@@ -1166,6 +1170,9 @@ defmodule Server.MCP.OperatorAPI do
         {%{}, conn}
     end
   end
+
+  defp thread_pause(conn, {:ok, thread}), do: json(conn, 200, %{thread_id: thread.id, paused: thread.paused_at != nil})
+  defp thread_pause(conn, {:error, why}), do: json(conn, 409, %{error: "cannot pause or resume: #{why}"})
 
   defp with_thread(conn, id, fun), do: with_row(conn, Thread, id, fun)
 

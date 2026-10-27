@@ -499,6 +499,20 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"pause" => "working"}} = post_json("/api/office/pause", %{mode: "back_to_work"})
     end
 
+    test "pause and resume one thread: the mark set and cleared; a closed thread is 409, a missing one 404",
+         %{thread: thread} do
+      assert {200, %{"thread_id" => id, "paused" => true}} = post_json("/api/threads/#{thread.id}/pause", %{})
+      assert id == thread.id
+      assert Server.Pause.thread_paused?(thread.id)
+      assert {200, %{"paused" => false}} = post_json("/api/threads/#{thread.id}/resume", %{})
+      refute Server.Pause.thread_paused?(thread.id)
+
+      {:ok, closed} = Channel.open_thread(%{title: "done"})
+      {:ok, _} = Channel.close_thread(closed)
+      assert {409, %{"error" => "cannot pause or resume: not_open"}} = post_json("/api/threads/#{closed.id}/pause", %{})
+      assert {404, _} = post_json("/api/threads/999999/pause", %{})
+    end
+
     test "the shift board: the snapshot carries each shift and every seat's; seats are put on one, the shift switched" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Board"})
       {:ok, day} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", crew: "day"})
