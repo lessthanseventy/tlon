@@ -47,6 +47,8 @@ defmodule Server.Ticket do
     field :updated_at, :utc_datetime
     belongs_to :workspace, Server.Workspace
     belongs_to :project, Server.Project
+    # The session that filed it (#679): never cast; NULL is "session unknown".
+    belongs_to :session, Server.Session
     has_many :ticket_links, Server.TicketLink, foreign_key: :from_id
     has_many :ticket_threads, Server.TicketThread
   end
