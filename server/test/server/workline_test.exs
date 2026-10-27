@@ -854,6 +854,15 @@ defmodule Server.WorklineTest do
       Repo.all(from m in Server.Message, where: m.thread_id == ^beat.id and like(m.body, "🚨%"), order_by: m.id)
     end
 
+    defp dropped_marked?(thread) do
+      import Ecto.Query
+
+      Repo.exists?(
+        from m in Server.Message,
+          where: m.thread_id == ^thread.id and fragment("?->>'dropped' IS NOT NULL", m.payload)
+      )
+    end
+
     defp parked_lamp!(grade) do
       thread = open!(%{slug: "lamp", stage: "review"})
       if grade, do: graded!(thread, grade)
@@ -1116,6 +1125,24 @@ defmodule Server.WorklineTest do
 
       assert [_first, second] = sheriff_reports(ws)
       assert second.body =~ head(repo)
+    end
+
+    test "requeue_stranded: with no sheriff seated the cap is not marked, so the next tick reports once one is seated" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Unseated"})
+      queued = queued_lamp!(%{workspace_id: ws.id})
+
+      for _ <- 1..3 do
+        Repo.update_all(Oban.Job, set: [state: "discarded"])
+        Workline.requeue_stranded()
+      end
+
+      refute dropped_marked?(queued)
+
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+      assert [] = Workline.requeue_stranded()
+
+      assert [_report] = sheriff_reports(ws)
+      assert dropped_marked?(queued)
     end
 
     test "a thread that isn't a workline just reopens" do
