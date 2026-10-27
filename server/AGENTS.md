@@ -118,9 +118,11 @@ and every layer the spine design's re-laid §9 asked for
   (`Server.Workline.send_back/4`, the `send_back` tool, `tlon-cli send-back`): back to build by its
   lead, back to plan or spec only by the tech lead (a coherence call) or the operator; an open one
   only, never while its verify or landing is queued or running. A reviewer's or QA's non-blocking
-  findings are `follow_ups` on `submit_review`/`submit_qa`: tickets tied to the workline, `held`
-  until its thread closes, then left to intake (one closed unmerged says so in each ticket); a later
-  round replaces its door's earlier list, a finding no longer raised closed `superseded`, never deleted.
+  findings are `follow_ups` on `submit_review`/`submit_qa`: one post on the workline, made after the
+  verdict for the lead it hands to (the builder on a bounce, the qa seat when QA is owed, the operator
+  at their gate — the author's own session ended with the verdict), who fixes what sits in the
+  change's lines, drops the rest or defers one with `file_ticket`; a `held` follow-up ticket goes to
+  intake when its thread closes (one closed unmerged says so in the ticket).
   No one reviews their own work: a verdict by the agent that built the branch (the git author or
   `Tlon-Author:` of a commit on it past main, its review.md aside) is refused (`Workline.self_review/2`).
   A review approves the code it read: its verdict records the branch's commit, and code committed

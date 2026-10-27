@@ -795,7 +795,8 @@ defmodule Server.Workline do
   handed to the qa seat. An approval of a commit already approved this round is that same
   approval, `{:ok, thread}` and nothing recorded: a client retries a call whose connection
   dropped, and the verdict ends the reviewer's session under it (`Server.Staffing.end_review/1`: a
-  review is a throwaway session, briefed fresh each round). A verdict by the
+  review is a throwaway session, briefed fresh each round), so its `follow_ups:` (non-blocking
+  findings) are posted once it has moved, for the lead it hands to (`follow_ups/4`). A verdict by the
   agent that built the branch is refused, `{:error, {:self_review, why}}` (`self_review/2`).
   `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
   """
@@ -835,7 +836,8 @@ defmodule Server.Workline do
   The qa seat's verdict on a reviewed change it drove (`submit_qa`): `"pass"` or `"fail"`, its report
   (what it pressed and the screen text it saw) recorded as evidence (`workline:<slug>:qa`). A fail
   sends it back to build with the finding, as a review requesting changes does; a pass advances it
-  to the merge gate. `opts` as `advance/2`'s.
+  to the merge gate. Its `follow_ups:` are posted once it has moved, for the lead it hands to
+  (`follow_ups/4`). `opts` as `advance/2`'s.
   """
   def qa_verdict(thread, verdict, author, report, opts \\ [])
 
@@ -849,17 +851,21 @@ defmodule Server.Workline do
         correlation: "workline:#{thread.slug}:qa"
       })
 
-    if verdict == "fail" do
-      bounce(
-        thread,
-        "QA found a problem",
-        "QA (#{author}) drove it and found:\n\n#{report}\n\nFix it test-first",
-        author
-      )
-    else
-      post_brief(thread, "✓ QA passed (#{author}):\n\n#{report}")
-      advance(Repo.get!(Thread, thread.id), opts)
-    end
+    outcome =
+      if verdict == "fail" do
+        bounce(
+          thread,
+          "QA found a problem",
+          "QA (#{author}) drove it and found:\n\n#{report}\n\nFix it test-first",
+          author
+        )
+      else
+        post_brief(thread, "✓ QA passed (#{author}):\n\n#{report}")
+        advance(Repo.get!(Thread, thread.id), opts)
+      end
+
+    {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []), :qa)
+    outcome
   end
 
   def qa_verdict(%Thread{stage: "review"}, verdict, _author, _report, _opts), do: {:error, {:bad_verdict, verdict}}
@@ -1013,18 +1019,22 @@ defmodule Server.Workline do
   end
 
   @doc """
-  A reviewer's or QA's non-blocking findings, posted on the workline for its lead: one message, each
-  text numbered (its first line the title, the rest the detail), blanks and repeated titles dropped.
-  None becomes a ticket here: the lead fixes what sits in the change's own lines before it lands,
-  drops the rest, or defers one with `file_ticket`, which matches it against open tickets. Filing
-  every finding grew the backlog faster than the office closed it. `{:ok, items}`, the items posted.
+  A reviewer's or QA's non-blocking findings, posted on the workline for the lead its verdict hands
+  to, so they are posted after the verdict moves it (`review_verdict/4`, `qa_verdict/5`): the builder
+  on a bounce, the qa seat when QA is owed, and the operator when the thread is handed to their gate
+  and its lead is still the author, whose session the verdict ended. One message, each text numbered
+  (its first line the title, the rest the detail), blanks and repeated titles dropped
+  (`follow_up_items/1`). None becomes a ticket here: the lead fixes what sits in the change's own
+  lines before it lands, drops the rest, or defers one with `file_ticket`, which matches it against
+  open tickets. Filing every finding grew the backlog faster than the office closed it. `{:ok,
+  items}`, the items posted.
   """
   def follow_ups(%Thread{} = thread, author, items, door \\ :review) do
-    items = items |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) |> Enum.uniq_by(&follow_up_title/1)
+    items = follow_up_items(items)
 
     if items != [] do
       lead = Server.Channel.thread_lead(thread.id)
-      to = if lead && lead != author, do: "@#{lead} ", else: ""
+      to = if lead && lead != author, do: "@#{lead} ", else: "@#{operator()} "
       list = items |> Enum.with_index(1) |> Enum.map_join("\n", fn {text, i} -> "#{i}. #{text}" end)
 
       post_brief(
@@ -1037,6 +1047,10 @@ defmodule Server.Workline do
 
     {:ok, items}
   end
+
+  @doc "The follow-ups `follow_ups/4` would post from `items`: trimmed, blanks and repeated titles dropped."
+  def follow_up_items(items),
+    do: items |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) |> Enum.uniq_by(&follow_up_title/1)
 
   @doc """
   Lift the hold on a closing workline's follow-ups so intake routes them. One that closed without
@@ -2101,27 +2115,31 @@ defmodule Server.Workline do
     # the verdict ends the reviewer's session: a review is a throwaway session, briefed fresh each round
     Server.Staffing.end_review(thread)
 
-    if verdict == "request_changes" do
-      bounced =
-        bounce(
-          thread,
-          "the review requested changes",
-          "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first",
-          author
-        )
+    outcome =
+      if verdict == "request_changes" do
+        bounced =
+          bounce(
+            thread,
+            "the review requested changes",
+            "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first",
+            author
+          )
 
-      if changes_requested(thread) >= 2,
-        do: escalate(Repo.get!(Thread, thread.id), "the review asked for changes twice")
+        if changes_requested(thread) >= 2,
+          do: escalate(Repo.get!(Thread, thread.id), "the review asked for changes twice")
 
-      bounced
-    else
-      Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
+        bounced
+      else
+        Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
 
-      case qa_owed(thread, opts) do
-        nil -> {:ok, thread}
-        {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
+        case qa_owed(thread, opts) do
+          nil -> {:ok, thread}
+          {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
+        end
       end
-    end
+
+    {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []), :review)
+    outcome
   end
 
   defp by_hand(thread, url) do
