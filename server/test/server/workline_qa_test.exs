@@ -115,6 +115,24 @@ defmodule Server.WorklineQATest do
     assert Enum.any?(bodies(thread), &(&1 =~ "QA passed" and &1 =~ "HOME"))
   end
 
+  test "a QA verdict names the seat, pane and session that filed it (#679)" do
+    {thread, opts} = at_review("qa-by", ["server/lib/server/mcp/operator_api.ex"])
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
+    nolan = Server.Staff.agent_by_name("nolan")
+    {:ok, s} = Server.Staff.start_session(%{agent_id: nolan.id, thread_id: thread.id, pane_ref: "%9"})
+    label = "nolan · pane t#{thread.id} %9 · session #{s.id}"
+
+    {:ok, _} =
+      Workline.qa_verdict(Repo.get!(Thread, thread.id), "pass", "nolan", "=== after: R\n HOME", [
+        {:session_id, s.id} | opts
+      ])
+
+    qa = Repo.one!(from(e in Server.Event, where: e.thread_id == ^thread.id and e.correlation == ^"workline:qa-by:qa"))
+    assert qa.session_id == s.id
+    assert Server.MCP.Brief.check(qa)["by"] == label
+    assert Enum.any?(bodies(thread), &(&1 =~ "QA passed (#{label})"))
+  end
+
   test "while QA is owed it is not at its gate: QA's question to the operator is a question, which a reply clears" do
     {thread, opts} = at_review("asks", ["office/kit/room.ts"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)

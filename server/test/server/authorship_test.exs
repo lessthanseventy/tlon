@@ -40,4 +40,44 @@ defmodule Server.AuthorshipTest do
     assert Authorship.session_label(s.id) == "pane t#{thread.id} %9 · session #{s.id}"
     assert Authorship.session_label(nil) == "session unknown"
   end
+
+  describe "rendered by Server.MCP.Brief" do
+    alias Server.MCP.Brief
+
+    setup %{thread: thread, agent: agent} do
+      {:ok, s} = Staff.start_session(%{agent_id: agent.id, thread_id: thread.id, pane_ref: "%9"})
+      %{session: s, label: "pane t#{thread.id} %9 · session #{s.id}"}
+    end
+
+    test "message/1: a stamped row names its session, a NULL one says unknown", ctx do
+      {:ok, m} = Channel.post(%{thread_id: ctx.thread.id, author: "nolan", body: "x"}, session_id: ctx.session.id)
+      assert Brief.message(m)["by"] == "nolan · #{ctx.label}"
+      {:ok, old} = Channel.post(%{thread_id: ctx.thread.id, author: "nolan", body: "y"})
+      assert Brief.message(old)["by"] == "nolan · session unknown"
+    end
+
+    test "ticket/1: filed_by", ctx do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Work"})
+      {:ok, t} = Server.Tickets.file(%{workspace_id: ws.id, title: "t"}, session_id: ctx.session.id)
+      assert Brief.ticket(t)["filed_by"] == ctx.label
+      {:ok, old} = Server.Tickets.file(%{workspace_id: ws.id, title: "u"})
+      assert Brief.ticket(old)["filed_by"] == "session unknown"
+    end
+
+    test "check/1: a qa by check names the seat; any other check its session", ctx do
+      {:ok, qa} =
+        Server.Dossier.record_check(%{thread_id: ctx.thread.id, cmd: "qa by nolan", exit: 0},
+          session_id: ctx.session.id
+        )
+
+      assert Brief.check(qa)["by"] == "nolan · #{ctx.label}"
+
+      {:ok, plain} =
+        Server.Dossier.record_check(%{thread_id: ctx.thread.id, cmd: "mix test", exit: 0}, session_id: ctx.session.id)
+
+      assert Brief.check(plain)["by"] == ctx.label
+      {:ok, old} = Server.Dossier.record_check(%{thread_id: ctx.thread.id, cmd: "qa by nolan", exit: 1})
+      assert Brief.check(old)["by"] == "nolan · session unknown"
+    end
+  end
 end

@@ -162,8 +162,11 @@ defmodule Server.MCP.Brief do
     }
   end
 
-  @doc "A measured check — a `check_passed`/`check_failed` event, keyed on the real exit code."
-  def check(%Event{kind: kind, created_at: created_at, detail: detail}) do
+  @doc """
+  A measured check — a `check_passed`/`check_failed` event, keyed on the real exit code. `by` is
+  the session that recorded it (#679); a `qa by <seat>` check names the seat too.
+  """
+  def check(%Event{kind: kind, created_at: created_at, detail: detail, session_id: session_id}) do
     d = detail || %{}
 
     %{
@@ -171,16 +174,19 @@ defmodule Server.MCP.Brief do
       "cmd" => d["cmd"],
       "exit" => d["exit"],
       "tail" => d["tail"],
+      "by" => check_by(d["cmd"], session_id),
       "at" => at(created_at)
     }
   end
 
   @doc "A message on the thread. A consult ASK (consult_id set, not a mirror) is flagged so a
-  consumer can render it as a request for an answer, not ambient chatter."
+  consumer can render it as a request for an answer, not ambient chatter. `by` is the author with
+  the session that posted it (#679), so a denial is checked against the row."
   def message(%Message{} = m) do
     %{
       "id" => m.id,
       "author" => m.author,
+      "by" => Server.Authorship.label(m.author, m.session_id),
       "body" => m.body,
       "reply_to" => m.reply_to,
       "at" => at(m.created_at),
@@ -217,6 +223,7 @@ defmodule Server.MCP.Brief do
       "labels" => t.labels,
       "assignee" => t.assignee,
       "seen" => t.seen,
+      "filed_by" => Server.Authorship.session_label(t.session_id),
       "epic_id" => Server.Tickets.epic_of(t.id),
       # UX slice 4: a ticket ties to MANY threads, so the single promoted_thread_id is gone. The
       # promoted one is named on its own because it is the tie a caller usually means.
@@ -261,4 +268,7 @@ defmodule Server.MCP.Brief do
       nil -> nil
     end
   end
+
+  defp check_by("qa by " <> seat, session_id), do: Server.Authorship.label(seat, session_id)
+  defp check_by(_cmd, session_id), do: Server.Authorship.session_label(session_id)
 end
