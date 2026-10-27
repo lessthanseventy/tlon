@@ -2301,4 +2301,24 @@ defmodule Server.MCP.ServerTest do
     assert hd(r["content"])["text"] =~ "the office is paused (pencils down): back to work first"
     assert Repo.aggregate(Thread, :count) == before
   end
+
+  test "staff_child is refused on a thread the operator paused, and opens nothing; resumed, it staffs",
+       %{token: token, thread: thread} do
+    {:ok, _} = Staff.register_agent(%{name: "hronir-paused", mandate: "build", engine: "fresh"})
+    {:ok, _} = Server.Pause.pause_thread(thread.id)
+    before = Repo.aggregate(Thread, :count)
+
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    child = %{"title" => "not now", "lead" => "hronir-paused", "brief" => "Build it."}
+
+    r = call(token, session, 4, "staff_child", child)
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "staff_child refused: thread ##{thread.id} is paused: resume it first"
+    assert Repo.aggregate(Thread, :count) == before
+
+    {:ok, _} = Server.Pause.resume_thread(thread.id)
+    refute call(token, session, 5, "staff_child", child)["isError"]
+    assert Repo.aggregate(Thread, :count) == before + 1
+  end
 end
