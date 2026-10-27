@@ -1,16 +1,13 @@
-APPROVE — note: no free reviewer was at the builder's grade (greybeard); reviewed by tzinacan, read-only, diff only. I did not run the gate or the tests (sandbox); the builder's red→green and `menard run check --in server` claims in pr.md are unverified by me — verify/landing runs the real gate.
+APPROVE (round 2) — note: no free reviewer was at the builder's grade (greybeard); reviewed by tzinacan, read-only, diff only. I did not run the gate or tests (sandbox); pr.md's `menard run check --in server` → 2233 tests green is unverified by me — verify/landing runs the real gate.
 
-Read: origin/main...HEAD (8 commits, 14 files).
+Read: round-1 review.md, then `a9a323e..HEAD` (c9ffc73; workline.ex, tools/workline.ex, server/AGENTS.md, review_fresh_session_test.exs).
 
-Correct:
-- `Staffing.end_review/1` mirrors `roll_leaf/1`'s guard (tmux fault ⇒ leave sessions alone, no stranded window) and skips `pane_retired`, as pr.md says.
-- `Workline.record_verdict` ends the session after the verdict is durable and before `bounce`, so the request_changes builder respawn is not killed by it. The approve path's later QA close is a harmless double close.
-- `BranchReview.record` `with` rewrite: the added `{:error, why}` clause is needed (else a failed `record_event` double-wraps); ends the session only on `{:ok, event}`; a verdict off any thread ends nothing.
-- `Board.brief/2`: `reviewing?` needs stage "review" AND viewer == lead, so the operator API (`brief/1`) and the builder keep the conversation; `hidden_if` keeps counts. `last_reviewed` stays in the stage brief; tested.
-- Lobby refusal uses `Channel.standing?/1` (exists); the test asserts nothing is recorded.
+The send-back (follow-ups addressed to no one once the verdict ends the reviewer's session) is fixed:
+- `review_verdict` and `qa_verdict` post `follow_ups:` AFTER the move, so `Channel.thread_lead` already names the new lead: builder on request_changes, qa seat when QA is owed. When approve hands to the operator's gate the lead is still the author, and `follow_ups/4` now falls back to `@operator()` instead of an empty prefix. `operator/0` exists (workline.ex:2214).
+- `SubmitReview`/`SubmitQA` no longer post first; they pass `follow_up_items/1` through and report its count. QA's old `stage == "review" and verdict in pass/fail` guard is preserved by the clause guard on `qa_verdict`, so a bad verdict posts nothing.
+- The idempotent-approve retry (`approved_at?`) returns before `record_verdict`, so a retried call does not double-post. Previously it would have.
+- Three tests pin the three addressees (builder / qa seat / operator, each refuting `@lonnrot`). server/AGENTS.md and the tool docs say what the code does.
 
-Follow-ups (non-blocking):
-1. Spec decision 2 says no thread posts in a review brief; `reviewing?` covers only a workline at stage review. A `review_branch` thread (e.g. "review and land PR") still shows OPENING/RECENT/DONE/LEARNINGS. Plan task 2 named it; the code and pr.md narrowed it silently. Extend or amend the spec.
-2. Hiding OPENING removes the operator's original ask from the reviewer; it must come from spec.md.
-3. `end_review` ends ALL live sessions on the thread, not just the verdict author's; a `review_branch` verdict from a shared non-standing thread would end other agents' sessions.
-4. `review_branch` over MCP is tested only for the refusal; the success path ending the session is covered only via `BranchReview.record` directly.
+Round-1 follow-ups, both dropped by the builder with reasons in pr.md; I accept them. #1: a per-review thread (choice A) has no builder conversation to hide. #2: the leaf window is one per thread, the kill cannot be author-scoped, and no shared thread takes a verdict now that review_branch is refused off the lobby.
+
+No new blocking findings.
