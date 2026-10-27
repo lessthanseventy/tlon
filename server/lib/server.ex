@@ -85,13 +85,15 @@ defmodule Server do
   Resolve a thread to the working dir its coworker (and a STACK-zoom lazygit) works in: its
   project's repo, then a lazily-ensured per-thread `git worktree` at `.worktrees/<name>` —
   `Server.Worktree.name_for/1`: the slug, else `t<id>`. Never the main tree (2026-09-08). The
-  checkout is marked with the thread (`Server.Worktree.mark_thread/2`), which its commits are stamped with.
+  checkout is marked with the thread (`Server.Worktree.mark_thread/2`), which its commits are stamped with,
+  and brought up to origin/main when it holds no work of its own (`Server.Worktree.catch_up/1`).
   `{:ok, path}`, `{:error, :no_repo | :no_thread | reason}`.
   """
   def worktree_for_thread(%Server.Thread{} = thread) do
     with {:ok, repo, name} <- repo_and_name(thread),
          {:ok, wt} <- Server.Worktree.ensure(repo, name) do
       Server.Worktree.mark_thread(wt, thread.id)
+      wt |> Server.Worktree.catch_up() |> tell_catch_up(wt, thread)
       {:ok, wt}
     end
   end
@@ -162,4 +164,29 @@ defmodule Server do
 
   defp cleanup_worktree(nil), do: :none
   defp cleanup_worktree({repo, name}), do: Server.Worktree.remove(repo, name)
+
+  # What a wake's catch-up left to say: a checkout it could not move, once per state (a lobby wakes
+  # often), so the thread knows why its checkout is behind main.
+  defp tell_catch_up({:ahead, n}, wt, thread) do
+    {tip, _} = System.cmd("git", ["-C", wt, "rev-parse", "HEAD"])
+
+    say_once(
+      wt,
+      thread,
+      "ahead:#{String.trim(tip)}:#{n}",
+      "checkout left where it is: #{n} commit#{if n == 1, do: "", else: "s"} of its own beyond origin/main"
+    )
+  end
+
+  defp tell_catch_up(:dirty, wt, thread),
+    do: say_once(wt, thread, "dirty", "checkout left where it is: uncommitted changes, so not moved to origin/main")
+
+  defp tell_catch_up(_, _wt, _thread), do: :ok
+
+  defp say_once(wt, thread, key, body) do
+    if Server.Worktree.report_once?(wt, key),
+      do: Server.Channel.post(%{thread_id: thread.id, author: "tlon", body: body})
+
+    :ok
+  end
 end
