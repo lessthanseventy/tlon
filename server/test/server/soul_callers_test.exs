@@ -1,10 +1,10 @@
 defmodule Server.SoulCallersTest do
   # A soul shapes talk and tone, never a work decision. The structural half of that is that
-  # nothing but banter, the brief builder and the diary can read one.
+  # nothing but banter, the corkboard (side projects), the brief builder and the diary can read one.
   use ExUnit.Case, async: true
 
   @lib Path.expand("../../lib", __DIR__)
-  @allowed ~w(server/soul.ex server/office/banter.ex server/profiles.ex server/diary.ex)
+  @allowed ~w(server/soul.ex server/office/banter.ex server/profiles.ex server/diary.ex server/office/corkboard.ex)
 
   test "Server.Soul.read/voice/tone/diary are called only from banter, profiles and the diary" do
     offenders =
