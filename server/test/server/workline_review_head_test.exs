@@ -83,8 +83,10 @@ defmodule Server.WorklineReviewHeadTest do
     git(root, ["checkout", "-q", "main"])
   end
 
+  # the approving verdict parked it itself (#686): the gate, awaiting the operator
   defp parked(thread) do
-    {:awaiting, parked} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
+    %Thread{stage: "review", awaiting: awaiting} = parked = Repo.get!(Thread, thread.id)
+    assert awaiting
     parked
   end
 
@@ -253,8 +255,8 @@ defmodule Server.WorklineReviewHeadTest do
     assert why =~ "this round"
     assert %Thread{stage: "review", awaiting: nil} = Repo.get!(Thread, thread.id)
 
-    {:ok, _} = Workline.review_verdict(reviewing, "approve", "lonnrot", artifacts: AllPresent)
-    assert {:awaiting, _} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
+    assert {:ok, %Thread{awaiting: "andrew"}} =
+             Workline.review_verdict(reviewing, "approve", "lonnrot", artifacts: AllPresent)
   end
 
   test "a round-one review from before shas were recorded still counts: round two needs its own verdict",

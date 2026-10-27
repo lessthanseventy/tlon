@@ -43,8 +43,9 @@ defmodule Server.MCP.Tool.SubmitReview do
   The write-fenced reviewer's ONE door (worklines slice 3): server writes and commits
   work/<slug>/review.md itself — the reviewer profile structurally cannot (write/edit
   denied). On THIS thread, or with `thread_id` one you lead; refused outside the review stage. The `verdict`
-  is recorded too (`Server.Workline.review_verdict/3`): `request_changes` sends the workline back
-  to build at once; after `approve`, call advance_stage to hand it to the merge gate. A finding that
+  is recorded too (`Server.Workline.review_verdict/4`): `request_changes` sends the workline back
+  to build at once; `approve` parks it at the merge gate itself (the verdict ends your session; there
+  is nothing more to call). A finding that
   shouldn't block goes in `follow_ups`: posted on the workline, after the verdict, for the lead it
   hands to (the builder, QA or the operator), not filed as tickets.
   """
@@ -81,7 +82,7 @@ defmodule Server.MCP.Tool.SubmitReview do
             "committed" => rel,
             "verdict" => "approve",
             "follow_ups" => length(follow_ups),
-            "next" => "call advance_stage"
+            "next" => "parked at the merge gate — your session ends here"
           })
 
         {:error, {:bounced, _}} ->
