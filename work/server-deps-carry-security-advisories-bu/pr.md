@@ -2,4 +2,4 @@ Bump server deps with security advisories: bandit 1.12.5→1.14.0 (EEF-CVE-2026-
 
 Closes ticket #624.
 
-Checked: `mix deps.get | grep VULNERABLE` printed nothing (was 2 hits before); `mix hex.audit` → "No retired or security advisory packages found". server:check and release:smoke run via run_task on this head (bandit is a minor bump).
+Checked: `mix deps.get | grep VULNERABLE` printed nothing (was 2 hits before); `mix hex.audit` → "No retired or security advisory packages found". server:check passed via run_task on this head; release:smoke not run from the seat (sandbox refuses it) — it gates the cut, since bandit is a minor bump.
