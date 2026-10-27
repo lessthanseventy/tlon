@@ -134,6 +134,40 @@ defmodule Server.DoctorTest do
     end
   end
 
+  describe "git_fetch_urls/1" do
+    setup do
+      repo = Path.join(System.tmp_dir!(), "doctor-git-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(repo)
+      {_, 0} = System.cmd("git", ["init", "-q", repo])
+      on_exit(fn -> File.rm_rf!(repo) end)
+      %{repo: repo}
+    end
+
+    defp git_config!(repo, key, value), do: {_, 0} = System.cmd("git", ["-C", repo, "config", key, value])
+
+    test "names both missing lines and the task that sets them", %{repo: repo} do
+      line = Doctor.git_fetch_urls(repo)
+      assert line =~ "missing"
+      assert line =~ ~s|url."https://github.com/".insteadOf|
+      assert line =~ ~s|url."git@github.com:".pushInsteadOf|
+      assert line =~ "server:setup"
+    end
+
+    test "names only the line still missing", %{repo: repo} do
+      git_config!(repo, "url.https://github.com/.insteadOf", "git@github.com:")
+      line = Doctor.git_fetch_urls(repo)
+      assert line =~ "missing"
+      assert line =~ "pushInsteadOf"
+      refute line =~ ~s|url."https://github.com/".insteadOf|
+    end
+
+    test "ok when fetch takes HTTPS and push stays on SSH", %{repo: repo} do
+      git_config!(repo, "url.https://github.com/.insteadOf", "git@github.com:")
+      git_config!(repo, "url.git@github.com:.pushInsteadOf", "git@github.com:")
+      assert Doctor.git_fetch_urls(repo) == "ok"
+    end
+  end
+
   test "refuses an unknown table rather than interpolating it" do
     assert_raise ArgumentError, ~r/no such table/, fn ->
       Doctor.table_to_jsonl("collection; DROP TABLE collection")

@@ -19,6 +19,7 @@ defmodule Mix.Tasks.Server.Doctor do
     Mix.shell().info("tables:    #{Enum.join(r.tables, ", ")}")
     Mix.shell().info("migrations: #{r.pending} pending")
     Mix.shell().info("crash dump: #{Server.Doctor.crash_dump()}")
+    Mix.shell().info("git fetch:  #{Server.Doctor.git_fetch_urls()}")
 
     if dir = opts[:export] do
       paths = Server.Doctor.export(dir)

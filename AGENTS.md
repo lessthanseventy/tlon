@@ -154,7 +154,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   commit (a review's commit too). It is the model as launched (a mid-session switch is not seen), so
   the record holds even when a model is wrong about itself.
 - **Sandboxed Bash — phantom dotfiles and unreachable localhost are the sandbox, not the repo.** Claude
-  Code's bash sandbox (a coworker's runs strict, from its profile's `sandbox.json`) has three
+  Code's bash sandbox (a coworker's runs strict, from its profile's `sandbox.json`) has four
   symptoms, and none is a bug to chase:
   - *Phantom untracked dotfiles.* The wrapper bind-mounts over shell-rc / `.gitconfig` / editor paths,
     so `git status` **run inside a bash call** reports `.bashrc`, `.zshrc`, `.gitconfig`, `.env`,
@@ -172,6 +172,13 @@ exists so a reader of the repo knows where the law comes from and edits the one 
     config write (`worktree add -b`, `switch -c`, `push -u`) fails "File exists" — work detached and push
     `HEAD:refs/heads/<branch>`. A launch that races another's teardown fails "bwrap: Can't find source path
     …/.git/config.lock": run it again. Never create or `rm` the file.
+  - *`git fetch origin` over SSH is refused.* The sandbox read-denies `~/.ssh/*`, so a fetch dies on
+    `~/.ssh/known_hosts: Permission denied`. The checkout fetches over HTTPS instead (the repo is public) and
+    pushes stay on SSH: `server:setup` sets `url."https://github.com/".insteadOf git@github.com:` and
+    `url."git@github.com:".pushInsteadOf git@github.com:` in the shared `.git/config`, `server:doctor` reports
+    when either is missing, and a bare clone sets the two lines by hand. Never set them from a seat (the
+    config.lock mount above). The `.gitmodules: Permission denied` warning is the 0-byte `/dev/null` phantom,
+    the same family as the dotfiles.
 
 - **Comments earn their place — load-bearing only.** A comment survives only if it states a non-obvious
   *why* or a real gotcha the code can't. Narrative, lore, dated incident references, decorative
