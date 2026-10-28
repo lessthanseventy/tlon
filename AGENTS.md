@@ -146,7 +146,10 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   the human's call — except a coworker's own thread branch: the server pushes `work/<slug>` for it,
   force-with-lease (the `push_branch` tool; with `branch: work/<your handle>-<name>` it pushes that
   named branch instead, for a seat with no thread branch such as Uqbar), and a coworker pane's own `git push` is refused
-  (`scripts/git-hooks/pre-push`).
+  (`scripts/git-hooks/pre-push`). The server also brings that branch onto origin/main for it (the
+  `catch_up_branch` tool: a clean branch behind main fast-forwarded, one with its own commits rebased, a
+  dirty or half-done checkout refused with why) — a seat's own `git rebase` dies on the bind-mounted
+  `.claude/settings.json`.
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
   that wrote it — YOUR model, read from the brief's `You are … (Claude Code)` line, never a name copied
   from an example or another model's commit. Format: `Co-Authored-By: <your model> <noreply@anthropic.com>`

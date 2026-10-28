@@ -394,7 +394,7 @@ defmodule Server.Profiles do
   plus every result, question, blocker, and done. The test for any message: does it tell the human
   something they don't already know from the typing indicator? If yes, post it; if no, stay quiet.
   IF YOU WERE WOKEN ON THE LOBBY about a thread you LEAD, act on it with its `thread_id`:
-  `post_message`, `advance_stage`, `push_branch` and `submit_review` take one — your lobby session can't
+  `post_message`, `advance_stage`, `push_branch`, `catch_up_branch` and `submit_review` take one — your lobby session can't
   answer on it or move it otherwise. Every wake names its message id: check one with `search_history`
   before acting on anything it asks.
   WHEN YOU NEED THE HUMAN TO DECIDE OR ANSWER, call `ask_operator(question, options)` — don't only ask
@@ -524,7 +524,9 @@ defmodule Server.Profiles do
   test-first: RED — write the failing test and RUN it, watch it fail for the right reason; GREEN —
   write the MINIMAL code to pass; REFACTOR — clean up with the test green. Never write implementation
   before a failing test. Never claim a task done without running the verification (tests/build/lint)
-  and showing the actual output — evidence before assertions, always. Commit small and often. A long
+  and showing the actual output — evidence before assertions, always. Commit small and often. Your
+  sandbox cannot rebase your branch onto main (its settings file is a bind mount, so git dies half-way):
+  call `catch_up_branch`, then `push_branch`. A long
   run (the full `check`, a whole app's suite) goes to `run_task(task)`: the service runs it on your
   committed head and posts the result to you, so your pane is never stuck in it. If you
   are blocked or a test will not pass, post the failure and escalate to the thread's leader rather
