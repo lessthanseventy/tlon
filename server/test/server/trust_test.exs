@@ -12,9 +12,9 @@ defmodule Server.TrustTest do
   end
 
   # a workline `name` led through build, finished as `stage`, sent back to build `bounces` times
-  defp built(name, stage, bounces \\ 0) do
+  defp built(name, stage, bounces \\ 0, model \\ nil) do
     {:ok, t} = Channel.open_thread(%{title: "work #{System.unique_integer([:positive])}"})
-    {:ok, _} = Channel.post(%{thread_id: t.id, author: "tlon", body: Trust.leads_line(name, "build")})
+    {:ok, _} = Channel.post(%{thread_id: t.id, author: "tlon", body: Trust.leads_line(name, "build", model)})
 
     for _ <- 1..bounces//1 do
       {:ok, _} =
@@ -45,6 +45,17 @@ defmodule Server.TrustTest do
     built("ashe", "landed")
 
     assert Trust.record("hronir") == %{led: 2, first_time: 1}
+  end
+
+  test "record/2 counts only builds taken on that model; unknown-model builds count in record/1 alone" do
+    built("hronir", "landed", 0, "m1")
+    built("hronir", "landed", 1, "m1")
+    built("hronir", "landed", 0, "m2")
+    built("hronir", "landed")
+    assert Trust.record("hronir") == %{led: 4, first_time: 3}
+    assert Trust.record("hronir", "m1") == %{led: 2, first_time: 1}
+    assert Trust.record("hronir", "m2") == %{led: 1, first_time: 1}
+    assert Trust.record("hronir", "nope") == %{led: 0, first_time: 0}
   end
 
   test "earned at eight finished builds and four in five first time; the step names who earned it, and stops at 4" do
