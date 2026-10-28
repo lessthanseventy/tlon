@@ -61,12 +61,45 @@ defmodule Server.Source.ToolsTest do
     assert msg =~ "have:"
   end
 
-  test "run verbs execute in the worktree and answer one structured result", %{thread: t, wt: wt} do
-    # format works on any file (the demo is already formatted → nothing changed) …
+  test "run verbs execute in the worktree and answer one structured result", %{thread: t} do
+    # format works on any file (the demo is already formatted → nothing changed)
     assert {:ok, %{ok: true, changed: []}} = Tools.run(t, :format, ["demo.ex"])
-    # … while compile needs a mix project, which a bare test repo is not: the verb says so, honestly
-    assert {:ok, %{ok: false, exit: exit}} = Tools.run(t, :compile, [])
-    assert is_integer(exit) and exit != 0
-    _ = wt
+  end
+
+  describe "run verbs find the mix project" do
+    test "default is the one subdirectory holding a mix.exs; `in` picks one explicitly", %{thread: t, wt: wt} do
+      mix_app(wt, "server")
+      assert {:ok, %{ok: true}} = Tools.run(t, :compile, [])
+      assert {:ok, %{ok: true}} = Tools.run(t, :compile, [], in: "server")
+    end
+
+    test "the worktree root wins when it holds a mix.exs", %{thread: t, wt: wt} do
+      mix_app(wt, ".")
+      assert {:ok, %{ok: true}} = Tools.run(t, :compile, [])
+    end
+
+    test "no candidate, or several, is a refusal that names them", %{thread: t, wt: wt} do
+      assert {:error, none} = Tools.run(t, :compile, [])
+      assert none =~ "no mix.exs"
+      mix_app(wt, "server")
+      mix_app(wt, "other")
+      assert {:error, many} = Tools.run(t, :compile, [])
+      assert many =~ "other" and many =~ "server" and many =~ "in:"
+    end
+
+    test "`in` outside the worktree is refused", %{thread: t} do
+      assert {:error, msg} = Tools.run(t, :compile, [], in: "../..")
+      assert msg =~ "outside"
+    end
+  end
+
+  defp mix_app(wt, dir) do
+    app = Path.join(wt, dir)
+    File.mkdir_p!(Path.join(app, "lib"))
+
+    File.write!(
+      Path.join(app, "mix.exs"),
+      "defmodule Tmp#{System.unique_integer([:positive])}.MixProject do\n  use Mix.Project\n  def project, do: [app: :tmp_app, version: \"0.1.0\"]\nend\n"
+    )
   end
 end
