@@ -63,6 +63,15 @@ defmodule Server.ThreadPauseTest do
     assert length(Enum.filter(bodies(busy), &(&1 =~ "paused"))) == 1
   end
 
+  test "a hold's why is in the pause notice, so the hold is recorded on the thread", %{busy: busy} do
+    assert {:ok, %Server.Thread{paused_at: %DateTime{}}} = Pause.pause_thread(busy.id, "waiting on the #629 merge")
+
+    assert [%Message{kind: "notice", body: "✎ paused — finish this turn" <> _ = body}] =
+             busy |> Channel.thread_messages() |> Enum.filter(&(&1.author == "tlon"))
+
+    assert body =~ "held: waiting on the #629 merge"
+  end
+
   test "resume clears the mark and wakes the lead; resuming an unpaused thread says nothing", %{busy: busy} do
     {:ok, _} = Pause.pause_thread(busy.id)
     assert {:ok, %Server.Thread{paused_at: nil}} = Pause.resume_thread(busy.id)

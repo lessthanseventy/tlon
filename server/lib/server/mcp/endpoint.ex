@@ -97,6 +97,7 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.UpdateTicket, name: "update_ticket")
   component(Server.MCP.Tool.StartTicket, name: "start_ticket")
   component(Server.MCP.Tool.BlockedOn, name: "blocked_on")
+  component(Server.MCP.Tool.HoldThread, name: "hold_thread")
   component(Server.MCP.Tool.WriteNote, name: "write_note")
   component(Server.MCP.Tool.GetNotes, name: "get_notes")
   # The PM's (pm-and-release design §1): the release pointer and the backlog's urgency.
