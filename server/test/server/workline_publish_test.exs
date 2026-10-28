@@ -269,6 +269,24 @@ defmodule Server.WorklinePublishTest do
       refute_received {:ran, _}
     end
 
+    test "prunes the branch's tracking ref before leasing, so a branch a landing deleted is leased as absent" do
+      run = runner([])
+      assert :ok = Publish.push_branch("/repo", "work/tiles", run)
+
+      assert_received {:ran, [_, _, _, "fetch", "--prune", "origin", refspec] = fetch}
+      assert refspec == "+refs/heads/work/tiles*:refs/remotes/origin/work/tiles*"
+      assert_received {:ran, [_, _, _, "push" | _] = push}
+      assert fetch != push
+      refute_received {:ran, _}
+    end
+
+    test "a failed prune-fetch refuses without pushing" do
+      run = runner([{&match?(["git", "-C", "/repo", "fetch" | _], &1), {"network down", 128}}])
+      assert {:error, why} = Publish.push_branch("/repo", "work/tiles", run)
+      assert why =~ "network down"
+      refute_received {:ran, ["git", "-C", "/repo", "push" | _]}
+    end
+
     test "a refused push says why" do
       run = runner([{&match?(["git", "-C", "/repo", "push" | _], &1), {"stale info", 1}}])
       assert {:error, why} = Publish.push_branch("/repo", "work/tiles", run)
