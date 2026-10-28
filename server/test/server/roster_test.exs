@@ -62,4 +62,40 @@ defmodule Server.RosterTest do
   test "no seats, no pick" do
     assert Roster.pick([], %{grade: "senior"}) == nil
   end
+
+  describe "the trust record tie-break" do
+    defp trusted(seat, led, first_time), do: Map.put(seat, :trust, %{led: led, first_time: first_time})
+
+    test "between otherwise equal seats the better first-time-landing record wins" do
+      seats = [trusted(seat("a", "senior"), 10, 5), trusted(seat("b", "senior"), 10, 9)]
+      assert {%{name: "b"}, []} = Roster.pick(seats, %{grade: "senior"})
+    end
+
+    test "a record never overrides a grade or specialty mismatch" do
+      seats = [
+        trusted(seat("good", "junior", "server"), 10, 10),
+        trusted(seat("fit", "senior", "office"), 10, 1)
+      ]
+
+      assert {%{name: "fit"}, []} = Roster.pick(seats, %{grade: "senior", specialty: "office"})
+      assert {%{name: "fit"}, []} = Roster.pick(seats, %{grade: "senior"})
+    end
+
+    test "a record never overrides the builder's-model rule" do
+      seats = [trusted(seat("same", "senior", nil, "fable"), 10, 10), seat("other", "senior", nil, "opus")]
+      assert {%{name: "other"}, []} = Roster.pick(seats, %{grade: "senior", not_model: "fable"})
+    end
+
+    test "no record is neutral: above a poor record, below a good one, never the worst" do
+      none = seat("none", "senior")
+      assert {%{name: "none"}, []} = Roster.pick([trusted(seat("poor", "senior"), 10, 2), none], %{grade: "senior"})
+      assert {%{name: "good"}, []} = Roster.pick([none, trusted(seat("good", "senior"), 10, 9)], %{grade: "senior"})
+      assert {%{name: "none"}, []} = Roster.pick([none, trusted(seat("zero", "senior"), 0, 0)], %{grade: "senior"})
+    end
+
+    test "equal records fall back to bench order" do
+      seats = [trusted(seat("a", "senior"), 10, 5), trusted(seat("b", "senior"), 10, 5)]
+      assert {%{name: "a"}, []} = Roster.pick(seats, %{grade: "senior"})
+    end
+  end
 end
