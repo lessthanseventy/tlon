@@ -108,36 +108,12 @@ defmodule Server.Workline.Publish do
     end
   end
 
-  @doc """
-  Fetch `branch`'s head on origin into its tracking ref, so a `push_branch/3` after it leases
-  against what GitHub holds now — a head GitHub moved itself (an update-branch) is not a push the
-  lease should refuse. `:ok` | `{:error, why}`.
-  """
-  def fetch_branch(repo, branch, run \\ &System.cmd/3) do
-    refspec = "+refs/heads/#{branch}:refs/remotes/origin/#{branch}"
-
-    case run.("git", ["-C", repo, "fetch", "origin", refspec], cd: repo, stderr_to_stdout: true) do
-      {_, 0} -> :ok
-      {out, _} -> {:error, "fetch of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
-    end
-  end
-
-  defp lease_push(repo, branch, run) do
-    case run.("git", ["-C", repo, "push", "--force-with-lease", "origin", branch], cd: repo, stderr_to_stdout: true) do
-      {_, 0} -> :ok
-      {out, _} -> {:error, "push of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
-    end
-  end
-
-  # A landing deletes the branch on origin, leaving the tracking ref stale, and the lease then
-  # refuses with "stale info". An explicit refspec never prunes (git dies "couldn't find remote
-  # ref"); a glob does, and the branch charset has no glob character of its own.
-  defp prune_branch(repo, branch, run) do
-    refspec = "+refs/heads/#{branch}*:refs/remotes/origin/#{branch}*"
-
-    case run.("git", ["-C", repo, "fetch", "--prune", "origin", refspec], cd: repo, stderr_to_stdout: true) do
-      {_, 0} -> :ok
-      {out, _} -> {:error, "fetch of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
+  # `{:ok, sha}`, or `{:ok, ""}` when origin has no such branch; a failed ls-remote is an error,
+  # never "absent".
+  defp remote_sha(repo, branch, run) do
+    case run.("git", ["-C", repo, "ls-remote", "origin", "refs/heads/#{branch}"], cd: repo, stderr_to_stdout: true) do
+      {out, 0} -> {:ok, out |> String.split(["\t", "\n"], trim: true) |> List.first("")}
+      {out, _} -> {:error, "ls-remote of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
     end
   end
 
@@ -163,8 +139,20 @@ defmodule Server.Workline.Publish do
   """
   def push_branch(repo, branch, run \\ &System.cmd/3) do
     with :ok <- thread_branch(branch),
-         :ok <- prune_branch(repo, branch, run),
-         do: lease_push(repo, branch, run)
+         {:ok, remote} <- remote_sha(repo, branch, run),
+         {:ok, expect} <- expected(repo, branch, remote, run),
+         do: lease_push(repo, branch, expect, run)
+  end
+
+  @doc """
+  Push `branch` over whatever origin holds — a reland, whose just-passed gate is the guard and whose
+  head may be one GitHub's update-branch moved. Leased on the sha read a moment before, so only a push
+  racing it is refused. `:ok` | `{:error, why}`.
+  """
+  def replace_branch(repo, branch, run \\ &System.cmd/3) do
+    with :ok <- thread_branch(branch),
+         {:ok, remote} <- remote_sha(repo, branch, run),
+         do: lease_push(repo, branch, remote, run)
   end
 
   @doc """
@@ -343,5 +331,50 @@ defmodule Server.Workline.Publish do
     if Regex.match?(~r{\Awork/[a-z0-9][a-z0-9-]*\z}, branch),
       do: :ok,
       else: {:error, "#{branch} is not a thread's work/<slug> branch — only those are pushed"}
+  end
+
+  # The lease names the sha it expects origin to hold, never a tracking ref: `origin/*` is refreshed
+  # by every fetch on the shared .git, so it proves nothing. The server remembers what it last
+  # pushed in its own ref, `refs/tlon/pushed/<branch>`, written after each push; nothing here
+  # fetches or touches `origin/*`.
+  defp lease_push(repo, branch, expect, run) do
+    lease = "--force-with-lease=refs/heads/#{branch}:#{expect}"
+
+    case run.("git", ["-C", repo, "push", lease, "origin", branch], cd: repo, stderr_to_stdout: true) do
+      {_, 0} -> record_push(repo, branch, run)
+      {out, _} -> {:error, "push of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
+    end
+  end
+
+  # Best-effort: a record that can't be written leaves the next push on what origin holds then.
+  defp record_push(repo, branch, run) do
+    with {out, 0} <- run.("git", ["-C", repo, "rev-parse", "--verify", "-q", branch], cd: repo),
+         sha when sha != "" <- String.trim(out) do
+      run.("git", ["-C", repo, "update-ref", "refs/tlon/pushed/#{branch}", sha], cd: repo, stderr_to_stdout: true)
+    end
+
+    :ok
+  end
+
+  defp recorded_sha(repo, branch, run) do
+    case run.("git", ["-C", repo, "rev-parse", "--verify", "-q", "refs/tlon/pushed/#{branch}"], cd: repo) do
+      {out, 0} -> String.trim(out)
+      _ -> ""
+    end
+  end
+
+  # Absent on origin: must stay absent (a landing deleted it). Present with a record: it must still
+  # be what the server pushed. Present without one (pushed before records): the sha read, once.
+  defp expected(_repo, _branch, "", _run), do: {:ok, ""}
+
+  defp expected(repo, branch, remote, run) do
+    case recorded_sha(repo, branch, run) do
+      pushed when pushed in ["", remote] ->
+        {:ok, remote}
+
+      pushed ->
+        {:error,
+         "origin/#{branch} moved since the server last pushed it (#{String.slice(pushed, 0, 7)} → #{String.slice(remote, 0, 7)}): a hand push, or GitHub moved it; the operator resolves it"}
+    end
   end
 end

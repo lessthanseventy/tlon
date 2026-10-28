@@ -311,7 +311,7 @@ defmodule Server.WorklineLandingTest do
                )
 
       assert_received :gated
-      assert_received {:ran, ["git", _, _, "push", "--force-with-lease", "origin", "work/lamp"]}
+      assert_received {:ran, ["git", _, _, "push", "--force-with-lease=refs/heads/work/lamp:", "origin", "work/lamp"]}
       assert_received {:ran, ["gh", "api", "repos/{owner}/{repo}/statuses/c2" | _]}
       assert_received {:ran, ["gh", "pr", "merge", @url, "--rebase", "--match-head-commit", "c2"]}
       refute_received {:ran, ["gh", "pr", "update-branch" | _]}
@@ -337,23 +337,25 @@ defmodule Server.WorklineLandingTest do
       assert blocked() == []
     end
 
-    test "a requeued landing fetches work/<slug> before its lease, so a head GitHub moved doesn't refuse the push" do
+    test "a requeued landing leases against the head origin holds now, so a head GitHub moved doesn't refuse the push" do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
       {:ok, _} = Workline.rebase_landing(Repo.get!(Thread, t.id))
       flush_ran()
       github = gh("OPEN")
 
-      # GitHub moved work/lamp's head: the lease holds only once the tracking ref is fetched
+      # GitHub moved work/lamp's head: the lease expects the sha ls-remote just read
       run = fn
-        "git", [_, _, "fetch", "origin", "+refs/heads/work/lamp:refs/remotes/origin/work/lamp"] = args, _opts ->
+        "git", [_, _, "ls-remote", "origin", "refs/heads/work/lamp"] = args, _opts ->
           send(self(), {:ran, ["git" | args]})
-          Process.put(:fetched, true)
-          {"", 0}
+          {"f00d\trefs/heads/work/lamp\n", 0}
 
-        "git", [_, _, "push", "--force-with-lease" | _] = args, _opts ->
+        "git", [_, _, "push", lease | _] = args, _opts ->
           send(self(), {:ran, ["git" | args]})
-          if Process.get(:fetched), do: {"", 0}, else: {"! [rejected] work/lamp (stale info)", 1}
+
+          if lease == "--force-with-lease=refs/heads/work/lamp:f00d",
+            do: {"", 0},
+            else: {"! [rejected] work/lamp (stale info)", 1}
 
         cmd, args, opts ->
           github.(cmd, args, opts)
