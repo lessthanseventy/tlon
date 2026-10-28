@@ -155,6 +155,7 @@ defmodule Server.MCP.ServerTest do
                "write_note",
                "get_notes",
                "push_branch",
+               "catch_up_branch",
                "review_branch",
                "land_pr",
                "operator_inbox",
@@ -2058,6 +2059,69 @@ defmodule Server.MCP.ServerTest do
 
     pushed = call(ntoken, handshake(ntoken), 3, "push_branch", %{"thread_id" => workline.id})
     assert pushed["isError"] and hd(pushed["content"])["text"] =~ "lead"
+
+    caught = call(ntoken, handshake(ntoken), 4, "catch_up_branch", %{"thread_id" => workline.id})
+    assert caught["isError"] and hd(caught["content"])["text"] =~ "lead"
+  end
+
+  test "catch_up_branch: the service moves the seat's checkout onto origin/main; a dirty one is refused with why" do
+    repo = Path.join(System.tmp_dir!(), "catch-up-tool-#{System.pid()}-#{System.unique_integer([:positive])}")
+    remote = repo <> "-origin.git"
+    File.mkdir_p!(repo)
+    on_exit(fn -> File.rm_rf!(repo) && File.rm_rf!(remote) end)
+
+    git = fn dir, args ->
+      System.cmd("git", ["-C", dir, "-c", "user.email=t@t", "-c", "user.name=t" | args], stderr_to_stdout: true)
+    end
+
+    {_, 0} = git.(repo, ["init", "-q", "-b", "main"])
+    File.write!(Path.join(repo, "README"), "seed\n")
+    {_, 0} = git.(repo, ["add", "README"])
+    {_, 0} = git.(repo, ["commit", "-qm", "seed"])
+    {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+    {_, 0} = git.(repo, ["remote", "add", "origin", remote])
+    {_, 0} = git.(repo, ["push", "-q", "origin", "main"])
+    {_, 0} = git.(repo, ["fetch", "-q", "origin"])
+
+    {:ok, ws} = Server.Workspaces.register(%{name: "CatchUp"})
+
+    {:ok, project} =
+      Server.Projects.register(%{workspace_id: ws.id, name: "p", repos: [%{"name" => "r", "path" => repo}]})
+
+    {:ok, workline} =
+      Server.Workline.open(%{
+        title: "fix",
+        slug: "caught-up",
+        stage: "build",
+        workspace_id: ws.id,
+        project_id: project.id
+      })
+
+    {:ok, wt} = Server.worktree_for_thread(workline)
+
+    File.write!(Path.join(repo, "NEW"), "more\n")
+    {_, 0} = git.(repo, ["add", "NEW"])
+    {_, 0} = git.(repo, ["commit", "-qm", "main moves"])
+    {_, 0} = git.(repo, ["push", "-q", "origin", "main"])
+    {_, 0} = git.(repo, ["fetch", "-q", "origin"])
+
+    {:ok, agent} = Staff.register_agent(%{name: "catcher", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(workline, agent)
+    session = handshake(token)
+    call(token, session, 2, "register", %{})
+
+    refute File.exists?(Path.join(wt, "NEW"))
+    r = call(token, session, 3, "catch_up_branch", %{})
+    refute r["isError"]
+    assert decode_tool_json(r)["result"] == "moved"
+    assert File.exists?(Path.join(wt, "NEW"))
+    assert Enum.any?(Channel.thread_messages(workline), &(&1.kind == "notice" and &1.body =~ "fast-forwarded"))
+
+    File.write!(Path.join(wt, "SCRATCH"), "x\n")
+    r = call(token, session, 4, "catch_up_branch", %{})
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "uncommitted"
+    assert File.exists?(Path.join(wt, "SCRATCH"))
   end
 
   test "push_branch with branch: pushes only a work/<caller>-* name, and never a workline's own branch", %{
