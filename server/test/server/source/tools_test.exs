@@ -88,6 +88,19 @@ defmodule Server.Source.ToolsTest do
     assert File.read!(Path.join(wt, "needs.ex")) =~ ~s|item("tool_denied", "blocking"|
   end
 
+  test "a clause edit the filesystem refuses is an error reply naming the file, never a raise (#442)", %{
+    thread: t,
+    wt: wt
+  } do
+    path = Path.join(wt, "demo.ex")
+    File.chmod!(path, 0o444)
+    on_exit(fn -> File.chmod(path, 0o644) end)
+
+    assert {:error, msg} = Tools.clause(t, :replace, "demo.ex", "old_name/1", "x", "x + 1")
+    assert msg =~ "demo.ex"
+    assert msg =~ "permission denied"
+  end
+
   test "run verbs execute in the worktree and answer one structured result", %{thread: t} do
     # format works on any file (the demo is already formatted → nothing changed)
     assert {:ok, %{ok: true, changed: []}} = Tools.run(t, :format, ["demo.ex"])

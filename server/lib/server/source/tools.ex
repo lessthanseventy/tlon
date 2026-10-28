@@ -47,10 +47,13 @@ defmodule Server.Source.Tools do
     with {:ok, root} <- root(thread),
          {:ok, [{rel, abs}]} <- resolve_all(root, [file]),
          {:ok, source} <- read(abs),
-         out when is_binary(out) <- clause_edit(verb, source, name_arity, head, code) do
-      File.write!(abs, out)
+         out when is_binary(out) <- clause_edit(verb, source, name_arity, head, code),
+         :ok <- write(abs, out) do
       {:ok, %{file: rel}}
     end
+  rescue
+    # an uncaught raise reaches the agent as a bare "Internal error"; the message names the cause
+    e -> {:error, Exception.message(e)}
   end
 
   defp clause_edit(:replace, source, na, head, code), do: Clause.replace_body(source, na, head, code || "")
@@ -146,6 +149,13 @@ defmodule Server.Source.Tools do
       true
     else
       _ -> false
+    end
+  end
+
+  defp write(abs, out) do
+    case File.write(abs, out) do
+      :ok -> :ok
+      {:error, reason} -> {:error, "#{abs}: #{:file.format_error(reason)}"}
     end
   end
 end
