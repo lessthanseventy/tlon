@@ -80,3 +80,11 @@ test("Uqbar's queue and the settled digest ride along, counted apart; an older s
   expect(old.settled).toEqual([])
   expect(old.counts).toEqual({ phone: 1, machine: 1, clipboard: 1, uqbar: 0, settled: 0 })
 })
+
+test("allowed fences a rule that holds a backtick with a longer fence, so it stays one code span", async () => {
+  const data = await import("../tui/data")
+  await data.allowed(7, "Bash(echo `date`)")
+  expect(posted).toEqual({ path: "/api/threads/7/messages", body: { body: "Allowed: `` Bash(echo `date`) `` is in my Claude Code settings now; run it again." } })
+  await data.allowed(7, "Bash(mise run release:smoke)")
+  expect(posted).toEqual({ path: "/api/threads/7/messages", body: { body: "Allowed: `Bash(mise run release:smoke)` is in my Claude Code settings now; run it again." } })
+})

@@ -582,6 +582,30 @@ defmodule Server.Office.NeedsTest do
       assert [%{kind: "tool_denied", rule: nil}] = Needs.list()
     end
 
+    test "a rule holding a backtick is fenced longer, so it stays one code span", %{ws: ws} do
+      t = workline(ws, "review", 3)
+
+      for _ <- 1..2 do
+        {:ok, _} =
+          Server.Dossier.record_event(%{
+            thread_id: t.id,
+            kind: "tool_denied",
+            correlation: "tool_denied:#{t.id}",
+            detail: %{
+              "agent" => "nolan",
+              "tool" => "Bash",
+              "command" => "echo `date`",
+              "summary" => "Bash · echo `date`",
+              "reason" => "Auto-Mode Bypass"
+            }
+          })
+      end
+
+      actions = for a <- Server.Alerts.list(), a.thread_id == t.id, x <- a.actions, do: x
+      allowed = Enum.find(actions, &(&1.label =~ "Allowed it"))
+      assert allowed.body.body == "Allowed: `` Bash(echo `date`) `` is in my Claude Code settings now; run it again."
+    end
+
     test "a hook's refusal offers no allow rule: no setting lifts it", %{ws: ws} do
       t = workline(ws, "review", 3)
 
