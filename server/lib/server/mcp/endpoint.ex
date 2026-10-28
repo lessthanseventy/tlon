@@ -103,6 +103,8 @@ defmodule Server.MCP.Endpoint do
   # The PM's (pm-and-release design §1): the release pointer and the backlog's urgency.
   # a coworker's own thread branch to GitHub (its pane's own pushes are refused by the pre-push hook)
   component(Server.MCP.Tool.PushBranch, name: "push_branch")
+  # …and its checkout brought onto origin/main by the service (its sandbox can't rewrite the settings file git would)
+  component(Server.MCP.Tool.CatchUpBranch, name: "catch_up_branch")
   # a reviewer's verdict on a non-workline branch, which `mise run land` requires
   component(Server.MCP.Tool.ReviewBranch, name: "review_branch")
   # …and the queue it lands through, reached over MCP (a sandboxed seat has no epmd for `mise run land`)
