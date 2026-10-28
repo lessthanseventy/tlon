@@ -121,13 +121,14 @@ defmodule Server.Pause do
   @doc """
   Pause one thread: its lead is told to finish the turn, and nothing but the operator's posts wakes
   it until `resume_thread/1`. `{:ok, thread}`; already paused, nothing is said again.
-  `{:error, :not_found | :not_open}`.
+  `{:error, :not_found | :not_open}`. A lead's hold (`Server.MCP.Tool.HoldThread`) passes its `why`,
+  which the notice carries: the mark is cleared only by `resume_thread/1`, never by a turn ending.
   """
-  def pause_thread(thread_id) do
+  def pause_thread(thread_id, why \\ nil) do
     with {:ok, %Server.Thread{paused_at: nil} = thread} <- open_thread(thread_id) do
       now = DateTime.truncate(DateTime.utc_now(), :second)
       {:ok, thread} = thread |> Ecto.Changeset.change(paused_at: now) |> Server.Repo.update()
-      tell(thread_id, @thread_told)
+      tell(thread_id, @thread_told, why)
       {:ok, thread}
     end
   end
@@ -170,8 +171,14 @@ defmodule Server.Pause do
 
   defp tell_live_threads, do: for(tid <- live_threads(), do: tell(tid, @told))
 
-  defp tell(tid, head) do
-    body = head <> ", commit what you have, and stop; don't start anything new. You'll hear when it's back to work."
+  defp tell(tid, head, why \\ nil) do
+    held = if why, do: " (held: #{why})", else: ""
+
+    body =
+      head <>
+        ", commit what you have, and stop; don't start anything new." <>
+        held <> " You'll hear when it's back to work."
+
     _ = Channel.post(%{thread_id: tid, author: "tlon", body: body, kind: "notice"})
   end
 

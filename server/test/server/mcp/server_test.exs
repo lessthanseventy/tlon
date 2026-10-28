@@ -151,6 +151,7 @@ defmodule Server.MCP.ServerTest do
                "update_ticket",
                "start_ticket",
                "blocked_on",
+               "hold_thread",
                "write_note",
                "get_notes",
                "push_branch",
@@ -1754,6 +1755,45 @@ defmodule Server.MCP.ServerTest do
     assert r["isError"]
     %{"text" => text} = Enum.find(r["content"], &(&1["type"] == "text"))
     assert text =~ "not open"
+  end
+
+  test "hold_thread: the lead holds and releases its own thread, the lead above it too, a stranger is refused" do
+    {:ok, ws} = Server.Workspaces.create(%{name: "HoldWS"})
+    {:ok, parent} = Channel.open_thread(%{title: "parent", workspace_id: ws.id})
+    {:ok, thread} = Channel.open_thread(%{title: "held", workspace_id: ws.id, parent_thread_id: parent.id})
+    {:ok, lead} = Staff.register_agent(%{name: "Holder", mandate: "build", engine: "fresh"})
+    {:ok, above} = Staff.register_agent(%{name: "Above", mandate: "lead", engine: "fresh"})
+    {:ok, stranger} = Staff.register_agent(%{name: "Stranger", mandate: "build", engine: "fresh"})
+    {:ok, _} = Server.Staff.assign(thread, lead)
+    {:ok, _} = Server.Staff.assign(parent, above)
+
+    token = MCP.Tokens.mint(thread, lead)
+    session = handshake(token)
+
+    r = call(token, session, 2, "hold_thread", %{"why" => "waiting on #629"})
+    refute r["isError"]
+    assert Server.Pause.thread_paused?(thread.id)
+
+    assert Enum.any?(Channel.thread_messages(thread), &(&1.kind == "notice" and &1.body =~ "held: waiting on #629"))
+
+    r = call(token, session, 3, "hold_thread", %{"release" => true})
+    refute r["isError"]
+    refute Server.Pause.thread_paused?(thread.id)
+
+    above_token = MCP.Tokens.mint(parent, above)
+    above_session = handshake(above_token)
+    r = call(above_token, above_session, 2, "hold_thread", %{"thread_id" => thread.id, "why" => "child waits"})
+    refute r["isError"]
+    assert Server.Pause.thread_paused?(thread.id)
+
+    other = MCP.Tokens.mint(parent, stranger)
+    other_session = handshake(other)
+    r = call(other, other_session, 2, "hold_thread", %{"thread_id" => thread.id, "release" => true})
+    assert r["isError"]
+    assert Server.Pause.thread_paused?(thread.id)
+
+    r = call(token, session, 4, "hold_thread", %{})
+    assert r["isError"]
   end
 
   test "post_message as a notice wakes nobody" do

@@ -464,6 +464,45 @@ defmodule Server.MCP.Tool.BlockedOn do
   end
 end
 
+defmodule Server.MCP.Tool.HoldThread do
+  @moduledoc """
+  Hold a workline on purpose, or let it go. Without `release`, `why` is required: the thread is
+  paused (`Server.Pause.pause_thread/2`) and says why in a notice, so nobody nudges, pages or
+  retires anyone for a stall that is a decision. Only you (or the operator) clear it, with
+  `release: true`, which wakes the lead; a turn ending does not. Your own thread, or with `thread_id`
+  one you steer (its lead, the lead above it or the manager).
+  """
+  use Server.MCP.Tool
+
+  alias Server.MCP.Tool
+  alias Server.Pause
+
+  schema do
+    field :why, :string, description: "Why the thread is held; required to hold"
+    field :release, :boolean, default: false, description: "Release the hold instead of making one"
+    field :thread_id, :integer, description: "A thread you steer, when your session is bound to another"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    case Tool.acting_thread(params, frame, &Tool.steers?/2, "its lead, the lead above it or the manager") do
+      {:error, message} -> fail(frame, message)
+      thread -> hold(frame, thread, params)
+    end
+  end
+
+  defp hold(frame, thread, %{release: true}), do: reply(frame, Pause.resume_thread(thread.id), &state/1)
+
+  defp hold(frame, thread, params) do
+    case params[:why] do
+      why when is_binary(why) and why != "" -> reply(frame, Pause.pause_thread(thread.id, why), &state/1)
+      _ -> fail(frame, "a hold needs a why")
+    end
+  end
+
+  defp state(thread), do: %{"thread_id" => thread.id, "paused" => thread.paused_at != nil}
+end
+
 defmodule Server.MCP.Tool.WriteNote do
   @moduledoc """
   Write a NOTE — funes-native scratch, agent-readable/writable. Defaults to a note on THIS thread;

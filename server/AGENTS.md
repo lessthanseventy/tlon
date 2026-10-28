@@ -85,6 +85,10 @@ and every layer the spine design's re-laid §9 asked for
   is never `stalled`; the ticket is one `blocked` Need however many threads wait. The block clears, and
   the lead is woken to retry, when the ticket is closed and `Server.Release.PM.note_live/1` sees a
   release go live (a fix reaches seats at a cut).
+- **a lead's hold** (`Server.Pause.pause_thread/2`, the `hold_thread` tool) — a deliberate stand-by is
+  not a stall: the thread's lead, the lead above it or the manager pauses it with a `why` (in the pause
+  notice) and releases it with `release: true`. It is the operator's per-thread pause, no new state; a
+  turn ending never clears it.
 - **the switchboard** (`Server.Switchboard` + `Server.Bus` + `Server.Arbiter`) — delivery WAKES the
   addressee (§5b.2): a posted message is a durable row first, then broadcast over `Phoenix.PubSub`, and
   the switchboard pokes the thread's lead / the @mentioned coworker / a reply's author through the
