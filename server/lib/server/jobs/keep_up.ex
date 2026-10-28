@@ -20,7 +20,8 @@ defmodule Server.Jobs.KeepUp do
   such fault, so it reaches the operator as a failed job (`Server.Office.Needs`), not only a log line.
 
   A main that has drifted is never merged: it is one ticket (and one lobby post) in the workspace
-  whose project owns the repo, or one keyed note for the operator when none does, updated in place
+  whose project owns the repo (a changed count is said again on the lobby as a notice), or one keyed
+  note for the operator when none does, updated in place
   and cleared only when main is level again. Whether the operator should also hear when the crew
   can't handle a drift (a live session committing to that main) is open.
   """
@@ -210,14 +211,25 @@ defmodule Server.Jobs.KeepUp do
                do: :ok
 
         t ->
-          with {:ok, _} <- Server.Tickets.update(t, %{title: title, body: body}),
-               %Server.Thread{} <- lobby,
-               do: :ok
+          update(t, lobby, title, body)
       end
 
     if posted != :ok, do: Server.Rollout.note({:drift, repo}, body)
     :ok
   end
+
+  # the lobby's last word on a drift is its newest count; a notice, so it wakes nobody
+  defp update(t, lobby, title, body) do
+    with {:ok, _} <- Server.Tickets.update(t, %{title: title, body: body}),
+         %Server.Thread{id: tid} <- lobby,
+         {:ok, _} <- recount(t, tid, title, body),
+         do: :ok
+  end
+
+  defp recount(%{title: title}, _tid, title, _body), do: {:ok, nil}
+
+  defp recount(_t, tid, title, body),
+    do: Server.Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: "⚠ " <> title <> " — " <> body})
 
   defp label(repo), do: "drift:" <> repo
 
