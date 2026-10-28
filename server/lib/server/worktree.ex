@@ -90,6 +90,24 @@ defmodule Server.Worktree do
   end
 
   @doc """
+  Bring a thread's checkout onto origin/main on request (the seat's sandbox cannot: its settings file
+  is a bind mount, so its own `git rebase` dies half-way). `catch_up/1`'s fast-forward, plus `rebase
+  origin/main` for a branch with commits of its own. Never fetches. `:moved | :level | {:rebased, n}`
+  (n own commits replayed) `| {:refused, reason}` (dirty, a half-done git operation, detached, or a
+  conflict — the rebase is aborted, the branch as it was) `| {:error, why}`.
+  """
+  def bring_to_main(wt) do
+    with :ok <- refuse_half_done(wt) do
+      case catch_up(wt) do
+        :detached -> {:refused, "HEAD is detached — check out the thread branch first"}
+        :dirty -> {:refused, "uncommitted changes — commit or discard them first, then ask again"}
+        {:ahead, n} -> rebase_onto_main(wt, n)
+        other -> other
+      end
+    end
+  end
+
+  @doc """
   The checkout's tip when origin/main holds commits it lacks (a branch with its own work that main
   has moved past), `:no` when it does not or git cannot say.
   """
@@ -533,6 +551,39 @@ defmodule Server.Worktree do
       dirty?(wt) -> :dirty
       match?({_, 0}, git(wt, ["merge-base", "--is-ancestor", "HEAD", "origin/main"])) -> forward(wt)
       true -> own_commits(wt)
+    end
+  end
+
+  # Before catch_up/1: a stopped rebase with a clean tree reads as `{:ahead, _}` there, and a second
+  # rebase over it would corrupt the branch.
+  defp refuse_half_done(wt) do
+    with {dir, 0} <- git(wt, ["rev-parse", "--absolute-git-dir"]),
+         half when is_binary(half) <-
+           Enum.find(
+             ~w(rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD),
+             &File.exists?(Path.join(String.trim(dir), &1))
+           ) do
+      {:refused, "a #{half} is in progress — finish or abort it first"}
+    else
+      _ -> :ok
+    end
+  end
+
+  defp rebase_onto_main(wt, n) do
+    if moved_past(wt) == :no do
+      :level
+    else
+      # --no-update-refs: the machine's git config sets rebase.updateRefs
+      case git(wt, ["rebase", "--quiet", "--no-update-refs", "origin/main"]) do
+        {_, 0} ->
+          {:rebased, n}
+
+        {out, _} ->
+          _ = git(wt, ["rebase", "--abort"])
+
+          {:refused,
+           "rebase onto origin/main hit a conflict, aborted — the branch is as it was: #{String.slice(out, 0, 300)}"}
+      end
     end
   end
 end

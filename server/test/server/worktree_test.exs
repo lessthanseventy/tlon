@@ -619,4 +619,135 @@ defmodule Server.WorktreeTest do
       assert Worktree.report_once?(ctx.wt, "ahead:def:1")
     end
   end
+
+  describe "bring_to_main/1 — a seat's checkout moved onto origin/main on request" do
+    setup %{repo: repo, git: git} do
+      remote = repo <> "-origin.git"
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+      on_exit(fn -> File.rm_rf!(remote) end)
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["remote", "add", "origin", remote])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+      {:ok, wt} = Worktree.ensure(repo, "x")
+      wt_git = fn args -> System.cmd("git", ["-C", wt | args], stderr_to_stdout: true) end
+
+      advance = fn ->
+        File.write!(Path.join(repo, "NEW"), "more\n")
+        {_, 0} = git.(["add", "NEW"])
+        {_, 0} = git.(["commit", "-qm", "main moves"])
+        {_, 0} = git.(["push", "-q", "origin", "main"])
+        {_, 0} = git.(["fetch", "-q", "origin"])
+      end
+
+      # main and the checkout each rewrite README their own way: a rebase of one onto the other conflicts
+      collide = fn ->
+        File.write!(Path.join(repo, "README"), "theirs\n")
+        {_, 0} = git.(["commit", "-qam", "main rewrites README"])
+        {_, 0} = git.(["push", "-q", "origin", "main"])
+        {_, 0} = git.(["fetch", "-q", "origin"])
+        File.write!(Path.join(wt, "README"), "mine\n")
+        {_, 0} = wt_git.(["commit", "-qam", "wt rewrites README"])
+      end
+
+      mine = fn ->
+        File.write!(Path.join(wt, "MINE"), "mine\n")
+        {_, 0} = wt_git.(["add", "MINE"])
+        {_, 0} = wt_git.(["commit", "-qm", "mine"])
+      end
+
+      head = fn g ->
+        {out, 0} = g.(["rev-parse", "HEAD"])
+        String.trim(out)
+      end
+
+      %{wt: wt, wt_git: wt_git, advance: advance, collide: collide, mine: mine, head: head}
+    end
+
+    test "behind and clean → fast-forwarded", ctx do
+      ctx.advance.()
+      assert :moved = Worktree.bring_to_main(ctx.wt)
+      assert ctx.head.(ctx.wt_git) == ctx.head.(ctx.git)
+      assert File.exists?(Path.join(ctx.wt, "NEW"))
+    end
+
+    test "own commit and main moved → rebased onto origin/main, the branch kept", ctx do
+      ctx.mine.()
+      ctx.advance.()
+      assert {:rebased, 1} = Worktree.bring_to_main(ctx.wt)
+      {parent, 0} = ctx.wt_git.(["rev-parse", "HEAD~1"])
+      assert String.trim(parent) == ctx.head.(ctx.git)
+      assert File.exists?(Path.join(ctx.wt, "MINE"))
+      assert File.exists?(Path.join(ctx.wt, "NEW"))
+      assert {"work/x\n", 0} = ctx.wt_git.(["rev-parse", "--abbrev-ref", "HEAD"])
+    end
+
+    test "already on origin/main, or own commits on a main that has not moved → level", ctx do
+      assert :level = Worktree.bring_to_main(ctx.wt)
+      ctx.mine.()
+      before = ctx.head.(ctx.wt_git)
+      assert :level = Worktree.bring_to_main(ctx.wt)
+      assert ctx.head.(ctx.wt_git) == before
+    end
+
+    test "uncommitted changes → refused with the reason, nothing moved", ctx do
+      ctx.mine.()
+      ctx.advance.()
+      before = ctx.head.(ctx.wt_git)
+
+      File.write!(Path.join(ctx.wt, "SCRATCH"), "x\n")
+      assert {:refused, reason} = Worktree.bring_to_main(ctx.wt)
+      assert reason =~ "uncommitted"
+      assert ctx.head.(ctx.wt_git) == before
+      assert File.exists?(Path.join(ctx.wt, "SCRATCH"))
+      File.rm!(Path.join(ctx.wt, "SCRATCH"))
+
+      File.write!(Path.join(ctx.wt, "README"), "edited\n")
+      assert {:refused, reason} = Worktree.bring_to_main(ctx.wt)
+      assert reason =~ "uncommitted"
+      assert ctx.head.(ctx.wt_git) == before
+      assert File.read!(Path.join(ctx.wt, "README")) == "edited\n"
+    end
+
+    test "a rebase stopped on a conflict → refused, left exactly as it is", ctx do
+      ctx.collide.()
+      {_, code} = ctx.wt_git.(["rebase", "origin/main"])
+      assert code != 0
+      {git_dir, 0} = ctx.wt_git.(["rev-parse", "--absolute-git-dir"])
+      stopped = Path.join(String.trim(git_dir), "rebase-merge")
+      assert File.dir?(stopped)
+      {status, 0} = ctx.wt_git.(["status", "--porcelain"])
+
+      assert {:refused, reason} = Worktree.bring_to_main(ctx.wt)
+      assert reason =~ "rebase"
+      assert File.dir?(stopped)
+      assert {^status, 0} = ctx.wt_git.(["status", "--porcelain"])
+    end
+
+    test "a detached HEAD → refused", ctx do
+      ctx.advance.()
+      before = ctx.head.(ctx.wt_git)
+      {_, 0} = ctx.wt_git.(["checkout", "-q", "--detach"])
+      assert {:refused, reason} = Worktree.bring_to_main(ctx.wt)
+      assert reason =~ "detached"
+      assert ctx.head.(ctx.wt_git) == before
+    end
+
+    test "a rebase that would conflict → aborted and refused, the branch as it was", ctx do
+      ctx.collide.()
+      before = ctx.head.(ctx.wt_git)
+      assert {:refused, reason} = Worktree.bring_to_main(ctx.wt)
+      assert reason =~ "conflict"
+      assert ctx.head.(ctx.wt_git) == before
+      assert {"", 0} = ctx.wt_git.(["status", "--porcelain"])
+      {git_dir, 0} = ctx.wt_git.(["rev-parse", "--absolute-git-dir"])
+      refute File.exists?(Path.join(String.trim(git_dir), "rebase-merge"))
+      assert File.read!(Path.join(ctx.wt, "README")) == "mine\n"
+    end
+
+    test "no origin/main → level", ctx do
+      {_, 0} = ctx.git.(["remote", "remove", "origin"])
+      assert :level = Worktree.bring_to_main(ctx.wt)
+    end
+  end
 end
