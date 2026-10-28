@@ -757,7 +757,7 @@ test("a refusal beneath the mod is reported with the call and the check's reason
 
   expect(r.decision).toBe("deny");
   expect(sent.filter((d) => d.tool === "tool_denied")).toEqual([
-    { tool: "tool_denied", args: { tool: "Bash", summary: "Bash · mise run release:smoke", reason: "Auto-Mode Bypass" } },
+    { tool: "tool_denied", args: { tool: "Bash", summary: "Bash · mise run release:smoke", command: "mise run release:smoke", reason: "Auto-Mode Bypass" } },
   ]);
 });
 

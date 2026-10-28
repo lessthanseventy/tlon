@@ -10,7 +10,7 @@
 // With no thread identity and TLON_OPERATOR_MODE set, the same mod is the operator's: a band of what
 // waits on them, the release and their streak, and the coworkers' asks put to them as questions.
 
-import { doingOf, summaryOf } from "./lib/doing.ts";
+import { commandOf, doingOf, summaryOf } from "./lib/doing.ts";
 import { ago, asDossier, renderBrief, type ChatterMessage, type Dossier } from "./lib/brief.ts";
 import { detectCorrection } from "./lib/recall.ts";
 import {
@@ -648,7 +648,8 @@ export function register(on) {
   // these (two or more since the workline last moved, nobody working it), the check's reason with it.
   on("tool.check", async ($, e, next) => {
     const r = (await next(e)) as { decision?: string; reason?: string } | undefined;
-    if (thread && r?.decision === "deny") declare($, "tool_denied", { tool: e.tool, summary: summaryOf(e.tool, e.input, cwd), ...(r.reason ? { reason: r.reason } : {}) });
+    const command = commandOf(e.tool, e.input, cwd);
+    if (thread && r?.decision === "deny") declare($, "tool_denied", { tool: e.tool, summary: summaryOf(e.tool, e.input, cwd), ...(command ? { command } : {}), ...(r.reason ? { reason: r.reason } : {}) });
     return r;
   });
 
