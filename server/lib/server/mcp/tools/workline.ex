@@ -45,7 +45,8 @@ defmodule Server.MCP.Tool.SubmitReview do
   denied). On THIS thread, or with `thread_id` one you lead; refused outside the review stage. The `verdict`
   is recorded too (`Server.Workline.review_verdict/4`): `request_changes` sends the workline back
   to build at once; `approve` parks it at the merge gate itself (the verdict ends your session; there
-  is nothing more to call). A finding that
+  is nothing more to call), and the reply's `next` says where it went — or that the park was refused
+  and the workline still sits at review, said on its thread too. A finding that
   shouldn't block goes in `follow_ups`: posted on the workline, after the verdict, for the lead it
   hands to (the builder, QA or the operator), not filed as tickets.
   """
@@ -75,15 +76,14 @@ defmodule Server.MCP.Tool.SubmitReview do
          nil <- Server.Workline.self_review(thread, identity.agent),
          {:ok, rel} <- Review.submit(thread, params[:body], identity.agent) do
       follow_ups = Server.Workline.follow_up_items(params[:follow_ups] || [])
+      lead = Channel.thread_lead(thread.id)
 
       case Server.Workline.review_verdict(thread, params[:verdict], identity.agent, follow_ups: follow_ups) do
-        {:ok, _} ->
-          ok(frame, %{
-            "committed" => rel,
-            "verdict" => "approve",
-            "follow_ups" => length(follow_ups),
-            "next" => "parked at the merge gate — your session ends here"
-          })
+        {:ok, _} = outcome ->
+          approved(frame, rel, follow_ups, outcome, lead)
+
+        {:error, {:not_parked, _}} = outcome ->
+          approved(frame, rel, follow_ups, outcome, lead)
 
         {:error, {:bounced, _}} ->
           ok(frame, %{
@@ -107,6 +107,34 @@ defmodule Server.MCP.Tool.SubmitReview do
 
   defp known_verdict(v) when v in ~w(approve request_changes), do: :ok
   defp known_verdict(v), do: {:error, {:bad_verdict, v}}
+
+  @doc """
+  The reply's `next` line, read off what the verdict returned: the thread as parked on whoever it
+  awaits, handed to QA (its lead is no longer `lead_before`) or queued under a standing approval —
+  or the refusal, when the park did not happen and the workline still sits at review.
+  """
+  def next({:ok, %{awaiting: awaiting}}, _lead_before) when is_binary(awaiting),
+    do: "parked at the merge gate, awaiting #{awaiting} — your session ends here"
+
+  def next({:ok, thread}, lead_before) do
+    case Channel.thread_lead(thread.id) do
+      ^lead_before -> "in the merge queue under a standing approval — your session ends here"
+      lead -> "handed to #{lead} for QA — your session ends here"
+    end
+  end
+
+  def next({:error, {:not_parked, why}}, _lead_before),
+    do: "verdict recorded but not parked: #{why} — the workline still sits at review; said on its thread for its lead"
+
+  defp approved(frame, rel, follow_ups, outcome, lead) do
+    ok(frame, %{
+      "committed" => rel,
+      "verdict" => "approve",
+      "parked" => match?({:ok, _}, outcome),
+      "follow_ups" => length(follow_ups),
+      "next" => next(outcome, lead)
+    })
+  end
 end
 
 defmodule Server.MCP.Tool.SubmitQA do

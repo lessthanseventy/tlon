@@ -410,7 +410,7 @@ defmodule Server.WorklineTest do
     test "an approving review asks for a risk grade" do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       thread = open!(%{slug: "asks-grade", stage: "review"})
-      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+      reviewed!(thread)
       assert_enqueued(worker: Server.Jobs.Grade, args: %{thread_id: thread.id})
     end
 
@@ -438,10 +438,23 @@ defmodule Server.WorklineTest do
       assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "standing approval"))
     end
 
+    # a refused park is the stall #686 exists to end: it is said on the thread and returned, never
+    # reported as parked
+    test "an approving review whose park the advance refuses says so on the thread and returns not parked" do
+      thread = open!(%{slug: "unparked", stage: "review"})
+
+      assert {:error, {:not_parked, why}} =
+               Workline.review_verdict(thread, "approve", "lonnrot", artifacts: NonePresent)
+
+      assert why =~ "review.md"
+      assert %Server.Thread{stage: "review", awaiting: nil} = Repo.get!(Server.Thread, thread.id)
+      assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "not parked" and &1.body =~ "review.md"))
+    end
+
     test "standing approval: an approved review graded at or under the threshold joins the queue itself" do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       thread = open!(%{slug: "auto-low", stage: "review"})
-      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+      reviewed!(thread)
       graded!(thread, @low)
 
       assert {:ok, queued} =
@@ -461,7 +474,7 @@ defmodule Server.WorklineTest do
             {"unreviewed", nil, @low}
           ] do
         thread = open!(%{slug: slug, stage: "review"})
-        if verdict, do: {:ok, _} = Workline.review_verdict(thread, verdict, "lonnrot")
+        if verdict, do: reviewed!(thread)
         if grade, do: graded!(thread, grade)
 
         assert {:awaiting, %{awaiting: "andrew"}} =
@@ -472,7 +485,7 @@ defmodule Server.WorklineTest do
 
     test "with no threshold set, every review waits for the operator, however low its grade" do
       thread = open!(%{slug: "no-policy", stage: "review"})
-      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+      reviewed!(thread)
       graded!(thread, @low)
 
       assert {:awaiting, %{awaiting: "andrew"}} =
@@ -482,7 +495,7 @@ defmodule Server.WorklineTest do
     test "a grade that arrives after the gate parked lands it then" do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       thread = open!(%{slug: "graded-late", stage: "review"})
-      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+      reviewed!(thread)
 
       {:awaiting, parked} =
         Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2)
@@ -494,7 +507,7 @@ defmodule Server.WorklineTest do
 
     test "a grade over the threshold leaves the parked gate with the operator" do
       thread = open!(%{slug: "graded-high", stage: "review"})
-      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+      reviewed!(thread)
 
       {:awaiting, parked} =
         Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2)
@@ -549,7 +562,7 @@ defmodule Server.WorklineTest do
       on_exit(fn -> Application.put_env(:server, :operator, previous) end)
 
       thread = open!(%{slug: "other-operator", stage: "review"})
-      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+      reviewed!(thread)
 
       assert {:awaiting, %{awaiting: "someone"} = parked} =
                Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2)
@@ -1218,5 +1231,12 @@ defmodule Server.WorklineTest do
     assert row.key == "landed:#{landed.id}" and row.level == "info" and row.thread_id == t.id
     assert row.title == Server.Alerts.landed_title(%{thread_id: t.id, title: "Mailbox: letters"})
     assert row.title == "##{t.id} landed — Mailbox: letters"
+  end
+
+  # an approving verdict on a thread with no repo: the Git checker refuses the park, which leaves the
+  # gate to the test's own advance — the verdict is recorded all the same
+  defp reviewed!(thread) do
+    {:error, {:not_parked, _}} = Workline.review_verdict(thread, "approve", "lonnrot")
+    thread
   end
 end
