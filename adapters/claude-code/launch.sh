@@ -158,5 +158,9 @@ if command -v jq >/dev/null 2>&1 && command -v flock >/dev/null 2>&1; then
   ) 9>"$cj.tlon-lock" || true
 fi
 
+# The account's claude.ai connectors (Gmail, Zoho, Slack, …) are no seat's work, and their tool
+# names ride every turn's prompt: off here, the tlon MCP above is unaffected.
+export ENABLE_CLAUDEAI_MCP_SERVERS=false
+
 # The provider's endpoint (gateway.sh): an ollama model never draws on the Claude plan.
 exec "$adapter/gateway.sh" "${TLON_PROVIDER:-anthropic}" claude --name "$name" --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" "${plugins[@]}" "$@"
