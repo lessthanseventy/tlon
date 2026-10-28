@@ -1374,7 +1374,13 @@ defmodule Server.Workline do
       free != [] ->
         # the lead going off: off shift after a shift change, so looked up on the whole bench
         builder = thread.workspace_id |> Server.Workspaces.bench_all() |> Enum.find(&(&1.name == current))
-        candidates = Enum.map(free, &%{coworker: &1, model: seat_model(thread.workspace_id, &1)})
+
+        candidates =
+          Enum.map(
+            free,
+            &%{coworker: &1, model: seat_model(thread.workspace_id, &1), trust: Server.Trust.record(&1.name)}
+          )
+
         {pick, short} = Server.Roster.pick(candidates, wanted(thread, kind, builder))
         hand_to(thread, kind, pick.name, shortfall(short, builder, thread.workspace_id))
 
@@ -1436,7 +1442,13 @@ defmodule Server.Workline do
     free = Enum.reject(of_kind, &leading_another?(&1, %Thread{id: 0}))
     want = %{grade: Server.Roster.wanted_grade(text, grade), specialty: Server.Roster.specialty_of(text)}
 
-    case Server.Roster.pick(Enum.map(if(free == [], do: of_kind, else: free), &%{coworker: &1, model: nil}), want) do
+    candidates =
+      Enum.map(
+        if(free == [], do: of_kind, else: free),
+        &%{coworker: &1, model: nil, trust: Server.Trust.record(&1.name)}
+      )
+
+    case Server.Roster.pick(candidates, want) do
       {%Server.Coworker{name: name}, _} -> name
       nil -> nil
     end

@@ -2,7 +2,9 @@ defmodule Server.Roster do
   @moduledoc """
   Who should take a piece of work, among the free seats of the kind it needs (roster design §6):
   the grade it wants, the area it touches, and for a review, a model other than the builder's at
-  no lower a grade. Pure — the caller hands in the candidates with their resolved models.
+  no lower a grade. Pure — the caller hands in the candidates with their resolved models and,
+  optionally, their `Server.Trust.record/1` (`trust`): between otherwise equal seats the better
+  first-time-landing rate wins; a missing record is neutral.
 
   The grade a piece of work wants is the manager's word when it gave one (`staff_child`'s
   `grade`); else greybeard for migrations, gates and the spec; else senior.
@@ -26,7 +28,7 @@ defmodule Server.Roster do
   end
 
   @doc """
-  The best of `candidates` (`%{coworker, model}`) for `want` (`grade`, and optionally `specialty`,
+  The best of `candidates` (`%{coworker, model}`, and `trust` when known) for `want` (`grade`, and optionally `specialty`,
   `not_model`, `min_grade`): `{coworker, shortfalls}`, the shortfalls `:same_model` and
   `:below_grade` naming what no candidate could meet; nil for none.
   """
@@ -40,7 +42,7 @@ defmodule Server.Roster do
       candidates
       |> Enum.with_index()
       |> Enum.min_by(fn {cand, i} ->
-        {same_model?(cand, want), below?(cand, want), distance(cand, want), miss?(cand, want), i}
+        {same_model?(cand, want), below?(cand, want), distance(cand, want), miss?(cand, want), -trust_rate(cand), i}
       end)
       |> elem(0)
 
@@ -62,4 +64,8 @@ defmodule Server.Roster do
 
   defp miss?(%{coworker: %{specialty: s}}, %{specialty: want}) when is_binary(want), do: s != want
   defp miss?(_cand, _want), do: false
+
+  # first-time-landing rate; no record (or no finished build) is neutral, so neither first nor last
+  defp trust_rate(%{trust: %{led: led, first_time: first}}) when led > 0, do: first / led
+  defp trust_rate(_cand), do: 0.5
 end
