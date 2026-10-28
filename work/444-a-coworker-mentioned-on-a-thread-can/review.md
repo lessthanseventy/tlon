@@ -1,22 +1,15 @@
-# Review: work/444-a-coworker-mentioned-on-a-thread-can @ 0c6127c (round 2)
+# Review: work/444-a-coworker-mentioned-on-a-thread-can @ 4f61635 (round 3)
 
-**Verdict: request_changes** — the round-1 blocking finding is not fixed; the round-1 follow-up is.
+**Verdict: approve** — the round-2 blocking finding is fixed; nothing else changed; no open findings remain.
 
-Read: my review.md at c39c407; `git diff c39c407..HEAD -- . ':!work/444-a-coworker-mentioned-on-a-thread-can'` (3 files: server/lib/server/mcp/tool.ex, server/lib/server/mcp/tools/thread.ex, server/test/server/mcp/server_test.exs; +14/−7); `grep -n consult_peer server/AGENTS.md`; `git log -1 -- server/AGENTS.md` → 5880bd8, which predates the branch. CHECKS: `mise run check` green on 0c6127c (23:42Z row); no `bench_contrast` row.
+Read: my review.md at fa7c021; `git diff fa7c021..HEAD -- . ':!work/444-a-coworker-mentioned-on-a-thread-can'` → one file, server/AGENTS.md, one hunk (+2/−2), the exact text review.md asked for; `grep -n consult_peer server/AGENTS.md` → none; `may_post?/2` defined at tool.ex:176 and named by PostMessage at tools/thread.ex:75, so the AGENTS.md pointer resolves. CHECKS: `mise run check` green on the branch at 00:01:27Z (verify's run); `bench_contrast` row reads "unmeasurable: server/AGENTS.md — a seat reads it, the bench never loads it" — not a REGRESSION, so not a finding and no habit to propose.
 
 ## Findings
 
-1. **server/AGENTS.md:230-232 still says the retired verb — unchanged since round 1.** The witness, verbatim on 0c6127c: "A mention of a coworker who isn't on the thread reaches them in their window on the workspace's standing thread; they answer with `consult_peer`." This change makes the line exactly wrong (the mentioned coworker now answers on the asker's thread with `post_message thread_id: N`; `consult_peer` is in the coworker profile's `excludeTools`, profiles.ex:328). Repo law: an AGENTS.md line the change makes stale is updated in the same change. The builder's round-2 commit addressed the two thread follow-ups (msg #15876) and not review.md's finding. Fix, one hunk:
-
-```
--thread reaches them in their window on the workspace's standing thread; they answer with
--`consult_peer`.)
-+thread reaches them in their window on the workspace's standing thread; the mention is the
-+invitation — they answer there with `post_message thread_id: N`, `Server.MCP.Tool.may_post?/2`.)
-```
+None.
 
 ## Verified this round, not findings
 
-- Round-1 follow-up 1 (refusal text overclaimed for the `leads?/2` verbs) is fixed in 0c6127c: `acting_thread/4` takes `who`, defaulting to "its lead"; only PostMessage passes "its lead, or someone @mentioned on it". The added test mints a lobby token for a mentioned agent, calls `push_branch` with `thread_id`, and asserts the refusal says "only its lead" and does not say "@mentioned". The `import … only:` list carries `acting_thread: 4`. Correct and minimal.
-- Round-1 follow-up 2 (adapters/skills/coordinate-via-funes/SKILL.md:30 still teaches `consult_peer`) is deferred as ticket #689 — out of this change's lines; not carried as a follow-up here since the ticket holds it.
-- Everything verified in round 1 (`may_post?/2` = `steers?/2 or mentioned?/2`; `steers?/2` untouched; `mentioned?/2` prefilter + `Server.Mentions.names/1` exact match; switchboard wake text; commit trailers) is unchanged by 0c6127c.
+1. **Round-2 finding fixed.** server/AGENTS.md:230-232 now reads, verbatim: "the mention is the invitation — they answer there with `post_message thread_id: N`, `Server.MCP.Tool.may_post?/2`." The retired verb is gone from the file.
+2. **Nothing else touched** since fa7c021: the code, tests and switchboard text verified in rounds 1 and 2 (`may_post?/2` = `steers?/2 or mentioned?/2`; `steers?/2` unchanged; `acting_thread/4` with a per-verb `who`; the mentioned-agent post / no-mention refusal / push_branch "only its lead" tests; the cross-thread wake text naming post_message) stand as reviewed.
+3. **Earlier follow-ups**: #1 (per-verb refusal text) landed in 0c6127c; #2 (adapters/skills/coordinate-via-funes/SKILL.md still teaching consult_peer) is ticket #689, outside this change's lines. No follow-ups carried.
