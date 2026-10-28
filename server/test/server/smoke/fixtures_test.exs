@@ -17,7 +17,7 @@ defmodule Server.Smoke.FixturesTest do
 
   test "tool_denied_need seeds an open thread the Needs list reports as tool_denied" do
     assert :ok = Fixtures.apply("tool_denied_need", "tlon_smoke_4100")
-    assert [%{kind: "tool_denied", level: "blocking"}] = Server.Office.Needs.list()
+    assert [%{kind: "tool_denied", level: "blocking", rule: "Bash(echo hi)"}] = Server.Office.Needs.list()
   end
 
   test "ticket_tree seeds an initiative, its epic, a free child, a child in flight and a loose ticket" do
