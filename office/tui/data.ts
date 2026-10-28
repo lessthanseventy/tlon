@@ -311,9 +311,9 @@ export const advance = (id: number) => write(`advancing #${id}`, `/threads/${id}
 export const handOff = (id: number, agent: string) => write(`handing #${id} off`, `/threads/${id}/hand-off`, { agent }, () => `#${id} handed to ${agent}`)
 /** a workline back to an earlier stage on its own branch, the build kept; `why` reaches the stage's lead */
 export const sendBack = (id: number, stage: "spec" | "plan" | "build", why: string) => write(`sending #${id} back to ${stage}`, `/threads/${id}/send_back`, { stage, why }, () => `#${id} back to ${stage}`)
-/** the refused command's allow rule is in your own settings now: said on the thread, which wakes the lead to run it again */
 /** a tool refusal's decision handed to Uqbar: a post to it on the thread, its lead untouched */
 export const refusalToUqbar = (id: number, text: string) => write(`asking Uqbar about #${id}`, `/threads/${id}/messages`, { body: `@uqbar decide this tool refusal for me: ${text}` }, () => `#${id}: Uqbar asked to decide`)
+/** the refused command's allow rule is in your own settings now: said on the thread, which wakes the lead to run it again */
 /** a backslash does not escape inside a Markdown code span: a text holding backticks takes a fence one longer than its longest run, spaced so a run at either end is not read as the fence */
 const codeSpan = (text: string) => {
   const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length))
