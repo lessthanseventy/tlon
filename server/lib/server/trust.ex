@@ -36,8 +36,14 @@ defmodule Server.Trust do
     end
   end
 
-  @doc "`%{led, first_time}` over `name`'s last #{@window} finished builds."
-  def record(name) do
+  @doc "`%{led, first_time}` over `name`'s last #{@window} finished builds, on every model, unknown included."
+  def record(name), do: record(name, :any)
+
+  @doc """
+  `record/1` narrowed to the builds `name` took on `model` (the leads line's label). A line from before
+  the model was recorded is in no model's record.
+  """
+  def record(name, model) do
     threads =
       Repo.all(
         from m in Message,
@@ -46,6 +52,7 @@ defmodule Server.Trust do
           where:
             m.author == "tlon" and like(m.body, ^(leads_line(name, "build") <> "%")) and
               (t.stage == "landed" or t.state == "closed"),
+          where: ^on_model(model),
           distinct: t.id,
           order_by: [desc: t.id],
           limit: @window,
@@ -87,6 +94,10 @@ defmodule Server.Trust do
       _ -> {max, nil}
     end
   end
+
+  # strpos, not LIKE: a model label's `_` would be a wildcard. The closing bracket makes it exact.
+  defp on_model(:any), do: true
+  defp on_model(model), do: dynamic([m], fragment("strpos(?, ?) > 0", m.body, ^"[model: #{model}]"))
 
   defp bounced([]), do: []
 
