@@ -180,7 +180,7 @@ defmodule Server.Alerts do
         rule ->
           [
             call("Allowed it: #{rule}", "/messages", t, %{
-              body: "Allowed: `#{rule}` is in my Claude Code settings now; run it again."
+              body: "Allowed: #{code_span(rule)} is in my Claude Code settings now; run it again."
             })
           ]
       end
@@ -239,6 +239,17 @@ defmodule Server.Alerts do
     do: [%{label: "Take the checkout down", method: "POST", path: "/api/office/needs/retire", body: %{key: key}}]
 
   defp actions(_need), do: []
+
+  # a backslash does not escape inside a Markdown code span: a text holding backticks takes a fence one
+  # longer than its longest run, with a space inside so a run at either end is not read as the fence
+  defp code_span(text) do
+    longest = ~r/`+/ |> Regex.scan(text) |> Enum.map(fn [run] -> String.length(run) end) |> Enum.max(fn -> 0 end)
+
+    case longest do
+      0 -> "`#{text}`"
+      n -> "`" |> String.duplicate(n + 1) |> then(&"#{&1} #{text} #{&1}")
+    end
+  end
 
   defp answers(path, options),
     do: for(o <- options || [], do: %{label: o["label"], method: "POST", path: path, body: %{key: o["key"]}})
