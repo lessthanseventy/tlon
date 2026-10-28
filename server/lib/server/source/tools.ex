@@ -60,10 +60,43 @@ defmodule Server.Source.Tools do
   @doc """
   A run verb in the worktree — `:check` (`mix precommit`), `:test` (args: files/lines), `:format`
   (args: files), `:compile` — as `Menard.Run.result/3`'s one structured map.
+
+  Runs in `opts[:in]` (a path under the worktree). Without it: the worktree root if it holds a
+  `mix.exs`, else the one immediate subdirectory that does; `:format` takes plain files, so it
+  stays at the root. Zero or several candidates are refused, naming them.
   """
-  @spec run(Server.Thread.t(), :check | :test | :format | :compile, [String.t()]) :: {:ok, map()} | {:error, String.t()}
-  def run(thread, verb, args) when verb in [:check, :test, :format, :compile] do
-    with {:ok, root} <- root(thread), do: {:ok, Menard.Run.result(root, Atom.to_string(verb), args)}
+  @spec run(Server.Thread.t(), :check | :test | :format | :compile, [String.t()], keyword()) ::
+          {:ok, map()} | {:error, String.t()}
+  def run(thread, verb, args, opts \\ []) when verb in [:check, :test, :format, :compile] do
+    with {:ok, root} <- root(thread),
+         {:ok, dir} <- run_dir(root, verb, opts[:in]) do
+      {:ok, Menard.Run.result(dir, Atom.to_string(verb), args)}
+    end
+  end
+
+  defp run_dir(root, :format, nil), do: {:ok, root}
+
+  defp run_dir(root, _verb, nil) do
+    apps = for dir <- ["." | subdirs(root)], File.exists?(Path.join([root, dir, "mix.exs"])), do: dir
+
+    case apps do
+      ["." | _] -> {:ok, root}
+      [dir] -> {:ok, Path.join(root, dir)}
+      [] -> {:error, "no mix.exs at the worktree root or one level down: pass in: <dir>"}
+      many -> {:error, "several mix projects (#{Enum.join(many, ", ")}): pass in: <dir>"}
+    end
+  end
+
+  defp run_dir(root, _verb, dir) do
+    with {:ok, [{_rel, abs}]} <- resolve_all(root, [dir]), do: {:ok, abs}
+  end
+
+  defp subdirs(root) do
+    root
+    |> File.ls!()
+    |> Enum.reject(&String.starts_with?(&1, "."))
+    |> Enum.filter(&File.dir?(Path.join(root, &1)))
+    |> Enum.sort()
   end
 
   defp root(thread) do

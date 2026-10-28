@@ -96,6 +96,8 @@ Every Elixir edit and run goes through `~/projects/menard/bin/menard VERB …` (
 reference for which verb fits which shape. `--frozen` runs the last build, for editing Menard with Menard.
 Coworkers have the same verbs as tools scoped to their worktree (`edit_clause`, `rename_identifier`,
 `outline_file`, `run_verb`). The `Edit` tool is for what Menard doesn't cover: TypeScript, Lua, Nix.
+`run_verb` runs `check`/`test`/`compile` in the worktree's mix project — the root, else the one subdirectory
+with a `mix.exs` (`server/`); pass `in: <dir>` to pick another, and `format` args stay root-relative.
 
 ## How to work — the four rules
 

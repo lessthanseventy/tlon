@@ -119,12 +119,16 @@ defmodule Server.MCP.Tool.RunVerb do
   schema do
     field :verb, :enum, values: ["check", "test", "format", "compile"], required: true
     field :args, {:list, :string}, description: "test: files or file:line; format: files"
+
+    field :in, :string,
+      description:
+        "directory under the worktree to run in (default: the mix project — the root, or the one subdirectory with a mix.exs)"
   end
 
   @impl true
   def execute(params, frame) do
     RenameIdentifier.with_thread(frame, fn thread ->
-      case Tools.run(thread, String.to_existing_atom(params.verb), params[:args] || []) do
+      case Tools.run(thread, String.to_existing_atom(params.verb), params[:args] || [], in: params[:in]) do
         {:ok, result} -> ok(frame, result)
         {:error, message} -> fail(frame, message)
       end
