@@ -87,6 +87,17 @@ defmodule Server.Source.ToolsTest do
       assert many =~ "other" and many =~ "server" and many =~ "in:"
     end
 
+    test "`in: \".\"` is the worktree root itself", %{thread: t, wt: wt} do
+      mix_app(wt, ".")
+      assert {:ok, %{ok: true}} = Tools.run(t, :compile, [], in: ".")
+    end
+
+    test "`in` naming a directory that does not exist is refused, not passed on", %{thread: t, wt: wt} do
+      mix_app(wt, "server")
+      assert {:error, msg} = Tools.run(t, :compile, [], in: "nope")
+      assert msg =~ "nope"
+    end
+
     test "`in` outside the worktree is refused", %{thread: t} do
       assert {:error, msg} = Tools.run(t, :compile, [], in: "../..")
       assert msg =~ "outside"
