@@ -122,6 +122,25 @@ defmodule Server.Workline.Publish do
     end
   end
 
+  defp lease_push(repo, branch, run) do
+    case run.("git", ["-C", repo, "push", "--force-with-lease", "origin", branch], cd: repo, stderr_to_stdout: true) do
+      {_, 0} -> :ok
+      {out, _} -> {:error, "push of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
+    end
+  end
+
+  # A landing deletes the branch on origin, leaving the tracking ref stale, and the lease then
+  # refuses with "stale info". An explicit refspec never prunes (git dies "couldn't find remote
+  # ref"); a glob does, and the branch charset has no glob character of its own.
+  defp prune_branch(repo, branch, run) do
+    refspec = "+refs/heads/#{branch}*:refs/remotes/origin/#{branch}*"
+
+    case run.("git", ["-C", repo, "fetch", "--prune", "origin", refspec], cd: repo, stderr_to_stdout: true) do
+      {_, 0} -> :ok
+      {out, _} -> {:error, "fetch of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
+    end
+  end
+
   @doc """
   Whether `agent` may push `branch` by name: only `work/<agent>-<something>`, so a seat can push
   a branch bearing its own name and nothing else. `:ok` | `{:error, why}`.
@@ -143,14 +162,9 @@ defmodule Server.Workline.Publish do
   never main, never anything else. `:ok` | `{:error, why}`.
   """
   def push_branch(repo, branch, run \\ &System.cmd/3) do
-    if Regex.match?(~r{\Awork/[a-z0-9][a-z0-9-]*\z}, branch) do
-      case run.("git", ["-C", repo, "push", "--force-with-lease", "origin", branch], cd: repo, stderr_to_stdout: true) do
-        {_, 0} -> :ok
-        {out, _} -> {:error, "push of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
-      end
-    else
-      {:error, "#{branch} is not a thread's work/<slug> branch — only those are pushed"}
-    end
+    with :ok <- thread_branch(branch),
+         :ok <- prune_branch(repo, branch, run),
+         do: lease_push(repo, branch, run)
   end
 
   @doc """
@@ -323,5 +337,11 @@ defmodule Server.Workline.Publish do
       {_, 0} -> :auto
       {out, _} -> {:error, out |> String.trim() |> String.slice(0, 300)}
     end
+  end
+
+  defp thread_branch(branch) do
+    if Regex.match?(~r{\Awork/[a-z0-9][a-z0-9-]*\z}, branch),
+      do: :ok,
+      else: {:error, "#{branch} is not a thread's work/<slug> branch — only those are pushed"}
   end
 end
