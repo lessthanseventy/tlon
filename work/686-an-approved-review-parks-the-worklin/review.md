@@ -1,14 +1,14 @@
-approve
+# Review — workline 686 (an approved review parks the workline itself)
 
-No free reviewer is at the builder's grade (greybeard); tzinacan (cheap tier) reviewed. Read the diff only. I did not run the suites and rely on pr.md's claim that server:check passed on 7ae9a69 (HEAD adds only pr.md).
+No free reviewer is at the builder's grade (greybeard); reviewed by tzinacan at a lower grade.
 
-## Findings
-- Spec: matches #686. After an approving verdict the session is gone, so `record_verdict` now calls `advance/2` itself (`park_approved`) when no QA is owed. The QA path is untouched, request_changes is untouched, and `end_review` stays where it was.
-- `{:awaiting, t}` is returned as `{:ok, t}`, so the `review_verdict` contract holds. The standing-approval path (`{:ok, moved}`) is covered by a test.
-- `{:error, _} -> {:ok, thread}` leaves the verdict standing with `awaiting` nil if the advance is refused. This is the old stall, but now only on a refusal, and the refusal is in the ledger. Acceptable; see the follow-up.
-- Text consistency: the tool's `next`, the review brief, the exit line and the continuation no longer say `advance_stage`. The tests (including the new `refute ... "advance_stage"`) and the stage-discipline eval clause are updated to match.
-- The new tests exercise the real door (`SubmitReview.execute`) and assert the thread ends up awaiting `andrew`.
-- No migration, dependency, gate or AGENTS.md change.
+**Verdict: approve**
 
-## Follow_ups
-No ticket for the swallowed advance error: the refusal is already in the ledger and the case is narrow.
+## What I checked
+- `Server.Workline.review_verdict`: with no QA owed, an approval now calls `park_approved`, which runs `advance` itself. `{:awaiting, _}` and `{:ok, _}` return `{:ok, thread}`. An advance error posts a warning on the thread and returns `{:error, {:not_parked, why}}`, so a refused park is never reported as parked. The verdict stands either way.
+- `SubmitReview`: the reply now carries `parked` and a `next` read off the outcome (awaiting the operator, queued under a standing approval, handed to QA, or not parked). `not_parked` takes the same reply path as success, so the reviewer sees the refusal.
+- Brief, exit line and continuation text now say approve ends the session. They no longer say to call `advance_stage`, which would be a dead instruction.
+- `menard run test --in server` on `workline_review_head_test`, `workline_test` and `workline_brief_test`: 113 tests, 0 failures. I did not run the full gate; verify and landing do.
+
+## Notes (non-blocking)
+- `next/2` tells "standing approval" apart from "handed to QA" by whether the thread's lead changed. That is a heuristic and would misreport if QA were ever staffed with the same lead. Nothing in this change triggers it.
