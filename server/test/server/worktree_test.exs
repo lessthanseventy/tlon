@@ -311,6 +311,59 @@ defmodule Server.WorktreeTest do
       thread = struct!(Server.Thread, %{id: 3, workspace_id: nil, project_id: nil, slug: "x", title: "t"})
       assert {:error, :no_repo} = Server.worktree_for_thread(thread)
     end
+
+    test "bring_branch_to_main/1 moves the checkout on request and tells the thread every outcome", %{
+      repo: repo,
+      git: git,
+      ws: ws,
+      project: p
+    } do
+      remote = repo <> "-origin.git"
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+      on_exit(fn -> File.rm_rf!(remote) end)
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["remote", "add", "origin", remote])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = git.(["fetch", "-q", "origin"])
+
+      {:ok, thread} = Server.Channel.open_thread(%{title: "t", workspace_id: ws.id, project_id: p.id, slug: "asked"})
+      assert {:ok, wt} = Server.worktree_for_thread(thread)
+
+      notices = fn ->
+        for %{kind: "notice", author: "tlon", body: b} <- Server.Channel.thread_messages(thread), do: b
+      end
+
+      advance = fn name ->
+        File.write!(Path.join(repo, name), "more\n")
+        {_, 0} = git.(["add", name])
+        {_, 0} = git.(["commit", "-qm", "main moves"])
+        {_, 0} = git.(["push", "-q", "origin", "main"])
+        {_, 0} = git.(["fetch", "-q", "origin"])
+      end
+
+      advance.("NEW")
+      assert :moved = Server.bring_branch_to_main(thread)
+      assert File.exists?(Path.join(wt, "NEW"))
+      assert [moved] = notices.()
+      assert moved =~ "origin/main"
+
+      File.write!(Path.join(wt, "MINE"), "mine\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "MINE"])
+      {_, 0} = System.cmd("git", ["-C", wt, "commit", "-qm", "mine"])
+      advance.("NEW2")
+      assert {:rebased, 1} = Server.bring_branch_to_main(thread)
+      assert File.exists?(Path.join(wt, "NEW2"))
+      assert [_, rebased] = notices.()
+      assert rebased =~ "1 commit"
+
+      File.write!(Path.join(wt, "SCRATCH"), "x\n")
+      advance.("NEW3")
+      assert {:refused, why} = Server.bring_branch_to_main(thread)
+      assert why =~ "uncommitted"
+      assert [_, _, refused] = notices.()
+      assert refused =~ "uncommitted"
+      refute File.exists?(Path.join(wt, "NEW3"))
+    end
   end
 
   describe "stranded/2" do
