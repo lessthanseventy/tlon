@@ -19,8 +19,22 @@ defmodule Server.Trust do
   @earned_rate 0.8
   @ceiling 4
 
-  @doc "The line the workline machine posts when `name` takes a workline's `stage`; the record reads it back."
-  def leads_line(name, stage), do: "→ #{name} leads (#{stage} stage)"
+  @doc """
+  The line the workline machine posts when `name` takes a workline's `stage`, with the model the seat
+  launched on when known; the record reads both back. Brackets, not a separator: a model label holds
+  parentheses and underscores but never `]`.
+  """
+  def leads_line(name, stage, model \\ nil)
+  def leads_line(name, stage, nil), do: "→ #{name} leads (#{stage} stage)"
+  def leads_line(name, stage, model), do: "→ #{name} leads (#{stage} stage) [model: #{model}]"
+
+  @doc "The model a leads line was taken on, or nil (a line from before the model was recorded)."
+  def model_of(body) do
+    case Regex.run(~r/^→ \S+ leads \([a-z]+ stage\) \[model: ([^\]]+)\]/u, body) do
+      [_, model] -> model
+      _ -> nil
+    end
+  end
 
   @doc "`%{led, first_time}` over `name`'s last #{@window} finished builds."
   def record(name) do
