@@ -421,7 +421,7 @@ defmodule Server.ReleaseSmokeScriptTest do
       File.write!(Path.join(ctx.signal, "go"), "")
 
       assert {out, 0} = Task.await(smoke, 30_000)
-      assert out =~ "smoke: holding"
+      assert out =~ ~r/smoke: holding http\S+ up \(dir \S+\)/
       assert out =~ "the hold of http://127.0.0.1:#{port} expired after 2s"
     end
 
