@@ -236,7 +236,13 @@ defmodule Server.Smoke.Fixtures do
           thread_id: t.id,
           kind: "tool_denied",
           correlation: "tool_denied:#{t.id}",
-          detail: %{"agent" => "fixture", "tool" => "Bash", "summary" => "Bash · echo hi", "reason" => "fixture"}
+          detail: %{
+            "agent" => "fixture",
+            "tool" => "Bash",
+            "summary" => "Bash · echo hi",
+            "command" => "echo hi",
+            "reason" => "fixture"
+          }
         })
     end
 
