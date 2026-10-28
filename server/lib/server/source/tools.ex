@@ -88,7 +88,17 @@ defmodule Server.Source.Tools do
   end
 
   defp run_dir(root, _verb, dir) do
-    with {:ok, [{_rel, abs}]} <- resolve_all(root, [dir]), do: {:ok, abs}
+    case Path.expand(dir, root) do
+      ^root ->
+        {:ok, root}
+
+      _ ->
+        with {:ok, [{_rel, abs}]} <- resolve_all(root, [dir]) do
+          if File.dir?(abs),
+            do: {:ok, abs},
+            else: {:error, "no directory #{dir} in the worktree: pass in: <dir>"}
+        end
+    end
   end
 
   defp subdirs(root) do
