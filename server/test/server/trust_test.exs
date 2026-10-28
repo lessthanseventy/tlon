@@ -30,6 +30,14 @@ defmodule Server.TrustTest do
     t
   end
 
+  test "a leads line carries the model it was taken on, and reads it back" do
+    assert Trust.leads_line("ashe", "build") == "→ ashe leads (build stage)"
+    line = Trust.leads_line("ashe", "build", "m1 (claude_code)")
+    assert line == "→ ashe leads (build stage) [model: m1 (claude_code)]"
+    assert Trust.model_of(line <> " — note") == "m1 (claude_code)"
+    assert Trust.model_of("→ ashe leads (build stage)") == nil
+  end
+
   test "a record counts finished builds, and as first time only a merge never sent back to build" do
     built("hronir", "landed")
     built("hronir", "landed", 1)
