@@ -174,6 +174,7 @@ defmodule Server.ReviewFreshSessionTest do
 
       assert {:ok, _} =
                Workline.review_verdict(thread, "approve", "lonnrot",
+                 artifacts: Server.TestArtifacts.Present,
                  branch_head: nil,
                  paths: ["server/lib/server/workline.ex"],
                  follow_ups: ["clean! could clear stray rows"]

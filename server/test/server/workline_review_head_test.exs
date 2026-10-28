@@ -4,6 +4,7 @@ defmodule Server.WorklineReviewHeadTest do
   # approval (the workline's own docs, work/<slug>/, may move: review.md is committed after the
   # verdict). Coming back, the reviewer is pointed at what changed since its last look.
   use ExUnit.Case, async: false
+  use Oban.Testing, repo: Server.Repo
 
   import Ecto.Query
 
@@ -153,7 +154,40 @@ defmodule Server.WorklineReviewHeadTest do
     answer = JSON.decode!(text)
     assert answer["verdict"] == "approve"
     refute answer["next"] =~ "advance_stage"
+    assert answer["next"] =~ "awaiting andrew"
     assert %Thread{stage: "review", awaiting: "andrew"} = Repo.get!(Thread, thread.id)
+  end
+
+  # the reply's "next" is read off the thread the verdict returned, never a fixed string: a park the
+  # advance refused is said as not parked
+  test "submit_review's next line says where the workline went, or that it was not parked", %{root: root} do
+    alias Server.MCP.Tool.SubmitReview
+
+    thread = at_review(root, "where")
+    lead = Channel.thread_lead(thread.id)
+    assert SubmitReview.next({:ok, %{thread | awaiting: "andrew"}}, lead) =~ "awaiting andrew"
+    assert SubmitReview.next({:ok, %{thread | awaiting: nil}}, lead) =~ "merge queue"
+    assert SubmitReview.next({:ok, %{thread | awaiting: nil}}, "someone-before") =~ "QA"
+    assert SubmitReview.next({:error, {:not_parked, "owed artifact missing: review.md"}}, "lonnrot") =~ "not parked"
+    assert SubmitReview.next({:error, {:not_parked, "owed artifact missing: review.md"}}, "lonnrot") =~ "review.md"
+  end
+
+  # park/3's approval-still-stands branch, now reached from the verdict itself (#686): an approval
+  # recorded on this code queues a fresh approving verdict after a docs-only commit without the operator
+  test "an approval that still stands queues a fresh approving verdict itself, without the operator",
+       %{root: root} do
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+    thread = at_review(root, "stands")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+    assert {:ok, %Thread{awaiting: nil}} = Workline.approve(parked(thread), artifacts: AllPresent, land: :queue)
+    assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+
+    on_branch(root, "stands", "work/stands/review.md", "approve, round two")
+
+    assert {:ok, %Thread{stage: "review", awaiting: nil}} =
+             Workline.review_verdict(Repo.get!(Thread, thread.id), "approve", "lonnrot", artifacts: AllPresent)
+
+    assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "still stands"))
   end
 
   test "the reviewed code lands, docs committed after it or not; code committed after it goes back to build",

@@ -2179,15 +2179,32 @@ defmodule Server.Workline do
 
   # The verdict ended the reviewer's session, so nobody is left to call advance_stage: the approval
   # parks the gate itself (#686) — on the operator, or straight into the queue under a standing
-  # approval. An advance refused here (review.md not committed, a test without a repo) leaves the
-  # verdict standing: the refusal is in the ledger as the artifact check.
+  # approval. A refused advance (review.md not committed, the queue down) is the stall #686 ends, so it
+  # is said on the thread and returned, never reported as parked; the verdict itself stands.
   defp park_approved(thread, opts) do
     case advance(Repo.get!(Thread, thread.id), opts) do
-      {:awaiting, parked} -> {:ok, parked}
-      {:ok, moved} -> {:ok, moved}
-      {:error, _} -> {:ok, thread}
+      {:awaiting, parked} ->
+        {:ok, parked}
+
+      {:ok, moved} ->
+        {:ok, moved}
+
+      {:error, why} ->
+        why = park_refusal(why)
+
+        post_brief(
+          thread,
+          "⚠ the approving verdict is recorded, but the workline is not parked at the gate: #{why}. " <>
+            "It sits at review until its lead advances it (advance_stage)."
+        )
+
+        {:error, {:not_parked, why}}
     end
   end
+
+  defp park_refusal({:artifact_missing, why}), do: "owed artifact missing: #{why}"
+  defp park_refusal({:queue, why}), do: "the merge queue refused it: #{inspect(why)}"
+  defp park_refusal(why), do: inspect(why)
 
   defp by_hand(thread, url) do
     record_publish(thread, 0, url)
