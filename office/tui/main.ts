@@ -59,6 +59,7 @@ import { READER_KEYS, Reader, type ReaderDeps } from "./reader"
 import { timelineRows } from "./timeline"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
 import { badge, cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input, type Seg } from "./term"
+import { execSelf, selfArgv } from "./exec"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
@@ -894,20 +895,21 @@ const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, que
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev
-/** start this TUI over on the new code: hand the terminal back, run the same command, leave with its code */
+/** start this TUI over on the new code: hand the terminal back and exec the same command in place */
 // every interval this process runs, so a relaunch can stop them all
 const timers: ReturnType<typeof setInterval>[] = []
 const every = (fn: () => unknown, ms: number) => { timers.push(setInterval(fn, ms)) }
 
 async function relaunch() {
   leave()
-  // hand the terminal over whole: a parent still ticking draws its own room on alternate frames
-  // with the child's (a strobe) and takes keys meant for it
+  execSelf(selfArgv())
+  // exec failed: run the new code as a child, the terminal handed over whole — a parent still
+  // ticking draws its own room on alternate frames with the child's (a strobe) and takes its keys
   mute()
   for (const t of timers) clearInterval(t)
   process.stdin.removeAllListeners("data")
   process.stdin.pause()
-  const child = Bun.spawn([process.execPath, ...process.argv.slice(1)], { stdio: ["inherit", "inherit", "inherit"], env: process.env })
+  const child = Bun.spawn(selfArgv(), { stdio: ["inherit", "inherit", "inherit"], env: process.env })
   process.exit(await child.exited)
 }
 
