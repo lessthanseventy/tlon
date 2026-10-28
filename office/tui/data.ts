@@ -313,13 +313,13 @@ export const handOff = (id: number, agent: string) => write(`handing #${id} off`
 export const sendBack = (id: number, stage: "spec" | "plan" | "build", why: string) => write(`sending #${id} back to ${stage}`, `/threads/${id}/send_back`, { stage, why }, () => `#${id} back to ${stage}`)
 /** a tool refusal's decision handed to Uqbar: a post to it on the thread, its lead untouched */
 export const refusalToUqbar = (id: number, text: string) => write(`asking Uqbar about #${id}`, `/threads/${id}/messages`, { body: `@uqbar decide this tool refusal for me: ${text}` }, () => `#${id}: Uqbar asked to decide`)
-/** the refused command's allow rule is in your own settings now: said on the thread, which wakes the lead to run it again */
 /** a backslash does not escape inside a Markdown code span: a text holding backticks takes a fence one longer than its longest run, spaced so a run at either end is not read as the fence */
 const codeSpan = (text: string) => {
   const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length))
   const fence = "`".repeat(longest + 1)
   return longest ? `${fence} ${text} ${fence}` : `${fence}${text}${fence}`
 }
+/** the refused command's allow rule is in your own settings now: said on the thread, which wakes the lead to run it again */
 export const allowed = (id: number, rule: string) => write(`telling #${id} it is allowed`, `/threads/${id}/messages`, { body: `Allowed: ${codeSpan(rule)} is in my Claude Code settings now; run it again.` }, () => `#${id} told: allowed`)
 export const move = (id: number, project: number) => write(`moving #${id}`, `/threads/${id}/move`, { project_id: project }, () => `#${id} moved`)
 export const deleteThread = (id: number) => send("DELETE", `deleting #${id}`, `/threads/${id}`, (j) => `deleted #${id}${j.worktree ? ` — worktree ${j.worktree}` : ""}`)
