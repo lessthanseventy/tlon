@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { doingOf, summaryOf } from "./doing.ts";
+import { commandOf, doingOf, summaryOf } from "./doing.ts";
 
 test("pi's built-in tools and Claude Code's map to the same kinds", () => {
   expect(doingOf("read", {})).toBe("read");
@@ -56,4 +56,15 @@ test("a summary is one line, capped, and redacts anything credential-shaped", ()
   expect(s("OLLAMA_API_KEY=sk-live1234567890abcdef pi")).toBe("Bash · OLLAMA_API_KEY=… pi");
   expect(s("gh auth login --with-token ghp_abcdefghijklmnop1234")).not.toContain("ghp_abcdefghijklmnop1234");
   expect(s("x".repeat(500)).length).toBeLessThanOrEqual(120);
+});
+
+test("a Bash command is reported whole only when its summary holds it unredacted and uncut", () => {
+  const c = (command: string) => commandOf("Bash", { command }, "/");
+  expect(c("mise run release:smoke")).toBe("mise run release:smoke");
+  expect(c("  mise run check \n")).toBe("mise run check");
+  expect(c("echo a\necho b")).toBeUndefined();
+  expect(c("OLLAMA_API_KEY=sk-live1234567890abcdef pi")).toBeUndefined();
+  expect(c("x".repeat(500))).toBeUndefined();
+  expect(commandOf("Read", { file_path: "/a.ex" }, "/")).toBeUndefined();
+  expect(commandOf("bash", { command: "ls" }, "/")).toBe("ls");
 });

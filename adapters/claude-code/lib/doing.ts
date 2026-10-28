@@ -53,3 +53,15 @@ export function summaryOf(tool: string, input: unknown, cwd: string): string {
   const line = `${name} · ${target}`;
   return line.length > MAX ? `${line.slice(0, MAX - 1)}…` : line;
 }
+
+/**
+ * A Bash call's whole command, for the server's allow rule (`tool_denied`'s `command`): only when
+ * its summary holds it as is — nothing redacted, joined, cut or made relative — so the rule it builds
+ * is the call, and no secret leaves for the server. Otherwise undefined.
+ */
+export function commandOf(tool: string, input: unknown, cwd: string): string | undefined {
+  const command = (input as { command?: unknown } | null)?.command;
+  if (!SHELL.test(tool.toLowerCase()) || typeof command !== "string") return undefined;
+  const whole = command.trim();
+  return whole !== "" && summaryOf(tool, input, cwd) === `Bash · ${whole}` ? whole : undefined;
+}

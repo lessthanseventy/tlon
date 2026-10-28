@@ -76,7 +76,7 @@ pure parts are `lib/` (bun-tested).
 - `#` and `@` complete from the threads and crew the session knows.
 
 **What the session does differently**
-- `tool.check` reports a refused call (`tool_denied`, an adapter verb) with its summary line and the check's reason: two or more since the workline moved, with nobody working it, are the operator's `tool_denied` Need (`Server.Office.Needs`), which says the allow rule a refused Bash command would need. Not yet proven against a live refusal.
+- `tool.check` reports a refused call (`tool_denied`, an adapter verb) with its summary line, a Bash call's whole command (when the summary holds it unredacted and uncut) and the check's reason: two or more since the workline moved, with nobody working it, are the operator's `tool_denied` Need (`Server.Office.Needs`), which says the allow rule a refused Bash command would need. Not yet proven against a live refusal.
 - `tool.check` holds a `git push` (call `push_branch`), a branch switch in the live checkout, and a
   production write (`bin/server rpc`, `tlon-cli code`, `release:cut`: asked, never allowed).
 - `attribution.text` signs a commit as the running model, on its provider's address.
