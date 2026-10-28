@@ -61,6 +61,33 @@ defmodule Server.Source.ToolsTest do
     assert msg =~ "have:"
   end
 
+  test "a body-only replace on a clause with a multi-line body lands through the tool path (#442)", %{thread: t, wt: wt} do
+    File.write!(Path.join(wt, "needs.ex"), """
+    defmodule Needs do
+      defp tool_denied(open, listed) do
+        for t <- open, not MapSet.member?(listed, t.id) do
+          t
+        end
+      end
+    end
+    """)
+
+    body = ~S"""
+    for t <- open,
+        not MapSet.member?(listed, t.id),
+        denials = denials_since(t, last_moved(t, nil)),
+        length(denials) >= 2,
+        not on_duty?(t) do
+      last = hd(denials)
+
+      item("tool_denied", "blocking", t, tool_denied_text(t, denials), last.created_at)
+    end
+    """
+
+    assert {:ok, %{file: "needs.ex"}} = Tools.clause(t, :replace, "needs.ex", "tool_denied/2", "open, listed", body)
+    assert File.read!(Path.join(wt, "needs.ex")) =~ ~s|item("tool_denied", "blocking"|
+  end
+
   test "run verbs execute in the worktree and answer one structured result", %{thread: t} do
     # format works on any file (the demo is already formatted → nothing changed)
     assert {:ok, %{ok: true, changed: []}} = Tools.run(t, :format, ["demo.ex"])
