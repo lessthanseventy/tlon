@@ -11,7 +11,7 @@ defmodule Server.Jobs.SmokeTest do
   #!/usr/bin/env bash
   trap 'exit 0' TERM
   echo "smoke: abc1234 on :4999"
-  echo "smoke: holding http://127.0.0.1:4999 up — TLON_URL=http://127.0.0.1:4999 mise run office:drive -- <keys>"
+  echo "smoke: holding http://127.0.0.1:4999 up (dir /tmp/tlon-smoke/Ab1) — TLON_URL=http://127.0.0.1:4999 mise run office:drive -- <keys>"
   while true; do sleep 0.1; done
   """
 
@@ -76,6 +76,7 @@ defmodule Server.Jobs.SmokeTest do
     wait_for(fn -> Enum.any?(bodies(t.id), &(&1 =~ "http://127.0.0.1:4999")) end)
     assert Enum.any?(bodies(t.id), &(&1 =~ "drive_smoke"))
     assert {:error, "a smoke is already up" <> _} = Smoke.start(t, nil)
+    assert Smoke.held(t.id).meta["dir"] == "/tmp/tlon-smoke/Ab1"
 
     assert :ok = Smoke.stop(t.id)
     assert %{success: 1} = Task.await(task, 10_000)
@@ -127,6 +128,16 @@ defmodule Server.Jobs.SmokeTest do
 
     assert {:ok, out} = Smoke.drive(t.id, ["E"], wide: true, sandbox: true)
     assert out =~ "wide=1 text=1 sandbox=1"
+  end
+
+  test "a hold that recorded no dir says it drove the checkout's office-drive.sh", %{thread: t} do
+    {:ok, _} =
+      %{thread_id: t.id, ref: "x"}
+      |> Server.Jobs.Smoke.new(state: "executing", meta: %{"url" => "http://127.0.0.1:4999"})
+      |> Oban.insert()
+
+    assert {:ok, out} = Smoke.drive(t.id, ["--help"])
+    assert out =~ "(old hold: driving the checkout's office-drive.sh)"
   end
 
   test "start carries fixtures into the job's args, and leaves them out when there are none", %{thread: t} do

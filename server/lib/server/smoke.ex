@@ -18,6 +18,8 @@ defmodule Server.Smoke do
   # a fixture is a name, then optionally `:key=value,key=value` (no spaces: TLON_SMOKE_FIXTURES is split on them)
   @fixture ~r/\A[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*=[A-Za-z0-9_.-]+(?:,[a-z][a-z0-9_]*=[A-Za-z0-9_.-]+)*)?\z/
 
+  @old_hold_note "(old hold: driving the checkout's office-drive.sh)\n"
+
   @doc """
   Queue the held smoke of `ref` (default the thread's own branch) for `thread`. `fixtures` are
   checked here by grammar only: the catalog that knows them is the candidate's
@@ -100,6 +102,7 @@ defmodule Server.Smoke do
   namespace of its own).
   """
   @spec drive(integer(), [String.t()], keyword()) :: {:ok, String.t()} | {:error, String.t()}
+
   def drive(thread_id, keys, opts \\ []) do
     case held(thread_id) do
       nil ->
@@ -113,7 +116,7 @@ defmodule Server.Smoke do
         task = Task.async(fn -> System.cmd(exe, args, cd: dir, env: env, stderr_to_stdout: true) end)
 
         case Task.yield(task, 180_000) || Task.shutdown(task, :brutal_kill) do
-          {:ok, {out, _code}} -> {:ok, out}
+          {:ok, {out, _code}} -> {:ok, if(meta["dir"], do: out, else: @old_hold_note <> out)}
           _ -> {:error, "the drive did not finish in 3 minutes"}
         end
     end
