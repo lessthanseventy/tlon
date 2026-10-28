@@ -109,7 +109,7 @@ defmodule Server.Pause do
          do: _ = Channel.post(%{thread_id: id, author: "tlon", body: body, kind: "notice"})
   end
 
-  @doc "Whether the operator has paused this one thread."
+  @doc "Whether this one thread is paused, by the operator or by its lead's hold."
   def thread_paused?(thread_id),
     do: Server.Repo.exists?(from t in Server.Thread, where: t.id == ^thread_id and not is_nil(t.paused_at))
 

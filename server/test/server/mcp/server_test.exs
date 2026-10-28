@@ -1796,6 +1796,27 @@ defmodule Server.MCP.ServerTest do
     assert r["isError"]
   end
 
+  test "hold_thread refuses a closed thread and a thread already held, as errors" do
+    {:ok, thread} = Channel.open_thread(%{title: "held twice"})
+    {:ok, lead} = Staff.register_agent(%{name: "Holder2", mandate: "build", engine: "fresh"})
+    {:ok, _} = Server.Staff.assign(thread, lead)
+    token = MCP.Tokens.mint(thread, lead)
+    session = handshake(token)
+
+    r = call(token, session, 2, "hold_thread", %{"why" => "first"})
+    refute r["isError"]
+
+    r = call(token, session, 3, "hold_thread", %{"why" => "second"})
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "already held"
+    refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "held: second"))
+
+    Repo.update_all(from(t in Thread, where: t.id == ^thread.id), set: [state: "closed"])
+    r = call(token, session, 4, "hold_thread", %{"release" => true})
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "not open"
+  end
+
   test "post_message as a notice wakes nobody" do
     {:ok, thread} = Channel.open_thread(%{title: "acks"})
     {:ok, agent} = Staff.register_agent(%{name: "Acker", mandate: "build", engine: "fresh"})

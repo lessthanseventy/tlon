@@ -487,11 +487,15 @@ defmodule Server.MCP.Tool.HoldThread do
   def execute(params, frame) do
     case Tool.acting_thread(params, frame, &Tool.steers?/2, "its lead, the lead above it or the manager") do
       {:error, message} -> fail(frame, message)
-      thread -> hold(frame, thread, params)
+      %{state: "open"} = thread -> hold(frame, thread, params)
+      thread -> fail(frame, "thread ##{thread.id} is not open")
     end
   end
 
   defp hold(frame, thread, %{release: true}), do: reply(frame, Pause.resume_thread(thread.id), &state/1)
+
+  defp hold(frame, %{paused_at: paused_at} = thread, _) when paused_at != nil,
+    do: fail(frame, "thread ##{thread.id} is already held; release it first")
 
   defp hold(frame, thread, params) do
     case params[:why] do
