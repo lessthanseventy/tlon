@@ -7,5 +7,6 @@ Closes #492 (follow-up from #294).
 - `tool_denied` takes an optional `command`; the event stores it.
 - The mod's `commandOf` (adapters/claude-code/lib/doing.ts) sends a Bash call's whole command only when `summaryOf` holds it as is (nothing redacted, joined, cut or made relative), so a secret never leaves and a cut command never makes a wrong rule.
 - `rule_of/1` reads `detail["command"]`; an event with only a summary offers no rule.
+- The smoke fixture's `tool_denied_need` seeds the field too, so its card keeps "Allowed it: Bash(echo hi)" (review finding; its test asserts the rule).
 
-Checked: `menard run test --in server` on needs_test.exs + mcp/server_test.exs (189 green; RED first on the new field and on a summary-only event); `bun test lib` (90) and `bun run typecheck` in adapters/claude-code; `mise run adapters:claude-code:mod` (47 green, the refusal test RED first on the missing `command`).
+Checked: `menard run test --in server` on needs_test.exs + mcp/server_test.exs (189 green; RED first on the new field and on a summary-only event) and smoke/fixtures_test.exs (16 green, RED first on `rule: nil`); `bun test lib` (90) and `bun run typecheck` in adapters/claude-code; `mise run adapters:claude-code:mod` (47 green, the refusal test RED first on the missing `command`).
