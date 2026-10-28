@@ -114,6 +114,19 @@ defmodule Server do
     wt |> Server.Worktree.catch_up() |> tell_catch_up(wt, thread)
   end
 
+  @doc """
+  Bring a thread's checkout onto origin/main now (`Server.Worktree.bring_to_main/1`), the result told
+  to the thread as a notice. Unlike `catch_up_worktree/2` this is asked for, so every outcome is posted,
+  not once per state. Returns `bring_to_main/1`'s result, or `{:error, why}` when the thread has no checkout.
+  """
+  def bring_branch_to_main(%Server.Thread{} = thread) do
+    with {:ok, wt} <- worktree_for_thread(thread) do
+      result = Server.Worktree.bring_to_main(wt)
+      Server.Channel.post(%{thread_id: thread.id, author: "tlon", kind: "notice", body: moved_text(result)})
+      result
+    end
+  end
+
   # A thread's repo + its worktree name, the pair every worktree door resolves first.
   defp repo_and_name(thread) do
     with {:ok, repo} <- repo_for_thread(thread), do: {:ok, repo, Server.Worktree.name_for(thread)}
@@ -215,4 +228,13 @@ defmodule Server do
 
     :ok
   end
+
+  defp moved_text(:moved), do: "checkout fast-forwarded to origin/main"
+  defp moved_text(:level), do: "checkout already on origin/main"
+
+  defp moved_text({:rebased, n}),
+    do: "checkout rebased onto origin/main (#{n} commit#{if n == 1, do: "", else: "s"} replayed)"
+
+  defp moved_text({:refused, why}), do: "checkout not moved: #{why}"
+  defp moved_text({:error, why}), do: "checkout could not be moved to origin/main: #{inspect(why)}"
 end
