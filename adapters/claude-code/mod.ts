@@ -648,8 +648,10 @@ export function register(on) {
   // these (two or more since the workline last moved, nobody working it), the check's reason with it.
   on("tool.check", async ($, e, next) => {
     const r = (await next(e)) as { decision?: string; reason?: string } | undefined;
-    const command = commandOf(e.tool, e.input, cwd);
-    if (thread && r?.decision === "deny") declare($, "tool_denied", { tool: e.tool, summary: summaryOf(e.tool, e.input, cwd), ...(command ? { command } : {}), ...(r.reason ? { reason: r.reason } : {}) });
+    if (thread && r?.decision === "deny") {
+      const command = commandOf(e.tool, e.input, cwd);
+      declare($, "tool_denied", { tool: e.tool, summary: summaryOf(e.tool, e.input, cwd), ...(command ? { command } : {}), ...(r.reason ? { reason: r.reason } : {}) });
+    }
     return r;
   });
 
