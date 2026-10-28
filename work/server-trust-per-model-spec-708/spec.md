@@ -21,7 +21,7 @@ models. The ask (#504): a record per coworker **and model**. A workline does not
 3. **`record/1` and `record/2`.** `record(name)` is unchanged (all models, unknown included).
    `record(name, model)` is the same query with the line's model suffix equal to `model`. `builder/1`
    returns `{name, model | nil}` (internal; `allowance/2` is its only caller).
-4. **`allowance/2`.** Stays per coworker (decision pending — see Open). The approval card's evidence
+4. **`allowance/2`.** Stays per coworker (operator, #16512). The approval card's evidence
    map gains `model` (the builder's model on this workline) so the card says which model earned it.
 5. **Backfill: none.** Lines written before this have no suffix: model `nil` = unknown. They count in
    the per-coworker record and are excluded from every `record(name, model)` (never guessed as the seat's
@@ -34,10 +34,10 @@ models. The ask (#504): a record per coworker **and model**. A workline does not
 Grader-score averaging (dropped: they rate the change, not the builder). Trust's thresholds (window 20,
 8 builds, 80%, ceiling 4) are untouched.
 
-## Open — operator's call (gate law)
+## Decided — operator's call (gate law), #16512: per coworker
 Should `allowance/2` use `record(name, model)` instead of `record(name)`? Stricter: a re-pointed seat
-loses its earned `auto_land_risk` step until it earns 8 builds on the new model. Changes who gets
-auto-approval, so the spec does not decide it. Recommended: no (decision 4).
+loses its earned `auto_land_risk` step until it earns 8 builds on the new model. Not taken: it changes who gets
+auto-approval; a later per-model allowance is a separate operator decision.
 
 ## Plan (build)
 1. Red: `trust_test` — a build under two models yields `record(name, m1)` / `record(name, m2)` splits;
