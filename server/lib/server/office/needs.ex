@@ -848,9 +848,9 @@ defmodule Server.Office.Needs do
 
   # the Claude Code allow rule that would pass the refused call, for the operator to add to their own
   # settings (the one place the permission check honours one; the server never writes them): a
-  # Bash command whose summary line holds it whole
-  defp rule_of(%{detail: %{"tool" => "Bash", "summary" => "Bash · " <> command}}) do
-    if !String.ends_with?(command, "…"), do: "Bash(#{command})"
+  # Bash command the adapter reported whole in the event's `command` field
+  defp rule_of(%{detail: %{"tool" => "Bash", "command" => command}}) when is_binary(command) and command != "" do
+    "Bash(#{command})"
   end
 
   defp rule_of(_event), do: nil

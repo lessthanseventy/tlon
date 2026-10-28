@@ -531,6 +531,7 @@ defmodule Server.Office.NeedsTest do
               "agent" => "nolan",
               "tool" => "Bash",
               "summary" => "Bash · mise run release:smoke",
+              "command" => "mise run release:smoke",
               "reason" => "Auto-Mode Bypass"
             }
           })
@@ -565,6 +566,22 @@ defmodule Server.Office.NeedsTest do
       assert allowed.body.body =~ "Bash(mise run release:smoke)"
     end
 
+    test "the allow rule comes from the event's command field, never the summary's text", %{ws: ws} do
+      t = workline(ws, "review", 3)
+
+      for _ <- 1..2 do
+        {:ok, _} =
+          Server.Dossier.record_event(%{
+            thread_id: t.id,
+            kind: "tool_denied",
+            correlation: "tool_denied:#{t.id}",
+            detail: %{"agent" => "nolan", "tool" => "Bash", "summary" => "Bash · mise run release:smoke"}
+          })
+      end
+
+      assert [%{kind: "tool_denied", rule: nil}] = Needs.list()
+    end
+
     test "a hook's refusal offers no allow rule: no setting lifts it", %{ws: ws} do
       t = workline(ws, "review", 3)
 
@@ -578,6 +595,7 @@ defmodule Server.Office.NeedsTest do
               "agent" => "nolan",
               "tool" => "Bash",
               "summary" => "Bash · python3 x.py",
+              "command" => "python3 x.py",
               "reason" => "PreToolUse:Bash hook error: python3 does not run here"
             }
           })

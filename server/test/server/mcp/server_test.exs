@@ -596,6 +596,7 @@ defmodule Server.MCP.ServerTest do
       call(token, session, 4, "tool_denied", %{
         "tool" => "Bash",
         "summary" => "Bash · mise run release:smoke",
+        "command" => "mise run release:smoke",
         "reason" => "Auto-Mode Bypass"
       })
 
@@ -605,6 +606,7 @@ defmodule Server.MCP.ServerTest do
              Server.Repo.all(from(e in Server.Event, where: e.thread_id == ^thread.id and e.kind == "tool_denied"))
 
     assert detail["summary"] == "Bash · mise run release:smoke"
+    assert detail["command"] == "mise run release:smoke"
     assert detail["reason"] == "Auto-Mode Bypass"
   end
 
