@@ -89,15 +89,16 @@ defmodule Server.Source.Tools do
 
   defp run_dir(root, _verb, dir) do
     case Path.expand(dir, root) do
-      ^root ->
-        {:ok, root}
+      ^root -> {:ok, root}
+      _ -> existing_dir(root, dir)
+    end
+  end
 
-      _ ->
-        with {:ok, [{_rel, abs}]} <- resolve_all(root, [dir]) do
-          if File.dir?(abs),
-            do: {:ok, abs},
-            else: {:error, "no directory #{dir} in the worktree: pass in: <dir>"}
-        end
+  defp existing_dir(root, dir) do
+    with {:ok, [{_rel, abs}]} <- resolve_all(root, [dir]) do
+      if File.dir?(abs),
+        do: {:ok, abs},
+        else: {:error, "no directory #{dir} in the worktree: pass in: <dir>"}
     end
   end
 
