@@ -1,9 +1,7 @@
-APPROVE — 9c1515b, "Allowed-it body: fence a rule holding a backtick".
+REQUEST_CHANGES — one misplaced comment; the logic is fine.
 
-Read the diff only; I could not run the suites (menard's build dir is read-only in my seat). The gate on verify/landing is the proof.
+Read the diff at 09ca687; I did not run the suites.
 
-- Both copies (`Server.Alerts.code_span/1`, `codeSpan` in office/tui/data.ts) do the same thing: a fence one backtick longer than the longest run, padded with a space when any backtick is present. CommonMark strips that one space pair, so a run at either end can't merge with the fence. A rule with no backtick renders as before.
-- Each side has a test with the exact expected body.
-- Lines are under the formatter's 120; no AGENTS.md or spec text goes stale.
-
-Nit, not blocking: data.ts already had a stray doc comment above `refusalToUqbar` ("the refused command's allow rule…") that belongs on `allowed`. Pre-existing.
+- Fix is right: `Server.Alerts.code_span/1` and `codeSpan` in office/tui/data.ts fence with one backtick more than the longest run, space-padded. A rule with no backtick renders as before. Each side has an exact-body test.
+- BLOCKING (small): commit 09ca687 says "the allow-rule comment sits on allowed", but office/tui/data.ts:316 still sits above `codeSpan` (317 is its doc, 318 the const), so the "the refused command's allow rule is in your own settings now…" doc now describes `codeSpan`. Move line 316 to directly above `export const allowed` (line 323), after codeSpan's closing `}`. Nothing else changes.
+- Nit: pr.md ends "`mise run check` below" with nothing below it; add the result or drop the words.
