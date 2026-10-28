@@ -21,6 +21,7 @@ defmodule Server.WorklinePublishTest do
     assert {:ok, "https://github.com/o/r/pull/9"} = Publish.publish("/repo", "tiles", "Floor step 1", run)
 
     assert_received {:ran, ["git", "-C", "/repo", "remote", "get-url", "origin"]}
+
     assert_received {:ran, ["git", "-C", "/repo", "push", "--force-with-lease", "origin", "work/tiles"]}
 
     assert_received {:ran,
@@ -257,10 +258,20 @@ defmodule Server.WorklinePublishTest do
   end
 
   describe "push_branch/3 — the one way a coworker's branch reaches GitHub" do
-    test "force-pushes a work/* branch with a lease" do
-      run = runner([])
+    test "force-pushes a work/* branch with a lease on what origin holds" do
+      run = runner([{&match?(["git", _, _, "ls-remote" | _], &1), {"abc123\trefs/heads/work/tiles\n", 0}}])
       assert :ok = Publish.push_branch("/repo", "work/tiles", run)
-      assert_received {:ran, ["git", "-C", "/repo", "push", "--force-with-lease", "origin", "work/tiles"]}
+
+      assert_received {:ran,
+                       [
+                         "git",
+                         "-C",
+                         "/repo",
+                         "push",
+                         "--force-with-lease=refs/heads/work/tiles:abc123",
+                         "origin",
+                         "work/tiles"
+                       ]}
     end
 
     test "never main, nor any branch that isn't a thread's" do
@@ -269,28 +280,171 @@ defmodule Server.WorklinePublishTest do
       refute_received {:ran, _}
     end
 
-    test "prunes the branch's tracking ref before leasing, so a branch a landing deleted is leased as absent" do
+    test "asks origin for the branch's sha before pushing, and fetches nothing" do
+      run = runner([{&match?(["git", _, _, "ls-remote" | _], &1), {"abc123\trefs/heads/work/tiles\n", 0}}])
+      assert :ok = Publish.push_branch("/repo", "work/tiles", run)
+
+      assert_received {:ran, ["git", "-C", "/repo", "ls-remote", "origin", "refs/heads/work/tiles"]}
+
+      assert_received {:ran,
+                       [
+                         "git",
+                         "-C",
+                         "/repo",
+                         "push",
+                         "--force-with-lease=refs/heads/work/tiles:abc123",
+                         "origin",
+                         "work/tiles"
+                       ]}
+
+      refute_received {:ran, [_, _, _, "fetch" | _]}
+    end
+
+    test "a branch absent on origin is leased as absent" do
       run = runner([])
       assert :ok = Publish.push_branch("/repo", "work/tiles", run)
 
-      assert_received {:ran, [_, _, _, "fetch", "--prune", "origin", refspec] = fetch}
-      assert refspec == "+refs/heads/work/tiles*:refs/remotes/origin/work/tiles*"
-      assert_received {:ran, [_, _, _, "push" | _] = push}
-      assert fetch != push
-      refute_received {:ran, _}
+      assert_received {:ran,
+                       [
+                         "git",
+                         "-C",
+                         "/repo",
+                         "push",
+                         "--force-with-lease=refs/heads/work/tiles:",
+                         "origin",
+                         "work/tiles"
+                       ]}
     end
 
-    test "a failed prune-fetch refuses without pushing" do
-      run = runner([{&match?(["git", "-C", "/repo", "fetch" | _], &1), {"network down", 128}}])
+    test "a failed ls-remote refuses without pushing — a failure never reads as absent" do
+      run = runner([{&match?(["git", "-C", "/repo", "ls-remote" | _], &1), {"network down", 128}}])
       assert {:error, why} = Publish.push_branch("/repo", "work/tiles", run)
       assert why =~ "network down"
       refute_received {:ran, ["git", "-C", "/repo", "push" | _]}
+    end
+
+    test "ls-remote arrives before the push, and the push carries the explicit lease" do
+      run = runner([{&match?(["git", _, _, "ls-remote" | _], &1), {"abc123\trefs/heads/work/tiles\n", 0}}])
+      assert :ok = Publish.push_branch("/repo", "work/tiles", run)
+
+      assert {:messages, [{:ran, [_, _, _, "ls-remote" | _]} | rest]} = Process.info(self(), :messages)
+      assert [lease] = for({:ran, [_, _, _, "push", lease | _]} <- rest, do: lease)
+
+      assert lease == "--force-with-lease=refs/heads/work/tiles:abc123"
     end
 
     test "a refused push says why" do
       run = runner([{&match?(["git", "-C", "/repo", "push" | _], &1), {"stale info", 1}}])
       assert {:error, why} = Publish.push_branch("/repo", "work/tiles", run)
       assert why =~ "stale info"
+    end
+  end
+
+  describe "push_branch/2 against a real origin" do
+    @describetag :tmp_dir
+
+    defp git!(dir, args) do
+      {out, 0} = System.cmd("git", ["-C", dir | args], stderr_to_stdout: true)
+      String.trim(out)
+    end
+
+    defp clone!(origin, dir) do
+      {_, 0} = System.cmd("git", ["clone", "-q", origin, dir], stderr_to_stdout: true)
+      git!(dir, ["config", "user.email", "t@example.com"])
+      git!(dir, ["config", "user.name", "t"])
+      dir
+    end
+
+    defp commit!(dir, msg) do
+      git!(dir, ["commit", "-q", "--allow-empty", "-m", msg])
+      git!(dir, ["rev-parse", "HEAD"])
+    end
+
+    setup %{tmp_dir: tmp} do
+      origin = Path.join(tmp, "origin.git")
+      {_, 0} = System.cmd("git", ["init", "-q", "--bare", "-b", "main", origin])
+      clone = clone!(origin, Path.join(tmp, "a"))
+      git!(clone, ["checkout", "-q", "-b", "main"])
+      commit!(clone, "root")
+      git!(clone, ["push", "-q", "origin", "main"])
+      %{origin: origin, clone: clone, tmp: tmp}
+    end
+
+    test "a branch deleted on origin, its tracking ref stale, is pushed", %{origin: origin, clone: a} do
+      git!(a, ["checkout", "-q", "-b", "work/tiles"])
+      commit!(a, "one")
+      git!(a, ["push", "-q", "origin", "work/tiles"])
+      git!(origin, ["branch", "-q", "-D", "work/tiles"])
+      assert git!(a, ["rev-parse", "origin/work/tiles"])
+
+      assert :ok = Publish.push_branch(a, "work/tiles")
+      assert git!(origin, ["rev-parse", "work/tiles"]) == git!(a, ["rev-parse", "HEAD"])
+    end
+
+    defp advanced_by_hand!(origin, tmp) do
+      b = clone!(origin, Path.join(tmp, "b"))
+      git!(b, ["checkout", "-q", "work/tiles"])
+      theirs = commit!(b, "by hand")
+      git!(b, ["push", "-q", "origin", "work/tiles"])
+      theirs
+    end
+
+    test "a push is recorded in refs/tlon/pushed, not in origin/*", %{clone: a} do
+      git!(a, ["checkout", "-q", "-b", "work/tiles"])
+      head = commit!(a, "one")
+      assert :ok = Publish.push_branch(a, "work/tiles")
+      assert git!(a, ["rev-parse", "refs/tlon/pushed/work/tiles"]) == head
+    end
+
+    test "a branch someone advanced on origin since the server pushed it is never overwritten", %{
+      origin: origin,
+      clone: a,
+      tmp: tmp
+    } do
+      git!(a, ["checkout", "-q", "-b", "work/tiles"])
+      commit!(a, "one")
+      assert :ok = Publish.push_branch(a, "work/tiles")
+      theirs = advanced_by_hand!(origin, tmp)
+
+      commit!(a, "two")
+      assert {:error, why} = Publish.push_branch(a, "work/tiles")
+      assert why =~ "moved since the server last pushed it"
+      assert git!(origin, ["rev-parse", "work/tiles"]) == theirs
+    end
+
+    test "a branch with no record is pushed once on what origin holds, and recorded", %{clone: a} do
+      git!(a, ["checkout", "-q", "-b", "work/tiles"])
+      commit!(a, "one")
+      git!(a, ["push", "-q", "origin", "work/tiles"])
+      head = commit!(a, "two")
+
+      assert :ok = Publish.push_branch(a, "work/tiles")
+      assert git!(a, ["rev-parse", "refs/tlon/pushed/work/tiles"]) == head
+    end
+
+    test "a reland replaces a head GitHub moved, and records it", %{origin: origin, clone: a, tmp: tmp} do
+      git!(a, ["checkout", "-q", "-b", "work/tiles"])
+      commit!(a, "one")
+      assert :ok = Publish.push_branch(a, "work/tiles")
+      advanced_by_hand!(origin, tmp)
+
+      head = commit!(a, "rebased")
+      assert :ok = Publish.replace_branch(a, "work/tiles")
+      assert git!(origin, ["rev-parse", "work/tiles"]) == head
+      assert git!(a, ["rev-parse", "refs/tlon/pushed/work/tiles"]) == head
+    end
+
+    test "pushing work/uqbar leaves origin/work/uqbar-fix's tracking ref untouched", %{origin: origin, clone: a} do
+      git!(a, ["checkout", "-q", "-b", "work/uqbar-fix"])
+      commit!(a, "fix")
+      git!(a, ["push", "-q", "origin", "work/uqbar-fix"])
+      tracked = git!(a, ["rev-parse", "origin/work/uqbar-fix"])
+      git!(origin, ["branch", "-q", "-D", "work/uqbar-fix"])
+
+      git!(a, ["checkout", "-q", "-b", "work/uqbar"])
+      commit!(a, "own")
+      assert :ok = Publish.push_branch(a, "work/uqbar")
+      assert git!(a, ["rev-parse", "origin/work/uqbar-fix"]) == tracked
     end
   end
 end
