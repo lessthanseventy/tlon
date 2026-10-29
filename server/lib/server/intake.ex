@@ -205,33 +205,8 @@ defmodule Server.Intake do
   # defers: `after_s` runs from the newest such message. The manager's operator ask (a `prompt`)
   # naming it blocks while open, and defers from its resolution once answered.
   defp in_triage?(ticket, after_s, now) do
-    ref = ~r/##{ticket.id}(?!\d)/
-    named = fn m -> Regex.match?(ref, m.body) end
-
-    consults =
-      from(m in Server.Message,
-        where:
-          not is_nil(m.consult_id) and m.mirrored == false and m.created_at > ^ticket.updated_at and
-            ilike(m.body, ^"%##{ticket.id}%")
-      )
-      |> Repo.all()
-      |> Enum.filter(named)
-
-    manager = Server.Workspaces.manager(ticket.workspace_id)
-    root = Server.Channel.machine_thread(ticket.workspace_id)
-
-    replies =
-      if manager && root do
-        from(m in Server.Message,
-          where:
-            m.thread_id == ^root.id and m.author == ^manager.name and m.created_at > ^ticket.updated_at and
-              ilike(m.body, ^"%##{ticket.id}%")
-        )
-        |> Repo.all()
-        |> Enum.filter(named)
-      else
-        []
-      end
+    consults = naming(ticket, dynamic([m], not is_nil(m.consult_id) and m.mirrored == false))
+    replies = manager_messages(ticket)
 
     if Enum.any?(replies, &(&1.kind == "prompt" and is_nil(&1.resolved_at))) do
       true
@@ -240,5 +215,27 @@ defmodule Server.Intake do
       newest = Enum.max([ticket.updated_at | Enum.reject(stamps, &is_nil/1)], DateTime)
       DateTime.diff(now, newest) < after_s
     end
+  end
+
+  defp manager_messages(ticket) do
+    manager = Server.Workspaces.manager(ticket.workspace_id)
+    root = Server.Channel.machine_thread(ticket.workspace_id)
+
+    if manager && root do
+      naming(ticket, dynamic([m], m.thread_id == ^root.id and m.author == ^manager.name))
+    else
+      []
+    end
+  end
+
+  # Messages after the route whose body names `#id` (not `#id0`).
+  defp naming(ticket, filter) do
+    ref = ~r/##{ticket.id}(?!\d)/
+
+    from(m in Server.Message,
+      where: ^dynamic([m], ^filter and m.created_at > ^ticket.updated_at and ilike(m.body, ^"%##{ticket.id}%"))
+    )
+    |> Repo.all()
+    |> Enum.filter(&Regex.match?(ref, &1.body))
   end
 end
