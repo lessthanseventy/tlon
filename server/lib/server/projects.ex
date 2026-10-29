@@ -151,7 +151,7 @@ defmodule Server.Projects do
   The thread's project's OTHER checkouts, `~`-expanded: what its coworker may read but not write
   (the harness opens them beside the worktree). Never the thread's own repo, never a scope glob, never
   a path that is not a directory; `[]` for a thread with no project. Claude Code makes a read dir a
-  write root and bwrap mounts ~45 args per repo found under one, so the dirs together may hold
+  write root and bwrap mounts args per repo found under one, so the dirs together may hold
   `Server.SandboxBudget.read_dir_repos/0` repos: `read_dirs_split/1` keeps a dir while the running
   total fits and skips one that does not (a later, smaller one may still fit).
   """

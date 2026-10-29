@@ -56,7 +56,7 @@ defmodule Server.ProfilesTest do
     # The numbers are Server.SandboxBudget's: bwrap's arg limit, the args Claude Code mounts per repo
     # under a write root, the fixed checkouts and the headroom. The write roots are seeded to exactly
     # their reserve and the read dirs past their share, so the test states the split. One grower in the
-    # roots must break it alone: (110 + 65) * 45 = 7875 > 7500. Seeding more only slows the gate under load.
+    # roots must break it alone: 110 repos pass the whole budget. Seeding more only slows the gate under load.
     @tag :tmp_dir
     test "a seat's write roots stay under the bwrap budget however many repos the box has", %{tmp_dir: home} do
       # unbounded growers: 110 repos in each cache a seat might share, and in another seat's scratch
