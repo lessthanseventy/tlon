@@ -11,7 +11,8 @@ defmodule Server.Intake do
   started within `@stalled_after` is started by intake itself, with the workspace's lead
   (`Server.Tickets.start_thread/1`), and the sheriff told: a handed-over ticket never holds a slot
   in silence — unless triage is in progress: the manager naming the ticket on the root thread, or a
-  consult naming it, after the route, defers the 30 minutes (they run from the newest such message).
+  consult naming it, after the route, defers the 30 minutes (they run from the newest such message);
+  the manager's open operator ask naming it blocks until answered, then defers the same way.
   A ticket the manager labelled `held` (it waits on something; the why in its body) is
   neither routed nor started until the label comes off. Run by `Server.Jobs.Intake` on the cron.
   """
@@ -200,8 +201,9 @@ defmodule Server.Intake do
   end
 
   # Triage in progress: a consult ask naming the ticket, or the manager naming it on the workspace's
-  # root thread, after the route. A consult is never resolved (only operator asks are), so like a
-  # manager reply it only defers: `after_s` runs from the newest such message.
+  # root thread, after the route. A consult is never resolved, so like a manager reply it only
+  # defers: `after_s` runs from the newest such message. The manager's operator ask (a `prompt`)
+  # naming it blocks while open, and defers from its resolution once answered.
   defp in_triage?(ticket, after_s, now) do
     ref = ~r/##{ticket.id}(?!\d)/
     named = fn m -> Regex.match?(ref, m.body) end
@@ -231,8 +233,12 @@ defmodule Server.Intake do
         []
       end
 
-    stamps = Enum.map(consults ++ replies, & &1.created_at)
-    newest = Enum.max([ticket.updated_at | stamps], DateTime)
-    DateTime.diff(now, newest) < after_s
+    if Enum.any?(replies, &(&1.kind == "prompt" and is_nil(&1.resolved_at))) do
+      true
+    else
+      stamps = Enum.flat_map(consults ++ replies, &[&1.created_at, &1.resolved_at])
+      newest = Enum.max([ticket.updated_at | Enum.reject(stamps, &is_nil/1)], DateTime)
+      DateTime.diff(now, newest) < after_s
+    end
   end
 end
