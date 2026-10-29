@@ -51,7 +51,7 @@ linked window at a time, ctrl+] to the room).
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
   `mise run office:sandbox` (`--sandbox`, or `OFFICE_SANDBOX=1`) runs it on a made-up world, no server: `tui/sandbox.ts` is the
-  world, `data.useFake` the one seam in `data.ts`; the play keys are the shifted letters `D E T F N W P C`, which no other key uses, so they never shadow a card.
+  world, `data.useFake` the one seam in `data.ts`; one play key, `E`, opens a numbered card; digits pick the toy, so no letter shadows a card.
   The sandbox keeps its looks, souls, hall, cast, pets and store in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire or adopt never reaches the machine's files.
   The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, taken)` is seeded, no model, no I/O; a lock is kept by `pass` baking it into the overrides —
   `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `l` lists it), → hire, space locks a row so a pass keeps it, `e` edits the lit row (name, pitch and soul by prompt; archetype/grade/specialty cycle the roster vocabulary; a slot row opens the look card on a draft of the candidate's look, whose `s` saves it as `overrides.look` — never `looks.json` until hired) as an edit over the seed. `hall.json`
@@ -103,7 +103,7 @@ linked window at a time, ctrl+] to the room).
   one twice: **one meaning per key**, so a hint never needs a mode to read. A new key is a free letter or
   symbol and a `verb`, never a second use of a taken one. The reader's handlers are still `case`s in `reader.ts`; only its hints come from the table. A card's rows scroll (`tui/pane.ts`: with the
   selection, or pgup/pgdn and the wheel, `↑/↓ N more` where rows hide); the foot lists the actions
-  the column can't show — all of them on a terminal too narrow for it — then the global keys; `?` opens the help card (that card's keys, the globals, the reader's, the sandbox's play keys). Popups only where a choice needs a list (the finder).
+  the column can't show — all of them on a terminal too narrow for it — then the global keys; `?` opens the help card (that card's keys, the globals, the reader's, the sandbox's play key). Popups only where a choice needs a list (the finder).
 
 ## Law
 
