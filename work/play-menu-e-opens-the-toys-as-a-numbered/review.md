@@ -1,33 +1,29 @@
-# Review: play menu — E opens the toys as a numbered card (#607)
+# Review — play-menu-e-opens-the-toys-as-a-numbered (#607), round 2
 
-**Verdict: request_changes.** Branch `work/play-menu-e-opens-the-toys-as-a-numbered` at 30b144d, read against origin/main. Three findings; the first blocks.
+**Verdict: APPROVE** — reviewed a624f83113325eb75e2b75f927d007a0fbb305f8 against origin/main, and the delta since my round-1 verdict (96ec321).
 
-## 1. A toy fired from a card loses the card, and the person under it (blocks)
+## Round-1 findings, checked
 
-`toyKey` (office/tui/main.ts) opens `{ kind: "play" }` with no `from`. `open()` adds `from` only for person/thread/look/review/issue, so the play card's row `run` (`back(); playDo(b.id); …`) lands on home every time. `playDo` reads `mode` after that `back()`, so `under = mode.kind === "person" ? mode.name : null` is always null, and the `mode.kind === "pet" && mode.who === "dog"` branch of `play.pet` is dead.
+1. **FIXED — a toy fired from the play card lost the card.** `Mode` is now `{ kind: "play"; from?: Mode }` (office/tui/main.ts:76) and `open()` adds `from` for play as it does for person/thread/look/review/issue (main.ts:635). The row's `run` calls `back()` first, which restores `mode.from`, then `playDo` reads `mode`: `under` is the person again, and the `mode.kind === "pet"` branch on `play.pet` is reachable. New test in office/test/navigation.test.ts: crew → person → `E 8` → "pat pat" with the person's card still on screen and no HOME header. Verify ran it green on this head.
+2. **FIXED — office/AGENTS.md wording.** Line 21 now says "the play card's fire drill row (`play("drill")`)" and "row 1 of the sandbox's play card plays one". No reference to the retired F or to `e`.
+3. **FIXED — every play row has a `playDo` case.** office/test/sandbox.test.ts slices the `playDo` body and asserts `case "${b.id}"` for each `PLAY_ROWS` entry, guarded by a non-empty check.
 
-Consequence, versus main: on a person card, `P` patted that person and `C` called someone over to them. Now `E 8` pats the cat, `E 9` calls someone to `bench[1]`, and Esc after a toy no longer returns to the card you were on. The spec kept every toy "two keystrokes away"; it did not retarget them.
+## Also on the branch (out of scope for #607, read anyway)
 
-Fix (two lines):
-```
--  | { kind: "pet"; who: "cat" | "dog" } | { kind: "play" } | …
-+  | { kind: "pet"; who: "cat" | "dog" } | { kind: "play"; from?: Mode } | …
+office/test/rack-card.test.ts: per-wait deadline (e16c9e1), waits for the full "THE RACK · all green" header (bdac7f1), restarts tmux via `killServer(socket)` (a624f83). All three read correct; afterAll keeps a bare kill-server, which is fine for teardown.
 
--    case "E": open({ kind: "play" }); draw(); return true
-+    case "E": open({ kind: "play", from: mode.kind === "home" || mode.kind === "play" ? undefined : mode }); return true
-```
-(`open()` already draws.) Test that goes red first: in navigation.test, `tab` onto a person, `E` `8`, wait for "pat pat", expect the person card still on screen.
+## Spec compliance
 
-## 2. office/AGENTS.md still names the retired keys (fix in the same round)
-
-Line 21: "`F` (`play("drill")`) raises a `DRILL`-long one" and "`e` in the sandbox plays one". F is unbound by this branch; `e` was never the key. Say "the play card's fire drill row" and "row 1 of the sandbox's play card". Same-commit doc law.
-
-## 3. The toyKey/playDo coverage test is now vacuous (follow-up)
-
-sandbox.test "the help line's play keys are the keys toyKey() handles" now only proves `case "E"` exists. Nothing checks each `card:play` row has a `case "play.x"` in `playDo`; a row added to keys.ts with no case would be a card row that does nothing. Assert `case "${b.id}"` for every `PLAY_ROWS` entry over the `playDo` body.
+- One `sandbox-play` binding left (`play.e`, key E); D/T/F/N/W/P/C are gone from keys.ts. keys.test narrows to one key.
+- `card:play` has nine numbered rows 1–9 (event, Gary, doorbell, drill, treat, night, weather, pet, call); night/weather/call are filtered when there is no `world`.
+- Gary's direct summon is row 2 (`play.gary`).
+- No new key convention: digits are already a card's numbered menu.
 
 ## Not findings
 
-- bench_contrast: "unmeasurable" (office/AGENTS.md is read by a seat, never loaded by the bench). Not a REGRESSION row.
-- `mise run check` green on the branch is the server's verify run. I did not run the drive walk myself; "2 → Gary's at the dumpster in the wide room" is the builder's report, not verified here.
-- Key table: sandbox-play is `["E"]`, card:play rows 1..9, digits exempt from the one-verb rule by keys.test's `guarded`. Matches the plan.
+- bench_contrast rows read "unmeasurable: office/AGENTS.md — a seat reads it, the bench never loads it". Not a REGRESSION; no habit proposed.
+- Verify's `mise run check` passed on a624f83 (office: 940 pass, 0 fail). That is the server's run; I did not run the gate or the drive walk myself.
+
+## Follow-ups (non-blocking)
+
+See the follow_ups posted with this verdict: the navigation test's bare kill-server on a reused socket, and E pressed on the play card dropping `from`.
