@@ -66,7 +66,7 @@ defmodule Server.Trust do
   @doc "Whether `record` has earned a seat a step of the operator's standing approval."
   def earned?(%{led: led, first_time: first}), do: led >= @earned_after and first / led >= @earned_rate
 
-  @doc "Who led `thread` through build (the last to take it), or nil."
+  @doc "Who led `thread` through build (the last to take it) and on what model: `{name, model | nil}`, or nil."
   def builder(%Thread{id: id}) do
     from(m in Message,
       where: m.thread_id == ^id and m.author == "tlon" and like(m.body, "→ % leads (build stage)%"),
@@ -77,19 +77,20 @@ defmodule Server.Trust do
     |> Repo.one()
     |> case do
       nil -> nil
-      body -> with [_, name] <- Regex.run(~r/^→ (\S+) leads \(build stage\)/u, body), do: name
+      body -> with [_, name] <- Regex.run(~r/^→ (\S+) leads \(build stage\)/u, body), do: {name, model_of(body)}
     end
   end
 
   @doc """
   The standing approval `max` as it stands for `thread`: one higher when its builder has earned it,
-  never past #{@ceiling}. `{max, nil}` | `{raised, %{name, led, first_time}}`.
+  never past #{@ceiling}. `{max, nil}` | `{raised, %{name, model, led, first_time}}`. The record is the
+  coworker's across models (the operator's call); `model` says which one built this workline.
   """
   def allowance(thread, max) when is_integer(max) do
-    with name when is_binary(name) and max < @ceiling <- builder(thread),
+    with {name, model} when max < @ceiling <- builder(thread),
          record = record(name),
          true <- earned?(record) do
-      {max + 1, Map.put(record, :name, name)}
+      {max + 1, Map.merge(record, %{name: name, model: model})}
     else
       _ -> {max, nil}
     end

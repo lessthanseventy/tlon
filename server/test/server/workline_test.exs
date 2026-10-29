@@ -465,6 +465,32 @@ defmodule Server.WorklineTest do
       assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "standing approval" and &1.body =~ "risk"))
     end
 
+    test "the earned step's note names the builder and the model they built this one on" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      line = Server.Trust.leads_line("hronir", "build", "m1")
+
+      for i <- 1..8 do
+        landed = open!(%{slug: "earned-#{i}", stage: "build"})
+        {:ok, _} = Channel.post(%{thread_id: landed.id, author: "tlon", body: line})
+        {:ok, _} = landed |> Server.Thread.workline_stage_changeset(%{stage: "landed"}) |> Repo.update()
+      end
+
+      thread = open!(%{slug: "auto-earned", stage: "review"})
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "tlon", body: line})
+      reviewed!(thread)
+      graded!(thread, %{@low | "scores" => %{@low_scores | "blast" => 3}})
+
+      assert {:ok, %Server.Thread{awaiting: nil}} =
+               Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2)
+
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+
+      assert Enum.any?(
+               Channel.thread_messages(thread),
+               &(&1.body =~ "earned by hronir on m1, who landed 8 of their last 8")
+             )
+    end
+
     test "standing approval holds back: a high axis, a decision left open, a limit, no grade, no approving review" do
       for {slug, verdict, grade} <- [
             {"high-blast", "approve", %{@low | "scores" => %{@low_scores | "blast" => 4}}},

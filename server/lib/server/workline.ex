@@ -938,7 +938,7 @@ defmodule Server.Workline do
     by =
       if earned,
         do:
-          ": one over your setting, earned by #{earned.name}, who landed #{earned.first_time} of their last #{earned.led} builds first time",
+          ": one over your setting, earned by #{earned.name}#{if earned.model, do: " on #{earned.model}"}, who landed #{earned.first_time} of their last #{earned.led} builds first time",
         else: ""
 
     "auto-approved by your standing approval (reviewed; #{Grade.line(grade(thread))}, none over #{max}#{by})"
