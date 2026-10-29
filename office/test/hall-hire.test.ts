@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { killServer } from "./kill-server"
 
 // The hall's → on a live server hires through the operator API, then keeps the candidate's look
 // and soul on the machine as the sandbox does.
@@ -26,8 +27,7 @@ let socket = `tlon-office-hall-hire-${process.pid}`
 const state = mkdtempSync(join(tmpdir(), "office-hall-hire-")), config = mkdtempSync(join(tmpdir(), "office-hall-hire-cfg-"))
 const tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", socket, ...a])
 afterAll(() => {
-  tmux("kill-server")
-  rmSync(`${process.env.TMUX_TMPDIR ?? "/tmp"}/tmux-${process.getuid!()}/${socket}`, { force: true })
+  killServer(socket)
   rmSync(state, { recursive: true, force: true })
   rmSync(config, { recursive: true, force: true })
   server.stop(true)
@@ -55,8 +55,8 @@ test("→ in the hall hires on the server and keeps the look and soul", async ()
 }, 30_000)
 
 test("→ on a name already on the bench is refused: nothing posted, nothing kept", async () => {
-  tmux("kill-server")
-  socket = `tlon-office-hall-taken-${process.pid}`
+  killServer(socket)
+  socket =`tlon-office-hall-taken-${process.pid}`
   const cfg = mkdtempSync(join(tmpdir(), "office-hall-taken-cfg-"))
   mkdirSync(join(cfg, "tlon"), { recursive: true })
   writeFileSync(join(cfg, "tlon/hall.json"), JSON.stringify({ seed: "hall:1", locks: {}, overrides: { name: "funes" }, pile: [] }))

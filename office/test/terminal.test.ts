@@ -1,8 +1,6 @@
 import { afterAll, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
 import { keyArgs, rows, TerminalView, unescape } from "../tui/terminal"
+import { killServer } from "./kill-server"
 
 const enc = new TextEncoder(), dec = new TextDecoder()
 
@@ -11,16 +9,9 @@ test("control mode's octal escapes come back as the bytes they stand for", () =>
   expect(dec.decode(unescape(enc.encode("héllo \\12 tail\\")))).toBe("héllo \\12 tail\\")
 })
 
-// a private tmux server in a socket dir of its own (os.tmpdir() honours $TMPDIR; a sandboxed /tmp is
-// read-only), so nothing live is touched
-const sockDir = (process.env.TMUX_TMPDIR = mkdtempSync(join(tmpdir(), "tlon-tmux-")))
 const socket = `tlon-office-test-${process.pid}`
 const tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", socket, ...a])
-const killServer = (sock: string) => Bun.spawnSync(["tmux", "-L", sock, "kill-server"])
-afterAll(() => {
-  killServer(socket)
-  rmSync(sockDir, { recursive: true, force: true })
-})
+afterAll(() => killServer(socket))
 
 test("a window's screen arrives, keys typed into it come back", async () => {
   tmux("new-session", "-d", "-s", "w9", "-n", "lead", "-x", "60", "-y", "10", "sh -c 'printf \"hello from the pane\\n\"; exec cat'")

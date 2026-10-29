@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { killServer } from "./kill-server"
 
 // The cast editor (the god view) drives the real TUI against a stub server with two seats on the
 // bench, its config dir a throwaway one so nothing reaches the operator's files.
@@ -37,9 +38,8 @@ const looksNow = () => { try { return JSON.parse(readFileSync(looksFile, "utf8")
 // the soul's editor runs in a tmux of the test's own, and stays up on the file without touching it
 const ownTmux = `tlon-office-cast-own-${process.pid}`
 afterAll(() => {
-  tmux("kill-server")
-  Bun.spawnSync(["tmux", "-L", ownTmux, "kill-server"])
-  rmSync(`${process.env.TMUX_TMPDIR ?? "/tmp"}/tmux-${process.getuid!()}/${socket}`, { force: true })
+  killServer(socket)
+  killServer(ownTmux)
   rmSync(state, { recursive: true, force: true })
   rmSync(config, { recursive: true, force: true })
   server.stop(true)
