@@ -1,51 +1,31 @@
-# Review: staff_child honours a named lead on a workline (#551) — round 2
+# Review — staff-child-honours-a-named-lead-on-a-wo (round 3)
 
-**Verdict: request_changes.** Round 1's two follow-ups are fixed (11f26f3), and well. Round 1's one **blocking** finding is not: `staff_opened/2` in `server/lib/server/workline.ex` (now lines 2350–2365) is byte-for-byte the code I quoted at 809af60. The builder's note #17017 took "the two follow-ups"; the blocking finding lived only in review.md's body. It goes back for that one thing.
+**Verdict: approve.** Branch read at 7859fe8b47959489e54ef393d579bdbb7fe405f1; the delta since my last verdict (dba109f) is that one commit.
 
-Read: `git diff 809af60..11f26f3 -- . ':!work/…'` (coordination.ex, workline.ex, server_test.exs, workline_test.exs), then `restaff/1,2` (1340–1397), `hand_to/4` (1494), `restaff_miss/3` (1521–1526), `Workspaces.manager/1` (310–314). CHECKS: `mise run check` green on 11f26f3, `menard run check --in server` 2407/0, no `bench_contrast` row.
+## The finding from round 2, checked
 
-## 1. Still open (blocking): a named lead the bench cannot replace is dropped, and the workline opens unled
+1. **Off-shift manager named as lead slipped past `not_manager`** — fixed. The witness, `coordination.ex:185-190`:
 
-Witness, `workline.ex:2355–2359`:
+   ```elixir
+   manager? =
+     ws
+     |> Server.Workspaces.bench_all()
+     |> Enum.any?(&(&1.name == lead and Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype)))
+   if manager?, do: {:manager_lead, lead}, else: :ok
+   ```
 
-```elixir
-why when is_binary(why) ->
-  staffed = restaff(thread)
-  lead = Server.Channel.thread_lead(staffed.id)
-  post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
-  staffed
-```
+   Verified: `bench_all/1` (`workspaces.ex:269`) is the same query as `bench/1` minus `on_shift/1`, so every seat is read regardless of `crew`/`shift`. The predicate is byte-for-byte `Workspaces.manager/1`'s (`workspaces.ex:314`), so what counts as "manager" is one definition applied to a wider bench, not a second one. `@meta_archetypes` is `[:surveyor]`, which is what the test seats. The refusal still runs ahead of `Workline.open`, so no unled thread is left behind.
 
-Trace: `workline_changeset/1` sets no `agent_id`, so the thread is born unled. `restaff(thread)` → `restaff(thread, kind)` → `of_kind == []` → `restaff_miss(thread, kind, …)` → `do: thread` (1526), unled, silent for every kind but reviewer. Then `lead` is nil, the posted line reads `→  leads, not hronir: …`, the stage brief wakes nobody, `staff/2` answers `{:ok, nil}` and the tool replies `"lead" => nil`.
+2. **The test is honest.** It seats `surveyor-night` on crew `night`, asserts it is *absent* from `bench/1` before calling the tool (so the test fails if the fixture ever lands on shift and stops testing the off-shift path), then asserts `isError` and an unchanged thread count. Builder reports it went red first on the `Spawn.ensure/3` crash; consistent with round 2's traced path.
 
-Concrete: the server_test "Named" workspace (daneri and hronir, builders only), `staff_child(lead: "hronir", workline: "spec")`. On origin/main `lead_for/2` took the pick (`is_nil(current) -> :as_asked`: "a workline staffing left without a lead takes the pick as asked"). On the branch: an orphan workline, no lead, no seat. That rule's doc was deleted with `lead_for` this round, so the branch now has neither the behaviour nor the sentence.
+## Earlier rounds
 
-Fix, same as round 1, in `staff_opened/2`:
+Round 1's two follow-ups (delete `lead_for/2`; refuse a manager as named lead) landed in 11f26f3 and were approved in round 2. Nothing from any round remains open.
 
-```elixir
-why when is_binary(why) ->
-  staffed = restaff(thread)
+## Checks
 
-  case Server.Channel.thread_lead(staffed.id) do
-    nil ->
-      # nobody of the stage's kind to give way to: the pick stands, as asked
-      hand_to(thread, @staff_by_stage[thread.stage] || "lead", wanted)
+`mise run check` exit 0 on the branch (09:50Z); `menard run check --in server` 2408 tests, 0 failed. No `bench_contrast` row among the five most recent CHECKS shown to me.
 
-    lead ->
-      post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
-      staffed
-  end
-```
+## Nits (not follow-ups)
 
-Red test first, in the server_test describe "staff_child with a named lead on a workline": `staff_child(lead: "hronir", workline: "spec")` → reply `lead == "hronir"`, `Channel.thread_lead(tid) == "hronir"`, exactly one leads-line (`[line] = leads_lines(tid)`), `line =~ "hronir leads"`. Add the sentence to `open/1`'s @doc too: a pick the bench cannot replace stands.
-
-## 2. Fixed since 809af60 (verified)
-
-- `lead_for/2` deleted; its two workline_test cases (748–774) now drive `Workline.open(lead:)` and assert the thread's lead and the posted "not yu … another workline" / "not hronir … planner" lines. One door.
-- `not_manager/2` in staff_child refuses the manager before anything opens (`coordination.ex:104`, 182–190); test asserts `isError`, the name in the text, and an unchanged thread count. Reply text says what to do instead.
-
-## 3. Still right from round 1
-
-One pick, one `hand_to`, one leads-line, one seat on the free path; `unfit/2` holds the busy and wrong-kind rule once; `bench_all` keeps off-shift picks nameable; plain threads untouched; pr.md current.
-
-Non-blocking findings in the follow-ups.
+The `manager?` predicate repeats `Workspaces.manager/1`'s lambda; a `Workspaces.manager?(ws, name)` would make it one line in two callers. Three lines beat a helper for a caller that doesn't exist yet — leaving it.
