@@ -40,6 +40,8 @@ defmodule Server.Jobs.Smoke do
 
     # nil when the script already exited: its messages are still in the mailbox
     os_pid = with info when is_list(info) <- Port.info(port), do: info[:os_pid]
+    # stamped before the build: `Server.Smoke.stop/1` TERMs a smoke that is not up yet by it
+    job = stamp(job, %{"os_pid" => os_pid, "log" => log})
     code = pump(port, job, tid, os_pid, log, [])
     if code != 0, do: post(job, "smoke of #{ref} ended (exit #{code}); the log: #{log}")
     :ok
@@ -80,12 +82,7 @@ defmodule Server.Jobs.Smoke do
 
   defp hold(job, os_pid, log, line) do
     with [_, url | dir] <- Regex.run(hold_line(), line) do
-      held = %{"url" => url, "os_pid" => os_pid, "log" => log, "dir" => List.first(dir)}
-
-      {:ok, _} =
-        job
-        |> Ecto.Changeset.change(meta: Map.merge(job.meta, held))
-        |> Server.Repo.update()
+      stamp(job, %{"url" => url, "os_pid" => os_pid, "log" => log, "dir" => List.first(dir)})
 
       post(
         job,
@@ -93,6 +90,15 @@ defmodule Server.Jobs.Smoke do
           "It tears itself down after the hold's TTL."
       )
     end
+  end
+
+  defp stamp(job, meta) do
+    {:ok, job} =
+      job
+      |> Ecto.Changeset.change(meta: Map.merge(job.meta, meta))
+      |> Server.Repo.update()
+
+    job
   end
 
   # to whoever started it (`by`, the start_smoke caller): unaddressed, the post would wake the

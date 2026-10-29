@@ -173,9 +173,12 @@ defmodule Server.Jobs.SmokeTest do
       %{job: job}
     end
 
-    test "drive and stop say it is building, with the job, not that no smoke is up", %{thread: t, job: job} do
+    test "drive says it is building, with the job, not that no smoke is up", %{thread: t, job: job} do
       assert {:error, "building since " <> _ = why} = Smoke.drive(t.id, ["/"])
       assert why =~ "(job #{job.id})"
+    end
+
+    test "stop on an executing job whose script has not started yet says it is building", %{thread: t} do
       assert {:error, "building since " <> _} = Smoke.stop(t.id)
     end
 
@@ -189,6 +192,32 @@ defmodule Server.Jobs.SmokeTest do
       assert {:ok, %{id: id}} = Smoke.start(t, "main", "qa1")
       refute id == job.id
     end
+  end
+
+  test "stop cancels a smoke still building: the script gets TERM and the job ends", %{thread: t} do
+    File.write!(Smoke.script(), """
+    #!/usr/bin/env bash
+    trap 'exit 143' TERM
+    echo "smoke: abc1234 on :4999"
+    while true; do sleep 0.1; done
+    """)
+
+    {:ok, job} = Smoke.start(t, nil, "qa1")
+    task = Task.async(fn -> Oban.drain_queue(queue: :smoke) end)
+    wait_for(fn -> Server.Repo.reload!(job).meta["os_pid"] end)
+
+    assert Smoke.held(t.id) == nil
+    assert %{state: "executing"} = Smoke.building(t.id)
+    assert :ok = Smoke.stop(t.id)
+    assert %{success: 1} = Task.await(task, 10_000)
+    assert Enum.any?(bodies(t.id), &(&1 =~ "ended (exit 143)"))
+  end
+
+  test "stop cancels a queued smoke that has no process yet", %{thread: t} do
+    {:ok, job} = Smoke.start(t, nil, "qa1")
+    assert :ok = Smoke.stop(t.id)
+    assert Server.Repo.reload!(job).state == "cancelled"
+    assert {:error, "no smoke is up for this thread"} = Smoke.stop(t.id)
   end
 
   test "a smoke that fails posts its last lines", %{thread: t} do

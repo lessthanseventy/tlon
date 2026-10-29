@@ -83,16 +83,25 @@ defmodule Server.Smoke do
     Server.Repo.one(if ref, do: where(query, [j], fragment("?->>'ref' = ?", j.args, ^ref)), else: query)
   end
 
-  @doc "Tear down the thread's held smoke: its script cleans up on TERM."
+  @doc """
+  Tear down the thread's smoke, up or still building: its script cleans up on TERM. A queued job
+  with no process yet is cancelled instead.
+  """
   @spec stop(integer()) :: :ok | {:error, String.t()}
   def stop(thread_id) do
-    case held(thread_id) do
+    case held(thread_id) || building(thread_id) do
       nil ->
-        {:error, none(thread_id, "no smoke is up for this thread")}
+        {:error, "no smoke is up for this thread"}
 
       %{meta: %{"os_pid" => pid}} ->
         _ = System.cmd("kill", ["-TERM", to_string(pid)], stderr_to_stdout: true)
         :ok
+
+      %{state: state, id: id} when state in ["available", "scheduled"] ->
+        Oban.cancel_job(id)
+
+      job ->
+        {:error, building_error(job, "its script has not started yet; stop again in a moment")}
     end
   end
 
