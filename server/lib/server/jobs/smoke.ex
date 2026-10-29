@@ -2,8 +2,10 @@ defmodule Server.Jobs.Smoke do
   @moduledoc """
   Runs `scripts/release-smoke.sh` with `TLON_SMOKE_HOLD=1` for a QA seat, from the service (a
   seat's Bash can't: `Server.Smoke`). The job is the hold: it lives as long as the script does, until
-  `stop_smoke` or the script's own hold TTL. When the script says it is holding, the job records
-  the url, the smoke's build dir (`Server.Smoke.drive/2` runs the candidate's drive from it) and the script's pid in its meta (what `Server.Smoke` finds it by) and posts the url and the
+  `stop_smoke` or the script's own hold TTL. The job records the script's pid and log in its meta
+  as soon as it starts (so `stop_smoke` can TERM a build); when the script says it is holding it
+  adds the url and the smoke's build dir (`Server.Smoke.drive/2` runs the candidate's drive from it),
+  what `Server.Smoke` finds it by, and posts the url and the
   log's path on the thread; a smoke that fails posts its last lines instead. One attempt: a retry
   would stack another build.
   """

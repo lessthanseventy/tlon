@@ -182,6 +182,14 @@ defmodule Server.Jobs.SmokeTest do
       assert {:error, "building since " <> _} = Smoke.stop(t.id)
     end
 
+    test "stop on a job whose script already exited (a null pid) says to stop again, TERMing nothing", %{
+      thread: t,
+      job: job
+    } do
+      job |> Ecto.Changeset.change(meta: %{"os_pid" => nil}) |> Server.Repo.update!()
+      assert {:error, "building since " <> _} = Smoke.stop(t.id)
+    end
+
     test "a start for the same ref returns the building job instead of a second build", %{thread: t, job: job} do
       assert {:ok, %{id: id}} = Smoke.start(t, nil, "qa1")
       assert id == job.id
