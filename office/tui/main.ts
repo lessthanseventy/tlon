@@ -48,7 +48,7 @@ import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk
 import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
 import { adder, bind, hints, LEGEND_CHARS, type KeyId } from "./keys"
-import { PLAY, ROOM_PLAY, roomKey, toy } from "./sandbox"
+import { PLAY, PLAY_ROWS, ROOM_PLAY, WORLD_ROWS, roomKey, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
@@ -73,7 +73,7 @@ type Mode =
   | { kind: "person"; name: string; from?: Mode } | { kind: "thread"; tid: number; from?: Mode }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number; from?: Mode } | { kind: "epic"; id: number; from?: Mode } | { kind: "calendar" } | { kind: "life" } | { kind: "pages" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "issue"; id: number; from?: Mode } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "play" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number; from?: Mode }
   | { kind: "look"; name: string; from?: Mode; hall?: true } | { kind: "look-editor"; name: string; view: "front" | "side" | "back"; from?: Mode; hall?: true }
   | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" } | { kind: "cast"; tab: "people" | "office" }
@@ -1854,6 +1854,10 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         actions: [back1],
       }
     }
+    case "play": return {
+      title: "PLAY", rows: [{ segs: [plain("pick a toy")] }],
+      actions: [...PLAY_ROWS.filter((b) => world || !WORLD_ROWS.includes(b.id)).map((b): Action => ({ ...bind(b.id), run: () => { back(); playDo(b.id); changed(); draw() } })), back1],
+    }
     case "pet": {
       const r = room(), wideRoom = r instanceof WideRoom ? r : null
       const doIt = (f: () => unknown) => () => { f(); changed(); draw() }
@@ -2048,7 +2052,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `HELP · ${m.title}`,
         actions: [{ ...bind("help.esc", `back to ${m.title.toLowerCase()}`), run: () => { mode = m.from; sel = 0; scroll = 0; snapSel = true; draw() } }],
-        rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", GLOBALS), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play keys (they win over a card's)", PLAY) : TOY_KEYS ? sect("the room's play keys (a card's own key wins)", ROOM_PLAY) : []), ...boardLegend()],
+        rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", GLOBALS), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play key (it wins over a card's)", PLAY) : TOY_KEYS ? sect("the room's play keys (a card's own key wins)", ROOM_PLAY) : []), ...boardLegend()],
       }
     }
     case "look-editor": {
@@ -2357,19 +2361,26 @@ let keyLog: string[] = []
 /** one key, one thing to do with the toy; true when the key was one of them. Off the sandbox only the room's keys, with OFFICE_TOY_KEYS=1 */
 function toyKey(k: string): boolean {
   if (!world && !roomKey(k, detail().actions.some((x) => x.key === k), TOY_KEYS)) return false
-  const r = room(), under = mode.kind === "person" ? mode.name : null
   switch (k) {
-    case "D": r.play("doorbell"); status = "ding dong"; break
-    case "E": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
-    case "F": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break
-    case "T": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
-    case "N": if (!world) return false; world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break
-    case "W": if (!world) return false; world.nextWeather(); status = `weather: ${world.snapshot().weather!.desc.toLowerCase()}`; void refresh(); break
-    case "P": if (mode.kind === "pet" && mode.who === "dog" && r instanceof WideRoom) r.patDog(); else if (under) r.pat(under); else r.pet(); status = "pat pat"; break
-    case "C": if (!world) return false; world.callOver(under ?? world.snapshot().bench[1]!.name); status = `calling someone over to ${under ?? "the desk"}`; void refresh(); break
+    case "E": open({ kind: "play" }); draw(); return true
     default: return false
   }
-  changed(); draw(); return true
+}
+
+/** one toy off the play card, by its row id */
+function playDo(id: string): void {
+  const r = room(), under = mode.kind === "person" ? mode.name : null
+  switch (id) {
+    case "play.doorbell": r.play("doorbell"); status = "ding dong"; break
+    case "play.gary": status = r.event("gary") ? "Gary's at the dumpster" : r.eventsHere() ? "a scene is running, or Gary is switched off (the wackiness dial)" : "events need the wide room (kitty graphics)"; break
+    case "play.event": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
+    case "play.drill": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break
+    case "play.treat": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
+    case "play.night": if (!world) return; world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break
+    case "play.weather": if (!world) return; world.nextWeather(); status = `weather: ${world.snapshot().weather!.desc.toLowerCase()}`; void refresh(); break
+    case "play.pet": if (mode.kind === "pet" && mode.who === "dog" && r instanceof WideRoom) r.patDog(); else if (under) r.pat(under); else r.pet(); status = "pat pat"; break
+    case "play.call": if (!world) return; world.callOver(under ?? world.snapshot().bench[1]!.name); status = `calling someone over to ${under ?? "the desk"}`; void refresh(); break
+  }
 }
 
 function onKey(k: string) {
