@@ -74,6 +74,7 @@ defmodule Server.Thread do
       :workspace_id,
       :project_id,
       :parent_thread_id,
+      :repo,
       :stage
     ])
     |> validate_required([:title, :slug, :stage])
