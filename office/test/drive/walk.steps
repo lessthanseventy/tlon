@@ -1,7 +1,7 @@
 # B7 drive walk, rail room (150x60): every card the sandbox can show x the keys its hint lists.
 # Replay: office/test/drive/run.sh   (narrow: OFFICE_COLS=60 OFFICE_ROWS=30 office/test/drive/run.sh)
 # Read the screen after each step. A click is `click:TEXT[@DX,DY]`: it aims at a label the screen shows, never at a measured cell.
-# The sandbox shadows t c n w f p e d on every card (play keys), so tickets/crew/etc. are reached by click or the finder.
+# The sandbox shadows E on every card (the play key), so tickets/crew/etc. are reached by click or the finder.
 wait:Toy
 
 # --- home: help, then each action key the card lists
@@ -43,14 +43,24 @@ BTab
 ']'
 
 # --- play keys on home
-D
 E
-T
-F
-N
-W
-P
-C
+2
+Escape
+E
+3
+E
+5
+E
+6
+E
+7
+E
+9
+E
+8
+Escape
+E
+4
 
 # --- person: Tab onto scharlach
 Tab
