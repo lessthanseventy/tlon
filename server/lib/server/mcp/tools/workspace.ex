@@ -306,7 +306,8 @@ defmodule Server.MCP.Tool.UpdateTicket do
   @moduledoc """
   Update a ticket's status/priority/title/body/assignee/labels/blocked_by. `id` identifies it; a missing
   ticket is refused. `blocked_by` replaces the tickets it waits on (`[]` clears them); a missing id, or
-  its own, is refused.
+  its own, is refused. `labels` and `body` replace; `add_labels` and `append_body` add to what is there
+  (a hold's reason goes in the body without wiping the filing).
 
   Closing one (`status: done`) takes its evidence, appended to its body: `fixed_by`, the commit that
   fixed it, or `because`, why it closes without one (a duplicate of #N, won't fix, stale). A ticket
@@ -321,9 +322,11 @@ defmodule Server.MCP.Tool.UpdateTicket do
     field :id, :integer, required: true, description: "The ticket id"
     field :status, :enum, values: ["backlog", "todo", "doing", "done"], description: "Move the ticket"
     field :labels, {:list, :string}, description: "Replace its labels; `held` keeps intake from routing or starting it"
+    field :add_labels, {:list, :string}, description: "Add these to its labels, keeping the rest (`held` holds it)"
     field :priority, :enum, values: ["low", "med", "high"]
     field :title, :string
-    field :body, :string
+    field :body, :string, description: "Replace its body"
+    field :append_body, :string, description: "Append to its body, keeping what is there"
     field :assignee, :string
     field :blocked_by, {:list, :integer}, description: "Replace the tickets it waits on; `[]` clears them"
 
@@ -360,7 +363,14 @@ defmodule Server.MCP.Tool.UpdateTicket do
   defp change(ticket, params, closed_why, frame) do
     {blocked_by, params} = Map.pop(params, :blocked_by)
     {parent_id, params} = Map.pop(params, :parent_id)
+    {add_labels, params} = Map.pop(params, :add_labels)
+    {append_body, params} = Map.pop(params, :append_body)
     attrs = params |> Map.drop([:id, :fixed_by, :because]) |> Map.reject(fn {_k, v} -> is_nil(v) end)
+
+    attrs =
+      attrs
+      |> add_labels(ticket, add_labels)
+      |> append_body(ticket, append_body)
 
     attrs =
       if closed_why,
@@ -381,6 +391,20 @@ defmodule Server.MCP.Tool.UpdateTicket do
 
       bad ->
         fail(frame, "blocked_by: no such ticket #{Enum.map_join(bad, ", ", &"##{&1}")}")
+    end
+  end
+
+  defp add_labels(attrs, _ticket, nil), do: attrs
+
+  defp add_labels(attrs, ticket, added),
+    do: Map.put(attrs, :labels, Enum.uniq(Map.get(attrs, :labels, ticket.labels || []) ++ added))
+
+  defp append_body(attrs, _ticket, nil), do: attrs
+
+  defp append_body(attrs, ticket, text) do
+    case String.trim(Map.get(attrs, :body, ticket.body || "")) do
+      "" -> Map.put(attrs, :body, text)
+      kept -> Map.put(attrs, :body, kept <> "\n\n" <> text)
     end
   end
 

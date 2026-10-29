@@ -1686,6 +1686,38 @@ defmodule Server.MCP.ServerTest do
     assert Server.Tickets.blockers(filed["id"]) == []
   end
 
+  test "update_ticket's add_labels and append_body add to a ticket; labels and body still replace" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "AddWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Holder", mandate: "manage", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+    {:ok, t} = Server.Tickets.file(%{workspace_id: ws.id, title: "a filing", body: "the filing", labels: ["bug"]})
+
+    held =
+      call(token, session, 2, "update_ticket", %{
+        "id" => t.id,
+        "add_labels" => ["held", "bug"],
+        "append_body" => "held: waits on #521"
+      })
+
+    refute held["isError"]
+    got = Server.Tickets.get(t.id)
+    assert got.labels == ["bug", "held"]
+    assert got.body == "the filing\n\nheld: waits on #521"
+
+    refute call(token, session, 3, "update_ticket", %{"id" => t.id, "labels" => ["x"], "body" => "new"})["isError"]
+    assert %{labels: ["x"], body: "new"} = Server.Tickets.get(t.id)
+
+    {:ok, bare} = Server.Tickets.file(%{workspace_id: ws.id, title: "no body or labels"})
+
+    refute call(token, session, 4, "update_ticket", %{"id" => bare.id, "add_labels" => ["held"], "append_body" => "why"})[
+             "isError"
+           ]
+
+    assert %{labels: ["held"], body: "why"} = Server.Tickets.get(bare.id)
+  end
+
   test "update_ticket closes a ticket only with its evidence: the commit that fixed it, or why not" do
     {:ok, ws} = Server.Workspaces.register(%{name: "CloseWS"})
     {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
