@@ -21,7 +21,7 @@ defmodule Server.Workline.Publish do
     opts = [cd: repo, stderr_to_stdout: true]
 
     with {_, 0} <- run.("git", ["-C", repo, "remote", "get-url", "origin"], opts),
-         {:push, {_, 0}} <- {:push, run.("git", ["-C", repo, "push", "--force-with-lease", "origin", branch], opts)},
+         {:push, :ok} <- {:push, replace_branch(repo, branch, run)},
          {:pr, {out, 0}} <-
            {:pr,
             run.(
@@ -46,7 +46,7 @@ defmodule Server.Workline.Publish do
         _ -> {:ok, url}
       end
     else
-      {:push, {out, _}} -> {:error, "push of #{branch} refused: #{String.slice(out, 0, 200)}"}
+      {:push, {:error, why}} -> {:error, why}
       {:pr, {out, _}} -> {:error, "PR for #{branch} not opened: #{String.slice(out, 0, 200)}"}
       {_out, _code} -> :none
     end
@@ -112,9 +112,21 @@ defmodule Server.Workline.Publish do
   # never "absent".
   defp remote_sha(repo, branch, run) do
     case run.("git", ["-C", repo, "ls-remote", "origin", "refs/heads/#{branch}"], cd: repo, stderr_to_stdout: true) do
-      {out, 0} -> {:ok, out |> String.split(["\t", "\n"], trim: true) |> List.first("")}
+      {out, 0} -> {:ok, ref_sha(out, "refs/heads/#{branch}")}
       {out, _} -> {:error, "ls-remote of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
     end
+  end
+
+  # stderr is merged into `out`, so only the line naming `ref` carries the sha.
+  defp ref_sha(out, ref) do
+    out
+    |> String.split("\n", trim: true)
+    |> Enum.find_value("", fn line ->
+      case String.split(line, "\t") do
+        [sha, ^ref] -> sha
+        _ -> nil
+      end
+    end)
   end
 
   @doc """
