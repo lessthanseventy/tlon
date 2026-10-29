@@ -212,6 +212,84 @@ defmodule Server.IntakeTest do
       assert length(Tickets.threads_of(again.id)) == 2
     end
 
+    defp triage(ws, who, ticket, extra \\ %{}) do
+      root = Server.Channel.machine_thread(ws.id)
+      attrs = Map.merge(%{thread_id: root.id, author: who, body: "on ##{ticket.id}"}, extra)
+      {:ok, m} = Server.Channel.post(attrs)
+      m
+    end
+
+    defp manager(ws), do: {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "tertius", archetype: "surveyor"})
+
+    defp age(m, minutes_ago) do
+      at = DateTime.utc_now() |> DateTime.add(-minutes_ago * 60, :second) |> DateTime.truncate(:second)
+      Server.Repo.update_all(from(x in Server.Message, where: x.id == ^m.id), set: [created_at: at])
+    end
+
+    test "is deferred by the manager naming it on the root thread — the 30 minutes run from that message", %{
+      ws: ws,
+      route: route
+    } do
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-k", archetype: "builder"})
+      busy = routed(ws, "being triaged", 31)
+      age(triage(ws, "tertius", busy), 10)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "todo"} = Tickets.get(busy.id)
+      assert Tickets.threads_of(busy.id) == []
+    end
+
+    test "a manager message naming another ticket whose number starts the same does not defer it", %{
+      ws: ws,
+      route: route
+    } do
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-l", archetype: "builder"})
+      stalled = routed(ws, "not the one", 31)
+      age(triage(ws, "tertius", stalled, %{body: "on ##{stalled.id}0"}), 10)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "doing"} = Tickets.get(stalled.id)
+    end
+
+    test "an open consult naming it blocks the fallback; once resolved and 30 minutes pass it fires", %{
+      ws: ws,
+      route: route
+    } do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-m", archetype: "builder"})
+      asked = routed(ws, "asked about", 31)
+      ask = triage(ws, "hronir", asked, %{consult_id: 999_001})
+      age(ask, 90)
+
+      Intake.run(cap: 4, route: route)
+      assert %{status: "todo"} = Tickets.get(asked.id)
+
+      Server.Repo.update_all(from(x in Server.Message, where: x.id == ^ask.id),
+        set: [resolved_at: DateTime.utc_now() |> DateTime.add(-40 * 60, :second) |> DateTime.truncate(:second)]
+      )
+
+      Intake.run(cap: 4, route: route)
+      assert %{status: "doing"} = Tickets.get(asked.id)
+    end
+
+    test "when the fallback fires it says so on the root thread, naming the new thread", %{ws: ws, route: route} do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-n", archetype: "builder"})
+      stalled = routed(ws, "announced", 31)
+
+      Intake.run(cap: 4, route: route)
+
+      [{"promoted", tid}] = Tickets.threads_of(stalled.id)
+      root = Server.Channel.machine_thread(ws.id)
+
+      assert Enum.any?(
+               Server.Channel.thread_messages(root),
+               &(&1.body =~ "##{stalled.id}" and &1.body =~ "thread ##{tid}" and &1.body =~ "intake started")
+             )
+    end
+
     test "is left with the manager inside the 30 minutes", %{ws: ws, route: route} do
       fresh = routed(ws, "just routed", 5)
       Intake.run(cap: 4, route: route)

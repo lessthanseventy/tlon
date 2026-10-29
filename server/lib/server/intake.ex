@@ -10,7 +10,8 @@ defmodule Server.Intake do
   so a long night leaves a reviewable pile, not an endless one. A routed ticket the manager hasn't
   started within `@stalled_after` is started by intake itself, with the workspace's lead
   (`Server.Tickets.start_thread/1`), and the sheriff told: a handed-over ticket never holds a slot
-  in silence. A ticket the manager labelled `held` (it waits on something; the why in its body) is
+  in silence — unless triage is in progress: the manager naming the ticket on the root thread, or an
+  open consult naming it, defers the 30 minutes (they run from the newest such message). A ticket the manager labelled `held` (it waits on something; the why in its body) is
   neither routed nor started until the label comes off. Run by `Server.Jobs.Intake` on the cron.
   """
   import Ecto.Query
@@ -76,7 +77,12 @@ defmodule Server.Intake do
 
   defp start_stalled(opts) do
     after_s = opts[:stalled_after] || Server.OperatorConfig.setting("stalled_ticket_minutes") * 60
-    for ticket <- stalled(after_s), not held?(ticket), do: start_stalled_ticket(ticket)
+    now = DateTime.utc_now()
+
+    for ticket <- stalled(after_s),
+        not held?(ticket),
+        not in_triage?(ticket, after_s, now),
+        do: start_stalled_ticket(ticket)
   end
 
   defp start_stalled_ticket(ticket) do
@@ -85,6 +91,15 @@ defmodule Server.Intake do
         "ticket ##{ticket.id} was routed to the manager and not staffed in 30 minutes, so intake started it here with the lead"
 
       Server.Channel.post(%{thread_id: thread.id, author: "tlon", body: "⏱ #{why}."})
+
+      if root = Server.Channel.machine_thread(ticket.workspace_id) do
+        Server.Channel.post(%{
+          thread_id: root.id,
+          author: "tlon",
+          body: "⏱ ticket ##{ticket.id} was not staffed in 30 minutes: intake started it as thread ##{thread.id}."
+        })
+      end
+
       Server.Sheriff.report(thread, why)
     end
   end
@@ -181,5 +196,44 @@ defmodule Server.Intake do
       |> Enum.split_with(&self_repair?/1)
 
     length(self) >= length(mine)
+  end
+
+  # Triage in progress: an open consult naming the ticket, or the manager naming it on the workspace's
+  # root thread after the route. The `after_s` runs from the newest such message.
+  defp in_triage?(ticket, after_s, now) do
+    ref = ~r/##{ticket.id}(?!\d)/
+    named = fn m -> Regex.match?(ref, m.body) end
+
+    consults =
+      from(m in Server.Message,
+        where: not is_nil(m.consult_id) and m.mirrored == false and ilike(m.body, ^"%##{ticket.id}%"),
+        order_by: [desc: m.id]
+      )
+      |> Repo.all()
+      |> Enum.filter(named)
+
+    manager = Server.Workspaces.manager(ticket.workspace_id)
+    root = Server.Channel.machine_thread(ticket.workspace_id)
+
+    replies =
+      if manager && root do
+        from(m in Server.Message,
+          where:
+            m.thread_id == ^root.id and m.author == ^manager.name and m.created_at > ^ticket.updated_at and
+              ilike(m.body, ^"%##{ticket.id}%")
+        )
+        |> Repo.all()
+        |> Enum.filter(named)
+      else
+        []
+      end
+
+    if Enum.any?(consults, &is_nil(&1.resolved_at)) do
+      true
+    else
+      stamps = Enum.map(consults, & &1.resolved_at) ++ Enum.map(replies, & &1.created_at)
+      newest = Enum.max([ticket.updated_at | stamps], DateTime)
+      DateTime.diff(now, newest) < after_s
+    end
   end
 end
