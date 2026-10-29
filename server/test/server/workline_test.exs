@@ -57,6 +57,11 @@ defmodule Server.WorklineTest do
     thread
   end
 
+  test "open keeps the repo a workline names" do
+    thread = open!(%{slug: "named-repo", repo: "/tmp/some-sibling"})
+    assert thread.repo == "/tmp/some-sibling"
+  end
+
   test "open starts a workline at intent, operator-born, machine-scoped" do
     thread = open!()
     assert thread.stage == "intent"
