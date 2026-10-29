@@ -10,8 +10,9 @@ defmodule Server.Intake do
   so a long night leaves a reviewable pile, not an endless one. A routed ticket the manager hasn't
   started within `@stalled_after` is started by intake itself, with the workspace's lead
   (`Server.Tickets.start_thread/1`), and the sheriff told: a handed-over ticket never holds a slot
-  in silence — unless triage is in progress: the manager naming the ticket on the root thread, or an
-  open consult naming it, defers the 30 minutes (they run from the newest such message). A ticket the manager labelled `held` (it waits on something; the why in its body) is
+  in silence — unless triage is in progress: the manager naming the ticket on the root thread, or a
+  consult naming it, after the route, defers the 30 minutes (they run from the newest such message).
+  A ticket the manager labelled `held` (it waits on something; the why in its body) is
   neither routed nor started until the label comes off. Run by `Server.Jobs.Intake` on the cron.
   """
   import Ecto.Query
@@ -198,16 +199,18 @@ defmodule Server.Intake do
     length(self) >= length(mine)
   end
 
-  # Triage in progress: an open consult naming the ticket, or the manager naming it on the workspace's
-  # root thread after the route. The `after_s` runs from the newest such message.
+  # Triage in progress: a consult ask naming the ticket, or the manager naming it on the workspace's
+  # root thread, after the route. A consult is never resolved (only operator asks are), so like a
+  # manager reply it only defers: `after_s` runs from the newest such message.
   defp in_triage?(ticket, after_s, now) do
     ref = ~r/##{ticket.id}(?!\d)/
     named = fn m -> Regex.match?(ref, m.body) end
 
     consults =
       from(m in Server.Message,
-        where: not is_nil(m.consult_id) and m.mirrored == false and ilike(m.body, ^"%##{ticket.id}%"),
-        order_by: [desc: m.id]
+        where:
+          not is_nil(m.consult_id) and m.mirrored == false and m.created_at > ^ticket.updated_at and
+            ilike(m.body, ^"%##{ticket.id}%")
       )
       |> Repo.all()
       |> Enum.filter(named)
@@ -228,12 +231,8 @@ defmodule Server.Intake do
         []
       end
 
-    if Enum.any?(consults, &is_nil(&1.resolved_at)) do
-      true
-    else
-      stamps = Enum.map(consults, & &1.resolved_at) ++ Enum.map(replies, & &1.created_at)
-      newest = Enum.max([ticket.updated_at | stamps], DateTime)
-      DateTime.diff(now, newest) < after_s
-    end
+    stamps = Enum.map(consults ++ replies, & &1.created_at)
+    newest = Enum.max([ticket.updated_at | stamps], DateTime)
+    DateTime.diff(now, newest) < after_s
   end
 end

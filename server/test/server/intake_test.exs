@@ -255,24 +255,32 @@ defmodule Server.IntakeTest do
       assert %{status: "doing"} = Tickets.get(stalled.id)
     end
 
-    test "an open consult naming it blocks the fallback; once resolved and 30 minutes pass it fires", %{
+    test "a consult naming it defers the 30 minutes from the ask — it is never resolved, so it never blocks", %{
       ws: ws,
       route: route
     } do
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-m", archetype: "builder"})
       asked = routed(ws, "asked about", 31)
       ask = triage(ws, "hronir", asked, %{consult_id: 999_001})
-      age(ask, 90)
+      age(ask, 10)
 
       Intake.run(cap: 4, route: route)
       assert %{status: "todo"} = Tickets.get(asked.id)
 
-      Server.Repo.update_all(from(x in Server.Message, where: x.id == ^ask.id),
-        set: [resolved_at: DateTime.utc_now() |> DateTime.add(-40 * 60, :second) |> DateTime.truncate(:second)]
-      )
+      age(ask, 40)
 
       Intake.run(cap: 4, route: route)
       assert %{status: "doing"} = Tickets.get(asked.id)
+    end
+
+    test "a consult from before the route does not defer it", %{ws: ws, route: route} do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-o", archetype: "builder"})
+      stalled = routed(ws, "old ask", 31)
+      age(triage(ws, "hronir", stalled, %{consult_id: 999_002}), 60)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "doing"} = Tickets.get(stalled.id)
     end
 
     test "when the fallback fires it says so on the root thread, naming the new thread", %{ws: ws, route: route} do
