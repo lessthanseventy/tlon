@@ -2,8 +2,12 @@ defmodule Server.ProfilesTest do
   @moduledoc "The coworker-profile registry, the pure render seam, and the materialiser (into a tmp dir)."
   use ExUnit.Case, async: true
 
+  alias Server.Channel
   alias Server.Profile
   alias Server.Profiles
+  alias Server.Projects
+  alias Server.SandboxBudget
+  alias Server.Workspaces
 
   describe "launch_bytes/1 — a launch's scripts, by content" do
     @describetag :tmp_dir
@@ -49,19 +53,39 @@ defmodule Server.ProfilesTest do
       assert "~/.local/share/mise" in writes
     end
 
-    # bwrap takes 9000 args; Claude Code mounts ~45 per repo found under a write root. 7500 leaves
-    # headroom; 65 repos are the fixed checkouts (ficciones, tlon and its worktrees). One grower in the
+    # The numbers are Server.SandboxBudget's: bwrap's arg limit, the args Claude Code mounts per repo
+    # under a write root, the fixed checkouts and the headroom. The write roots are seeded to exactly
+    # their reserve and the read dirs past their share, so the test states the split. One grower in the
     # roots must break it alone: (110 + 65) * 45 = 7875 > 7500. Seeding more only slows the gate under load.
     @tag :tmp_dir
     test "a seat's write roots stay under the bwrap budget however many repos the box has", %{tmp_dir: home} do
       # unbounded growers: 110 repos in each cache a seat might share, and in another seat's scratch
       for cache <- ~w(mix menard-scratch tlon-scratch/other-seat), do: seed_repos(home, ".cache/#{cache}", 110)
 
-      for cache <- Profiles.dev_caches() -- ~w(mix menard-scratch tlon-scratch),
-          do: seed_repos(home, ".cache/#{cache}", 2)
+      # one repo in each dev cache a seat writes, so each is proven to count
+      caches = Profiles.dev_caches() -- ~w(mix menard-scratch tlon-scratch)
+      for cache <- caches, do: seed_repos(home, ".cache/#{cache}", 1)
+
+      # read dirs are write roots too (#505): 3 dirs of 30 repos each pass the old per-dir cap, sum 90 > 61
+      Server.TestDB.clean!()
+      {:ok, ws} = Workspaces.register(%{name: "budget-read"})
+      read = for n <- ~w(ra rb rc), do: Path.join(home, "projects/#{n}")
+      for d <- read, i <- 1..30, do: File.mkdir_p!(Path.join([d, "r#{i}", ".git"]))
+      repos = for d <- read, do: %{"name" => Path.basename(d), "path" => d}
+
+      {:ok, p} =
+        Projects.register(%{
+          workspace_id: ws.id,
+          name: "budget-read",
+          repos: [%{"name" => "own", "path" => "/p/own"} | repos]
+        })
+
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id})
+      kept = Projects.read_dirs(t)
+      read_count = kept |> Enum.map(&length(Path.wildcard(Path.join(&1, "**/.git"), match_dot: true))) |> Enum.sum()
 
       for seat <- ["hronir", "zunz"], archetype <- [:builder, :qa] do
-        seed_repos(home, ".cache/tlon-scratch/#{seat}", 40)
+        seed_repos(home, ".cache/tlon-scratch/#{seat}", SandboxBudget.write_root_reserve() - length(caches))
         roots = Profiles.instantiate(%{archetype: archetype, name: seat}).sandbox["filesystem"]["allowWrite"]
 
         count =
@@ -71,7 +95,9 @@ defmodule Server.ProfilesTest do
           |> Enum.map(&length(Path.wildcard(Path.join(&1, "**/.git"), match_dot: true)))
           |> Enum.sum()
 
-        assert (count + 65) * 45 <= 7500, "#{seat}/#{archetype}: #{count} repos under ~ write roots"
+        assert (count + read_count + SandboxBudget.fixed_repos()) * SandboxBudget.args_per_repo() <=
+                 SandboxBudget.max_args(),
+               "#{seat}/#{archetype}: #{count} repos under ~ write roots + #{read_count} under read dirs"
       end
     end
 
