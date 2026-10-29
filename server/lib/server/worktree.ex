@@ -353,17 +353,30 @@ defmodule Server.Worktree do
 
   # tlon's own checkout gets its hooks from `server:setup`; a sibling repo has no scripts/git-hooks,
   # so its config points at tlon's (absolute), which fence on TLON_THREAD and are inert without it
+  # A repo with hooks of its own is refused, never overwritten.
   defp point_hooks_at_tlon(repo_path) do
-    root = Server.Profiles.main_root()
-
     # the common dir, not tlon_root/0: the service is built in `.release`, a linked worktree of tlon
-    if Server.Profiles.main_root(repo_path) == root do
-      :ok
-    else
-      case git(repo_path, ["config", "core.hooksPath", Path.join(root, "scripts/git-hooks")]) do
-        {_, 0} -> :ok
-        {out, _} -> {:error, "could not point hooks at tlon's: #{String.slice(out, 0, 200)}"}
-      end
+    with {:ok, root} <- Server.Profiles.main_root(),
+         {:ok, repo_root} <- Server.Profiles.main_root(repo_path) do
+      if repo_root == root, do: :ok, else: set_hooks_path(repo_path, Path.join(root, "scripts/git-hooks"))
+    end
+  end
+
+  defp set_hooks_path(repo_path, hooks) do
+    case git(repo_path, ["config", "--get", "core.hooksPath"]) do
+      {out, 0} ->
+        if String.trim(out) == hooks,
+          do: :ok,
+          else: {:error, "#{repo_path} has its own core.hooksPath (#{String.trim(out)}); not pointing it at tlon's"}
+
+      {_, 1} ->
+        case git(repo_path, ["config", "core.hooksPath", hooks]) do
+          {_, 0} -> :ok
+          {out, _} -> {:error, "could not point hooks at tlon's: #{String.slice(out, 0, 200)}"}
+        end
+
+      {out, _} ->
+        {:error, "could not read core.hooksPath: #{String.slice(out, 0, 200)}"}
     end
   end
 

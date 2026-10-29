@@ -125,7 +125,8 @@ defmodule Server.Smoke do
   @doc "The script that builds and holds the smoke (`config :server, :smoke_script` in tests)."
   def script,
     do:
-      Application.get_env(:server, :smoke_script) || Path.join(Server.Profiles.main_root(), "scripts/release-smoke.sh")
+      Application.get_env(:server, :smoke_script) ||
+        Path.join(elem(Server.Profiles.main_root(), 1), "scripts/release-smoke.sh")
 
   defp building_error(%Oban.Job{id: id} = job, fallback) do
     since = Calendar.strftime(job.attempted_at || job.inserted_at, "%H:%M:%SZ")
