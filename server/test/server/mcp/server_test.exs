@@ -1278,6 +1278,27 @@ defmodule Server.MCP.ServerTest do
       assert line =~ "hronir leads"
     end
 
+    test "the manager named as a workline's lead is refused before anything opens", %{
+      ws: ws,
+      token: token,
+      session: session
+    } do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "surveyor-one", archetype: "surveyor"})
+      before = length(Server.Repo.all(Server.Thread))
+
+      r =
+        call(token, session, 4, "staff_child", %{
+          "title" => "manager build",
+          "lead" => "surveyor-one",
+          "workline" => "intent",
+          "brief" => "Do it."
+        })
+
+      assert r["isError"]
+      assert hd(r["content"])["text"] =~ "surveyor-one"
+      assert length(Server.Repo.all(Server.Thread)) == before
+    end
+
     test "a busy named lead gives way to the stage's pick, and says so", %{ws: ws, token: token, session: session} do
       {:ok, busy} =
         Server.Workline.open(%{title: "hronir busy", slug: "hronir-busy", stage: "build", workspace_id: ws.id})

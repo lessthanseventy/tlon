@@ -752,8 +752,8 @@ defmodule Server.WorklineTest do
           %{"archetype" => "planner", "name" => "averroes"}
         ])
 
-      w = open!(%{slug: "picked", stage: "spec", workspace_id: ws.id})
-      assert {:ok, "averroes", :as_asked} = Workline.lead_for(w, "averroes")
+      w = open!(%{slug: "picked", stage: "spec", workspace_id: ws.id, lead: "averroes"})
+      assert Channel.thread_lead(w.id) == "averroes"
     end
 
     test "a manager's pick that is busy, or the wrong kind, gives way to the rule's — and says why" do
@@ -764,13 +764,13 @@ defmodule Server.WorklineTest do
         ])
 
       _busy = open!(%{slug: "yu-busy", stage: "spec", workspace_id: ws.id})
-      w = open!(%{slug: "second-spec", stage: "spec", workspace_id: ws.id})
-      staffed = Channel.thread_lead(w.id)
+      w = open!(%{slug: "second-spec", stage: "spec", workspace_id: ws.id, lead: "yu"})
+      refute Channel.thread_lead(w.id) == "yu"
+      assert Enum.any?(Channel.thread_messages(w), &(&1.body =~ "not yu" and &1.body =~ "another workline"))
 
-      assert {:ok, ^staffed, {:instead, why}} = Workline.lead_for(w, "yu")
-      assert why =~ "yu" and why =~ "another workline"
-      assert {:ok, ^staffed, {:instead, why}} = Workline.lead_for(w, "hronir")
-      assert why =~ "planner"
+      w2 = open!(%{slug: "third-spec", stage: "spec", workspace_id: ws.id, lead: "hronir"})
+      refute Channel.thread_lead(w2.id) == "hronir"
+      assert Enum.any?(Channel.thread_messages(w2), &(&1.body =~ "not hronir" and &1.body =~ "planner"))
     end
 
     test "a lead already of the stage's kind keeps the workline, busy elsewhere or not" do
