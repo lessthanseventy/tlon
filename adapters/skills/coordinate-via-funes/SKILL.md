@@ -27,15 +27,13 @@ judgment you keep in your own context dies with you.
   its answer back as the tool's result, mid-turn: `context: transcript` (the default) shows it
   your recent session, `context: none` is a clean one-shot. The operator has the same as
   `/consult [model]` and `/fresh [model]`.
-- **Ask a coworker directly with `consult_peer(peer, prompt, thread_id?)`.** It delivers an ask
-  to the peer's thread; the peer's answer is mirrored back to your own thread, so you read it
-  in your dossier. Address the peer by agent name, and when the ask is about one of its
-  threads pass that `thread_id`: a peer on several worklines gets it on the wrong one otherwise.
-- **When a coworker consults YOU, answer with a `reply_to`.** Your brief renders a consult
-  ask as "<caller> is consulting you — reply to answer". Answer it by posting on your thread
-  with `post_message(body, reply_to: <the ask's message id>)` — the `reply_to` is what the
-  mirror keys on to carry your answer back to the caller. A consult is a conversation, not a
-  one-shot: keep replying with `reply_to` until it's done.
+- **Ask a coworker by @mentioning them on your thread.** `post_message` with their handle
+  in the body (`@name, …`) delivers it; you have no `consult_peer` (coworker profiles exclude
+  it). Their answer lands on your thread.
+- **When someone asks YOU, answer where the notice says.** A wake from another thread names
+  it: if you lead it or were @mentioned on it, answer there with
+  `post_message(body, thread_id: <that thread>)`; otherwise answer here and @mention the
+  author. Use `reply_to: <the ask's message id>` so the reply targets them.
 - **Never route yourself through operator-only UI to reach a coworker.** You cannot press
   the office's keys; reaching claude by typing into another window's terminal is a
   raw hack, not a capability. Delegate through `/consult`, post on your thread, or ask the
