@@ -1,25 +1,15 @@
-# Review: push_branch leases against the server's own push record (70ab219)
+VERDICT: approve
 
-**Verdict: request_changes.** The design (hronir, #16487) is implemented faithfully and the real-git tests prove the three cases, but the landing's own push in `publish/5` was left on the old bare lease and never records, which makes the new refusal fire against the server's own push.
+Reviewer grade: no free reviewer is at the builder's senior grade, so this review was run at ulrikke's grade (reviewer seat, not senior). Stated here per the tech lead's instruction (#16549).
 
-## Findings
+Scope: diff f84e3fc..1fb9d64 (the two fixes to lonnrot's request_changes review at 70ab219). I read the diff and the full push/record code in server/lib/server/workline/publish.ex. I did NOT run the test suite or the gate from this seat; the verify stage (server-run, 00:09:41 onward) is what gated 1fb9d64.
 
-1. **`publish/5` pushes with a bare lease and does not record** (publish.ex:24). After this change every server push except this one writes `refs/tlon/pushed/<branch>`. Sequence: seat `push_branch` P (record P) → approve → landing publishes rebased L with auto-merge armed → operator `send_back` to build (`behind/2` admits `landed`) → builder `push_branch` → ls-remote L, record P → refused "moved since the server last pushed it (P → L): a hand push, or GitHub moved it". The server moved it; a false refusal this change introduces. Fix: the publish push is the same intentional replacement a reland is, so route it through `replace_branch/3`:
-   ```
-   -         {:push, {_, 0}} <- {:push, run.("git", ["-C", repo, "push", "--force-with-lease", "origin", branch], opts)},
-   +         {:push, :ok} <- {:push, replace_branch(repo, branch, run)},
-   ...
-   -      {:push, {out, _}} -> {:error, "push of #{branch} refused: #{String.slice(out, 0, 200)}"}
-   +      {:push, {:error, why}} -> {:error, why}
-   ```
-   publish_test.exs:25 is the one remaining bare-lease assertion to update. Three push paths become two.
+Checked against lonnrot's two findings:
+1. publish/5 now pushes through replace_branch/3 (publish.ex:24), so the landing's push goes through lease_push and records refs/tlon/pushed/<branch>. The send_back → push_branch false refusal no longer applies. Error passthrough `{:push, {:error, why}} -> {:error, why}` matches replace_branch's return shape. Fixed.
+2. ref_sha/2 (publish.ex:121) takes the tab-split line whose second field is exactly refs/heads/<branch>; stderr noise cannot become the expect. Test with an ssh warning ahead of the ls-remote line added. Fixed.
 
-2. **`remote_sha/3` takes the first token of merged stdout+stderr as the sha** (publish.ex:115). With `stderr_to_stdout: true`, a stderr line (ssh "Warning: Permanently added…", a credential-helper note) lands first and becomes `expect`; the push then fails on an invalid lease. Loud, not silent, so not blocking alone, but in the change's lines: select the line whose second field is `refs/heads/<branch>` and take its first field.
+Lease semantics checked: expect "" → `--force-with-lease=refs/heads/<b>:` means must-not-exist (correct git form). Record present and differs from origin → refused. No record → origin's sha, once. No fetch, prune, or origin/* write on the push path.
 
-## Verified
+Known and accepted, not a finding here: record_push writes refs/tlon/pushed/<branch> into the shared .git, which the ticket #706 text said to avoid ("no update-ref"). hronir's design call (#16487) explicitly chose the record, so I follow that.
 
-- ls-remote runs before the push and nothing fetches or prunes; a failed ls-remote is `{:error, _}`, never "absent".
-- Absent on origin → lease `""`; record present and moved → refused, proven against a real bare origin and a second clone (case b); no record → the sha read once, then recorded; `replace_branch/3` relands over a hand-advanced head and records.
-- `work/uqbar` push leaves `origin/work/uqbar-fix` untouched.
-- `fetch_branch`/`prune_branch` gone; no stale reference in lib, docs or AGENTS.md (rg).
-- Branch gate green: CHECKS row `mise run check` exit 0 at 70ab219. No bench_contrast row (no persona file touched).
+Non-blocking (see follow_ups): record_push's comment says a failed record write "leaves the next push on what origin holds then". That is false: a stale record is kept and compared against origin, which now holds our own push, so the next push refuses with "moved since the server last pushed it".
