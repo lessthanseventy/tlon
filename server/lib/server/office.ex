@@ -293,12 +293,8 @@ defmodule Server.Office do
     end
   end
 
-  # each open thread with its lead, whether a tmux window is running it (asked of tmux: a Claude
-  # Code worker registers no session until it calls register, so the roster alone misses it), and
-  # whether it is the standing thread of its workspace
   defp home_ws_ids(wss), do: wss |> Enum.filter(&(&1.type == "home")) |> Enum.map(& &1.id)
 
-  # a session is only warm with a window to wake in: the thread's leaf, or the coworker's own on the standing thread
   # the last windows tmux answered with: a read that fails (a fault, a restart) keeps them for
   # @held_s, so a hiccup never empties the room, and a tmux that stays down does not keep ghosts
   defp held_windows(ws) do
@@ -378,6 +374,7 @@ defmodule Server.Office do
 
       seated? = MapSet.member?(sessioned, {t.id, lead})
 
+      # a window with no session is not a desk: the lead is idle until it registers
       desk? =
         (live and not Server.Coworker.window_only?(live, seated?)) or lead in on_it or
           MapSet.member?(warm, {t.id, lead})
