@@ -52,7 +52,7 @@ import { PLAY, PLAY_ROWS, ROOM_PLAY, WORLD_ROWS, roomKey, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
-import { applyBuild, loadHome } from "./home"
+import { applyBuild, loadFloor } from "./home"
 import { inSandbox, loadPets, PETS_PATH, savePets } from "./pets"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { READER_KEYS, Reader, type ReaderDeps } from "./reader"
@@ -285,7 +285,7 @@ let drag: { col: number; row: number } | null = null
 let build: Build | null = null
 // the room moved (re-render its frame); its art changed (resend the image)
 let roomChanged = true, imageDirty = true, homeShown = false
-let homeNow = loadHome()
+let homeNow = loadFloor()
 
 // what the open card reads, fetched when it opens and on every refresh while it stays open
 let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.Triage | null = null, rack: data.Health | null = null
@@ -1576,7 +1576,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "build": {
-      if (!build) build = startBuild(loadHome())
+      if (!build) build = startBuild(loadFloor())
       const b = build
       const mutate = (f: (b: Build) => Build): (() => void) => () => {
         build = applyBuild(build!, f)
@@ -2141,7 +2141,7 @@ function draw() {
   // leaving build mode puts the room back, however the mode was left
   if (!building && homeShown) {
     roomChanged = true; imageDirty = true
-    homeNow = loadHome()
+    homeNow = loadFloor()
     for (const r of rooms.values()) if (r instanceof WideRoom) r.setHome(homeNow)
     // the home below the office grows or shrinks with the home, and the room's rows with it
     layoutScreen()
