@@ -7,6 +7,8 @@
 export type HomeTileKind = "living" | "kitchen" | "bathroom" | "bedroom" | "street" | "garden"
 export const CATALOGUE: HomeTileKind[] = ["living", "kitchen", "bathroom", "bedroom", "street", "garden"]
 
+import type { Rect } from "./tiles"
+
 export type Pt = [number, number]
 export type HomeTile = { kind: HomeTileKind; at: Pt; rot?: 0 | 90 | 180 | 270 }
 export type Home = { tiles: HomeTile[] }
@@ -149,3 +151,26 @@ export const defaultHome = (cols: number): Home => ({
     { kind: "kitchen", at: [2, OFFICE_ROWS + 1] }, { kind: "bathroom", at: [3, OFFICE_ROWS + 1] },
   ],
 })
+
+/** each home tile's furniture as tile-local px rects (approximate footprints of the sprites in homeart.ts); local x=0 stays clear — the lane a walk takes down a tile's left edge. Street and bathroom floor is open. */
+export const HOME_BLOCKS: Record<HomeTileKind, Rect[]> = {
+  living: [{ x: 1, y: 6, w: 10, h: 4 }],
+  kitchen: [{ x: 1, y: 0, w: 11, h: 2 }, { x: 3, y: 4, w: 6, h: 3 }],
+  bathroom: [{ x: 1, y: 1, w: 4, h: 5 }, { x: 10, y: 2, w: 2, h: 2 }],
+  bedroom: [{ x: 1, y: 1, w: 6, h: 8 }],
+  street: [],
+  garden: [{ x: 1, y: 3, w: 11, h: 2 }, { x: 1, y: 6, w: 11, h: 2 }],
+}
+
+/** a footprint turned clockwise with its tile (the sprite is 12×12) */
+function turn(r: Rect, rot: 0 | 90 | 180 | 270 = 0): Rect {
+  let q = r
+  for (let k = 0; k < rot / 90; k++) q = { x: 12 - q.y - q.h, y: q.x, w: q.h, h: q.w }
+  return q
+}
+
+/** a home tile's footprints on the floor, in px */
+export function tileBlocks(t: HomeTile): Rect[] {
+  const [ox, oy] = cellPx(t.at)
+  return HOME_BLOCKS[t.kind].map((r) => turn(r, t.rot)).map((r) => ({ x: ox + r.x, y: oy + r.y, w: r.w, h: r.h }))
+}

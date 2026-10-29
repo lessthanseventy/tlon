@@ -1,8 +1,8 @@
-// Builds the Plan the sim needs by unioning every tile on the floor. For this step every tile is
-// anchored at [0,0] (absolute coordinates); the grid offset in `home.tiles[].at` is read but not
-// yet applied — step 3 (build mode) applies it.
+// Builds the Plan the sim needs by unioning every tile on the floor. The office tiles are anchored at
+// [0,0]; the home tiles (kit/home.ts) sit below at their absolute cells and add their blocks.
 import type { Actor, Kind, Pastime, Plan, Spot } from "./sim"
 import type { Home, Rect, Tile, TileKind } from "./tiles"
+import { tileBlocks, type Home as FloorHome } from "./home"
 import { EMPTY } from "./types"
 import { bathroomTile } from "./tiles/bathroom"
 import { catCornerTile } from "./tiles/cat-corner"
@@ -23,7 +23,7 @@ const LOUNGE_KINDS: (Kind | Pastime)[] = [
   "couch", "cooler", "coffee", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read", "bathroom",
 ]
 
-export function floorPlan(home: Home, w: number): Plan<Layout> & { blocks: (l: Layout) => Rect[] } {
+export function floorPlan(home: Home, w: number, floor: FloorHome = { tiles: [] }): Plan<Layout> & { blocks: (l: Layout) => Rect[] } {
   const z = zones(w)
   const tiles = home.tiles.map((t) => FACTORIES[t.kind](z, w))
   const office = officeTile(z)
@@ -63,7 +63,7 @@ export function floorPlan(home: Home, w: number): Plan<Layout> & { blocks: (l: L
     },
     cat: nina.cat(),
     blocks(l: Layout): Rect[] {
-      return [{ x: 0, y: 0, w, h: BAND }, ...tiles.flatMap((t) => t.blocks(l))]
+      return [{ x: 0, y: 0, w, h: BAND }, ...tiles.flatMap((t) => t.blocks(l)), ...floor.tiles.flatMap(tileBlocks)]
     },
   }
 }
