@@ -93,18 +93,8 @@ defmodule Server.Smoke do
   @spec stop(integer()) :: :ok | {:error, String.t()}
   def stop(thread_id) do
     case held(thread_id) || building(thread_id) do
-      nil ->
-        {:error, "no smoke is up for this thread"}
-
-      %{meta: %{"os_pid" => pid}} when is_integer(pid) ->
-        _ = System.cmd("kill", ["-TERM", to_string(pid)], stderr_to_stdout: true)
-        :ok
-
-      %{state: state, id: id} when state in ["available", "scheduled"] ->
-        Oban.cancel_job(id)
-
-      job ->
-        {:error, building_error(job, "its script has not started yet; stop again in a moment")}
+      nil -> {:error, "no smoke is up for this thread"}
+      job -> stop_job(job)
     end
   end
 
@@ -168,7 +158,7 @@ defmodule Server.Smoke do
 
   # the tip moved since the building job was queued: that build is of a commit nobody asked for now
   defp replace(old, thread_id, ref, sha, opts) do
-    case stop(thread_id) do
+    case stop_job(old) do
       :ok ->
         insert(thread_id, ref, sha, opts, %{"replaced" => old.id})
 
@@ -210,4 +200,13 @@ defmodule Server.Smoke do
     wide = if opts[:wide], do: [{"OFFICE_WIDE", "1"}, {"OFFICE_TEXT", "1"}], else: []
     if opts[:sandbox], do: [{"OFFICE_SANDBOX", "1"} | wide], else: wide
   end
+
+  defp stop_job(%{meta: %{"os_pid" => pid}}) when is_integer(pid) do
+    _ = System.cmd("kill", ["-TERM", to_string(pid)], stderr_to_stdout: true)
+    :ok
+  end
+
+  defp stop_job(%{state: state, id: id}) when state in ["available", "scheduled"], do: Oban.cancel_job(id)
+
+  defp stop_job(job), do: {:error, building_error(job, "its script has not started yet; stop again in a moment")}
 end
