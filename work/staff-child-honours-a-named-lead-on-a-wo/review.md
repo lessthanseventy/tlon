@@ -1,45 +1,42 @@
-# Review — staff-child-honours-a-named-lead-on-a-wo (head 7859fe8)
+# Review — staff-child-honours-a-named-lead-on-a-wo (head 8a0e6d7)
 
-**Verdict: request_changes.** One confirmed regression against the rule the removed `lead_for/2` doc promised; four-line fix plus one test. Everything else stands as approved before.
+**Verdict: approve.** The one finding from round 3 is fixed exactly as asked, with the test I specified. Nothing new since 70ea71b beyond that fix.
 
-## 1. An unfit pick on a bench without the stage's kind leaves the workline unled, and the thread says so with an empty name
+## 1. Round 3 finding fixed: an unfit pick on a bench without the stage's kind is taken as asked
 
-Witness, `server/lib/server/workline.ex` `staff_opened/2`, the unfit branch:
-
-```elixir
-why when is_binary(why) ->
-  staffed = restaff(thread)
-  lead = Server.Channel.thread_lead(staffed.id)
-  post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
-  staffed
-```
-
-`restaff/2` on a bench with no coworker of the stage's kind goes to `restaff_miss`, which returns the thread untouched. A freshly opened workline has no lead, so `lead` is nil and the line posted reads `→  leads, not <wanted>: …`. `StaffChild.staff/2` then returns `{:ok, nil}` and the tool replies with lead nil. Nobody is woken; the workline sits unled.
-
-Before this branch the same case took the pick as asked. The removed `lead_for/2` was explicit: "a workline staffing left without a lead, takes the pick as asked", implemented by `is_nil(current) -> {:ok, wanted, :as_asked}`. That path is gone and nothing replaces it.
-
-Concrete trigger: a bench with a reviewer and no builder; `staff_child` opens a `build` workline with `lead:` that reviewer. Wrong kind, so unfit; `restaff(thread, "builder")` hits `of_kind == []`; thread_lead stays nil. Same at `intent` (no kind) when the pick is busy, since `restaff/1` for intent picks the bench's lead and that may also be nil.
-
-Fix (restores the old rule, one branch):
+Witness, `server/lib/server/workline.ex` `staff_opened/2`, the unfit branch now reads:
 
 ```elixir
-why when is_binary(why) ->
-  staffed = restaff(thread)
+case Server.Channel.thread_lead(staffed.id) do
+  nil ->
+    hand_to(staffed, @staff_by_stage[thread.stage] || "lead", wanted)
 
-  case Server.Channel.thread_lead(staffed.id) do
-    nil ->
-      hand_to(staffed, @staff_by_stage[thread.stage] || "lead", wanted)
-
-    lead ->
-      post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
-      staffed
-  end
+  lead ->
+    post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
+    staffed
+end
 ```
 
-Test to add, `server/test/server/mcp/server_test.exs` beside the existing "busy named lead gives way" case: seat only a reviewer on the workspace, `staff_child` a `build` workline with `lead:` that reviewer, assert the reply's `lead` is that reviewer, `Channel.thread_lead` is not nil, and no `→ … leads, not` message was posted. It fails on this head (lead nil) and passes with the fix.
+`restaff_miss` returns the thread untouched, so `thread_lead` is nil on a bench with no coworker of the stage's kind, and the branch falls to `hand_to` with the named pick. That restores the rule the removed `lead_for/2` promised ("left without a lead, takes the pick as asked"). The empty-name leads-line is gone with it.
+
+Test added, `server/test/server/mcp/server_test.exs` "an unfit named lead on a bench without the stage's kind is taken as asked, not left unled": reviewer-only bench, `build` workline, `lead:` that reviewer; asserts the reply's lead, `Channel.thread_lead` and no "leads, not" line. On this head:
+
+```
+menard run test --in server test/server/mcp/server_test.exs:1344
+{"ok":true,"tests":1,"failed":0}
+menard run test --in server test/server/mcp/server_test.exs test/server/workline_test.exs
+{"ok":true,"tests":192,"failed":0}
+```
+
+That the test was red before the fix is emma's report (#17082); I verified green on head and, by reading, that the old branch leaves `thread_lead` nil, which the assertion `== "lonnrot"` would catch.
+
+## 2. bench_contrast
+
+builder-junior 2/2 vs 2/2, librarian 2/2 vs 2/2: green, not findings. builder-senior "error — a side ran no tasks" is ticket #623 (the role runs zero tasks on both sides); recorded this sighting there. No REGRESSION row.
 
 ## Unchanged from the earlier approvals
 
-- `not_manager/2` refusal before the thread opens: correct, no orphan thread.
-- `unfit/2` with `seat` nil (a registered agent off the bench) falls to `hand_to` as asked: matches the old doc.
-- Five new tests pass and each fails without its change; `mise run check` exit 0 on this head.
+- `not_manager/2` refuses an on- or off-shift manager before the thread opens: no orphan thread.
+- `unfit/2` with `seat` nil (an agent not on the bench) falls to `hand_to` as asked.
+- `lead_for/2` deleted; `Workline.open(lead:)` is the one door.
+- `mise run check` exit 0 recorded by verify on this head.
