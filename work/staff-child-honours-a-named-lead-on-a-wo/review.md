@@ -1,31 +1,45 @@
-# Review — staff-child-honours-a-named-lead-on-a-wo (round 3)
+# Review — staff-child-honours-a-named-lead-on-a-wo (head 7859fe8)
 
-**Verdict: approve.** Branch read at 7859fe8b47959489e54ef393d579bdbb7fe405f1; the delta since my last verdict (dba109f) is that one commit.
+**Verdict: request_changes.** One confirmed regression against the rule the removed `lead_for/2` doc promised; four-line fix plus one test. Everything else stands as approved before.
 
-## The finding from round 2, checked
+## 1. An unfit pick on a bench without the stage's kind leaves the workline unled, and the thread says so with an empty name
 
-1. **Off-shift manager named as lead slipped past `not_manager`** — fixed. The witness, `coordination.ex:185-190`:
+Witness, `server/lib/server/workline.ex` `staff_opened/2`, the unfit branch:
 
-   ```elixir
-   manager? =
-     ws
-     |> Server.Workspaces.bench_all()
-     |> Enum.any?(&(&1.name == lead and Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype)))
-   if manager?, do: {:manager_lead, lead}, else: :ok
-   ```
+```elixir
+why when is_binary(why) ->
+  staffed = restaff(thread)
+  lead = Server.Channel.thread_lead(staffed.id)
+  post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
+  staffed
+```
 
-   Verified: `bench_all/1` (`workspaces.ex:269`) is the same query as `bench/1` minus `on_shift/1`, so every seat is read regardless of `crew`/`shift`. The predicate is byte-for-byte `Workspaces.manager/1`'s (`workspaces.ex:314`), so what counts as "manager" is one definition applied to a wider bench, not a second one. `@meta_archetypes` is `[:surveyor]`, which is what the test seats. The refusal still runs ahead of `Workline.open`, so no unled thread is left behind.
+`restaff/2` on a bench with no coworker of the stage's kind goes to `restaff_miss`, which returns the thread untouched. A freshly opened workline has no lead, so `lead` is nil and the line posted reads `→  leads, not <wanted>: …`. `StaffChild.staff/2` then returns `{:ok, nil}` and the tool replies with lead nil. Nobody is woken; the workline sits unled.
 
-2. **The test is honest.** It seats `surveyor-night` on crew `night`, asserts it is *absent* from `bench/1` before calling the tool (so the test fails if the fixture ever lands on shift and stops testing the off-shift path), then asserts `isError` and an unchanged thread count. Builder reports it went red first on the `Spawn.ensure/3` crash; consistent with round 2's traced path.
+Before this branch the same case took the pick as asked. The removed `lead_for/2` was explicit: "a workline staffing left without a lead, takes the pick as asked", implemented by `is_nil(current) -> {:ok, wanted, :as_asked}`. That path is gone and nothing replaces it.
 
-## Earlier rounds
+Concrete trigger: a bench with a reviewer and no builder; `staff_child` opens a `build` workline with `lead:` that reviewer. Wrong kind, so unfit; `restaff(thread, "builder")` hits `of_kind == []`; thread_lead stays nil. Same at `intent` (no kind) when the pick is busy, since `restaff/1` for intent picks the bench's lead and that may also be nil.
 
-Round 1's two follow-ups (delete `lead_for/2`; refuse a manager as named lead) landed in 11f26f3 and were approved in round 2. Nothing from any round remains open.
+Fix (restores the old rule, one branch):
 
-## Checks
+```elixir
+why when is_binary(why) ->
+  staffed = restaff(thread)
 
-`mise run check` exit 0 on the branch (09:50Z); `menard run check --in server` 2408 tests, 0 failed. No `bench_contrast` row among the five most recent CHECKS shown to me.
+  case Server.Channel.thread_lead(staffed.id) do
+    nil ->
+      hand_to(staffed, @staff_by_stage[thread.stage] || "lead", wanted)
 
-## Nits (not follow-ups)
+    lead ->
+      post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
+      staffed
+  end
+```
 
-The `manager?` predicate repeats `Workspaces.manager/1`'s lambda; a `Workspaces.manager?(ws, name)` would make it one line in two callers. Three lines beat a helper for a caller that doesn't exist yet — leaving it.
+Test to add, `server/test/server/mcp/server_test.exs` beside the existing "busy named lead gives way" case: seat only a reviewer on the workspace, `staff_child` a `build` workline with `lead:` that reviewer, assert the reply's `lead` is that reviewer, `Channel.thread_lead` is not nil, and no `→ … leads, not` message was posted. It fails on this head (lead nil) and passes with the fix.
+
+## Unchanged from the earlier approvals
+
+- `not_manager/2` refusal before the thread opens: correct, no orphan thread.
+- `unfit/2` with `seat` nil (a registered agent off the bench) falls to `hand_to` as asked: matches the old doc.
+- Five new tests pass and each fails without its change; `mise run check` exit 0 on this head.
