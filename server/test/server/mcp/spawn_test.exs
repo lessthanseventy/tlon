@@ -239,20 +239,42 @@ defmodule Server.MCP.SpawnTest do
       assert Repo.get(Thread, existing.id).agent_id == lead.id
     end
 
-    test "the exports carry TLON_READ_DIRS = the project's other repos, for the harness to open read-only" do
+    @tag :tmp_dir
+    test "the exports carry TLON_READ_DIRS = the project's other repos, for the harness to open read-only", %{
+      tmp_dir: dir
+    } do
       {:ok, ws} = Server.Workspaces.register(%{name: "rd"})
+      [b, c] = for n <- ~w(b c), do: seed_dir(dir, n, 1)
 
       repos = [
         %{"name" => "a", "path" => "/nonexistent/a"},
-        %{"name" => "b", "path" => "/p/b"},
-        %{"name" => "c", "path" => "/p/c"}
+        %{"name" => "b", "path" => b},
+        %{"name" => "c", "path" => c}
       ]
 
       {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "multi", repos: repos})
       {:ok, thread} = Channel.open_thread(%{title: "rd", workspace_id: ws.id, project_id: p.id})
 
       assert {:ok, %{exports: ex}} = Spawn.join(thread.id, "codex")
-      assert ex =~ ~s(TLON_READ_DIRS="/p/b:/p/c")
+      assert ex =~ ~s(TLON_READ_DIRS="#{b}:#{c}")
+      refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "read dirs"))
+    end
+
+    @tag :tmp_dir
+    test "read dirs the shared budget leaves out are posted once on the thread", %{tmp_dir: dir} do
+      [a, b] = for n <- ~w(a b), do: seed_dir(dir, n, 40)
+
+      {:ok, ws} = Server.Workspaces.register(%{name: "rd-drop"})
+      repos = [%{"name" => "own", "path" => "/p/own"}, %{"name" => "a", "path" => a}, %{"name" => "b", "path" => b}]
+      {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "drop", repos: repos})
+      {:ok, thread} = Channel.open_thread(%{title: "rd", workspace_id: ws.id, project_id: p.id})
+
+      assert {:ok, %{exports: ex}} = Spawn.join(thread.id, "codex")
+      assert ex =~ ~s(TLON_READ_DIRS="#{a}")
+      posts = for m <- Channel.thread_messages(thread), m.body =~ "read dirs", do: m
+      assert [post] = posts
+      assert post.body =~ b
+      assert post.kind == "notice"
     end
   end
 
@@ -278,5 +300,11 @@ defmodule Server.MCP.SpawnTest do
       assert {:error, {:no_thread, 999_999}} = Spawn.mint_for(999_999, "claude-code")
       assert {:error, {:no_agent, "ghost"}} = Spawn.mint_for(t.id, "ghost")
     end
+  end
+
+  defp seed_dir(root, name, n) do
+    dir = Path.join(root, name)
+    for i <- 1..n, do: File.mkdir_p!(Path.join([dir, "r#{i}", ".git"]))
+    dir
   end
 end
