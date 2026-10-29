@@ -351,7 +351,26 @@ defmodule Server.Worktree do
 
   # -- helpers --------------------------------------------------------------
 
+  # tlon's own checkout gets its hooks from `server:setup`; a sibling repo has no scripts/git-hooks,
+  # so its config points at tlon's (absolute), which fence on TLON_THREAD and are inert without it
+  defp point_hooks_at_tlon(repo_path) do
+    root = Server.Profiles.tlon_root()
+
+    if Path.expand(repo_path) == root do
+      :ok
+    else
+      case git(repo_path, ["config", "core.hooksPath", Path.join(root, "scripts/git-hooks")]) do
+        {_, 0} -> :ok
+        {out, _} -> {:error, "could not point hooks at tlon's: #{String.slice(out, 0, 200)}"}
+      end
+    end
+  end
+
   defp do_ensure(repo_path, slug) do
+    with :ok <- point_hooks_at_tlon(repo_path), do: ensure_checkout(repo_path, slug)
+  end
+
+  defp ensure_checkout(repo_path, slug) do
     wt = path(repo_path, slug)
 
     # A linked worktree carries a `.git` FILE (`gitdir: …`), not a dir — presence is enough.

@@ -9,6 +9,7 @@ defmodule Server.TestRepoDir do
   def make!(context \\ %{}) do
     tmp = Path.join(System.tmp_dir!(), "repo-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
+    clear_seat_thread()
     git = fn args -> System.cmd("git", ["-C", tmp | args], stderr_to_stdout: true) end
     {_, 0} = git.(["init", "-q"])
     {_, 0} = git.(["config", "user.email", "test@test"])
@@ -18,6 +19,16 @@ defmodule Server.TestRepoDir do
     {_, 0} = git.(["commit", "-qm", "seed"])
     ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(tmp) end)
     Map.merge(context, %{repo: tmp, git: git})
+  end
+
+  @doc """
+  `Server.Worktree.ensure` points a sibling repo's hooks at tlon's, which refuse a commit on main
+  while `TLON_THREAD` is set — as it is in a seat's own env. Cleared for the test, restored on exit.
+  """
+  def clear_seat_thread do
+    seat_thread = System.get_env("TLON_THREAD")
+    System.delete_env("TLON_THREAD")
+    ExUnit.Callbacks.on_exit(fn -> if seat_thread, do: System.put_env("TLON_THREAD", seat_thread) end)
   end
 
   def with_project(context \\ %{}) do
