@@ -100,7 +100,14 @@ defmodule Server.MCP.Spawn do
     with {:ok, %{thread: thread, agent: agent}} <- ensure(thread_ref, agent_name, opts),
          {:ok, cwd} <- cwd_export(thread, agent) do
       token = Tokens.mint(thread, agent)
-      {:ok, %{thread: thread, agent: agent, token: token, exports: exports(thread, agent, token) <> cwd}}
+
+      {:ok,
+       %{
+         thread: thread,
+         agent: agent,
+         token: token,
+         exports: exports(thread, agent, token) <> cwd <> lobby_export(thread)
+       }}
     end
   end
 
@@ -160,6 +167,10 @@ defmodule Server.MCP.Spawn do
       label -> "\nexport TLON_MODEL='#{String.replace(label, ~r/['"$`\\]/, "")}'"
     end
   end
+
+  # Marks a pane on the workspace's root thread so the pre-commit hook can refuse a commit on the
+  # lobby's own branch.
+  defp lobby_export(thread), do: if(Channel.root_machine_thread?(thread), do: "\nexport TLON_LOBBY=1", else: "")
 
   # The thread's worktree, ensured now, for the boot script to cd into — a coworker never writes in
   # the main tree (2026-09-08). An outside citizen starts in the repo itself, as the operator's own
