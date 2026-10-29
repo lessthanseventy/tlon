@@ -273,6 +273,40 @@ defmodule Server.IntakeTest do
       assert %{status: "doing"} = Tickets.get(asked.id)
     end
 
+    test "the manager's open operator ask naming it blocks the fallback; once resolved and 30 minutes pass it fires",
+         %{ws: ws, route: route} do
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-p", archetype: "builder"})
+      parked = routed(ws, "waits on the operator", 120)
+      root = Server.Channel.machine_thread(ws.id)
+      {:ok, ask} = Server.Attention.ask(root.id, "tertius", "park ##{parked.id}?", ["yes", "no"])
+      age(ask, 100)
+
+      Intake.run(cap: 4, route: route)
+      assert %{status: "todo"} = Tickets.get(parked.id)
+
+      Server.Attention.resolve(Server.Repo.get(Server.Message, ask.id), "answered: yes")
+      at = DateTime.utc_now() |> DateTime.add(-40 * 60, :second) |> DateTime.truncate(:second)
+      Server.Repo.update_all(from(x in Server.Message, where: x.id == ^ask.id), set: [resolved_at: at])
+
+      Intake.run(cap: 4, route: route)
+      assert %{status: "doing"} = Tickets.get(parked.id)
+    end
+
+    test "an operator ask the manager resolved less than 30 minutes ago still defers it", %{ws: ws, route: route} do
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-q", archetype: "builder"})
+      parked = routed(ws, "just answered", 120)
+      root = Server.Channel.machine_thread(ws.id)
+      {:ok, ask} = Server.Attention.ask(root.id, "tertius", "park ##{parked.id}?", ["yes", "no"])
+      age(ask, 100)
+      Server.Attention.resolve(Server.Repo.get(Server.Message, ask.id), "answered: yes")
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "todo"} = Tickets.get(parked.id)
+    end
+
     test "a consult from before the route does not defer it", %{ws: ws, route: route} do
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-o", archetype: "builder"})
       stalled = routed(ws, "old ask", 31)
