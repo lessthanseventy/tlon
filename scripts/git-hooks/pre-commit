@@ -7,6 +7,12 @@
 set -u
 [ -n "${TLON_THREAD:-}" ] || exit 0
 branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo DETACHED)"
+# The lobby (TLON_LOBBY, the workspace's root thread) has no work of its own: its branch work/t<id>
+# is the one a lead strands commits on when it builds a workline from its lobby seat.
+if [ -n "${TLON_LOBBY:-}" ] && [ "$branch" = "work/t$TLON_THREAD" ]; then
+  echo "tlon: refusing to commit on '$branch' from the lobby — the lobby has no work of its own; commit in the workline's worktree, .worktrees/<slug> on work/<slug>." >&2
+  exit 1
+fi
 case "$branch" in
   work/*) exit 0 ;;
 esac

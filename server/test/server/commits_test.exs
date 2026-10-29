@@ -19,7 +19,10 @@ defmodule Server.CommitsTest do
     # them, so that identity can never leak into a commit the test didn't ask for.
     isolate_env = fn env ->
       given = Enum.into(env, %{})
-      %{"TLON_THREAD" => nil, "TLON_AUTHOR" => nil, "TLON_MODEL" => nil} |> Map.merge(given) |> Map.to_list()
+
+      %{"TLON_THREAD" => nil, "TLON_AUTHOR" => nil, "TLON_MODEL" => nil, "TLON_LOBBY" => nil}
+      |> Map.merge(given)
+      |> Map.to_list()
     end
 
     git = fn args, env ->
@@ -137,6 +140,34 @@ defmodule Server.CommitsTest do
     File.write!(Path.join(repo, "u"), "u\n")
     {_, 0} = git.(["add", "u"], [])
     assert {_, 0} = git.(["commit", "-qm", "uqbar's fix"], [{"TLON_THREAD", "269"}])
+  end
+
+  test "branch fencing: a lobby pane (TLON_LOBBY) is refused on work/t1 — the lobby has no work of its own", %{
+    repo: repo,
+    git: git
+  } do
+    {_, 0} = git.(["switch", "-c", "work/t1"], [])
+    File.write!(Path.join(repo, "l"), "l\n")
+    {_, 0} = git.(["add", "l"], [])
+    {out, code} = git.(["commit", "-qm", "a lead's build in the lobby"], [{"TLON_THREAD", "1"}, {"TLON_LOBBY", "1"}])
+    assert code != 0
+    assert out =~ "refusing to commit"
+    assert out =~ ".worktrees/<slug>"
+  end
+
+  test "branch fencing: a lobby pane still commits on work/uqbar-*, and a workline pane on work/t3", %{
+    repo: repo,
+    git: git
+  } do
+    {_, 0} = git.(["switch", "-c", "work/uqbar-x"], [])
+    File.write!(Path.join(repo, "u"), "u\n")
+    {_, 0} = git.(["add", "u"], [])
+    assert {_, 0} = git.(["commit", "-qm", "uqbar from the lobby"], [{"TLON_THREAD", "1"}, {"TLON_LOBBY", "1"}])
+
+    {_, 0} = git.(["switch", "-c", "work/t3"], [])
+    File.write!(Path.join(repo, "w"), "w\n")
+    {_, 0} = git.(["add", "w"], [])
+    assert {_, 0} = git.(["commit", "-qm", "a workline pane"], [{"TLON_THREAD", "3"}])
   end
 
   test "an unreadable repo is an error, and for_thread turns no-repo into an empty section", %{repo: repo} do

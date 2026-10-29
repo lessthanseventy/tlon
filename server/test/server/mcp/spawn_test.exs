@@ -218,6 +218,17 @@ defmodule Server.MCP.SpawnTest do
       assert ex =~ "TLON_MODEL='anthropic/claude-opus-5-5 (claude_code)'"
     end
 
+    test "TLON_LOBBY is exported for the workspace's root machine thread only" do
+      {:ok, ws} = Server.Bootstrap.ensure()
+      root = Channel.machine_thread(ws.id)
+      {:ok, child} = Channel.open_thread(%{title: "a workline", scope: "machine", stage: "build", workspace_id: ws.id})
+
+      assert {:ok, %{exports: lobby}} = Spawn.join(root.id, "codex")
+      assert lobby =~ ~s(export TLON_LOBBY=1)
+      assert {:ok, %{exports: work}} = Spawn.join(child.id, "codex")
+      refute work =~ "TLON_LOBBY"
+    end
+
     test "no repo anywhere → no TLON_CWD line, and the spawn still succeeds" do
       {:ok, thread} = Channel.open_thread(%{title: "no repo"})
       assert {:ok, %{exports: ex}} = Spawn.join(thread.id, "codex")
