@@ -182,10 +182,12 @@ defmodule Server.MCP.Tool.StaffChild do
   # a workline's lead is staffed once, at open: a manager named there would be refused after the
   # thread exists, leaving it unled
   defp not_manager(%{workspace_id: ws}, %{workline: stage, lead: lead}) when is_binary(stage) and not is_nil(ws) do
-    case Server.Workspaces.manager(ws) do
-      %{name: ^lead} -> {:manager_lead, lead}
-      _ -> :ok
-    end
+    manager? =
+      ws
+      |> Server.Workspaces.bench_all()
+      |> Enum.any?(&(&1.name == lead and Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype)))
+
+    if manager?, do: {:manager_lead, lead}, else: :ok
   end
 
   defp not_manager(_parent, _params), do: :ok
