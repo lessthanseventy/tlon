@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { killServer } from "./kill-server"
 
 // A thread card opens with its reply box focused: typing lands in it and Enter posts it; the first
 // Esc leaves the box (the card's keys work again), the second goes back. Drives the real TUI
@@ -30,14 +31,11 @@ const server = Bun.serve({
 // a tmux server per test: a socket reused right after kill-server can race its teardown
 const sockets: string[] = []
 let socket = ""
-const fresh = () => { if (socket) Bun.spawnSync(["tmux", "-L", socket, "kill-server"]); socket = `tlon-office-reply-${process.pid}-${sockets.length}`; sockets.push(socket) }
+const fresh = () => { if (socket) killServer(socket); socket = `tlon-office-reply-${process.pid}-${sockets.length}`; sockets.push(socket) }
 const state = mkdtempSync(join(tmpdir(), "office-reply-"))
 const tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", socket, ...a])
 afterAll(() => {
-  for (const s of sockets) {
-    Bun.spawnSync(["tmux", "-L", s, "kill-server"])
-    rmSync(`${process.env.TMUX_TMPDIR ?? "/tmp"}/tmux-${process.getuid!()}/${s}`, { force: true })
-  }
+  for (const s of sockets) killServer(s)
   rmSync(state, { recursive: true, force: true })
   server.stop(true)
 })
