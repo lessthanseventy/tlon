@@ -1340,6 +1340,30 @@ defmodule Server.MCP.ServerTest do
                &(&1.body =~ "daneri leads, not hronir")
              )
     end
+
+    test "an unfit named lead on a bench without the stage's kind is taken as asked, not left unled" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Reviewers only"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "lonnrot", archetype: "reviewer", grade: "senior"})
+      manager = Staff.agent_by_name("tertius")
+      {:ok, home} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, agent_id: manager.id})
+      token = MCP.Tokens.mint(home, manager)
+      session = handshake(token)
+      call(token, session, 3, "register", %{})
+
+      r =
+        call(token, session, 4, "staff_child", %{
+          "title" => "no builder here",
+          "lead" => "lonnrot",
+          "workline" => "build",
+          "brief" => "Build it."
+        })
+
+      refute r["isError"]
+      payload = decode_tool_json(r)
+      assert payload["lead"] == "lonnrot"
+      assert Channel.thread_lead(payload["thread_id"]) == "lonnrot"
+      refute Enum.any?(leads_lines(payload["thread_id"]), &(&1 =~ "leads, not"))
+    end
   end
 
   describe "send_back and follow-ups" do

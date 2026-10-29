@@ -2356,9 +2356,15 @@ defmodule Server.Workline do
     case seat && unfit(thread, seat) do
       why when is_binary(why) ->
         staffed = restaff(thread)
-        lead = Server.Channel.thread_lead(staffed.id)
-        post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
-        staffed
+
+        case Server.Channel.thread_lead(staffed.id) do
+          nil ->
+            hand_to(staffed, @staff_by_stage[thread.stage] || "lead", wanted)
+
+          lead ->
+            post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
+            staffed
+        end
 
       _ ->
         hand_to(thread, @staff_by_stage[thread.stage] || "lead", wanted)
