@@ -16,7 +16,7 @@ defmodule Server.ProfilesMainRootTest do
   end
 
   test "main_root/1 returns an error, not a raise, for a path that is not a git repo" do
-    dir = Path.join(System.tmp_dir!(), "not-a-repo-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "not-a-repo-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
     assert {:error, _} = Server.Profiles.main_root(dir)
