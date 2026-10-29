@@ -1,48 +1,27 @@
-# Review — a-thread-can-name-its-repo-staff-child-o @ 3f6a18b (round 5)
+# Review — a-thread-can-name-its-repo-staff-child-o @ d2869a8 (round 6)
 
-**Verdict: request_changes.** I approved this head in round 4 and I was wrong on one point. The grader's detectability row (#16662) is a real finding, and I measured it on this box: `git -C ~/projects/ficciones config core.hooksPath` answers `/home/andrew/projects/ficciones/scripts/git-hooks`, a directory holding its own pre-commit, prepare-commit-msg, pre-push, post-checkout, post-merge and post-rewrite. `Server.Profiles` names that repo (`@repo "/home/andrew/projects/ficciones"`). The first thread that names ficciones as its repo would silently replace those six hooks with tlon's, and the branch's own test asserts exactly that overwrite:
+**Verdict: approve.** The three round-5 findings (a809135) are fixed on the branch in the ruled shapes, verify is green on exactly this head (`mise run check` exit 0 at 03:23Z, evidence `workline:a-thread-can-name-its-repo-staff-child-o:verify`), and the one follow-up I carried from round 5 was folded into d2869a8, so nothing is left open. Read: `git diff a809135..d2869a8 -- . ':!work/…'` (worktree.ex, profiles.ex, smoke.ex, worktree_test, profiles_main_root_test).
+
+## Findings from round 5, checked
+
+**1. Fixed — a sibling's own `core.hooksPath` is refused, never overwritten.** `set_hooks_path/2` reads `config --get` first: `{_, 1}` (unset) → sets tlon's; equal → `:ok`; anything else → `{:error, "<repo> has its own core.hooksPath (<value>); not pointing it at tlon's"}`. The `with` in `point_hooks_at_tlon/1` means `ensure` returns that error before `ensure_checkout` runs. The test is the witness:
 
 ```
 {_, 0} = git.(["config", "core.hooksPath", "elsewhere"])
-assert {:ok, _} = Worktree.ensure(repo, "hooked")
-assert String.trim(out) == hooks
+assert {:error, msg} = Worktree.ensure(repo, "hooked")
+assert msg =~ "elsewhere"
+assert String.trim(out) == "elsewhere"
+refute File.exists?(Worktree.path(repo, "hooked"))
 ```
 
-Everything from round 4 still holds (findings 1–3 fixed, 161 tests green, branch on origin/main). This round adds one blocking finding and pulls one follow-up into the change because it sits in the same lines.
+The idempotency half of the original test is kept (second `ensure` with tlon's value → `:ok`); the overwrite assertion is gone. `git/2` is `stderr_to_stdout: true` through the pre-existing `:git_cmd` seam (on main at worktree.ex:498), so the exit-1 branch is `--get`'s unset case and nothing else.
 
-## Findings
+**2. Fixed — `Profiles.main_root/1` returns `{:ok, root} | {:error, out}`.** `stderr_to_stdout`, output sliced to 200. Worktree passes the error through; `Smoke.script/0` unwraps with `{:ok, root} = Server.Profiles.main_root()` (d2869a8 replaced the `elem(…, 1)` that would have built a path from git's error text). New test: a non-repo tmp dir returns `{:error, _}`, stamped with `System.pid()` after the first verify caught the unique_integer-only name. Worktree's moduledoc "never a raise" now holds in `ensure` for real.
 
-**1. BLOCKING — `point_hooks_at_tlon/1` overwrites a repo's own `core.hooksPath` without a word.** Read the value first; write only when it is unset or already tlon's; otherwise return `{:error, "…has its own core.hooksPath: <value>"}` so `ensure` refuses rather than disarms a sibling's hooks. Ruled shape:
-
-```elixir
-defp point_hooks_at_tlon(repo_path) do
-  root = Server.Profiles.main_root()
-  hooks = Path.join(root, "scripts/git-hooks")
-
-  if Server.Profiles.main_root(repo_path) == root do
-    :ok
-  else
-    case git(repo_path, ["config", "--get", "core.hooksPath"]) do
-      {out, 0} when trim(out) == hooks -> :ok
-      {out, 0} -> {:error, "#{repo_path} has its own core.hooksPath (#{String.trim(out)}); not pointing it at tlon's"}
-      {_, 1} ->
-        case git(repo_path, ["config", "core.hooksPath", hooks]) do
-          {_, 0} -> :ok
-          {out, _} -> {:error, "could not point hooks at tlon's: #{String.slice(out, 0, 200)}"}
-        end
-      {out, _} -> {:error, "could not read core.hooksPath: #{String.slice(out, 0, 200)}"}
-    end
-  end
-end
-```
-
-(`git config --get` exits 1 when the key is unset; `trim/1` is `String.trim`, written out in the real code.) Change the test: set `elsewhere`, then assert `ensure` returns `{:error, msg}` with `elsewhere` in `msg` and the config still reads `elsewhere`. Keep the idempotency half: a second `ensure` with tlon's value already set is `:ok`.
-
-**2. In the same lines — `Profiles.main_root/1` raises inside `ensure`.** My round-4 follow-up, raised by the grader to blast. Since finding 1 reopens this function, do it now: `main_root/1` returns `{:ok, root} | {:error, out}`; `Smoke.script/0` and `point_hooks_at_tlon/1` match on it; the hooks function passes the error through. Worktree's moduledoc ("never a raise") then holds without exception. Update `profiles_main_root_test.exs` for the tuple.
-
-**3. Test gap — the tlon-own-checkout no-op branch is unpinned.** Add one `worktree_test` case: `ensure` on a linked worktree of `Server.Profiles.main_root()` (or the tmp-repo-plus-linked-worktree shape from `profiles_main_root_test`) leaves `core.hooksPath` unset.
+**3. Fixed — the tlon-own-checkout no-op is pinned.** The new test runs `ensure` on `File.cwd!()` (`server/`, inside tlon's checkout) with every `git/2` call stubbed; `main_root/1` uses `System.cmd` directly, so the common-dir comparison is real while nothing is written. A broken comparison would send `config --get` to the stub and trip `refute_received`. It leaves `server/.worktrees/own-noop-N/.git` for the test's life; `.worktrees/` is ignored and `on_exit` removes it.
 
 ## Not findings
-- Scope (grader row 1): the hooks pointing is what makes a sibling seat stamped and fenced (#714); it belongs in this change. No split required.
-- Reversibility (grader row 2): real, but finding 1 bounds it to repos that had no hooks of their own; those get tlon's inert-without-TLON_THREAD hooks, which is the intent.
-- No `bench_contrast` row among the CHECKS; nothing to call there.
+- `point_hooks_at_tlon` returns `main_root(repo_path)`'s raw git text on a non-repo `repo_path`, with no "could not" prefix. Unreachable: `ensure` refuses `:not_a_repo` at line 64 before it gets there.
+- The three ✗ proof rows (intent/spec/plan not committed) are the docs, not the code; this child never had them on the branch. The operator's call at `approve 420`, as noted in round 4.
+- No `bench_contrast` row among the CHECKS.
+- Branch is 11 commits on top of origin/main at b8fffdf; the diff is 15 files, +354/−32, all under `server/` plus the workline's own docs.
