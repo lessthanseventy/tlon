@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { killServer } from "./kill-server"
 
 // The rack card (H) has one LANDING & CHECKS list: the waiters in the order the server sends them,
 // the running train as one block (its gate, holding the check it runs, then its cars), who waits
@@ -66,7 +67,7 @@ test("the rack lists landing & checks in one place, in order: a train is one blo
 }, 30_000)
 
 test("a node with no job queue reads neutral under all green: a dim ○ row, no ✕", async () => {
-  tmux("kill-server")
+  killServer(socket)
   current = { ...health, jobs: false, checks: { running: null, waiting: [] }, merge_queue: [] } as unknown as typeof health
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
