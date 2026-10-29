@@ -1142,6 +1142,23 @@ defmodule Server.MCP.ServerTest do
       assert repo == Path.expand("~/projects/menard")
     end
 
+    test "a workline staffed with a repo keeps it", %{rtoken: token, rsession: session} do
+      r =
+        call(token, session, 4, "staff_child", %{
+          "title" => "menard workline",
+          "lead" => "hronir-repo",
+          "brief" => "Build it.",
+          "workline" => "build",
+          "repo" => "~/projects/menard"
+        })
+
+      refute r["isError"]
+      tid = decode_tool_json(r)["thread_id"]
+      assert Repo.get!(Thread, tid).repo == Path.expand("~/projects/menard")
+      assert {:ok, repo} = Server.repo_for_thread(tid)
+      assert repo == Path.expand("~/projects/menard")
+    end
+
     test "a repo outside the workspace is refused, and opens nothing", %{rtoken: token, rsession: session} do
       before = Repo.aggregate(Thread, :count)
 
@@ -2134,6 +2151,7 @@ defmodule Server.MCP.ServerTest do
     repo = Path.join(System.tmp_dir!(), "catch-up-tool-#{System.pid()}-#{System.unique_integer([:positive])}")
     remote = repo <> "-origin.git"
     File.mkdir_p!(repo)
+    Server.TestRepoDir.clear_seat_thread()
     on_exit(fn -> File.rm_rf!(repo) && File.rm_rf!(remote) end)
 
     git = fn dir, args ->
@@ -2164,6 +2182,7 @@ defmodule Server.MCP.ServerTest do
       })
 
     {:ok, wt} = Server.worktree_for_thread(workline)
+    assert wt == Path.join([repo, ".worktrees", "caught-up"])
 
     File.write!(Path.join(repo, "NEW"), "more\n")
     {_, 0} = git.(repo, ["add", "NEW"])

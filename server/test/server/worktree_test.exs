@@ -20,11 +20,24 @@ defmodule Server.WorktreeTest do
     {_, 0} = git.(["add", "README"])
     {_, 0} = git.(["commit", "-qm", "seed"])
 
+    Server.TestRepoDir.clear_seat_thread()
     on_exit(fn -> File.rm_rf!(tmp) end)
     %{repo: tmp, git: git}
   end
 
   describe "ensure/2" do
+    test "a sibling repo is pointed at tlon's hooks, absolutely and on every ensure", %{repo: repo, git: git} do
+      hooks = Path.join(Server.Profiles.tlon_root(), "scripts/git-hooks")
+      assert {:ok, _} = Worktree.ensure(repo, "hooked")
+      assert {out, 0} = git.(["config", "core.hooksPath"])
+      assert String.trim(out) == hooks
+
+      {_, 0} = git.(["config", "core.hooksPath", "elsewhere"])
+      assert {:ok, _} = Worktree.ensure(repo, "hooked")
+      assert {out, 0} = git.(["config", "core.hooksPath"])
+      assert String.trim(out) == hooks
+    end
+
     test "creates an isolated checkout on branch work/<slug>", %{repo: repo, git: git} do
       assert {:ok, wt} = Worktree.ensure(repo, "redis-cache")
       assert wt == Worktree.path(repo, "redis-cache")
