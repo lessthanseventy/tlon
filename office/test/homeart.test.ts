@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Canvas } from "../kit/canvas"
-import { CATALOGUE, type Home, type HomeTile } from "../kit/home"
+import { CATALOGUE, OFFICE_ROWS, cellPx, floorHeight, type HomeTile } from "../kit/home"
 import { mailbox } from "../kit/mailbox"
-import { ANNEX_PAD, SPRITES, TILE, TILE_ART, annexHeight, paintAnnex, paintTile, renderHome, rotated } from "../kit/homeart"
+import { SPRITES, TILE, TILE_ART, paintFloor, paintTile, renderHome, rotated } from "../kit/homeart"
 import { ROLE } from "../kit/palette"
 
 describe("rotated", () => {
@@ -110,22 +110,22 @@ describe("weather on the garden", () => {
   })
 })
 
-describe("annex", () => {
-  const one = { tiles: [{ kind: "garden", at: [3, 5] }] } as Home
-  test("no tiles → no height, nothing painted", () => {
-    expect(annexHeight({ tiles: [] })).toBe(0)
-    const c = new Canvas(40, 40), before = Buffer.from(c.rgba).toString("hex")
-    paintAnnex(c, { tiles: [] }, 0)
-    expect(Buffer.from(c.rgba).toString("hex")).toBe(before)
+describe("floor", () => {
+  const one = { tiles: [{ kind: "garden" as const, at: [0, OFFICE_ROWS] as [number, number] }] }
+  test("no tiles → nothing painted", () => {
+    const c = new Canvas(60, 60), before = Buffer.from(c.rgba)
+    paintFloor(c, { tiles: [] })
+    expect(Buffer.from(c.rgba).equals(before)).toBe(true)
   })
-  test("height covers the tile rows; a tile paints where paintTile would", () => {
-    expect(annexHeight(one)).toBe(14 + 2 * ANNEX_PAD)
-    const c = new Canvas(60, annexHeight(one))
-    paintAnnex(c, one, 0)
-    const ref = new Canvas(TILE, TILE)
-    paintTile(ref, 0, 0, one.tiles[0]!)
-    const at = (cv: Canvas, x: number, y: number) => Buffer.from(cv.rgba).readUInt32LE((y * cv.width + x) * 4)
-    expect(at(c, ANNEX_PAD + 1 + 5, ANNEX_PAD + 1 + 5)).toBe(at(ref, 5, 5))
+  test("a tile paints where paintTile would, at its absolute cell, with no pad", () => {
+    const h = floorHeight(one), c = new Canvas(60, h), ref = new Canvas(60, h)
+    paintFloor(c, one)
+    const [x, y] = cellPx([0, OFFICE_ROWS])
+    paintTile(ref, x, y, one.tiles[0]!)
+    for (let j = 0; j < TILE; j++) for (let i = 0; i < TILE; i++) {
+      const k = ((y + j) * 60 + x + i) * 4
+      expect([...c.rgba.slice(k, k + 4)]).toEqual([...ref.rgba.slice(k, k + 4)])
+    }
   })
 })
 
