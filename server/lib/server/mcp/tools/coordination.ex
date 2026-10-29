@@ -11,11 +11,25 @@ defmodule Server.MCP.Tool.OpenThread do
 
   schema do
     field :title, :string, required: true, description: "What the thread is for (its NORTH STAR)"
+
+    field :repo, :string,
+      description: "The registered repo of this workspace the thread works in (default: its project's first)"
   end
 
   @impl true
   def execute(params, frame) do
-    reply(frame, Channel.open_thread(%{title: params[:title]}), fn thread -> %{"thread_id" => thread.id} end)
+    thread_id = Server.MCP.Identity.from_frame(frame).thread_id
+    caller = thread_id && Channel.thread(thread_id)
+
+    case Server.Projects.repo_attrs(caller, params[:repo]) do
+      {:ok, extra} ->
+        reply(frame, Channel.open_thread(Map.merge(%{title: params[:title]}, extra)), fn thread ->
+          %{"thread_id" => thread.id}
+        end)
+
+      {:error, reason} ->
+        fail(frame, "open_thread refused: #{reason}")
+    end
   end
 end
 
@@ -61,6 +75,10 @@ defmodule Server.MCP.Tool.StaffChild do
     field :ticket_id, :integer,
       description: "The ticket this work is for, when it came from one — it moves into the new thread"
 
+    field :repo, :string,
+      description:
+        "A registered repo of this workspace the child works in (its worktree and push_branch go there), e.g. a sibling like menard; default: the project's first"
+
     field :workline, :enum,
       values: ["intent", "spec", "plan", "build"],
       description:
@@ -81,8 +99,9 @@ defmodule Server.MCP.Tool.StaffChild do
          :ok <- briefed(params[:brief]),
          :ok <- routes_here(parent, identity.agent_id),
          :ok <- ticket_free(params[:ticket_id]),
+         {:repo, {:ok, repo}} <- {:repo, Server.Projects.repo_attrs(parent, params[:repo])},
          {:agent, %Agent{}} <- {:agent, params[:lead] && Staff.agent_by_name(params[:lead])},
-         {:ok, thread} <- open_child(params[:title], parent, params[:workline]),
+         {:ok, thread} <- open_child(params[:title], parent, params[:workline], repo),
          {:ok, thread} <- graded(thread, params[:grade]),
          {:ok, lead} <- staff(thread, params[:lead]),
          {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}),
@@ -104,6 +123,9 @@ defmodule Server.MCP.Tool.StaffChild do
           frame,
           "staff_child refused: from the lobby only #{manager} staffs. Staff a sub-effort from the thread you lead, or ask #{manager} for new work."
         )
+
+      {:repo, {:error, reason}} ->
+        fail(frame, "staff_child refused: #{reason}")
 
       {:agent, nil} ->
         fail(frame, "no registered agent named #{inspect(params[:lead])} — staff a handle from the workspace roster")
@@ -192,15 +214,15 @@ defmodule Server.MCP.Tool.StaffChild do
   defp child_attrs(title, parent), do: %{title: title, parent_thread_id: parent.id, project_id: parent.project_id}
 
   # a plain thread, or a workline at `stage` in the parent's workspace (its brief the stage's own)
-  defp open_child(title, parent, nil), do: Channel.open_thread(child_attrs(title, parent))
+  defp open_child(title, parent, nil, repo), do: Channel.open_thread(Map.merge(child_attrs(title, parent), repo))
 
-  defp open_child(title, parent, stage) do
+  defp open_child(title, parent, stage, repo) do
     extra =
       if parent,
         do: %{parent_thread_id: parent.id, project_id: parent.project_id, workspace_id: parent.workspace_id},
         else: %{}
 
-    Server.Workline.open_titled(title, stage, extra)
+    Server.Workline.open_titled(title, stage, Map.merge(extra, repo))
   end
 
   # checked before anything opens, so a refused ticket leaves no thread behind

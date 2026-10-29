@@ -15,6 +15,26 @@ defmodule Server.ProjectsTest do
     {:ok, workspace: ws}
   end
 
+  describe "workspace_repo/2" do
+    test "a path some project of the workspace registers, ~-expanded; any other path is refused", %{workspace: ws} do
+      {:ok, _} =
+        Projects.register(%{
+          workspace_id: ws.id,
+          name: "m",
+          repos: [%{"name" => "menard", "path" => "~/projects/menard"}]
+        })
+
+      {:ok, other} = Workspaces.register(%{name: "Other"})
+      {:ok, _} = Projects.register(%{workspace_id: other.id, name: "x", repos: [%{"name" => "x", "path" => "/srv/x"}]})
+
+      expanded = Path.expand("~/projects/menard")
+      assert {:ok, ^expanded} = Projects.workspace_repo(ws.id, "~/projects/menard")
+      assert {:ok, ^expanded} = Projects.workspace_repo(ws.id, expanded)
+      assert {:error, reason} = Projects.workspace_repo(ws.id, "/srv/x")
+      assert reason =~ "not a repo of this workspace"
+    end
+  end
+
   describe "register/1" do
     test "inserts under a workspace and announces on the projects topic", %{workspace: ws} do
       Bus.subscribe_projects()
