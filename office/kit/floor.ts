@@ -1,8 +1,8 @@
 // Builds the Plan the sim needs by unioning every tile on the floor. The office tiles are anchored at
 // [0,0]; the home tiles (kit/home.ts) sit below at their absolute cells and add their blocks.
-import type { Actor, Kind, Pastime, Plan, Spot } from "./sim"
+import type { Actor, Kind, Pastime, Plan, Pt, Spot } from "./sim"
 import type { Home, Rect, Tile, TileKind } from "./tiles"
-import { tileBlocks, type Home as FloorHome } from "./home"
+import { CELL, OFFICE_H, OFFICE_ROWS, cellPath, cellPx, tileBlocks, type Home as FloorHome, type Pt as Cell } from "./home"
 import { EMPTY } from "./types"
 import { bathroomTile } from "./tiles/bathroom"
 import { catCornerTile } from "./tiles/cat-corner"
@@ -23,7 +23,26 @@ const LOUNGE_KINDS: (Kind | Pastime)[] = [
   "couch", "cooler", "coffee", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read", "bathroom",
 ]
 
-export function floorPlan(home: Home, w: number, floor: FloorHome = { tiles: [] }): Plan<Layout> & { blocks: (l: Layout) => Rect[] } {
+/** a walk's two ends on the street: the office door's street cell and the home's first living tile, `null` unless the floor has both */
+function streetDoors(floor: FloorHome, w: number) {
+  const street: Cell = [Math.floor((w - 18) / CELL), OFFICE_ROWS]
+  const living = floor.tiles.find((t) => t.kind === "living")
+  if (!living || !floor.tiles.some((t) => t.kind === "street" && t.at[0] === street[0] && t.at[1] === street[1])) return null
+  const [lx, ly] = cellPx(living.at)
+  return { street, living: living.at, doors: { office: { x: w - 18, y: OFFICE_H + CELL / 2 }, home: { x: lx, y: ly } } }
+}
+
+/** the street's mid-line and each tile's left lane (local x=0, kept clear in HOME_BLOCKS), so a walk crosses no block */
+function walkAlong(chain: Cell[], from: Pt, to: Pt): Pt[] {
+  const pts = chain.map((c) => {
+    const [x, y] = cellPx(c)
+    return { x, y: c[1] === OFFICE_ROWS ? OFFICE_H + CELL / 2 : y }
+  })
+  return [from, ...pts, to].filter((p, i, a) => i === 0 || p.x !== a[i - 1]!.x || p.y !== a[i - 1]!.y)
+}
+
+export function floorPlan(home: Home, w: number, floor: FloorHome = { tiles: [] }): Plan<Layout> & { blocks: (l: Layout) => Rect[]; doors?: { office: Pt; home: Pt }; walk?: (from: Pt, to: Pt) => Pt[] } {
+  const street = streetDoors(floor, w)
   const z = zones(w)
   const tiles = home.tiles.map((t) => FACTORIES[t.kind](z, w))
   const office = officeTile(z)
@@ -62,6 +81,10 @@ export function floorPlan(home: Home, w: number, floor: FloorHome = { tiles: [] 
       return [{ x, y: from }, { x: la, y: from }, { x: la, y: HALL }, { x: lb, y: HALL }, ...there]
     },
     cat: nina.cat(),
+    ...(street && {
+      doors: street.doors,
+      walk: (from: Pt, to: Pt) => walkAlong(cellPath(floor.tiles, street.street, street.living), from, to),
+    }),
     blocks(l: Layout): Rect[] {
       return [{ x: 0, y: 0, w, h: BAND }, ...tiles.flatMap((t) => t.blocks(l)), ...floor.tiles.flatMap(tileBlocks)]
     },
