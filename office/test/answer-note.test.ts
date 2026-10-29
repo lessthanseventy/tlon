@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // An ask is answered by one tap (1–9), or with a note: `"` opens a one-line box, "<number> <note>"
 // and Enter send "<key> <note>" through the same POST /api/office/prompts/:id. Drives the real TUI
@@ -43,7 +44,7 @@ const until = async (what: string, ok: () => boolean) => {
 test("\" answers an ask with a note: the body is \"<key> <note>\"; a plain 1 still sends the bare key", async () => {
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${join(import.meta.dir, "..")}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "t")
   await until("the tickets column", () => screen().includes("TICKETS · "))
   tmux("send-keys", "-t", "0", "Right", "Right", "Right")
@@ -59,4 +60,4 @@ test("\" answers an ask with a note: the body is \"<key> <note>\"; a plain 1 sti
   tmux("send-keys", "-t", "0", "1")
   await until("the plain answer", () => answers.length === 2)
   expect(answers[1]).toEqual({ path: "/api/office/prompts/77", body: { key: "yes" } })
-}, 40_000)
+}, TUI_TEST)

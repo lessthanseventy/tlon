@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // The cast editor in --sandbox writes its cast.json under $TMPDIR/tlon-sandbox, never the operator's config dir.
 const socket = `tlon-office-cast-sandbox-${process.pid}`
@@ -26,7 +27,7 @@ test("⏎ on grade in the sandbox keeps it in the sandbox's cast.json, and the o
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && env -u TLON_CAST -u TLON_LOOKS -u TLON_SOULS TMPDIR='${tmp}' XDG_CONFIG_HOME='${config}' XDG_STATE_HOME='${tmp}' OFFICE_GRAPHICS=blocks '${process.execPath}' tui/main.ts --sandbox`)
-  await until("the room", () => screen().includes("HOME"))
+  await started(tmux, "the room", () => screen().includes("HOME"))
   tmux("send-keys", "-t", "0", "-l", "`")
   await until("the cast", () => screen().includes("THE CAST · people"))
   for (let i = 0; i < 8 && !screen().includes("THE CAST · people · grade"); i++) { tmux("send-keys", "-t", "0", "right"); await Bun.sleep(150) }
@@ -36,4 +37,4 @@ test("⏎ on grade in the sandbox keeps it in the sandbox's cast.json, and the o
   await until("the sandbox's cast.json", () => existsSync(file))
   expect(Object.values(JSON.parse(readFileSync(file, "utf8")) as Record<string, { grade?: string }>).map((t) => t.grade)).toEqual(["junior"])
   expect(readdirSync(config)).toEqual([])
-}, 40_000)
+}, TUI_TEST)

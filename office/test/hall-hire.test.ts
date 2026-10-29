@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { killServer } from "./kill-server"
+import { started, TUI_TEST } from "./started"
 
 // The hall's → on a live server hires through the operator API, then keeps the candidate's look
 // and soul on the machine as the sandbox does.
@@ -44,7 +45,7 @@ const launch = (cfg: string) => tmux("new-session", "-d", "-x", "150", "-y", "50
 
 test("→ in the hall hires on the server and keeps the look and soul", async () => {
   launch(config)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "h")
   await until("the hall", () => screen().includes("HIRING HALL"))
   tmux("send-keys", "-t", "0", "Right")
@@ -52,7 +53,7 @@ test("→ in the hall hires on the server and keeps the look and soul", async ()
   expect(hired!.archetype).toBe("builder")
   expect(existsSync(join(config, "tlon/souls", `${hired!.name}.md`))).toBe(true)
   expect(Object.keys(JSON.parse(readFileSync(join(config, "tlon/looks.json"), "utf8")))).toContain(hired!.name)
-}, 30_000)
+}, TUI_TEST)
 
 test("→ on a name already on the bench is refused: nothing posted, nothing kept", async () => {
   killServer(socket)
@@ -63,7 +64,7 @@ test("→ on a name already on the bench is refused: nothing posted, nothing kep
   const before = posted.length
   try {
     launch(cfg)
-    await until("the workspace in the header", () => screen().includes("Toy"))
+    await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
     tmux("send-keys", "-t", "0", "h")
     await until("the hall", () => screen().includes("HIRING HALL"))
     tmux("send-keys", "-t", "0", "Right")
@@ -72,4 +73,4 @@ test("→ on a name already on the bench is refused: nothing posted, nothing kep
     expect(existsSync(join(cfg, "tlon/souls/funes.md"))).toBe(false)
     expect(existsSync(join(cfg, "tlon/looks.json"))).toBe(false)
   } finally { rmSync(cfg, { recursive: true, force: true }) }
-}, 30_000)
+}, TUI_TEST)

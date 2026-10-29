@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { killServer } from "./kill-server"
+import { started, TUI_TEST } from "./started"
 
 // The cast editor (the god view) drives the real TUI against a stub server with two seats on the
 // bench, its config dir a throwaway one so nothing reaches the operator's files.
@@ -59,7 +60,7 @@ test("` opens the cast: a row per seat, } the office tab, esc home", async () =>
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' XDG_CONFIG_HOME='${config}' TLON_OFFICE_TMUX='${ownTmux}' EDITOR='tail -f' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "-l", "`")
   await until("the cast", () => screen().includes("THE CAST"))
   expect(screen()).toContain("ada")
@@ -69,7 +70,7 @@ test("` opens the cast: a row per seat, } the office tab, esc home", async () =>
   await until("the office tab", () => screen().includes("WACKINESS"))
   tmux("send-keys", "-t", "0", "escape")
   await until("home again", () => !screen().includes("WACKINESS") && !screen().includes("THE CAST"))
-}, 40_000)
+}, TUI_TEST)
 
 const keys = (...k: string[]) => tmux("send-keys", "-t", "0", ...k)
 const field = async (name: string) => {

@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // `R` on an out-of-date office reloads the real TUI, run in a tmux of the test's own against a stub
 // server whose office revision moves on: afterwards one office runs, in the same process
@@ -49,12 +50,12 @@ test("R reloads in place: one office, the same process", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' XDG_CONFIG_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   rev = "bbb222"
   await until("the reload offer", () => screen().includes("R reloads"))
   const before = offices()
   expect(before).toHaveLength(1)
   tmux("send-keys", "-t", "0", "-l", "R")
-  await until("the reloaded office, on the new revision", () => screen().includes("Toy") && !screen().includes("R reloads"))
+  await started(tmux, "the reloaded office, on the new revision", () => screen().includes("Toy") && !screen().includes("R reloads"))
   expect(offices()).toEqual(before)
-}, 40_000)
+}, TUI_TEST)

@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // An ask lives on the needs inbox: its one-tap keys are the options' keys, and `"` opens the note box,
 // whose first word is the option's number, key or label. Drives the real TUI against a stub server.
@@ -48,7 +49,7 @@ const note = async (text: string, n: number) => {
 test("an inbox ask: the box takes a number, key or label and keeps the note as typed; a plain key sends the bare key", async () => {
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${join(import.meta.dir, "..")}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "i")
   await until("the ask's card", () => screen().includes("replace the pipe?") && screen().includes("answer with a note"))
   await note("2 the old one leaks", 1)
@@ -59,4 +60,4 @@ test("an inbox ask: the box takes a number, key or label and keeps the note as t
   tmux("send-keys", "-t", "0", "y")
   await until("the plain answer", () => answers.length === 4)
   expect(answers[3]!.body).toEqual({ key: "y" })
-}, 60_000)
+}, TUI_TEST)
