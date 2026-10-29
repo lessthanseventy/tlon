@@ -11,6 +11,30 @@ export type Pt = [number, number]
 export type HomeTile = { kind: HomeTileKind; at: Pt; rot?: 0 | 90 | 180 | 270 }
 export type Home = { tiles: HomeTile[] }
 
+export const CELL = 14
+/** px height of the office block; rooms/wide.ts WIDE_H, asserted equal in test/home.test.ts */
+export const OFFICE_H = 200
+/** cell rows the office occupies from the floor's top: a home tile on a row above this overlaps it */
+export const OFFICE_ROWS = 15
+
+/** top-left px of a cell's tile on the floor: row OFFICE_ROWS starts at the office's bottom edge */
+export const cellPx = ([cx, cy]: Pt): Pt => [cx * CELL + 1, OFFICE_H + (cy - OFFICE_ROWS) * CELL + 1]
+
+/** the whole floor's px height: the office, or down to the lowest home tile */
+export function floorHeight(h: Home): number {
+  if (!h.tiles.length) return OFFICE_H
+  return Math.max(OFFICE_H, OFFICE_H + (Math.max(...h.tiles.map((t) => t.at[1])) - OFFICE_ROWS + 1) * CELL)
+}
+
+/** a home saved before the office was on the floor sits at the origin: shift it in memory (never on disk) below the office */
+export function belowOffice(h: Home): Home {
+  if (!h.tiles.length) return h
+  const top = Math.min(...h.tiles.map((t) => t.at[1]))
+  if (top >= OFFICE_ROWS) return h
+  const dy = OFFICE_ROWS + 1 - top
+  return { ...h, tiles: h.tiles.map((t) => ({ ...t, at: [t.at[0], t.at[1] + dy] as Pt })) }
+}
+
 const HISTORY_LIMIT = 10
 const posKey = (p: Pt) => `${p[0]},${p[1]}`
 const neighbors = ([x, y]: Pt): Pt[] => [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]
