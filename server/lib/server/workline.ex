@@ -78,6 +78,7 @@ defmodule Server.Workline do
   terminal/unknown stage, or `{:error, changeset}` (a taken slug is a UNIQUE refusal).
   """
   def open(attrs) do
+    {wanted, attrs} = Map.pop(attrs, :lead)
     stage = Map.get(attrs, :stage, "intent")
 
     if stage in @openable do
@@ -89,7 +90,7 @@ defmodule Server.Workline do
       with {:ok, thread} <-
              attrs |> Thread.workline_changeset() |> Repo.insert() |> Server.Bus.announce(:thread_opened) do
         # staffed first, so the brief — the wake from the entry stage — reaches its lead
-        thread = restaff(thread)
+        thread = staff_opened(thread, wanted)
         post_brief(thread, Brief.stage_message(thread))
         {:ok, thread}
       end
@@ -1464,23 +1465,13 @@ defmodule Server.Workline do
   """
   def lead_for(%Thread{} = thread, wanted) do
     current = Server.Channel.thread_lead(thread.id)
-    kind = @staff_by_stage[thread.stage]
 
     seat =
       thread.workspace_id && thread.workspace_id |> Server.Workspaces.bench_all() |> Enum.find(&(&1.name == wanted))
 
-    cond do
-      is_nil(current) or is_nil(seat) ->
-        {:ok, wanted, :as_asked}
-
-      kind && seat.archetype != kind ->
-        {:ok, current, {:instead, "#{wanted} is a #{seat.archetype}; the #{thread.stage} stage is a #{kind}'s"}}
-
-      leading_another?(seat, thread) ->
-        {:ok, current, {:instead, "#{wanted} is leading another workline"}}
-
-      true ->
-        {:ok, wanted, :as_asked}
+    case is_nil(current) or is_nil(seat) or unfit(thread, seat) do
+      why when is_binary(why) -> {:ok, current, {:instead, why}}
+      _ -> {:ok, wanted, :as_asked}
     end
   end
 
@@ -2368,6 +2359,37 @@ defmodule Server.Workline do
       {:error, _} ->
         opts[:on_cars].([lead.id], true)
         land_queued(lead, opts)
+    end
+  end
+
+  # A manager's named lead is the one pick when it fits (`unfit/2`); else the stage's own pick leads
+  # and the thread says why — one seat either way.
+  defp staff_opened(thread, nil), do: restaff(thread)
+
+  defp staff_opened(thread, wanted) do
+    seat =
+      thread.workspace_id && thread.workspace_id |> Server.Workspaces.bench_all() |> Enum.find(&(&1.name == wanted))
+
+    case seat && unfit(thread, seat) do
+      why when is_binary(why) ->
+        staffed = restaff(thread)
+        lead = Server.Channel.thread_lead(staffed.id)
+        post_brief(staffed, "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)")
+        staffed
+
+      _ ->
+        hand_to(thread, @staff_by_stage[thread.stage] || "lead", wanted)
+    end
+  end
+
+  # why `seat` cannot lead `thread`, or nil
+  defp unfit(thread, seat) do
+    kind = @staff_by_stage[thread.stage]
+
+    cond do
+      kind && seat.archetype != kind -> "#{seat.name} is a #{seat.archetype}; the #{thread.stage} stage is a #{kind}'s"
+      leading_another?(seat, thread) -> "#{seat.name} is leading another workline"
+      true -> nil
     end
   end
 end

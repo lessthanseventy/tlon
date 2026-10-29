@@ -101,7 +101,7 @@ defmodule Server.MCP.Tool.StaffChild do
          :ok <- ticket_free(params[:ticket_id]),
          {:repo, {:ok, repo}} <- {:repo, Server.Projects.repo_attrs(parent, params[:repo])},
          {:agent, %Agent{}} <- {:agent, params[:lead] && Staff.agent_by_name(params[:lead])},
-         {:ok, thread} <- open_child(params[:title], parent, params[:workline], repo),
+         {:ok, thread} <- open_child(params[:title], parent, params[:workline], repo, params[:lead]),
          {:ok, thread} <- graded(thread, params[:grade]),
          {:ok, lead} <- staff(thread, params[:lead]),
          {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}),
@@ -175,27 +175,12 @@ defmodule Server.MCP.Tool.StaffChild do
   defp briefed(brief) when is_binary(brief), do: if(String.trim(brief) == "", do: :blank, else: :ok)
   defp briefed(_), do: :blank
 
-  # a plain thread takes the pick; a workline keeps one coworker to one workline (Workline.lead_for/2):
-  # a busy or wrong-kind pick gives way to the one staffing chose when it opened, and the thread says why
+  # a plain thread takes the pick; a workline was staffed once, at open (Workline.open/1 honours the
+  # named lead when it fits, else says why not): the reply names whoever actually leads
   defp staff(%{stage: nil} = thread, wanted),
     do: with({:ok, _} <- Channel.assign_lead(thread.id, wanted), do: {:ok, wanted})
 
-  defp staff(thread, wanted) do
-    case Server.Workline.lead_for(thread, wanted) do
-      {:ok, ^wanted, :as_asked} ->
-        with {:ok, _} <- Channel.assign_lead(thread.id, wanted), do: {:ok, wanted}
-
-      {:ok, lead, {:instead, why}} ->
-        {:ok, _} =
-          Channel.post(%{
-            thread_id: thread.id,
-            author: "tlon",
-            body: "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)"
-          })
-
-        {:ok, lead}
-    end
-  end
+  defp staff(thread, _wanted), do: {:ok, Channel.thread_lead(thread.id)}
 
   # The lead's seat is on the child, and it does not wait on delivery: the switchboard spawns who a
   # message ADDRESSES (`Server.Switchboard.target_names/1`), so a brief that mentions another coworker
@@ -214,15 +199,15 @@ defmodule Server.MCP.Tool.StaffChild do
   defp child_attrs(title, parent), do: %{title: title, parent_thread_id: parent.id, project_id: parent.project_id}
 
   # a plain thread, or a workline at `stage` in the parent's workspace (its brief the stage's own)
-  defp open_child(title, parent, nil, repo), do: Channel.open_thread(Map.merge(child_attrs(title, parent), repo))
+  defp open_child(title, parent, nil, repo, _lead), do: Channel.open_thread(Map.merge(child_attrs(title, parent), repo))
 
-  defp open_child(title, parent, stage, repo) do
+  defp open_child(title, parent, stage, repo, lead) do
     extra =
       if parent,
         do: %{parent_thread_id: parent.id, project_id: parent.project_id, workspace_id: parent.workspace_id},
         else: %{}
 
-    Server.Workline.open_titled(title, stage, Map.merge(extra, repo))
+    Server.Workline.open_titled(title, stage, extra |> Map.merge(repo) |> Map.put(:lead, lead))
   end
 
   # checked before anything opens, so a refused ticket leaves no thread behind
