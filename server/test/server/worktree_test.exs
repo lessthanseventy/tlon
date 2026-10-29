@@ -27,7 +27,7 @@ defmodule Server.WorktreeTest do
 
   describe "ensure/2" do
     test "a sibling repo is pointed at tlon's hooks, absolutely and on every ensure", %{repo: repo, git: git} do
-      hooks = Path.join(Server.Profiles.tlon_root(), "scripts/git-hooks")
+      hooks = Path.join(Server.Profiles.main_root(), "scripts/git-hooks")
       assert {:ok, _} = Worktree.ensure(repo, "hooked")
       assert {out, 0} = git.(["config", "core.hooksPath"])
       assert String.trim(out) == hooks

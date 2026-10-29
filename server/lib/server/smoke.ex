@@ -123,16 +123,9 @@ defmodule Server.Smoke do
   end
 
   @doc "The script that builds and holds the smoke (`config :server, :smoke_script` in tests)."
-  def script, do: Application.get_env(:server, :smoke_script) || Path.join(main_root(), "scripts/release-smoke.sh")
-
-  @doc """
-  The main checkout of the repo `from` belongs to: the parent of its git common dir, so a build dir
-  (the service's `.release`) resolves to the checkout that holds main's scripts.
-  """
-  def main_root(from \\ Server.Profiles.tlon_root()) do
-    {out, 0} = System.cmd("git", ["-C", from, "rev-parse", "--path-format=absolute", "--git-common-dir"])
-    out |> String.trim() |> Path.dirname()
-  end
+  def script,
+    do:
+      Application.get_env(:server, :smoke_script) || Path.join(Server.Profiles.main_root(), "scripts/release-smoke.sh")
 
   defp building_error(%Oban.Job{id: id} = job, fallback) do
     since = Calendar.strftime(job.attempted_at || job.inserted_at, "%H:%M:%SZ")
