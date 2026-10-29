@@ -5,7 +5,8 @@ defmodule Server.Smoke do
   has neither of, so the seat asks and the service runs it (`Server.Jobs.Smoke`). The release
   script keeps its own one-smoke-per-commit lock; this module only finds the thread's job and
   stops it: `held/1` is the one up (its url in meta), `building/2` the one queued or still building
-  (no url yet) — drive says so and a same-ref start returns it; stop TERMs its script once it has a
+  (no url yet) — drive says so and a start for the same commit returns it (the ref is resolved to its
+  sha at start; a ref whose tip moved cancels the old build and queues the new one); stop TERMs its script once it has a
   pid, or cancels the job when it has no process yet.
   """
   import Ecto.Query
@@ -155,13 +156,43 @@ defmodule Server.Smoke do
   end
 
   defp queue(thread_id, ref, opts) do
-    case building(thread_id, ref) do
-      nil ->
-        args = Map.reject(Map.merge(opts, %{thread_id: thread_id, ref: ref}), fn {_k, v} -> v in [nil, []] end)
-        Oban.insert(Job.new(args))
+    with {:ok, sha} <- resolve(ref) do
+      case building(thread_id, ref) do
+        nil -> insert(thread_id, ref, sha, opts, %{})
+        %{args: %{"sha" => ^sha}} = job -> {:ok, job}
+        old -> replace(old, thread_id, ref, sha, opts)
+      end
+    end
+  end
 
-      job ->
-        {:ok, job}
+  # the tip moved since the building job was queued: that build is of a commit nobody asked for now
+  defp replace(old, thread_id, ref, sha, opts) do
+    with :ok <- stop(thread_id), do: insert(thread_id, ref, sha, opts, %{"replaced" => old.id})
+  end
+
+  defp insert(thread_id, ref, sha, opts, meta) do
+    args = Map.reject(Map.merge(opts, %{thread_id: thread_id, ref: ref, sha: sha}), fn {_k, v} -> v in [nil, []] end)
+    Oban.insert(Job.new(args, meta: meta))
+  end
+
+  # the commit `ref` names right now, in the git dir every thread worktree shares; a ref not fetched
+  # is refused, not fetched, in the request path (`config :server, :smoke_resolve` in tests)
+  defp resolve(ref) do
+    resolver = Application.get_env(:server, :smoke_resolve, &resolve_in_main_root/1)
+
+    case resolver.(ref) do
+      {:ok, sha} -> {:ok, sha}
+      _ -> {:error, "no commit #{ref}"}
+    end
+  end
+
+  defp resolve_in_main_root(ref) do
+    with {:ok, root} <- Server.Profiles.main_root(),
+         {out, 0} <-
+           System.cmd("git", ["-C", root, "rev-parse", "-q", "--verify", "#{ref}^{commit}"], stderr_to_stdout: true) do
+      {:ok, String.trim(out)}
+    else
+      _ -> :error
     end
   end
 
