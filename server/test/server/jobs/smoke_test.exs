@@ -219,6 +219,15 @@ defmodule Server.Jobs.SmokeTest do
       assert Server.Repo.reload!(job).args["sha"] == "sha-of-work/a-thing"
     end
 
+    test "a start over a moved tip whose build can't be cancelled yet says so in start's words", %{thread: t, job: job} do
+      Application.put_env(:server, :smoke_resolve, fn ref -> {:ok, "moved-" <> ref} end)
+      assert {:error, why} = Smoke.start(t, nil, "qa1")
+      assert why =~ "moved"
+      assert why =~ "job #{job.id}"
+      assert why =~ "start again"
+      refute why =~ "stop again"
+    end
+
     test "a start for another ref still queues", %{thread: t, job: job} do
       assert {:ok, %{id: id}} = Smoke.start(t, "main", "qa1")
       refute id == job.id

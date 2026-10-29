@@ -67,7 +67,8 @@ defmodule Server.Smoke do
 
   @doc """
   The thread's smoke job that is queued or running but not up yet (no url), or nil; with `ref`,
-  only one of that ref. A start for the same ref returns it rather than stacking a second build.
+  only one of that ref. A start for the same commit returns it rather than stacking a second
+  build; a start over a moved tip replaces it.
   A job queued over `@building_minutes` ago is a stuck build, not a building one.
   """
   @spec building(integer(), String.t() | nil) :: Oban.Job.t() | nil
@@ -167,7 +168,14 @@ defmodule Server.Smoke do
 
   # the tip moved since the building job was queued: that build is of a commit nobody asked for now
   defp replace(old, thread_id, ref, sha, opts) do
-    with :ok <- stop(thread_id), do: insert(thread_id, ref, sha, opts, %{"replaced" => old.id})
+    case stop(thread_id) do
+      :ok ->
+        insert(thread_id, ref, sha, opts, %{"replaced" => old.id})
+
+      {:error, _} ->
+        {:error,
+         "the tip of #{ref} moved, but the old build (job #{old.id}) can't be cancelled until its script starts: start again in a moment"}
+    end
   end
 
   defp insert(thread_id, ref, sha, opts, meta) do
