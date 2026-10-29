@@ -326,3 +326,21 @@ describe("loading the floor", () => {
     expect(connected(h.tiles)).toBe(true)
   })
 })
+
+describe("build mode on the floor", () => {
+  test("refuses a drop overlapping the office block, and the cursor starts below it", () => {
+    const b0 = startBuild({ tiles: [] }, OFFICE_ROWS)
+    expect(b0.cursor).toEqual([0, OFFICE_ROWS])
+    const own = place(b0)
+    expect(own.home.tiles.length).toBe(1)
+    const up = move(own, 0, -1)
+    expect(place(up).refused).toBe(true)
+    const carrying = pickUp(own)
+    expect(drop(move(carrying, 0, -1)).refused).toBe(true)
+    expect(startBuild({ tiles: [] }).cursor).toEqual([0, 0])
+  })
+  test("gridWindow includes the office's last row as a margin for a home below it", () => {
+    const w = gridWindow({ tiles: [{ kind: "street", at: [0, OFFICE_ROWS] }] }, [0, OFFICE_ROWS])
+    expect(w.y0).toBe(OFFICE_ROWS - 1)
+  })
+})

@@ -21,7 +21,7 @@ import { entryOf } from "../kit/entry"
 import { queueItems, type QueueItem } from "../kit/rack"
 import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES_BLURB, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
-import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
+import { CELL, OFFICE_ROWS, defaultHome, drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
 import { clipLabel, inboxSections, phoneBar, ringFrame } from "../kit/surfaces"
@@ -1576,7 +1576,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "build": {
-      if (!build) build = startBuild(loadFloor())
+      if (!build) { const h = loadFloor(); build = startBuild(h.tiles.length ? h : defaultHome(Math.ceil(g.floorW / CELL)), OFFICE_ROWS) }
       const b = build
       const mutate = (f: (b: Build) => Build): (() => void) => () => {
         build = applyBuild(build!, f)
@@ -2149,7 +2149,7 @@ function draw() {
   homeShown = building
   const vp = building ? { x: 0, y: 0, w: viewport.w, h: viewport.h } : viewport
   if (building) {
-    frame = renderHome({ home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(needs), frames: streakFrames(lifeCard?.streaks ?? {}), bed: bedScene(lifeCard?.today ?? [], Date.now()) })
+    frame = renderHome({ top: build!.top, home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(needs), frames: streakFrames(lifeCard?.streaks ?? {}), bed: bedScene(lifeCard?.today ?? [], Date.now()) })
     imageDirty = true
   } else if (fresh || roomChanged) { frame = room0.render(a, { picked: lit ?? picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx(), machine: bySurface.counts.machine, clipboard: bySurface.clipboard.filter((n) => n.workspace_id == null || n.workspace_id === ws) }, measureFor(g), world?.now()); roomChanged = false }
   const seen = clipFrame(frame!, vp)

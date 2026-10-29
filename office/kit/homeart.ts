@@ -101,10 +101,10 @@ export function paintFloor(c: Canvas, h: Home) {
   for (const t of h.tiles) { const [x, y] = cellPx(t.at); paintTile(c, x, y, t) }
 }
 
-export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number; weather?: string | null; mail?: Mailbox | null; frames?: StreakFrame[]; bed?: BedScene | null }
+export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number; weather?: string | null; mail?: Mailbox | null; frames?: StreakFrame[]; bed?: BedScene | null; top?: number }
 
 /** the build grid as a Frame of w×h logical px: every cell of `gridWindow`, centred; no text, no hits. The frames hang on the first living tile. */
-export function renderHome({ home, cursor, carrying, refused, w, h, weather, mail, frames, bed }: HomeView): Frame {
+export function renderHome({ home, cursor, carrying, refused, w, h, weather, mail, frames, bed, top = 0 }: HomeView): Frame {
   const c = new Canvas(w, h)
   c.px(0, 0, w, h, ROLE.ground)
   const win = gridWindow(home, cursor)
@@ -115,7 +115,7 @@ export function renderHome({ home, cursor, carrying, refused, w, h, weather, mai
     const [px, py] = pos([x, y])
     const t = home.tiles.find((q) => q.at[0] === x && q.at[1] === y)
     if (t) paintTile(c, px, py, t, weather, mail, t === wall ? frames : null, bed)
-    else c.px(px, py, TILE, TILE, ROLE.raised)
+    else if (y >= top) c.px(px, py, TILE, TILE, ROLE.raised)
   }
   const [cx, cy] = pos(cursor)
   if (carrying) {
