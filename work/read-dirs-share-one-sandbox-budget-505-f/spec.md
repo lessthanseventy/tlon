@@ -1,4 +1,4 @@
-# #505 (folds #582) — read dirs share one sandbox budget
+# #505 (folds #582, #506) — read dirs share one sandbox budget
 
 ## Problem
 Claude Code makes every read dir a write root, and bwrap mounts ~45 args per `.git` found under one; bwrap takes 9000 (#299, #455). Today `Projects.read_dirs/1` only caps each checkout at 100 nested repos (`@max_nested_repos`), and the budget test (`profiles_test.exs:56`) counts repos under the `~/` write roots only. Nothing bounds the sum: three read dirs at 90 repos give (270 + 65) × 45 ≈ 15k, pass every test, and kill the seat's Bash.
@@ -10,10 +10,12 @@ Claude Code makes every read dir a write root, and bwrap mounts ~45 args per `.g
 2. **`read_dir_repos`** = `div(max_args, args_per_repo) − fixed_repos − write_root_reserve`, where `write_root_reserve` is the 40 repos the test already seeds in a seat's scratch dir. That is 166 − 65 − 40 = **61**.
 3. **`Projects.read_dirs/1` spends it across the list.** Walk the project's repos in order; keep a dir while `running + nested_repos(dir) ≤ read_dir_repos`, adding its count; a dir that does not fit is skipped (later, smaller ones may still fit). The per-dir cap of 100 goes, since the shared budget subsumes it. (`nested_repos` counts the `.git` of the dir itself too, as today.)
 4. **What the seat gets when they do not fit (the one decision): drop in list order, do not refuse.** The seat opens with the dirs that fit; dropped ones are listed in a single post on its thread. Refusing to open any would stop work over a read-only convenience. `read_dirs/1` stays pure; it returns `{kept, dropped}` through a new `read_dirs_split/1` (`read_dirs/1` = kept, so callers are unchanged), and `Spawn.read_dirs_export/1` (spawn.ex:193) posts the dropped list once at launch.
+5. **Count only repos (#506).** `nested_repos/1` counts the `-print` lines ending in `/.git`; find's error text ("Permission denied", "No such file") never counts, though `stderr_to_stdout` stays. It ignores find's exit code: a partial walk is a lower bound and keeps the dir, so a checkout is never dropped on the exit code alone. `read_dirs_split/1` checks `File.dir?/1` before the walk; a path that is not a directory is not opened and not counted as dropped for budget.
 
 ## Tests (RED first)
 - `profiles_test.exs`: extend the budget test: seed a project with 3 read dirs of 30 repos each (each under the old 100 cap, sum 90 > 61), run `Profiles.instantiate` + `Projects.read_dirs`, assert `(fixed_repos + Σ write-root repos + Σ nested_repos(kept read dirs)) × args_per_repo ≤ max_args`. Red on main (all three kept).
 - `projects_test.exs`: dirs of 30/30/10 → kept = first and third, dropped = second (skip, not stop); a single dir over 61 → dropped; order preserved.
+- `projects_test.exs` (#506): a tmp_dir with one repo plus a `chmod 000` subdir gives `nested_repos` == 1 (chmod it back in `on_exit`); a nonexistent read dir is not in kept. Red on main, where the error lines count.
 - `spawn` test: a dropped dir produces exactly one thread post naming it; none when all fit.
 
 ## Done
