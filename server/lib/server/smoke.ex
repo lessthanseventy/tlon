@@ -3,9 +3,10 @@ defmodule Server.Smoke do
   The held smoke a QA seat drives, run by the service. `scripts/release-smoke.sh` needs Postgres's
   unix socket and a network namespace shared with the scratch node, which a seat's sandboxed Bash
   has neither of, so the seat asks and the service runs it (`Server.Jobs.Smoke`). The release
-  script keeps its own one-smoke-per-commit lock; this module only finds the running one
-  (an executing `Jobs.Smoke` whose meta carries the url) and stops it. A smoke still building has
-  no url yet: `building/2` finds it, so drive and stop say so and a same-ref start returns it.
+  script keeps its own one-smoke-per-commit lock; this module only finds the thread's job and
+  stops it: `held/1` is the one up (its url in meta), `building/2` the one queued or still building
+  (no url yet) — drive says so and a same-ref start returns it; stop TERMs its script once it has a
+  pid, or cancels the job when it has no process yet.
   """
   import Ecto.Query
 
@@ -93,7 +94,7 @@ defmodule Server.Smoke do
       nil ->
         {:error, "no smoke is up for this thread"}
 
-      %{meta: %{"os_pid" => pid}} ->
+      %{meta: %{"os_pid" => pid}} when is_integer(pid) ->
         _ = System.cmd("kill", ["-TERM", to_string(pid)], stderr_to_stdout: true)
         :ok
 
