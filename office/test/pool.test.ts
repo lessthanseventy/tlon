@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { ROLE } from "../kit/palette"
-import { corner, WideRoom, zones } from "../rooms/wide"
+import { gamesTile } from "../kit/tiles/games"
+import { corner, WideRoom, widePlan, zones } from "../rooms/wide"
 import { focus, measure, office, seeded } from "./golden"
 
 // The operator saw the balls move with nobody hitting them: the players stood at the table and the
@@ -12,7 +13,11 @@ test("a pool shot is in someone's hands: the cue runs from the shooter to the ba
   const a = viewOf(o, 1), r: any = new WideRoom(696)
   r.hour = () => 12
   const pool = corner(zones(696)).pool
-  for (let i = 0; r.peopleAt("pool").length < 2 && i < 40_000; i++) r.step(a)
+  const [s1, s2] = gamesTile(zones(696)).spots(widePlan(696).layout(a)).pool!
+  r.step(a)
+  const [one, two, ...rest] = [...r.actors.values()]
+  rest.forEach((x: any, i: number) => { x.moving = true; x.x = 1000 * (i + 1); x.y = 0 })
+  for (const [x, s] of [[one, s1], [two, s2]] as const) { x.spot = s; x.x = s.x; x.y = s.y; x.moving = false; x.path = [] }
   expect(r.peopleAt("pool").length).toBe(2)
 
   const hex = (fr: any, x: number, y: number) => { const o = (y * fr.width + x) * 4; return "#" + [0, 1, 2].map((k) => fr.rgba[o + k].toString(16).padStart(2, "0")).join("").toUpperCase() }
