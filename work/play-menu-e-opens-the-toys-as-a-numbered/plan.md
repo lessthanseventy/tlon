@@ -30,7 +30,7 @@ Commit: "office: E opens the play card; Gary has his direct summon (#607)".
 
 ## Task 3 — drive check + docs
 Files: `test/drive/walk.steps`, `README.md` (l.65), `AGENTS.md`→`office/AGENTS.md` (l.54, l.106), `docs/plans/2026-10-08-office-as-a-toy-design.md` (l.159 only if it lists the letters).
-1. `walk.steps` l.46-53 (`D E T F N W P C`): replace with `E`, `wait:summon Gary`, `2`, `wait:Gary` is not a stable label — use plain steps: `E`, `2`, `Escape`, `E`, `3`, `E`, `5`, `E`, `6`, `E`, `7`, `E`, `9`, `E`, `8`, `Escape`, `E`, `4`. The card is read from the screens the replay prints.
+1. `walk.steps` l.46-53 (`D E T F N W P C`): replace with `E`, `2`, `Escape`, `E`, `3`, `E`, `5`, `E`, `6`, `E`, `7`, `E`, `9`, `E`, `8`, `Escape`, `E`, `4`. The card is read from the screens the replay prints.
 2. Docs: play keys are now `E` (a numbered card) — README, office/AGENTS.md l.54 (“the play keys are the shifted letters `D E T F N W P C`” → “one play key, `E`, opens a numbered card; digits pick the toy”), l.106 wording. 
 3. Verify, read the output: `office/test/drive/run.sh walk` exits 0 and the screen after the first `E` lists nine numbered rows incl. "summon Gary"; after `2`, run `OFFICE_WIDE=1 OFFICE_TEXT=1 office/test/drive/run.sh walk` and see Gary's mutter ("I WILL END YOU…") in the wide room text (events need the wide room). Then `mise run office:check` green.
 Commit: "office: drive walk and docs for the play card (#607)".
