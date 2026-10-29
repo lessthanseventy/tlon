@@ -223,6 +223,17 @@ defmodule Server.ProjectsTest do
 
       assert Projects.read_dirs(t) == [slim]
     end
+
+    @tag :tmp_dir
+    test "nested_repos counts repos only: an unreadable subdir's error line is not one", %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join([dir, "r", ".git"]))
+      locked = Path.join(dir, "locked")
+      File.mkdir_p!(locked)
+      File.chmod!(locked, 0o000)
+      on_exit(fn -> File.chmod!(locked, 0o755) end)
+
+      assert Projects.nested_repos(dir) == 1
+    end
   end
 
   describe "repo_for_thread/1 — a scope glob is not a checkout" do
