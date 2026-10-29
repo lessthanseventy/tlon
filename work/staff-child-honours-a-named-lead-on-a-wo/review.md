@@ -1,12 +1,12 @@
-# Review: staff_child honours a named lead on a workline (#551)
+# Review: staff_child honours a named lead on a workline (#551) — round 2
 
-**Verdict: request_changes.** The fix for the ticket is right and small, and the two new tests pass here (`menard run test --in server test/server/mcp/server_test.exs:1242` → 2 tests, 0 failed; the server's full `mise run check` row is green, no `bench_contrast` row). One path inside the new `staff_opened/2` regresses a documented rule and leaves a workline unled; it sits in the change's own lines, so it goes back rather than to a follow-up.
+**Verdict: request_changes.** Round 1's two follow-ups are fixed (11f26f3), and well. Round 1's one **blocking** finding is not: `staff_opened/2` in `server/lib/server/workline.ex` (now lines 2350–2365) is byte-for-byte the code I quoted at 809af60. The builder's note #17017 took "the two follow-ups"; the blocking finding lived only in review.md's body. It goes back for that one thing.
 
-Read: commit 2db899e against origin/main 57b66b2 (coordination.ex, workline.ex, server_test.exs, pr.md), plus `restaff/2`, `hand_to/4`, `assign_lead/2`, `workline_changeset/1`.
+Read: `git diff 809af60..11f26f3 -- . ':!work/…'` (coordination.ex, workline.ex, server_test.exs, workline_test.exs), then `restaff/1,2` (1340–1397), `hand_to/4` (1494), `restaff_miss/3` (1521–1526), `Workspaces.manager/1` (310–314). CHECKS: `mise run check` green on 11f26f3, `menard run check --in server` 2407/0, no `bench_contrast` row.
 
-## 1. A named lead the bench cannot replace is now dropped on the floor (blocking)
+## 1. Still open (blocking): a named lead the bench cannot replace is dropped, and the workline opens unled
 
-`lead_for/2`'s doc, still on the branch, says: *"a workline staffing left without a lead, takes the pick as asked"* — and the old code did that (`is_nil(current) -> {:ok, wanted, :as_asked}`). The new branch:
+Witness, `workline.ex:2355–2359`:
 
 ```elixir
 why when is_binary(why) ->
@@ -16,11 +16,11 @@ why when is_binary(why) ->
   staffed
 ```
 
-`workline_changeset/1` sets no `agent_id`, so the thread is born unled. When `wanted` is the wrong kind and the bench has nobody of the stage's kind, `restaff/2` hits `of_kind == []` → `restaff_miss` → returns the thread unled, quietly (only the reviewer kind posts). Then `lead` is nil, the line posted reads `→  leads, not yu: …`, the stage brief goes to nobody, and `staff_child` answers `"lead" => nil`.
+Trace: `workline_changeset/1` sets no `agent_id`, so the thread is born unled. `restaff(thread)` → `restaff(thread, kind)` → `of_kind == []` → `restaff_miss(thread, kind, …)` → `do: thread` (1526), unled, silent for every kind but reviewer. Then `lead` is nil, the posted line reads `→  leads, not hronir: …`, the stage brief wakes nobody, `staff/2` answers `{:ok, nil}` and the tool replies `"lead" => nil`.
 
-Concrete case: a workspace whose bench is builders only (the new test's own "Named" workspace is one), manager calls `staff_child(lead: "hronir", workline: "spec")`. On main hronir gets the spec, as asked. On the branch an orphan workline opens with no lead.
+Concrete: the server_test "Named" workspace (daneri and hronir, builders only), `staff_child(lead: "hronir", workline: "spec")`. On origin/main `lead_for/2` took the pick (`is_nil(current) -> :as_asked`: "a workline staffing left without a lead takes the pick as asked"). On the branch: an orphan workline, no lead, no seat. That rule's doc was deleted with `lead_for` this round, so the branch now has neither the behaviour nor the sentence.
 
-Fix, in `staff_opened/2`: when staffing finds nobody, the pick stands, as the doc says.
+Fix, same as round 1, in `staff_opened/2`:
 
 ```elixir
 why when is_binary(why) ->
@@ -37,14 +37,15 @@ why when is_binary(why) ->
   end
 ```
 
-Red test first, beside the two new ones: builders-only bench, `staff_child(lead: "hronir", workline: "spec")` → `lead == "hronir"`, `thread_lead == "hronir"`, exactly one leads-line.
+Red test first, in the server_test describe "staff_child with a named lead on a workline": `staff_child(lead: "hronir", workline: "spec")` → reply `lead == "hronir"`, `Channel.thread_lead(tid) == "hronir"`, exactly one leads-line (`[line] = leads_lines(tid)`), `line =~ "hronir leads"`. Add the sentence to `open/1`'s @doc too: a pick the bench cannot replace stands.
 
-## 2. What is right
+## 2. Fixed since 809af60 (verified)
 
-- One pick, one `hand_to`, one leads-line, one seat on the free path: `open/1` pops `:lead`, `staff_opened` hands straight to the name; `staff/2` for worklines no longer assigns. Matches the tech lead's plan.
-- The busy and wrong-kind rule lives once, in `unfit/2`, shared by `lead_for/2` and `staff_opened/2`; `lead_for`'s existing tests (workline_test 748–774) still cover it.
-- `bench_all` (off-shift counts as on the bench for a named pick) kept, as documented.
-- The no-name path: `picked/2` → `suggest_lead` → a name, handed directly; a busy suggestion falls to `unfit` → `restaff` → the hire path. One pick there too.
-- Plain threads untouched. pr.md says what changed and how it was checked.
+- `lead_for/2` deleted; its two workline_test cases (748–774) now drive `Workline.open(lead:)` and assert the thread's lead and the posted "not yu … another workline" / "not hronir … planner" lines. One door.
+- `not_manager/2` in staff_child refuses the manager before anything opens (`coordination.ex:104`, 182–190); test asserts `isError`, the name in the text, and an unchanged thread count. Reply text says what to do instead.
 
-Non-blocking findings are in the follow-ups.
+## 3. Still right from round 1
+
+One pick, one `hand_to`, one leads-line, one seat on the free path; `unfit/2` holds the busy and wrong-kind rule once; `bench_all` keeps off-shift picks nameable; plain threads untouched; pr.md current.
+
+Non-blocking findings in the follow-ups.
