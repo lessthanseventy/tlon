@@ -168,11 +168,13 @@ defmodule Server.ProjectsTest do
       assert {:error, :no_repo} = Projects.repo_for_thread(t)
     end
 
-    test "a thread that names its repo works there, not in the project's first" do
+    @tag :tmp_dir
+    test "a thread that names its repo works there, not in the project's first", %{tmp_dir: dir} do
       {:ok, ws} = Workspaces.register(%{name: "own-repo"})
+      ficciones = seed_dir(dir, "ficciones", 1)
 
       repos = [
-        %{"name" => "ficciones", "path" => "~/projects/ficciones"},
+        %{"name" => "ficciones", "path" => ficciones},
         %{"name" => "menard", "path" => "~/projects/menard"}
       ]
 
@@ -181,27 +183,29 @@ defmodule Server.ProjectsTest do
 
       assert {:ok, path} = Projects.repo_for_thread(t)
       assert path == Path.expand("~/projects/menard")
-      assert Projects.read_dirs(t) == [Path.expand("~/projects/ficciones")]
+      assert Projects.read_dirs(t) == [ficciones]
     end
 
-    test "read_dirs are the project's other checkouts: never the thread's own repo, never a glob" do
+    @tag :tmp_dir
+    test "read_dirs are the project's other checkouts: never the thread's own repo, never a glob", %{tmp_dir: dir} do
       {:ok, ws} = Workspaces.register(%{name: "read-dirs"})
+      mix_master = seed_dir(dir, "mix_master", 1)
 
       repos = [
         %{"name" => "ficciones", "path" => "~/projects/ficciones"},
         %{"name" => "scope", "path" => "modules/*"},
-        %{"name" => "mix_master", "path" => "/p/mix_master"}
+        %{"name" => "mix_master", "path" => mix_master}
       ]
 
       {:ok, p} = Projects.register(%{workspace_id: ws.id, name: "tlon", repos: repos})
       {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id})
 
-      assert Projects.read_dirs(t) == ["/p/mix_master"]
+      assert Projects.read_dirs(t) == [mix_master]
       assert Projects.read_dirs(%{t | project_id: nil}) == []
     end
 
-    # Claude Code treats a read dir as a write root and bwrap mounts ~45 args per repo found under
-    # it (9000 max), so a checkout that nests hundreds of repos (test tmp_dirs) can't be opened.
+    # Claude Code treats a read dir as a write root and bwrap mounts args per repo found under it,
+    # so a checkout that nests more repos than Server.SandboxBudget.read_dir_repos/0 can't be opened.
     @tag :tmp_dir
     test "read_dirs drop a checkout nesting more repos than a seat's bwrap budget allows", %{
       workspace: ws,
@@ -233,6 +237,42 @@ defmodule Server.ProjectsTest do
       on_exit(fn -> File.chmod!(locked, 0o755) end)
 
       assert Projects.nested_repos(dir) == 1
+    end
+
+    @tag :tmp_dir
+    test "read_dirs_split spends one budget across the list: skip what does not fit, keep later ones that do", %{
+      workspace: ws,
+      tmp_dir: dir
+    } do
+      # 35 + 35 overflows the 61 the dirs share; 35 + 10 does not
+      dirs = for {n, count} <- [{"a", 35}, {"b", 35}, {"c", 10}], do: seed_dir(dir, n, count)
+
+      {:ok, p} =
+        Projects.register(%{
+          workspace_id: ws.id,
+          name: "shared",
+          repos: [%{"name" => "own", "path" => "/p/own"} | named(dirs)]
+        })
+
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id})
+      [a, b, c] = dirs
+
+      assert Projects.read_dirs_split(t) == {[a, c], [b]}
+      assert Projects.read_dirs(t) == [a, c]
+    end
+
+    @tag :tmp_dir
+    test "a read dir that does not exist is not opened and not dropped", %{workspace: ws, tmp_dir: dir} do
+      real = seed_dir(dir, "real", 1)
+
+      repos =
+        for {n, p} <- [{"own", "/p/own"}, {"gone", Path.join(dir, "gone")}, {"real", real}],
+            do: %{"name" => n, "path" => p}
+
+      {:ok, p} = Projects.register(%{workspace_id: ws.id, name: "gone", repos: repos})
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id})
+
+      assert Projects.read_dirs_split(t) == {[real], []}
     end
   end
 
@@ -270,4 +310,12 @@ defmodule Server.ProjectsTest do
       assert {:error, :no_project} = Projects.move_thread(thread, -1)
     end
   end
+
+  defp seed_dir(root, name, n) do
+    dir = Path.join(root, name)
+    for i <- 1..n, do: File.mkdir_p!(Path.join([dir, "r#{i}", ".git"]))
+    dir
+  end
+
+  defp named(dirs), do: for(d <- dirs, do: %{"name" => Path.basename(d), "path" => d})
 end
