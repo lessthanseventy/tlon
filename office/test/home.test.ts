@@ -5,6 +5,9 @@ import { join } from "node:path"
 import {
   CATALOGUE, canPlace, connected, gridWindow, GRID_MAX, drop, move, pickUp, place, remove, rotate, startBuild, undo, type Home, type HomeTile,
 } from "../kit/home"
+import { CELL, OFFICE_H, OFFICE_ROWS, belowOffice, cellPx, floorHeight } from "../kit/home"
+import { TILE } from "../kit/homeart"
+import { WIDE_H } from "../rooms/wide"
 import { applyBuild, loadHome, saveHome } from "../tui/home"
 
 const byAt = (x: HomeTile, y: HomeTile) => x.at[0] - y.at[0] || x.at[1] - y.at[1]
@@ -280,5 +283,29 @@ describe("garden tile", () => {
       saveHome(home, join(dir, "home.json"))
       expect(loadHome(join(dir, "home.json"))).toEqual(home)
     } finally { rmSync(dir, { recursive: true }) }
+  })
+})
+
+describe("floor geometry", () => {
+  test("the office block is ceil(WIDE_H / CELL) rows and a cell is a tile plus a border", () => {
+    expect(OFFICE_H).toBe(WIDE_H)
+    expect(OFFICE_ROWS).toBe(Math.ceil(WIDE_H / CELL))
+    expect(CELL).toBe(TILE + 2)
+  })
+  test("cellPx: row OFFICE_ROWS starts at the office's bottom edge", () => {
+    expect(cellPx([0, OFFICE_ROWS])).toEqual([1, WIDE_H + 1])
+    expect(cellPx([2, OFFICE_ROWS + 1])).toEqual([2 * CELL + 1, WIDE_H + CELL + 1])
+  })
+  test("floorHeight: office alone, or down to the lowest tile's bottom", () => {
+    expect(floorHeight({ tiles: [] })).toBe(WIDE_H)
+    expect(floorHeight({ tiles: [{ kind: "street", at: [0, OFFICE_ROWS] }] })).toBe(WIDE_H + CELL)
+    expect(floorHeight({ tiles: [{ kind: "living", at: [0, OFFICE_ROWS + 2] }] })).toBe(WIDE_H + 3 * CELL)
+  })
+  test("belowOffice shifts a legacy home so its top row is OFFICE_ROWS + 1, and leaves a placed one alone", () => {
+    const legacy = { tiles: [{ kind: "living" as const, at: [0, 0] as [number, number] }, { kind: "kitchen" as const, at: [1, 0] as [number, number] }] }
+    expect(belowOffice(legacy).tiles.map((t) => t.at)).toEqual([[0, OFFICE_ROWS + 1], [1, OFFICE_ROWS + 1]])
+    expect(legacy.tiles[0]!.at).toEqual([0, 0])
+    const placed = { tiles: [{ kind: "street" as const, at: [0, OFFICE_ROWS] as [number, number] }] }
+    expect(belowOffice(placed)).toBe(placed)
   })
 })
