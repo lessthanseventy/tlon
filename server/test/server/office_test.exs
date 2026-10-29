@@ -179,6 +179,22 @@ defmodule Server.OfficeTest do
       assert %{warm: true} = Enum.find(status.roster, &(&1.agent == "hronir"))
     end
 
+    test "on the standing thread the lead's own window is a desk only with its session on that thread", %{ws: ws} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+      {:ok, %{id: standing}} = Channel.open_thread(%{title: "root", workspace_id: ws.id, scope: "machine"})
+      {:ok, _} = Channel.assign_lead(standing, "hronir")
+      {:ok, elsewhere} = Channel.open_thread(%{title: "elsewhere", workspace_id: ws.id})
+      windows("0\thronir\t\t\t\thronir\t")
+      hronir = Server.Staff.agent_by_name("hronir")
+
+      {:ok, _} = Server.Staff.start_session(%{agent_id: hronir.id, thread_id: elsewhere.id})
+      seat = fn -> Enum.find(Office.status().threads, &(&1.id == standing)).seat end
+      assert seat.() == "idle"
+
+      {:ok, _} = Server.Staff.start_session(%{agent_id: hronir.id, thread_id: standing})
+      assert seat.() == "desk"
+    end
+
     test "a thread says whether it is a standing duty — the sheriff's beat, a schedule's — not work",
          %{ws: ws} do
       {:ok, beat} = Channel.open_thread(%{title: Server.Sheriff.beat_title(), workspace_id: ws.id})
