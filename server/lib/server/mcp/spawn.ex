@@ -189,9 +189,23 @@ defmodule Server.MCP.Spawn do
     end
   end
 
-  # The project's other repos, for the harness to open read-only beside the worktree.
+  # The project's other repos, for the harness to open read-only beside the worktree. Dirs the shared
+  # sandbox budget leaves out are named once on the thread, so the seat knows why they are not there.
   defp read_dirs_export(thread) do
-    case Server.Projects.read_dirs(thread) do
+    {kept, dropped} = Server.Projects.read_dirs_split(thread)
+
+    if dropped != [] do
+      Server.Channel.post(%{
+        thread_id: thread.id,
+        author: "tlon",
+        kind: "notice",
+        body:
+          "read dirs left out (the seat's sandbox budget holds #{Server.SandboxBudget.read_dir_repos()} repos across them): " <>
+            Enum.join(dropped, ", ")
+      })
+    end
+
+    case kept do
       [] -> ""
       dirs -> "\nexport TLON_READ_DIRS=\"#{Enum.join(dirs, ":")}\""
     end
