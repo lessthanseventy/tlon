@@ -174,3 +174,22 @@ export function tileBlocks(t: HomeTile): Rect[] {
   const [ox, oy] = cellPx(t.at)
   return HOME_BLOCKS[t.kind].map((r) => turn(r, t.rot)).map((r) => ({ x: ox + r.x, y: oy + r.y, w: r.w, h: r.h }))
 }
+
+/** the cell chain from `from` to `to` through the floor's tiles (every door is open: adjacency is the edge), both ends included; [] when either is off the floor or unreachable */
+export function cellPath(tiles: HomeTile[], from: Pt, to: Pt): Pt[] {
+  const on = new Set(tiles.map((t) => posKey(t.at)))
+  if (!on.has(posKey(from)) || !on.has(posKey(to))) return []
+  const prev = new Map<string, Pt | null>([[posKey(from), null]])
+  const queue: Pt[] = [from]
+  for (let i = 0; i < queue.length; i++) {
+    const p = queue[i]!
+    if (posKey(p) === posKey(to)) break
+    for (const n of neighbors(p)) {
+      if (on.has(posKey(n)) && !prev.has(posKey(n))) { prev.set(posKey(n), p); queue.push(n) }
+    }
+  }
+  if (!prev.has(posKey(to))) return []
+  const chain: Pt[] = []
+  for (let p: Pt | null = to; p; p = prev.get(posKey(p)) ?? null) chain.unshift(p)
+  return chain
+}
