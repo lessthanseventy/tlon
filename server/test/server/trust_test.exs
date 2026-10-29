@@ -61,13 +61,16 @@ defmodule Server.TrustTest do
   test "earned at eight finished builds and four in five first time; the step names who earned it, and stops at 4" do
     for _ <- 1..7, do: built("hronir", "landed")
     built("hronir", "landed", 2)
-    t = built("hronir", "landed")
+    t = built("hronir", "landed", 0, "m1")
+    unknown = built("hronir", "landed")
     built("ashe", "landed")
     lone = built("ashe", "landed")
 
-    assert Trust.record("hronir") == %{led: 9, first_time: 8}
-    assert Trust.builder(t) == "hronir"
-    assert {3, %{name: "hronir", led: 9, first_time: 8}} = Trust.allowance(t, 2)
+    assert Trust.record("hronir") == %{led: 10, first_time: 9}
+    assert Trust.builder(t) == {"hronir", "m1"}
+    assert Trust.builder(unknown) == {"hronir", nil}
+    assert {3, %{name: "hronir", model: "m1", led: 10, first_time: 9}} = Trust.allowance(t, 2)
+    assert {3, %{name: "hronir", model: nil}} = Trust.allowance(unknown, 2)
     assert {4, nil} = Trust.allowance(t, 4)
     assert {2, nil} = Trust.allowance(lone, 2)
   end
