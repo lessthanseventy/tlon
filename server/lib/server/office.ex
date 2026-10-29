@@ -376,7 +376,11 @@ defmodule Server.Office do
       on_it = thinking |> Map.get(t.id, []) |> Enum.map(& &1.agent)
       lead = leads[t.id]
 
-      desk? = (live and MapSet.member?(sessioned, {t.id, lead})) or lead in on_it or MapSet.member?(warm, {t.id, lead})
+      seated? = MapSet.member?(sessioned, {t.id, lead})
+
+      desk? =
+        (live and not Server.Coworker.window_only?(live, seated?)) or lead in on_it or
+          MapSet.member?(warm, {t.id, lead})
 
       Map.merge(t, %{
         prompt: prompts[t.id],

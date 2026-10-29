@@ -117,6 +117,10 @@ defmodule Server.Coworker do
 
   def status(_facts), do: :cold
 
+  @doc "A tmux window runs the seat and no session is registered for it: the window is up, nobody is in it."
+  @spec window_only?(boolean(), boolean()) :: boolean()
+  def window_only?(windowed?, sessioned?), do: windowed? and not sessioned?
+
   @doc "One roster row (`Server.Office.status/0`) as the line `tlon-cli roster` prints."
   @spec roster_line(map()) :: String.t()
   def roster_line(%{status: status, agent: agent, thread_id: tid, title: title} = row) do

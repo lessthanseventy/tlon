@@ -22,6 +22,13 @@ defmodule Server.CoworkerStatusTest do
     assert Coworker.status(%{@live | session: false, warm: false}) == :cold
   end
 
+  test "a window up with no session is the one window_only? case" do
+    assert Coworker.window_only?(true, false)
+    refute Coworker.window_only?(true, true)
+    refute Coworker.window_only?(false, false)
+    refute Coworker.window_only?(false, true)
+  end
+
   test "every state has its one glyph" do
     glyphs = for s <- Coworker.statuses(), do: Coworker.glyph(s)
     assert Enum.uniq(glyphs) == glyphs
