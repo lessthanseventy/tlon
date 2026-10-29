@@ -31,8 +31,8 @@ import { bathroomTile } from "../kit/tiles/bathroom"
 import { CAT_DESK, CAT_WARM, catCornerTile, PERCH_TOP, RADIATOR } from "../kit/tiles/cat-corner"
 import { officeTile } from "../kit/tiles/office"
 import { floorPlan } from "../kit/floor"
-import type { Home } from "../kit/home"
-import { annexHeight, paintAnnex } from "../kit/homeart"
+import { floorHeight, type Home } from "../kit/home"
+import { paintFloor } from "../kit/homeart"
 import { DEFAULT_OFFICE } from "../kit/tiles"
 import { NINA, pick } from "../kit/voices"
 import { hueRole, newYearLeft, RELEASE_MIN, Tv } from "../kit/tv"
@@ -497,7 +497,7 @@ export class WideRoom extends Sim<Layout> {
   /** the remote: the next channel */
   /** the placed home tiles; drawn as a strip below the office */
   setHome(h: Home) { this.home = h }
-  get height() { return WIDE_H + annexHeight(this.home) }
+  get height() { return floorHeight(this.home) }
   channel() { this.tvSet.next() }
   /** the TUI calls this every ~2s with whatever playerctl reports (or null — no player running) */
   setPlayer(p: NowPlaying | null) { this.player = p }
@@ -602,7 +602,8 @@ export class WideRoom extends Sim<Layout> {
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), (F0 + F1) / 2, 120, a.ok ? ROLE.inactive : ROLE.alarm)
     if (this.alarmed) text("FIRE DRILL", (F0 + F1) / 2, 132, ROLE.alarm)
     this.nightfall(sc, now)
-    paintAnnex(sc.cv, this.home, WIDE_H)
+    if (this.home.tiles.length) sc.cv.px(0, WIDE_H, this.width, this.height - WIDE_H, ROLE.ground)
+    paintFloor(sc.cv, this.home)
     return sc.finish()
   }
 

@@ -7,9 +7,8 @@ import { kitchenTile } from "../kit/tiles/kitchen"
 import { loungeTile } from "../kit/tiles/lounge"
 import { meetingTile } from "../kit/tiles/meeting"
 import { officeTile } from "../kit/tiles/office"
-import type { Home } from "../kit/home"
+import { CELL, OFFICE_ROWS, floorHeight, type Home } from "../kit/home"
 import { refsOf } from "../kit/margin"
-import { annexHeight } from "../kit/homeart"
 import { type Agents, EMPTY } from "../kit/types"
 import type { Tv } from "../kit/tv"
 import { WIDE_H, WideRoom, widePlan, zones } from "../rooms/wide"
@@ -27,8 +26,8 @@ describe("the wide room", () => {
     })
   }
 
-  test("a home hangs below the office as an annex; the office rows stay put", () => {
-    const home: Home = { tiles: [{ kind: "garden", at: [0, 0] }] }
+  test("a home on the floor below the office: the office rows stay put, height is the floor's real extent", () => {
+    const home: Home = { tiles: [{ kind: "street", at: [0, OFFICE_ROWS] }, { kind: "garden", at: [0, OFFICE_ROWS + 1] }] }
     const a = viewOf(office(3), 1), now = new Date(2026, 9, 5, 21, 0)
     const shot = (h?: Home) => seeded(7, () => {
       const room = new WideRoom(696)
@@ -38,7 +37,8 @@ describe("the wide room", () => {
     })
     const bare = shot(), withHome = shot(home)
     expect(bare.height).toBe(WIDE_H)
-    expect(withHome.height).toBe(WIDE_H + annexHeight(home))
+    expect(withHome.height).toBe(floorHeight(home))
+    expect(withHome.height).toBe(WIDE_H + 2 * CELL)
     expect(Buffer.from(withHome.rgba.slice(0, bare.rgba.length)).equals(Buffer.from(bare.rgba))).toBe(true)
   })
 

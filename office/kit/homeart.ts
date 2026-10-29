@@ -1,14 +1,13 @@
 // Home tiles as pixel art: `TILE_ART` maps a tile kind to the function that paints it, and
 // `renderHome` lays the build grid out as a Frame. A new tile kind plugs in by adding a key.
 import { Canvas, type Frame } from "./canvas"
-import { gridWindow, type Home, type HomeTile, type Pt } from "./home"
+import { CELL, cellPx, gridWindow, type Home, type HomeTile, type Pt } from "./home"
 import { paintMailboxTile, type Mailbox } from "./mailbox"
 import { ROLE, tint } from "./palette"
 import { DECOR } from "./sprites"
 import type { BedScene, StreakFrame } from "./life"
 
 export const TILE = 12
-const CELL = TILE + 2
 
 /** a square sprite turned clockwise by `rot` degrees */
 export function rotated(rows: string[], rot: 0 | 90 | 180 | 270 = 0): string[] {
@@ -97,18 +96,9 @@ export function paintTile(c: Canvas, x: number, y: number, t: HomeTile, weather?
   if (t.kind === "living" && frames?.length) paintFrames(c, x, y, frames)
 }
 
-export const ANNEX_PAD = 8
-const bounds = (h: Home) => ({ x0: Math.min(...h.tiles.map((t) => t.at[0])), y0: Math.min(...h.tiles.map((t) => t.at[1])), y1: Math.max(...h.tiles.map((t) => t.at[1])) })
-
-/** px height of the strip that shows `h` under the office: 0 when it has no tiles */
-export const annexHeight = (h: Home) => h.tiles.length ? (bounds(h).y1 - bounds(h).y0 + 1) * CELL + 2 * ANNEX_PAD : 0
-
-/** paints the home on `c` from row `y`: ground, then every tile via `paintTile`. Canvas clips what overruns the width. */
-export function paintAnnex(c: Canvas, h: Home, y: number) {
-  if (!h.tiles.length) return
-  const { x0, y0 } = bounds(h)
-  c.px(0, y, c.width, annexHeight(h), ROLE.ground)
-  for (const t of h.tiles) paintTile(c, ANNEX_PAD + (t.at[0] - x0) * CELL + 1, y + ANNEX_PAD + (t.at[1] - y0) * CELL + 1, t)
+/** paints the home's tiles on the floor canvas at their absolute cells (the office rows above are the room's own). Canvas clips what overruns the width. */
+export function paintFloor(c: Canvas, h: Home) {
+  for (const t of h.tiles) { const [x, y] = cellPx(t.at); paintTile(c, x, y, t) }
 }
 
 export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number; weather?: string | null; mail?: Mailbox | null; frames?: StreakFrame[]; bed?: BedScene | null }

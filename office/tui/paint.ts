@@ -14,7 +14,7 @@ import type { Viewport } from "./viewport"
 export type Geometry = { k: number; cw: number; ch: number; col: number; row: number; cols: number; rows: number; kitty: boolean; floorW: number; floorH: number }
 
 /** the biggest whole-pixel scale that fits `fitH` (default the floor's height), or a flat legible 2× once that no longer fits at all;
- *  a floor taller than `fitH` (the wide room's home annex) keeps that scale and pans in the viewport rather than shrinking the room */
+ *  a floor taller than `fitH` (the wide room's home below the office) keeps that scale and pans in the viewport rather than shrinking the room */
 export function geometry(W: number, H: number, termCols: number, termRows: number, below: number, cell: { w: number; h: number } | null, kitty: boolean, fitH = H): Geometry {
   const room = Math.max(4, termRows - below)
   if (kitty && cell) {
