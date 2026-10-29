@@ -1199,11 +1199,16 @@ defmodule Server.Profiles do
   @doc """
   The main checkout of the repo `from` belongs to: the parent of its git common dir, so a build dir
   (the service's `.release`, a linked worktree) resolves to the checkout that holds main's scripts.
+  `{:error, output}` when `from` is not in a git repo.
   """
-  @spec main_root(String.t()) :: String.t()
+  @spec main_root(String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def main_root(from \\ tlon_root()) do
-    {out, 0} = System.cmd("git", ["-C", from, "rev-parse", "--path-format=absolute", "--git-common-dir"])
-    out |> String.trim() |> Path.dirname()
+    case System.cmd("git", ["-C", from, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+           stderr_to_stdout: true
+         ) do
+      {out, 0} -> {:ok, out |> String.trim() |> Path.dirname()}
+      {out, _} -> {:error, String.slice(out, 0, 200)}
+    end
   end
 
   @doc """

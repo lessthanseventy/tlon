@@ -27,15 +27,46 @@ defmodule Server.WorktreeTest do
 
   describe "ensure/2" do
     test "a sibling repo is pointed at tlon's hooks, absolutely and on every ensure", %{repo: repo, git: git} do
-      hooks = Path.join(Server.Profiles.main_root(), "scripts/git-hooks")
+      {:ok, root} = Server.Profiles.main_root()
+      hooks = Path.join(root, "scripts/git-hooks")
       assert {:ok, _} = Worktree.ensure(repo, "hooked")
       assert {out, 0} = git.(["config", "core.hooksPath"])
       assert String.trim(out) == hooks
 
-      {_, 0} = git.(["config", "core.hooksPath", "elsewhere"])
       assert {:ok, _} = Worktree.ensure(repo, "hooked")
       assert {out, 0} = git.(["config", "core.hooksPath"])
       assert String.trim(out) == hooks
+    end
+
+    test "a sibling repo's own core.hooksPath is refused, not overwritten", %{repo: repo, git: git} do
+      {_, 0} = git.(["config", "core.hooksPath", "elsewhere"])
+      assert {:error, msg} = Worktree.ensure(repo, "hooked")
+      assert msg =~ "elsewhere"
+      assert {out, 0} = git.(["config", "core.hooksPath"])
+      assert String.trim(out) == "elsewhere"
+      refute File.exists?(Worktree.path(repo, "hooked"))
+    end
+
+    test "tlon's own checkout (any worktree of it) is never reconfigured" do
+      own = File.cwd!()
+      slug = "own-noop-#{System.unique_integer([:positive])}"
+      wt = Worktree.path(own, slug)
+      File.mkdir_p!(wt)
+      File.write!(Path.join(wt, ".git"), "gitdir: nowhere\n")
+      on_exit(fn -> File.rm_rf!(wt) end)
+
+      test_pid = self()
+
+      Application.put_env(:server, :git_cmd, fn cmd, args, opts ->
+        if "config" in args, do: send(test_pid, {:config_call, args})
+        _ = {cmd, opts}
+        {"", 0}
+      end)
+
+      on_exit(fn -> Application.delete_env(:server, :git_cmd) end)
+
+      assert {:ok, ^wt} = Worktree.ensure(own, slug)
+      refute_received {:config_call, _}
     end
 
     test "creates an isolated checkout on branch work/<slug>", %{repo: repo, git: git} do
