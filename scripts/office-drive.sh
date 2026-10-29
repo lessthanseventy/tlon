@@ -3,7 +3,7 @@
 # each step's keys, print the screen after each, then tear it all down — in ONE call, because a
 # harness may reap a tmux server between calls. Half blocks under tmux, so the frame is text.
 #
-#   office-drive.sh STEP...      each STEP is tmux send-keys arguments: "/" "'108'" "Enter" "M-Enter" ("ctrl+]" is C-])
+#   office-drive.sh STEP...      each STEP is tmux send-keys arguments: "/" "'108'" "Enter" "M-Enter" ("ctrl+]" is C-]); a STEP that is not valid shell (a bare ` or ") is sent as that one key
 #                                or click:TEXT[@DX,DY] — a left click on the first screen cell where TEXT starts (+DX columns,
 #                                +DY rows): aim at what the screen shows, never at a measured coordinate; or wait:TEXT — no keys; waits until the screen shows TEXT (30 s at most)
 #
@@ -58,7 +58,9 @@ for r,l in enumerate(L):
       if [ -z "$pos" ]; then echo "=== no such text on screen: $want"; else set -- $pos; t send-keys -t 0 -l $'\033[<0;'"$1;$2"$'M\033[<0;'"$1;$2"$'m'; sleep "${OFFICE_WAIT:-1.5}"; fi ;;
     # ctrl+X, as the office's own hints spell a key, is tmux's C-X; typed as is it is six letters
     ctrl+*) t send-keys -t 0 "C-${step#ctrl+}"; sleep "${OFFICE_WAIT:-1.5}" ;;
-    *) eval "t send-keys -t 0 $step"; sleep "${OFFICE_WAIT:-1.5}" ;;
+    # a step is shell words ("'108'", "M-Enter"); one that is not valid shell (a bare ` or ") is the key itself
+    *) if bash -n <<<"t send-keys -t 0 $step" 2>/dev/null; then eval "t send-keys -t 0 $step"; else t send-keys -t 0 -- "$step"; fi
+       sleep "${OFFICE_WAIT:-1.5}" ;;
   esac
   echo "=== after: $step"
   if [ -n "${OFFICE_TEXT:-}" ]; then t capture-pane -p -t 0 | sed -E 's/[▀▄█ ]+/ /g' | grep -E '[[:alnum:]]'
