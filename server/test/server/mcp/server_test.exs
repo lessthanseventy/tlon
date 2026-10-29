@@ -1278,6 +1278,23 @@ defmodule Server.MCP.ServerTest do
       assert line =~ "hronir leads"
     end
 
+    test "an off-shift manager named as a workline's lead is refused too", %{ws: ws, token: token, session: session} do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "surveyor-night", archetype: "surveyor", crew: "night"})
+      refute Enum.any?(Server.Workspaces.bench(ws.id), &(&1.name == "surveyor-night"))
+      before = length(Server.Repo.all(Server.Thread))
+
+      r =
+        call(token, session, 4, "staff_child", %{
+          "title" => "off shift manager build",
+          "lead" => "surveyor-night",
+          "workline" => "intent",
+          "brief" => "Do it."
+        })
+
+      assert r["isError"]
+      assert length(Server.Repo.all(Server.Thread)) == before
+    end
+
     test "the manager named as a workline's lead is refused before anything opens", %{
       ws: ws,
       token: token,
