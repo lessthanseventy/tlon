@@ -2,11 +2,13 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { killServer } from "./kill-server"
 
 // Drives the real TUI on the toy world: esc is one step back (to the card you came from), a status
 // line does not outlive the card it was said on, and words that did not send come back.
 const state = mkdtempSync(join(tmpdir(), "office-nav-"))
 let socket = ""
+let starts = 0
 const tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", socket, ...a])
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
@@ -18,13 +20,13 @@ const until = async (what: string, ok: () => boolean) => {
   if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
 }
 afterAll(() => {
-  Bun.spawnSync(["tmux", "-L", socket, "kill-server"])
-  rmSync(`${process.env.TMUX_TMPDIR ?? "/tmp"}/tmux-${process.getuid!()}/${socket}`, { force: true })
+  killServer(socket)
   rmSync(state, { recursive: true, force: true })
 })
 
 async function start() {
-  socket = `tlon-office-nav-${process.pid}`
+  // a socket killed a moment ago may still be dying: each start gets its own
+  socket = `tlon-office-nav-${process.pid}-${++starts}`
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TMPDIR='${state}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts --sandbox`)
@@ -107,7 +109,7 @@ test("cards say what they hold: the inherited model, the current workspace, an e
 }, 60_000)
 
 test("a toy fired from the play card lands back on the card you opened it from", async () => {
-  Bun.spawnSync(["tmux", "-L", socket, "kill-server"])
+  killServer(socket)
   await start()
   keys("c")
   await until("the crew card", () => screen().includes("CREW · "))
