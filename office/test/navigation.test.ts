@@ -33,7 +33,7 @@ async function start() {
 
 test("esc steps back through the cards you came by, and the status line stays on its card", async () => {
   await start()
-  keys("T")
+  keys("E", "5")
   await until("the treat said", () => screen().includes("treat! they come running"))
   keys("c")
   await until("the crew card", () => screen().includes("CREW · "))
