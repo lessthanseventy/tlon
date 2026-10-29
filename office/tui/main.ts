@@ -1548,7 +1548,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
       const rows: Row[] = [
         ...rack.problems.map((p) => ({ segs: [pink("! "), plain(p)] })),
-        ok(true, `tlon ${rack.version}, up ${up}`), ok(rack.db, "the database answers"), ok(rack.jobs, rack.jobs ? "the job queue runs (staffing, sweeps, schedules)" : "no job queue on this node"),
+        ok(true, `tlon ${rack.version}, up ${up}`), ok(rack.db, "the database answers"), rack.jobs ? ok(true, "the job queue runs (staffing, sweeps, schedules)") : { segs: [dim("○ no job queue on this node")] },
         ok(rack.failed_jobs === 0, `${rack.failed_jobs} failed job(s) today`), ok(rack.tmux, "tmux is there for the coworkers"),
         { segs: [dim(`disk ${rack.disk_pct ?? "?"}% · memory ${rack.mem_pct ?? "?"}% · load ${rack.load ?? "?"}`)] },
         { segs: [plain("")] },

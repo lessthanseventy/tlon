@@ -16,14 +16,15 @@ const health = {
   merge_queue: [car(7, "the lead car", 1), car(8, "the middle car", 2), car(9, "office-drive", 3),
     { thread_id: 5, title: "PR #61 chat-ux", state: "queued", train: "solo", gate: null }],
 }
+let current: typeof health = health
 const server = Bun.serve({
   port: 0,
   fetch: (req) => {
     const path = new URL(req.url).pathname
     if (path.endsWith("/office/needs")) return Response.json([])
-    if (path.endsWith("/office/health")) return Response.json(health)
+    if (path.endsWith("/office/health")) return Response.json(current)
     if (path.endsWith("/settings")) return Response.json({ knobs: [], restart_pending: true })
-    if (path.endsWith("/office")) return Response.json({ roster: [], threads: [], workspaces: [{ id: 1, name: "Toy" }], bench: [], tickets: [], health })
+    if (path.endsWith("/office")) return Response.json({ roster: [], threads: [], workspaces: [{ id: 1, name: "Toy" }], bench: [], tickets: [], health: current })
     return new Response("no", { status: 404 })
   },
 })
@@ -62,4 +63,21 @@ test("the rack lists landing & checks in one place, in order: a train is one blo
     .every((n, i, a) => n >= 0 && (i === 0 || n > a[i - 1]!))).toBe(true)
   expect(s.split("office-drive").length - 1).toBe(1)
   expect(s.split("train → main").length - 1).toBe(1)
+}, 30_000)
+
+test("a node with no job queue reads neutral under all green: a dim ○ row, no ✕", async () => {
+  tmux("kill-server")
+  current = { ...health, jobs: false, checks: { running: null, waiting: [] }, merge_queue: [] } as typeof health
+  const office = join(import.meta.dir, "..")
+  tmux("new-session", "-d", "-x", "150", "-y", "50",
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+  await until("the room", () => screen().includes("Toy"))
+  tmux("send-keys", "-t", "0", "H")
+  await until("the rack", () => screen().includes("THE RACK"))
+  const s = screen()
+  expect(s).toContain("THE RACK · all green")
+  expect(s).not.toContain("✕")
+  expect(s).toContain("○ no job queue on this node")
+  const styled = dec.decode(tmux("capture-pane", "-p", "-e", "-t", "0").stdout).split("\n").find((l) => l.includes("no job queue"))!
+  expect(styled).toContain("38;2;184;153;76")
 }, 30_000)
