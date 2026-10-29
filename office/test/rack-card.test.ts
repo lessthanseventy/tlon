@@ -67,7 +67,7 @@ test("the rack lists landing & checks in one place, in order: a train is one blo
 
 test("a node with no job queue reads neutral under all green: a dim ○ row, no ✕", async () => {
   tmux("kill-server")
-  current = { ...health, jobs: false, checks: { running: null, waiting: [] }, merge_queue: [] } as typeof health
+  current = { ...health, jobs: false, checks: { running: null, waiting: [] }, merge_queue: [] } as unknown as typeof health
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
