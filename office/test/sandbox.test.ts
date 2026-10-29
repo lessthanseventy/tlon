@@ -39,11 +39,14 @@ test("off the sandbox, E runs on the room with OFFICE_TOY_KEYS=1, unless the car
 })
 
 test("the help line's play keys are the keys toyKey() handles", async () => {
-  const { PLAY } = await import("../tui/sandbox")
+  const { PLAY, PLAY_ROWS } = await import("../tui/sandbox")
   expect(PLAY.map((p) => p.key).join("")).toBe("E")
   const src = await Bun.file(new URL("../tui/main.ts", import.meta.url)).text()
   const body = src.slice(src.indexOf("function toyKey("), src.indexOf("function onKey("))
   for (const { key } of PLAY) expect(body).toContain(`case "${key}"`)
+  const rows = src.slice(src.indexOf("function playDo("), src.indexOf("function onKey("))
+  expect(PLAY_ROWS.length).toBeGreaterThan(0)
+  for (const b of PLAY_ROWS) expect(rows).toContain(`case "${b.id}"`)
 })
 
 test("hire puts a new person on the bench, on shift for everyone, and they are not hired twice", () => {
