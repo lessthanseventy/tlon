@@ -6,6 +6,10 @@ defmodule Server.Trust do
   worklines landing first time at 80% or better has the operator's standing approval
   (`auto_land_risk`) raised by one on the worklines they built, never past 4 — fewer approval cards
   for work from a seat that keeps getting it right, and the card that does come says why.
+
+  The record is per coworker; `record/2` splits it by the model on the leads line, the one the seat
+  launched on when it took the build. A line from before the model was recorded is unknown: in the
+  coworker's record, in no model's.
   """
   import Ecto.Query
 
