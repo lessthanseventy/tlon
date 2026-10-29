@@ -33,9 +33,11 @@ defmodule Server.Jobs.SmokeTest do
     script = Path.join(System.tmp_dir!(), "smoke-stub-#{System.pid()}-#{System.unique_integer([:positive])}.sh")
     File.write!(script, @stub)
     Application.put_env(:server, :smoke_script, script)
+    Application.put_env(:server, :smoke_resolve, fn ref -> {:ok, "sha-of-" <> ref} end)
 
     on_exit(fn ->
       Application.delete_env(:server, :smoke_script)
+      Application.delete_env(:server, :smoke_resolve)
       File.rm(script)
     end)
 
@@ -140,6 +142,23 @@ defmodule Server.Jobs.SmokeTest do
     assert out =~ "(old hold: driving the checkout's office-drive.sh)"
   end
 
+  test "a start for a tip that moved cancels the queued build and queues the new sha", %{thread: t} do
+    {:ok, old} = Smoke.start(t, nil, "qa1")
+    Application.put_env(:server, :smoke_resolve, fn ref -> {:ok, "moved-" <> ref} end)
+    assert {:ok, new} = Smoke.start(t, nil, "qa1")
+    refute new.id == old.id
+    assert Server.Repo.reload!(new).args["sha"] == "moved-work/a-thing"
+    assert new.meta["replaced"] == old.id
+    assert Server.Repo.reload!(old).state == "cancelled"
+    assert Smoke.building(t.id).id == new.id
+  end
+
+  test "a ref that resolves to no commit is refused, nothing queued", %{thread: t} do
+    Application.put_env(:server, :smoke_resolve, fn _ -> :error end)
+    assert {:error, "no commit work/a-thing"} = Smoke.start(t, nil)
+    assert [] = all_enqueued(worker: Server.Jobs.Smoke)
+  end
+
   test "start carries fixtures into the job's args, and leaves them out when there are none", %{thread: t} do
     {:ok, _} = Smoke.start(t, nil, "qa1", [], ["tool_denied_need"])
     assert_enqueued(worker: Server.Jobs.Smoke, args: %{thread_id: t.id, fixtures: ["tool_denied_need"]})
@@ -194,6 +213,10 @@ defmodule Server.Jobs.SmokeTest do
       assert {:ok, %{id: id}} = Smoke.start(t, nil, "qa1")
       assert id == job.id
       assert Smoke.building(t.id).id == job.id
+    end
+
+    test "the job carries the sha its ref resolved to", %{job: job} do
+      assert Server.Repo.reload!(job).args["sha"] == "sha-of-work/a-thing"
     end
 
     test "a start for another ref still queues", %{thread: t, job: job} do

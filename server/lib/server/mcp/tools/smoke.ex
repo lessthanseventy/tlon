@@ -36,14 +36,22 @@ defmodule Server.MCP.Tool.StartSmoke do
              params[:flags] || [],
              params[:fixtures] || []
            ) do
-      ok(frame, %{
-        "queued" => job.id,
-        "next" => "the url is posted on thread ##{thread.id} when the build is up (minutes)"
-      })
+      ok(
+        frame,
+        Map.merge(
+          %{"queued" => job.id, "next" => "the url is posted on thread ##{thread.id} when the build is up (minutes)"},
+          replaced_note(job)
+        )
+      )
     else
       {:error, why} -> fail(frame, why)
     end
   end
+
+  defp replaced_note(%{meta: %{"replaced" => id}}),
+    do: %{"replaced" => "job #{id} was building an older commit of this ref; cancelled"}
+
+  defp replaced_note(_), do: %{}
 end
 
 defmodule Server.MCP.Tool.DriveSmoke do
