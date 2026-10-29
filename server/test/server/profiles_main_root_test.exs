@@ -1,5 +1,5 @@
-defmodule Server.SmokeScriptTest do
-  # The held smoke runs main's copy of release-smoke.sh, even when the service asks from a build dir.
+defmodule Server.ProfilesMainRootTest do
+  # A build dir (the service's `.release`) resolves to the main checkout it was cut from.
   use ExUnit.Case, async: true
 
   @tag :tmp_dir
@@ -11,8 +11,8 @@ defmodule Server.SmokeScriptTest do
     git!(main, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"])
     git!(main, ["worktree", "add", "-q", "--detach", release])
 
-    assert Server.Smoke.main_root(release) == Path.expand(main)
-    assert Server.Smoke.main_root(main) == Path.expand(main)
+    assert Server.Profiles.main_root(release) == Path.expand(main)
+    assert Server.Profiles.main_root(main) == Path.expand(main)
   end
 
   defp git!(dir, args), do: {_, 0} = System.cmd("git", ["-C", dir | args], stderr_to_stdout: true)

@@ -354,9 +354,10 @@ defmodule Server.Worktree do
   # tlon's own checkout gets its hooks from `server:setup`; a sibling repo has no scripts/git-hooks,
   # so its config points at tlon's (absolute), which fence on TLON_THREAD and are inert without it
   defp point_hooks_at_tlon(repo_path) do
-    root = Server.Profiles.tlon_root()
+    root = Server.Profiles.main_root()
 
-    if Path.expand(repo_path) == root do
+    # the common dir, not tlon_root/0: the service is built in `.release`, a linked worktree of tlon
+    if Server.Profiles.main_root(repo_path) == root do
       :ok
     else
       case git(repo_path, ["config", "core.hooksPath", Path.join(root, "scripts/git-hooks")]) do

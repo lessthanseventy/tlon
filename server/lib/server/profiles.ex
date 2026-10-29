@@ -1197,6 +1197,16 @@ defmodule Server.Profiles do
   def tlon_root, do: Path.expand("../../..", __DIR__)
 
   @doc """
+  The main checkout of the repo `from` belongs to: the parent of its git common dir, so a build dir
+  (the service's `.release`, a linked worktree) resolves to the checkout that holds main's scripts.
+  """
+  @spec main_root(String.t()) :: String.t()
+  def main_root(from \\ tlon_root()) do
+    {out, 0} = System.cmd("git", ["-C", from, "rev-parse", "--path-format=absolute", "--git-common-dir"])
+    out |> String.trim() |> Path.dirname()
+  end
+
+  @doc """
   The config dir a profile materialises into, keyed by workspace so
   two workspaces can run the same coworker name under different policy. A workspace-less profile
   keeps the flat path.
