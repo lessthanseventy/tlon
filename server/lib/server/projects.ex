@@ -12,8 +12,6 @@ defmodule Server.Projects do
   alias Server.Project
   alias Server.Repo
 
-  @max_nested_repos 100
-
   @doc "Register a project under a workspace. `{:ok, project}` or `{:error, changeset}` (dup name within the workspace / bad workspace_id)."
   def register(attrs) do
     attrs |> Project.register_changeset() |> Repo.insert() |> Bus.announce(:project_registered)
@@ -151,23 +149,39 @@ defmodule Server.Projects do
 
   @doc """
   The thread's project's OTHER checkouts, `~`-expanded: what its coworker may read but not write
-  (the harness opens them beside the worktree). Never the thread's own repo, never a scope glob;
-  `[]` for a thread with no project. Claude Code makes a read dir a write root and bwrap mounts ~45
-  args per repo found under one (9000 max, ~65 repos already fixed), so a checkout nesting more than
-  `@max_nested_repos` (test tmp_dirs, scratch clones) is not opened.
+  (the harness opens them beside the worktree). Never the thread's own repo, never a scope glob, never
+  a path that is not a directory; `[]` for a thread with no project. Claude Code makes a read dir a
+  write root and bwrap mounts ~45 args per repo found under one, so the dirs together may hold
+  `Server.SandboxBudget.read_dir_repos/0` repos: `read_dirs_split/1` keeps a dir while the running
+  total fits and skips one that does not (a later, smaller one may still fit).
   """
-  def read_dirs(%Server.Thread{project_id: pid} = thread) when not is_nil(pid) do
+  def read_dirs(thread), do: thread |> read_dirs_split() |> elem(0)
+
+  @doc "`{kept, dropped}`: `read_dirs/1` and the dirs the shared budget left out, in list order."
+  def read_dirs_split(%Server.Thread{project_id: pid} = thread) when not is_nil(pid) do
     own = with {:ok, path} <- repo_for_thread(thread), do: path
 
-    for %{"path" => path} <- get(pid).repos || [],
-        not String.contains?(path, "*"),
-        dir = Path.expand(path),
-        dir != own,
-        nested_repos(dir) <= @max_nested_repos,
-        do: dir
+    dirs =
+      for %{"path" => path} <- get(pid).repos || [],
+          not String.contains?(path, "*"),
+          dir = Path.expand(path),
+          dir != own,
+          File.dir?(dir),
+          do: dir
+
+    {kept, dropped, _used} =
+      Enum.reduce(dirs, {[], [], 0}, fn dir, {kept, dropped, used} ->
+        n = nested_repos(dir)
+
+        if used + n <= Server.SandboxBudget.read_dir_repos(),
+          do: {[dir | kept], dropped, used + n},
+          else: {kept, [dir | dropped], used}
+      end)
+
+    {Enum.reverse(kept), Enum.reverse(dropped)}
   end
 
-  def read_dirs(_thread), do: []
+  def read_dirs_split(_thread), do: {[], []}
 
   # The first repo's `~`-expanded path, or `:no_repo`. Repos are a JSON list of `%{"path" => …}`.
   @doc "A project's primary checkout (its first repo), `~`-expanded."
