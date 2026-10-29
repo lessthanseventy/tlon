@@ -300,14 +300,17 @@ export const KEYS = [
   { id: "reader.ends", scope: "reader", key: "home end", label: "the oldest / the newest" },
   { id: "reader.back", scope: "reader", key: "esc", label: "back to the room", verb: "back" },
   // the sandbox's play keys
-  { id: "play.d", scope: "sandbox-play", key: "D", label: "doorbell" },
-  { id: "play.e", scope: "sandbox-play", key: "E", label: "event" },
-  { id: "play.t", scope: "sandbox-play", key: "T", label: "treat" },
-  { id: "play.f", scope: "sandbox-play", key: "F", label: "fire drill" },
-  { id: "play.n", scope: "sandbox-play", key: "N", label: "night" },
-  { id: "play.w", scope: "sandbox-play", key: "W", label: "weather" },
-  { id: "play.p", scope: "sandbox-play", key: "P", label: "pet" },
-  { id: "play.c", scope: "sandbox-play", key: "C", label: "call over" },
+  { id: "play.e", scope: "sandbox-play", key: "E", label: "play", verb: "play" },
+  // card:play
+  { id: "play.event", scope: "card:play", key: "1", label: "a random event" },
+  { id: "play.gary", scope: "card:play", key: "2", label: "summon Gary" },
+  { id: "play.doorbell", scope: "card:play", key: "3", label: "the doorbell" },
+  { id: "play.drill", scope: "card:play", key: "4", label: "a fire drill" },
+  { id: "play.treat", scope: "card:play", key: "5", label: "a treat (they come running)" },
+  { id: "play.night", scope: "card:play", key: "6", label: "night / morning" },
+  { id: "play.weather", scope: "card:play", key: "7", label: "the next weather" },
+  { id: "play.pet", scope: "card:play", key: "8", label: "pat the pet" },
+  { id: "play.call", scope: "card:play", key: "9", label: "call someone over" },
 ] as const satisfies readonly Binding[]
 
 export type KeyId = (typeof KEYS)[number]["id"]
