@@ -41,6 +41,7 @@ const DOSSIER = { thread_id: 42, goal: "ship the mod", lead: "claude-code", todo
 const GLANCE = { archetype: "builder", crew: [], red: [], persona: { voice: "plain-spoken", catchphrase: "Right then." }, line: null, landed: [] };
 const TURN_END = { answer: "", durationMs: 1, isAborted: false, turnId: "t1", reason: "answer" };
 const START = { cwd: "/repo", surface: null, isInteractive: false };
+const SPAWN = { subagentType: "general-purpose", prompt: "bg" };
 
 // What Claude Code and the tlon server answer beneath the plugins; returns every tlon call made.
 function engine(on, world: World = {}): Declare[] {
@@ -49,6 +50,8 @@ function engine(on, world: World = {}): Declare[] {
   on("session.start", ($, e) => ({ cwd: e.cwd }));
   on("session.end", ($, e) => ({ sessionId: e.sessionId }));
   on("turn.start", ($, e) => ({ turnId: e.turnId }));
+  // the host resolves a spawned agent to its id; the subagent's own turns carry it as agentId
+  on("agent.spawn", () => ({ model: "sonnet", agentId: "sub-1" }));
   on("turn.complete", ($, e) => ({ text: e.answer }));
   on("prompt.submit", ($, e) => {
     if (world.submitFails) throw new Error("session closing");
@@ -142,7 +145,6 @@ test("a citizen registers, then declares thinking, each tool, and idle, in order
   await $.turn.start({ text: "run the gate", turnId: "t1" });
   await $.tool.call({ tool: "Bash", command: "mise run check" });
   await $.tool.call({ tool: "Read", file_path: "/repo/lib/x.ex" });
-  await $.turn.complete({ ...TURN_END, agentId: "sub-1" });
   await $.turn.complete(TURN_END);
   await settle();
 
@@ -327,6 +329,7 @@ test("a seat set to compact at half full asks to compact between main-thread tur
   expect(world.compactions).toEqual([]);
 
   world.contextPercent = 70;
+  await $.agent.spawn(SPAWN);
   await $.turn.complete({ ...TURN_END, agentId: "sub-1" });
   await settle();
   expect(world.compactions).toEqual([]);
@@ -702,25 +705,12 @@ test("an abandoned submit settling late does not corrupt the count: the next con
   expect(takes()).toBe(2);
 });
 
-test("a subagent's turn.start declares no presence_thinking; the main turn's stands",async ($, on) => {
+test("a main turn ending while a spawned subagent still runs is not idle; the last subagent ending is", async ($, on) => {
   const sent = engine(on);
 
   await $.session.start(START);
   await $.turn.start({ text: "go", turnId: "t1" });
-  await settle();
-  expect(declares(sent).filter((d) => d.tool === "presence_thinking")).toHaveLength(1);
-
-  await $.turn.start({ text: "bg", turnId: "s1", agentId: "sub-1" });
-  await settle();
-  expect(declares(sent).filter((d) => d.tool === "presence_thinking")).toHaveLength(1);
-});
-
-test("a main turn ending while a subagent still runs is not idle; the last subagent ending is", async ($, on) => {
-  const sent = engine(on);
-
-  await $.session.start(START);
-  await $.turn.start({ text: "go", turnId: "t1" });
-  await $.turn.start({ text: "bg", turnId: "s1", agentId: "sub-1" });
+  await $.agent.spawn(SPAWN);
   await $.turn.complete(TURN_END);
   await settle();
   expect(declares(sent).filter((d) => d.tool === "presence_idle")).toEqual([]);
@@ -736,7 +726,7 @@ test("a background subagent outliving the main turn gets a presence_doing refres
 
   await $.session.start(START);
   await $.turn.start({ text: "go", turnId: "t1" });
-  await $.turn.start({ text: "bg", turnId: "s1", agentId: "sub-1" });
+  await $.agent.spawn(SPAWN);
   await $.turn.complete(TURN_END);
   await settle();
   expect(declares(sent).filter((d) => d.tool === "presence_idle")).toEqual([]);

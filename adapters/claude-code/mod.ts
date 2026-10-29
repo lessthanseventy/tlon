@@ -80,7 +80,7 @@ let submitting: Promise<void> = Promise.resolve();
 let pendingSubmits = 0;
 // bumped at session.end: a submit from an earlier conversation settling late must not touch the count
 let submitGen = 0;
-// subagents whose turn started and has not ended: the session is busy while any runs, even after
+// subagents spawned and not yet ended: the session is busy while any runs, even after
 // its own turn ended
 const running = new Set<string>();
 let mainEnded = false;
@@ -639,15 +639,18 @@ export function register(on) {
   });
 
   on("turn.start", async ($, e, next) => {
-    if (e.agentId) running.add(e.agentId);
-    else mainEnded = false;
-    if (thread && !e.agentId) declare($, "presence_thinking");
+    mainEnded = false;
+    if (thread) declare($, "presence_thinking");
     return next(e);
   });
 
+  // A subagent's run raises no turn.start: its id is known only here, from the started agent. No id
+  // for a remote or isolated agent, or a spawn a hook refused.
   on("agent.spawn", async ($, e, next) => {
-    if (!onOllama && e.subagentType === "Explore" && (await fiveHourUsed($)) >= HOT_5H) return next({ ...e, model: "haiku" });
-    return next(e);
+    const hot = !onOllama && e.subagentType === "Explore" && (await fiveHourUsed($)) >= HOT_5H;
+    const r = await next(hot ? { ...e, model: "haiku" } : e);
+    if (r?.agentId) running.add(r.agentId);
+    return r;
   });
 
   // A refusal is reported, never acted on: the server derives the operator's `tool_denied` Need from
