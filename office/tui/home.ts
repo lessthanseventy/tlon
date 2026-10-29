@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
-import { CATALOGUE, type Build, type Home, type HomeTile } from "../kit/home"
+import { CATALOGUE, belowOffice, type Build, type Home, type HomeTile } from "../kit/home"
 
 export const HOME_PATH = process.env.TLON_HOME
   ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/home.json")
@@ -21,6 +21,9 @@ export function loadHome(path: string = HOME_PATH): Home {
   } catch { /* no file, or not JSON: an empty home */ }
   return { tiles: [] }
 }
+
+/** the home as the floor holds it: a file saved before the office was on the floor is shifted below it, in memory only */
+export const loadFloor = (path: string = HOME_PATH): Home => belowOffice(loadHome(path))
 
 /** tiles on disk whose kind this build doesn't know (a reverted kind): kept opaque so a save doesn't lose them */
 function unknownTiles(path: string): unknown[] {

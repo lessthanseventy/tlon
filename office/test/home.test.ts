@@ -5,10 +5,10 @@ import { join } from "node:path"
 import {
   CATALOGUE, canPlace, connected, gridWindow, GRID_MAX, drop, move, pickUp, place, remove, rotate, startBuild, undo, type Home, type HomeTile,
 } from "../kit/home"
-import { CELL, OFFICE_H, OFFICE_ROWS, belowOffice, cellPx, floorHeight } from "../kit/home"
+import { CELL, OFFICE_H, OFFICE_ROWS, belowOffice, cellPx, defaultHome, floorHeight } from "../kit/home"
 import { TILE } from "../kit/homeart"
 import { WIDE_H } from "../rooms/wide"
-import { applyBuild, loadHome, saveHome } from "../tui/home"
+import { applyBuild, loadFloor, loadHome, saveHome } from "../tui/home"
 
 const byAt = (x: HomeTile, y: HomeTile) => x.at[0] - y.at[0] || x.at[1] - y.at[1]
 
@@ -307,5 +307,22 @@ describe("floor geometry", () => {
     expect(legacy.tiles[0]!.at).toEqual([0, 0])
     const placed = { tiles: [{ kind: "street" as const, at: [0, OFFICE_ROWS] as [number, number] }] }
     expect(belowOffice(placed)).toBe(placed)
+  })
+})
+
+describe("loading the floor", () => {
+  test("loadFloor shifts a legacy file below the office and leaves the file on disk untouched", () => {
+    const dir = mkdtempSync(join(tmpdir(), "home-")), path = join(dir, "home.json")
+    const raw = JSON.stringify({ tiles: [{ kind: "living", at: [0, 0] }] })
+    writeFileSync(path, raw)
+    expect(loadFloor(path).tiles[0]!.at).toEqual([0, OFFICE_ROWS + 1])
+    expect(readFileSync(path, "utf8")).toBe(raw)
+    rmSync(dir, { recursive: true })
+  })
+  test("defaultHome: a street row the office's width, the rooms in a row under it, one piece", () => {
+    const h = defaultHome(50)
+    expect(h.tiles.filter((t) => t.kind === "street").map((t) => t.at)).toEqual(Array.from({ length: 50 }, (_, i) => [i, OFFICE_ROWS]))
+    expect(h.tiles.find((t) => t.kind === "living")!.at).toEqual([0, OFFICE_ROWS + 1])
+    expect(connected(h.tiles)).toBe(true)
   })
 })

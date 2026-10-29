@@ -140,3 +140,12 @@ export function gridWindow(home: Home, cursor: Pt): { x0: number; x1: number; y0
   const [x0, x1] = axis(0), [y0, y1] = axis(1)
   return { x0, x1, y0, y1 }
 }
+
+/** the first home: a one-row street under the office, `cols` wide, and the rooms in a row under it */
+export const defaultHome = (cols: number): Home => ({
+  tiles: [
+    ...Array.from({ length: cols }, (_, i): HomeTile => ({ kind: "street", at: [i, OFFICE_ROWS] })),
+    { kind: "living", at: [0, OFFICE_ROWS + 1] }, { kind: "bedroom", at: [1, OFFICE_ROWS + 1] },
+    { kind: "kitchen", at: [2, OFFICE_ROWS + 1] }, { kind: "bathroom", at: [3, OFFICE_ROWS + 1] },
+  ],
+})
