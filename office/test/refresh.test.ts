@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // The office's snapshot lands as soon as /office answers, whatever its other reads are doing: the
 // inbox's (/office/needs) takes seconds on a real repo, and a finder opened before it returned
@@ -36,10 +37,10 @@ afterAll(() => {
 
 const capture = () => tmux("capture-pane", "-p", "-t", "0")
 const screen = () => dec.decode(capture().stdout)
-// one budget for the whole test, under bun's own timeout, so a step that never lands throws its
-// own message (which step, how long, the pane and tmux's complaint) instead of a bare timeout
-const t0 = performance.now(), deadline = t0 + 25_000
+// a budget per step, under bun's own timeout, so a step that never lands throws its own message
+// (which step, how long, the pane and tmux's complaint) instead of a bare timeout
 const until = async (what: string, ok: () => boolean) => {
+  const t0 = performance.now(), deadline = t0 + 25_000
   while (!ok() && performance.now() < deadline) await Bun.sleep(50)
   if (!ok()) {
     const r = capture()
@@ -54,7 +55,7 @@ test("the finder lists the snapshot's threads while the inbox read is still out"
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   // the snapshot is in: its workspace names the header
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   expect(screen()).toContain("Toy")
   tmux("send-keys", "-t", "0", "/")
   await until("FIND after /", () => screen().includes("FIND"))
@@ -63,4 +64,4 @@ test("the finder lists the snapshot's threads while the inbox read is still out"
   expect(screen()).toContain("#42 the slow inbox")
   // listed while that read was still out, not after the TUI gave up on it
   expect(firstInboxGivenUp).toBe(false)
-}, 30_000)
+}, TUI_TEST)

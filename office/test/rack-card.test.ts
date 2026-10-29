@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { killServer } from "./kill-server"
+import { started, TUI_TEST } from "./started"
 
 // The rack card (H) has one LANDING & CHECKS list: the waiters in the order the server sends them,
 // the running train as one block (its gate, holding the check it runs, then its cars), who waits
@@ -50,7 +51,7 @@ test("the rack lists landing & checks in one place, in order: a train is one blo
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the room", () => screen().includes("Toy"))
+  await started(tmux, "the room", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "H")
   await until("the rack", () => screen().includes("THE RACK"))
   await until("the list", () => screen().includes("LANDING & CHECKS"))
@@ -64,7 +65,7 @@ test("the rack lists landing & checks in one place, in order: a train is one blo
     .every((n, i, a) => n >= 0 && (i === 0 || n > a[i - 1]!))).toBe(true)
   expect(s.split("office-drive").length - 1).toBe(1)
   expect(s.split("train → main").length - 1).toBe(1)
-}, 30_000)
+}, TUI_TEST)
 
 test("a node with no job queue reads neutral under all green: a dim ○ row, no ✕", async () => {
   killServer(socket)
@@ -72,7 +73,7 @@ test("a node with no job queue reads neutral under all green: a dim ○ row, no 
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the room", () => screen().includes("Toy"))
+  await started(tmux, "the room", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "H")
   await until("the rack, all green", () => screen().includes("THE RACK · all green"))
   const s = screen()
@@ -80,4 +81,4 @@ test("a node with no job queue reads neutral under all green: a dim ○ row, no 
   expect(s).toContain("○ no job queue on this node")
   const styled = dec.decode(tmux("capture-pane", "-p", "-e", "-t", "0").stdout).split("\n").find((l) => l.includes("no job queue"))!
   expect(styled).toContain("38;2;184;153;76")
-}, 30_000)
+}, TUI_TEST)

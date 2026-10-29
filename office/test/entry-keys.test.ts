@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // Uqbar's entry (U) marks its footnotes ¹ ² …: the digit under a mark opens that footnote, and the
 // actions pane says so. Drives the real TUI against a stub server with two footnotes (the inbox, the rack).
@@ -30,8 +31,8 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const deadline = performance.now() + 25_000
 const until = async (what: string, ok: () => boolean) => {
+  const deadline = performance.now() + 25_000
   while (!ok() && performance.now() < deadline) await Bun.sleep(50)
   if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
 }
@@ -41,7 +42,7 @@ test("a digit opens its footnote, and the pane lists it", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the phone in the header", () => screen().includes("1 waiting on you"))
+  await started(tmux, "the phone in the header", () => screen().includes("1 waiting on you"))
   keys("U")
   await until("the entry's footnotes", () => screen().includes("FOOTNOTES"))
   expect(screen()).toMatch(/2 +footnote ² — the rack/)
@@ -52,4 +53,4 @@ test("a digit opens its footnote, and the pane lists it", async () => {
   await until("the entry again", () => screen().includes("FOOTNOTES"))
   keys("1")
   await until("the inbox", () => screen().includes("DECIDE · 1 of 1"))
-}, 30_000)
+}, TUI_TEST)

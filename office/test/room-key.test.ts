@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // Ctrl-] is the room — the room with nothing open over it — from a card, a focused reply box, the
 // finder and the reader. Drives the real TUI against a stub server; it never posts.
@@ -59,7 +60,7 @@ test("ctrl-] goes to the room from a reply box, a card, the finder and the reade
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the room", () => screen().includes(ROOM))
+  await started(tmux, "the room", () => screen().includes(ROOM))
   await card()
   tmux("send-keys", "-t", "0", "-l", "half a thought")
   await until("the typing in the box", () => screen().includes("half a thought"))
@@ -79,7 +80,7 @@ test("ctrl-] goes to the room from a reply box, a card, the finder and the reade
   await until("the reader", () => screen().includes("the sink is fixed") && !screen().includes(ROOM))
   await room("the reader")
   expect(posts).toEqual([])
-}, 40_000)
+}, TUI_TEST)
 
 test("ctrl-] keeps what you were writing: the card's box, the reader's and an input's, there when you come back", async () => {
   await card()

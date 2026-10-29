@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { killServer } from "./kill-server"
+import { started, TUI_TEST } from "./started"
 
 // Drives the real TUI on the toy world: esc is one step back (to the card you came from), a status
 // line does not outlive the card it was said on, and words that did not send come back.
@@ -30,7 +31,7 @@ async function start() {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TMPDIR='${state}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts --sandbox`)
-  await until("the toy", () => screen().includes("Toy"))
+  await started(tmux, "the toy", () => screen().includes("Toy"))
 }
 
 test("esc steps back through the cards you came by, and the status line stays on its card", async () => {
@@ -52,7 +53,7 @@ test("esc steps back through the cards you came by, and the status line stays on
   await until("back on the person", () => !screen().includes("hair") && !screen().includes("CREW · "))
   keys("Escape")
   await until("back on the crew", () => screen().includes("CREW · "))
-}, 60_000)
+}, TUI_TEST)
 
 test("words that did not send come back when the box is opened again", async () => {
   keys("Escape")
@@ -119,4 +120,4 @@ test("a toy fired from the play card lands back on the card you opened it from",
   await until("the pat", () => screen().includes("pat pat"))
   expect(screen()).toContain("SCHARLACH  ─")
   expect(screen()).not.toContain("HOME  ─")
-}, 60_000)
+}, TUI_TEST)

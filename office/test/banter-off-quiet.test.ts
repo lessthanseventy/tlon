@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // With the office dial's banter off, chatter() asks the server for nothing it writes lazily with model
 // tokens (banter, pets, corkboard, talk). Drives the real TUI against a stub server and reads the paths it hit.
@@ -36,8 +37,7 @@ test("banter off: chatter() makes no banter, pets, corkboard or talk call", asyn
   writeFileSync(dial, JSON.stringify({ mode: "office", preset: "casual", overrides: { banter: false } }))
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${join(import.meta.dir, "..")}' && TLON_URL='http://127.0.0.1:${server.port}' TLON_OFFICE='${dial}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  const deadline = performance.now() + 25_000
-  while (!hits.some((p) => p.includes("/office/suggestions/")) && performance.now() < deadline) await Bun.sleep(50)
+  await started(tmux, "the suggestions read", () => hits.some((p) => p.includes("/office/suggestions/")))
   expect(hits.some((p) => p.includes("/office/suggestions/"))).toBe(true) // chatter() ran to the end
   expect(hits.filter((p) => /\/office\/(banter|pets|corkboard|talk)\b/.test(p))).toEqual([])
-}, 40_000)
+}, TUI_TEST)

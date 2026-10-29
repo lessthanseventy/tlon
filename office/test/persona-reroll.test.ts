@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // e → "draw a new one (reroll)" throws away the persona's hand edits, so it asks first: n changes
 // nothing, y rerolls, and says so while the model call runs. Drives the real TUI against a stub
@@ -34,8 +35,8 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const t0 = performance.now(), deadline = t0 + 25_000
 const until = async (what: string, ok: () => boolean) => {
+  const t0 = performance.now(), deadline = t0 + 25_000
   while (!ok() && performance.now() < deadline) await Bun.sleep(50)
   if (!ok()) throw new Error(`never saw ${what} after ${performance.now() - t0}ms; pane:\n${screen()}`)
 }
@@ -45,7 +46,7 @@ test("e then reroll asks first: n changes nothing, y rerolls", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "/")
   await until("FIND", () => screen().includes("FIND"))
   tmux("send-keys", "-t", "0", "-l", "ada")
@@ -69,4 +70,4 @@ test("e then reroll asks first: n changes nothing, y rerolls", async () => {
   expect(posts).toEqual(["/api/workspaces/1/coworkers/5/persona"])
   await until("the wait said", () => screen().includes("drawing a new one"))
   answer()
-}, 40_000)
+}, TUI_TEST)

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { killServer } from "./kill-server"
+import { started, TUI_TEST } from "./started"
 
 // A thread card opens with its reply box focused: typing lands in it and Enter posts it; the first
 // Esc leaves the box (the card's keys work again), the second goes back. Drives the real TUI
@@ -55,7 +56,7 @@ test("a thread card opens with its reply box focused; esc leaves the box, esc ag
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "t")
   await until("the tickets column", () => screen().includes("TICKETS · "))
   tmux("send-keys", "-t", "0", "Right", "Right", "Right")
@@ -75,14 +76,14 @@ test("a thread card opens with its reply box focused; esc leaves the box, esc ag
   tmux("send-keys", "-t", "0", "Escape")
   await until("the card left", () => !screen().includes("THREAD #9"))
   expect(posts.length).toBe(1)
-}, 40_000)
+}, TUI_TEST)
 
 test("a thread with an open prompt opens with the box unfocused: 1 answers at once, as its card and in the reader", async () => {
   fresh()
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "t")
   await until("the tickets column", () => screen().includes("TICKETS · "))
   tmux("send-keys", "-t", "0", "Right", "Right", "Right")
@@ -104,18 +105,18 @@ test("a thread with an open prompt opens with the box unfocused: 1 answers at on
   await until("the reader's answer", () => answers.length === 2)
   expect(answers).toEqual([{ path: "/api/office/prompts/77", body: { key: "yes" } }, { path: "/api/office/prompts/77", body: { key: "yes" } }])
   expect(posts.length).toBe(1)
-}, 40_000)
+}, TUI_TEST)
 
 test("a thread another surface asks to show opens with the box unfocused: it never takes the keys unasked", async () => {
   fresh()
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   await Bun.sleep(1500)
   focusAt = Date.now()
   await until("the reader on #9", () => screen().includes("the sink is fixed"))
   await Bun.sleep(300)
   expect(screen()).toContain("r or enter to write")
   expect(screen()).not.toContain("esc leave the box")
-}, 40_000)
+}, TUI_TEST)

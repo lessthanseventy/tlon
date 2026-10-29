@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // esc from a ticket or an epic opened out of a list goes back to that list, not home: column →
 // epic → ticket, then esc, esc walks back the way it came. Drives the real TUI against a stub server.
@@ -30,8 +31,8 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const deadline = performance.now() + 25_000
 const until = async (what: string, ok: () => boolean) => {
+  const deadline = performance.now() + 25_000
   while (!ok() && performance.now() < deadline) await Bun.sleep(50)
   if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
 }
@@ -41,7 +42,7 @@ test("esc from a ticket or epic returns to the list it was opened from", async (
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   keys("t")
   await until("the tickets column", () => screen().includes("TICKETS ·"))
   keys("Space")
@@ -53,4 +54,4 @@ test("esc from a ticket or epic returns to the list it was opened from", async (
   keys("Escape")
   await until("back on the column", () => screen().includes("TICKETS ·"))
   expect(screen()).not.toContain("EPIC #10")
-}, 30_000)
+}, TUI_TEST)

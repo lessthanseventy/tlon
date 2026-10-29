@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { started, TUI_TEST } from "./started"
 
 // the TICKETS column is a tree: enter on a group opens it in place (its children indent under it,
 // an in-flight child names its thread), enter again folds it, enter on a ticket opens the ticket,
@@ -32,8 +33,8 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const deadline = performance.now() + 25_000
 const until = async (what: string, ok: () => boolean) => {
+  const deadline = performance.now() + 25_000
   while (!ok() && performance.now() < deadline) await Bun.sleep(50)
   if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
 }
@@ -43,7 +44,7 @@ test("enter folds a group open in place; a ticket opens; o opens the group's car
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   keys("t")
   await until("the tickets column", () => screen().includes("TICKETS ·"))
   expect(screen()).not.toContain("the child ticket")
@@ -66,13 +67,13 @@ test("enter folds a group open in place; a ticket opens; o opens the group's car
 
   keys("Up", "Space")
   await until("the epic's card", () => screen().includes("EPIC #10"))
-}, 30_000)
+}, TUI_TEST)
 
 test("the tree's card does not claim a who sort: tickets carry no owner", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the workspace in the header", () => screen().includes("Toy"))
+  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   keys("t")
   await until("the tickets column", () => screen().includes("TICKETS ·"))
   keys("s")
@@ -80,4 +81,4 @@ test("the tree's card does not claim a who sort: tickets carry no owner", async 
   keys("s")
   await until("the sort moved on", () => !screen().includes("by title"))
   expect(screen()).not.toContain("by who")
-}, 30_000)
+}, TUI_TEST)
