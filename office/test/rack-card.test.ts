@@ -73,9 +73,8 @@ test("a node with no job queue reads neutral under all green: a dim ○ row, no 
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await until("the room", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "H")
-  await until("the rack", () => screen().includes("THE RACK"))
+  await until("the rack, all green", () => screen().includes("THE RACK · all green"))
   const s = screen()
-  expect(s).toContain("THE RACK · all green")
   expect(s).not.toContain("✕")
   expect(s).toContain("○ no job queue on this node")
   const styled = dec.decode(tmux("capture-pane", "-p", "-e", "-t", "0").stdout).split("\n").find((l) => l.includes("no job queue"))!
