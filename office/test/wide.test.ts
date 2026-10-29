@@ -8,11 +8,16 @@ import { loungeTile } from "../kit/tiles/lounge"
 import { meetingTile } from "../kit/tiles/meeting"
 import { officeTile } from "../kit/tiles/office"
 import { CELL, OFFICE_ROWS, floorHeight, type Home } from "../kit/home"
+import { floorPlan } from "../kit/floor"
+import { DEFAULT_OFFICE } from "../kit/tiles"
 import { refsOf } from "../kit/margin"
 import { type Agents, EMPTY } from "../kit/types"
 import type { Tv } from "../kit/tv"
 import { WIDE_H, WideRoom, widePlan, zones } from "../rooms/wide"
 import { focus, frameHashes, GOLDEN, measure, office, seeded } from "./golden"
+
+/** a street under the office door and a living room off it: the floor with a home on it */
+const HOME: Home = { tiles: [...Array.from({ length: 50 }, (_, i): Home["tiles"][number] => ({ kind: "street", at: [i, OFFICE_ROWS] })), { kind: "living", at: [1, OFFICE_ROWS + 1] }] }
 
 describe("the wide room", () => {
   for (const w of [540, 560, 640]) {
@@ -40,6 +45,16 @@ describe("the wide room", () => {
     expect(withHome.height).toBe(floorHeight(home))
     expect(withHome.height).toBe(WIDE_H + 2 * CELL)
     expect(Buffer.from(withHome.rgba.slice(0, bare.rgba.length)).equals(Buffer.from(bare.rgba))).toBe(true)
+  })
+
+  test("setHome gives the sim the home's blocks, and a same home is not re-planned", () => {
+    const room = new WideRoom(696), planOf = () => (room as unknown as { plan: unknown }).plan
+    const before = planOf()
+    room.setHome(HOME)
+    const after = planOf()
+    expect(after).not.toBe(before)
+    room.setHome({ tiles: [...HOME.tiles] })
+    expect(planOf()).toBe(after)
   })
 
   test("the room's pixels don't move: a golden hash per width", async () => {
@@ -294,8 +309,8 @@ describe("the wide room", () => {
 
   // every route between every fixed spot, at three widths: seconds of CPU, more under a full gate
   test("no walk crosses the furniture", () => {
-    for (const w of [540, 560, 700]) {
-      const plan = widePlan(w), l = plan.layout(viewOf(office(8), 1))
+    for (const w of [540, 560, 700]) for (const plan of [widePlan(w), floorPlan(DEFAULT_OFFICE, w, HOME)]) {
+      const l = plan.layout(viewOf(office(8), 1))
       const homes = l.people.map((p) => plan.home(l, p.agent)).filter((s): s is Spot => !!s)
       const spots = [...homes, ...plan.queue, ...plan.lounge, plan.exit, plan.pen, plan.roam(l)]
       const blocks = plan.blocks(l)

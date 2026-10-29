@@ -495,8 +495,12 @@ export class WideRoom extends Sim<Layout> {
   /** the lounge TV flashes the new level over whatever it was showing */
   protected override levelUp(level: number) { super.levelUp(level); this.tvSet.showLevel(level) }
   /** the remote: the next channel */
-  /** the placed home tiles; drawn as a strip below the office */
-  setHome(h: Home) { this.home = h }
+  /** the placed home tiles: drawn on the floor below the office, and the sim re-plans around their blocks */
+  setHome(h: Home) {
+    if (JSON.stringify(h) === JSON.stringify(this.home)) return
+    this.home = h
+    this.plan = floorPlan(DEFAULT_OFFICE, this.width, h)
+  }
   get height() { return floorHeight(this.home) }
   channel() { this.tvSet.next() }
   /** the TUI calls this every ~2s with whatever playerctl reports (or null — no player running) */

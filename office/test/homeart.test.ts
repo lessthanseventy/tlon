@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Canvas } from "../kit/canvas"
-import { CATALOGUE, OFFICE_ROWS, cellPx, floorHeight, type HomeTile } from "../kit/home"
+import { CATALOGUE, OFFICE_ROWS, cellPx, floorHeight, type Home, type HomeTile } from "../kit/home"
 import { mailbox } from "../kit/mailbox"
 import { SPRITES, TILE, TILE_ART, paintFloor, paintTile, renderHome, rotated } from "../kit/homeart"
 import { ROLE } from "../kit/palette"
@@ -188,5 +188,13 @@ describe("the bed on the bedroom tile", () => {
   test("only the bedroom has a bed", () => {
     const street = { tiles: [{ kind: "street", at: [0, 0] }] }
     expect(view("asleep", street)).toBe(view(undefined, street))
+  })
+})
+
+describe("the office in the build grid", () => {
+  test("a view with `top` paints the office's cells apart from an empty cell below them", () => {
+    const view = { home: { tiles: [{ kind: "street", at: [0, OFFICE_ROWS] }] } as Home, cursor: [0, OFFICE_ROWS] as [number, number], carrying: null, refused: false, w: 120, h: 80 }
+    const plain = renderHome(view), dimmed = renderHome({ ...view, top: OFFICE_ROWS })
+    expect(Buffer.from(dimmed.rgba).equals(Buffer.from(plain.rgba))).toBe(false)
   })
 })

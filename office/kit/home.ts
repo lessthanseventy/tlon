@@ -60,17 +60,19 @@ export function at(home: Home, p: Pt): HomeTile | undefined {
   return home.tiles.find((t) => t.at[0] === p[0] && t.at[1] === p[1])
 }
 
-/** would `tile` overlap another tile, or leave the floor in more than one piece? */
-export function canPlace(home: Home, tile: HomeTile): boolean {
+/** would `tile` overlap another tile, sit on the office rows above `top`, or leave the floor in more than one piece? */
+export function canPlace(home: Home, tile: HomeTile, top = -Infinity): boolean {
+  if (tile.at[1] < top) return false
   const rest = home.tiles.filter((t) => t !== at(home, tile.at))
   if (rest.length !== home.tiles.length) return false // the cell is already taken
   return connected([...rest, tile])
 }
 
-export type Build = { home: Home; cursor: Pt; carrying: HomeTile | null; history: Home[]; refused: boolean; writes: number }
+export type Build = { home: Home; cursor: Pt; top: number; carrying: HomeTile | null; history: Home[]; refused: boolean; writes: number }
 
-export function startBuild(home: Home): Build {
-  return { home, cursor: [0, 0], carrying: null, history: [], refused: false, writes: 0 }
+/** `top` is the first row a tile may sit on (the office rows above it are not buildable); unset, the grid is unbounded */
+export function startBuild(home: Home, top?: number): Build {
+  return { home, cursor: [0, top ?? 0], top: top ?? -Infinity, carrying: null, history: [], refused: false, writes: 0 }
 }
 
 const remember = (b: Build): Home[] => [...b.history, b.home].slice(-HISTORY_LIMIT)
@@ -89,7 +91,7 @@ export function pickUp(b: Build): Build {
 export function drop(b: Build): Build {
   if (!b.carrying) return b
   const tile: HomeTile = { ...b.carrying, at: b.cursor }
-  if (!canPlace(b.home, tile)) return { ...b, refused: true }
+  if (!canPlace(b.home, tile, b.top)) return { ...b, refused: true }
   return { ...b, home: { tiles: [...b.home.tiles, tile] }, carrying: null, refused: false, history: remember(b), writes: b.writes + 1 }
 }
 
@@ -100,7 +102,7 @@ export function place(b: Build): Build {
   const kind = CATALOGUE[existing ? (CATALOGUE.indexOf(existing.kind) + 1) % CATALOGUE.length : 0]!
   const tile: HomeTile = existing?.rot ? { kind, at: b.cursor, rot: existing.rot } : { kind, at: b.cursor }
   const without = { tiles: b.home.tiles.filter((t) => t !== existing) }
-  if (!canPlace(without, tile)) return { ...b, refused: true }
+  if (!canPlace(without, tile, b.top)) return { ...b, refused: true }
   return { ...b, home: { tiles: [...without.tiles, tile] }, refused: false, history: remember(b), writes: b.writes + 1 }
 }
 
