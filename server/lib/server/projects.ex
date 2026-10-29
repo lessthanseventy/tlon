@@ -122,6 +122,34 @@ defmodule Server.Projects do
   def repo_for_thread(_thread), do: {:error, :no_repo}
 
   @doc """
+  A repo a thread may be opened on: `path` (`~`-expanded) must be one of the repos the workspace's
+  projects register. `{:ok, expanded_path}` or `{:error, reason}` naming the refusal.
+  """
+  def workspace_repo(workspace_id, path) when is_binary(path) do
+    expanded = Path.expand(path)
+
+    registered? =
+      workspace_id
+      |> in_workspace()
+      |> Enum.any?(fn project ->
+        Enum.any?(project.repos || [], &(is_binary(&1["path"]) and Path.expand(&1["path"]) == expanded))
+      end)
+
+    if registered?, do: {:ok, expanded}, else: {:error, "#{path} is not a repo of this workspace"}
+  end
+
+  @doc """
+  The attrs a tool's optional `repo` adds to a new thread opened by `caller` (a thread or nil):
+  none for no repo; else the repo and the caller's workspace it was checked against.
+  """
+  def repo_attrs(_caller, nil), do: {:ok, %{}}
+
+  def repo_attrs(caller, repo) do
+    ws = (caller && caller.workspace_id) || Server.Bootstrap.default_workspace_id()
+    with {:ok, path} <- workspace_repo(ws, repo), do: {:ok, %{repo: path, workspace_id: ws}}
+  end
+
+  @doc """
   The thread's project's OTHER checkouts, `~`-expanded: what its coworker may read but not write
   (the harness opens them beside the worktree). Never the thread's own repo, never a scope glob;
   `[]` for a thread with no project. Claude Code makes a read dir a write root and bwrap mounts ~45

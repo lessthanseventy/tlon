@@ -1103,6 +1103,72 @@ defmodule Server.MCP.ServerTest do
     end
   end
 
+  describe "staff_child repo" do
+    setup do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Sibling"})
+
+      {:ok, _} =
+        Server.Projects.register(%{
+          workspace_id: ws.id,
+          name: "m",
+          repos: [
+            %{"name" => "tlon", "path" => "~/projects/tlon"},
+            %{"name" => "menard", "path" => "~/projects/menard"}
+          ]
+        })
+
+      {:ok, _} = Staff.register_agent(%{name: "hronir-repo", mandate: "build", engine: "fresh"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
+      {:ok, caller} = Staff.register_agent(%{name: "repo-caller", mandate: "route", engine: "fresh"})
+      token = MCP.Tokens.mint(lobby, caller)
+      session = handshake(token)
+      call(token, session, 3, "register", %{})
+      %{rtoken: token, rsession: session}
+    end
+
+    test "a registered sibling repo becomes the child's repo", %{rtoken: token, rsession: session} do
+      r =
+        call(token, session, 4, "staff_child", %{
+          "title" => "menard work",
+          "lead" => "hronir-repo",
+          "brief" => "Build it.",
+          "repo" => "~/projects/menard"
+        })
+
+      refute r["isError"]
+      tid = decode_tool_json(r)["thread_id"]
+      assert Repo.get!(Thread, tid).repo == Path.expand("~/projects/menard")
+      assert {:ok, repo} = Server.repo_for_thread(tid)
+      assert repo == Path.expand("~/projects/menard")
+    end
+
+    test "a repo outside the workspace is refused, and opens nothing", %{rtoken: token, rsession: session} do
+      before = Repo.aggregate(Thread, :count)
+
+      r =
+        call(token, session, 4, "staff_child", %{
+          "title" => "elsewhere",
+          "lead" => "hronir-repo",
+          "brief" => "Build it.",
+          "repo" => "/etc"
+        })
+
+      assert r["isError"]
+      assert hd(r["content"])["text"] =~ "not a repo of this workspace"
+      assert Repo.aggregate(Thread, :count) == before
+    end
+
+    test "open_thread takes the same repo and refuses the same stranger", %{rtoken: token, rsession: session} do
+      ok = call(token, session, 5, "open_thread", %{"title" => "m", "repo" => "~/projects/menard"})
+      refute ok["isError"]
+      assert Repo.get!(Thread, decode_tool_json(ok)["thread_id"]).repo == Path.expand("~/projects/menard")
+
+      bad = call(token, session, 6, "open_thread", %{"title" => "m", "repo" => "/etc"})
+      assert bad["isError"]
+      assert hd(bad["content"])["text"] =~ "not a repo of this workspace"
+    end
+  end
+
   test "staff_child refuses a ticket already worked, and opens nothing", %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "hronir-dup", mandate: "build", engine: "fresh"})
     {:ok, ws} = Server.Workspaces.register(%{name: "Claims"})
