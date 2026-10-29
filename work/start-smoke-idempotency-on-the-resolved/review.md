@@ -1,57 +1,55 @@
-# Review: start-smoke-idempotency-on-the-resolved @ 95722bc
+# Review: start-smoke-idempotency-on-the-resolved @ e6f9be0 (round 2)
 
-**Verdict: request_changes.** One correctness defect in the lines this change adds; the rest of the change does what #537 and hronir's read (thread 1, #17456) asked.
-
-## 1. `replace/5` cancels *a* building job of the thread, not *the* one it found (blocking)
-
-The witness, `server/lib/server/smoke.ex`:
+**Verdict: request_changes.** Round 1's blocking finding is unfixed. The delta since 18573ea (`git diff 18573ea..e6f9be0 -- server`) fixes the two thread follow-ups (start's moved-tip wording, `building/2`'s @doc) and nothing else; the witness is the one line the finding named, unchanged:
 
 ```elixir
-old -> replace(old, thread_id, ref, sha, opts)
-…
 defp replace(old, thread_id, ref, sha, opts) do
-  with :ok <- stop(thread_id), do: insert(thread_id, ref, sha, opts, %{"replaced" => old.id})
+  case stop(thread_id) do
+```
+
+## 1. `replace/5` still cancels *a* building job of the thread, not *the* one it found (blocking, round 1 §1)
+
+`old` came from `building(thread_id, ref)`. `stop/1` re-queries `held(thread_id) || building(thread_id)`; with no ref, `building/1` is `order_by: j.id, limit: 1` across every ref the thread has queued. `start/5` refuses while a smoke is held, so `held` can't bite here; two refs can, and the suite's own "a start for another ref still queues" says two refs on one thread is allowed:
+
+- job A (lower id) queued for `main`; job B queued for `work/x` at s1.
+- tip of `work/x` moves to s2; `start(t, "work/x")`.
+- `building(t, "work/x")` → B. `stop(t)` → `building(t)` → A. A is cancelled, `:ok`.
+- a new job is inserted with `meta.replaced = B.id`. B still builds s1; A, which nobody touched, is gone; the MCP result says B was cancelled.
+
+Round 2's new tests both run on one ref, so they pass by construction and don't reach this. Fix as round 1 gave it: stop the job you found, by lifting `stop/1`'s three job clauses into `stop_job/1`:
+
+```elixir
+def stop(thread_id) do
+  case held(thread_id) || building(thread_id) do
+    nil -> {:error, "no smoke is up for this thread"}
+    job -> stop_job(job)
+  end
+end
+
+defp stop_job(%{meta: %{"os_pid" => pid}}) when is_integer(pid) do
+  _ = System.cmd("kill", ["-TERM", to_string(pid)], stderr_to_stdout: true)
+  :ok
+end
+
+defp stop_job(%{state: state, id: id}) when state in ["available", "scheduled"], do: Oban.cancel_job(id)
+
+defp stop_job(job),
+  do: {:error, building_error(job, "its script has not started yet; stop again in a moment")}
+
+defp replace(old, thread_id, ref, sha, opts) do
+  case stop_job(old) do
+    :ok -> insert(thread_id, ref, sha, opts, %{"replaced" => old.id})
+    {:error, _} -> {:error, "the tip of #{ref} moved, but the old build (job #{old.id}) can't be cancelled until its script starts: start again in a moment"}
+  end
 end
 ```
 
-`old` came from `building(thread_id, ref)`. `stop/1` re-queries with `held(thread_id) || building(thread_id)`, and `building/1` with no ref is `order_by: j.id, limit: 1` across every ref the thread has queued. The suite's own "a start for another ref still queues" test says two refs can build side by side on one thread, so:
+The red-first test, beside "a start for a tip that moved cancels the queued build…": queue `"main"` then `"work/a-thing"`, move the resolver, start `"work/a-thing"` again; assert the `main` job is still `available`, the old `work/a-thing` job is `cancelled`, and `new.meta["replaced"]` is the old `work/a-thing` id. Round 2's "can't be cancelled yet" test stays green under `stop_job(old)` (executing, no pid → the error clause).
 
-- Job A (id 1) queued for `main`, job B (id 2) queued for `work/x` at sha s1.
-- Tip of `work/x` moves to s2; `start(t, "work/x")`.
-- `building(t, "work/x")` returns B. `stop(t)` finds A, cancels A, returns `:ok`.
-- A new job is inserted with `meta.replaced = B.id`. B still builds s1; A, the build nobody touched, is gone. The MCP result tells QA that B was cancelled.
+## Checked and sound this round
 
-Fix: stop the job you found. The job-targeted half of `stop/1` already exists as its three clauses; lift it out so both doors use it.
-
-```elixir
-  def stop(thread_id) do
-    case held(thread_id) || building(thread_id) do
-      nil -> {:error, "no smoke is up for this thread"}
-      job -> stop_job(job)
-    end
-  end
-
-  defp stop_job(%{meta: %{"os_pid" => pid}}) when is_integer(pid) do
-    _ = System.cmd("kill", ["-TERM", to_string(pid)], stderr_to_stdout: true)
-    :ok
-  end
-
-  defp stop_job(%{state: state, id: id}) when state in ["available", "scheduled"], do: Oban.cancel_job(id)
-
-  defp stop_job(job),
-    do: {:error, building_error(job, "its script has not started yet; stop again in a moment")}
-
-  defp replace(old, thread_id, ref, sha, opts) do
-    with :ok <- stop_job(old), do: insert(thread_id, ref, sha, opts, %{"replaced" => old.id})
-  end
-```
-
-And the test that goes red first, beside "a start for a tip that moved…": queue `"main"` then `"work/a-thing"`, move the resolver, start `"work/a-thing"` again; assert the `main` job is still `available`, the old `work/a-thing` job is `cancelled`, and `new.meta["replaced"]` is the old `work/a-thing` id.
-
-## What I checked and found sound
-
-- Resolve happens once, at start, in `Server.Profiles.main_root/0`'s git dir with the script's own line (`rev-parse -q --verify <ref>^{commit}`); no fetch in the request path. The `@ref` grammar forbids a leading `-`, so the ref can't be read as an option.
-- Sha stored in args beside the ref; same ref + same sha returns the building job; unresolvable ref refuses with `no commit <ref>` and queues nothing. Tests cover all three, red first per pr.md.
-- The script still takes the ref, so the smoke node is untouched.
-- `:smoke_resolve` knob mirrors `:smoke_script`; test setup cleans it up.
-- `menard run check --in server` and `mise run check` green in CHECKS (2426 server tests). No `bench_contrast` row, as expected for a non-steering change.
+- Round-1 follow-up 2 fixed: `replace/5` now returns start's own words (tip moved, job N can't be cancelled until its script starts, start again); the new test asserts the words and refutes "stop again".
+- Round-1 follow-up 3 fixed: `building/2` @doc says same commit / moved tip replaces.
+- Round-1 follow-up 1 (the script re-resolves the ref at run time) dropped for #538–#540, as hronir settled; carried below so it isn't lost.
+- Everything round 1 found sound is unchanged: resolve once at start in `main_root`'s git dir, sha in args, same sha returns the job, unresolvable ref refuses with nothing queued, script still takes the ref, `:smoke_resolve` knob cleaned up in test setup.
+- CHECKS: `mise run check` green at 17:47Z on this branch. No `bench_contrast` row, as expected for a non-steering change.
