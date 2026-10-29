@@ -153,6 +153,16 @@ defmodule Server.Jobs.SmokeTest do
     assert Smoke.building(t.id).id == new.id
   end
 
+  test "a moved tip cancels the job it found, not another ref's build on the thread", %{thread: t} do
+    {:ok, other} = Smoke.start(t, "main", "qa1")
+    {:ok, old} = Smoke.start(t, nil, "qa1")
+    Application.put_env(:server, :smoke_resolve, fn ref -> {:ok, "moved-" <> ref} end)
+    assert {:ok, new} = Smoke.start(t, nil, "qa1")
+    assert new.meta["replaced"] == old.id
+    assert Server.Repo.reload!(old).state == "cancelled"
+    assert Server.Repo.reload!(other).state == "available"
+  end
+
   test "a ref that resolves to no commit is refused, nothing queued", %{thread: t} do
     Application.put_env(:server, :smoke_resolve, fn _ -> :error end)
     assert {:error, "no commit work/a-thing"} = Smoke.start(t, nil)
