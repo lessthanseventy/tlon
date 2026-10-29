@@ -22,7 +22,8 @@ defmodule Server.WorklinePublishTest do
 
     assert_received {:ran, ["git", "-C", "/repo", "remote", "get-url", "origin"]}
 
-    assert_received {:ran, ["git", "-C", "/repo", "push", "--force-with-lease", "origin", "work/tiles"]}
+    assert_received {:ran,
+                     ["git", "-C", "/repo", "push", "--force-with-lease=refs/heads/work/tiles:", "origin", "work/tiles"]}
 
     assert_received {:ran,
                      ["gh", "pr", "create", "--head", "work/tiles", "--base", "main", "--title", "Floor step 1" | _]}
@@ -260,6 +261,23 @@ defmodule Server.WorklinePublishTest do
   describe "push_branch/3 — the one way a coworker's branch reaches GitHub" do
     test "force-pushes a work/* branch with a lease on what origin holds" do
       run = runner([{&match?(["git", _, _, "ls-remote" | _], &1), {"abc123\trefs/heads/work/tiles\n", 0}}])
+      assert :ok = Publish.push_branch("/repo", "work/tiles", run)
+
+      assert_received {:ran,
+                       [
+                         "git",
+                         "-C",
+                         "/repo",
+                         "push",
+                         "--force-with-lease=refs/heads/work/tiles:abc123",
+                         "origin",
+                         "work/tiles"
+                       ]}
+    end
+
+    test "an ssh warning on stderr is not read as the sha" do
+      out = "Warning: Permanently added 'github.com' to the list of known hosts.\nabc123\trefs/heads/work/tiles\n"
+      run = runner([{&match?(["git", _, _, "ls-remote" | _], &1), {out, 0}}])
       assert :ok = Publish.push_branch("/repo", "work/tiles", run)
 
       assert_received {:ran,
