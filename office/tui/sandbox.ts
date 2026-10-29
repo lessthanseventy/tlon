@@ -1,6 +1,6 @@
 // The sandbox: a made-up world for the TUI to run on with no server (`office --sandbox`) — the toy
 // in docs/plans/2026-10-08-office-as-a-toy-design.md §1. Same sim, same rooms; only the snapshot's source differs.
-import { hints } from "./keys"
+import { hints, KEYS } from "./keys"
 import { EMPTY, type Agents, type Ticket, type Visit } from "../kit/types"
 
 const NAMES = ["scharlach", "tertius", "hronir", "lonnrot", "yu", "beatriz", "nolan", "emma", "ireneo", "daneri", "sonny"]
@@ -101,6 +101,9 @@ export type Toy = ReturnType<typeof toy>
 /** the sandbox's play keys, as the help line lists them; `toyKey()` in main.ts handles each */
 export const PLAY = hints("sandbox-play")
 /** the play keys that need only the room, so the real office runs them under OFFICE_TOY_KEYS=1 */
-export const ROOM_PLAY = PLAY.filter((p) => ["D", "E", "F", "T", "P"].includes(p.key))
+export const ROOM_PLAY = PLAY.filter((p) => p.key === "E")
+/** the play card's numbered rows; the ones in `WORLD_ROWS` need the sandbox's `world` */
+export const PLAY_ROWS = KEYS.filter((b) => b.scope === "card:play")
+export const WORLD_ROWS: readonly string[] = ["play.night", "play.weather", "play.call"]
 /** off the sandbox, a room key runs when the flag is on and the card has no action of its own on that key */
 export const roomKey = (k: string, cardClaims: boolean, flag: boolean): boolean => ROOM_PLAY.some((p) => p.key === k) && !cardClaims && flag

@@ -119,3 +119,11 @@ test("save is one key with one verb, and ⏎ stays the lit row's on both cards t
   expect(new Set(saves.map((b) => b.key)).size).toBe(1)
   expect(saves.map((b) => b.key)).not.toContain("enter")
 })
+
+test("the seven retired play letters are unbound in sandbox-play", () => {
+  expect(all.filter((b) => b.scope === "sandbox-play").map((b) => b.key)).toEqual(["E"])
+})
+
+test("the play card numbers its rows 1..9 in order", () => {
+  expect(all.filter((b) => b.scope === "card:play").map((b) => b.key)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9"])
+})

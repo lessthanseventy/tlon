@@ -28,19 +28,19 @@ test("night toggles a clock override", () => {
   t.toggleNight(); expect(t.now().getHours()).toBe(new Date().getHours())
 })
 
-test("off the sandbox, D E F T P run on the room with OFFICE_TOY_KEYS=1, unless the card claims the key", async () => {
+test("off the sandbox, E runs on the room with OFFICE_TOY_KEYS=1, unless the card claims the key", async () => {
   const { roomKey } = await import("../tui/sandbox")
-  for (const k of ["D", "E", "F", "T", "P"]) {
+  for (const k of ["E"]) {
     expect(roomKey(k, false, true)).toBe(true)
     expect(roomKey(k, true, true)).toBe(false)
     expect(roomKey(k, false, false)).toBe(false)
   }
-  for (const k of ["N", "W", "C"]) expect(roomKey(k, false, true)).toBe(false)
+  for (const k of ["D", "T", "F", "N", "W", "P", "C"]) expect(roomKey(k, false, true)).toBe(false)
 })
 
 test("the help line's play keys are the keys toyKey() handles", async () => {
   const { PLAY } = await import("../tui/sandbox")
-  expect(PLAY.map((p) => p.key).join("")).toBe("DETFNWPC")
+  expect(PLAY.map((p) => p.key).join("")).toBe("E")
   const src = await Bun.file(new URL("../tui/main.ts", import.meta.url)).text()
   const body = src.slice(src.indexOf("function toyKey("), src.indexOf("function onKey("))
   for (const { key } of PLAY) expect(body).toContain(`case "${key}"`)
