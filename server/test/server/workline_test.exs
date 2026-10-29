@@ -718,6 +718,20 @@ defmodule Server.WorklineTest do
       assert Server.Workspaces.policy(ws.id, seat.agent_id).model == glm
     end
 
+    test "the leads line names the model the seat launches on, its policy's when it has one" do
+      {:ok, ws} = bench_ws("ModelLine", [%{"archetype" => "planner", "name" => "yu"}])
+      yu = Enum.find(Server.Workspaces.bench(ws.id), &(&1.name == "yu"))
+      glm = %{"provider" => "ollama-cloud", "model" => "glm-5.2", "thinking" => "medium"}
+      {:ok, _} = Server.Workspaces.set_policy(ws.id, yu.agent_id, %{model: glm})
+      w = open!(%{slug: "model-line", stage: "spec", workspace_id: ws.id})
+
+      label = Server.Profiles.model_label(ws.id, "yu")
+      assert label =~ "glm-5.2"
+      leads = w |> Channel.thread_messages() |> Enum.map(& &1.body) |> Enum.find(&String.starts_with?(&1, "→ yu leads"))
+      assert leads == "→ yu leads (spec stage) [model: #{label}]"
+      assert Server.Trust.model_of(leads) == label
+    end
+
     test "a coworker whose other workline only waits on the operator is free to lead this one" do
       {:ok, ws} = bench_ws("WaitingPlanner", [%{"archetype" => "planner", "name" => "yu"}])
       a = open!(%{slug: "waits", stage: "spec", workspace_id: ws.id})

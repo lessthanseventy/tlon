@@ -1524,7 +1524,8 @@ defmodule Server.Workline do
       case Server.Channel.assign_lead(thread.id, name) do
         {:ok, restaffed} ->
           close_leaf(restaffed)
-          post_brief(restaffed, "#{Server.Trust.leads_line(name, thread.stage)}#{note}")
+          model = Server.Profiles.model_label(thread.workspace_id, name)
+          post_brief(restaffed, "#{Server.Trust.leads_line(name, thread.stage, model)}#{note}")
           restaffed
 
         {:error, reason} ->
