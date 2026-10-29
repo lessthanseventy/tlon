@@ -105,3 +105,16 @@ test("cards say what they hold: the inherited model, the current workspace, an e
   await until("the species cycled", () => screen().includes("your rabbit"))
   expect(screen()).not.toContain("princess")
 }, 60_000)
+
+test("a toy fired from the play card lands back on the card you opened it from", async () => {
+  Bun.spawnSync(["tmux", "-L", socket, "kill-server"])
+  await start()
+  keys("c")
+  await until("the crew card", () => screen().includes("CREW · "))
+  keys("Enter")
+  await until("a person card", () => !screen().includes("CREW · ") && screen().includes("ACTIONS"))
+  keys("E", "8")
+  await until("the pat", () => screen().includes("pat pat"))
+  expect(screen()).toContain("SCHARLACH  ─")
+  expect(screen()).not.toContain("HOME  ─")
+}, 60_000)

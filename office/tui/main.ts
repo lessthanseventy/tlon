@@ -73,7 +73,7 @@ type Mode =
   | { kind: "person"; name: string; from?: Mode } | { kind: "thread"; tid: number; from?: Mode }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number; from?: Mode } | { kind: "epic"; id: number; from?: Mode } | { kind: "calendar" } | { kind: "life" } | { kind: "pages" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "issue"; id: number; from?: Mode } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "play" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "play"; from?: Mode } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number; from?: Mode }
   | { kind: "look"; name: string; from?: Mode; hall?: true } | { kind: "look-editor"; name: string; view: "front" | "side" | "back"; from?: Mode; hall?: true }
   | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" } | { kind: "cast"; tab: "people" | "office" }
@@ -632,7 +632,7 @@ function openThread(): number | null {
   return null
 }
 function open(m: Mode) {
-  if ((m.kind === "person" || m.kind === "thread" || m.kind === "look" || m.kind === "review" || m.kind === "issue") && m.from === undefined && mode.kind !== "home" && mode.kind !== "help" && mode.kind !== m.kind) m = { ...m, from: mode }
+  if ((m.kind === "person" || m.kind === "thread" || m.kind === "look" || m.kind === "review" || m.kind === "issue" || m.kind === "play") && m.from === undefined && mode.kind !== "home" && mode.kind !== "help" && mode.kind !== m.kind) m = { ...m, from: mode }
   status = ""; readWhys.delete(cardKey(m)); mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") { picked = m.tid; cardReply = { tid: m.tid, ed: cardReply?.tid === m.tid ? cardReply.ed : new Editor(), focused: !asks(m.tid) } }
   if (m.kind === "person") cardOpen = false
