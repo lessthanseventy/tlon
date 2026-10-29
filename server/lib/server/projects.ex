@@ -178,9 +178,12 @@ defmodule Server.Projects do
 
   def primary_repo_path(_project), do: {:error, :no_repo}
 
-  # `find -prune` never walks into a repo's own .git, which `**/.git` does (minutes on a big one)
-  defp nested_repos(dir) do
+  # `find -prune` never walks into a repo's own .git, which `**/.git` does (minutes on a big one).
+  # Only `-print` lines count: stderr is merged in, and a "Permission denied" line is not a repo. The
+  # exit code is ignored: a partial walk is a lower bound, so a checkout is never dropped on it alone.
+  @doc false
+  def nested_repos(dir) do
     {out, _} = System.cmd("find", [dir, "-name", ".git", "-prune", "-print"], stderr_to_stdout: true)
-    out |> String.split("\n", trim: true) |> length()
+    out |> String.split("\n", trim: true) |> Enum.count(&String.ends_with?(&1, "/.git"))
   end
 end
