@@ -227,6 +227,14 @@ async function loadFigure($, archetype: string | null) {
 let sessionId: number | null = null;
 let superseded = false;
 let registering: Promise<void> | null = null;
+// A pane_ref is only the workspace's own when $TMUX is its socket (tlon-workspace-<n>): a `%N` from
+// another tmux, the operator's own, would read as a workspace pane on the server.
+async function paneRegistration($): Promise<Record<string, unknown>> {
+  const pane = await $.env.get("TMUX_PANE");
+  const socket = ((await $.env.get("TMUX")) ?? "").split(",")[0].split("/").pop() ?? "";
+  return pane && /^tlon-workspace-\d+$/.test(socket) ? { pane_ref: pane } : {};
+}
+
 function registerNow($): Promise<void> {
   return (registering ??= (async () => {
     const args = registration;
@@ -294,8 +302,7 @@ async function drainWakes($) {
     if (superseded && Array.isArray(wakes)) {
       superseded = false;
       void note($, "take_wakes: no longer superseded — claiming the seat again");
-      const pane = await $.env.get("TMUX_PANE");
-      registration = pane ? { pane_ref: pane } : {};
+      registration = await paneRegistration($);
       void registerNow($);
     }
     if (Array.isArray(wakes) && wakes.length) submitWakes($, wakes.map(String));
@@ -521,8 +528,7 @@ export function register(on) {
       return next(e);
     }
     cwd = e.cwd;
-    const pane = await $.env.get("TMUX_PANE");
-    registration = pane ? { pane_ref: pane } : {};
+    registration = await paneRegistration($);
     registerFailed = false;
     superseded = false;
     sessionId = null;

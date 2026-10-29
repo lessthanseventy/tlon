@@ -35,7 +35,7 @@ type World = {
   writes?: { path: string; text: string }[];
 };
 
-const IDENTITY = { TLON_THREAD: "42", TLON_AUTHOR: "claude-code", TMUX_PANE: "%7", OLLAMA_API_KEY: "k" };
+const IDENTITY = { TLON_THREAD: "42", TLON_AUTHOR: "claude-code", TMUX: "/tmp/tmux-1000/tlon-workspace-1,4242,0", TMUX_PANE: "%7", OLLAMA_API_KEY: "k" };
 const NONE = { shown: [], more: 0 };
 const DOSSIER = { thread_id: 42, goal: "ship the mod", lead: "claude-code", todos: NONE, next: null, learnings: NONE, unknowns: NONE, done: NONE, blockers: NONE, checks: NONE, recent: [] };
 const GLANCE = { archetype: "builder", crew: [], red: [], persona: { voice: "plain-spoken", catchphrase: "Right then." }, line: null, landed: [] };
@@ -153,6 +153,24 @@ test("a citizen registers, then declares thinking, each tool, and idle, in order
     { tool: "presence_doing", args: { what: "read", summary: "Read · lib/x.ex" } },
     { tool: "presence_idle", args: {} },
   ]);
+});
+
+test("a pane_ref from a tmux that is not the workspace's own is not sent", async ($, on) => {
+  const sent = engine(on, { env: { ...IDENTITY, TMUX: "/tmp/tmux-1000/default,4242,0" } });
+
+  await $.session.start(START);
+  await settle();
+
+  expect(sent.filter((d) => d.tool === "register")).toEqual([{ tool: "register", args: {} }]);
+});
+
+test("a pane_ref from the workspace's own tmux socket is sent", async ($, on) => {
+  const sent = engine(on, { env: { ...IDENTITY, TMUX: "/tmp/tmux-1000/tlon-workspace-1,4242,0" } });
+
+  await $.session.start(START);
+  await settle();
+
+  expect(sent.filter((d) => d.tool === "register")).toEqual([{ tool: "register", args: { pane_ref: "%7" } }]);
 });
 
 test("a plain claude, with no tlon identity, calls nothing and briefs nothing", async ($, on) => {
