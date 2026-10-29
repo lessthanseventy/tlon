@@ -76,6 +76,9 @@ defmodule Server.Workline do
   Open a workline: a machine-scoped thread + the `work/<slug>/` name, at stage `:stage` (default
   "intent"; any-stage entry, Slice 4D). `{:ok, thread}`, `{:error, {:invalid_stage, s}}` for a
   terminal/unknown stage, or `{:error, changeset}` (a taken slug is a UNIQUE refusal).
+
+  An optional `:lead` (a manager's pick) leads when they are of the stage's kind (intent takes anyone
+  on the bench) and lead no other live workline; else the stage's own pick leads and the thread says why.
   """
   def open(attrs) do
     {wanted, attrs} = Map.pop(attrs, :lead)
@@ -1452,26 +1455,6 @@ defmodule Server.Workline do
     case Server.Roster.pick(candidates, want) do
       {%Server.Coworker{name: name}, _} -> name
       nil -> nil
-    end
-  end
-
-  @doc """
-  Who leads `thread` when a manager asks for `wanted` (`staff_child`): them, when they are of the
-  stage's kind (intent takes anyone on the bench) and lead no other live workline — else whoever
-  staffing put there when the workline opened, and why. A pick from off the bench (a registered
-  agent the bench does not seat), or a workline staffing left without a lead, takes the pick as
-  asked. A pick off shift counts as on the bench: a manager may ask for someone off shift by name,
-  and the kind and busy checks still apply. `{:ok, name, :as_asked | {:instead, why}}`.
-  """
-  def lead_for(%Thread{} = thread, wanted) do
-    current = Server.Channel.thread_lead(thread.id)
-
-    seat =
-      thread.workspace_id && thread.workspace_id |> Server.Workspaces.bench_all() |> Enum.find(&(&1.name == wanted))
-
-    case is_nil(current) or is_nil(seat) or unfit(thread, seat) do
-      why when is_binary(why) -> {:ok, current, {:instead, why}}
-      _ -> {:ok, wanted, :as_asked}
     end
   end
 

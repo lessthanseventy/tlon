@@ -101,6 +101,7 @@ defmodule Server.MCP.Tool.StaffChild do
          :ok <- ticket_free(params[:ticket_id]),
          {:repo, {:ok, repo}} <- {:repo, Server.Projects.repo_attrs(parent, params[:repo])},
          {:agent, %Agent{}} <- {:agent, params[:lead] && Staff.agent_by_name(params[:lead])},
+         :ok <- not_manager(parent, params),
          {:ok, thread} <- open_child(params[:title], parent, params[:workline], repo, params[:lead]),
          {:ok, thread} <- graded(thread, params[:grade]),
          {:ok, lead} <- staff(thread, params[:lead]),
@@ -126,6 +127,12 @@ defmodule Server.MCP.Tool.StaffChild do
 
       {:repo, {:error, reason}} ->
         fail(frame, "staff_child refused: #{reason}")
+
+      {:manager_lead, name} ->
+        fail(
+          frame,
+          "staff_child refused: #{name} is the workspace's manager and never leads a workline — name a worker, or omit lead and the stage's pick leads"
+        )
 
       {:agent, nil} ->
         fail(frame, "no registered agent named #{inspect(params[:lead])} — staff a handle from the workspace roster")
@@ -171,6 +178,17 @@ defmodule Server.MCP.Tool.StaffChild do
     do: if(Server.Pause.thread_paused?(id), do: {:paused, "thread ##{id} is paused: resume it first"}, else: :ok)
 
   defp parent_active(_unbound), do: :ok
+
+  # a workline's lead is staffed once, at open: a manager named there would be refused after the
+  # thread exists, leaving it unled
+  defp not_manager(%{workspace_id: ws}, %{workline: stage, lead: lead}) when is_binary(stage) and not is_nil(ws) do
+    case Server.Workspaces.manager(ws) do
+      %{name: ^lead} -> {:manager_lead, lead}
+      _ -> :ok
+    end
+  end
+
+  defp not_manager(_parent, _params), do: :ok
 
   defp briefed(brief) when is_binary(brief), do: if(String.trim(brief) == "", do: :blank, else: :ok)
   defp briefed(_), do: :blank
