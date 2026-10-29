@@ -868,7 +868,8 @@ defmodule Server.Office.Needs do
   # operator paused (`Server.Pause.pause_thread/1`) they stopped themselves
   defp stalled(open, listed) do
     if Server.Pause.state() == :working do
-      cutoff = DateTime.add(DateTime.utc_now(), -Server.OperatorConfig.setting("quiet_workline_minutes") * 60, :second)
+      quiet_s = Server.OperatorConfig.setting("quiet_workline_minutes") * 60
+      cutoff = DateTime.add(DateTime.utc_now(), -quiet_s, :second)
 
       blocked = Server.Blocked.thread_ids()
       paused = Server.Pause.paused_thread_ids()
@@ -888,7 +889,8 @@ defmodule Server.Office.Needs do
           moved = last_moved(t, Map.get(tips[root], t.slug)),
           DateTime.before?(moved, cutoff),
           not on_duty?(t) do
-        item("stalled", "blocking", t, stalled_text(t, moved), moved)
+        # its age is when it went stalled: from `moved` it would be past uqbar_route_minutes at birth
+        item("stalled", "blocking", t, stalled_text(t, moved), DateTime.add(moved, quiet_s, :second))
       end
     else
       []

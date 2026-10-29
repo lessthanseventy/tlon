@@ -1354,6 +1354,28 @@ defmodule Server.Office.NeedsTest do
       assert [%{key: ^key, route: "uqbar"}] = Needs.grouped().uqbar
     end
 
+    test "a stalled workline's age is when it stalled, not its last move: it waits with Uqbar, then fails open",
+         %{ws: ws} do
+      for {name, kind} <- [{"planck", "planner"}, {"bauer", "builder"}, {"revel", "reviewer"}],
+          do: {:ok, _} = Server.Workspaces.seat(ws.id, %{name: name, archetype: kind})
+
+      t = workline(ws, "review", 0)
+      quiet = Server.OperatorConfig.setting("quiet_workline_minutes")
+
+      moved = fn minutes ->
+        at = DateTime.utc_now() |> DateTime.add(-minutes * 60, :second) |> DateTime.truncate(:second)
+        Server.Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [created_at: at])
+        Server.Repo.update_all(from(e in Server.Event, where: e.thread_id == ^t.id), set: [created_at: at])
+        Server.Repo.update_all(from(m in Server.Message, where: m.thread_id == ^t.id), set: [created_at: at])
+      end
+
+      moved.(quiet + 1)
+      assert [%{key: "stalled:" <> _, route: "uqbar"}] = Needs.grouped().uqbar
+
+      moved.(quiet + 31)
+      assert [%{key: "stalled:" <> _, why: "Uqbar did not route it in time"}] = Needs.grouped().clipboard
+    end
+
     test "a gate parked longer than uqbar_route_minutes ago fails open", %{ws: ws} do
       {key, t} = parked_gate(ws)
       at = DateTime.utc_now() |> DateTime.add(-31 * 60, :second) |> DateTime.truncate(:second)
