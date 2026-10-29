@@ -1239,6 +1239,71 @@ defmodule Server.MCP.ServerTest do
     assert decode_tool_json(r)["lead"] == "daneri"
   end
 
+  describe "staff_child with a named lead on a workline" do
+    setup do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Named"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "senior"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", grade: "junior"})
+      {:ok, manager} = Staff.register_agent(%{name: "tertius", mandate: "route", engine: "fresh"})
+      {:ok, home} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, agent_id: manager.id})
+      token = MCP.Tokens.mint(home, manager)
+      session = handshake(token)
+      call(token, session, 3, "register", %{})
+      %{ws: ws, token: token, session: session}
+    end
+
+    defp leads_lines(thread_id) do
+      thread_id
+      |> Channel.thread()
+      |> Channel.thread_messages()
+      |> Enum.map(& &1.body)
+      |> Enum.filter(&String.starts_with?(&1, "→ "))
+    end
+
+    test "a free builder named as lead is the one seat: one pick, one leads-line", %{token: token, session: session} do
+      r =
+        call(token, session, 4, "staff_child", %{
+          "title" => "named build",
+          "lead" => "hronir",
+          "workline" => "build",
+          "brief" => "Build it."
+        })
+
+      refute r["isError"]
+      payload = decode_tool_json(r)
+      tid = payload["thread_id"]
+      assert payload["lead"] == "hronir"
+      assert Channel.thread_lead(tid) == "hronir"
+      assert [line] = leads_lines(tid)
+      assert line =~ "hronir leads"
+    end
+
+    test "a busy named lead gives way to the stage's pick, and says so", %{ws: ws, token: token, session: session} do
+      {:ok, busy} =
+        Server.Workline.open(%{title: "hronir busy", slug: "hronir-busy", stage: "build", workspace_id: ws.id})
+
+      {:ok, _} = Channel.assign_lead(busy.id, "hronir")
+
+      r =
+        call(token, session, 4, "staff_child", %{
+          "title" => "second build",
+          "lead" => "hronir",
+          "workline" => "build",
+          "brief" => "Build it too."
+        })
+
+      refute r["isError"]
+      payload = decode_tool_json(r)
+      assert payload["lead"] == "daneri"
+      assert Channel.thread_lead(payload["thread_id"]) == "daneri"
+
+      assert Enum.any?(
+               Channel.thread_messages(Channel.thread(payload["thread_id"])),
+               &(&1.body =~ "daneri leads, not hronir")
+             )
+    end
+  end
+
   describe "send_back and follow-ups" do
     setup do
       roster = [
