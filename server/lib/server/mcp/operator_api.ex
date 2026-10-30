@@ -166,6 +166,8 @@ defmodule Server.MCP.OperatorAPI do
   alias Server.Workline
   alias Server.Workspaces
 
+  @bad_name "a name is lowercase letters, digits, - and _, starting with a letter or digit"
+
   @spec call(Plug.Conn.t(), [String.t()]) :: Plug.Conn.t()
   def call(conn, [resource | rest]), do: route(conn, conn.method, resource, rest)
   def call(conn, []), do: no_route(conn)
@@ -641,6 +643,7 @@ defmodule Server.MCP.OperatorAPI do
     do: with_workspace(conn, id, &reply(conn, Workspaces.remove(&1), fn w -> %{deleted: w.id} end))
 
   defp on_workspaces(conn, "POST", [id, "coworkers"]), do: with_workspace(conn, id, &hire(conn, &1))
+  defp on_workspaces(conn, "POST", [id, "hire", "draft"]), do: with_workspace(conn, id, &draft_hire(conn, &1))
 
   defp on_workspaces(conn, "PATCH", [id, "coworkers", a]),
     do: with_workspace(conn, id, &with_int(conn, a, fn agent -> retarget(conn, &1, agent) end))
@@ -1038,7 +1041,7 @@ defmodule Server.MCP.OperatorAPI do
           json(conn, 201, %{seat_id: c.id, agent_id: c.agent_id, name: c.name, archetype: c.archetype})
         else
           {:error, :bad_name} ->
-            json(conn, 422, %{error: "a name is lowercase letters, digits, - and _, starting with a letter or digit"})
+            json(conn, 422, %{error: @bad_name})
 
           {:error, why} ->
             refused(conn, why)
@@ -1046,6 +1049,25 @@ defmodule Server.MCP.OperatorAPI do
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"name", "archetype"})})
+    end
+  end
+
+  # a soul and pitch for a hire not yet made: nothing written, nobody seated (the hall's `s`)
+  defp draft_hire(conn, _ws) do
+    case body(conn) do
+      {%{"name" => name, "archetype" => arch} = b, conn} when is_binary(name) and is_binary(arch) ->
+        case name_ok(name) do
+          :ok ->
+            {soul, source} = Soul.preview(name, arch)
+            pitch = "#{name}: a #{b["grade"] || "junior"} #{arch} for #{b["specialty"] || "office"}."
+            json(conn, 200, %{soul: soul, pitch: pitch, source: source})
+
+          {:error, :bad_name} ->
+            json(conn, 422, %{error: @bad_name})
+        end
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"name", "archetype", "grade"?, "specialty"?})})
     end
   end
 
