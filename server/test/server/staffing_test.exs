@@ -21,7 +21,13 @@ defmodule Server.StaffingTest do
     {:ok, ws} = Workspaces.register(%{name: "Freedonia", type: "code", scope: "project", repos: [], roster: @bench})
     # the workspace's standing machine thread — the oldest open one, so it is opened FIRST here
     {:ok, standing} = Channel.open_thread(%{title: "general", scope: "machine", workspace_id: ws.id})
-    on_exit(fn -> Application.delete_env(:server, :tmux_cmd) end)
+    # the node booted a day from now unless a test says otherwise: every fixture session predates it
+    Server.Staff.mark_boot(DateTime.add(DateTime.utc_now(), 86_400))
+
+    on_exit(fn ->
+      Application.delete_env(:server, :tmux_cmd)
+      Server.Staff.mark_boot()
+    end)
 
     %{ws: ws, standing: standing, sock: "tlon-workspace-#{ws.id}", session: "w#{ws.id}"}
   end
@@ -232,6 +238,41 @@ defmodule Server.StaffingTest do
 
     assert Server.Repo.get!(Server.Session, cut.id).ended_at
     assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "@borges the machine restarted"))
+  end
+
+  test "a windowless mid-turn session begun before this boot is woken once; the one the wake begins is left alone",
+       %{ws: ws} do
+    thread = staffed_thread(ws, "borges")
+    cut = session!("borges", thread.id, 30, true)
+    boot = DateTime.add(DateTime.utc_now(), -60)
+
+    cut
+    |> Ecto.Changeset.change(started_at: boot |> DateTime.add(-3_600) |> DateTime.truncate(:second))
+    |> Server.Repo.update!()
+
+    Server.Staff.mark_boot(boot)
+    tmux("")
+
+    assert :ok = Staffing.pass(ws.id)
+    assert Server.Repo.get!(Server.Session, cut.id).ended_at
+
+    woken = session!("borges", thread.id, 30, true)
+    assert :ok = Staffing.pass(ws.id)
+
+    refute Server.Repo.get!(Server.Session, woken.id).ended_at
+    assert 1 == Enum.count(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
+  end
+
+  test "a windowless mid-turn session begun after this boot is never ended by the restart sweep", %{ws: ws} do
+    thread = staffed_thread(ws, "borges")
+    mid = session!("borges", thread.id, 30, true)
+    Server.Staff.mark_boot(DateTime.add(DateTime.utc_now(), -3_600))
+    tmux("")
+
+    assert :ok = Staffing.pass(ws.id)
+
+    refute Server.Repo.get!(Server.Session, mid.id).ended_at
+    refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
   end
 
   test "a tmux that can't be asked ends nothing: no idle session ended, no cut-off turn announced", %{ws: ws} do

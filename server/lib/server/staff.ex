@@ -207,17 +207,29 @@ defmodule Server.Staff do
   end
 
   @doc """
-  Sessions a turn was cut off in: mid-turn (`thinking_since` set), not ended, in `workspace_id`.
+  Record when this node booted (now, unless given): the line `interrupted/2` draws between a turn
+  the restart cut off and one begun since. Set once at `Application.start`.
+  """
+  def mark_boot(at \\ DateTime.utc_now()), do: :persistent_term.put({__MODULE__, :booted_at}, at)
+
+  @doc "When this node booted (`mark_boot/1`); the epoch if never marked, so nothing reads as cut off."
+  def booted_at, do: :persistent_term.get({__MODULE__, :booted_at}, ~U[1970-01-01 00:00:00Z])
+
+  @doc """
+  Sessions a turn was cut off in: mid-turn (`thinking_since` set), not ended, in `workspace_id`,
+  begun before `before` (the node's boot — a session begun after it was not cut off by that restart).
   `[%{session_id, thread_id, agent}]` — the staffing pass asks tmux whether each still has a window.
   """
-  def interrupted(workspace_id) do
+  def interrupted(workspace_id, before) do
     Repo.all(
       from s in Session,
         join: t in Thread,
         on: t.id == s.thread_id,
         join: a in Agent,
         on: a.id == s.agent_id,
-        where: t.workspace_id == ^workspace_id and is_nil(s.ended_at) and not is_nil(s.thinking_since),
+        where:
+          t.workspace_id == ^workspace_id and is_nil(s.ended_at) and not is_nil(s.thinking_since) and
+            s.started_at < ^before,
         select: %{session_id: s.id, thread_id: s.thread_id, agent: a.name}
     )
   end
