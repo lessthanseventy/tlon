@@ -47,8 +47,8 @@ defmodule Server.Office.Needs do
       nobody is working it: allowed (`rule`, the Claude Code allow rule for a refused Bash command, is
       the operator's to add to their own settings, the one place the check honours one; saying so on
       the thread is the answer; a hook's refusal, `hook_refusal?/1`, has no rule), done by hand, sent
-      back, or its decision handed to Uqbar as a post (the lead stays); an answer is movement, so a
-      refusal after it is a new item);
+      back, or its decision handed to Uqbar as a post (the lead stays); an answer is movement, and so is
+      a post by the refused seat itself, so a refusal after either is a new item);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
@@ -820,7 +820,7 @@ defmodule Server.Office.Needs do
   defp tool_denied(open, listed) do
     for t <- open,
         not MapSet.member?(listed, t.id),
-        denials = denials_since(t, last_moved(t, nil)),
+        denials = denials_since(t, refused_moved(t)),
         length(denials) >= 2,
         not on_duty?(t) do
       last = hd(denials)
@@ -1168,4 +1168,21 @@ defmodule Server.Office.Needs do
   # the limits the review's risk grade hit, [] when none; the grade is review-scoped
   defp limits(%Thread{stage: "review"} = t), do: Server.Workline.grade_limits(t)
   defp limits(_t), do: []
+
+  # a refused seat that posts afterwards worked around the refusal: its own progress is movement
+  # here (chatter is not, for `stalled`)
+  defp refused_moved(t) do
+    agents =
+      from(e in Event, where: e.thread_id == ^t.id and e.kind == "tool_denied", select: e.detail)
+      |> Repo.all()
+      |> Enum.map(& &1["agent"])
+      |> Enum.uniq()
+
+    posted =
+      Repo.one(from m in Message, where: m.thread_id == ^t.id and m.author in ^agents, select: max(m.created_at))
+
+    [last_moved(t, nil), posted && DateTime.from_naive!(posted, "Etc/UTC")]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.max(DateTime)
+  end
 end
