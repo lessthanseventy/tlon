@@ -1,44 +1,18 @@
-REQUEST_CHANGES — reviewed by lonnrot at 5e307b0 (origin/main..HEAD: dc4f3fa needs.ex + needs_test, 090ddb8 pr.md, 6dd8b22 ulrikke's review, 5e307b0 corkboard_test).
+APPROVE — reviewed by lonnrot at bb5cfda (second round; my first verdict was 260f54a, request_changes). Delta read: `git diff 260f54a..HEAD -- . ':!work/…'` = bb5cfda only (needs.ex 17 lines, needs_test.exs 17 lines).
 
-The stage brief told me "You reviewed this before, at e45ef87". That commit is ulrikke's review (Tlon-Author: ulrikke), not mine: this is my first read, so I read the whole diff, not the delta. Filed as a ticket.
+Findings, numbered:
 
-Findings:
+1. FIXED — my blocking finding (a post by any seat ever refused on the thread cleared the item). `refused_moved/1` now bounds both queries to after `last_moved(t, nil)`:
+       where: e.thread_id == ^t.id and e.kind == "tool_denied" and e.created_at > ^moved
+       where: m.thread_id == ^t.id and m.author in ^agents and m.created_at > ^moved
+   so `agents` is the current round's refused seats and `posted` their newest post in that round. It is the patch I posted, line for line. The new test is the scenario I asked for: emma refused, `stage_advanced`, nolan refused, emma posts → the item stays and names nolan. ireneo reports it red before the fix, 96/96 after (CHECKS row 01:34:16Z).
 
-1. BLOCKING — `refused_moved/1` clears the item on a post by any seat ever refused on the thread, not the refused seat.
-   The witness:
-       from(e in Event, where: e.thread_id == ^t.id and e.kind == "tool_denied", select: e.detail)
-   has no time bound, so `agents` is every agent in every tool_denied event the thread ever recorded. `posted` is then the newest post by any of them. Scenario, the shape of this very thread: emma is refused twice at build (round 1); verify and back-to-build reset `last_moved` via stage_advanced; ireneo is refused twice at build (round 2); emma answers an @mention. emma's post is newer than ireneo's denials, so `denials_since(t, refused_moved(t))` is [] and ireneo's blocking phone item vanishes with no signal. The ticket says "a post on the thread by that agent"; the code says "by any agent once refused here".
-   Fix (the one predicate, no new plumbing): bound both queries to after `last_moved(t, nil)`; `posted || moved` is then the max, so the DateTime juggling goes too.
+2. FIXED — the `DateTime.from_naive!` no-op is gone; `posted || moved` is a `DateTime` either way, which `denials_since/2` compares directly.
 
-       defp refused_moved(t) do
-         moved = last_moved(t, nil)
+3. Checked by me: `last_moved/2` always includes `t.created_at`, so `moved` is never nil and `created_at > ^moved` cannot hit Ecto's nil-comparison error on a thread with no movement. An empty `agents` makes `m.author in ^[]` false, `posted` nil, and the item behaves as before the change.
 
-         agents =
-           from(e in Event,
-             where: e.thread_id == ^t.id and e.kind == "tool_denied" and e.created_at > ^moved,
-             select: e.detail
-           )
-           |> Repo.all()
-           |> Enum.map(& &1["agent"])
-           |> Enum.uniq()
+4. Spec: #579 asks that a refused seat's later post or commit count as movement. Post: done. Commit: not done, said in pr.md and on the thread; stays a follow-up, not a block, since the fault the ticket opened on (the item returning every turn after the seat posts) is closed.
 
-         posted =
-           Repo.one(
-             from m in Message,
-               where: m.thread_id == ^t.id and m.author in ^agents and m.created_at > ^moved,
-               select: max(m.created_at)
-           )
+5. Policy: any post by the refused seat clears the item, including a "still blocked" one. ireneo kept this on purpose; the moduledoc now says so ("a post by the refused seat itself"). Decided, so no longer a finding.
 
-         posted || moved
-       end
-
-   RED first in needs_test: two denials for seat "emma", a stage_advanced event (or the workline helper's advance), two denials for "nolan", sleep past the second, a post by "emma" → `[%{kind: "tool_denied"}]` must still be listed. `deny/2` hard-codes "nolan", so it wants an agent argument. Without the fix the item clears; with it, it stays.
-   The thorough form (per-agent: drop only the denials whose own agent posted after them) is better still, but it is not what I am blocking on; the bounded form matches the ticket for seats that rotate across stages.
-
-2. Same lines, fix while there: `DateTime.from_naive!(posted, "Etc/UTC")` converts nothing. `Message.created_at` is `:utc_datetime` (message.ex:16) and `max/1` over it comes back a `DateTime` — `last_moved/2` uses `max(e.created_at)` bare for the same reason. `DateTime.from_naive!/2` on a `DateTime` is a no-op (checked: `elixir -e` returns the same ~U), so it cannot crash, but it tells the next reader the column is naive. The patch in 1 removes it.
-
-3. The tests pin the right two directions (post after denials clears; post before, or another seat's post after, does not). The `Process.sleep(1100)` is the cost of a second-resolution column; fine.
-
-4. corkboard_test `File.rm_rf!` → `File.rm_rf`: a cleanup that no longer raises is the right call for on_exit, and it is why the landing went red, not needs.ex. It leaves the cause (the lazy writer outliving the test and a tmp dir leaked on the race) — follow-up, not blocking.
-
-Verified by me: the diff, the Message/Event column types, the `from_naive!` no-op. Not re-run by me: the suite; I cite verify's `mise run check` exit 0 on 5e307b0 at 01:26Z (CHECKS) and nolan's QA pass (msg 17687, the no-post path only). No bench_contrast row among the CHECKS rows shown to me.
+Verified by me: the delta diff, `last_moved/2` and `denials_since/2` sources, the Message column type (prior round). Not re-run by me: the suite; I cite verify's `mise run check` exit 0 on bb5cfda at 01:45:58Z (CHECKS). No bench_contrast row among the CHECKS rows shown to me.
