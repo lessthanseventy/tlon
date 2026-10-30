@@ -193,6 +193,13 @@ export async function pets(ws: number, cat?: { name: string; species: string; wa
 export async function talk(ws: number, situation: string, a: string, b: string): Promise<{ who: string; line: string }[]> {
   try { const r = await call("POST", `/office/talk/${ws}`, { situation, a, b }); return r.status === 200 ? r.json.turns ?? [] : [] } catch { return [] }
 }
+/** `s` in the hall: a soul and pitch for a hire not yet made (nothing written server-side) */
+export async function draftSoul(ws: number, c: { name: string; archetype: string; grade: string; specialty: string }): Promise<{ soul: string; pitch: string; source: string } | { error: string }> {
+  try {
+    const r = await call("POST", `/workspaces/${ws}/hire/draft`, c)
+    return r.status === 200 ? r.json : { error: r.json?.error ?? "no draft" }
+  } catch { return { error: "the server didn't answer" } }
+}
 export async function thread(id: number): Promise<ThreadView | null> {
   try { const r = await call("GET", `/office/threads/${id}`); return r.status === 200 ? r.json : null } catch { return null }
 }

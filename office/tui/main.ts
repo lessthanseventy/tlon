@@ -33,7 +33,7 @@ import { ROLE, useRoles, type Role } from "../kit/palette"
 import { bedScene, lifeHeader, lifeRows, streakFrames } from "../kit/life"
 import { usageHeader } from "../kit/usage"
 import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
-import { BLANK_SOUL, bringBack, candidateOf, dropPile, editField, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, setLook, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
+import { BLANK_SOUL, bringBack, candidateOf, dropPile, drawSoul, editField, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, setLook, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow, type RowEdit } from "./hall"
 import { castSignature, loadCast, saveCast, setTrait, type Cast } from "../kit/cast"
 import { CAST_FIELDS, castRows, nextTrait, rerollTrait } from "./cast"
@@ -218,6 +218,16 @@ function hallEdit(what: RowEdit) {
   // a name being edited is not taken by itself
   const own = { ...ctx, taken: ctx.taken.filter((n) => n !== c.name) }
   ask(f === "soul" ? `soul for ${c.name}` : `${f} for ${c.name}`, (s) => apply(editField(hall, own, f, s)), { text: c[f], multiline: f === "soul" })
+}
+async function hallDraw() {
+  if (ws === null) return
+  const c = candidateOf(hall, hallCtx())
+  status = `drawing ${c.name}…`; draw()
+  const r = await data.draftSoul(ws, c)
+  if ("error" in r) status = r.error
+  else if (candidateOf(hall, hallCtx()).name !== c.name) return draw()
+  else { hallSet(drawSoul(hall, r)); status = `drew ${c.name}'s soul (${r.source}) — e to edit` }
+  draw()
 }
 async function hallHire() {
   const ctx = hallCtx(), c = candidateOf(hall, ctx)
@@ -2007,6 +2017,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           { ...bind("hall.space"), run: () => rows[sel]?.open?.() },
           { ...bind("hall.m"), run: () => open({ kind: "hall-pile" }) },
           { ...bind("hall.e"), run: () => { const w = hallRows(c, hall.locks)[sel]?.edit; if (w) hallEdit(w) } },
+          { ...bind("hall.W"), run: () => void hallDraw() },
           back1,
         ],
       }
