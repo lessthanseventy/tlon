@@ -299,9 +299,17 @@ defmodule Server.Soul do
 
   defp check_name(name), do: if(name =~ ~r/\A[a-z0-9][a-z0-9_-]*\z/, do: :ok, else: {:error, :bad_name})
 
-  defp body(name, archetype) do
-    Map.get(@samples, name) || from_model(name, archetype) || fallback(name, archetype)
+  @doc "The soul `draft/2` would write for `name`, and whether the model wrote it; writes nothing."
+  @spec preview(String.t(), String.t()) :: {String.t(), :model | :fallback}
+  def preview(name, archetype) do
+    cond do
+      sample = Map.get(@samples, name) -> {sample, :fallback}
+      text = from_model(name, archetype) -> {text, :model}
+      true -> {fallback(name, archetype), :fallback}
+    end
   end
+
+  defp body(name, archetype), do: name |> preview(archetype) |> elem(0)
 
   # the model writes the six sections; whatever it puts under Diary is dropped (step 5's)
   defp from_model(name, archetype) do

@@ -101,6 +101,30 @@ defmodule Server.SoulTest do
     assert prompt =~ "Death and the Compass" and prompt =~ "a detective"
   end
 
+  describe "preview/2" do
+    test "the model's soul, and that it was the model's; nothing is written", %{dir: dir} = ctx do
+      stub_model(
+        ctx,
+        "## Where they're from\nFrom the story.\n\n## Wants\nw\n\n## Fears\nf\n\n## Quirks\nq\n\n## People\np\n\n## The side project\ns\n\n## Diary\nINVENTED ENTRY\n"
+      )
+
+      assert {text, :model} = Soul.preview("newhire", "builder")
+      assert text =~ "From the story."
+      assert String.ends_with?(text, "## Diary\n")
+      refute File.exists?(Path.join(dir, "newhire.md"))
+    end
+
+    test "no generator: the template, as :fallback" do
+      assert {text, :fallback} = Soul.preview("newhire", "builder")
+      assert text =~ "## Wants"
+    end
+
+    test "a sample name returns its sample as :fallback" do
+      assert {text, :fallback} = Soul.preview("lonnrot", "reviewer")
+      assert text =~ "## Diary"
+    end
+  end
+
   test "a malformed model reply falls back to the template", ctx do
     stub_model(ctx, "sorry, no")
     assert {:ok, :written} = Soul.draft(ctx.ws.id, "lonnrot")
