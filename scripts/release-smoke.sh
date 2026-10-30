@@ -16,7 +16,8 @@
 # and seed `Server.Smoke.Fixtures` sets on the node before the drive; TLON_SMOKE_SERVER_BIN is the
 # bin/server the fixtures are rpc'd through (default the scratch build's). A sandboxed Bash is
 # refused up front: it can't reach Postgres, and each of its calls has a network namespace of its
-# own, blind to the port a hold serves on.
+# own, blind to the port a hold serves on. The scratch node reads its operator settings from a file
+# in its build dir (TLON_CONFIG), never the operator's ~/.config/tlon/config.json.
 set -uo pipefail
 . "$(dirname "$0")/lib/fresh-script.sh"
 . "$(dirname "$0")/lib/record-ran.sh"
@@ -161,9 +162,10 @@ if [ -z "$url" ]; then
   }
   smoke_build_unlock
 
-  # MCP is what serves /api; everything that would talk to a model, the weather or a pane stays off
+  # MCP is what serves /api; everything that would talk to a model, the weather or a pane stays off.
+  # TLON_CONFIG gives the node a settings file of its own (none yet: every knob at its default), not the operator's.
   TLON_NODE="tlon-smoke-$port@127.0.0.1" TLON_DATABASE="$db" TLON_START_MCP=1 TLON_MCP_PORT="$port" \
-    TLON_BANTER=0 TLON_WEATHER=0 TLON_CALENDAR=0 \
+    TLON_BANTER=0 TLON_WEATHER=0 TLON_CALENDAR=0 TLON_CONFIG="$dir/config.json" \
     "$dir/server/_build/prod/rel/server/bin/server" start >>"$log" 2>&1 8>&- &
   node=$!
   for _ in $(seq 90); do
