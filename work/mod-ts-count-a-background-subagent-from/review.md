@@ -1,21 +1,20 @@
-# Review: mod.ts: count a background subagent from agent.spawn, not turn.start (#546)
+# Review: mod.ts: count a background subagent from agent.spawn, not turn.start (#546) — round 2
 
-**Verdict: approve.** Branch work/mod-ts-count-a-background-subagent-from @ 33f5ece, diffed against origin/main (merge-base 14d491c). Four files, +25/-24.
+**Verdict: approve.** Branch work/mod-ts-count-a-background-subagent-from @ 1ebc3c1, diffed against origin/main (merge-base 14d491c). Since my approve at 98a5c7e the diff outside `work/` is one line in `server/test/server/release_smoke_script_test.exs`; mod.ts, mod.test.ts and README are byte-identical to what I reviewed, so findings 1–6 of the first round stand unchanged.
 
 ## Verified
 
-- `mise run adapters:claude-code:mod` run by me on the branch: 48 pass, 0 fail (log `.logs/20261029T175838-mise-run-adapters-claude-code-mod.log`). The verify stage's `mise run check` row is green (exit 0). No `bench_contrast` row in CHECKS.
+- The CHECKS row for this round's verify: `mise run check` exit 0 at 00:39:57Z (server 2428/2428 by the merge-queue's count less the one fixed; office 958 pass). No `bench_contrast` row.
 - Commit trailer `Co-Authored-By: claude-sonnet-5-5` matches `Tlon-Model: anthropic/claude-sonnet-5-5`.
+- Not run by me: the Elixir file. The sandbox has no Postgres or checks queue; the server's verify row is the evidence.
 
-## Findings
+## Findings on the delta
 
-1. **The fix matches the brief (msg 17632) and the cause.** `agent.spawn` now awaits `next` on both the plain and the Explore→haiku path and adds `r.agentId` when present; `turn.start` keeps only `mainEnded = false` and the thinking declare; `turn.complete` is untouched, so `running.delete(e.agentId)` / `mainEnded = true` / the `running.size === 0` idle check stand as before. The STALE_REFRESH poll (mod.ts:538) and `session.end`'s `running.clear()` need no change.
-2. **The guard is right.** `if (r?.agentId)` covers a remote or isolated agent and a hook-refused spawn, where the result has no id; nothing is added, so a seat cannot be pinned busy by an agent that never gets a `turn.complete` of its own.
-3. **The tests now pin the host's contract, not an invented one.** Every `turn.start({... agentId})` is gone. The RED path is real: emma reports 2 fail before the change, both an unexpected `presence_idle`, which is exactly #440's live symptom. The deleted test ("a subagent's turn.start declares no presence_thinking") asserted an event the host never raises; dropping it is correct, and `turn.start` always declaring thinking is now the whole truth.
-4. **Deviation accepted.** The fake engine's `agent.spawn` returns `{ model, agentId }` because the kit rejects a spawn result without `model`; the compaction test spawns before its subagent `turn.complete` instead of losing the "a subagent completing doesn't compact" assertion. Both preserve what was asserted.
-5. **Docs in step.** README's "Being a citizen" line says the subagent counts from `agent.spawn` since the host raises no `turn.start` for it. pr.md names the cause, the guard, the ticket and the check.
-6. **Not verified by me:** the host's own type file. I could not locate Claude Code 2.1.293's hook `.d.ts` on disk (not under its nix store path, and `claude-code/testing` resolves inside the host). The contract I reviewed against is the one the tech lead quoted in msg 17628/17632 (`TurnStartInput` has no `agentId`; `agent.spawn` resolves the id). The kit accepting `{ model, agentId }` as a spawn result is consistent with it. The owed live proof is what closes this.
+1. **The merge-queue red was not this change's.** It failed `the fetch of origin a holder that is gone … is reclaimed, not refused`, a test on main that this TS-only branch never touched. The queue told the builder to fix it on the branch, so its presence here is sanctioned, not scope creep.
+2. **The cause is real and the fix is the right shape.** The witness: `-      stale_lock(tmp, root, "pid 9999999 on http://127.0.0.1:4777\n")` → `+ … http://127.0.0.1:#{free_port()}\n`. The smoke script treats a url that answers as a live holder; a service on :4777 answered during the full run, so the "gone" holder read alive. `free_port/0` (line 41) binds :0 on loopback, reads the port, closes it — a port nothing answers on now. Every other stale-record test in the file (lines 248, 495) already used it; this one was the lone fixed port on the reclaim path.
+3. **The one `4777` left (line 217) is correct to leave.** That test holds a fresh lock (not aged to 2020), so the script refuses on "a record too young to be a finished build" before it probes the url; the port is only echoed in the assertion. Not load-dependent.
+4. **RED reproduced, by the builder's account:** emma served 200 on :4777, the test failed with "already being smoked", and with the fix passed 27/27 under the same listener (msg 17675). I could not reproduce from a sandboxed seat; the green verify row is consistent with it.
 
-## Out of scope, already owned
+## Still open, unchanged
 
-Typechecking mod.ts against the host's types in `adapters:claude-code:check` is hronir's follow-up ticket per the brief. #545 (a spawn that never completes pins the seat busy) stays its own ticket, by this fix's design too.
+Follow-up 1 from round one (the foreground Agent live proof) is restated below. #545 and hronir's typecheck ticket stay their own.
