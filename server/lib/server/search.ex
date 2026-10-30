@@ -173,16 +173,17 @@ defmodule Server.Search do
     |> Enum.map(&elem(&1, 0))
   end
 
-  defp details([], _q), do: []
+  defp details([], _q, _timeout), do: []
 
-  defp details(ids, q) do
+  defp details(ids, q, timeout) do
     %{rows: rows} =
       Repo.query!(
         """
         SELECT id, thread_id, author, ts_headline('english', body, websearch_to_tsquery('english', $2), $3), created_at
         FROM message WHERE id = ANY($1)
         """,
-        [ids, q, @headline]
+        [ids, q, @headline],
+        timeout: timeout
       )
 
     by_id = Map.new(rows, fn [id | _] = row -> {id, row} end)
@@ -193,9 +194,9 @@ defmodule Server.Search do
         do: %{message_id: id, thread_id: thread_id, author: author, snippet: snippet, at: at}
   end
 
-  defp with_window(shown, 0), do: shown
+  defp with_window(shown, 0, _timeout), do: shown
 
-  defp with_window(shown, n) do
+  defp with_window(shown, n, timeout) do
     Enum.map(shown, fn hit ->
       %{rows: rows} =
         Repo.query!(
@@ -207,7 +208,8 @@ defmodule Server.Search do
            WHERE thread_id = $1 AND id > $2 ORDER BY id LIMIT $3)
           ORDER BY id
           """,
-          [hit.thread_id, hit.message_id, n]
+          [hit.thread_id, hit.message_id, n],
+          timeout: timeout
         )
 
       window = Enum.map(rows, fn [id, author, body, at] -> %{message_id: id, author: author, body: body, at: at} end)
@@ -281,9 +283,10 @@ defmodule Server.Search do
           |> fuse()
           |> Enum.take(limit)
 
-        shown = ids |> details(q) |> with_window(Keyword.get(opts, :around, 0))
+        timeout = timeout(opts)
+        shown = ids |> details(q, timeout) |> with_window(Keyword.get(opts, :around, 0), timeout)
 
-        %{shown: shown, more: max(count("message", "body_tsv", q, "", timeout(opts)) - length(shown), 0)}
+        %{shown: shown, more: max(count("message", "body_tsv", q, "", timeout) - length(shown), 0)}
     end
   end
 end
