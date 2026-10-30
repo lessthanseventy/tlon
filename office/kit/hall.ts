@@ -244,7 +244,7 @@ export function editField(h: Hall, o: Ctx, f: Field | "pitch" | "soul", value: s
   return { ...h, overrides: { ...h.overrides, [f]: v } }
 }
 
-/** `s`: the server's drawn soul and pitch, stored as the edits `e` would make, flagged drawn */
+/** `W`: the server's drawn soul and pitch, stored as the edits `e` would make, flagged drawn */
 export const drawSoul = (h: Hall, d: { soul: string; pitch: string }): Hall => ({ ...h, overrides: { ...h.overrides, soul: d.soul, pitch: d.pitch, drawn: true } })
 
 /** the look card's saved draft, stored as the candidate's whole look; the parts edits it supersedes go */
