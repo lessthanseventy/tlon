@@ -174,6 +174,92 @@ defmodule Server.WorklineSendBackTest do
     end
   end
 
+  describe "send_back/5 unqueue: true" do
+    setup do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      :ok
+    end
+
+    # with Oban up, advancing into verify queued a real Verify job; a workline at review has run it
+    defp reviewed(slug) do
+      thread = at_review(slug)
+
+      Repo.update_all(
+        from(j in Oban.Job,
+          where: j.queue == "verify" and fragment("?->>'thread_id'", j.args) == ^to_string(thread.id)
+        ),
+        set: [state: "completed"]
+      )
+
+      thread
+    end
+
+    defp queued_landing(thread), do: %{thread_id: thread.id} |> Server.Jobs.Land.new() |> Repo.insert!()
+
+    defp job_state(job), do: Repo.get!(Oban.Job, job.id).state
+
+    test "Oban.cancel_job joins the caller's transaction — the one assumption the design rests on" do
+      job = "joins" |> reviewed() |> queued_landing()
+
+      assert {:error, :rolled_back} =
+               Repo.transaction(fn ->
+                 :ok = Oban.cancel_job(job.id)
+                 assert Repo.get!(Oban.Job, job.id).state == "cancelled"
+                 Repo.rollback(:rolled_back)
+               end)
+
+      assert job_state(job) == "available"
+    end
+
+    test "a queued landing is pulled and the thread sent back in one step; nothing is left to requeue" do
+      thread = reviewed("pull-it")
+      job = queued_landing(thread)
+
+      assert {:ok, %Thread{stage: "build"}} = Workline.send_back(thread, "build", "a nit", "hronir", unqueue: true)
+      assert job_state(job) == "cancelled"
+      assert Workline.requeue_stranded() == []
+    end
+
+    test "a landing already executing is never pulled" do
+      thread = reviewed("mid-gate")
+      job = queued_landing(thread)
+      {1, _} = Repo.update_all(from(j in Oban.Job, where: j.id == ^job.id), set: [state: "executing"])
+
+      assert {:error, {:in_flight, why}} = Workline.send_back(thread, "build", "x", "hronir", unqueue: true)
+      assert why =~ "landing"
+      assert job_state(job) == "executing"
+      assert %Thread{stage: "review"} = Repo.get!(Thread, thread.id)
+    end
+
+    test "a queued verify is not a landing: it is let finish" do
+      thread = reviewed("verifying")
+      job = %{thread_id: thread.id, slug: thread.slug} |> Server.Jobs.Verify.new() |> Repo.insert!()
+
+      assert {:error, {:in_flight, why}} = Workline.send_back(thread, "build", "x", "hronir", unqueue: true)
+      assert why =~ "verify"
+      assert job_state(job) == "available"
+      assert %Thread{stage: "review"} = Repo.get!(Thread, thread.id)
+    end
+
+    test "a refused send-back pulls nothing" do
+      thread = reviewed("not-theirs")
+      job = queued_landing(thread)
+
+      assert {:error, {:not_yours, _}} = Workline.send_back(thread, "build", "x", "stranger", unqueue: true)
+      assert job_state(job) == "available"
+      assert %Thread{stage: "review"} = Repo.get!(Thread, thread.id)
+    end
+
+    test "a later approval queues cleanly after a pull: the cancelled job holds no unique slot" do
+      thread = reviewed("again")
+      queued_landing(thread)
+      assert {:ok, _} = Workline.send_back(thread, "build", "x", "hronir", unqueue: true)
+
+      assert {:ok, %Oban.Job{conflict?: false, state: "available"}} =
+               Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id}))
+    end
+  end
+
   describe "follow_ups/4" do
     test "posts the findings on the workline for its lead, numbered, and files no ticket" do
       thread = at_review("with-nits")
