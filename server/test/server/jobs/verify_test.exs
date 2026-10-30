@@ -105,6 +105,20 @@ defmodule Server.Jobs.VerifyTest do
       assert why =~ "closed"
     end
 
+    test "a red result on a thread closed while it ran is cancelled: it stays closed, nobody is told", %{t: t} do
+      since = check!(t, 0).id
+      check!(t, 1)
+      {:ok, _} = Server.Channel.close_thread(t)
+      n = Server.Repo.aggregate(Server.Message, :count)
+
+      assert {:cancel, why} =
+               Server.Jobs.Verify.finish(t.id, t.slug, since, {"", 1}, %{attempt: 1, max_attempts: 3})
+
+      assert why =~ "closed"
+      assert %{stage: "verify", state: "closed"} = Server.Repo.get!(Server.Thread, t.id)
+      assert Server.Repo.aggregate(Server.Message, :count) == n
+    end
+
     test "a thread already closed is cancelled before anything runs", %{t: t} do
       {:ok, _} = Server.Channel.close_thread(t)
       n = Server.Repo.aggregate(Server.Message, :count)

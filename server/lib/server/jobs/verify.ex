@@ -79,10 +79,14 @@ defmodule Server.Jobs.Verify do
   to build on the same branch with the finding (`Server.Workline.red_verify/2`) and a copy to the
   sheriff. One that recorded nothing was cut off (a service restart, a signal) or could not
   start, and is an error so Oban runs it again (`max_attempts` 3); only the last attempt tells the
-  sheriff it could not run. A thread closed meanwhile is nobody's work: the job is cancelled, not retried.
+  sheriff it could not run. A closed thread is cancelled whatever it recorded, green or red, and is
+  neither moved nor reported.
   """
   def finish(tid, slug, since, {out, _code}, %{attempt: attempt, max_attempts: max}) do
     case {last_verify(slug), Channel.thread(tid)} do
+      {_, %Server.Thread{state: "closed"}} ->
+        {:cancel, "thread ##{tid} is closed"}
+
       {%{id: id} = e, t} when id > since ->
         if e.kind == "check_failed" and t do
           finding = "#{e.detail["cmd"]} (exit #{e.detail["exit"]}) — #{tail(e.detail["tail"])}"
@@ -91,9 +95,6 @@ defmodule Server.Jobs.Verify do
         end
 
         :ok
-
-      {_, %Server.Thread{state: "closed"}} ->
-        {:cancel, "thread ##{tid} is closed"}
 
       {_, t} ->
         if attempt >= max and t, do: Server.Sheriff.report(t, "verify could not run: #{tail(out)}")
