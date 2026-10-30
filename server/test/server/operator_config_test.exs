@@ -113,3 +113,43 @@ defmodule Server.OperatorConfigTest do
     assert OperatorConfig.operator() == Application.get_env(:server, :operator, "andrew")
   end
 end
+
+defmodule Server.OperatorConfigPathTest do
+  # path/0 reads the Application env, then TLON_CONFIG, then the XDG default. Env is global, so this
+  # module is not async; each test restores what it changed.
+  use ExUnit.Case, async: false
+
+  alias Server.OperatorConfig
+
+  setup do
+    prior_app = Application.get_env(:server, :operator_config_path)
+    prior_env = System.get_env("TLON_CONFIG")
+    prior_xdg = System.get_env("XDG_CONFIG_HOME")
+    Application.delete_env(:server, :operator_config_path)
+    System.put_env("XDG_CONFIG_HOME", "/xdg-home")
+
+    on_exit(fn ->
+      if prior_app, do: Application.put_env(:server, :operator_config_path, prior_app)
+      if prior_env, do: System.put_env("TLON_CONFIG", prior_env), else: System.delete_env("TLON_CONFIG")
+      if prior_xdg, do: System.put_env("XDG_CONFIG_HOME", prior_xdg), else: System.delete_env("XDG_CONFIG_HOME")
+    end)
+
+    :ok
+  end
+
+  test "TLON_CONFIG names the settings file ahead of the XDG default" do
+    System.put_env("TLON_CONFIG", "/scratch/config.json")
+    assert OperatorConfig.path() == "/scratch/config.json"
+  end
+
+  test "without TLON_CONFIG the file is the XDG default" do
+    System.delete_env("TLON_CONFIG")
+    assert OperatorConfig.path() == "/xdg-home/tlon/config.json"
+  end
+
+  test "the Application env still wins over TLON_CONFIG" do
+    System.put_env("TLON_CONFIG", "/scratch/config.json")
+    Application.put_env(:server, :operator_config_path, "/app/config.json")
+    assert OperatorConfig.path() == "/app/config.json"
+  end
+end

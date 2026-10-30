@@ -3,7 +3,7 @@ defmodule Server.OperatorConfig do
   The operator's **runtime settings file**, read side — knobs that change without editing Elixir
   source or re-running `home:switch`. A plain JSON map at `~/.config/tlon/config.json`
   (override with `config :server, :operator_config_path`, which the test envs point away from the
-  real home). The operator edits it by hand; the one key written back is a switch the office TUI
+  real home; or `TLON_CONFIG`, which a scratch smoke node points at its own file). The operator edits it by hand; the one key written back is a switch the office TUI
   flips (`put/3`, the rest of the file kept). The profile registry and the staffing pass read it
   here, so every coworker the service spawns wears its overrides.
 
@@ -191,10 +191,10 @@ defmodule Server.OperatorConfig do
     "greybeard" => %{provider: "anthropic", model: "claude-fable-5-1", thinking: "high"}
   }
 
-  @doc "The settings file path (`config :server, :operator_config_path` override, else ~/.config/tlon/config.json)."
+  @doc "The settings file path (`config :server, :operator_config_path` override, else `$TLON_CONFIG`, else ~/.config/tlon/config.json)."
   @spec path() :: String.t()
   def path do
-    Application.get_env(:server, :operator_config_path) ||
+    Application.get_env(:server, :operator_config_path) || System.get_env("TLON_CONFIG") ||
       Path.join([xdg_config_home(), "tlon", "config.json"])
   end
 
