@@ -105,6 +105,26 @@ defmodule Server.TicketsTest do
       assert %{stage: "build"} = Server.Repo.get!(Server.Thread, thread.id)
     end
 
+    test "a ticket labelled review starts as a plain thread: no stage, no slug, nothing owed" do
+      {:ok, ws} = Workspaces.create(%{name: "Review"})
+
+      {:ok, t} =
+        Tickets.file(%{workspace_id: ws.id, title: "Review PR #675", body: "head abc123", labels: ["review"]})
+
+      assert {:ok, %{stage: nil, slug: nil} = thread} = Tickets.start_thread(t)
+      assert %{stage: nil, slug: nil} = Server.Repo.get!(Server.Thread, thread.id)
+      assert Server.Workline.owed_status(thread) == :none
+
+      assert [{"promoted", tid}] = Tickets.threads_of(t.id)
+      assert tid == thread.id
+      assert %{status: "doing"} = Tickets.get(t.id)
+
+      assert [%{body: body}] = for(m <- Channel.thread_messages(thread), m.author == "andrew", do: m)
+      assert body =~ "head abc123"
+      assert body =~ "review_branch verdict"
+      assert body =~ "ticket ##{t.id}"
+    end
+
     test "route sends a ticket to the workspace's manager as intake on its root thread" do
       {:ok, ws} = Workspaces.register(%{name: "Routed"})
       {:ok, _} = Workspaces.seat(ws.id, %{name: "tertius-r", archetype: "surveyor"})
