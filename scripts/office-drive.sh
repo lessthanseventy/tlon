@@ -5,7 +5,7 @@
 #
 #   office-drive.sh STEP...      each STEP is tmux send-keys arguments: "/" "'108'" "Enter" "M-Enter" ("ctrl+]" is C-]); a one-character STEP is sent as that key, not parsed (a bare ` or ")
 #                                or click:TEXT[@DX,DY] — a left click on the first screen cell where TEXT starts (+DX columns,
-#                                +DY rows): aim at what the screen shows, never at a measured coordinate; or wait:TEXT — no keys; waits until the screen shows TEXT (30 s at most)
+#                                +DY rows): aim at what the screen shows, never at a measured coordinate; or wait:TEXT — no keys; waits until the screen shows TEXT (30 s at most); or ticks:N — no keys; lets N ticks (100 ms each) pass, lists the text seen in the screen every 10 of them (a balloon that came and went too), then the frame
 #
 # TLON_URL picks the server (default the service's 127.0.0.1:4040; `server:dev` is :4041).
 # OFFICE_COLS/OFFICE_ROWS size the window (150x60), OFFICE_WAIT the settle per step (1.5 s),
@@ -58,6 +58,11 @@ for r,l in enumerate(L):
       if [ -z "$pos" ]; then echo "=== no such text on screen: $want"; else set -- $pos; t send-keys -t 0 -l $'\033[<0;'"$1;$2"$'M\033[<0;'"$1;$2"$'m'; sleep "${OFFICE_WAIT:-1.5}"; fi ;;
     # ctrl+X, as the office's own hints spell a key, is tmux's C-X; typed as is it is six letters
     ctrl+*) t send-keys -t 0 "C-${step#ctrl+}"; sleep "${OFFICE_WAIT:-1.5}" ;;
+    # ticks:N sends no keys: N sim ticks (100 ms each) pass, the screen captured every 10. The text seen in any capture
+    # is listed before the frame, so a balloon that came and went still shows
+    ticks:*) n="${step#ticks:}"; seen="$state/seen"; : >"$seen"
+      for i in $(seq "$n"); do sleep 0.1; [ $((i % 10)) -eq 0 ] && t capture-pane -p -t 0 >>"$seen"; done
+      echo "=== seen over $n ticks:"; sed -E 's/[▀▄█ ]+/ /g; s/^ //; s/ $//' "$seen" | grep -E '[[:alnum:]]' | awk '!s[$0]++' ;;
     # a step is shell words ("'108'", "M-Enter"), eval'd so a quoted title stays one key; one character is the key
     # itself, which eval would take for shell syntax (a bare ` or " or ; or &)
     *) if [ "${#step}" -eq 1 ]; then t send-keys -t 0 -l -- "$step"; else eval "t send-keys -t 0 $step"; fi
