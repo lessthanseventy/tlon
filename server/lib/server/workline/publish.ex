@@ -9,6 +9,10 @@ defmodule Server.Workline.Publish do
   head. A repo with no `origin` is `:none` — nothing to publish to.
   """
 
+  # GitHub takes a PR title of 256 characters at most: the thread title's first line, cut on a word
+  # with an ellipsis. The full title then heads the body, so no reader loses any of it.
+  @pr_title_max 256
+
   @doc """
   Publish `work/<slug>` from `repo`. `landing[:gated]`, the sha the landing's gate passed on, is posted
   as the commit status `tlon/check` = success and the PR merged at once at that head; with none, no
@@ -19,7 +23,7 @@ defmodule Server.Workline.Publish do
   def publish(repo, slug, title, run \\ &System.cmd/3, landing \\ []) do
     branch = "work/#{slug}"
     opts = [cd: repo, stderr_to_stdout: true]
-    title = pr_title(title)
+    pr_title = pr_title(title)
 
     with {_, 0} <- run.("git", ["-C", repo, "remote", "get-url", "origin"], opts),
          {:push, :ok} <- {:push, replace_branch(repo, branch, run)},
@@ -27,7 +31,18 @@ defmodule Server.Workline.Publish do
            {:pr,
             run.(
               "gh",
-              ["pr", "create", "--head", branch, "--base", "main", "--title", title, "--body", body(repo, slug, run)],
+              [
+                "pr",
+                "create",
+                "--head",
+                branch,
+                "--base",
+                "main",
+                "--title",
+                pr_title,
+                "--body",
+                pr_body(title, pr_title, body(repo, slug, run))
+              ],
               opts
             )} do
       url = out |> String.split("\n", trim: true) |> List.last() |> String.trim()
@@ -391,6 +406,23 @@ defmodule Server.Workline.Publish do
     end
   end
 
-  # GitHub refuses a PR title over 256 characters; a sheriff incident's workline is titled with its whole report.
-  defp pr_title(title), do: if(String.length(title) > 256, do: String.slice(title, 0, 255) <> "…", else: title)
+  defp pr_title(title) do
+    line = title |> String.split("\n", parts: 2) |> hd() |> String.trim()
+    if String.length(line) <= @pr_title_max, do: line, else: cut_title(line)
+  end
+
+  defp cut_title(line) do
+    head = String.slice(line, 0, @pr_title_max - 1)
+
+    words =
+      head
+      |> String.split(" ")
+      |> Enum.drop(-1)
+      |> Enum.join(" ")
+
+    if(words == "", do: head, else: words) <> "…"
+  end
+
+  defp pr_body(title, title, body), do: body
+  defp pr_body(title, _pr_title, body), do: title <> "\n\n" <> body
 end
