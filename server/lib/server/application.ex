@@ -15,6 +15,7 @@ defmodule Server.Application do
     # its stop timeout and marks every restart failed.
     :ok = :inet_db.set_lookup([:file, :dns])
 
+    Server.Staff.mark_boot()
     Server.MCP.Tool.init_fence()
 
     # PubSub is always up — it is the switchboard's nudge and cheap to run, and the
