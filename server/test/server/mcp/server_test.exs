@@ -1405,6 +1405,23 @@ defmodule Server.MCP.ServerTest do
       assert Repo.get!(Thread, wl.id).stage == "plan"
     end
 
+    test "with unqueue the tech lead pulls a queued landing with the send-back; without it, it is let finish",
+         %{lobby: lobby, wl: wl} do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      job = %{thread_id: wl.id} |> Server.Jobs.Land.new() |> Repo.insert!()
+      {token, session} = as("hronir", lobby)
+      ask = %{"stage" => "build", "why" => "a nit", "thread_id" => wl.id}
+
+      r = call(token, session, 4, "send_back", ask)
+      assert r["isError"]
+      assert get_in(r, ["content", Access.at(0), "text"]) =~ "landing is queued or running"
+      assert Repo.get!(Oban.Job, job.id).state == "available"
+
+      refute call(token, session, 5, "send_back", Map.put(ask, "unqueue", true))["isError"]
+      assert Repo.get!(Thread, wl.id).stage == "build"
+      assert Repo.get!(Oban.Job, job.id).state == "cancelled"
+    end
+
     test "submit_qa posts its follow-ups on the workline, filing no ticket", %{wl: wl} do
       {token, session} = as("nolan", wl)
 
