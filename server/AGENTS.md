@@ -122,12 +122,15 @@ and every layer the spine design's re-laid §9 asked for
   operator's `approve <id> --skip-qa <why>` (API `{"skip_qa"}`), recorded as its QA verdict.
   The operator reviews a branch from the office (`Server.Workline.OperatorReview`): its diff as
   files, hunks and numbered lines, and notes on lines or files submitted with a verdict — comment,
-  request changes (`send_back/4` to build, the notes its why) or approve — reaching the lead as one
+  request changes (`send_back/5` to build, the notes its why) or approve — reaching the lead as one
   post in revdiff's shape (`## path:line (+) note`).
   A workline moves backwards on its own thread and branch, the build kept to improve, never redone
-  (`Server.Workline.send_back/4`, the `send_back` tool, `tlon-cli send-back`): back to build by its
+  (`Server.Workline.send_back/5`, the `send_back` tool, `tlon-cli send-back`): back to build by its
   lead, back to plan or spec only by the tech lead (a coherence call) or the operator; an open one
-  only, never while its verify or landing is queued or running. A reviewer's or QA's non-blocking
+  only, never while its verify is queued or running or its landing is running; a landing still
+  waiting in the merge queue is pulled with the move by `unqueue` (the tool's and the API's field,
+  the cli's `--unqueue`), cancelled in the same transaction so nothing finds the thread at review to
+  requeue it. A reviewer's or QA's non-blocking
   findings are `follow_ups` on `submit_review`/`submit_qa`: one post on the workline, made after the
   verdict for the lead it hands to (the builder on a bounce, the qa seat when QA is owed, the operator
   at their gate — the author's own session ended with the verdict), who fixes what sits in the

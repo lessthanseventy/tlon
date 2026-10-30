@@ -58,7 +58,8 @@
 #   workline "<title>" <slug>      open a workline at stage intent (operator kickoff)
 #   track <id>                     promote a plain thread into a workline at build (opt-in)
 #   advance <id> [from-stage]      advance a workline past its current stage, only from from-stage when given (verifier green path)
-#   send-back <id> spec|plan|build <why…>  move a workline back on its own branch, the build kept to improve
+#   send-back <id> spec|plan|build [--unqueue] <why…>  move a workline back on its own branch, the build kept to
+#                                  improve; --unqueue pulls a landing still waiting in the merge queue with it
 #   flag <name> on|off             turn a feature flag on or off for everyone (Server.Flags)
 #   pause pencils_down|lights_out|back_to_work   the office's stop controls (Server.Pause)
 #   quiet                          "quiet", or "busy" and what a restart would cut off (server:restart asks)
@@ -577,9 +578,10 @@ case "$cmd" in
 
   send-back)
     tid="${1:-}"; to="${2:-}"; shift 2 2>/dev/null || true
+    unq=false; if [ "${1:-}" = "--unqueue" ]; then unq=true; shift; fi
     { int "$tid" && [[ "$to" =~ ^(spec|plan|build)$ ]] && [ -n "$*" ]; } ||
-      { echo 'usage: tlon-cli.sh send-back <thread-id> spec|plan|build <why…>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> raise(\"no thread #$tid\"); t -> case Server.Workline.send_back(t, \"$to\", \"$(esc "$*")\", Application.get_env(:server, :operator, \"andrew\")) do {:ok, b} -> IO.puts(\"sent back — thread #$tid now at #{b.stage}, led by #{Server.Channel.thread_lead(b.id)}\"); {:error, why} -> IO.puts(:stderr, \"refused: #{inspect(why)}\"); raise(\"refused\") end end"
+      { echo 'usage: tlon-cli.sh send-back <thread-id> spec|plan|build [--unqueue] <why…>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> raise(\"no thread #$tid\"); t -> case Server.Workline.send_back(t, \"$to\", \"$(esc "$*")\", Application.get_env(:server, :operator, \"andrew\"), unqueue: $unq) do {:ok, b} -> IO.puts(\"sent back — thread #$tid now at #{b.stage}, led by #{Server.Channel.thread_lead(b.id)}\"); {:error, why} -> IO.puts(:stderr, \"refused: #{inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
   record-verify)
