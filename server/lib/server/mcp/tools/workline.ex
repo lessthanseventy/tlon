@@ -218,8 +218,9 @@ defmodule Server.MCP.Tool.SendBack do
   @moduledoc """
   Send a workline back to an earlier stage, on the same thread and branch — what was built and
   reviewed stays, and the stage's lead improves it rather than starting over
-  (`Server.Workline.send_back/4`). Back to build: the workline's lead. Back to plan or spec: the tech
-  lead only, since it reshapes the build; anyone else is told to ask him.
+  (`Server.Workline.send_back/5`). Back to build: the workline's lead. Back to plan or spec: the tech
+  lead only, since it reshapes the build; anyone else is told to ask him. `unqueue` pulls a landing
+  still waiting in the merge queue with the move; one already running, or a verify, still refuses.
   """
   use Server.MCP.Tool
 
@@ -229,6 +230,10 @@ defmodule Server.MCP.Tool.SendBack do
   schema do
     field :stage, :enum, values: ["spec", "plan", "build"], required: true, description: "The stage to send it back to"
     field :why, :string, required: true, description: "What is wrong, so the stage's lead knows what to change"
+
+    field :unqueue, :boolean,
+      description:
+        "Pull a landing that is queued but not yet running from the merge queue in the same step; a running landing or a verify still refuses"
 
     field :thread_id, :integer,
       description: "The workline (its #id), when it isn't the thread your session is bound to (e.g. the lobby)"
@@ -240,7 +245,8 @@ defmodule Server.MCP.Tool.SendBack do
 
     with %Server.Thread{stage: stage} = thread when not is_nil(stage) <-
            Channel.thread(params[:thread_id] || identity.thread_id) || {:error, "no such thread"},
-         {:ok, back} <- Workline.send_back(thread, params[:stage], params[:why], identity.agent) do
+         {:ok, back} <-
+           Workline.send_back(thread, params[:stage], params[:why], identity.agent, unqueue: params[:unqueue] == true) do
       ok(frame, %{"thread_id" => back.id, "stage" => back.stage, "lead" => Channel.thread_lead(back.id)})
     else
       %Server.Thread{} ->
