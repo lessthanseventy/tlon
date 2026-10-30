@@ -679,6 +679,26 @@ defmodule Server.Office.NeedsTest do
       assert [%{kind: "tool_denied"}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
     end
 
+    test "the refused seat posting after its denials clears it: it moved on", %{ws: ws} do
+      t = workline(ws, "review", 3)
+      deny(t, 2)
+      assert [%{kind: "tool_denied"}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
+
+      Process.sleep(1100)
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "nolan", body: "worked around it"})
+      assert [] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
+    end
+
+    test "the refused seat's post before its denials, or another seat's after, does not clear it", %{ws: ws} do
+      t = workline(ws, "review", 3)
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "nolan", body: "trying the smoke"})
+      Process.sleep(1100)
+      deny(t, 2)
+      Process.sleep(1100)
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "someone-else", body: "chatter"})
+      assert [%{kind: "tool_denied"}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
+    end
+
     test "a workline blocked on an open ticket is not stalled; the ticket's one item says why", %{ws: ws} do
       t = workline(ws, "build", 4)
       assert [{"stalled", "blocking"}] = kinds(ws)
