@@ -615,6 +615,44 @@ defmodule Server.MCP.GatewayTest do
       assert {404, _} = post_json("/api/workspaces/#{ws.id}/coworkers/999999/persona", %{})
     end
 
+    test "hire/draft answers a soul and pitch for a hire not yet made, writing nothing" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      dir = Path.join(System.tmp_dir!(), "draft-souls-#{System.pid()}-#{System.unique_integer([:positive])}")
+      Application.put_env(:server, :souls_dir, dir)
+
+      on_exit(fn ->
+        Application.put_env(:server, :souls_dir, Path.join(System.tmp_dir!(), "tlon-test-souls-unset"))
+        Application.put_env(:server, :generator_cmd, "/nonexistent/tlon-test-generator")
+        File.rm_rf!(dir)
+      end)
+
+      url = "/api/workspaces/#{ws.id}/hire/draft"
+      c = %{name: "newhire", archetype: "builder", grade: "senior", specialty: "server"}
+
+      assert {200, %{"soul" => soul, "pitch" => "newhire: a senior builder for server.", "source" => "fallback"}} =
+               post_json(url, c)
+
+      assert soul =~ "## Wants"
+
+      File.mkdir_p!(dir)
+      cli = Path.join(dir, "model")
+
+      reply =
+        "## Where they're from\nx\n\n## Wants\nw\n\n## Fears\nf\n\n## Quirks\nq\n\n## People\np\n\n## The side project\ns\n\n## Diary\n"
+
+      File.write!(cli, "#!/bin/sh\ncat >/dev/null\ncat <<'EOF'\n#{reply}\nEOF\n")
+      File.chmod!(cli, 0o755)
+      Application.put_env(:server, :generator_cmd, cli)
+      assert {200, %{"source" => "model"}} = post_json(url, c)
+
+      assert Server.Workspaces.bench(ws.id) == []
+      refute File.exists?(Path.join(dir, "newhire.md"))
+
+      assert {422, _} = post_json(url, %{c | name: "Sonny"})
+      assert {400, _} = post_json(url, %{name: "newhire"})
+      assert {404, _} = post_json("/api/workspaces/999999/hire/draft", c)
+    end
+
     test "hiring over HTTP gives the seat a persona, made off the request" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
       {201, c} = post_json("/api/workspaces/#{ws.id}/coworkers", %{name: "yu", archetype: "builder"})
