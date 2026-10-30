@@ -388,18 +388,18 @@ defmodule Server.TicketsTest do
 
       assert ["top", "bottom"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
 
-      assert :ok = Tickets.reorder(Tickets.get(top.id), :down)
+      assert :moved = Tickets.reorder(Tickets.get(top.id), :down)
       assert ["bottom", "top"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
 
-      assert :ok = Tickets.reorder(Tickets.get(top.id), :up)
+      assert :moved = Tickets.reorder(Tickets.get(top.id), :up)
       assert ["top", "bottom"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
     end
 
-    test "reordering past the end of a column is :ok, not an error", %{workspace: ws} do
+    test "reordering with no sibling to swap with is :none, not an error", %{workspace: ws} do
       {:ok, only} = Tickets.file(%{workspace_id: ws.id, title: "only"})
 
-      assert :ok = Tickets.reorder(only, :up)
-      assert :ok = Tickets.reorder(only, :down)
+      assert :none = Tickets.reorder(only, :up)
+      assert :none = Tickets.reorder(only, :down)
     end
 
     test "a reorder only sees its OWN column — a neighbour in another status is not one", %{workspace: ws} do
@@ -408,7 +408,7 @@ defmodule Server.TicketsTest do
       {:ok, _} = Tickets.update(b, %{status: "doing"})
 
       # `a` is alone in backlog now, so there is nothing to swap with
-      assert :ok = Tickets.reorder(Tickets.get(a.id), :up)
+      assert :none = Tickets.reorder(Tickets.get(a.id), :up)
       assert Tickets.get(a.id).sort == a.sort
     end
 
@@ -422,13 +422,13 @@ defmodule Server.TicketsTest do
       {:ok, a2} = Tickets.file(%{workspace_id: ws.id, title: "a2", epic_id: epic_a.id})
 
       # a1 sits between loose and b1 in the column, so its only sibling is a2, the last of them
-      assert :ok = Tickets.reorder(Tickets.get(a1.id), :down)
+      assert :moved = Tickets.reorder(Tickets.get(a1.id), :down)
       assert Tickets.get(a1.id).sort > Tickets.get(a2.id).sort
       assert Tickets.get(loose.id).sort == loose.sort
       assert Tickets.get(b1.id).sort == b1.sort
 
       # a top-level ticket's siblings are the other top-level tickets, epics included
-      assert :ok = Tickets.reorder(Tickets.get(loose.id), :up)
+      assert :moved = Tickets.reorder(Tickets.get(loose.id), :up)
       assert Tickets.get(loose.id).sort == epic_b.sort
       assert Tickets.get(a1.id).sort > Tickets.get(a2.id).sort
     end

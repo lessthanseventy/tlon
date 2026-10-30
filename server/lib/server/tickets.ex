@@ -522,9 +522,9 @@ defmodule Server.Tickets do
   @doc """
   Move a ticket up or down within its status column, and persist it. Swaps `sort` with the
   neighbour rather than renumbering the column, so a move is two writes whatever the column holds.
-  `:ok` when there is no neighbour — the end of a list is not an error.
+  `:none` when there is no sibling to swap with — the end of a list is not an error, but nothing moved.
   """
-  @spec reorder(Ticket.t(), :up | :down) :: :ok
+  @spec reorder(Ticket.t(), :up | :down) :: :moved | :none
   def reorder(%Ticket{} = ticket, direction) do
     case neighbour(ticket, direction) do
       %Ticket{} = other ->
@@ -533,10 +533,10 @@ defmodule Server.Tickets do
         {:ok, moved} = ticket |> Ticket.update_changeset(%{sort: other.sort}) |> Repo.update()
         {:ok, _swapped} = other |> Ticket.update_changeset(%{sort: ticket.sort}) |> Repo.update()
         Bus.announce({:ok, moved}, :ticket_updated)
-        :ok
+        :moved
 
       nil ->
-        :ok
+        :none
     end
   end
 

@@ -98,7 +98,7 @@ defmodule Server.MCP.OperatorAPI do
       DELETE /api/tickets/:id             Tickets.remove
       POST   /api/tickets/:id/route       Tickets.route: to the workspace's manager (no manager: its lead starts it)
       POST   /api/tickets/:id/start       {"agent_id"?} → Tickets.start_thread (default: the lead); 201 + the thread
-      POST   /api/tickets/:id/reorder     {"direction": "up"|"down"} → Tickets.reorder within its column
+      POST   /api/tickets/:id/reorder     {"direction": "up"|"down"} → Tickets.reorder among its siblings; {ticket, moved}
       POST   /api/tickets/:id/blockers    {"by"} → Tickets.link(by, id, "blocks")
       DELETE /api/tickets/:id/blockers/:by  Tickets.unlink
 
@@ -805,8 +805,8 @@ defmodule Server.MCP.OperatorAPI do
   defp reorder(conn, t) do
     case body(conn) do
       {%{"direction" => d}, conn} when d in ~w(up down) ->
-        :ok = Tickets.reorder(t, String.to_existing_atom(d))
-        json(conn, 200, %{ticket: t.id})
+        moved = Tickets.reorder(t, String.to_existing_atom(d))
+        json(conn, 200, %{ticket: t.id, moved: moved == :moved})
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"direction": "up" | "down"})})

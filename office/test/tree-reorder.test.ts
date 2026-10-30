@@ -30,7 +30,7 @@ const server = Bun.serve({
       const below = siblings.filter((t) => t.sort > mover.sort).sort((a, b) => a.sort - b.sort)[0]
       const other = body.direction === "up" ? above : below
       if (other) [mover.sort, other.sort] = [other.sort, mover.sort]
-      return Response.json({ ok: true })
+      return Response.json({ ticket: mover.id, moved: other !== undefined })
     }
     return new Response("no", { status: 404 })
   },
@@ -65,6 +65,10 @@ test("K moves a ticket among its siblings and the cursor stays on it, past an op
   // open the epic: its child shows under it, and the mover sits below the child
   keys("Enter")
   await until("the epic's child", () => screen().includes("the epic's child"))
+
+  // the epic's child is its epic's only child: K has no sibling to swap with, and says so instead of "moved"
+  keys("Down", "K")
+  await until("the nothing-to-swap report", () => screen().includes("#11 has no sibling to swap with"))
   // the cursor marker is ▸: walk down until it sits on the mover's row
   const onMover = () => screen().split("\n").some((l) => l.includes("▸") && l.includes("#21 the mover"))
   for (let i = 0; i < 6 && !onMover(); i++) {
