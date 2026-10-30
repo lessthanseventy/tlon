@@ -12,4 +12,12 @@ defmodule Server.Jobs do
     # a db fault while enqueueing is the caller's error to handle, never a raise through a GenServer
     e -> {:error, Exception.message(e)}
   end
+
+  @doc """
+  Cancel job `id` when Oban is up on this node (`Oban.cancel_job/1`: one update through the repo, so
+  inside a `Repo.transaction` it commits or rolls back with the caller); `{:error, :no_oban}` otherwise.
+  """
+  def cancel(id) when is_integer(id) do
+    if Oban.Registry.whereis(Oban), do: Oban.cancel_job(id), else: {:error, :no_oban}
+  end
 end

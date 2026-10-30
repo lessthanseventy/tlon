@@ -1043,15 +1043,21 @@ defmodule Server.Workline do
   it. Back to build is the call of the workline's lead (its reviewer, QA or builder); back to plan or
   spec reshapes the build, a coherence call, so it is the tech lead's (`Server.Coworker.lead/1`) or
   the operator's. An open workline only, and not while its verify or landing is queued or running:
-  either would move it on from under the send-back. `{:ok, thread}` | `{:error, {:not_movable,
-  stage}}` | `{:error, {:in_flight, why}}` | `{:error, {:not_behind, stage}}` | `{:error, {:not_yours, why}}`.
+  either would move it on from under the send-back. With `unqueue: true` a landing that is queued but
+  not yet running is pulled from the merge queue in the same transaction as the move, so nothing
+  finds the thread at review to requeue it (`requeue_stranded/0`); a running landing, and a verify
+  in any state, still refuse. `{:ok, thread}` | `{:error, {:not_movable, stage}}` | `{:error,
+  {:in_flight, why}}` | `{:error, {:not_behind, stage}}` | `{:error, {:not_yours, why}}`.
   """
-  def send_back(%Thread{} = thread, to, why, by) do
+  def send_back(%Thread{} = thread, to, why, by, opts \\ []) do
+    unqueue? = Keyword.get(opts, :unqueue, false)
+
     allowed = fn locked ->
       with :ok <- movable(locked),
-           :ok <- not_in_flight(locked),
+           :ok <- not_in_flight(locked, unqueue?),
            :ok <- behind(locked, to),
-           do: may_send_back(locked, to, by)
+           :ok <- may_send_back(locked, to, by),
+           do: pull_landing(locked, unqueue?)
     end
 
     move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by), allowed, by)
@@ -1921,24 +1927,56 @@ defmodule Server.Workline do
   defp movable(%Thread{state: "open", stage: stage}) when stage in ~w(plan build verify review), do: :ok
   defp movable(%Thread{stage: stage}), do: {:error, {:not_movable, stage}}
 
-  defp not_in_flight(thread) do
-    queues =
-      Repo.all(
-        from j in Oban.Job,
-          where:
-            j.queue in ["verify", "landing"] and j.state in ["available", "scheduled", "executing", "retryable"] and
-              fragment("?->>'thread_id'", j.args) == ^to_string(thread.id),
-          select: j.queue
-      )
+  # With `unqueue?` only a verify or a landing already executing blocks; a landing still waiting its
+  # turn is `cancel_landings/1`'s to pull.
+  defp not_in_flight(thread, unqueue?) do
+    blocking =
+      thread
+      |> in_flight_jobs(["available", "scheduled", "executing", "retryable"])
+      |> Enum.filter(fn {queue, state, _id} -> not unqueue? or queue == "verify" or state == "executing" end)
 
-    case queues do
+    case blocking do
       [] ->
         :ok
 
-      [q | _] ->
+      [{q, _, _} | _] ->
         {:error,
          {:in_flight, "its #{if q == "verify", do: "verify", else: "landing"} is queued or running; let it finish"}}
     end
+  end
+
+  defp in_flight_jobs(thread, states) do
+    Repo.all(
+      from j in Oban.Job,
+        where:
+          j.queue in ["verify", "landing"] and j.state in ^states and
+            fragment("?->>'thread_id'", j.args) == ^to_string(thread.id),
+        select: {j.queue, j.state, j.id}
+    )
+  end
+
+  defp pull_landing(_thread, false), do: :ok
+  defp pull_landing(thread, true), do: cancel_landings(thread)
+
+  # Inside move_back's transaction, under the thread row's lock. The one window left: a landing that
+  # starts executing between not_in_flight's select and this cancel — Land takes the same row lock
+  # (`Server.Jobs.Land.perform/1`), so it waits on us, then finds the thread moved and does nothing.
+  defp cancel_landings(thread) do
+    thread
+    |> in_flight_jobs(["available", "scheduled", "retryable"])
+    |> Enum.reduce_while(:ok, fn
+      {"landing", _state, id}, :ok ->
+        case Server.Jobs.cancel(id) do
+          :ok ->
+            {:cont, :ok}
+
+          {:error, why} ->
+            {:halt, {:error, {:in_flight, "its landing is queued and can't be pulled here: #{inspect(why)}"}}}
+        end
+
+      _verify, :ok ->
+        {:cont, :ok}
+    end)
   end
 
   # the review approved the code it read (its verdict's `sha`): code committed after it goes back
