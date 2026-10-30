@@ -65,7 +65,10 @@ defmodule Server.MCP.Tool.DriveSmoke do
   alias Server.Smoke
 
   schema do
-    field :keys, {:list, :string}, required: true, description: ~s(office:drive steps, e.g. ["wait:HOME", "/", "Enter"])
+    field :keys, {:list, :string},
+      required: true,
+      description:
+        ~s(office:drive steps, e.g. ["wait:HOME", "/", "Enter"]; "ticks:N" lets N ticks pass and lists every balloon seen)
 
     field :thread_id, :integer,
       description: "The workline you QA (its #id), when your session is bound to another thread"
