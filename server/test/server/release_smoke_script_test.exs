@@ -235,7 +235,7 @@ defmodule Server.ReleaseSmokeScriptTest do
     test "a holder that is gone (no such pid, nothing on its url, an old record) is reclaimed, not refused",
          %{tmp: tmp, root: root} = ctx do
       # above PID_MAX_LIMIT: a pid no process can hold
-      stale_lock(tmp, root, "pid 9999999 on http://127.0.0.1:4777\n")
+      stale_lock(tmp, root, "pid 9999999 on http://127.0.0.1:#{free_port()}\n")
 
       {out, _} = run_smoke(ctx, ["work/feature"])
 
