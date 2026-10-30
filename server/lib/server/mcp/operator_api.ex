@@ -67,8 +67,9 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/threads/:id/advance     Workline.advance (409 when it can't: not a workline, gated, …)
       POST   /api/threads/:id/approve     {"skip_qa"?} → Workline.approve: complete its parked gate; skip_qa
                                           (a reason) lands a review past an owed QA pass, recorded
-      POST   /api/threads/:id/send_back   {"stage", "why"} → Workline.send_back as the operator: back to
-                                          spec/plan/build on its own branch (400 without a why, 409 refused)
+      POST   /api/threads/:id/send_back   {"stage", "why", "unqueue"?} → Workline.send_back as the operator: back to
+                                          spec/plan/build on its own branch (400 without a why, 409 refused);
+                                          unqueue pulls a landing still waiting in the merge queue with it
       GET    /api/threads/:id/review      Workline.OperatorReview.diff: the branch's change as files, hunks, numbered lines
       POST   /api/threads/:id/review      {"verdict": comment|changes|approve, "summary"?, "notes"?: [{"path", "line"?, "side"?, "text"}]}
                                           → OperatorReview.submit as the operator: the notes to the lead; changes sends it back to build
@@ -563,7 +564,7 @@ defmodule Server.MCP.OperatorAPI do
       do:
         reply(
           conn,
-          Workline.send_back(t, b["stage"], b["why"], Server.OperatorConfig.operator()),
+          Workline.send_back(t, b["stage"], b["why"], Server.OperatorConfig.operator(), unqueue: b["unqueue"] == true),
           &thread_row/1
         ),
       else: json(conn, 400, %{error: "send_back takes a stage and a why"})
