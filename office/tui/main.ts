@@ -1324,7 +1324,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const tree = mode.col === 0 ? treeRows(a, expanded, levelOrder) : null
       const it = tree ? pick(tree, sel) : pick(items, sel), group = tree ? pick(tree, sel) : undefined
       const shown = tree ?? items
-      const reorder = (dir: "up" | "down"): Action => ({ ...bind(dir === "up" ? "column.K" : "column.J", `move ${dir}`), run: () => { if (it?.act.kind === "ticket") void did(data.ticketReorder(it.act.id, dir)).then(() => { sel = Math.max(0, Math.min(sel + (dir === "up" ? -1 : 1), shown.length - 1)); draw() }) } })
+      const reorder = (dir: "up" | "down"): Action => ({ ...bind(dir === "up" ? "column.K" : "column.J", `move ${dir}`), run: () => { if (it?.act.kind === "ticket") { const was = JSON.stringify(it.act); void did(data.ticketReorder(it.act.id, dir)).then(() => { const at = detail().rows.findIndex((r) => r.ref === was); sel = at >= 0 ? at : Math.max(0, Math.min(sel + (dir === "up" ? -1 : 1), shown.length - 1)); draw() }) } } })
       return {
         // tickets carry no owner, so the tree has no who order to name
         title: `${col.name} · ${mode.col === 0 ? openTotal(a, items.length) : items.length}${colSort.name === "board" || (tree && colSort.name === "who") ? "" : ` · by ${colSort.name}`}`,
