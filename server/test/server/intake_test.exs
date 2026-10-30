@@ -83,7 +83,7 @@ defmodule Server.IntakeTest do
     assert hd(Tickets.in_workspace(ws.id)).id == step1.id
     assert Intake.next(ws.id).id == step1.id
 
-    :ok = Tickets.reorder(step2, :up)
+    :moved = Tickets.reorder(step2, :up)
     assert hd(Tickets.in_workspace(ws.id)).id == step2.id
 
     Intake.run(cap: 4, route: route)

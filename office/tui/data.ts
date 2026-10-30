@@ -326,7 +326,7 @@ export const deleteThread = (id: number) => send("DELETE", `deleting #${id}`, `/
 
 export const ticketPatch = (id: number, patch: { status?: string; title?: string; body?: string }) => send("PATCH", `changing #${id}`, `/tickets/${id}`, (j) => `#${id} ${j.status}`, patch)
 export const ticketDelete = (id: number) => send("DELETE", `deleting #${id}`, `/tickets/${id}`, () => `ticket #${id} deleted`)
-export const ticketReorder = (id: number, direction: "up" | "down") => write(`moving #${id}`, `/tickets/${id}/reorder`, { direction }, () => `#${id} moved ${direction}`)
+export const ticketReorder = (id: number, direction: "up" | "down") => write(`moving #${id}`, `/tickets/${id}/reorder`, { direction }, (j) => j.moved ? `#${id} moved ${direction}` : `#${id} has no sibling to swap with`)
 export const ticketBlock = (id: number, by: number) => write(`blocking #${id}`, `/tickets/${id}/blockers`, { by }, () => `#${id} blocked by #${by}`)
 export const ticketUnblock = (id: number, by: number) => send("DELETE", `unblocking #${id}`, `/tickets/${id}/blockers/${by}`, () => `#${id} no longer blocked by #${by}`)
 
