@@ -1,0 +1,10 @@
+**approve** — no free reviewer is at the builder's grade (greybeard); reviewed by tzinacan (sonnet-5-5). I read the diff; I did not run the tests.
+
+Right then: the shape is sound. One function takes `unqueue:`, and the tool, the API and the cli pass it through. The cancel happens inside move_back's transaction under the thread row lock, so nothing is left for `requeue_stranded/0` to find. A verify and a running landing still refuse. The docs (server/AGENTS.md, the operator_api moduledoc, the cli usage) change with the code. The tests cover pulling a queued landing, an executing landing, a verify, a refused send-back pulling nothing, the cancel rolling back with the transaction, and re-enqueue after a pull.
+
+I read `cancel_landings` and Land's perform, not ran them. `cancel_landings` re-selects only available, scheduled and retryable jobs, so a landing that flips to executing mid-call is left alone. Land's perform then waits on the row lock and finds the thread moved. The comment in `cancel_landings` says Land "takes the same row lock". That is true, but Land's own comment says the lock only orders its read and is released before `land/5`. So it narrows the window rather than guarding it. That is fine here, because executing jobs are excluded from the cancel.
+
+Follow-ups, none blocking:
+- A queued landing can be riding another job's merge train. `Jobs.Land.companions/2` picks available and scheduled jobs. `unqueue` cancels that thread's own job, but the thread may already be a car in an executing train. `not_in_flight` looks only at the thread's own job states. Check whether `land_train` re-reads each car's stage. This shape already existed, and `unqueue` makes it reachable on purpose.
+- `Server.Jobs.cancel/1` returns `{:error, :no_oban}` when Oban is down. That surfaces as an `in_flight` refusal with an `inspect`ed atom. It is tolerable; a plainer message would read better.
+- plan.md and pr.md are committed under `work/<slug>/`. I assume that is the workline convention.
