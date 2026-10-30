@@ -114,7 +114,7 @@ defmodule Server.Office.CorkboardTest do
         Application.delete_env(:server, :banter_cmd)
         Application.put_env(:server, :souls_dir, Path.join(System.tmp_dir!(), "tlon-test-souls-unset"))
         Application.delete_env(:server, :generator_daily_cap)
-        File.rm_rf!(dir)
+        File.rm_rf(dir)
       end)
 
       start_supervised!(Corkboard)
