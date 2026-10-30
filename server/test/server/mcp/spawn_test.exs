@@ -207,6 +207,45 @@ defmodule Server.MCP.SpawnTest do
       refute File.exists?(Path.join(wt, ".git"))
     end
 
+    test "a refused join leaves the thread's agent as it was: a new lead, a replaced lead" do
+      %{repo: repo, ws: ws, project: p} = Server.TestRepoDir.with_project()
+      {:ok, thread} = Channel.open_thread(%{title: "stale", workspace_id: ws.id, project_id: p.id})
+      wt = Server.Worktree.path(repo, "t#{thread.id}")
+      File.mkdir_p!(Path.join(wt, "work/x"))
+      before = Repo.get(Thread, thread.id).agent_id
+
+      assert {:error, {:not_a_checkout, ^wt}} = Spawn.join(thread.id, "codex", assign: true)
+      assert Repo.get(Thread, thread.id).agent_id == before
+      refute Staff.agent_by_name("codex") && Repo.get(Thread, thread.id).agent_id == Staff.agent_by_name("codex").id
+    end
+
+    test "a refused env leaves no open thread behind" do
+      {:ok, ws} = Server.Bootstrap.ensure()
+      dir = Path.join(System.tmp_dir!(), "not-a-repo-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+
+      {:ok, _} =
+        Server.Projects.register(%{workspace_id: ws.id, name: "plain", repos: [%{"name" => "r", "path" => dir}]})
+
+      title = "refused-env-#{System.unique_integer([:positive])}"
+
+      assert {:error, _} = Spawn.env(title, "codex")
+      refute Repo.get_by(Thread, title: title, state: "open")
+    end
+
+    test "a repo thread whose worktree fails any other way is refused, not started with no cwd" do
+      %{ws: ws, project: p} = Server.TestRepoDir.with_project()
+      dir = Path.join(System.tmp_dir!(), "not-a-repo-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+      {:ok, thread} = Channel.open_thread(%{title: "broken", workspace_id: ws.id, project_id: p.id})
+      {:ok, thread} = thread |> Ecto.Changeset.change(repo: dir) |> Repo.update()
+      assert {:error, :not_a_repo} = Server.worktree_for_thread(thread)
+
+      assert {:error, _} = Spawn.join(thread.id, "codex")
+    end
+
     test "an outside citizen's pane starts in the repo's main checkout: no worktree of its own to strand" do
       %{repo: repo, ws: ws} = Server.TestRepoDir.with_project()
       {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
@@ -256,9 +295,10 @@ defmodule Server.MCP.SpawnTest do
     } do
       {:ok, ws} = Server.Workspaces.register(%{name: "rd"})
       [b, c] = for n <- ~w(b c), do: seed_dir(dir, n, 1)
+      own = git_repo(dir, "own")
 
       repos = [
-        %{"name" => "a", "path" => "/nonexistent/a"},
+        %{"name" => "a", "path" => own},
         %{"name" => "b", "path" => b},
         %{"name" => "c", "path" => c}
       ]
@@ -276,7 +316,13 @@ defmodule Server.MCP.SpawnTest do
       [a, b] = for n <- ~w(a b), do: seed_dir(dir, n, 40)
 
       {:ok, ws} = Server.Workspaces.register(%{name: "rd-drop"})
-      repos = [%{"name" => "own", "path" => "/p/own"}, %{"name" => "a", "path" => a}, %{"name" => "b", "path" => b}]
+
+      repos = [
+        %{"name" => "own", "path" => git_repo(dir, "own")},
+        %{"name" => "a", "path" => a},
+        %{"name" => "b", "path" => b}
+      ]
+
       {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "drop", repos: repos})
       {:ok, thread} = Channel.open_thread(%{title: "rd", workspace_id: ws.id, project_id: p.id})
 
@@ -311,6 +357,29 @@ defmodule Server.MCP.SpawnTest do
       assert {:error, {:no_thread, 999_999}} = Spawn.mint_for(999_999, "claude-code")
       assert {:error, {:no_agent, "ghost"}} = Spawn.mint_for(t.id, "ghost")
     end
+  end
+
+  defp git_repo(root, name) do
+    dir = Path.join(root, name)
+    File.mkdir_p!(dir)
+    {_, 0} = System.cmd("git", ["init", "-q", "-b", "main", dir])
+
+    {_, 0} =
+      System.cmd("git", [
+        "-C",
+        dir,
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "init"
+      ])
+
+    dir
   end
 
   defp seed_dir(root, name, n) do

@@ -97,8 +97,11 @@ defmodule Server.MCP.Spawn do
   end
 
   defp mint_and_export(thread_ref, agent_name, opts) do
-    with {:ok, %{thread: thread, agent: agent}} <- ensure(thread_ref, agent_name, opts),
-         {:ok, cwd} <- cwd_export(thread, agent) do
+    with {:ok, thread} <- resolve_thread(thread_ref, opts),
+         {:ok, agent} <- ensure_agent(agent_name, opts),
+         {:ok, dir} <- checkout_or_close(thread_ref, thread, agent),
+         {:ok, thread} <- maybe_assign(thread, agent, opts) do
+      cwd = cwd_export(thread, agent, dir)
       token = Tokens.mint(thread, agent)
 
       {:ok,
@@ -108,6 +111,14 @@ defmodule Server.MCP.Spawn do
          token: token,
          exports: exports(thread, agent, token) <> cwd <> lobby_export(thread)
        }}
+    end
+  end
+
+  # A refused checkout must leave nothing staffed; a thread this very call opened is closed too.
+  defp checkout_or_close(thread_ref, thread, agent) do
+    with {:error, _} = refused <- checkout_for(thread, agent) do
+      if match?({:open, _}, thread_ref), do: Channel.close_thread(thread)
+      refused
     end
   end
 
@@ -175,29 +186,33 @@ defmodule Server.MCP.Spawn do
   # The thread's worktree, ensured now, for the boot script to cd into — a coworker never writes in
   # the main tree (2026-09-08). An outside citizen starts in the repo itself, as the operator's own
   # sessions do, and makes its own scratch worktrees. No repo exports nothing; the pane starts wherever.
-  # A worktree dir that is not a checkout is refused: git there would fall up to the live main tree.
-  # Only the thread's lead catches its checkout up. The switchboard's wake spawn joins the lead with
-  # `assign: false` (it never re-seats), so `:assign` is not the tell; a rider (a crew pane, a reviewer
-  # window) is not the lead and joins while the lead's pane is mid-turn, where a move must never land.
-  defp cwd_export(thread, agent) do
+  # Any worktree failure on a repo thread is refused (a worktree dir that is not a checkout would
+  # fall git up to the live main tree); only a thread with no repo exports nothing. It runs before
+  # the assign, so a refusal staffs nothing.
+  defp checkout_for(thread, agent) do
     dir =
       if agent.name in Server.Outside.names(),
         do: Server.repo_for_thread(thread),
         else: Server.worktree_for_thread(thread)
 
     case dir do
-      {:ok, path} ->
-        if agent.id == thread.agent_id and agent.name not in Server.Outside.names(),
-          do: Server.catch_up_worktree(thread, path)
-
-        {:ok, "\nexport TLON_CWD=\"#{path}\""}
-
-      {:error, {:not_a_checkout, _} = refused} ->
-        {:error, refused}
-
-      {:error, _} ->
-        {:ok, ""}
+      {:ok, path} -> {:ok, path}
+      {:error, :no_repo} -> {:ok, nil}
+      {:error, _} = refused -> refused
     end
+  end
+
+  # Only the thread's lead catches its checkout up, so this follows the assign. The switchboard's wake
+  # spawn joins the lead with `assign: false` (it never re-seats), so `:assign` is not the tell; a rider
+  # (a crew pane, a reviewer window) is not the lead and joins while the lead's pane is mid-turn, where
+  # a move must never land.
+  defp cwd_export(_thread, _agent, nil), do: ""
+
+  defp cwd_export(thread, agent, path) do
+    if agent.id == thread.agent_id and agent.name not in Server.Outside.names(),
+      do: Server.catch_up_worktree(thread, path)
+
+    "\nexport TLON_CWD=\"#{path}\""
   end
 
   # The project's other repos, for the harness to open read-only beside the worktree. Dirs the shared
