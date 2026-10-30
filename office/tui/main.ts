@@ -2151,7 +2151,7 @@ function draw() {
   if (building) {
     frame = renderHome({ top: build!.top, home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(needs), frames: streakFrames(lifeCard?.streaks ?? {}), bed: bedScene(lifeCard?.today ?? [], Date.now()) })
     imageDirty = true
-  } else if (fresh || roomChanged) { frame = room0.render(a, { picked: lit ?? picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx(), machine: bySurface.counts.machine, clipboard: bySurface.clipboard.filter((n) => n.workspace_id == null || n.workspace_id === ws) }, measureFor(g), world?.now()); roomChanged = false }
+  } else if (fresh || roomChanged) { frame = room0.render(a, { picked: lit ?? picked, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx(), machine: bySurface.counts.machine, clipboard: bySurface.clipboard.filter((n) => n.workspace_id == null || n.workspace_id === ws) }, measureFor(g), world?.now()); roomChanged = false }
   const seen = clipFrame(frame!, vp)
   if (!building) addMargin(seen, vp)
   if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(seen, g, vp); sentImage = true; imageDirty = false }

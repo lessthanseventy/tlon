@@ -9,7 +9,7 @@ import { WideRoom } from "../rooms/wide"
 export const GOLDEN = new URL("./golden.json", import.meta.url).pathname
 
 export const measure = (s: string) => s.length * 2
-export const focus = { picked: null, armed: null, person: null }
+export const focus = { picked: null, person: null }
 
 /** run `f` with Math.random seeded (mulberry32), so a test of the room's chance is the same every run */
 export function seeded<T>(seed: number, f: () => T): T {

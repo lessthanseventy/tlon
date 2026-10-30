@@ -34,7 +34,7 @@ describe("the light follows the clock", () => {
   })
 })
 
-const focus = { picked: null, armed: null, person: null }
+const focus = { picked: null, person: null }
 const measure = (s: string) => s.length * 2
 const at = (hour: number) => new Date(2026, 2, 6, hour, 0)
 const lum = (rgba: Uint8Array) => { let s = 0; for (let i = 0; i < rgba.length; i += 4) s += rgba[i]! + rgba[i + 1]! + rgba[i + 2]!; return s / (rgba.length / 4) }

@@ -31,10 +31,10 @@ describe("picking a person brackets that person", () => {
     test(`${name}: a picked person is bracketed alone, a picked thread brackets everyone on it`, () => {
       const room = make(), a = viewOf(shared(), 1)
       for (let i = 0; i < 400; i++) room.step(a)
-      const one = room.render(a, { picked: 102, armed: null, person: "w0" }, measure)
+      const one = room.render(a, { picked: 102, person: "w0" }, measure)
       expect(one.ink.filter((i) => i.t === "brackets").length).toBe(1)
       expect(bracketed(one)).toEqual(["w0"])
-      const both = room.render(a, { picked: 102, armed: null, person: null }, measure)
+      const both = room.render(a, { picked: 102, person: null }, measure)
       expect(bracketed(both)).toEqual(["w0", "w1"])
     })
   }

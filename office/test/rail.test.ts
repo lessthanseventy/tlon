@@ -4,7 +4,7 @@ import { EMPTY, type Agents } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 
 const measure = (s: string) => s.length * 2
-const focus = { picked: null, armed: null, person: null }
+const focus = { picked: null, person: null }
 
 /** a workspace with a manager, a lead and `grunts` builders, all at work */
 function office(grunts: number): Agents {

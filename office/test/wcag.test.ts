@@ -29,7 +29,7 @@ function labels(room: RailRoom | WideRoom, w: number, h: number, cell: { w: numb
   const g = geometry(w, h, cols, rows, 17, cell, true), a = viewOf(office(), 1)
   for (let i = 0; i < 300; i++) room.step(a)
   room.say("yu", "a reply to you")
-  const fr = room.render(a, { picked: 101, armed: null, person: null }, measureFor(g), now)
+  const fr = room.render(a, { picked: 101, person: null }, measureFor(g), now)
   const bw = fr.width * g.k, bh = fr.height * g.k, big = new Uint8Array(bw * bh * 4)
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) big.set(fr.rgba.subarray(((Math.floor(y / g.k) * fr.width) + Math.floor(x / g.k)) * 4, ((Math.floor(y / g.k) * fr.width) + Math.floor(x / g.k)) * 4 + 4), (y * bw + x) * 4)
   const vw = Math.min(g.floorW, (g.cols * g.cw) / g.k), vh = Math.min(g.floorH, (g.rows * g.ch) / g.k)
@@ -92,7 +92,7 @@ describe("WCAG 1.4.8-ish: labels don't overprint each other", () => {
     for (const [w, ch, cols] of [[540, 18, 135], [696, 18, 174], [900, 18, 225], [720, 27, 120], [696, 27, 174], [640, 36, 120], [600, 45, 120]] as const) {
       const g = geometry(w, WIDE_H, cols, 51, 17, { w: Math.round((ch * 8) / 18), h: ch }, true), a = viewOf(office(), 1), room = new WideRoom(w)
       for (let i = 0; i < 300; i++) room.step(a)
-      const zoom = textScale(g), boxes = room.render(a, { picked: 101, armed: null, person: null }, measureFor(g)).ink.flatMap((i) => {
+      const zoom = textScale(g), boxes = room.render(a, { picked: 101, person: null }, measureFor(g)).ink.flatMap((i) => {
         if (i.t !== "text") return []
         const { font, sc } = typeFor(i.size, zoom), tw = i.s.length * font.w * sc, x = i.align === "center" ? i.x * g.k - tw / 2 : i.x * g.k, base = i.y * g.k - sc
         return [{ s: i.s, x0: x, x1: x + tw - sc, y0: base - font.ascent * sc, y1: base + (font.h - font.ascent) * sc }]

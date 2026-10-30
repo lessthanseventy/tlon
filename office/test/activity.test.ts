@@ -8,7 +8,7 @@ import { viewOf } from "../kit/crew"
 
 // the server's `presence_doing` kinds (Server.MCP.Tool.PresenceDoing), and a turn between tools
 const KINDS = ["think", "read", "edit", "bash", "search", "web", "test", "delegate"]
-const focus = { picked: null, armed: null, person: null }
+const focus = { picked: null, person: null }
 
 function frame(doing: string | null, tick = 0, extra: Partial<Actor> = {}) {
   const sc = new Scene(48, 48, tick)
