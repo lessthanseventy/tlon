@@ -520,7 +520,7 @@ defmodule Server.Office.NeedsTest do
       assert text =~ "treviranus: QA is blocked"
     end
 
-    defp deny(t, n) do
+    defp deny(t, n, agent \\ "nolan") do
       for _ <- 1..n do
         {:ok, _} =
           Server.Dossier.record_event(%{
@@ -528,7 +528,7 @@ defmodule Server.Office.NeedsTest do
             kind: "tool_denied",
             correlation: "tool_denied:#{t.id}",
             detail: %{
-              "agent" => "nolan",
+              "agent" => agent,
               "tool" => "Bash",
               "summary" => "Bash · mise run release:smoke",
               "command" => "mise run release:smoke",
@@ -697,6 +697,19 @@ defmodule Server.Office.NeedsTest do
       Process.sleep(1100)
       {:ok, _} = Channel.post(%{thread_id: t.id, author: "someone-else", body: "chatter"})
       assert [%{kind: "tool_denied"}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
+    end
+
+    test "a seat refused in an earlier round posting does not clear the current round's item", %{ws: ws} do
+      t = workline(ws, "build", 3)
+      deny(t, 2, "emma")
+      Process.sleep(1100)
+      {:ok, _} = Server.Dossier.record_event(%{thread_id: t.id, kind: "stage_advanced", detail: %{}})
+      Process.sleep(1100)
+      deny(t, 2, "nolan")
+      Process.sleep(1100)
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "emma", body: "answering an @mention"})
+      assert [%{kind: "tool_denied", text: text}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
+      assert text =~ "nolan"
     end
 
     test "a workline blocked on an open ticket is not stalled; the ticket's one item says why", %{ws: ws} do
