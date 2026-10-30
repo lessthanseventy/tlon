@@ -9,7 +9,7 @@ defmodule Server.Workline.Publish do
   head. A repo with no `origin` is `:none` — nothing to publish to.
   """
 
-  # GitHub takes a PR title of 256 characters at most: the thread title's first line, cut on a word
+  # GitHub takes a PR title of 256 characters at most: the thread title's first non-blank line, cut on a word
   # with an ellipsis. The full title then heads the body, so no reader loses any of it.
   @pr_title_max 256
 
@@ -23,7 +23,7 @@ defmodule Server.Workline.Publish do
   def publish(repo, slug, title, run \\ &System.cmd/3, landing \\ []) do
     branch = "work/#{slug}"
     opts = [cd: repo, stderr_to_stdout: true]
-    pr_title = pr_title(title)
+    pr_title = pr_title(title, slug)
 
     with {_, 0} <- run.("git", ["-C", repo, "remote", "get-url", "origin"], opts),
          {:push, :ok} <- {:push, replace_branch(repo, branch, run)},
@@ -406,9 +406,15 @@ defmodule Server.Workline.Publish do
     end
   end
 
-  defp pr_title(title) do
-    line = title |> String.split("\n", parts: 2) |> hd() |> String.trim()
-    if String.length(line) <= @pr_title_max, do: line, else: cut_title(line)
+  defp pr_title(title, slug) do
+    title
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> case do
+      [] -> slug
+      [line | _] -> if String.length(line) <= @pr_title_max, do: line, else: cut_title(line)
+    end
   end
 
   defp cut_title(line) do
