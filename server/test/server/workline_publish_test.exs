@@ -126,6 +126,35 @@ defmodule Server.WorklinePublishTest do
              Publish.publish("/repo", "tiles", "Floor step 1", run)
   end
 
+  describe "the PR's title — GitHub takes 256 characters at most" do
+    defp title_arg(args), do: args |> Enum.drop_while(&(&1 != "--title")) |> Enum.at(1)
+
+    test "a thread title over 256 characters is cut to fit, on a word, and the full title heads the body" do
+      long = String.duplicate("sheriff incident report word ", 16) <> "end"
+      assert String.length(long) > 256
+
+      pr = {&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}
+      assert {:ok, _} = Publish.publish("/repo", "tiles", long, runner([pr]))
+      assert_received {:ran, ["gh", "pr", "create" | args]}
+
+      title = title_arg(args)
+      assert String.length(title) <= 256
+      assert String.ends_with?(title, "…")
+      assert String.starts_with?(long, String.trim_trailing(title, "…"))
+
+      body = args |> Enum.drop_while(&(&1 != "--body")) |> Enum.at(1)
+      assert String.starts_with?(body, long)
+    end
+
+    test "a title already within 256 characters goes through unchanged, with no repeat in the body" do
+      pr = {&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}
+      assert {:ok, _} = Publish.publish("/repo", "tiles", "Floor step 1", runner([pr]))
+      assert_received {:ran, ["gh", "pr", "create" | args]}
+      assert title_arg(args) == "Floor step 1"
+      refute args |> Enum.drop_while(&(&1 != "--body")) |> Enum.at(1) |> String.starts_with?("Floor step 1\n")
+    end
+  end
+
   describe "the PR's body — what a reader of the PR needs, from the branch itself" do
     defp git_show(name, text), do: {&match?(["git", _, _, "show", "work/tiles:work/tiles/" <> ^name], &1), {text, 0}}
     defp git_log(text), do: {&match?(["git", _, _, "log" | _], &1), {text, 0}}
