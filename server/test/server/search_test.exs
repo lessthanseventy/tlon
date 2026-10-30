@@ -166,6 +166,52 @@ defmodule Server.SearchTest do
       Task.await(holder)
     end
 
+    # The lock is taken once the query before the one under test has returned, so only that query waits;
+    # it is let go as that query returns (or after 300ms), so an unbounded query finishes (red) rather
+    # than hang, and no later query is the one that times out.
+    for {name, after_sql, until_sql, around} <- [
+          {"details", "SELECT id, embedding", "ts_headline", 0},
+          {"window", "ts_headline", "UNION ALL", 1}
+        ] do
+      test "the #{name} query is bounded by the timeout: passed to history/3", %{thread: thread} do
+        {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "ticket review"})
+        test = self()
+        id = {__MODULE__, make_ref()}
+
+        :telemetry.attach(
+          id,
+          [:server, :repo, :query],
+          fn _, _, meta, _ ->
+            cond do
+              String.contains?(meta.query, unquote(after_sql)) ->
+                {:ok, holder} =
+                  Task.start(fn ->
+                    Repo.transaction(fn ->
+                      Repo.query!("LOCK TABLE message IN ACCESS EXCLUSIVE MODE")
+                      send(test, :locked)
+                      receive do: (:release -> :ok), after: (300 -> :ok)
+                    end)
+                  end)
+
+                Process.put(:holder, holder)
+                assert_receive :locked
+
+              String.contains?(meta.query, unquote(until_sql)) ->
+                send(Process.get(:holder), :release)
+
+              true ->
+                :ok
+            end
+          end,
+          nil
+        )
+
+        result = Search.history("ticket review", 10, timeout: 50, around: unquote(around))
+        :telemetry.detach(id)
+        assert {:error, :timeout} = result
+      end
+    end
+
     test "an empty/whitespace query returns nothing, not an error" do
       assert %{shown: [], more: 0} = Search.history("   ")
     end
