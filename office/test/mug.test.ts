@@ -4,7 +4,7 @@ import type { Actor } from "../kit/sim"
 import { lookOf } from "../kit/sprites"
 import { EMPTY } from "../kit/types"
 
-const focus = { picked: null, armed: null, person: null }
+const focus = { picked: null, person: null }
 
 // the columns where a carried mug changes the frame, against the same frame without it
 function mugColumns(face: Actor["face"], moving: boolean) {

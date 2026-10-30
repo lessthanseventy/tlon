@@ -10,7 +10,7 @@ import { EVENT_KINDS } from "../kit/events"
 import { WideRoom, widePlan } from "../rooms/wide"
 import { DOOR, RIM_FLOOR } from "../kit/bathroom"
 
-const focus = { picked: null, armed: null, person: null }
+const focus = { picked: null, person: null }
 const measure = (s: string) => s.length * 2
 
 /** run `f` with Math.random fixed at `r`: every chance taken (0), or none (0.999) */

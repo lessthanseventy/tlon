@@ -168,8 +168,6 @@ export class RailRoom extends Sim<Layout> {
     // a header opens the column it is named for
     const folded = boardColumns(a, focus.board)
     const cols: Sticky[][] = folded.map((col, c) => c === 0 ? stickyItems(a).map((s): Sticky => ({ tip: s.text, act: s.act, colour: ROLE.prose })) : col.items.map((it): Sticky => {
-      if (it.act.kind === "ticket")
-        return { tip: `ticket #${it.act.id} ${it.title}\n${it.routed ? "with the manager to staff" : "click: send to the manager, or click a coworker to hand it over"}`, act: it.act, colour: it.routed ? ROLE.meta : ROLE.prose, mark: it.high ? ROLE.alarm : undefined, blink: it.act.id === focus.armed }
       const id = it.act.kind === "thread" ? it.act.tid : 0
       const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""
       return { tip: `#${id} ${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act, colour: it.who ? shirtOf(it.archetype) : ROLE.inactive, mark: it.stage === "doing" ? ROLE.assistant : undefined, blink: it.asks }
