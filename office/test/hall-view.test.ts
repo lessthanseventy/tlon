@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { roll } from "../kit/hall"
 import { SLOTS } from "../kit/parts"
-import { hallRows, stepRow, HALL_ROWS } from "../tui/hall"
+import { hallRows, lookHint, stepRow, HALL_ROWS } from "../tui/hall"
 
 const VOCAB = { archetypes: ["builder", "reviewer"], grades: ["junior", "senior"], specialties: ["office", "server"] }
 const cand = () => roll("hall:3", { taken: [], vocab: VOCAB })
@@ -41,4 +41,9 @@ test("the soul has a row of its own, last, that says what it holds and is not lo
   expect(last.lock).toBeNull()
   expect(text(last)).toContain("soul")
   expect(text(hallRows({ ...cand(), soul: "## Wants\nsleep\n" }, {}).at(-1)!)).toContain("sleep")
+})
+
+test("the look card's hint says where the look goes: the room, or the candidate until hired", () => {
+  expect(lookHint(false)).toBe("look at the room — a saved change shows there live, with no restart")
+  expect(lookHint(true)).toBe("the look is kept on the candidate and written to looks.json when they're hired")
 })

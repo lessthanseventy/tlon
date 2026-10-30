@@ -34,7 +34,7 @@ import { bedScene, lifeHeader, lifeRows, streakFrames } from "../kit/life"
 import { usageHeader } from "../kit/usage"
 import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
 import { BLANK_SOUL, bringBack, candidateOf, dropPile, drawSoul, editField, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, setLook, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
-import { hallRows, stepRow, type RowEdit } from "./hall"
+import { hallRows, lookHint, stepRow, type RowEdit } from "./hall"
 import { castSignature, loadCast, saveCast, setTrait, type Cast } from "../kit/cast"
 import { CAST_FIELDS, castRows, nextTrait, rerollTrait } from "./cast"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, storeNamesTaken, toggleLock as storeToggle, type Store } from "../kit/store"
@@ -1922,7 +1922,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const draft = (lookDraft ??= m.hall ? structuredClone(candidateOf(hall, hallCtx()).look) : { ...baseLook(name), ...overrideFor(name) })
       const field = (label: string, value: string, cycle: () => void): Row => ({ segs: [dim(label.padEnd(12)), plain(value)], open: () => { cycle(); draw() } })
       const rows: Row[] = [
-        { segs: [dim("look at the room — a saved change shows there live, with no restart")] },
+        { segs: [dim(lookHint(!!m.hall))] },
         field("hair", draft.hair ?? "", () => { draft.hair = cycleVal(HAIR_STYLES, draft.hair!) }),
         field("hair colour", draft.hairRole ?? "", () => { draft.hairRole = cycleVal(HAIR_ROLES, draft.hairRole!) }),
         field("skin", draft.skinRole ?? "default", () => { draft.skinRole = cycleOpt(SKIN_ROLES, draft.skinRole) }),
