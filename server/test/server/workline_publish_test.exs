@@ -153,6 +153,20 @@ defmodule Server.WorklinePublishTest do
       assert title_arg(args) == "Floor step 1"
       refute args |> Enum.drop_while(&(&1 != "--body")) |> Enum.at(1) |> String.starts_with?("Floor step 1\n")
     end
+
+    test "a title whose first line is blank takes the first non-blank line, not an empty --title" do
+      pr = {&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}
+      assert {:ok, _} = Publish.publish("/repo", "tiles", "\n  \nFloor step 1\nmore", runner([pr]))
+      assert_received {:ran, ["gh", "pr", "create" | args]}
+      assert title_arg(args) == "Floor step 1"
+    end
+
+    test "a title that is blank throughout takes the slug, not an empty --title" do
+      pr = {&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}
+      assert {:ok, _} = Publish.publish("/repo", "tiles", " \n\n ", runner([pr]))
+      assert_received {:ran, ["gh", "pr", "create" | args]}
+      assert title_arg(args) == "tiles"
+    end
   end
 
   describe "the PR's body — what a reader of the PR needs, from the branch itself" do
