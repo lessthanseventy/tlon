@@ -37,12 +37,20 @@ defmodule Mix.Tasks.Server.Eval do
     System.put_env("TLON_DATABASE", eval_db)
     Mix.Task.run("ecto.drop", ["--quiet", "--force-drop"])
     Mix.Task.run("ecto.create", ["--quiet"])
-    Mix.Task.run("ecto.migrate", ["--quiet"])
-    Mix.Task.run("app.start")
-    Logger.configure(level: :warning)
 
-    report = "evals" |> Server.Eval.load() |> Server.Eval.run(mode: mode)
-    Mix.shell().info(Server.Eval.scorecard(report))
-    if !report.ok?, do: Mix.raise("server.eval failed")
+    # dropped again when the run ends, red or raised: the pid is fresh every run, so the drop above
+    # never finds the last run's database — without this each run left one behind (#556).
+    try do
+      Mix.Task.run("ecto.migrate", ["--quiet"])
+      Mix.Task.run("app.start")
+      Logger.configure(level: :warning)
+
+      report = "evals" |> Server.Eval.load() |> Server.Eval.run(mode: mode)
+      Mix.shell().info(Server.Eval.scorecard(report))
+      if !report.ok?, do: Mix.raise("server.eval failed")
+    after
+      Mix.Task.reenable("ecto.drop")
+      Mix.Task.run("ecto.drop", ["--quiet", "--force-drop"])
+    end
   end
 end
