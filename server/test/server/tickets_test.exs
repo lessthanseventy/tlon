@@ -411,6 +411,27 @@ defmodule Server.TicketsTest do
       assert :ok = Tickets.reorder(Tickets.get(a.id), :up)
       assert Tickets.get(a.id).sort == a.sort
     end
+
+    test "a reorder swaps only with a SIBLING: an epic's child never trades with a loose ticket or another epic's child",
+         %{workspace: ws} do
+      {:ok, epic_a} = Tickets.file(%{workspace_id: ws.id, title: "epic a", kind: "epic"})
+      {:ok, epic_b} = Tickets.file(%{workspace_id: ws.id, title: "epic b", kind: "epic"})
+      {:ok, a1} = Tickets.file(%{workspace_id: ws.id, title: "a1", epic_id: epic_a.id})
+      {:ok, loose} = Tickets.file(%{workspace_id: ws.id, title: "loose"})
+      {:ok, b1} = Tickets.file(%{workspace_id: ws.id, title: "b1", epic_id: epic_b.id})
+      {:ok, a2} = Tickets.file(%{workspace_id: ws.id, title: "a2", epic_id: epic_a.id})
+
+      # a1 sits between loose and b1 in the column, so its only sibling is a2, the last of them
+      assert :ok = Tickets.reorder(Tickets.get(a1.id), :down)
+      assert Tickets.get(a1.id).sort > Tickets.get(a2.id).sort
+      assert Tickets.get(loose.id).sort == loose.sort
+      assert Tickets.get(b1.id).sort == b1.sort
+
+      # a top-level ticket's siblings are the other top-level tickets, epics included
+      assert :ok = Tickets.reorder(Tickets.get(loose.id), :up)
+      assert Tickets.get(loose.id).sort == epic_b.sort
+      assert Tickets.get(a1.id).sort > Tickets.get(a2.id).sort
+    end
   end
 
   describe "Dossier.resolve_owned/2" do

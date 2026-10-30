@@ -540,15 +540,28 @@ defmodule Server.Tickets do
     end
   end
 
-  # The ticket immediately above (`:up` — the next LOWER sort) or below in the same column.
+  # The ticket immediately above (`:up` — the next LOWER sort) or below among its SIBLINGS: the same
+  # column and the same epic (a loose ticket's siblings are the loose tickets).
   defp neighbour(%Ticket{} = t, direction) do
     base = from(o in Ticket, where: o.workspace_id == ^t.workspace_id and o.status == ^t.status and o.id != ^t.id)
+    base = same_epic(base, epic_of(t.id))
 
     case direction do
       :up -> base |> where([o], o.sort < ^t.sort) |> order_by([o], desc: o.sort) |> limit(1) |> Repo.one()
       :down -> base |> where([o], o.sort > ^t.sort) |> order_by([o], asc: o.sort) |> limit(1) |> Repo.one()
     end
   end
+
+  defp same_epic(base, nil),
+    do: where(base, [o], o.id not in subquery(from l in TicketLink, where: l.kind == "parent", select: l.to_id))
+
+  defp same_epic(base, epic_id),
+    do:
+      where(
+        base,
+        [o],
+        o.id in subquery(from l in TicketLink, where: l.kind == "parent" and l.from_id == ^epic_id, select: l.to_id)
+      )
 
   # A new ticket joins the BOTTOM of its column: the column is a queue, and the work filed first
   # (a series' step 1 before its step 2) is taken first. Move one up to bring it sooner.
