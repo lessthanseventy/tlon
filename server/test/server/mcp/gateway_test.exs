@@ -464,6 +464,20 @@ defmodule Server.MCP.GatewayTest do
       assert {409, _} = post_json("/api/threads/#{wl.id}/send_back", %{stage: "build", why: "forward"})
     end
 
+    test "POST /api/threads/:id/send_back with unqueue pulls a queued landing with the move" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      {:ok, wl} = Server.Workline.open(%{title: "pull me", slug: "pull-me", stage: "review"})
+      job = %{thread_id: wl.id} |> Server.Jobs.Land.new() |> Server.Repo.insert!()
+
+      assert {409, _} = post_json("/api/threads/#{wl.id}/send_back", %{stage: "build", why: "a nit"})
+      assert Server.Repo.get!(Oban.Job, job.id).state == "available"
+
+      assert {200, %{"stage" => "build"}} =
+               post_json("/api/threads/#{wl.id}/send_back", %{stage: "build", why: "a nit", unqueue: true})
+
+      assert Server.Repo.get!(Oban.Job, job.id).state == "cancelled"
+    end
+
     test "a republish or a cut retried with nothing failed behind it is refused, not run" do
       {:ok, wl} = Server.Workline.open(%{title: "not landed", slug: "not-landed", stage: "review"})
       assert {409, %{"error" => why}} = post_json("/api/threads/#{wl.id}/republish", %{})
