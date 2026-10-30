@@ -109,6 +109,7 @@ defmodule Server.MCP.OperatorAPI do
       DELETE /api/repos/:id               Workspaces.remove_repo
       DELETE /api/workspaces/:id          Workspaces.remove (its threads move on; the last is refused)
       POST   /api/workspaces/:id/coworkers  {"name", "archetype", "model"?, "effort"?, "ask"?} → seat + retarget; 201
+      POST   /api/workspaces/:id/hire/draft  {"name", "archetype", "grade"?, "specialty"?} → Soul.preview: {soul, pitch, source}; nothing written, nobody seated
       PATCH  /api/workspaces/:id/coworkers/:agent_id  {"model"?, "effort"?, "ask"?} → Workspaces.retarget
       POST   /api/workspaces/:id/coworkers/:agent_id/persona  {"reroll"?} → its persona, made if none (Server.Persona)
       PATCH  /api/workspaces/:id/coworkers/:agent_id/persona  {"backstory"?, "voice"?, "quirks"?} → Persona.edit
@@ -1052,7 +1053,7 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
-  # a soul and pitch for a hire not yet made: nothing written, nobody seated (the hall's `s`)
+  # a soul and pitch for a hire not yet made: nothing written, nobody seated (the hall's `W`)
   defp draft_hire(conn, _ws) do
     case body(conn) do
       {%{"name" => name, "archetype" => arch} = b, conn} when is_binary(name) and is_binary(arch) ->
