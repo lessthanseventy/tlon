@@ -19,6 +19,7 @@ defmodule Server.Workline.Publish do
   def publish(repo, slug, title, run \\ &System.cmd/3, landing \\ []) do
     branch = "work/#{slug}"
     opts = [cd: repo, stderr_to_stdout: true]
+    title = pr_title(title)
 
     with {_, 0} <- run.("git", ["-C", repo, "remote", "get-url", "origin"], opts),
          {:push, :ok} <- {:push, replace_branch(repo, branch, run)},
@@ -389,4 +390,7 @@ defmodule Server.Workline.Publish do
          "origin/#{branch} moved since the server last pushed it (#{String.slice(pushed, 0, 7)} → #{String.slice(remote, 0, 7)}): a hand push, or GitHub moved it; the operator resolves it"}
     end
   end
+
+  # GitHub refuses a PR title over 256 characters; a sheriff incident's workline is titled with its whole report.
+  defp pr_title(title), do: if(String.length(title) > 256, do: String.slice(title, 0, 255) <> "…", else: title)
 end

@@ -32,6 +32,15 @@ defmodule Server.WorklinePublishTest do
                      ["gh", "pr", "merge", "https://github.com/o/r/pull/9", "--rebase", "--auto", "--delete-branch"]}
   end
 
+  test "a title over GitHub's 256 characters is cut to 256 and ends in an ellipsis" do
+    run = runner([{&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}])
+    assert {:ok, _} = Publish.publish("/repo", "tiles", String.duplicate("é", 300), run)
+
+    assert_received {:ran, ["gh", "pr", "create", "--head", "work/tiles", "--base", "main", "--title", title | _]}
+    assert String.length(title) == 256
+    assert String.ends_with?(title, "…")
+  end
+
   test "a landing its gate passed posts tlon/check on the sha it gated, so GitHub's required check is there" do
     run = runner([{&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}])
     assert {:ok, _} = Publish.publish("/repo", "tiles", "Floor step 1", run, gated: "abc123")
