@@ -63,6 +63,14 @@ defmodule Server.ReleaseSmokeScriptTest do
     assert out =~ "/api/office"
   end
 
+  # the scratch node reads its operator settings from a file of its own, never the operator's
+  test "the scratch node starts with TLON_CONFIG under its build dir, not the operator's config" do
+    script = File.read!(@script)
+
+    assert script =~
+             ~r/TLON_NODE="tlon-smoke-\$port@127\.0\.0\.1"[\s\S]*?TLON_CONFIG="\$dir\/config\.json"[\s\S]*?bin\/server" start/
+  end
+
   test "TLON_SMOKE_FLAGS turns each flag on through the node's own API; a flag it doesn't know fails the smoke" do
     url = stub(["build_mode"], FlagStub)
 
