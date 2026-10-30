@@ -55,3 +55,8 @@ export function hallRows(c: Candidate, locks: Locks): HallRow[] {
 
 /** the soul in one line: its first written line, or that nothing is written under the headings yet */
 const soulLine = (soul: string) => soul.split("\n").find(l => l.trim() && !l.startsWith("#"))?.trim() ?? "(blank headings — e writes it)"
+
+/** the look card's first line: a hall candidate's look is only kept until they are hired, so say where it goes */
+export const lookHint = (hall: boolean) => hall
+  ? "the look is kept on the candidate and written to looks.json when they're hired"
+  : "look at the room — a saved change shows there live, with no restart"
