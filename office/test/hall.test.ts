@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall, seatedNames, editField, setLook } from "../kit/hall"
+import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall, seatedNames, editField, setLook, drawSoul } from "../kit/hall"
 
 const VOCAB = { archetypes: ["builder", "reviewer", "planner"], grades: ["junior", "senior", "greybeard"], specialties: ["office", "server"] }
 const LEGAL = /^[a-z0-9][a-z0-9_-]*$/
@@ -272,6 +272,19 @@ describe("hall e: edit the card", () => {
     expect(c.pitch).toBe("Quiet and good.")
     expect(c.soul).toBe("## Wants\nsleep\n")
     expect(editField(h0(), ctx(), "pitch", "   ")).toEqual({ error: expect.stringContaining("pitch") })
+  })
+  test("drawSoul stores a drawn soul and pitch as edits, flagged drawn, and survives a save", () => {
+    const h = drawSoul(h0(), { soul: "## Wants\nsleep\n", pitch: "a: a junior builder for office." })
+    const c = candidateOf(h, ctx())
+    expect([c.soul, c.pitch, c.drawn]).toEqual(["## Wants\nsleep\n", "a: a junior builder for office.", true])
+    const p = join(tmpdir(), `hall-draw-${process.pid}-${Date.now()}.json`)
+    saveHall(p, h)
+    expect(candidateOf(loadHall(p), ctx()).soul).toBe("## Wants\nsleep\n")
+    rmSync(p)
+  })
+  test("a pass drops a drawn soul and pitch", () => {
+    const c = candidateOf(pass(drawSoul(h0(), { soul: "## Wants\nsleep\n", pitch: "p" }), ctx()), ctx())
+    expect([c.drawn, c.pitch === "p"]).toEqual([false, false])
   })
   test("an edited field survives a pass only when locked, like any other", () => {
     const rolled = roll("hall:5", ctx()).grade, edit = VOCAB.grades.find(g => g !== rolled)!
