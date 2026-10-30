@@ -244,3 +244,9 @@ run = "scripts/check-main.sh"
 ["sandbox:argv"]
 description = "inside a sandboxed Bash: the bwrap arg count and its mounts grouped by prefix; `-- record` also appends `<ts> <count> wt=<n>` to $TMPDIR/bwrap-argc/count.log and snapshots the path args on change, `-- diff` shows the paths added since the first snapshot"
 run = "scripts/bwrap-argc.sh"
+
+# Not scheduled: whether it recurs is a separate call. The live box's existing eval databases are the
+# operator's to sweep — run it once, by hand: `mise run server:db-sweep`.
+["server:db-sweep"]
+description = "server: drop the tlon_eval_<digits> databases nothing is connected to (a killed or red eval's) — usage: mise run server:db-sweep [-- <prefix>]"
+run = "scripts/db-sweep.sh"
