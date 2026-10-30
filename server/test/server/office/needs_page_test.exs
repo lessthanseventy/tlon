@@ -3,6 +3,7 @@ defmodule Server.Office.NeedsPageTest do
   use ExUnit.Case, async: false
 
   import Ecto.Query
+  import ExUnit.CaptureLog
 
   alias Server.Channel
   alias Server.Office.NeedsPage
@@ -110,5 +111,44 @@ defmodule Server.Office.NeedsPageTest do
     :ok = Server.OperatorConfig.put("uqbar_routing", false, path)
     NeedsPage.run()
     assert Server.Repo.all(from t in Server.Thread, where: t.title == "uqbar's study") == []
+  end
+
+  defp failed_job! do
+    {:ok, job} = %{} |> Oban.Job.new(worker: "Server.Jobs.Verify", queue: "default") |> Server.Repo.insert()
+
+    job
+    |> Ecto.Changeset.change(
+      state: "discarded",
+      attempted_at: DateTime.utc_now(),
+      errors: [%{"error" => "boom"}]
+    )
+    |> Server.Repo.update!()
+  end
+
+  test "a workspace-less need is paged on the oldest workspace's study, marked machine-wide", %{ws: _ws} do
+    job = failed_job!()
+    key = "job:#{job.id}"
+    NeedsPage.run()
+    [oldest | _] = Server.Workspaces.all()
+    assert [%{payload: %{"need_page" => [^key]}, body: body}] = pages(oldest)
+    assert body =~ "machine-wide"
+  end
+
+  test "a pass where every need is already paged logs nothing", %{ws: ws} do
+    question(ws)
+    NeedsPage.run()
+    assert capture_log(fn -> assert :ok = NeedsPage.run(later(600)) end) == ""
+  end
+
+  test "a page the study cannot be opened for is logged, not dropped", %{ws: ws} do
+    question(ws)
+    {1, _} = Server.Repo.update_all(from(a in Server.Agent, where: a.name == "uqbar"), set: [name: "uqbar-away"])
+
+    on_exit(fn ->
+      Server.Repo.update_all(from(a in Server.Agent, where: a.name == "uqbar-away"), set: [name: "uqbar"])
+    end)
+
+    log = capture_log(fn -> assert :ok = NeedsPage.run() end)
+    assert log =~ "no_such_citizen"
   end
 end

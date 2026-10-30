@@ -5,6 +5,8 @@ defmodule Server.Office.NeedsPage do
   posts ONE `tlon` message per workspace naming the keys not yet paged. "Paged" is that message's
   `payload["need_page"]`, no older than the item, so it survives a restart. Waits while Uqbar is
   mid-turn and `@gap_s` after its last page; the keys stay unpaged, so the next page carries them.
+  A need with no workspace (a failed job, a box health problem) is machine-wide: it pages the oldest
+  workspace's study, and its line says so.
   """
   import Ecto.Query
 
@@ -13,33 +15,51 @@ defmodule Server.Office.NeedsPage do
   alias Server.Office.Needs
   alias Server.Repo
 
+  require Logger
+
   @gap_s 300
   @listed 20
 
   @doc "Page each workspace's Uqbar for its newly unrouted needs. `:ok`."
   def run(now \\ DateTime.utc_now()) do
     if Server.OperatorConfig.setting("uqbar_routing") do
+      home = Enum.find_value(Server.Workspaces.all(), & &1.id)
+
       now
       |> Needs.grouped()
       |> Map.fetch!(:uqbar)
-      |> Enum.reject(&is_nil(&1.workspace_id))
-      |> Enum.group_by(& &1.workspace_id)
+      |> Enum.group_by(&(&1.workspace_id || home))
       |> Enum.each(fn {ws, items} -> page(ws, items, now) end)
     else
       :ok
     end
   end
 
+  defp page(nil, items, _now) do
+    Logger.warning("#{length(items)} needs for Uqbar have no workspace to page: none is registered")
+    :ok
+  end
+
   defp page(ws, items, now) do
     with {:ok, study} <- Server.Outside.study(ws),
          pages = pages(study.id),
          [_ | _] = fresh <- Enum.reject(items, &paged?(&1, pages)),
-         true <- quiet?(study.id, pages, now) do
-      keys = Enum.map(fresh, & &1.key)
-      Channel.post(%{thread_id: study.id, author: "tlon", body: body(fresh), payload: %{"need_page" => keys}})
+         true <- quiet?(study.id, pages, now),
+         {:ok, _} <-
+           Channel.post(%{
+             thread_id: study.id,
+             author: "tlon",
+             body: body(fresh),
+             payload: %{"need_page" => Enum.map(fresh, & &1.key)}
+           }) do
+      machine = Enum.count(fresh, &is_nil(&1.workspace_id))
+      if machine > 0, do: Logger.info("paged #{machine} machine-wide needs on workspace #{ws}")
+      :ok
+    else
+      [] -> :ok
+      false -> :ok
+      {:error, reason} -> Logger.warning("needs page on workspace #{ws} failed: #{inspect(reason)}")
     end
-
-    :ok
   end
 
   # `{created_at, keys}` of every page on the study, newest first
@@ -69,7 +89,13 @@ defmodule Server.Office.NeedsPage do
   end
 
   defp body(fresh) do
-    listed = fresh |> Enum.take(@listed) |> Enum.map_join("\n", &"- #{&1.key} (#{&1.kind}) #{&1.title}")
+    listed =
+      fresh
+      |> Enum.take(@listed)
+      |> Enum.map_join(
+        "\n",
+        &"- #{&1.key} (#{&1.kind}) #{&1.title}#{if &1.workspace_id, do: "", else: " (machine-wide)"}"
+      )
 
     "@uqbar #{length(fresh)} new #{if length(fresh) == 1, do: "need waits", else: "needs wait"} in your group. " <>
       "Read operator_inbox, then settle_need or pass_up_need each `route: uqbar` item:\n" <> listed
