@@ -1172,17 +1172,24 @@ defmodule Server.Office.Needs do
   # a refused seat that posts afterwards worked around the refusal: its own progress is movement
   # here (chatter is not, for `stalled`)
   defp refused_moved(t) do
+    moved = last_moved(t, nil)
+
     agents =
-      from(e in Event, where: e.thread_id == ^t.id and e.kind == "tool_denied", select: e.detail)
+      from(e in Event,
+        where: e.thread_id == ^t.id and e.kind == "tool_denied" and e.created_at > ^moved,
+        select: e.detail
+      )
       |> Repo.all()
       |> Enum.map(& &1["agent"])
       |> Enum.uniq()
 
     posted =
-      Repo.one(from m in Message, where: m.thread_id == ^t.id and m.author in ^agents, select: max(m.created_at))
+      Repo.one(
+        from m in Message,
+          where: m.thread_id == ^t.id and m.author in ^agents and m.created_at > ^moved,
+          select: max(m.created_at)
+      )
 
-    [last_moved(t, nil), posted && DateTime.from_naive!(posted, "Etc/UTC")]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.max(DateTime)
+    posted || moved
   end
 end
