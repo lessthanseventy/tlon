@@ -36,4 +36,7 @@ TLON_URL=http://127.0.0.1:4041 mise run office:drive -- "/" "'108'" "Enter" "r" 
 - `OFFICE_TAIL=60` prints the whole screen; `OFFICE_WAIT` lengthens the settle for slow reads.
 - `"wait:TEXT"` sends no keys: it waits (30 s at most) until the screen shows TEXT. Open the finder
   only after `"wait:‹ Machine ›"`: until the TUI's first snapshot lands it lists nothing.
+- `"ticks:N"` sends no keys: it lets N ticks (100 ms each) pass, then lists every line of text seen on
+  the screen every 10 of them — a balloon that came and went too — before the frame. A staggered cast
+  reaction shows whole with `"ticks:200"`.
 - Never type into a coworker's live terminal (`enter` on a person zooms into theirs).
