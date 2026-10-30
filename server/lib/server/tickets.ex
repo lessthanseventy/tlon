@@ -256,7 +256,8 @@ defmodule Server.Tickets do
   end
 
   @doc """
-  Start work on a ticket: a workline at build on the ticket's project (`Server.Workline.promote/1`,
+  Start work on a ticket. A ticket labelled `review` (`review?/1`) opens a plain thread instead — no
+  workline — owing a `review_branch` verdict on the PR head. Otherwise: a workline at build on the ticket's project (`Server.Workline.promote/1`,
   so it is verified, reviewed and risk-graded like any other) whose opening post is the ticket (the
   operator's post, so its lead is staffed like any ask), and the ticket promoted into it. `agent_id`
   hands the thread to that coworker; without one, or when it is the manager (who never leads a
@@ -279,12 +280,15 @@ defmodule Server.Tickets do
            %{title: ticket.title, workspace_id: ticket.workspace_id, project_id: ticket.project_id, scope: "machine"}
            |> then(&if(agent_id, do: Map.put(&1, :agent_id, agent_id), else: &1))
            |> Server.Channel.open_thread(),
-         {:ok, thread} <- Server.Workline.promote(opened),
+         {:ok, thread} <- begin_work(ticket, opened),
          {:ok, _} <- promote(ticket, thread.id),
-         {:ok, _} <- Server.Attention.respond(thread.id, operator, ask) do
+         {:ok, _} <- Server.Attention.respond(thread.id, operator, brief(ticket, ask)) do
       {:ok, thread}
     end
   end
+
+  @doc "Whether a ticket asks for a PR review: its labels include `review`, set by whoever filed it."
+  def review?(%Ticket{labels: labels}), do: is_list(labels) and "review" in labels
 
   @doc """
   Whether work may start on a ticket: `:ok` in the backlog or routed (`todo`); `{:error, why}` when it
@@ -558,5 +562,19 @@ defmodule Server.Tickets do
     for {"promoted", id} <- threads_of(ticket_id), id != thread_id, reduce: false do
       acc -> acc or match?(%Server.Thread{state: "open"}, Repo.get(Server.Thread, id))
     end
+  end
+
+  # A review's artifact is a review_branch verdict, not commits, so it is a plain thread (stage nil:
+  # nothing owed, no nudge, no stuck alarm) — never a workline.
+  defp begin_work(%Ticket{} = ticket, opened),
+    do: if(review?(ticket), do: {:ok, opened}, else: Server.Workline.promote(opened))
+
+  defp brief(%Ticket{} = ticket, ask) do
+    if review?(ticket),
+      do:
+        ask <>
+          "\n\nThis is a PR review, not a build: owed is a review_branch verdict (approve | request_changes) " <>
+          "on the PR head sha you read. You write no code and own no work/<slug> branch.",
+      else: ask
   end
 end
