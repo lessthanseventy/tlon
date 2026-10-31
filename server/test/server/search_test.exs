@@ -153,8 +153,10 @@ defmodule Server.SearchTest do
 
       refute Enum.any?(nodes, &(&1["Node Type"] == "Sort"))
 
-      assert [%{"Index Name" => "message_pkey", "Actual Rows" => 2.0}] =
+      assert [%{"Index Name" => "message_pkey", "Actual Rows" => rows}] =
                Enum.filter(nodes, &(&1["Node Type"] == "Index Scan"))
+
+      assert rows == 2
     end
 
     test "the meaning pass scores only the newest embedded messages, not the whole channel", %{thread: thread} do
