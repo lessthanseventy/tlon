@@ -1,5 +1,5 @@
 defmodule Server.WorklineVerifyScriptTest do
-  # scripts/workline-verify.sh's failures(): the failing tests by name, read out of a real
+  # scripts/lib/failures.sh's failures(): the failing tests by name, read out of a real
   # ExUnit and a real bun run — what a red verify and a bounced landing lead with.
   use ExUnit.Case, async: true
 
@@ -42,9 +42,9 @@ defmodule Server.WorklineVerifyScriptTest do
    1 fail
   """
 
-  # the script's own function, lifted out and fed `output` on stdin
+  # scripts/lib/failures.sh (workline-verify.sh and check-main.sh share it), fed `output` on stdin
   @run ~S"""
-  eval "$(sed -n '/^failures() {/,/^}/p' "$0")"
+  . "$(dirname "$0")/lib/failures.sh"
   printf '%s\n' "$1" | failures
   """
 
