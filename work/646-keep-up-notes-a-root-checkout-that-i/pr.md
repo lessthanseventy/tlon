@@ -4,7 +4,7 @@ Closes #646.
 
 `Publish.follow_main/2` returned `:skipped` for a checkout on another branch, which `keep_up` treated
 as nothing: the root checkout sat on a merged branch for 5 days unnoticed. It now returns
-`{:off_main, branch}`, and `KeepUp.drifted/2` posts one keyed rollout note (`{:off_main, repo}`) naming
+`{:off_main, branch}` (`"detached at <sha>"` for a detached HEAD), and `KeepUp.drifted/2` posts one keyed rollout note (`{:off_main, repo}`) naming
 the branch. The checkout is still left alone (a session may be working there). The note is cleared when
 main is back and level or drifted (the drift note takes over).
 

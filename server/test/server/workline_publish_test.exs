@@ -241,6 +241,16 @@ defmodule Server.WorklinePublishTest do
       refute_received {:ran, ["git", "-C", _, "fetch" | _]}
     end
 
+    test "a detached HEAD is off main too, and says where" do
+      run =
+        runner([
+          {&match?(["git", "-C", _, "symbolic-ref" | _], &1), {"fatal: ref HEAD is not a symbolic ref\n", 128}},
+          {&match?(["git", "-C", _, "rev-parse", "--short", "HEAD"], &1), {"abc1234\n", 0}}
+        ])
+
+      assert {:off_main, "detached at abc1234"} = Publish.follow_main("/repo", run)
+    end
+
     test "main with commits of its own is never merged or rewritten — it says how far it has drifted" do
       run = runner([on("main"), ancestor(1), {&match?(["git", "-C", _, "rev-list", "--count" | _], &1), {"4\n", 0}}])
       assert {:diverged, 4} = Publish.follow_main("/repo", run)
