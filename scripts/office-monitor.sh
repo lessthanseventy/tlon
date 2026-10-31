@@ -26,7 +26,6 @@ every="${TLON_MONITOR_EVERY:-45}"
 until_new=0; [ "${1:-}" = --until-new ] && until_new=1
 state="${XDG_STATE_HOME:-$HOME/.local/state}/tlon/office-monitor.seen"
 declare -A seen
-down=0
 said=0
 if [ $until_new = 1 ] && [ -s "$state" ]; then
   since=$(head -1 "$state")
@@ -42,17 +41,23 @@ say() {
   [ $until_new = 1 ] && echo "$1" >>"$state"
 }
 
+forget() {
+  [ -n "${seen[$1]:-}" ] || return
+  unset "seen[$1]"
+  [ $until_new = 1 ] && { grep -vxF -- "$1" "$state" >"$state.tmp"; mv "$state.tmp" "$state"; }
+}
+
 while :; do
   if office=$(curl -sf -m 10 "$url/api/office"); then
-    [ $down = 1 ] && { echo "UP     the service answers again"; said=1; }; down=0
+    if [ -n "${seen[down:$url]:-}" ]; then forget "down:$url"; echo "UP     the service answers again"; said=1; fi
     while IFS=$'\t' read -r key line; do
       [ -n "$key" ] && say "need:$key" "NEED   $line"
     done < <(curl -sf -m 10 "$url/api/office/needs" | jq -r '.[]? | [.key, "\(.level) \(.kind) #\(.thread_id // "-") \(.text | gsub("\\s+";" ") | .[0:200])"] | @tsv')
     while IFS= read -r p; do
       [ -n "$p" ] && say "health:$p" "HEALTH $p"
     done < <(jq -r '.health.problems[]? | if type=="string" then . else tostring end | .[0:200]' <<<"$office")
-  elif [ $down = 0 ]; then
-    down=1; said=1; echo "DOWN   $url/api/office does not answer"
+  else
+    say "down:$url" "DOWN   $url/api/office does not answer"
   fi
 
   while IFS='|' read -r id rest; do
