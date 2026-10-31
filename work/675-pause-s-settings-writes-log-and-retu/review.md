@@ -1,0 +1,11 @@
+Verdict: request_changes. The new `{:error, why}` return from Pause is not handled by its caller, so the crash has moved and not gone.
+
+1. **Blocking: `server/lib/server/mcp/operator_api.ex` (POST /office/pause) does `{:ok, state} = modes[mode].()`.** Before this change a failed write raised a MatchError in Pause. Now Pause returns `{:error, why}` and the route raises a MatchError on that match. The operator's pencils-down key (#673) hits this route, and a failed write still gives a 500. Match both arms, e.g. `{:error, why} -> json(conn, 500, %{error: inspect(why)})`, and add a route test. The `@doc`s promise `{:error, why}`, so every caller has to handle it. Only the operator API calls `pencils_down`, `lights_out` and `back_to_work`; `auto/1` is the other caller.
+
+2. **Blocking: `change/2` can leave the office half-changed.** If `write_setting("pause", …)` succeeds and `write_setting("pause_by", nil)` fails, the pause is already persisted. Then `{:error, _}` is returned, nobody is told, no pane is interrupted, and `Pause.state()` reads the new state. The comment "the office did not change state" is false in that case. Either write both keys in one call, or roll back the first write when the second fails. Add a test.
+
+3. **Blocking: `auto/1` has the same hole.** The latch write (`auto_paused_for`) lands first. If `pencils_down()` then errors, the window stays latched but the office was never paused, so it will not retry at the next reading. If `pause_by` fails after `pencils_down` succeeded, the office is paused with no `schedule_resume`, so it never auto-resumes. The commit message says auto "neither latches nor pauses", which only holds when the first write fails. Order the writes so the latch goes last, or clear the latch on failure.
+
+4. Minor: `auto/1`'s `@doc` still says "Always `:ok`". That is true, but it should say a failed write is logged and nothing changes.
+
+The nil-`resets_at` latch test and the below-threshold no-op test look right. I read the diff and the callers. I did not run the suite.
