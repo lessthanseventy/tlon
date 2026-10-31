@@ -194,7 +194,7 @@ defmodule Server.SearchTest do
                   end)
 
                 Process.put(:holder, holder)
-                assert_receive :locked
+                assert_receive :locked, 5_000
 
               String.contains?(meta.query, unquote(until_sql)) ->
                 send(Process.get(:holder), :release)
