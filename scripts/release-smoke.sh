@@ -11,7 +11,7 @@
 # 4040 and `tlon` are refused. TLON_SMOKE_URL smokes a server already up there instead: nothing is
 # built, started or recorded. A run ends `ran-on: smoke <sha>` and reports it to the service (lib/record-ran.sh), so a hand run counts for release:status too.
 # A second smoke of a commit another run is smoking waits for it, up to TLON_SMOKE_LOCK_WAIT seconds
-# (default 3600; 0 refuses at once), then smokes itself.
+# (default 1200, inside a schedule's 30 minutes of silence; 0 refuses at once), then smokes itself.
 # TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped, or
 # until TLON_SMOKE_HOLD_TTL seconds pass (default 7200): a forgotten hold would hold its port and
 # database for good. TLON_SMOKE_FLAGS and TLON_SMOKE_FIXTURES (space-separated names) turn flags on
@@ -29,7 +29,7 @@ refuse_stale_script "$0"
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 port="${TLON_SMOKE_PORT:-$(smoke_pick_port $((4100 + $$ % 800)))}"
 db="${TLON_SMOKE_DATABASE:-tlon_smoke_$port}" url="${TLON_SMOKE_URL:-}"
-lock_wait="${TLON_SMOKE_LOCK_WAIT:-3600}"
+lock_wait="${TLON_SMOKE_LOCK_WAIT:-1200}"
 hold="${TLON_SMOKE_HOLD:-}" ttl="${TLON_SMOKE_HOLD_TTL:-7200}" flags="${TLON_SMOKE_FLAGS:-}"
 fixtures="${TLON_SMOKE_FIXTURES:-}" server_bin="${TLON_SMOKE_SERVER_BIN:-}"
 log="$(mktemp -t tlon-smoke-log-XXXXXX)"
