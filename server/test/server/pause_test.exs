@@ -7,6 +7,7 @@ defmodule Server.PauseTest do
   use Oban.Testing, repo: Server.Repo
 
   import Ecto.Query
+  import ExUnit.CaptureLog
 
   alias Server.Channel
   alias Server.Message
@@ -116,6 +117,24 @@ defmodule Server.PauseTest do
 
     assert Server.OperatorConfig.boot_oban(oban)[:queues] ==
              [default: 5, verify: [limit: 1, paused: true], landing: [limit: 1, paused: true]]
+  end
+
+  test "a settings write that fails logs and returns an error; the office stays as it was", %{busy: busy} do
+    unwritable_settings()
+
+    log = capture_log(fn -> assert {:error, _} = Pause.pencils_down() end)
+
+    assert log =~ "\"pause\""
+    assert Pause.state() == :working
+    refute Enum.any?(bodies(busy), &(&1 =~ "pencils down"))
+  end
+
+  # A settings path that cannot be written: its directory is a regular file, so mkdir fails.
+  defp unwritable_settings do
+    blocker = Path.join(System.tmp_dir!(), "pause-blocker-#{System.pid()}-#{System.unique_integer([:positive])}")
+    File.write!(blocker, "")
+    on_exit(fn -> File.rm(blocker) end)
+    Application.put_env(:server, :operator_config_path, Path.join(blocker, "config.json"))
   end
 
   defp tlon_chats(thread),
@@ -282,6 +301,34 @@ defmodule Server.PauseTest do
       assert Pause.state() == :working
       Pause.auto(%{five_hour: %{percent: 91, resets_at: @r5b}})
       assert Pause.state() == :pencils_down
+    end
+
+    test "a nil resets_at latches: the same window with no reset time does not fire again after back_to_work" do
+      Pause.auto(%{seven_day: %{percent: 95, resets_at: nil}})
+      {:ok, :working} = Pause.back_to_work()
+      Pause.auto(%{seven_day: %{percent: 95, resets_at: nil}})
+      assert Pause.state() == :working
+    end
+
+    test "below the threshold nothing is written: no latch, no pause, no job, no notice", %{lobby: lobby} do
+      path = Application.get_env(:server, :operator_config_path)
+      before = bodies(lobby)
+
+      assert :ok = Pause.auto(%{five_hour: %{percent: 89, resets_at: @r5_iso}})
+      assert Pause.state() == :working
+      refute File.exists?(path)
+      refute_enqueued(worker: Server.Jobs.AutoResume)
+      assert bodies(lobby) == before
+    end
+
+    test "a failed settings write during an auto pause logs and returns :ok, pausing nothing", %{lobby: lobby} do
+      unwritable_settings()
+
+      log = capture_log(fn -> assert :ok = Pause.auto(@hot) end)
+
+      assert log =~ "auto_paused_for"
+      assert Pause.state() == :working
+      refute Enum.any?(bodies(lobby), &(&1 =~ "5h at 91%"))
     end
 
     test "a manual pause is left as it is, and says nothing", %{lobby: lobby} do

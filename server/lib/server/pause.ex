@@ -34,6 +34,8 @@ defmodule Server.Pause do
   alias Server.OperatorConfig
   alias Server.Tmux
 
+  require Logger
+
   @told "✎ pencils down — finish this turn"
 
   # differs from @told so stopped_threads/0 never counts a thread pause as the office's
@@ -59,13 +61,13 @@ defmodule Server.Pause do
     end
   end
 
-  @doc "Ask the office to stop. `{:ok, :pencils_down}`; already there, nothing is said again."
+  @doc "Ask the office to stop. `{:ok, :pencils_down}`; already there, nothing is said again. `{:error, why}` when the settings write fails: logged, nothing changes."
   def pencils_down, do: go(:pencils_down)
 
-  @doc "Stop the office: pencils down, the verify and landing queues paused, every coworker pane interrupted. `{:ok, :lights_out}`."
+  @doc "Stop the office: pencils down, the verify and landing queues paused, every coworker pane interrupted. `{:ok, :lights_out}`, or `{:error, why}` as `pencils_down/0`."
   def lights_out, do: go(:lights_out)
 
-  @doc "Undo pencils down or lights out. `{:ok, :working}`."
+  @doc "Undo pencils down or lights out. `{:ok, :working}`, or `{:error, why}` as `pencils_down/0`."
   def back_to_work, do: go(:working)
 
   @doc """
@@ -82,10 +84,10 @@ defmodule Server.Pause do
          {name, %{percent: p, resets_at: r}} <-
            Enum.find(windows, fn {name, w} ->
              w.percent >= limit and Map.get(latched, to_string(name), :none) != w.resets_at
-           end) do
-      :ok = OperatorConfig.put("auto_paused_for", Map.put(latched, to_string(name), r))
-      {:ok, _} = pencils_down()
-      :ok = OperatorConfig.put("pause_by", "auto:#{name}")
+           end),
+         :ok <- write_setting("auto_paused_for", Map.put(latched, to_string(name), r)),
+         {:ok, _} <- pencils_down(),
+         :ok <- write_setting("pause_by", "auto:#{name}") do
       at = schedule_resume(name, r)
       auto_say(name, p, r, at)
     end
@@ -164,20 +166,34 @@ defmodule Server.Pause do
     end
   end
 
+  # A failed write is logged and returned, never raised: the office did not change state, so
+  # nothing is told, interrupted or resumed.
   defp go(want) do
     from = state()
+    if from == want, do: {:ok, want}, else: change(from, want)
+  end
 
-    if from != want do
-      :ok = OperatorConfig.put("pause", if(want != :working, do: Atom.to_string(want)))
-      :ok = OperatorConfig.put("pause_by", nil)
+  defp change(from, want) do
+    with :ok <- write_setting("pause", if(want != :working, do: Atom.to_string(want))),
+         :ok <- write_setting("pause_by", nil) do
       if from == :working, do: tell_live_threads()
       if want == :working, do: wake_stopped_threads()
       if want == :lights_out, do: lights_off()
       if from == :lights_out, do: Server.Rollout.pause_gates(:resume_queue)
       lobby(want)
+      {:ok, want}
     end
+  end
 
-    {:ok, want}
+  defp write_setting(key, value) do
+    case OperatorConfig.put(key, value) do
+      :ok ->
+        :ok
+
+      {:error, why} = error ->
+        Logger.error("pause: could not write #{inspect(key)} to the settings file: #{inspect(why)}")
+        error
+    end
   end
 
   defp tell_live_threads, do: for(tid <- live_threads(), do: tell(tid, @told))
