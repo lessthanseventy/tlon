@@ -4,6 +4,7 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$root/scripts/lib/record-ran.sh"
+. "$root/scripts/lib/failures.sh"
 "$root/scripts/git-fetch-origin.sh" "$root" main || { echo "check-main: fetch failed"; exit 1; }
 # The checkout lives in the verify cache, as workline-verify's do, never in TMPDIR: /tmp is every
 # seat's write root, and the suite's hundreds of seeded git repos there cost every seat bwrap
@@ -20,7 +21,7 @@ git -C "$root" worktree prune
 dir="$(mktemp -d -p "$vroot" main-XXXXXX)"
 log="$(mktemp -t tlon-main-check-XXXXXX)"
 # the cleanup ignores a second TERM: a signal landing inside it would run `exit 143` and skip the rest
-trap 'trap "" TERM INT; rm -f "$log"; git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir"' EXIT
+trap 'trap "" TERM INT; rm -f "$log"; git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir" "$dir.hex"' EXIT
 # bash dies of an untrapped TERM without running the EXIT trap (a service stop signals the whole tree)
 trap 'exit 143' TERM
 trap 'exit 130' INT
@@ -33,10 +34,11 @@ sha="$(git rev-parse HEAD)"
 for v in $(compgen -e | grep '^TLON_'); do unset "$v"; done
 export MISE_YES=1 TLON_TEST_DATABASE=tlon_test_main
 mise trust -q "$dir" >/dev/null 2>&1
-# a Hex home of its own (scripts/lib/seed-hex.sh)
+# a Hex home of its own (scripts/lib/seed-hex.sh), beside the checkout, never in it: the gate
+# posts tlon/check only on a clean tree (scripts/check.sh), and an in-tree .hex is untracked
 . "$root/scripts/lib/seed-hex.sh"
-seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$dir/.hex"
-export HEX_HOME="$dir/.hex"
+seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$dir.hex"
+export HEX_HOME="$dir.hex"
 (cd server && mix deps.get >/dev/null) || { echo "check-main: mix deps.get failed"; exit 1; }
 # the queue's own lines pass through: the schedule restarts its timeout at each one
 mise run check 2>&1 | tee "$log" | grep --line-buffered "^checks queue:"
@@ -44,8 +46,8 @@ code=${PIPESTATUS[0]}
 # the verdict: every suite's counts, and on a red gate where it broke
 grep -E "(pass|fail)$|Result:|ERROR|check-names:|passed ·" "$log"
 if [ "$code" -ne 0 ]; then
-  # each failing test's block (name, file:line, assertion); the log's end when there is none
-  fails="$(grep -E -A14 "^\[[a-z:]+\] +[0-9]+\) test" "$log" | grep -vE "\] *$|\[debug\]")"
+  # each failing test by name and file:line, whatever the suite; the log's end when there is none
+  fails="$(failures <"$log")"
   if [ -n "$fails" ]; then echo "--- failures:"; echo "$fails"; else echo "--- the end of the log:"; tail -n 30 "$log"; fi
 fi
 # last, past any failure output: the nightly's run records it (Server.ScheduleRun), so "the gate

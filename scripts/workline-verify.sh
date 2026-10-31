@@ -22,6 +22,7 @@ root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-co
 cli="$root/scripts/tlon-cli.sh"
 # sourced before the cd below: $0 may be relative
 . "$(dirname "$0")/lib/seed-hex.sh"
+. "$(dirname "$0")/lib/failures.sh"
 # WORKLINE_GATE=1: the merge queue's gate (Server.Jobs.Land) — the same check and evidence, but it
 # never advances and posts nothing; it says what broke on stdout and the landing tells the thread
 note() { if [ -n "${WORKLINE_GATE:-}" ]; then echo "$2"; else "$cli" note "$@"; fi; }
@@ -155,16 +156,6 @@ tree="$fresh"
 # result could not be recorded is a gate that never ran as far as the stage machine can tell,
 # so the failure is surfaced (stderr + the unrecorded flag) instead of dropped on the floor.
 unrecorded=0
-# The failing tests by name (ExUnit's "N) test … (Mod)" + its file:line, bun's "(fail) …" and the
-# "error: …" before it that says why, read past mise's "[task] " line prefix): a long suite's last
-# 400 bytes hold only its summary, or another task's interleaved compile output, and the lead would
-# re-run it to learn what broke.
-failures() {
-  awk '{ sub(/^\[[^]]*\] /, "") }
-       /^ +[0-9]+\) (test|doctest|property) / { sub(/^ +/, ""); h = $0; getline; sub(/^\[[^]]*\] /, ""); sub(/^ +/, ""); print h " — " $0; next }
-       /^error: / { e = e $0 "\n"; next }
-       /^\(fail\) / { printf "%s", e; e = ""; print }' | cut -c1-160 | iconv -c -f utf-8 -t utf-8 | head -n 10
-}
 run_gate() {
   local name="$1"; shift
   local out code
