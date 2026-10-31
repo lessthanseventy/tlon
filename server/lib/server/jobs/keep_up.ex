@@ -23,7 +23,8 @@ defmodule Server.Jobs.KeepUp do
   A main that has drifted is never merged: it is one ticket (and one lobby post) in the workspace
   whose project owns the repo (a changed count is said again on the lobby as a notice), or one keyed
   note for the operator when none does, updated in place
-  and cleared only when main is level again. Whether the operator should also hear when the crew
+  and cleared only when main is level again. A main checkout on another branch is left alone but
+  noted for the operator (`{:off_main, repo}`) until it is back on main. Whether the operator should also hear when the crew
   can't handle a drift (a live session committing to that main) is open.
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 120]
@@ -176,6 +177,7 @@ defmodule Server.Jobs.KeepUp do
   # and one ticket carries the count for the crew to land; the operator is not asked. A repo no
   # project owns has no crew to hand it to, so it stays a single keyed note for the operator.
   def drifted(repo, {:diverged, n}) do
+    Server.Rollout.clear({:off_main, repo})
     title = "land local main's #{n} commit#{if n == 1, do: "", else: "s"}"
 
     case owner(repo) do
@@ -190,8 +192,18 @@ defmodule Server.Jobs.KeepUp do
     end
   end
 
+  # Left alone, as a live session may be working there, but said: a root that stays off main runs
+  # nothing new and nobody would otherwise know.
+  def drifted(repo, {:off_main, branch}) do
+    Server.Rollout.note(
+      {:off_main, repo},
+      "#{repo}: the root checkout is on #{branch}, not main, so it is not following origin/main — switch it back to main"
+    )
+  end
+
   def drifted(repo, :forwarded) do
     Server.Rollout.clear({:drift, repo})
+    Server.Rollout.clear({:off_main, repo})
 
     with ws when not is_nil(ws) <- owner(repo), %Server.Ticket{} = t <- open_ticket(ws, repo) do
       Server.Tickets.update(t, %{status: "done"})

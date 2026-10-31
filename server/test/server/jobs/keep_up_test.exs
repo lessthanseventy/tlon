@@ -38,6 +38,27 @@ defmodule Server.Jobs.KeepUpTest do
     end
   end
 
+  describe "a repo whose checkout is off main" do
+    test "one note naming the branch, updated in place, cleared when main is back and level" do
+      KeepUp.drifted("/r/off", {:off_main, "office-mug-in-hand"})
+      KeepUp.drifted("/r/off", {:off_main, "other"})
+
+      assert [%{text: text}] = notes("/r/off")
+      assert text =~ "other"
+
+      KeepUp.drifted("/r/off", :forwarded)
+      assert notes("/r/off") == []
+    end
+
+    test "back on main but drifted also clears it" do
+      KeepUp.drifted("/r/off", {:off_main, "x"})
+      KeepUp.drifted("/r/off", {:diverged, 2})
+
+      assert [%{text: text}] = notes("/r/off")
+      assert text =~ "2 commit"
+    end
+  end
+
   describe "a repo a project owns" do
     setup do
       {:ok, _root} = Workspaces.create(%{name: "Home"})
@@ -259,7 +280,7 @@ defmodule Server.Jobs.KeepUpTest do
         if remote, do: {remote <> "\n", 0}, else: {"error: No such remote 'origin'\n", 2}
 
       "git", ["-C", _, "symbolic-ref" | _], _ ->
-        {"feature\n", 0}
+        {"main\n", 0}
 
       "gh", ["pr", "list" | _], _ ->
         {gh_error, 1}
@@ -293,7 +314,7 @@ defmodule Server.Jobs.KeepUpTest do
 
       KeepUp.keep_up("/r/moved", fn
         "git", ["-C", _, "remote", "get-url", "origin"], _ -> {"git@github.com:acme/app.git\n", 0}
-        "git", ["-C", _, "symbolic-ref" | _], _ -> {"feature\n", 0}
+        "git", ["-C", _, "symbolic-ref" | _], _ -> {"main\n", 0}
         "gh", ["pr", "list" | _], _ -> {"[]", 0}
         _, _, _ -> {"", 0}
       end)
@@ -356,7 +377,7 @@ defmodule Server.Jobs.KeepUpTest do
           {"https://github.com/acme/app.git\n", 0}
 
         "git", ["-C", _, "symbolic-ref" | _], _ ->
-          {"feature\n", 0}
+          {"main\n", 0}
 
         "gh", ["pr", "list" | _] = args, _ ->
           if Enum.any?(args, &(&1 =~ "mergeStateStatus")), do: {"gh: HTTP 502", 1}, else: {"[]", 0}

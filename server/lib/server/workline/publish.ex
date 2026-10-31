@@ -231,7 +231,7 @@ defmodule Server.Workline.Publish do
   @doc """
   Keep `repo`'s main checkout a mirror of origin/main: on `main`, fetch and fast-forward to it.
   Never a merge or a rewrite — local main with commits of its own is `{:diverged, ahead}` for the
-  operator to sort out; a checkout on another branch is `:skipped`. `:forwarded` (or already level),
+  operator to sort out; a checkout on another branch is `{:off_main, branch}`, left alone. `:forwarded` (or already level),
   or `{:error, why}` when git refuses.
   """
   def follow_main(repo, run \\ &System.cmd/3) do
@@ -244,7 +244,7 @@ defmodule Server.Workline.Publish do
         else: diverged(git)
     else
       {out, code} when is_binary(out) and code != 0 -> {:error, String.slice(out, 0, 200)}
-      _ -> :skipped
+      {branch, 0} when is_binary(branch) -> {:off_main, String.trim(branch)}
     end
   end
 
