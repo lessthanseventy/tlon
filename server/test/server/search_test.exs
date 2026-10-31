@@ -265,4 +265,16 @@ defmodule Server.SearchTest do
       assert Enum.map(shown, & &1.text) == ["the MCP channel listens on port 4040", "the release runs on port 4040"]
     end
   end
+
+  describe "fact_relevance/2 — keyword relevance of a turn" do
+    test "a whole turn is read by its last 64 distinct words, so the query stays bounded" do
+      {:ok, early} = Dossier.bank_fact(%{kind: "learned", text: "zephyrine opens the turn", provenance: "derived"})
+      {:ok, late} = Dossier.bank_fact(%{kind: "learned", text: "quillmark closes the turn", provenance: "derived"})
+
+      filler = Enum.map_join(1..200, " ", &"filler#{&1}")
+      turn = "zephyrine #{filler} quillmark quillmark quillmark"
+
+      assert Map.keys(Search.fact_relevance(turn, [early.id, late.id])) == [late.id]
+    end
+  end
 end
