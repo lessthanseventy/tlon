@@ -31,6 +31,9 @@ defmodule Server.Search do
   @semantic_window 2_000
   @query_timeout 10_000
 
+  # fact_relevance's term cap: ts_rank_cd's cost grows with the query's term count.
+  @relevance_terms 64
+
   @headline "StartSel=⟪, StopSel=⟫, MaxWords=12, MinWords=4, MaxFragments=1, FragmentDelimiter=…"
 
   @doc """
@@ -96,10 +99,12 @@ defmodule Server.Search do
   relevance blend (`Server.Recall`). Unlike the searches above, a fact matches on ANY query term
   (the query is a thread's title + the operator's last words, not a hand-typed AND), graded by
   `ts_rank_cd` and normalised so the best match is 1.0. A map of id => relevance in (0, 1];
-  unmatched ids are absent; empty for a blank query or id list.
+  unmatched ids are absent; empty for a blank query or id list. A long query (a whole turn, when
+  `Server.Recall.Judge.nearest` falls back here) is read by its last #{@relevance_terms} distinct
+  words, so the query stays bounded.
   """
   def fact_relevance(query, fact_ids) when is_binary(query) and is_list(fact_ids) do
-    case {any_terms(query), fact_ids} do
+    case {last_terms(query, @relevance_terms), fact_ids} do
       {"", _} ->
         %{}
 
@@ -234,6 +239,16 @@ defmodule Server.Search do
   # The literal terms, OR-joined for websearch_to_tsquery. `or` is the one operator left for it to
   # read: a leading `-` (its NOT) and quotes (its phrases) are stripped, so a word is always searched for.
   defp any_terms(query), do: query |> tokens() |> Enum.join(" or ")
+
+  defp last_terms(query, n) do
+    query
+    |> tokens()
+    |> Enum.reverse()
+    |> Enum.uniq_by(&String.downcase/1)
+    |> Enum.take(n)
+    |> Enum.reverse()
+    |> Enum.join(" or ")
+  end
 
   defp tokens(query) do
     query
