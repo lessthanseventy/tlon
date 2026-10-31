@@ -136,6 +136,27 @@ defmodule Server.SearchTest do
       assert [%{"Actual Loops" => 1}] = plan |> plan_nodes() |> Enum.filter(&(&1["Subplan Name"] == "CTE idf"))
     end
 
+    test "the meaning pass reads the newest embeddings by key, never sorting the channel", %{thread: thread} do
+      for n <- 1..5 do
+        {:ok, m} = Channel.post(%{thread_id: thread.id, author: "a", body: "note #{n}"})
+        embed!(m, [1.0, 0.0])
+      end
+
+      {sql, params} =
+        captured_history_query(
+          fn -> Search.history("note", 10, query_embedding: [1.0, 0.0], semantic_window: 2) end,
+          "embedding IS NOT NULL"
+        )
+
+      %{rows: [[[%{"Plan" => plan}]]]} = Repo.query!("EXPLAIN (ANALYZE, FORMAT JSON) " <> sql, params)
+      nodes = plan_nodes(plan)
+
+      refute Enum.any?(nodes, &(&1["Node Type"] == "Sort"))
+
+      assert [%{"Index Name" => "message_pkey", "Actual Rows" => 2.0}] =
+               Enum.filter(nodes, &(&1["Node Type"] == "Index Scan"))
+    end
+
     test "the meaning pass scores only the newest embedded messages, not the whole channel", %{thread: thread} do
       {:ok, old} = Channel.post(%{thread_id: thread.id, author: "a", body: "the oldest note"})
       {:ok, mid} = Channel.post(%{thread_id: thread.id, author: "a", body: "a middle note"})
@@ -201,15 +222,21 @@ defmodule Server.SearchTest do
   end
 
   # The ranking query history/3 sent, read off the repo's telemetry so the test explains the real SQL.
-  defp captured_history_query(fun) do
+  defp captured_history_query(fun, marker \\ "idf AS MATERIALIZED") do
     id = {__MODULE__, make_ref()}
     :telemetry.attach(id, [:server, :repo, :query], &__MODULE__.handle_query/4, %{capture: self()})
     on_exit(fn -> :telemetry.detach(id) end)
 
     fun.()
 
-    assert_received {:sql, sql, params}
-    assert sql =~ "idf AS MATERIALIZED"
+    {:messages, mailbox} = Process.info(self(), :messages)
+
+    assert {:sql, sql, params} =
+             Enum.find(mailbox, fn
+               {:sql, s, _} -> s =~ marker
+               _ -> false
+             end)
+
     {sql, params}
   end
 
