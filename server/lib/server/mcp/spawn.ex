@@ -26,6 +26,8 @@ defmodule Server.MCP.Spawn do
 
   The launchers call `ensure` once (identity), and the adapter mints per connect.
   """
+  import Ecto.Query, only: [from: 2]
+
   alias Server.Channel
   alias Server.MCP.Tokens
   alias Server.Repo
@@ -220,15 +222,13 @@ defmodule Server.MCP.Spawn do
   defp read_dirs_export(thread) do
     {kept, dropped} = Server.Projects.read_dirs_split(thread)
 
-    if dropped != [] do
-      Server.Channel.post(%{
-        thread_id: thread.id,
-        author: "tlon",
-        kind: "notice",
-        body:
-          "read dirs left out (the seat's sandbox budget holds #{Server.SandboxBudget.read_dir_repos()} repos across them): " <>
-            Enum.join(dropped, ", ")
-      })
+    body =
+      "read dirs left out (the seat's sandbox budget holds #{Server.SandboxBudget.read_dir_repos()} repos across them): " <>
+        Enum.join(dropped, ", ")
+
+    if dropped != [] and
+         not Repo.exists?(from m in Server.Message, where: m.thread_id == ^thread.id and m.body == ^body) do
+      Channel.post(%{thread_id: thread.id, author: "tlon", kind: "notice", body: body})
     end
 
     case kept do

@@ -328,6 +328,7 @@ defmodule Server.MCP.SpawnTest do
 
       assert {:ok, %{exports: ex}} = Spawn.join(thread.id, "codex")
       assert ex =~ ~s(TLON_READ_DIRS="#{a}")
+      assert {:ok, _} = Spawn.join(thread.id, "codex")
       posts = for m <- Channel.thread_messages(thread), m.body =~ "read dirs", do: m
       assert [post] = posts
       assert post.body =~ b
