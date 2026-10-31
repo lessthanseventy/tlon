@@ -177,10 +177,11 @@ defmodule Server.Workline.Continuation do
   end
 
   # unique until the gap's end, so sweeps inside one gap leave one scheduled check; quiet is a key
-  # so a plain check never swallows the quiet one
+  # so a plain check never swallows the quiet one. Not :executing: the check that is running
+  # requeues itself from inside perform, and would match its own row.
   defp requeue(thread_id, at, quiet) do
     period = Server.OperatorConfig.setting("continuation_gap_minutes") * 60 + 60
-    unique = [period: period, keys: [:thread_id, :quiet], states: [:available, :scheduled, :executing]]
+    unique = [period: period, keys: [:thread_id, :quiet], states: [:available, :scheduled]]
     Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id, quiet: quiet}, scheduled_at: at, unique: unique))
     :ok
   end

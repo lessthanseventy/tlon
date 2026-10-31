@@ -95,6 +95,23 @@ defmodule Server.Workline.ContinuationTest do
       assert [_] = all_enqueued(worker: Server.Jobs.Continue, args: %{thread_id: fresh.id})
     end
 
+    test "a requeued check that runs and finds the gap held again requeues itself, not matching its own executing row" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      {:ok, fresh} = Workline.open(%{title: "straight to build", slug: "requeue-self", stage: "build"})
+
+      Repo.insert!(
+        Server.Jobs.Continue.new(%{thread_id: fresh.id, quiet: true},
+          state: "executing",
+          attempted_at: DateTime.utc_now()
+        )
+      )
+
+      Repo.update_all(Oban.Job, set: [inserted_at: DateTime.add(DateTime.utc_now(), -9 * 60)])
+      :ok = Continuation.run(fresh.id, artifacts: Present, quiet: true)
+
+      assert [_] = all_enqueued(worker: Server.Jobs.Continue, args: %{thread_id: fresh.id})
+    end
+
     test "a lead's post holds nudges back for one gap only", %{thread: t} do
       {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "builds", engine: "claude-code"})
       {:ok, _} = Server.Staff.assign(Repo.get!(Server.Thread, t.id), a)
