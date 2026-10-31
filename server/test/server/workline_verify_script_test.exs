@@ -371,6 +371,14 @@ defmodule Server.WorklineVerifyScriptTest do
       assert String.starts_with?(cwd, Path.join(ctx.tmp, "cache/tlon-verify") <> "/")
     end
 
+    test "the sweep removes a Hex home whose tree is gone", ctx do
+      orphan = Path.join(ctx.tmp, "cache/tlon-verify/orphan.hex")
+      File.mkdir_p!(orphan)
+
+      assert {_, 0} = gate(ctx)
+      refute File.exists?(orphan)
+    end
+
     test "red: exit 1 and the gate's tail on stdout, still nothing recorded", ctx do
       assert {out, 1} = gate(ctx, [{"FAKE_GATE", "1"}])
       refute out =~ "could not record"
