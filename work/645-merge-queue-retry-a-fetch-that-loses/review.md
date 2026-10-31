@@ -1,17 +1,14 @@
-No free reviewer is at the builder's grade (greybeard); reviewed by tzinacan (deepseek-flash class), so read as a careful but lower-grade pass.
+VERDICT: request_changes
 
-# Verdict: approve
+Supersedes my earlier approve. The retry itself is fine; the new error shape breaks one caller. Found by reading the code, not by running it.
 
-Merge queue: retry a fetch that loses the origin/main ref lock (#645).
+Bug: `Workline.land/3` (server/lib/server/workline.ex, ~1549) calls `merger.merge(repo, slug)` and matches only `{:error, why}`. `Merge.fetch_main` now returns `{:error, {:interrupted, str}}`, so interpolating `why` into the "couldn't merge" brief raises Protocol.UndefinedError on the approve-now path with the real merger. The gate should stay parked and the thread should say why; instead it crashes.
 
-## What I checked (read the diff, grepped callers; did not run the suite)
-- `fetch_main/2` replaces both `fetch origin main` calls (`merge/3`, `stack/3`). It retries up to 3 tries (250 ms, then 500 ms) only on "cannot lock ref". Any other fetch failure, or a lock that never clears, returns `{:error, {:interrupted, why}}`.
-- `merge/3`'s `with` has no `else`, so the interrupted tuple passes through to `Workline.land_queued`, `PRLanding` and `Jobs.Land`. All three already handle `{:interrupted, _}` (retry, with the last attempt bouncing).
-- `stack/3` passes `{:error, _}` through. Both train callers handle only `{:gate, _}` specially, so an interrupted fetch falls to their generic `{:error, _}` branch (land solo / leave unverified). Safe.
-- The message change in `workline.ex` ("cut off three times", not "the gate") is accurate now that the fetch can also cause it.
-- Tests cover a held lock that clears (`merge/3` and `stack/3`), a lock that never clears (branch tip unchanged, interrupted), and `land_queued` leaving the stage at review. The nowhere-remote test is updated to the interrupted shape.
+Required:
+1. In `land/3`, add a `{:error, {:interrupted, why}}` clause before `{:error, why}`. It posts the same "couldn't merge work/<slug>: <why>" brief and returns `{:error, {:merge, why}}`.
+2. In server/test/server/workline_test.exs, add a case: a parked review approved with a `merge:` stub returning `{:error, {:interrupted, "..."}}` and `land: :now` returns an error without raising, and its brief says "couldn't merge".
+3. Widen the `@spec` on `Merge.merge/3` to include `{:error, {:interrupted, String.t()}}`.
 
-## Nits (not blocking)
-- A permanently bad origin URL is now retried by the Oban job before it bounces: a few extra attempts of delay, nothing worse.
-- The 250/500 ms backoff is hard-coded; fine for a winner that finishes in tens of ms.
-- The tests that hold the real lock for 400 ms are timing-dependent, but the margin looks adequate.
+PRLanding and Jobs.Land already match `{:interrupted, why}`.
+
+Not in this review: narrowing `fetch_main` so only the lock race is classed interrupted is filed as its own low ticket.
