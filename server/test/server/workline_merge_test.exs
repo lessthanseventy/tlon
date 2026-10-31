@@ -172,11 +172,57 @@ defmodule Server.Workline.MergeTest do
     assert why =~ "work/nope"
   end
 
-  test "a git step that fails says what git said, not only which step", %{repo: repo, git: git} do
+  # a fetch that fails is the machine's, not the branch's: the landing retries, nothing is bounced
+  test "a fetch that fails is interrupted, saying what git said, not only which step", %{repo: repo, git: git} do
     {_, 0} = git.(["remote", "set-url", "origin", repo <> "-nowhere.git"])
-    assert {:error, why} = Merge.merge(repo, "finder")
+    assert {:error, {:interrupted, why}} = Merge.merge(repo, "finder")
     assert why =~ "could not fetch origin"
     assert why =~ "nowhere.git"
+  end
+
+  describe "the origin/main ref lock (another fetch in the same .git at once)" do
+    # a lock another fetch holds: git fails with "cannot lock ref" until it is gone
+    defp hold_lock(repo, for_ms) do
+      lock = Path.join(repo, ".git/refs/remotes/origin/main.lock")
+      File.write!(lock, "")
+      if for_ms, do: spawn(fn -> Process.sleep(for_ms) && File.rm!(lock) end)
+      lock
+    end
+
+    test "merge/3 retries a fetch that loses the lock, and proceeds once it is free", %{
+      repo: repo,
+      git: git,
+      other: other
+    } do
+      upstream = land_upstream(other, "theirs.txt", "from github\n", "theirs")
+      hold_lock(repo, 400)
+
+      assert {:ok, %{from: ^upstream}} = Merge.merge(repo, "finder")
+      assert sha(git, "origin/main") == upstream
+    end
+
+    test "stack/3 retries it the same way", %{repo: repo, other: other} do
+      upstream = land_upstream(other, "theirs.txt", "from github\n", "theirs")
+      hold_lock(repo, 400)
+
+      assert {:ok, %{from: ^upstream}} = Merge.stack(repo, ["finder"])
+    end
+
+    test "a lock that never clears: bounded tries, then interrupted for the landing to retry", %{
+      repo: repo,
+      git: git,
+      other: other
+    } do
+      _ = land_upstream(other, "theirs.txt", "from github\n", "theirs")
+      lock = hold_lock(repo, nil)
+      on_exit(fn -> File.rm(lock) end)
+      tip = sha(git, "work/finder")
+
+      assert {:error, {:interrupted, why}} = Merge.merge(repo, "finder")
+      assert why =~ "could not fetch origin"
+      assert why =~ "cannot lock ref"
+      assert sha(git, "work/finder") == tip
+    end
   end
 
   test "a repo with no origin has nowhere to land", %{repo: repo, git: git} do

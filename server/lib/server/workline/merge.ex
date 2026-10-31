@@ -8,10 +8,12 @@ defmodule Server.Workline.Merge do
   branch left as it was — except one only on the office's golden frames (`office/test/golden.json`),
   which takes origin's side; a branch that touched `office/` has its frames re-hashed and committed
   after the rebase, before the gate. `{:ok, %{from, to}}` (origin's main, and the rebased branch tip), or
-  `{:error, why}` in words the operator can act on.
+  `{:error, why}` in words the operator can act on. Origin that could not be fetched is
+  `{:error, {:interrupted, why}}`: the machine's fault, not the branch's, for the landing to retry.
   """
 
   @golden "office/test/golden.json"
+  @fetch_tries 3
 
   @doc """
   Ready `work/<slug>` in `repo` to land: fetch origin, rebase the branch onto `origin/main`, gate it.
@@ -29,7 +31,7 @@ defmodule Server.Workline.Merge do
 
     with {:ok, _} <- run(repo, ["rev-parse", "--verify", "--quiet", branch], "there is no branch #{branch}"),
          {:ok, _} <- run(repo, ["remote", "get-url", "origin"], "#{repo} has no origin to land on"),
-         {:ok, _} <- run(repo, ["fetch", "--quiet", "origin", "main"], "could not fetch origin"),
+         {:ok, _} <- fetch_main(repo),
          {:ok, from} <- run(repo, ["rev-parse", "origin/main"], "origin has no main"),
          {:ok, _} <- rebase(repo, branch, rehash, "origin/main"),
          {:ok, _} <- gate.(repo, branch),
@@ -51,7 +53,7 @@ defmodule Server.Workline.Merge do
     gate = Keyword.get(opts, :gate, fn _repo, _branch -> {:ok, :no_gate} end)
     rehash = Keyword.get(opts, :rehash, &bun_rehash/1)
 
-    with {:ok, _} <- run(repo, ["fetch", "--quiet", "origin", "main"], "could not fetch origin"),
+    with {:ok, _} <- fetch_main(repo),
          {:ok, from} <- run(repo, ["rev-parse", "origin/main"], "origin has no main"),
          {:ok, cars} <- stack_cars(repo, slugs, rehash),
          {:gate, {:ok, _}} <- {:gate, gate.(repo, "train/#{List.last(slugs)}")} do
@@ -69,6 +71,25 @@ defmodule Server.Workline.Merge do
     case git(repo, ["rev-parse", ref <> "^{tree}"]) do
       {out, 0} -> String.trim(out)
       _ -> nil
+    end
+  end
+
+  # Landings and KeepUp fetch origin in the one shared .git at once; the fetch that loses the race on
+  # refs/remotes/origin/main's lock fails though the ref is fine, and succeeds as a no-op once the
+  # winner is done. A fetch that still fails is the machine's, not the branch's: interrupted, so the
+  # landing is retried, never bounced to build.
+  defp fetch_main(repo, try \\ 1) do
+    case git(repo, ["fetch", "--quiet", "origin", "main"]) do
+      {out, 0} ->
+        {:ok, String.trim(out)}
+
+      {out, _} ->
+        if try < @fetch_tries and out =~ "cannot lock ref" do
+          Process.sleep(250 * try)
+          fetch_main(repo, try + 1)
+        else
+          {:error, {:interrupted, said("could not fetch origin", out)}}
+        end
     end
   end
 
