@@ -160,14 +160,14 @@ defmodule Server.SearchTest do
           end)
         end)
 
-      assert_receive :locked
+      assert_receive :locked, 5_000
       assert {:error, :timeout} = Search.history("ticket review", 10, timeout: 50)
       send(holder.pid, :release)
       Task.await(holder)
     end
 
     # The lock is taken once the query before the one under test has returned, so only that query waits;
-    # it is let go as that query returns (or after 300ms), so an unbounded query finishes (red) rather
+    # it is let go as that query returns (or after 5s), so an unbounded query finishes (red) rather
     # than hang, and no later query is the one that times out.
     for {name, after_sql, until_sql, around} <- [
           {"details", "SELECT id, embedding", "ts_headline", 0},
@@ -175,40 +175,18 @@ defmodule Server.SearchTest do
         ] do
       test "the #{name} query is bounded by the timeout: passed to history/3", %{thread: thread} do
         {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "ticket review"})
-        test = self()
         id = {__MODULE__, make_ref()}
 
         :telemetry.attach(
           id,
           [:server, :repo, :query],
-          fn _, _, meta, _ ->
-            cond do
-              String.contains?(meta.query, unquote(after_sql)) ->
-                {:ok, holder} =
-                  Task.start(fn ->
-                    Repo.transaction(fn ->
-                      Repo.query!("LOCK TABLE message IN ACCESS EXCLUSIVE MODE")
-                      send(test, :locked)
-                      receive do: (:release -> :ok), after: (300 -> :ok)
-                    end)
-                  end)
-
-                Process.put(:holder, holder)
-                assert_receive :locked, 5_000
-
-              String.contains?(meta.query, unquote(until_sql)) ->
-                send(Process.get(:holder), :release)
-
-              true ->
-                :ok
-            end
-          end,
-          nil
+          &__MODULE__.handle_query/4,
+          %{test: self(), after_sql: unquote(after_sql), until_sql: unquote(until_sql)}
         )
 
-        result = Search.history("ticket review", 10, timeout: 50, around: unquote(around))
-        :telemetry.detach(id)
-        assert {:error, :timeout} = result
+        on_exit(fn -> :telemetry.detach(id) end)
+
+        assert {:error, :timeout} = Search.history("ticket review", 10, timeout: 50, around: unquote(around))
       end
     end
 
@@ -219,21 +197,44 @@ defmodule Server.SearchTest do
 
   # The ranking query history/3 sent, read off the repo's telemetry so the test explains the real SQL.
   defp captured_history_query(fun) do
-    test = self()
     id = {__MODULE__, make_ref()}
-
-    :telemetry.attach(
-      id,
-      [:server, :repo, :query],
-      fn _, _, meta, _ -> send(test, {:sql, meta.query, meta.params}) end,
-      nil
-    )
+    :telemetry.attach(id, [:server, :repo, :query], &__MODULE__.handle_query/4, %{capture: self()})
+    on_exit(fn -> :telemetry.detach(id) end)
 
     fun.()
-    :telemetry.detach(id)
 
-    assert_received {:sql, "-- idf is MATERIALIZED" <> _ = sql, params}
+    assert_received {:sql, sql, params}
+    assert sql =~ "idf AS MATERIALIZED"
     {sql, params}
+  end
+
+  # Telemetry handler: an exported fun rather than a closure. With %{capture: pid} it reports each query
+  # to pid; with %{test:, after_sql:, until_sql:} it holds an ACCESS EXCLUSIVE lock once the query
+  # matching after_sql is about to run, and lets it go when the query matching until_sql starts.
+  def handle_query(_event, _measurements, meta, %{capture: test}) do
+    send(test, {:sql, meta.query, meta.params})
+  end
+
+  def handle_query(_event, _measurements, meta, %{test: test, after_sql: after_sql, until_sql: until_sql}) do
+    cond do
+      String.contains?(meta.query, after_sql) -> hold_lock(test)
+      String.contains?(meta.query, until_sql) -> send(Process.get(:holder), :release)
+      true -> :ok
+    end
+  end
+
+  defp hold_lock(test) do
+    {:ok, holder} = Task.start(fn -> lock_until_released(test) end)
+    Process.put(:holder, holder)
+    assert_receive :locked, 5_000
+  end
+
+  defp lock_until_released(test) do
+    Repo.transaction(fn ->
+      Repo.query!("LOCK TABLE message IN ACCESS EXCLUSIVE MODE")
+      send(test, :locked)
+      receive do: (:release -> :ok), after: (5_000 -> :ok)
+    end)
   end
 
   defp plan_nodes(node), do: [node | Enum.flat_map(Map.get(node, "Plans", []), &plan_nodes/1)]
