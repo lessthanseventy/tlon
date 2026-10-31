@@ -179,6 +179,19 @@ defmodule Server.OfficeTest do
       assert %{warm: true} = Enum.find(status.roster, &(&1.agent == "hronir"))
     end
 
+    test "a paused thread carries its paused_at and reads as parked, whoever is at its desk", %{ws: ws} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+      {:ok, t} = Channel.open_thread(%{title: "held", workspace_id: ws.id})
+      {:ok, _} = Channel.assign_lead(t.id, "hronir")
+      {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name("hronir").id, thread_id: t.id})
+      windows("0\tt#{t.id}\t#{t.id}\t\t\thronir\t")
+      {:ok, _} = Server.Pause.pause_thread(t.id)
+
+      row = Enum.find(Office.status().threads, &(&1.id == t.id))
+
+      assert %{paused_at: %DateTime{}, seat: "parked"} = row
+    end
+
     test "on the standing thread the lead's own window is a desk only with its session on that thread", %{ws: ws} do
       {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
       {:ok, %{id: standing}} = Channel.open_thread(%{title: "root", workspace_id: ws.id, scope: "machine"})
