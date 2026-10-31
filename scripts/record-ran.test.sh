@@ -24,4 +24,11 @@ out="$(PATH="$tmp/bin:$PATH" record_ran smoke "$sha" 0 2>&1)"; code=$?
 [ "$code" = 0 ] || { echo "FAIL a service that is down must not fail the run (got $code)"; bad=1; }
 case "$out" in *"not recorded"*) echo "ok   a service that is down: warned, run unharmed" ;; *) echo "FAIL it warns when the report fails: $out"; bad=1 ;; esac
 
+# a scheduled run (TLON_SCHEDULE_RUN, seen when the lib is sourced: the gates unset TLON_* after) is
+# recorded by its schedule: it posts nothing, a second row would sit beside the schedule's own
+printf '#!/bin/sh\necho posted >"%s/posted"\necho %s\n' "$tmp" "'{\"id\":1}'" >"$tmp/bin/curl"
+out="$(PATH="$tmp/bin:$PATH" TLON_SCHEDULE_RUN=1 bash -c ". '$here/lib/record-ran.sh'; unset TLON_SCHEDULE_RUN; record_ran gate '$sha' 0" 2>&1)"; code=$?
+[ "$code" = 0 ] || { echo "FAIL a scheduled run returns 0 (got $code)"; bad=1; }
+[ ! -e "$tmp/posted" ] && echo "ok   a scheduled run posts nothing" || { echo "FAIL a scheduled run must not POST a second record"; bad=1; }
+
 exit "$bad"
