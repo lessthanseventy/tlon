@@ -275,6 +275,32 @@ defmodule Server.StaffingTest do
     refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
   end
 
+  test "a mid-turn session begun after boot whose pane is gone is ended once quiet past the grace, and its coworker told once",
+       %{ws: ws} do
+    thread = staffed_thread(ws, "borges")
+    Server.Staff.mark_boot(DateTime.add(DateTime.utc_now(), -3_600))
+    # begun after boot, its turn still open on the row, nothing heard from it for 15 minutes
+    lost = session!("borges", thread.id, 900, true)
+
+    # its leaf still up: a quiet turn behind a live pane is the stale-turn clock's, not ours
+    tmux("1\tt#{thread.id}\t#{thread.id}\tdone\t999999991\tborges\t#{fresh()}\n")
+    assert :ok = Staffing.pass(ws.id)
+    refute Server.Repo.get!(Server.Session, lost.id).ended_at
+    refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "pick it up from the brief"))
+
+    # the pane died under it
+    tmux("")
+    assert :ok = Staffing.pass(ws.id)
+    assert Server.Repo.get!(Server.Session, lost.id).ended_at
+    assert 1 == Enum.count(Channel.thread_messages(thread), &(&1.body =~ "@borges your pane went away"))
+
+    # the session that wake begins — mid-turn, no window the fake tmux shows — is inside the grace: left alone
+    begun = session!("borges", thread.id, 30, true)
+    assert :ok = Staffing.pass(ws.id)
+    refute Server.Repo.get!(Server.Session, begun.id).ended_at
+    assert 1 == Enum.count(Channel.thread_messages(thread), &(&1.body =~ "pick it up from the brief"))
+  end
+
   test "a tmux that can't be asked ends nothing: no idle session ended, no cut-off turn announced", %{ws: ws} do
     idle = session!("hronir", staffed_thread(ws, "hronir").id, 1_200)
     thread = staffed_thread(ws, "borges")

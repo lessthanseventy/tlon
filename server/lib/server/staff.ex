@@ -221,17 +221,17 @@ defmodule Server.Staff do
   `[%{session_id, thread_id, agent}]` — the staffing pass asks tmux whether each still has a window.
   """
   def interrupted(workspace_id, before) do
-    Repo.all(
-      from s in Session,
-        join: t in Thread,
-        on: t.id == s.thread_id,
-        join: a in Agent,
-        on: a.id == s.agent_id,
-        where:
-          t.workspace_id == ^workspace_id and is_nil(s.ended_at) and not is_nil(s.thinking_since) and
-            s.started_at < ^before,
-        select: %{session_id: s.id, thread_id: s.thread_id, agent: a.name}
-    )
+    Repo.all(from [s, t, a] in mid_turn(workspace_id), where: s.started_at < ^before)
+  end
+
+  @doc """
+  Sessions whose pane may have died under them: mid-turn, not ended, in `workspace_id`, begun at or
+  after `since` (this node's boot — `interrupted/2` has the ones before it) and not heard from since
+  `quiet`. A turn behind a live pane calls the server; a dead pane never does. Same shape as
+  `interrupted/2`; the staffing pass asks tmux whether each still has a window.
+  """
+  def stranded(workspace_id, since, quiet) do
+    Repo.all(from [s, t, a] in mid_turn(workspace_id), where: s.started_at >= ^since and s.last_active_at < ^quiet)
   end
 
   @doc """
@@ -273,5 +273,15 @@ defmodule Server.Staff do
             s.thread_id == ^thread_id and s.agent_id == ^agent_id and is_nil(s.ended_at) and
               not is_nil(s.pane_ref)
       )
+  end
+
+  defp mid_turn(workspace_id) do
+    from s in Session,
+      join: t in Thread,
+      on: t.id == s.thread_id,
+      join: a in Agent,
+      on: a.id == s.agent_id,
+      where: t.workspace_id == ^workspace_id and is_nil(s.ended_at) and not is_nil(s.thinking_since),
+      select: %{session_id: s.id, thread_id: s.thread_id, agent: a.name}
   end
 end

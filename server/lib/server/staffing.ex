@@ -285,26 +285,33 @@ defmodule Server.Staffing do
     |> Enum.any?(fn {at, thinking} -> live_turn?(thinking) or Presence.warm_for?(at, agent, workspace_id) end)
   end
 
-  # A session begun before this node booted, still mid-turn with no window to run it: the machine
-  # went down under it (one begun since cannot have been cut off by that restart). End it (so
-  # the switchboard does not try to wake a pane that is gone) and tell its coworker on the thread
-  # to carry on — the message spawns them fresh, brief-seeded, like any other. Not told when the
-  # thread has moved on to another lead (a stage handover; a leadless thread has not): a session
-  # that no longer leads cannot answer there, and the turn it had was landed by the one that does.
-  # The standing thread has no single lead and a crew role is never one, so those are always told.
+  # A session still mid-turn with no window to run it, either begun before this node booted (the
+  # machine went down under it; one begun since cannot have been cut off by that restart) or begun
+  # since and quiet past the boot grace (its pane died: a turn behind a live pane calls the server,
+  # so a mistagged window never reads as a dead one — the loop that made the boot line necessary).
+  # End it (so the switchboard does not try to wake a pane that is gone) and tell its coworker on
+  # the thread to carry on — the message spawns them fresh, brief-seeded, like any other. Not told
+  # when the thread has moved on to another lead (a stage handover; a leadless thread has not): a
+  # session that no longer leads cannot answer there, and the turn it had was landed by the one
+  # that does. The standing thread has no single lead and a crew role is never one, so those are
+  # always told.
   defp resume_interrupted(workspace_id, tabs, standing) do
-    for %{session_id: sid, thread_id: tid, agent: agent} <- Staff.interrupted(workspace_id, Staff.booted_at()),
+    boot = Staff.booted_at()
+    quiet = DateTime.add(DateTime.utc_now(), -@boot_grace_s, :second)
+
+    cut_off =
+      for s <- Staff.interrupted(workspace_id, boot), do: {s, "the machine restarted while you were mid-turn here"}
+
+    lost =
+      for s <- Staff.stranded(workspace_id, boot, quiet), do: {s, "your pane went away while you were mid-turn here"}
+
+    for {%{session_id: sid, thread_id: tid, agent: agent}, why} <- cut_off ++ lost,
         not has_window?(tabs, tid, agent, standing) do
       # one row gone or one post refused doesn't stop the rest of the pass
       with %Session{} = session <- Repo.get(Session, sid), do: Staff.end_session(session)
 
       if still_theirs?(tid, agent, standing) do
-        _ =
-          Channel.post(%{
-            thread_id: tid,
-            author: "tlon",
-            body: "@#{agent} the machine restarted while you were mid-turn here — pick it up from the brief."
-          })
+        _ = Channel.post(%{thread_id: tid, author: "tlon", body: "@#{agent} #{why} — pick it up from the brief."})
       end
     end
 
