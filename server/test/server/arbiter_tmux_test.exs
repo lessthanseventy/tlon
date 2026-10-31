@@ -191,6 +191,44 @@ defmodule Server.Arbiter.TmuxTest do
     assert {:error, :already_running} = Arbiter.Tmux.spawn(exports)
   end
 
+  test "spawn: two concurrent spawns for one leaf open exactly one window — the second re-lists under the lock",
+       %{thread: t, exports: exports} do
+    # a fake tmux with state: list-windows is slow (the race window), new-window adds the leaf
+    {:ok, windows} = Agent.start_link(fn -> "" end)
+    pid = self()
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      send(pid, {:tmux, args})
+
+      case Enum.at(args, 2) do
+        "list-windows" ->
+          Process.sleep(150)
+          {Agent.get(windows, & &1), 0}
+
+        "has-session" ->
+          {"", 0}
+
+        "new-window" ->
+          Agent.update(windows, &(&1 <> "1\tt#{t.id}\t#{t.id}\t\t123\tclaude-code\t1\n"))
+          {"", 0}
+
+        _ ->
+          {"", 0}
+      end
+    end)
+
+    results =
+      1..2
+      |> Enum.map(fn _ -> Task.async(fn -> Server.Arbiter.Tmux.spawn(exports) end) end)
+      |> Task.await_many(5_000)
+      |> Enum.sort()
+
+    assert [{:error, :already_running}, {:ok, %{window: window}}] = results
+    assert window == "t#{t.id}"
+    assert_received {:tmux, [_, _, "new-window" | _]}
+    refute_received {:tmux, [_, _, "new-window" | _]}
+  end
+
   test "spawn: a process still holding the seat's identity is retired before the new window opens", %{
     thread: t,
     exports: exports

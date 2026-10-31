@@ -49,35 +49,15 @@ defmodule Server.Arbiter.Tmux do
   def spawn(exports) do
     with {:ok, thread_id, author} <- identity(exports),
          %Thread{} = thread <- Repo.get(Thread, thread_id) || {:error, :no_thread},
-         ws when not is_nil(ws) <- workspace_id(thread),
-         # the Aleph's window is named for it like a lobby window: one at a time, no leaf seat, and
-         # no thread tag, which would make it the thread's leaf (`Tmux.leaf_tab/2`) in its lead's place
-         standing? = standing?(ws, thread) or author == Server.Aleph.name(),
-         tabs when is_list(tabs) <- tmux_windows(ws),
-         :absent <- running(tabs, thread, author, standing?),
-         _ = Server.Orphans.retire(thread_id, author, Application.get_env(:server, :orphans, [])),
-         parked? = Server.Staffing.parked_note?(thread_id),
-         :ok <- under_cap(tabs, thread, standing?) do
-      leaf_thread = if(!standing?, do: thread_id)
+         ws when not is_nil(ws) <- workspace_id(thread) do
+      # the Aleph's window is named for it like a lobby window: one at a time, no leaf seat, and
+      # no thread tag, which would make it the thread's leaf (`Tmux.leaf_tab/2`) in its lead's place
+      standing? = standing?(ws, thread) or author == Server.Aleph.name()
       window = if standing?, do: author, else: "t#{thread_id}"
-      script = Tmux.boot_script(exports, launcher(ws, author))
-      cmd = "/bin/sh -c " <> Tmux.sh_single_quote(script)
 
-      args =
-        if Tmux.session_up?(ws),
-          do: ["new-window", "-d", "-t", Tmux.session(ws), "-n", window, cmd],
-          else: ["new-session", "-d", "-s", Tmux.session(ws), "-n", window, cmd]
-
-      case Tmux.run(ws, args) do
-        {_out, 0} ->
-          tag(ws, window, leaf_thread, author)
-          Tmux.set_window_option(ws, "=" <> window, "@funes_launch", launch_stamp(ws, author))
-          _ = parked? and Server.Staffing.note_seated(thread, author)
-          {:ok, target(ws, window)}
-
-        {out, _} ->
-          {:error, {:tmux, String.slice(out, 0, 200)}}
-      end
+      # one spawn at a time per window: several wakes drained at once each read the seat as absent
+      # and each opened a window — the tabs are listed under the lock, so the second sees the first's
+      :global.trans({{__MODULE__, ws, window}, self()}, fn -> open(exports, thread, ws, author, standing?, window) end)
     else
       {:error, _} = e -> e
       nil -> {:error, :no_workspace}
@@ -250,5 +230,35 @@ defmodule Server.Arbiter.Tmux do
   defp profile_for(ws, author) do
     bench = Workspaces.bench_all(ws)
     Profiles.seat_profile(author, bench, ws) || Profiles.citizen_profile(author, ws)
+  end
+
+  defp open(exports, %Thread{id: thread_id} = thread, ws, author, standing?, window) do
+    with tabs when is_list(tabs) <- tmux_windows(ws),
+         :absent <- running(tabs, thread, author, standing?),
+         _ = Server.Orphans.retire(thread_id, author, Application.get_env(:server, :orphans, [])),
+         parked? = Server.Staffing.parked_note?(thread_id),
+         :ok <- under_cap(tabs, thread, standing?) do
+      leaf_thread = if(!standing?, do: thread_id)
+      script = Tmux.boot_script(exports, launcher(ws, author))
+      cmd = "/bin/sh -c " <> Tmux.sh_single_quote(script)
+
+      args =
+        if Tmux.session_up?(ws),
+          do: ["new-window", "-d", "-t", Tmux.session(ws), "-n", window, cmd],
+          else: ["new-session", "-d", "-s", Tmux.session(ws), "-n", window, cmd]
+
+      case Tmux.run(ws, args) do
+        {_out, 0} ->
+          tag(ws, window, leaf_thread, author)
+          Tmux.set_window_option(ws, "=" <> window, "@funes_launch", launch_stamp(ws, author))
+          _ = parked? and Server.Staffing.note_seated(thread, author)
+          {:ok, target(ws, window)}
+
+        {out, _} ->
+          {:error, {:tmux, String.slice(out, 0, 200)}}
+      end
+    else
+      {:error, _} = e -> e
+    end
   end
 end
