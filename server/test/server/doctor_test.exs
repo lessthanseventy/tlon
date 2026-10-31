@@ -168,6 +168,45 @@ defmodule Server.DoctorTest do
     end
   end
 
+  describe "config_lock/2" do
+    setup do
+      root = Path.join(System.tmp_dir!(), "doctor-lock-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(root, ".git"))
+      on_exit(fn -> File.rm_rf!(root) end)
+      %{root: root, lock: Path.join([root, ".git", "config.lock"])}
+    end
+
+    test "ok when there is no lock", %{root: root} do
+      assert Doctor.config_lock(root, fn -> false end) == "ok"
+    end
+
+    test "a lock older than a few minutes with no sandbox running is stale, with the rm to run", %{
+      root: root,
+      lock: lock
+    } do
+      File.write!(lock, "")
+      File.touch!(lock, System.os_time(:second) - 7200)
+
+      line = Doctor.config_lock(root, fn -> false end)
+      assert line =~ lock
+      assert line =~ "stale"
+      assert line =~ "rm #{lock}"
+    end
+
+    test "a lock that is still young is not reported, even with no sandbox running", %{root: root, lock: lock} do
+      File.write!(lock, "")
+
+      assert Doctor.config_lock(root, fn -> false end) == "ok"
+    end
+
+    test "a lock while a sandbox is live is not reported", %{root: root, lock: lock} do
+      File.write!(lock, "")
+      File.touch!(lock, System.os_time(:second) - 7200)
+
+      assert Doctor.config_lock(root, fn -> true end) == "ok"
+    end
+  end
+
   test "refuses an unknown table rather than interpolating it" do
     assert_raise ArgumentError, ~r/no such table/, fn ->
       Doctor.table_to_jsonl("collection; DROP TABLE collection")
