@@ -192,6 +192,7 @@ defmodule Server.WorklineVerifyScriptTest do
       echo "$(git rev-parse HEAD) $CHECKS_LABEL ${TLON_TEST_DATABASE:-}" >"$GATE_LOG"
       echo "$PWD" >"$GATE_LOG.cwd"
       echo "$*" >"$GATE_LOG.args"
+      env | grep -E '^(WORKLINE_GATE|LAND_REF|RUN_TASK|RULES_ONLY)=' >"$GATE_LOG.env"
       [ -z "$GATE_NOISE" ] || { echo "the failing assertion, line 42"; seq 1 2000; }
       exit "${FAKE_GATE:-0}"
       """)
@@ -209,8 +210,7 @@ defmodule Server.WorklineVerifyScriptTest do
           {"GATE_LOG", Path.join(ctx.tmp, "gate.log")},
           {"WORKLINE_GATE", "1"},
           {"LAND_REF", "land/feature"},
-          {"CHECKS_LABEL", "PR #7 landing feature"},
-          {"RUN_TASK", nil}
+          {"CHECKS_LABEL", "PR #7 landing feature"}
         ] ++ env
 
       System.cmd("bash", [Path.join(ctx.repo, "scripts/workline-verify.sh"), "-", "pr-7-feature", ctx.repo],
@@ -220,14 +220,9 @@ defmodule Server.WorklineVerifyScriptTest do
     end
 
     # a workline's own verify (thread 7, work/pr-7-feature): records through the CLI stub and advances.
-    # Branch mode's variables are cleared: under run_task the suite inherits the job's own (#620).
     defp verify(ctx, env \\ []) do
       env =
         [
-          {"WORKLINE_GATE", nil},
-          {"LAND_REF", nil},
-          {"RUN_TASK", nil},
-          {"RULES_ONLY", nil},
           {"CHECKS_LABEL", nil},
           {"PATH", "#{ctx.tmp}/bin:#{System.get_env("PATH")}"},
           {"TMPDIR", ctx.tmp},
@@ -357,6 +352,12 @@ defmodule Server.WorklineVerifyScriptTest do
 
       assert {_, 0} = gate(ctx, [{"RUN_TASK", "office:test"}])
       assert File.read!(Path.join(ctx.tmp, "gate.log.args")) == "run office:test\n"
+    end
+
+    # the job's branch-mode variables stay in the script; the suite it runs gets none of them (#620)
+    test "the suite inherits none of branch mode's variables", ctx do
+      assert {_, 0} = gate(ctx, [{"RUN_TASK", "office:test"}])
+      assert File.read!(Path.join(ctx.tmp, "gate.log.env")) == ""
     end
 
     test "the checkout lives under the verify cache, never under TMPDIR (a seat's write root)", ctx do

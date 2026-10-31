@@ -37,6 +37,8 @@ tree="${3:-$("$cli" worktree "$tid" 2>/dev/null)}"
 # database under another ({:error, :already_up}, tables wiped mid-suite).
 clean=(env)
 for v in $(compgen -e | grep '^TLON_'); do clean+=(-u "$v"); done
+# branch mode's variables belong to this script's job, not to the suite it runs (#620)
+clean+=(-u WORKLINE_GATE -u LAND_REF -u RUN_TASK -u RULES_ONLY)
 role=verify; [ -n "${WORKLINE_GATE:-}" ] && role=land
 db="tlon_${role}_$(printf '%s' "$slug" | tr -c 'a-zA-Z0-9' '_' | tr 'A-Z' 'a-z')"
 clean+=(TLON_TEST_DATABASE="${db:0:63}")
