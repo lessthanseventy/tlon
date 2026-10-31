@@ -513,6 +513,24 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"pause" => "working"}} = post_json("/api/office/pause", %{mode: "back_to_work"})
     end
 
+    test "a pause the settings file refuses is a 500 with the reason, not a crash" do
+      blocker = Path.join(System.tmp_dir!(), "pause-api-blocker-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.write!(blocker, "")
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, Path.join(blocker, "config.json"))
+
+      on_exit(fn ->
+        File.rm(blocker)
+
+        if prior,
+          do: Application.put_env(:server, :operator_config_path, prior),
+          else: Application.delete_env(:server, :operator_config_path)
+      end)
+
+      assert {500, %{"error" => error}} = post_json("/api/office/pause", %{mode: "pencils_down"})
+      assert error =~ "enotdir"
+    end
+
     test "pause and resume one thread: the mark set and cleared; a closed thread is 409, a missing one 404",
          %{thread: thread} do
       assert {200, %{"thread_id" => id, "paused" => true}} = post_json("/api/threads/#{thread.id}/pause", %{})
