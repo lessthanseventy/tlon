@@ -4,6 +4,7 @@
 #
 #   office-monitor.sh            # every 45 s; TLON_MONITOR_EVERY=<s> to change
 #   office-monitor.sh --until-new   # exit after the first pass that said something
+#   TLON_MONITOR_SKIP=<regex>       # lines matching it are never said (and never end a --until-new run)
 #
 # --until-new is for a harness whose watchers expire (Claude Code's Monitor stops at 30 min): run it as
 # a background command, which is woken on exit with no time cap, and start it again after reading.
@@ -36,9 +37,13 @@ else
   [ $until_new = 1 ] && mkdir -p "${state%/*}" && echo "$since" >"$state"
 fi
 
+skip="${TLON_MONITOR_SKIP:-}"
+
 say() {
   [ -n "${seen[$1]:-}" ] && return
-  seen[$1]=1; said=1; echo "$2"
+  seen[$1]=1
+  # skipped is still remembered, so it never wakes a later run either
+  if [ -z "$skip" ] || ! [[ "$2" =~ $skip ]]; then said=1; echo "$2"; fi
   [ $until_new = 1 ] && echo "$1" >>"$state"
 }
 
