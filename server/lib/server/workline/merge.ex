@@ -23,7 +23,7 @@ defmodule Server.Workline.Merge do
   rewrites the golden frames in the rebased checkout (default: `bun test/golden.ts` in its office).
   """
   @spec merge(String.t(), String.t() | nil, keyword()) ::
-          {:ok, %{from: String.t(), to: String.t()}} | {:error, String.t()}
+          {:ok, %{from: String.t(), to: String.t()}} | {:error, String.t() | {:interrupted, String.t()}}
   def merge(repo, slug, opts \\ []) do
     branch = Keyword.get(opts, :branch, "work/#{slug}")
     gate = Keyword.get(opts, :gate, fn _repo, _branch -> {:ok, :no_gate} end)
