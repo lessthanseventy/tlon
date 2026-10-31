@@ -271,7 +271,7 @@ case "$cmd" in
   toys)
     # The daily refill (a script schedule): each staffed workspace's visitors, puns and seats' reactions,
     # on the generator's ollama model. Off banter refills nothing and is no failure.
-    exec "$SERVER" rpc "r = for %{id: ws} <- Server.Workspaces.all(), Server.Workspaces.bench_all(ws) != [], {kind, res} <- Server.ToyPool.refresh_all_due(ws), do: {ws, kind, res}; bad = for {ws, kind, {:error, why}} <- r, why != :off, do: \"##{ws} #{inspect(kind)}: #{inspect(why)}\"; off = Enum.count(r, &match?({_, _, {:error, :off}}, &1)); IO.puts(\"toys: #{length(r) - length(bad) - off} of #{length(r)} pools fresh#{if off > 0, do: \" (banter is off)\"}\"); Enum.each(bad, &IO.puts/1); if bad != [], do: raise(\"refused\")"
+    exec "$SERVER" rpc "Server.ToyPool.refresh_cli()"
     ;;
 
   canvas)

@@ -140,7 +140,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 
 | verb | does |
 |---|---|
-| `toys:refresh` | toys: refill the toy's generated pools (visitors, puns, each seat's reactions, and the day's invented accessory) a day old or more, on the generator's ollama model, against the LIVE service — the daily script schedule (Server.ToyPool.refresh_all_due) |
+| `toys:refresh` | toys: refill the toy's generated pools (visitors, puns, each seat's reactions, and the day's invented accessory) a day old or more, on the generator's ollama model, against the LIVE service — the daily script schedule (Server.ToyPool.refresh_cli) |
 
 ## watch
 

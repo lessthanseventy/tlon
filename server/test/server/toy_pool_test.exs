@@ -150,6 +150,31 @@ defmodule Server.ToyPoolTest do
     assert count(calls) == 7
   end
 
+  test "toys:refresh prints each pool as it lands and says so when the run is all fresh", %{ws: ws} do
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "builder", crew: "night"})
+
+    output = ExUnit.CaptureIO.capture_io(fn -> assert :ok = ToyPool.refresh_cli() end)
+
+    assert output =~ "#{ws.id} :visitors: fresh"
+    assert output =~ "#{ws.id} {:reactions, \"yu\"}: fresh"
+    assert output =~ "toys: 5 of 5 pools fresh"
+  end
+
+  test "a hung model stops the run after 3 timeouts in a row, says why, and fails", %{ws: ws, cli: cli, calls: calls} do
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "builder", crew: "night"})
+    Application.put_env(:server, :model_cli_timeout_s, 1)
+    on_exit(fn -> Application.delete_env(:server, :model_cli_timeout_s) end)
+    File.write!(cli, "#!/bin/sh\necho x >> #{calls}\necho overloaded >&2\nsleep 5\n")
+
+    output = ExUnit.CaptureIO.capture_io(fn -> assert_raise RuntimeError, ~r/refused/, &ToyPool.refresh_cli/0 end)
+
+    assert count(calls) == 3
+    assert output =~ "#{ws.id} :visitors: {:model_cli_timeout, 1, \"overloaded\\n\"}"
+    assert output =~ "#{ws.id} :puns: {:model_cli_timeout, 1,"
+    assert output =~ "stopped after 3 model timeouts in a row; 2 pools not tried"
+    assert [] == ToyPool.visitors(ws.id)
+  end
+
   test "day is every stored pool of the workspace, empty until generated", %{ws: ws} do
     assert ToyPool.day(ws.id) == %{visitors: [], puns: [], reactions: %{}, parts: []}
 
