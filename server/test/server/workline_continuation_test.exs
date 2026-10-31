@@ -64,6 +64,29 @@ defmodule Server.Workline.ContinuationTest do
       assert continuations(fresh.id) == []
     end
 
+    test "a skipped check is requeued for the gap's end, so the nudge is not lost" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      {:ok, fresh} = Workline.open(%{title: "straight to build", slug: "requeue", stage: "build"})
+      :ok = Continuation.run(fresh.id, artifacts: Missing)
+
+      assert [job] = all_enqueued(worker: Server.Jobs.Continue, args: %{thread_id: fresh.id})
+      gap_end = DateTime.add(fresh.created_at, 10 * 60)
+      assert abs(DateTime.diff(job.scheduled_at, gap_end)) <= 1
+    end
+
+    test "a lead's post holds nudges back for one gap only", %{thread: t} do
+      {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "builds", engine: "claude-code"})
+      {:ok, _} = Server.Staff.assign(Repo.get!(Server.Thread, t.id), a)
+      {:ok, _} = Server.Channel.post(%{thread_id: t.id, author: "hronir", body: "still on the build"})
+      now = DateTime.utc_now()
+
+      :ok = Continuation.run(t.id, artifacts: Missing, now: DateTime.add(now, 5 * 60))
+      assert continuations(t.id) == []
+
+      :ok = Continuation.run(t.id, artifacts: Missing, now: DateTime.add(now, 11 * 60))
+      assert [_] = continuations(t.id)
+    end
+
     test "none while the lead posted on the thread inside the window", %{thread: t} do
       {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "builds", engine: "claude-code"})
       {:ok, _} = Server.Staff.assign(Repo.get!(Server.Thread, t.id), a)
