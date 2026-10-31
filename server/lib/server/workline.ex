@@ -596,8 +596,8 @@ defmodule Server.Workline do
           {:error, {:interrupted, why}}
 
         {:error, {:interrupted, why}} ->
-          Server.Sheriff.report(thread, "the merge queue's gate was cut off three times: #{why}")
-          bounce(thread, why, "the merge queue's gate was cut off three times (#{why}); verify again, then approve")
+          Server.Sheriff.report(thread, "the merge queue was cut off three times: #{why}")
+          bounce(thread, why, "the merge queue was cut off three times (#{why}); verify again, then approve")
 
         {:error, why} ->
           Server.Sheriff.report(thread, "the merge queue bounced it back to build: #{why}")
