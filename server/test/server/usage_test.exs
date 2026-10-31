@@ -31,6 +31,12 @@ defmodule Server.UsageTest do
     assert Enum.any?(Server.Channel.thread_messages(lobby), &(&1.body =~ "5h at 92%"))
   end
 
+  test "a report below the threshold leaves the office working and says nothing", %{lobby: lobby} do
+    :ok = Usage.report(%{"five_hour" => %{"percent" => 50, "resets_at" => "2026-10-27T14:00:00Z"}})
+    assert Server.Pause.state() == :working
+    refute Enum.any?(Server.Channel.thread_messages(lobby), &(&1.body =~ "pencils down"))
+  end
+
   test "nothing reported yet is nil, never a made-up zero" do
     assert Usage.claude() == nil
   end

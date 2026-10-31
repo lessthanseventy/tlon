@@ -74,7 +74,8 @@ defmodule Server.Pause do
   A plan meter reading (`%{five_hour?: w, seven_day?: w}`, `w = %{percent, resets_at}`): at the
   `auto_pause_at` knob, pencils down and the reason on the lobby. Only from :working; a window that
   already paused the office (its `resets_at`, kept per window in the settings file) never pauses it
-  again, so the operator's back_to_work sticks. Always `:ok`.
+  again, so the operator's back_to_work sticks. Always `:ok`; a failed settings write is logged and
+  nothing changes, not even the latch.
   """
   def auto(windows) do
     limit = OperatorConfig.setting("auto_pause_at")
@@ -85,9 +86,11 @@ defmodule Server.Pause do
            Enum.find(windows, fn {name, w} ->
              w.percent >= limit and Map.get(latched, to_string(name), :none) != w.resets_at
            end),
-         :ok <- write_setting("auto_paused_for", Map.put(latched, to_string(name), r)),
-         {:ok, _} <- pencils_down(),
-         :ok <- write_setting("pause_by", "auto:#{name}") do
+         {:ok, :pencils_down} <-
+           change(:working, :pencils_down, %{
+             "pause_by" => "auto:#{name}",
+             "auto_paused_for" => Map.put(latched, to_string(name), r)
+           }) do
       at = schedule_resume(name, r)
       auto_say(name, p, r, at)
     end
@@ -173,9 +176,12 @@ defmodule Server.Pause do
     if from == want, do: {:ok, want}, else: change(from, want)
   end
 
-  defp change(from, want) do
-    with :ok <- write_setting("pause", if(want != :working, do: Atom.to_string(want))),
-         :ok <- write_setting("pause_by", nil) do
+  # The pause and its extra keys (an auto pause's pause_by and latch) go in one write: a failed write
+  # leaves the file, and so the office, as it was.
+  defp change(from, want, extra \\ %{}) do
+    settings = Map.merge(%{"pause" => if(want != :working, do: Atom.to_string(want)), "pause_by" => nil}, extra)
+
+    with :ok <- write_settings(settings) do
       if from == :working, do: tell_live_threads()
       if want == :working, do: wake_stopped_threads()
       if want == :lights_out, do: lights_off()
@@ -185,13 +191,13 @@ defmodule Server.Pause do
     end
   end
 
-  defp write_setting(key, value) do
-    case OperatorConfig.put(key, value) do
+  defp write_settings(changes) do
+    case OperatorConfig.put_many(changes) do
       :ok ->
         :ok
 
       {:error, why} = error ->
-        Logger.error("pause: could not write #{inspect(key)} to the settings file: #{inspect(why)}")
+        Logger.error("pause: could not write #{inspect(Map.keys(changes))} to the settings file: #{inspect(why)}")
         error
     end
   end

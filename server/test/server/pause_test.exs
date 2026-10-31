@@ -331,6 +331,16 @@ defmodule Server.PauseTest do
       refute Enum.any?(bodies(lobby), &(&1 =~ "5h at 91%"))
     end
 
+    test "an auto pause's pause, its pause_by and its latch land in one settings write", %{lobby: lobby} do
+      assert :ok = Pause.auto(@hot)
+
+      settings = Server.OperatorConfig.read()
+      assert settings["pause"] == "pencils_down"
+      assert settings["pause_by"] == "auto:five_hour"
+      assert settings["auto_paused_for"] == %{"five_hour" => @r5_iso}
+      assert Enum.any?(bodies(lobby), &(&1 =~ "5h at 91%"))
+    end
+
     test "a manual pause is left as it is, and says nothing", %{lobby: lobby} do
       {:ok, :lights_out} = Pause.lights_out()
       before = bodies(lobby)
