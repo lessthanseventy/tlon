@@ -4,6 +4,7 @@ defmodule Server.PauseTest do
   # interrupts every coworker pane. Back to work undoes either. The state lives in the operator's
   # settings file, so a restart keeps it.
   use ExUnit.Case, async: false
+  use Oban.Testing, repo: Server.Repo
 
   import Ecto.Query
 
@@ -13,6 +14,7 @@ defmodule Server.PauseTest do
 
   setup do
     Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
     path = Path.join(System.tmp_dir!(), "pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
@@ -198,7 +200,48 @@ defmodule Server.PauseTest do
     test "a window at the threshold while working pauses and says why on the lobby", %{lobby: lobby} do
       assert :ok = Pause.auto(@hot)
       assert Pause.state() == :pencils_down
-      assert Enum.any?(bodies(lobby), &(&1 =~ "5h at 91%" and &1 =~ "14:00" and &1 =~ "back to work when you say"))
+
+      assert Enum.any?(
+               bodies(lobby),
+               &(&1 =~ "5h at 91%" and &1 =~ "14:00" and &1 =~ "back to work at 14:00 UTC or when you say")
+             )
+    end
+
+    test "an auto pause with resets_at enqueues one job at resets_at; performing it resumes", %{lobby: lobby} do
+      Pause.auto(@hot)
+      {:ok, at, _} = DateTime.from_iso8601("2026-10-27T14:00:00Z")
+
+      assert_enqueued(
+        worker: Server.Jobs.AutoResume,
+        args: %{window: "five_hour", resets_at: "2026-10-27T14:00:00Z"},
+        scheduled_at: at
+      )
+
+      assert Enum.any?(bodies(lobby), &(&1 =~ "back to work at 14:00 UTC or when you say"))
+      assert :ok = perform_job(Server.Jobs.AutoResume, %{window: "five_hour", resets_at: "2026-10-27T14:00:00Z"})
+      assert Pause.state() == :working
+    end
+
+    test "a stale job leaves a later hand pause alone" do
+      Pause.auto(@hot)
+      {:ok, :working} = Pause.back_to_work()
+      {:ok, :pencils_down} = Pause.pencils_down()
+      assert :ok = perform_job(Server.Jobs.AutoResume, %{window: "five_hour", resets_at: "2026-10-27T14:00:00Z"})
+      assert Pause.state() == :pencils_down
+    end
+
+    test "a nil resets_at enqueues nothing and the notice says when you say", %{lobby: lobby} do
+      Pause.auto(%{seven_day: %{percent: 95, resets_at: nil}})
+      refute_enqueued(worker: Server.Jobs.AutoResume)
+      assert Enum.any?(bodies(lobby), &(&1 =~ "back to work when you say"))
+      refute Enum.any?(bodies(lobby), &(&1 =~ "or when you say"))
+    end
+
+    test "lights out after an auto pause is not resumed by the job" do
+      Pause.auto(@hot)
+      {:ok, :lights_out} = Pause.lights_out()
+      assert :ok = perform_job(Server.Jobs.AutoResume, %{window: "five_hour", resets_at: "2026-10-27T14:00:00Z"})
+      assert Pause.state() == :lights_out
     end
 
     test "below the threshold nothing happens" do
