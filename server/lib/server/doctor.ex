@@ -3,6 +3,9 @@ defmodule Server.Doctor do
   The 2am report. Ask the database itself whether it is sound — the arbiter's own
   answers, not our bookkeeping — and provide the JSONL escape hatch that makes it
   repairable with a text editor.
+
+  The `.git/config.lock` check is honest only on the host (`mise run server:doctor`): inside a seat the
+  bind-mounted `/dev/null` always holds that lock, so its report can't be trusted there.
   """
   alias Server.Repo
 
@@ -126,6 +129,37 @@ defmodule Server.Doctor do
       missing ->
         "missing #{Enum.join(missing, ", ")} — fetch over SSH is refused in a sandbox; `mise run server:setup` sets them"
     end
+  end
+
+  @stale_lock_seconds 300
+
+  @doc """
+  The checkout's `.git/config.lock` at `root`, as one report line: `ok`, or `stale` with the `rm` for
+  the operator. A lock is stale when it is older than a few minutes and no `bwrap` is running; a live
+  sandbox's lock is also 0-byte, so age plus no sandbox is the only tell. `bwrap_running?` is injectable
+  so the check is deterministic in tests.
+  """
+  @spec config_lock(Path.t(), (-> boolean())) :: String.t()
+  def config_lock(root \\ Server.Profiles.tlon_root(), bwrap_running? \\ &bwrap_running?/0) do
+    path = Path.join([root, ".git", "config.lock"])
+
+    case File.stat(path, time: :posix) do
+      {:ok, %{mtime: mtime}} ->
+        if System.os_time(:second) - mtime > @stale_lock_seconds and not bwrap_running?.() do
+          "stale #{path} — no sandbox is running; `rm #{path}`"
+        else
+          "ok"
+        end
+
+      {:error, _} ->
+        "ok"
+    end
+  end
+
+  defp bwrap_running? do
+    match?({_, 0}, System.cmd("pgrep", ["-x", "bwrap"], stderr_to_stdout: true))
+  rescue
+    ErlangError -> true
   end
 
   @doc """

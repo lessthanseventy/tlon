@@ -178,7 +178,8 @@ exists so a reader of the repo knows where the law comes from and edits the one 
     runs and deletes it after; every session's sandboxed commands do it at once. While one exists, a git
     config write (`worktree add -b`, `switch -c`, `push -u`) fails "File exists" — work detached and push
     `HEAD:refs/heads/<branch>`. A launch that races another's teardown fails "bwrap: Can't find source path
-    …/.git/config.lock": run it again. Never create or `rm` the file.
+    …/.git/config.lock": run it again. Never create or `rm` the file — except a lock with no sandbox running
+    that is older than a few minutes is stale, and the operator removes it (`server:doctor` names it).
   - *`git fetch origin` over SSH is refused.* The sandbox read-denies `~/.ssh/*`, so a fetch dies on
     `~/.ssh/known_hosts: Permission denied`. The checkout fetches over HTTPS instead (the repo is public) and
     pushes stay on SSH: `server:setup` sets `url."https://github.com/".insteadOf git@github.com:` and
