@@ -221,7 +221,9 @@ defmodule Server.HarnessTest do
 
       exec = fn provider ->
         {out, 0} = System.cmd("bash", [launcher], env: [{"TLON_PROVIDER", provider} | env])
-        out |> String.split("\n") |> Enum.find(&String.starts_with?(&1, "exec: "))
+        # The exec line is printed last and spans lines: the system prompt in its argv holds newlines.
+        [_, exec] = String.split(out, "\nexec: ", parts: 2)
+        exec
       end
 
       assert exec.("anthropic") =~ "adapters/claude-code/plan"
