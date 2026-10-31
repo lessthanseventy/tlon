@@ -40,30 +40,37 @@ defmodule Server.Jobs.KeepUp do
   def keep_up(repo, run \\ &System.cmd/3) do
     drifted(repo, Server.Workline.Publish.follow_main(repo, run))
 
-    if github_remote?(repo, run) do
-      conflicting = read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo, run))
-      failing = read(repo, "red PRs", Server.Workline.Publish.failing(repo, run))
-      if conflicting != :error and failing != :error, do: Server.Rollout.clear("keep_up:#{repo}")
-      reland(repo, unread(conflicting), run)
-      red_checks(repo, unread(failing), run)
-    else
-      no_remote(repo)
-    end
+    case remote(repo, run) do
+      :github ->
+        conflicting = read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo, run))
+        failing = read(repo, "red PRs", Server.Workline.Publish.failing(repo, run))
+        if conflicting != :error and failing != :error, do: Server.Rollout.clear("keep_up:#{repo}")
+        reland(repo, unread(conflicting), run)
+        red_checks(repo, unread(failing), run)
+        []
 
-    []
+      :elsewhere ->
+        no_remote(repo)
+        []
+
+      {:fault, why} ->
+        fault(why)
+    end
   rescue
     e -> fault("keep_up #{repo}: #{Exception.message(e)}")
   end
 
-  # a repo whose origin is not on GitHub (none, GitLab, a bare path) has no GitHub PRs to keep up with:
-  # not a fault, so no rollout item. Its main is still followed. Said once in the log, not every
-  # pass, which is what a repo nobody can act on would otherwise fill it with.
-  defp github_remote?(repo, run) do
+  # Exit 2 is git's "No such remote": the repo has no origin, so it is skipped. Any other failure of
+  # `git remote get-url` is a fault, not a skip. Its main is still followed, whichever it is.
+  defp remote(repo, run) do
     case run.("git", ["-C", repo, "remote", "get-url", "origin"], stderr_to_stdout: true) do
-      {url, 0} -> url =~ ~r{^(?:(?:https?|git|ssh)://)?(?:[^@/]+@)?(?:ssh\.)?github\.com[/:]}
-      _ -> false
+      {url, 0} -> if github?(url), do: :github, else: :elsewhere
+      {_, 2} -> :elsewhere
+      {out, code} -> {:fault, "keep_up #{repo}: git remote get-url origin exited #{code}: #{String.trim(out)}"}
     end
   end
+
+  defp github?(url), do: url =~ ~r{^(?:(?:https?|git|ssh)://)?(?:[^@/]+@)?(?:ssh\.)?github\.com[/:]}
 
   defp no_remote(repo) do
     if !:persistent_term.get({__MODULE__, :no_remote, repo}, false) do
