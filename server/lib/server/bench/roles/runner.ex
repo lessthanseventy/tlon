@@ -62,6 +62,21 @@ defmodule Server.Bench.Roles.Runner do
     records
   end
 
+  @doc """
+  `:ok` when every role has a task in `suite`'s tiers under the bench dir, else `{:error, why}` for the
+  first that has none: a role asked for by name must not run on nothing.
+  """
+  def require_tasks(roles, suite, opts \\ []) do
+    dir = opts[:dir] || Path.join(Profiles.tlon_root(), "bench/roles")
+
+    Enum.find_value(roles, :ok, fn role ->
+      set = Roles.roles()[role].set
+
+      if Roles.load(Path.join(dir, "tasks"), set, suite) == [],
+        do: {:error, "#{role}: no #{suite} tasks under bench/roles/tasks/#{set}"}
+    end)
+  end
+
   @doc "Where a run's records go: `out` when given (nothing else touched), else the day's results file and the README."
   def persist(records, dir, nil) do
     Roles.append!(Path.join([dir, "results", "#{Date.utc_today()}.json"]), records)
