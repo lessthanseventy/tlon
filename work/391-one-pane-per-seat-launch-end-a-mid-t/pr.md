@@ -1,0 +1,6 @@
+One pane per seat launch, and a session whose pane is gone is ended and its seat re-woken. Closes #391 (halves (3) and (4); (1) and (2) landed in 7fc8030 and cb5e87a).
+
+- `Arbiter.Tmux.spawn` runs one at a time per (workspace, window) under `:global.trans`, with the tabs listed inside the lock. Several wakes drained at once each read the leaf as absent and each opened a window (daneri on #468, two panes 3 s apart); now the second sees the first's window and gets `:already_running`.
+- `Staffing.resume_interrupted` also ends a mid-turn session begun since this boot whose window is gone and that has not called the server past the boot grace (`Staff.stranded/3`), and tells its coworker on the thread to pick up from the brief, which respawns the seat. The quiet gate is what keeps #580's loop shut: a turn behind a live but mistagged window keeps calling the server, a dead pane never does. The sessions the thinking sweep never clears (its memory is lost with the pane) were ended by nobody before this.
+
+Checked: `menard run test` on `arbiter_tmux_test`, `staffing_test`, `staff_test` — 95 tests, 0 failures. Both new tests were red first: the concurrent spawn yielded two `{:ok}` windows, the lost session stayed open. `server:check` run on the committed head by `run_task`.
