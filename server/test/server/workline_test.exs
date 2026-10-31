@@ -289,6 +289,12 @@ defmodule Server.WorklineTest do
     end
   end
 
+  # origin could not be fetched: the machine's fault, which the merger reports as interrupted
+  defmodule NoFetch do
+    @moduledoc false
+    def merge(_repo, _slug, _opts \\ []), do: {:error, {:interrupted, "could not fetch origin (git: cannot lock ref)"}}
+  end
+
   defmodule Merges do
     @moduledoc false
     def merge(repo, slug, opts \\ []) do
@@ -578,6 +584,18 @@ defmodule Server.WorklineTest do
       assert {:error, {:bounced, why}} = Workline.land_queued(queued, merge: Merges, gate: gate, last: true)
       assert why =~ "killed"
       assert %Server.Thread{stage: "build"} = Repo.get(Server.Thread, thread.id)
+    end
+
+    test "its turn, origin could not be fetched: the landing retries, the stage stays review" do
+      thread = open!(%{slug: "no-fetch", stage: "review"})
+      {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+      {:ok, queued} = parked |> Server.Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+
+      assert {:error, {:interrupted, why}} =
+               Workline.land_queued(queued, merge: NoFetch, gate: fn _, _ -> {:ok, :green} end)
+
+      assert why =~ "could not fetch origin"
+      assert %Server.Thread{stage: "review", awaiting: nil} = Repo.get(Server.Thread, thread.id)
     end
 
     test "a thread no longer queued (re-parked, closed, moved on) is left alone" do
