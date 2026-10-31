@@ -69,7 +69,9 @@ defmodule Server.MCP.Tool.LandPR do
 
   @impl true
   def execute(params, frame) do
-    case Server.PRLanding.request(Server.Profiles.tlon_root(), params[:pr]) do
+    by = Identity.from_frame(frame).agent
+
+    case Server.PRLanding.request(Server.Profiles.tlon_root(), params[:pr], by: by) do
       {:ok, _job} ->
         ok(frame, %{"queued" => params[:pr], "next" => "its outcome is posted on its review's thread"})
 
