@@ -869,6 +869,24 @@ defmodule Server.MCP.ServerTest do
     assert Repo.get!(Session, db_session.id).last_active_at == cold
   end
 
+  test "office_glance: my own row is `me`, with what I declared by presence_doing — crew stays the other seats",
+       %{thread: thread, agent: agent, token: token} do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Mirror"})
+    Repo.update_all(from(t in Thread, where: t.id == ^thread.id), set: [workspace_id: ws.id])
+    on_exit(fn -> Server.Presence.Thinking.idle(thread.id, agent.name) end)
+
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    call(token, session, 4, "presence_thinking", %{})
+    call(token, session, 5, "presence_doing", %{"what" => "bash"})
+
+    glance = decode_tool_json(call(token, session, 6, "office_glance", %{}))
+
+    assert %{"agent" => name, "thread_id" => tid, "doing" => "bash"} = glance["me"]
+    assert name == agent.name and tid == thread.id
+    refute Enum.any?(glance["crew"], &(&1["agent"] == agent.name))
+  end
+
   test "a seat's cut tools are refused by the server too, not only hidden from its model — but it may still register",
        %{token: _token} do
     {:ok, ws} = Server.Workspaces.register(%{name: "Fenced"})
