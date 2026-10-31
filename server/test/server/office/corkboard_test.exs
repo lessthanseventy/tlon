@@ -18,6 +18,25 @@ defmodule Server.Office.CorkboardTest do
     %{name: "yu", archetype: "reviewer", lead: false, thread: nil}
   ]
 
+  # before the config is reset: a writer not yet at its model call would otherwise read the real one
+  @stuck "corkboard writers still running 5s after the test"
+
+  # The writers run `System.cmd` on a supervisor of the test's own, unlinked so it outlives the
+  # test process: they are still running when the test ends, and only waiting them out (a join)
+  # keeps one from creating a file in `dir` while it is removed.
+  defp board_supervisor! do
+    {:ok, sup} = Task.Supervisor.start_link()
+    Process.unlink(sup)
+    sup
+  end
+
+  defp join_writers(sup, dir) do
+    idle = Enum.find_value(1..100, fn _ -> Task.Supervisor.children(sup) == [] || (Process.sleep(50) && nil) end)
+    Supervisor.stop(sup)
+    File.rm_rf!(dir)
+    idle
+  end
+
   describe "pick/3" do
     test "a reply needs someone else's note to answer; a tease, someone to tease" do
       alone = %{crew: [hd(@crew)], tickets: []}
@@ -108,16 +127,18 @@ defmodule Server.Office.CorkboardTest do
       Application.put_env(:server, :generator_cmd, cli)
       Application.put_env(:server, :banter_cmd, cli)
       Application.put_env(:server, :souls_dir, souls)
+      sup = board_supervisor!()
 
       on_exit(fn ->
+        joined = join_writers(sup, dir)
         Application.put_env(:server, :generator_cmd, "/nonexistent/tlon-test-generator")
         Application.delete_env(:server, :banter_cmd)
         Application.put_env(:server, :souls_dir, Path.join(System.tmp_dir!(), "tlon-test-souls-unset"))
         Application.delete_env(:server, :generator_daily_cap)
-        File.rm_rf(dir)
+        joined || flunk(@stuck)
       end)
 
-      start_supervised!(Corkboard)
+      start_supervised!({Corkboard, task_supervisor: sup})
       %{ws: ws, prompts: prompts}
     end
 
@@ -230,14 +251,31 @@ defmodule Server.Office.CorkboardTest do
       File.write!(cli, ~s(#!/bin/sh\necho '{"note": "Whoever keeps renaming things: I see you."}'\n))
       File.chmod!(cli, 0o755)
       Application.put_env(:server, :banter_cmd, cli)
+      sup = board_supervisor!()
 
       on_exit(fn ->
+        joined = join_writers(sup, dir)
         Application.delete_env(:server, :banter_cmd)
-        File.rm_rf!(dir)
+        joined || flunk(@stuck)
       end)
 
-      start_supervised!(Corkboard)
-      %{ws: ws}
+      start_supervised!({Corkboard, task_supervisor: sup})
+      %{ws: ws, dir: dir, cli: cli}
+    end
+
+    test "a writer still running when the test ends is joined before the dir goes", %{ws: ws, dir: dir, cli: cli} do
+      # the model keeps recreating `prompts` for half a second; the test ends the moment it starts
+      prompts = Path.join(dir, "prompts")
+
+      File.write!(cli, """
+      #!/bin/sh
+      i=0
+      while [ $i -lt 25000 ]; do : > "#{prompts}"; i=$((i+1)); done
+      echo '{"note": "slow"}'
+      """)
+
+      Corkboard.notes(ws.id)
+      assert Enum.find_value(1..40, fn _ -> File.exists?(prompts) || (Process.sleep(25) && nil) end)
     end
 
     test "a poll asks for a note, and a later poll has it pinned", %{ws: ws} do

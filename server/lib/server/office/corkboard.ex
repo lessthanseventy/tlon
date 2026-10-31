@@ -50,7 +50,11 @@ defmodule Server.Office.Corkboard do
   @doc false
   def voice, do: @voice
 
-  def start_link(_), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  @doc "Starts the board. `task_supervisor:` is where its note writers run (the test's own, so it can join them)."
+  def start_link(opts) do
+    sup = Keyword.get(List.wrap(opts), :task_supervisor, Server.TaskSupervisor)
+    GenServer.start_link(__MODULE__, %{task_supervisor: sup}, name: __MODULE__)
+  end
 
   @doc """
   The workspace's corkboard, newest first: `%{id, author, kind, body, re, at}` (`re` the id of the
@@ -165,12 +169,14 @@ defmodule Server.Office.Corkboard do
 
     if now - entry.at >= @every_s do
       board = entry.notes
-      Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:pinned, ws, write(ws, board)}) end)
+      Task.Supervisor.start_child(state.task_supervisor, fn -> GenServer.cast(me, {:pinned, ws, write(ws, board)}) end)
     end
 
     # one seat's side project per poll, spaced past the model timeout so a slow call never overlaps the next
     if now - entry.side_at >= @side_every_s and now >= entry.side_hold do
-      Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:pinned, ws, side_write(ws)}) end)
+      Task.Supervisor.start_child(state.task_supervisor, fn ->
+        GenServer.cast(me, {:pinned, ws, side_write(ws)})
+      end)
     end
 
     entry = %{
