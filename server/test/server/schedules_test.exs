@@ -216,6 +216,12 @@ defmodule Server.SchedulesTest do
     assert %{check_name: nil, sha: nil} = Schedules.perform(run.id)
   end
 
+  test "a script sees it runs on a schedule, so its gate leaves the run's record to the schedule", %{ws: ws} do
+    s = schedule!(ws, %{cron: "@daily", body: "echo scheduled=$TLON_SCHEDULE_RUN"})
+    {:ok, run} = Schedules.run_now(s)
+    assert %{output: "scheduled=1\n"} = Schedules.perform(run.id)
+  end
+
   test "a script that reads its stdin ends instead of waiting on it", %{ws: ws} do
     s = schedule!(ws, %{cron: "@daily", body: "cat; echo done"})
     {:ok, run} = Schedules.run_now(s)

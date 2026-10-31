@@ -306,7 +306,20 @@ defmodule Server.Schedules do
   # gate's wait behind other checks is not its run, and a busy queue would otherwise kill it first.
   defp shell(cmd, dir) do
     args = ["-c", "exec </dev/null\n" <> cmd]
-    port = Port.open({:spawn_executable, "/bin/sh"}, [:binary, :exit_status, :stderr_to_stdout, args: args, cd: dir])
+
+    # TLON_SCHEDULE_RUN: the schedule records this run itself (its ran-on line), so a gate must not also report it (scripts/lib/record-ran.sh)
+    env = [{~c"TLON_SCHEDULE_RUN", ~c"1"}]
+
+    port =
+      Port.open({:spawn_executable, "/bin/sh"}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        args: args,
+        cd: dir,
+        env: env
+      ])
+
     timeout = Application.get_env(:server, :schedule_script_timeout_ms, @script_timeout_ms)
     collect(port, "", System.monotonic_time(:millisecond) + timeout, fn -> kill(port) end, timeout)
   rescue
