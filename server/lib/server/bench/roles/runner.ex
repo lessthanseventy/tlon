@@ -30,9 +30,10 @@ defmodule Server.Bench.Roles.Runner do
     commit = commit()
 
     records =
-      for role <- roles do
+      for role <- roles,
+          tasks = Roles.load(Path.join(dir, "tasks"), Roles.roles()[role].set, suite),
+          tasks != [] do
         p = profile(role, opts[:model])
-        tasks = Roles.load(Path.join(dir, "tasks"), Roles.roles()[role].set, suite)
 
         info(
           "#{role} on #{p.model.provider}/#{p.model.model} (#{p.model.thinking}, #{p.harness}): #{length(tasks)} tasks"

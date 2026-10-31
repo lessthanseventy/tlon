@@ -6,7 +6,8 @@ defmodule Mix.Tasks.Server.BenchRoles do
   Each role's frozen tasks (`bench/roles/tasks/`) through the harness and model a coworker of it
   is routed to — or `--model`, to compare a role on another model without retargeting anything —
   graded, appended to `bench/roles/results/<date>.json`, and `bench/roles/README.md` regenerated
-  (`Server.Bench.Roles.Runner`). Every role when no `--role` is given. It spends real model quota
+  (`Server.Bench.Roles.Runner`). Every role when no `--role` is given; a role with no tasks in the suite
+  is named as not run, and gets no record. It spends real model quota
   and starts no Repo: it reads and writes no database.
 
   `--oracle` grades the real solution instead of a model, on every task sourced from a commit: it
@@ -62,9 +63,15 @@ defmodule Mix.Tasks.Server.BenchRoles do
   defp run(suite, roles, model, out) do
     Mix.Task.run("app.config")
 
-    for r <- Roles.Runner.run(suite, roles, model: model, out: out) do
+    records = Roles.Runner.run(suite, roles, model: model, out: out)
+
+    for r <- records do
       tiers = Enum.map_join(r.tiers, " ", fn {tier, t} -> "#{tier} #{t.passed}/#{t.total}" end)
       Mix.shell().info("#{r.role} #{r.model}: #{tiers} · #{r.wall_s}s · #{r.usage.input}/#{r.usage.output} tokens")
+    end
+
+    for role <- roles -- Enum.map(records, & &1.role) do
+      Mix.shell().info("#{role}: no #{suite} tier, skipped")
     end
   end
 

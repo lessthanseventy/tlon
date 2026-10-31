@@ -53,6 +53,17 @@ defmodule Server.Bench.Roles.RunnerTest do
     assert File.read!(Path.join(dir, "README.md")) =~ "| qa |"
   end
 
+  test "a role with no tasks in the suite is not run and leaves no record" do
+    dir = Path.join(System.tmp_dir!(), "no-tasks-#{System.pid()}-#{System.unique_integer([:positive])}")
+    task = Path.join(dir, "tasks/senior/s1")
+    File.mkdir_p!(task)
+    on_exit(fn -> File.rm_rf!(dir) end)
+    File.write!(Path.join(task, "task.json"), JSON.encode!(%{tier: "full", grader: %{kind: "check", cmd: "true"}}))
+    File.write!(Path.join(task, "prompt.md"), "x")
+
+    assert Runner.run("canary", ["builder-senior"], dir: dir, out: Path.join(dir, "out.json")) == []
+  end
+
   test "a sourced task gets half an hour, a plain builder fifteen minutes" do
     assert Runner.timeout_s(%{set: "senior", source: %{"commit" => "x"}}) == 1800
     assert Runner.timeout_s(%{set: "builder", source: nil}) == 900
