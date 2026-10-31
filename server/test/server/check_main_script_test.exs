@@ -23,7 +23,7 @@ defmodule Server.CheckMainScriptTest do
     File.mkdir_p!(Path.join(root, "server"))
     File.write!(Path.join(root, "server/mix.exs"), "")
 
-    for f <- ~w(check-main.sh git-fetch-origin.sh lib/seed-hex.sh),
+    for f <- ~w(check-main.sh git-fetch-origin.sh lib/seed-hex.sh lib/record-ran.sh lib/failures.sh),
         do: File.cp!(Path.join(@scripts, f), Path.join(root, "scripts/#{f}"))
 
     sh!(root, """
@@ -78,8 +78,20 @@ defmodule Server.CheckMainScriptTest do
     System.cmd("kill", ["-TERM", "#{pid}"])
   end
 
-  defp checkouts(ctx), do: Path.wildcard(Path.join(ctx.scratch, "cache/tlon-verify/main-*"))
-  defp leftovers(ctx), do: Path.wildcard(Path.join(ctx.scratch, "tlon-main-*")) ++ checkouts(ctx)
+  defp checkouts(ctx), do: Path.wildcard(Path.join(ctx.scratch, "cache/tlon-verify/main-??????"))
+  defp hex_homes(ctx), do: Path.wildcard(Path.join(ctx.scratch, "cache/tlon-verify/main-??????.hex"))
+  defp leftovers(ctx), do: Path.wildcard(Path.join(ctx.scratch, "tlon-main-*")) ++ checkouts(ctx) ++ hex_homes(ctx)
+
+  # the gate posts tlon/check only on a clean tree (scripts/check.sh): its Hex home sits beside the checkout
+  test "the gated tree stays clean: the Hex home is beside the checkout, not in it", ctx do
+    port = start(ctx)
+    wait_for(Path.join(ctx.scratch, "gating"))
+    assert [checkout] = checkouts(ctx)
+    assert [_] = hex_homes(ctx)
+    assert sh!(checkout, "git status --porcelain") == ""
+    stop(port)
+    assert_receive {^port, {:exit_status, 143}}, 10_000
+  end
 
   # the full suite seeds hundreds of git repos in its checkout; under TMPDIR (/tmp, every seat's write
   # root) each costs every seat bwrap mounts while it runs, past bwrap's 9000 arguments
@@ -99,7 +111,7 @@ defmodule Server.CheckMainScriptTest do
     port = start(ctx)
 
     wait_for(Path.join(ctx.scratch, "gating"))
-    assert length(leftovers(ctx)) == 2
+    assert length(leftovers(ctx)) == 3
 
     stop(port)
 

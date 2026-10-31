@@ -79,16 +79,18 @@ vroot="${XDG_CACHE_HOME:-$HOME/.cache}/tlon-verify"
 mkdir -p "$vroot"
 for stale in "$vroot"/*/; do
   stale="${stale%/}"; [ -d "$stale" ] || continue
+  # a tree's Hex home goes with its tree
+  case "$stale" in *.hex) continue ;; esac
   pgrep -f "$stale" >/dev/null && continue
   [ -n "$(find /proc/[0-9]*/cwd -maxdepth 0 -lname "$stale*" -print -quit 2>/dev/null)" ] && continue
-  rm -rf "$stale"
+  rm -rf "$stale" "$stale.hex"
 done
 git -C "$repo" worktree prune
 fresh="$(mktemp -d -p "$vroot" "XXXXXX")" && cd "$fresh" || exit 1
 drop_tree() { git -C "$repo" worktree remove --force "$1" >/dev/null 2>&1; rm -rf "$1"; }
 mainwt=""
 cleanup() {
-  drop_tree "$fresh"
+  drop_tree "$fresh"; rm -rf "$fresh.hex"
   [ -z "$mainwt" ] || drop_tree "$mainwt"
   git -C "$repo" worktree prune
 }
@@ -132,8 +134,8 @@ fi
 [ -n "${RULES_ONLY:-}" ] && exit 0
 mise trust -q "$fresh" >/dev/null 2>&1
 # a Hex home of its own
-seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$fresh/.hex"
-clean+=(HEX_HOME="$fresh/.hex")
+seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$fresh.hex"
+clean+=(HEX_HOME="$fresh.hex")
 # each mix project in the tree (tlon's under server/, menard's at its root): the lead's fetched dep
 # sources, copy-on-write, to save the download — never its _build: compiled against the branch's
 # old base, it fails the gate on lock mismatches main has moved past — then what main's lock pins now

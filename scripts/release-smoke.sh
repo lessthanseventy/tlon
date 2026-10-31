@@ -47,7 +47,7 @@ cleanup() {
   if [ -n "$dir" ]; then
     # the 2 GB build goes before the slow drop, so a SIGKILL mid-cleanup leaves less in RAM-backed /tmp
     git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1
-    rm -rf "$dir" "$dir.lock"
+    rm -rf "$dir" "$dir.lock" "$dir.hex"
     psql -h "${PGHOST:-/run/postgresql}" -d postgres -qc "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" >>"$log" 2>&1
   fi
   [ -n "$dblock" ] && rm -f "$dblock"
@@ -149,8 +149,8 @@ if [ -z "$url" ]; then
   mise trust -q "$dir" >/dev/null 2>&1
   # a Hex home of its own (scripts/lib/seed-hex.sh)
   . "$(dirname "$0")/lib/seed-hex.sh"
-  seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$dir/.hex"
-  export HEX_HOME="$dir/.hex"
+  seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$dir.hex"
+  export HEX_HOME="$dir.hex"
   # the drive runs the candidate's own office-drive.sh under a throwaway XDG_STATE_HOME, which hides the trust above
   export MISE_TRUSTED_CONFIG_PATHS="$dir"
   [ -d "$root/server/deps" ] && cp -a --reflink=auto "$root/server/deps" "$dir/server/"
