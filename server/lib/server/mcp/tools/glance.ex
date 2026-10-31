@@ -4,8 +4,9 @@ defmodule Server.MCP.Tool.OfficeGlance do
   conversation (the tlon-citizen mod's band and toasts): the crew on its workspace and what each
   is doing, what is red on its own thread (open blockers, failed checks), its own voice (the
   persona's voice line and catchphrase), one line from the office's pool (a doorbell visitor, a pun),
-  and the worklines that landed in the last day. `crew` is the other seats; the caller's own row is `me`. Scoped to the caller's workspace and thread. A
-  glance is not activity: the mod reads it on a timer, so it leaves warmth alone.
+  and the worklines that landed in the last day. `crew` is the other seats; the caller's own row
+  on this thread is `me`. Scoped to the caller's workspace and thread. A glance is not activity:
+  the mod reads it on a timer, so it leaves warmth alone.
   """
   use Server.MCP.Tool
 
@@ -24,11 +25,12 @@ defmodule Server.MCP.Tool.OfficeGlance do
 
   defp glance(%Thread{workspace_id: ws} = thread, agent) when is_integer(ws) do
     seat = Enum.find(Server.Workspaces.bench_all(ws), &(&1.name == agent))
+    rows = rows(ws)
 
     %{
       archetype: seat && seat.archetype,
-      crew: crew(ws, agent),
-      me: me(ws, agent),
+      crew: Enum.reject(rows, &(&1.agent == agent)),
+      me: Enum.find(rows, &(&1.agent == agent and &1.thread_id == thread.id)),
       red: red(ws, thread.id),
       persona: persona(ws, agent),
       line: line(ws),
@@ -37,10 +39,6 @@ defmodule Server.MCP.Tool.OfficeGlance do
   end
 
   defp glance(_thread, _agent), do: %{archetype: nil, crew: [], me: nil, red: [], persona: nil, line: nil, landed: []}
-
-  defp crew(ws, me), do: Enum.reject(rows(ws), &(&1.agent == me))
-
-  defp me(ws, me), do: Enum.find(rows(ws), &(&1.agent == me))
 
   defp rows(ws) do
     for r <- Server.Office.roster(ws), uniq: true do

@@ -877,6 +877,8 @@ defmodule Server.MCP.ServerTest do
 
     session = handshake(token)
     call(token, session, 3, "register", %{})
+    {:ok, other} = Channel.open_thread(%{title: "my other seat", workspace_id: ws.id})
+    {:ok, _} = Staff.start_session(%{thread_id: other.id, agent_id: agent.id, pane_ref: "%9"})
     call(token, session, 4, "presence_thinking", %{})
     call(token, session, 5, "presence_doing", %{"what" => "bash"})
 
