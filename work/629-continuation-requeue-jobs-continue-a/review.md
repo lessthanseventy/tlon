@@ -1,24 +1,42 @@
-Verdict: request_changes. No free reviewer is at the builder's grade (senior), so this review was done by ulrikke at review grade, read-only, not re-run.
+Verdict: request_changes. Reviewed 92fe705 (the diff since 2e5a83f plus the whole branch against ebf276c); run, not only read.
 
-**Blocker: the quiet-band nudge is lost when the check is requeued.** `Continuation.run/2`'s `{:later, at}` branch requeues `Jobs.Continue` with args `%{thread_id}` only. `Jobs.Continue.perform/1` then calls `run(tid)` without `quiet:`. The quiet sweep (`maintain/sweep.ex` `sweep_quiet`) calls `run(t.id, quiet: true)`, and the "artifact there, nobody advanced it" nudge exists only under `opts[:quiet]` (`nudge/2`, otherwise `:nothing`). So a gap-held quiet nudge comes back as a plain check that posts nothing at the gap's end. The PR's claim that the nudge is "late, not lost" does not hold for this path, and no new test covers it.
+1. **Fixed: the quiet nudge survives the requeue.** `{:later, at} -> requeue(thread_id, at, opts[:quiet] == true)`; `Continue.perform` passes `quiet: args["quiet"] == true`. ulrikke's blocker is closed, with tests.
 
-Fix:
+2. **Blocker: the requeued check swallows its own re-requeue.** `requeue/3` inserts with
+`unique = [period: gap + 60, keys: [:thread_id, :quiet], states: [:available, :scheduled, :executing]]`.
+Oban's unique query (`deps/oban/lib/oban/engines/basic.ex:487`, `unique_query/1`) matches any job in those states inserted within the period and does not exclude the inserting job. The requeued check was inserted one gap before it runs, inside `period`. When it runs and `gap_wait` says `{:later, _}` again (the lead posted inside the gap), its `requeue` finds itself (state executing) and returns the conflict; nothing is scheduled. The nudge waits for the hourly sweep: the fault #629 set out to close, in the gap's own case (an active lead).
+
+Evidence (scratch test against this worktree's test db, `mise x -- mix test`): executing `Continue` job for the thread, `quiet: true`, `inserted_at` now-9min; lead posts; `Continuation.run(t.id, artifacts: Present, quiet: true)` → `:ok`, scheduled Continue jobs for the thread: `[]`. The same insert with `states: [:available, :scheduled]` → `conflict?: false`, `state: "scheduled"`. With the branch's states → `conflict?: true`, `state: "executing"`. The branch's own 29 tests in `workline_continuation_test.exs` pass.
+
+Fix (one token) in `server/lib/server/workline/continuation.ex`, `requeue/3`:
 ```
-continuation.ex
-- {:later, at} -> requeue(thread_id, at)
-+ {:later, at} -> requeue(thread_id, at, opts[:quiet])
-- defp requeue(thread_id, at) do
--   Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id}, scheduled_at: at))
-+ defp requeue(thread_id, at, quiet) do
-+   Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id, quiet: quiet == true}, scheduled_at: at))
-
-jobs/continue.ex
-- def perform(%Oban.Job{args: %{"thread_id" => tid}}) when is_integer(tid), do: Continuation.run(tid)
-+ def perform(%Oban.Job{args: %{"thread_id" => tid} = args}) when is_integer(tid),
-+   do: Continuation.run(tid, quiet: args["quiet"] == true)
+-    unique = [period: period, keys: [:thread_id, :quiet], states: [:available, :scheduled, :executing]]
++    unique = [period: period, keys: [:thread_id, :quiet], states: [:available, :scheduled]]
 ```
-Add a test: a `quiet: true` run that hits the gap enqueues a job carrying `quiet: true`, and that job nudges at the gap's end when the artifact is there but unmoved.
+A sweep that runs while the check executes may then add one scheduled job beside it; the gap caps nudges and the next sweep dedupes against that scheduled one, so nothing multiplies.
 
-Follow-up (non-blocking): the Continue unique window is 30s on inserted_at, so repeated sweeps inside one gap can leave several scheduled jobs for one thread. The gap still caps nudges, but the jobs pile up. From reading Oban's unique semantics, not from a run.
+Red-first test, in `describe "spacing"` of `server/test/server/workline_continuation_test.exs` (gap 10, thread opened 11 min ago):
+```elixir
+    test "the requeued check, run while the lead spoke inside the gap, is requeued again, not swallowed by itself", %{thread: t} do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "builds", engine: "claude-code"})
+      {:ok, _} = Server.Staff.assign(Repo.get!(Server.Thread, t.id), a)
+      # the check requeued 9 minutes ago is the one running now
+      {:ok, job} = Server.Jobs.enqueue(Server.Jobs.Continue.new(%{thread_id: t.id, quiet: true}, scheduled_at: DateTime.utc_now()))
+      Repo.update_all(from(j in Oban.Job, where: j.id == ^job.id),
+        set: [state: "executing", inserted_at: DateTime.add(DateTime.utc_now(), -9 * 60), attempted_at: DateTime.utc_now()])
+      {:ok, _} = Server.Channel.post(%{thread_id: t.id, author: "hronir", body: "still on it"})
 
-Verified by reading the diff and call sites only; the test suite was not run.
+      :ok = Continuation.run(t.id, artifacts: Present, quiet: true)
+
+      scheduled =
+        from(j in Oban.Job,
+          where: j.worker == "Server.Jobs.Continue" and j.state == "scheduled" and
+            fragment("(? ->> 'thread_id')::bigint", j.args) == ^t.id)
+
+      assert [_] = Repo.all(scheduled)
+    end
+```
+Red on 92fe705 (`[]`), green with the one-token change. Update the `requeue` comment to say the executing check is not a duplicate of its own requeue.
+
+3. Spec: the rest holds. `gap_wait` returns the later of last nudge and lead's last post plus the gap; `lead_last_post_at` on `agent_id: nil` is epoch, so an unled thread never waits; gap 0 is `:go`. The `maintain_test` default-gap test and the lead-post-one-gap test cover the regressions the plan named. CHECKS: `menard run check --in server` 2500/0 and `mise run check` green on 92fe705; no bench_contrast row.
