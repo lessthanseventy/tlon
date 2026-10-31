@@ -199,6 +199,26 @@ defmodule Server.MaintainTest do
     assert Enum.any?(Repo.all(Message), &(&1.thread_id == w.id and &1.body =~ "↻ continue"))
   end
 
+  test "with the default gap, the quiet sweep still nudges a workline that has been silent for hours" do
+    path = Path.join(System.tmp_dir!(), "maintain-gap-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+    prior = Application.get_env(:server, :operator_config_path)
+    Application.put_env(:server, :operator_config_path, path)
+    File.write!(path, "{}")
+
+    on_exit(fn ->
+      File.rm(path)
+      Application.put_env(:server, :operator_config_path, prior)
+    end)
+
+    {:ok, w} = Workline.open(%{title: "quiet", slug: "quiet-#{System.unique_integer([:positive])}", stage: "plan"})
+    two_hours_ago = DateTime.utc_now() |> DateTime.add(-7_200, :second) |> DateTime.truncate(:second)
+    Repo.update_all(from(m in Message, where: m.thread_id == ^w.id), set: [created_at: two_hours_ago])
+    Repo.update_all(from(t in Thread, where: t.id == ^w.id), set: [created_at: two_hours_ago])
+
+    sweep()
+    assert Enum.any?(Repo.all(Message), &(&1.thread_id == w.id and &1.body =~ "↻ continue"))
+  end
+
   test "the quiet band is the operator's quiet_workline_minutes knob" do
     path = Path.join(Path.expand("tmp"), "maintain-quiet-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)

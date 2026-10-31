@@ -16,7 +16,8 @@ defmodule Server.Workline.Continuation do
   (`Server.Blocked`), one the operator paused (`Server.Pause.pause_thread/1`), one whose smoke is still building
   (`Server.Smoke.building/2`), one whose lead is clocked out (`Server.Presence.clocked_out?/1`),
   one inside `continuation_gap_minutes` of its last nudge (or its opening, when it has had none)
-  or of the lead's last post on it, and while the office is paused (`Server.Pause`).
+  or of the lead's last post on it (the check is queued again for the gap's end, so the nudge is
+  late, not lost), and while the office is paused (`Server.Pause`).
   """
 
   import Ecto.Query
@@ -53,7 +54,7 @@ defmodule Server.Workline.Continuation do
          false <- verifying?(thread),
          nil <- smoke_building(thread),
          false <- lead_clocked_out?(thread),
-         false <- too_soon?(thread, opts),
+         :go <- gap_wait(thread, opts),
          after_id = last_advance_id(thread_id),
          sent = sent_since(thread_id, after_id),
          {:budget, true, _} <- {:budget, sent < max, {thread, why, sent, after_id}} do
@@ -75,6 +76,7 @@ defmodule Server.Workline.Continuation do
       :ok
     else
       {:budget, false, {thread, why, sent, after_id}} -> stuck(thread, why, sent, after_id)
+      {:later, at} -> requeue(thread_id, at)
       _ -> :ok
     end
   end
@@ -163,14 +165,20 @@ defmodule Server.Workline.Continuation do
 
   # at most one nudge per gap: measured from the last continuation, or from the thread's opening
   # when it has had none (a workline opened straight at a stage has no advance to count from);
-  # and none while the lead spoke on the thread inside the window
-  defp too_soon?(thread, opts) do
+  # and none while the lead spoke on the thread inside the window. Inside it: `{:later, at}`, the
+  # gap's end, where the check is queued again — the idle that asked for it is the only trigger.
+  defp gap_wait(thread, opts) do
     gap = Server.OperatorConfig.setting("continuation_gap_minutes") * 60
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     since = DateTime.add(now, -gap)
+    last = Enum.max([last_continuation_at(thread), lead_last_post_at(thread)], DateTime)
 
-    gap > 0 and
-      (DateTime.compare(last_continuation_at(thread), since) == :gt or lead_spoke_since?(thread, since))
+    if gap > 0 and DateTime.compare(last, since) == :gt, do: {:later, DateTime.add(last, gap)}, else: :go
+  end
+
+  defp requeue(thread_id, at) do
+    Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id}, scheduled_at: at))
+    :ok
   end
 
   defp last_continuation_at(thread) do
@@ -181,11 +189,13 @@ defmodule Server.Workline.Continuation do
     ) || thread.created_at
   end
 
-  defp lead_spoke_since?(%Thread{agent_id: nil}, _since), do: false
+  defp lead_last_post_at(%Thread{agent_id: nil}), do: ~U[1970-01-01 00:00:00Z]
 
-  defp lead_spoke_since?(%Thread{id: id, agent_id: agent_id}, since) do
+  defp lead_last_post_at(%Thread{id: id, agent_id: agent_id}) do
     name = Repo.get!(Server.Agent, agent_id).name
-    Repo.exists?(from m in Message, where: m.thread_id == ^id and m.author == ^name and m.created_at > ^since)
+
+    Repo.one(from m in Message, where: m.thread_id == ^id and m.author == ^name, select: max(m.created_at)) ||
+      ~U[1970-01-01 00:00:00Z]
   end
 
   defp last_advance_id(thread_id) do
