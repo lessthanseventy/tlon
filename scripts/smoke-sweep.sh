@@ -20,7 +20,7 @@ for stale in "${TMPDIR:-/tmp}"/tlon-smoke/*/ "${TMPDIR:-/tmp}"/tlon-smoke-*/; do
     # a build from before the lock: only once it is older than any build takes
     [ -n "$(find "$stale" -maxdepth 0 -mmin +120)" ] || continue
   fi
-  git -C "$root" worktree remove --force "$stale" >/dev/null 2>&1; rm -rf "$stale" "$stale.lock"
+  git -C "$root" worktree remove --force "$stale" >/dev/null 2>&1; rm -rf "$stale" "$stale.lock" "$stale.hex"
 done
 # a lock whose build is gone: a cleanup cut short between the two
 for lock in "${TMPDIR:-/tmp}"/tlon-smoke/*.lock; do
