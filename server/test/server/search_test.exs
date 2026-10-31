@@ -126,7 +126,11 @@ defmodule Server.SearchTest do
       for n <- 1..3,
           do: {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "thread #{n} review lonnrot verify"})
 
-      {sql, params} = captured_history_query(fn -> Search.history("thread review lonnrot verify", 10) end)
+      {sql, params} =
+        captured_history_query(fn ->
+          Search.history("thread review lonnrot verify", 10, query_embedding: [1.0, 0.0])
+        end)
+
       %{rows: [[[%{"Plan" => plan}]]]} = Repo.query!("EXPLAIN (ANALYZE, FORMAT JSON) " <> sql, params)
 
       assert [%{"Actual Loops" => 1}] = plan |> plan_nodes() |> Enum.filter(&(&1["Subplan Name"] == "CTE idf"))
@@ -161,7 +165,7 @@ defmodule Server.SearchTest do
         end)
 
       assert_receive :locked, 5_000
-      assert {:error, :timeout} = Search.history("ticket review", 10, timeout: 50)
+      assert {:error, :timeout} = Search.history("ticket review", 10, query_embedding: [1.0, 0.0], timeout: 50)
       send(holder.pid, :release)
       Task.await(holder)
     end
@@ -186,7 +190,8 @@ defmodule Server.SearchTest do
 
         on_exit(fn -> :telemetry.detach(id) end)
 
-        assert {:error, :timeout} = Search.history("ticket review", 10, timeout: 50, around: unquote(around))
+        assert {:error, :timeout} =
+                 Search.history("ticket review", 10, query_embedding: [1.0, 0.0], timeout: 50, around: unquote(around))
       end
     end
 
