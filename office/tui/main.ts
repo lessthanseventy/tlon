@@ -1008,6 +1008,7 @@ function threadActions(tid: number, inReader = false): Action[] {
         find(`MOVE #${tid} TO PROJECT`, view().projects.map((p) => ({ segs: [{ s: p.name, fg: ROLE.prose }], text: p.name, run: () => { picker = null; void did(data.move(tid, p.id)) } })))
       },
     },
+    ...(th ? [th.paused_at ? { ...bind("thread.P.paused"), run: () => void did(data.pauseThread(tid, "resume")) } : { ...bind("thread.P.running"), run: () => void did(data.pauseThread(tid, "pause")) }] : []),
     { ...bind("thread.x"), run: () => ask2(`close #${tid} as done`, () => did(data.closeThread(tid))) },
     { ...bind("thread.D"), run: () => ask2(`delete #${tid} for good (its worktree goes too, if it loses nothing)`, () => { if (reader) closeReader(); back(); void did(data.deleteThread(tid)) }) },
   ]
@@ -1324,7 +1325,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     case "thread": {
       const tid = mode.tid
       const th = threadOf(tid)
-      return { title: `THREAD #${tid}${th?.stage ? ` · workline ${th.stage}` : ""}`, rows: threadRows(th, tid), tint: th?.awaiting || th?.prompt ? ROLE.attention : th?.lead ? authorColor(th.lead) : ROLE.key, actions: [...liveActions(tid), ...threadActions(tid), back1] }
+      return { title: `THREAD #${tid}${th?.stage ? ` · workline ${th.stage}` : ""}${th?.paused_at ? " · ⏸ paused" : ""}`, rows: threadRows(th, tid), tint: th?.awaiting || th?.prompt ? ROLE.attention : th?.lead ? authorColor(th.lead) : ROLE.key, actions: [...liveActions(tid), ...threadActions(tid), back1] }
     }
     case "column": {
       const col = boardColumns(a, boardCtx())[mode.col]!, items = arrange(col.items, colSort.cmp, null)[0]!.items

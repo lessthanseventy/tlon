@@ -90,6 +90,8 @@ export const KEYS = [
   { id: "thread.P", scope: "card:thread", key: "#", label: "move to project…", verb: "project" },
   { id: "thread.x", scope: "card:thread", key: "x", label: "close as done", verb: "done" },
   { id: "thread.D", scope: "card:thread", key: "d", label: "delete for good", verb: "remove" },
+  { id: "thread.P.paused", scope: "card:thread", key: "|", label: "resume it", mode: "paused", verb: "pause" },
+  { id: "thread.P.running", scope: "card:thread", key: "|", label: "pause it: nothing new starts on it, it stops after its turn", mode: "running", verb: "pause" },
   // card:seat
   { id: "seat.M", scope: "card:seat", key: "M", label: "model…", verb: "model" },
   { id: "seat.y", scope: "card:seat", key: "&", label: "ask before acting / allow without asking", verb: "toggle ask" },
