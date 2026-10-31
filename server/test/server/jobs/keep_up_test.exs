@@ -270,18 +270,36 @@ defmodule Server.Jobs.KeepUpTest do
   end
 
   describe "a repo with no GitHub to read" do
-    test "a repo with no remote is skipped: no gh read, no rollout item" do
+    test "a repo with no remote is skipped, and said in one keyed note" do
       KeepUp.keep_up("/r/no-remote", pass(nil, "no git remotes found"))
 
-      assert notes("/r/no-remote") == []
+      assert [%{key: "keep_up:remote:/r/no-remote", text: text}] = notes("/r/no-remote")
+      assert text =~ "has no origin remote"
     end
 
-    test "a repo whose origin is not GitHub is skipped: no gh read, no rollout item" do
+    test "a repo whose origin is not GitHub is skipped, and said in one keyed note" do
       for remote <- ["git@gitlab.com:acme/app.git", "https://gitlab.com/acme/app.git", "/srv/git/app.git"] do
         KeepUp.keep_up("/r/elsewhere", pass(remote, "none of the git remotes point to a known GitHub host"))
       end
 
-      assert notes("/r/elsewhere") == []
+      assert [%{key: "keep_up:remote:/r/elsewhere", text: text}] = notes("/r/elsewhere")
+      assert text =~ "is not on GitHub, so its PRs are not kept up"
+    end
+
+    test "a repo whose origin moves onto GitHub has its note cleared" do
+      gitlab = pass("git@gitlab.com:acme/app.git", "x")
+      KeepUp.keep_up("/r/moved", gitlab)
+      assert [_] = notes("/r/moved")
+
+      KeepUp.keep_up("/r/moved", fn
+        "git", ["-C", _, "remote", "get-url", "origin"], _ -> {"git@github.com:acme/app.git\n", 0}
+        "git", ["-C", _, "symbolic-ref" | _], _ -> {"feature\n", 0}
+        "gh", ["pr", "list" | _], _ -> {"[]", 0}
+        _, _, _ -> {"", 0}
+      end)
+
+      _ = :sys.get_state(Rollout)
+      assert notes("/r/moved") == []
     end
 
     test "a repo whose origin is not GitHub still has its main followed" do
@@ -295,7 +313,8 @@ defmodule Server.Jobs.KeepUpTest do
 
       KeepUp.keep_up("/r/gitlab-drift", run)
 
-      assert [%{text: text}] = Enum.filter(Rollout.pending(), &(&1.text =~ "/r/gitlab-drift"))
+      assert [%{text: text}] = Enum.filter(Rollout.pending(), &(&1.text =~ "local main has"))
+      assert text =~ "/r/gitlab-drift"
       assert text =~ "local main has 2 commit"
     end
 
@@ -314,12 +333,11 @@ defmodule Server.Jobs.KeepUpTest do
       end
     end
 
-    test "a remote-less repo is said once across passes, not every pass" do
-      first = ExUnit.CaptureLog.capture_log(fn -> KeepUp.keep_up("/r/quiet", pass(nil, "x")) end)
-      again = ExUnit.CaptureLog.capture_log(fn -> KeepUp.keep_up("/r/quiet", pass(nil, "x")) end)
+    test "a remote-less repo is said as one note across passes, not one per pass" do
+      KeepUp.keep_up("/r/quiet", pass(nil, "x"))
+      KeepUp.keep_up("/r/quiet", pass(nil, "x"))
 
-      assert first =~ "/r/quiet has no GitHub remote"
-      refute again =~ "/r/quiet"
+      assert [_one] = notes("/r/quiet")
     end
 
     test "a repo GitHub can't resolve is one rollout item, not one per read" do
