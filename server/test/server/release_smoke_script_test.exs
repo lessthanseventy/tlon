@@ -250,7 +250,9 @@ defmodule Server.ReleaseSmokeScriptTest do
 
       refute out =~ "already being smoked"
       assert out =~ "waiting for"
-      assert out =~ ~r/smoke: [0-9a-f]{7} on :#{ctx.port}/
+      refute out =~ "timed out"
+      # the record at the path is this run's: it came out of the wait with the lock, not out of time
+      assert File.read!(lock) =~ ~r/\Apid \d+ on http:\/\/127\.0\.0\.1:#{ctx.port}\n\z/
     end
 
     test "a live holder that outlasts the wait bound is timed out on, naming it", %{tmp: tmp, root: root} = ctx do
