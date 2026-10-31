@@ -24,6 +24,12 @@ defmodule Server.OperatorConfigTest do
     refute OperatorConfig.banter?(path)
   end
 
+  test "put_many writes several keys in one file write and keeps the rest", %{path: path} do
+    File.write!(path, ~s({"max_leaves": 3, "pause_by": "auto:five_hour"}))
+    :ok = OperatorConfig.put_many(%{"pause" => "pencils_down", "pause_by" => nil}, path)
+    assert OperatorConfig.read(path) == %{"max_leaves" => 3, "pause" => "pencils_down", "pause_by" => nil}
+  end
+
   test "knobs lists every runtime setting with its value, the default where the file is silent", %{path: path} do
     File.write!(path, ~s({"max_leaves": 3}))
     knobs = Map.new(OperatorConfig.knobs(path), &{&1.key, &1})

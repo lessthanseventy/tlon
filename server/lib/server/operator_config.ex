@@ -337,9 +337,13 @@ defmodule Server.OperatorConfig do
 
   @doc "Set one key in the settings file, keeping every other (the file and its directory made if absent)."
   @spec put(String.t(), term(), String.t()) :: :ok | {:error, term()}
-  def put(key, value, path \\ path()) do
+  def put(key, value, path \\ path()), do: put_many(%{key => value}, path)
+
+  @doc "Set several keys in one write of the settings file, so they land together or not at all."
+  @spec put_many(map(), String.t()) :: :ok | {:error, term()}
+  def put_many(changes, path \\ path()) when is_map(changes) do
     with :ok <- File.mkdir_p(Path.dirname(path)) do
-      File.write(path, Jason.encode_to_iodata!(Map.put(read(path), key, value), pretty: true))
+      File.write(path, Jason.encode_to_iodata!(Map.merge(read(path), changes), pretty: true))
     end
   end
 
