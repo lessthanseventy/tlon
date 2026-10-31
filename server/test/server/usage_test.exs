@@ -6,6 +6,7 @@ defmodule Server.UsageTest do
 
   setup do
     Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
     path = Path.join(System.tmp_dir!(), "usage-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
