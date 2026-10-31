@@ -6,6 +6,7 @@ let resolved: unknown = null
 let answered: unknown = null
 let handed = false
 let posted = 0, officeDown = false
+let threadPaused = false
 const server = Bun.serve({
   port: 0,
   fetch: (req) => {
@@ -25,6 +26,8 @@ const server = Bun.serve({
     if (req.method === "POST" && path.endsWith("/threads/77/messages")) { posted++; return Response.json({ id: 1 }, { status: 201 }) }
     if (req.method === "POST" && path.endsWith("/threads/44/rebase")) return Response.json({ rebased: 44 }, { status: 202 })
     if (req.method === "POST" && path.endsWith("/threads/44/reland")) return Response.json({ relanded: 44 }, { status: 202 })
+    if (req.method === "POST" && path.endsWith("/threads/5/pause")) { threadPaused = true; return Response.json({ thread_id: 5, paused: true }) }
+    if (req.method === "POST" && path.endsWith("/threads/5/resume")) { threadPaused = false; return Response.json({ thread_id: 5, paused: false }) }
     return new Response("no", { status: 404 })
   },
 })
@@ -41,6 +44,15 @@ test("status carries the server's revs — what `R` compares to know the office 
   expect(all.life).toEqual({ "7": { level: 2, xp: 650, due: [] } })
   expect(all.pause).toBe("pencils_down")
   expect(all.ticket_open).toEqual({ "1": { total: 3, loose: 1 } })
+})
+
+test("pauseThread holds one thread and resumes it: the server's pause and resume routes, said back in words", async () => {
+  process.env.TLON_URL = `http://127.0.0.1:${server.port}/api`
+  const data = await import("../tui/data")
+  expect(await data.pauseThread(5, "pause")).toBe("#5 paused")
+  expect(threadPaused).toBe(true)
+  expect(await data.pauseThread(5, "resume")).toBe("#5 back on")
+  expect(threadPaused).toBe(false)
 })
 
 test("the standing thread is the front desk in the room, not \"lobby\"", async () => {

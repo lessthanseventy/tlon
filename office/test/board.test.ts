@@ -24,6 +24,10 @@ describe("a workline card's state", () => {
     expect(cardState(snap([t, ...busy]), t, { maxLeaves: 2 })).toEqual({ kind: "parked", why: "waiting for a seat (2/2)", atCap: true })
     expect(cardState(snap([t]), t)).toEqual({ kind: "parked", why: "waiting for a seat", atCap: true })
   })
+  test("paused: held by the operator, not waiting for a seat — no cap to raise", () => {
+    const t = thread(7, { seat: "parked", paused_at: "2026-10-31T11:00:00Z" })
+    expect(cardState(snap([t]), t)).toEqual({ kind: "parked", why: "paused: nothing starts on it until you resume it" })
+  })
   test("idle: staffed, nobody at a desk and not waiting for one", () => {
     const t = thread(7)
     expect(cardState(snap([t]), t)).toEqual({ kind: "idle", why: "ireneo is not at a desk" })

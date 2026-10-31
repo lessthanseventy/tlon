@@ -329,6 +329,8 @@ const codeSpan = (text: string) => {
 /** the refused command's allow rule is in your own settings now: said on the thread, which wakes the lead to run it again */
 export const allowed = (id: number, rule: string) => write(`telling #${id} it is allowed`, `/threads/${id}/messages`, { body: `Allowed: ${codeSpan(rule)} is in my Claude Code settings now; run it again.` }, () => `#${id} told: allowed`)
 export const move = (id: number, project: number) => write(`moving #${id}`, `/threads/${id}/move`, { project_id: project }, () => `#${id} moved`)
+/** hold one thread (`pause`) or let it go on (`resume`): the server's per-thread pause, not the whole office's `pause` */
+export const pauseThread = (id: number, mode: "pause" | "resume") => write(`${mode === "pause" ? "pausing" : "resuming"} #${id}`, `/threads/${id}/${mode}`, {}, (j) => `#${id} ${j.paused ? "paused" : "back on"}`)
 export const deleteThread = (id: number) => send("DELETE", `deleting #${id}`, `/threads/${id}`, (j) => `deleted #${id}${j.worktree ? ` — worktree ${j.worktree}` : ""}`)
 
 export const ticketPatch = (id: number, patch: { status?: string; title?: string; body?: string }) => send("PATCH", `changing #${id}`, `/tickets/${id}`, (j) => `#${id} ${j.status}`, patch)
