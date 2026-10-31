@@ -38,7 +38,7 @@ defmodule Mix.Tasks.Server.BenchRoles do
     cond do
       opts[:fingerprint] -> fingerprint!(opts[:out])
       opts[:oracle] -> oracle!(suite, roles)
-      true -> run(suite, roles, model, opts[:out])
+      true -> run(suite, roles, model, opts[:out], Keyword.has_key?(opts, :role))
     end
   end
 
@@ -60,8 +60,10 @@ defmodule Mix.Tasks.Server.BenchRoles do
     if graded == [] or !Enum.all?(graded), do: Mix.raise("oracle: reference solution not green on every sourced task")
   end
 
-  defp run(suite, roles, model, out) do
+  defp run(suite, roles, model, out, named?) do
     Mix.Task.run("app.config")
+
+    if named?, do: named!(Roles.Runner.require_tasks(roles, suite))
 
     records = Roles.Runner.run(suite, roles, model: model, out: out)
 
@@ -74,6 +76,9 @@ defmodule Mix.Tasks.Server.BenchRoles do
       Mix.shell().info("#{role}: no #{suite} tier, skipped")
     end
   end
+
+  defp named!(:ok), do: :ok
+  defp named!({:error, why}), do: Mix.raise(why)
 
   defp suite!(suite) when suite in ~w(canary full), do: suite
   defp suite!(suite), do: Mix.raise("--suite is canary or full, got #{inspect(suite)}")
