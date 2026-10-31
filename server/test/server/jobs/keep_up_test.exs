@@ -235,6 +235,23 @@ defmodule Server.Jobs.KeepUpTest do
     assert [_] = notes("/r/orphan")
   end
 
+  describe "a git that won't say what its origin is" do
+    test "a git failure other than 'no such remote' is a fault, so the job fails" do
+      run = fn
+        "git", ["-C", _, "remote", "get-url", "origin"], _ -> {"fatal: not a git repository\n", 128}
+        _, _, _ -> {"", 0}
+      end
+
+      assert [why] = KeepUp.keep_up("/r/git-fault", run)
+      assert why =~ "/r/git-fault"
+      assert why =~ "fatal: not a git repository"
+    end
+
+    test "'no such remote' (exit 2) is a skip, not a fault" do
+      assert [] = KeepUp.keep_up("/r/no-origin", pass(nil, "no git remotes found"))
+    end
+  end
+
   # the git origin url (nil: no origin) and what `gh pr list` says, for every call of a pass
   defp pass(remote, gh_error) do
     fn
