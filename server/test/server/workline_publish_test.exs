@@ -235,9 +235,9 @@ defmodule Server.WorklinePublishTest do
       assert_received {:ran, ["git", "-C", "/repo", "merge", "--ff-only", "-q", "origin/main"]}
     end
 
-    test "a checkout on another branch is left alone" do
+    test "a checkout on another branch is left alone, and says which" do
       run = runner([on("work/x")])
-      assert :skipped = Publish.follow_main("/repo", run)
+      assert {:off_main, "work/x"} = Publish.follow_main("/repo", run)
       refute_received {:ran, ["git", "-C", _, "fetch" | _]}
     end
 
