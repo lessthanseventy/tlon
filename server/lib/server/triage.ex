@@ -86,7 +86,7 @@ defmodule Server.Triage do
       for t <- open,
           o <- Server.Recurrence.similar_tickets(ws, t.title),
           o.id > t.id and MapSet.member?(ids, o.id),
-          do: "##{t.id} / ##{o.id}: #{t.title}"
+          do: "##{t.id} #{t.title} / ##{o.id} #{o.title}"
 
     if found != [], do: "Look alike, #{length(found)}:\n" <> Enum.join(Enum.take(found, 10), "\n")
   end
