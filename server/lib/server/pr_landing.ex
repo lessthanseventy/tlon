@@ -19,7 +19,7 @@ defmodule Server.PRLanding do
   reviewer): `{:ok, job}`, or `{:error, why}` when it is main or its review doesn't approve its head
   on origin.
   """
-  def queue(repo, pr, branch, pr_author \\ nil) do
+  def queue(repo, pr, branch, pr_author \\ nil, opts \\ []) do
     with :ok <- not_main(branch),
          {:ok, head} <- fetch(repo, branch),
          {:ok, review} <- BranchReview.approves(repo, branch, head, pr_author: pr_author),
@@ -34,7 +34,7 @@ defmodule Server.PRLanding do
            ) do
       post(
         review.thread_id,
-        "⧗ PR ##{pr} (#{branch}, approved by #{review.by}) is in the merge queue: it lands once rebased onto main and green there, one landing at a time"
+        "⧗ PR ##{pr} (#{branch}, approved by #{review.by}#{queued_by(opts[:by])}) is in the merge queue: it lands once rebased onto main and green there, one landing at a time"
       )
 
       {:ok, job}
@@ -44,7 +44,8 @@ defmodule Server.PRLanding do
   @doc """
   `scripts/land.sh`'s preflight, run here so a sandboxed seat reaches the queue over MCP (`land_pr`)
   rather than epmd: GitHub says what PR `pr` is, and one closed, not onto main, from a fork, from main
-  or a protected branch is refused; else `queue/4` by its branch. `opts`: `:run` (gh).
+  or a protected branch is refused; else `queue/5` by its branch. `opts`: `:run` (gh), `:by` (who queued
+  it, named in the thread's post). gh's stderr is left out of stdout: a warning on exit 0 would not parse.
   """
   def request(repo, pr, opts \\ []) do
     run = Keyword.get(opts, :run, &System.cmd/3)
@@ -52,14 +53,14 @@ defmodule Server.PRLanding do
     with {:ok, info} <- view(repo, pr, run),
          :ok <- landable(info),
          :ok <- unprotected(repo, info["headRefName"], run) do
-      queue(repo, pr, info["headRefName"], get_in(info, ["author", "login"]))
+      queue(repo, pr, info["headRefName"], get_in(info, ["author", "login"]), by: opts[:by])
     end
   end
 
   defp view(repo, pr, run) do
     fields = "headRefName,baseRefName,state,isCrossRepository,author"
 
-    with {out, 0} <- run.("gh", ["pr", "view", to_string(pr), "--json", fields], cd: repo, stderr_to_stdout: true),
+    with {out, 0} <- run.("gh", ["pr", "view", to_string(pr), "--json", fields], cd: repo),
          {:ok, %{"headRefName" => _} = info} <- Jason.decode(out) do
       {:ok, info}
     else
@@ -75,7 +76,7 @@ defmodule Server.PRLanding do
 
   defp unprotected(repo, branch, run) do
     args = ["api", "repos/{owner}/{repo}/branches/#{branch}", "--jq", ".protected"]
-    {out, code} = run.("gh", args, cd: repo, stderr_to_stdout: true)
+    {out, code} = run.("gh", args, cd: repo)
 
     case {code, String.trim(out)} do
       {0, "false"} -> :ok
@@ -128,6 +129,9 @@ defmodule Server.PRLanding do
       git(repo, ["branch", "-D", ref])
     end
   end
+
+  defp queued_by(nil), do: ""
+  defp queued_by(by), do: ", queued by #{by}"
 
   defp not_main("main"), do: {:error, "main is never landed — land the branch that goes onto it"}
   defp not_main(_branch), do: :ok

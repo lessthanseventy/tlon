@@ -124,8 +124,27 @@ defmodule Server.PRLandingTest do
     test "an open PR onto main from its own branch is queued by its branch", ctx do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       approve(ctx, origin(ctx, "feature"))
-      assert {:ok, _} = PRLanding.request(ctx.repo, 7, run: pr_gh(feature_pr()))
+      assert {:ok, _} = PRLanding.request(ctx.repo, 7, run: pr_gh(feature_pr()), by: "lonnrot")
       assert [%{"pr" => 7, "branch" => "feature", "pr_author" => "andrew"}] = jobs()
+      assert posts(ctx) =~ "queued by lonnrot"
+    end
+
+    test "gh's stderr on exit 0 does not refuse a landable PR", ctx do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      approve(ctx, origin(ctx, "feature"))
+
+      # gh's stderr joins stdout only when the caller asks for it, as System.cmd does
+      noisy = fn "gh", args, opts ->
+        warn = if opts[:stderr_to_stdout], do: "warning: gh is deprecated\n", else: ""
+
+        case args do
+          ["pr", "view" | _] -> {warn <> Jason.encode!(feature_pr()), 0}
+          ["api" | _] -> {warn <> "false\n", 0}
+        end
+      end
+
+      assert {:ok, _} = PRLanding.request(ctx.repo, 7, run: noisy)
+      assert [%{"pr" => 7}] = jobs()
     end
 
     test "refused before it is queued: closed, not onto main, a fork, main itself, protected, unreadable", ctx do
