@@ -79,8 +79,8 @@ vroot="${XDG_CACHE_HOME:-$HOME/.cache}/tlon-verify"
 mkdir -p "$vroot"
 for stale in "$vroot"/*/; do
   stale="${stale%/}"; [ -d "$stale" ] || continue
-  # a tree's Hex home goes with its tree
-  case "$stale" in *.hex) continue ;; esac
+  # a tree's Hex home goes with its tree; one whose tree is already gone goes alone
+  case "$stale" in *.hex) [ -d "${stale%.hex}" ] || rm -rf "$stale"; continue ;; esac
   pgrep -f "$stale" >/dev/null && continue
   [ -n "$(find /proc/[0-9]*/cwd -maxdepth 0 -lname "$stale*" -print -quit 2>/dev/null)" ] && continue
   rm -rf "$stale" "$stale.hex"
