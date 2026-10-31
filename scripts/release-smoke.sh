@@ -10,6 +10,8 @@
 # and a database named after it, so concurrent smokes never share either); the service's
 # 4040 and `tlon` are refused. TLON_SMOKE_URL smokes a server already up there instead: nothing is
 # built, started or recorded. A run ends `ran-on: smoke <sha>` and reports it to the service (lib/record-ran.sh), so a hand run counts for release:status too.
+# A second smoke of a commit another run is smoking waits for it, up to TLON_SMOKE_LOCK_WAIT seconds
+# (default 3600; 0 refuses at once), then smokes itself.
 # TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped, or
 # until TLON_SMOKE_HOLD_TTL seconds pass (default 7200): a forgotten hold would hold its port and
 # database for good. TLON_SMOKE_FLAGS and TLON_SMOKE_FIXTURES (space-separated names) turn flags on
@@ -27,6 +29,7 @@ refuse_stale_script "$0"
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 port="${TLON_SMOKE_PORT:-$(smoke_pick_port $((4100 + $$ % 800)))}"
 db="${TLON_SMOKE_DATABASE:-tlon_smoke_$port}" url="${TLON_SMOKE_URL:-}"
+lock_wait="${TLON_SMOKE_LOCK_WAIT:-3600}"
 hold="${TLON_SMOKE_HOLD:-}" ttl="${TLON_SMOKE_HOLD_TTL:-7200}" flags="${TLON_SMOKE_FLAGS:-}"
 fixtures="${TLON_SMOKE_FIXTURES:-}" server_bin="${TLON_SMOKE_SERVER_BIN:-}"
 log="$(mktemp -t tlon-smoke-log-XXXXXX)"
@@ -38,7 +41,7 @@ fail() { echo "smoke FAILED: $*$([ -s "$log" ] && echo " (the log: $log)")"; exi
 for v in $(compgen -e | grep -E '^(TLON_|RELEASE_)'); do unset "$v"; done
 unset INVOCATION_ID
 
-dir="" node="" sha="" ok="" office="$root" dblock=""
+dir="" node="" sha="" ok="" office="$root" dblock="" waited=""
 cleanup() {
   if [ -n "$node" ]; then kill "$node" 2>/dev/null; wait "$node" 2>/dev/null; fi
   if [ -n "$dir" ]; then
@@ -85,25 +88,38 @@ if [ -z "$url" ]; then
         { [ -n "$hurl" ] && curl -s -m 5 -o /dev/null "$hurl/api/office"; } ||
         [ -z "$(find "$lock" -maxdepth 0 -mmin +20)" ]
     }
-    holder_is_live && fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
+    # A live holder is waited for, not refused: a schedule that meets a hand run of the same commit
+    # smokes once it is done (and records its own ran-on). The bound is finite: a TLON_SMOKE_HOLD
+    # holder can hold up to its TTL. 0 refuses at once.
+    if holder_is_live; then
+      [ "$lock_wait" -gt 0 ] 2>/dev/null || fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
+      echo "smoke: waiting for ${sha:0:7} to be smoked by ($holder), up to ${lock_wait}s"
+      flock -w "$lock_wait" 8 || fail "${sha:0:7}: timed out waiting for ($holder) after ${lock_wait}s"
+      # a reclaimer may have replaced the file while this waited on the old one
+      [ "$(stat -L -c %i /proc/$$/fd/8)" = "$(stat -c %i "$lock" 2>/dev/null)" ] ||
+        fail "${sha:0:7} is already being smoked (another run reclaimed its lock while this waited)"
+      waited=1
+    fi
     # Reclaiming replaces the lock file, so two reclaimers would each lock a file of their own and both
     # build. One at a time, by a lock beside it held only through the reclaim; and the file this run opened
     # must still be the one at the path, or another reclaimer got there between its read of the record and this.
-    exec 6>"$lock.reclaim"
-    flock -n 6 || fail "${sha:0:7} is already being smoked (another run is reclaiming its lock)"
-    [ "$(stat -L -c %i /proc/$$/fd/8)" = "$(stat -c %i "$lock" 2>/dev/null)" ] ||
-      fail "${sha:0:7} is already being smoked (another run reclaimed its lock first)"
-    # weighing the holder took a while: it may have let go, and a run that never takes the guard may
-    # have the file by now
-    if ! flock -n 8; then
-      holder_is_live && fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
-      echo "smoke: reclaiming the lock on ${sha:0:7} from a holder that is gone ($holder)"
-      exec 8>&-
-      rm -f "$lock"
-      exec 8<>"$lock"
-      flock -n 8 || fail "${sha:0:7} is already being smoked (a run took the lock as this one reclaimed it)"
+    if [ -z "$waited" ]; then
+      exec 6>"$lock.reclaim"
+      flock -n 6 || fail "${sha:0:7} is already being smoked (another run is reclaiming its lock)"
+      [ "$(stat -L -c %i /proc/$$/fd/8)" = "$(stat -c %i "$lock" 2>/dev/null)" ] ||
+        fail "${sha:0:7} is already being smoked (another run reclaimed its lock first)"
+      # weighing the holder took a while: it may have let go, and a run that never takes the guard may
+      # have the file by now
+      if ! flock -n 8; then
+        holder_is_live && fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
+        echo "smoke: reclaiming the lock on ${sha:0:7} from a holder that is gone ($holder)"
+        exec 8>&-
+        rm -f "$lock"
+        exec 8<>"$lock"
+        flock -n 8 || fail "${sha:0:7} is already being smoked (a run took the lock as this one reclaimed it)"
+      fi
+      exec 6>&-
     fi
-    exec 6>&-
   fi
   # truncated, so a shorter record leaves no tail of the last run's
   : >"$lock"
