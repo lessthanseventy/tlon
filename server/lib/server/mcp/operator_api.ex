@@ -260,8 +260,10 @@ defmodule Server.MCP.OperatorAPI do
 
     case body(conn) do
       {%{"mode" => mode}, conn} when is_map_key(modes, mode) ->
-        {:ok, state} = modes[mode].()
-        json(conn, 200, %{pause: state})
+        case modes[mode].() do
+          {:ok, state} -> json(conn, 200, %{pause: state})
+          {:error, why} -> json(conn, 500, %{error: inspect(why)})
+        end
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"mode": "pencils_down" | "lights_out" | "back_to_work"})})
