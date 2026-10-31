@@ -11,5 +11,6 @@ defmodule Server.Jobs.Continue do
   alias Server.Workline.Continuation
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"thread_id" => tid}}) when is_integer(tid), do: Continuation.run(tid)
+  def perform(%Oban.Job{args: %{"thread_id" => tid} = args}) when is_integer(tid),
+    do: Continuation.run(tid, quiet: args["quiet"] == true)
 end
