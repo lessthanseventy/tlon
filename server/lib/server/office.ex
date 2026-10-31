@@ -392,13 +392,16 @@ defmodule Server.Office do
         live: live,
         standing: std,
         thinking: on_it,
-        seat: if(t.paused_at, do: "parked", else: seat(t.id, lead, desk?)),
+        seat: thread_seat(t, lead, desk?),
         duty: MapSet.member?(duties, t.id),
         study: Server.Outside.study?(t.title, lead, citizens),
         landing: MapSet.member?(landing, t.id)
       })
     end)
   end
+
+  defp thread_seat(%{paused_at: %DateTime{}}, _lead, _desk?), do: "parked"
+  defp thread_seat(t, lead, desk?), do: seat(t.id, lead, desk?)
 
   defp seat(_id, _lead, true), do: "desk"
   defp seat(_id, nil, false), do: "idle"
