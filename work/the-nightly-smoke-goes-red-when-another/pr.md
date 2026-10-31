@@ -1,6 +1,6 @@
 release-smoke waits for a live holder of its commit lock instead of exiting 1.
 
-A scheduled smoke that met a by-hand smoke of the same commit failed "already being smoked" (red on #189, main fine). Now a live holder is waited for with `flock -w TLON_SMOKE_LOCK_WAIT` (default 3600s; 0 = the old immediate refusal), then the run smokes and records its own ran-on. A holder that outlasts the bound fails "timed out waiting for (<holder>)". The gone-holder reclaim path is unchanged.
+A scheduled smoke that met a by-hand smoke of the same commit failed "already being smoked" (red on #189, main fine). Now a live holder is waited for with `flock -w TLON_SMOKE_LOCK_WAIT` (default 1200s, inside a schedule's 30-minute silence kill; 0 = the old immediate refusal), then the run smokes and records its own ran-on. A holder that outlasts the bound fails "timed out waiting for (<holder>)". The gone-holder reclaim path is unchanged.
 
 Closes ticket #603.
 
