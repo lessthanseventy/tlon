@@ -76,7 +76,7 @@ defmodule Server.Workline.Continuation do
       :ok
     else
       {:budget, false, {thread, why, sent, after_id}} -> stuck(thread, why, sent, after_id)
-      {:later, at} -> requeue(thread_id, at)
+      {:later, at} -> requeue(thread_id, at, opts[:quiet] == true)
       _ -> :ok
     end
   end
@@ -176,8 +176,12 @@ defmodule Server.Workline.Continuation do
     if gap > 0 and DateTime.compare(last, since) == :gt, do: {:later, DateTime.add(last, gap)}, else: :go
   end
 
-  defp requeue(thread_id, at) do
-    Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id}, scheduled_at: at))
+  # unique until the gap's end, so sweeps inside one gap leave one scheduled check; quiet is a key
+  # so a plain check never swallows the quiet one
+  defp requeue(thread_id, at, quiet) do
+    period = Server.OperatorConfig.setting("continuation_gap_minutes") * 60 + 60
+    unique = [period: period, keys: [:thread_id, :quiet], states: [:available, :scheduled, :executing]]
+    Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id, quiet: quiet}, scheduled_at: at, unique: unique))
     :ok
   end
 

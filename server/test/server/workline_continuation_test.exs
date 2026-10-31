@@ -74,6 +74,27 @@ defmodule Server.Workline.ContinuationTest do
       assert abs(DateTime.diff(job.scheduled_at, gap_end)) <= 1
     end
 
+    test "a skipped quiet sweep is requeued as quiet, so the nudge at the gap's end is still the quiet one" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      {:ok, fresh} = Workline.open(%{title: "straight to build", slug: "requeue-quiet", stage: "build"})
+      :ok = Continuation.run(fresh.id, artifacts: Present, quiet: true)
+
+      assert [job] = all_enqueued(worker: Server.Jobs.Continue, args: %{thread_id: fresh.id})
+      assert job.args["quiet"] == true
+      assert continuations(fresh.id) == []
+    end
+
+    test "repeated skipped sweeps inside one gap leave one scheduled check" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      {:ok, fresh} = Workline.open(%{title: "straight to build", slug: "requeue-dedupe", stage: "build"})
+      :ok = Continuation.run(fresh.id, artifacts: Present, quiet: true)
+      # a later sweep: past the default unique window, still inside the gap
+      Repo.update_all(Oban.Job, set: [inserted_at: DateTime.add(DateTime.utc_now(), -5 * 60)])
+      :ok = Continuation.run(fresh.id, artifacts: Present, quiet: true)
+
+      assert [_] = all_enqueued(worker: Server.Jobs.Continue, args: %{thread_id: fresh.id})
+    end
+
     test "a lead's post holds nudges back for one gap only", %{thread: t} do
       {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "builds", engine: "claude-code"})
       {:ok, _} = Server.Staff.assign(Repo.get!(Server.Thread, t.id), a)
