@@ -354,7 +354,14 @@ defmodule Server.Office do
         from(t in Server.Thread,
           where: t.state == "open",
           order_by: [desc: t.id],
-          select: %{id: t.id, title: t.title, stage: t.stage, awaiting: t.awaiting, workspace_id: t.workspace_id}
+          select: %{
+            id: t.id,
+            title: t.title,
+            stage: t.stage,
+            awaiting: t.awaiting,
+            workspace_id: t.workspace_id,
+            paused_at: t.paused_at
+          }
         )
       )
 
@@ -385,7 +392,7 @@ defmodule Server.Office do
         live: live,
         standing: std,
         thinking: on_it,
-        seat: seat(t.id, lead, desk?),
+        seat: if(t.paused_at, do: "parked", else: seat(t.id, lead, desk?)),
         duty: MapSet.member?(duties, t.id),
         study: Server.Outside.study?(t.title, lead, citizens),
         landing: MapSet.member?(landing, t.id)
