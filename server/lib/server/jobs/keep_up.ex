@@ -13,7 +13,8 @@ defmodule Server.Jobs.KeepUp do
   `pr_blocked` Need.
 
   A repo whose origin is not on GitHub has no PRs to read: it is skipped for all of the above except
-  following its main, and said once in the log.
+  following its main, and it has one keyed rollout note (`keep_up:remote:<repo>`) saying so, cleared
+  once its origin is on GitHub.
 
   A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
   from PATH, a git that won't run) leaves the other repos their pass, then fails the job with every
@@ -42,6 +43,7 @@ defmodule Server.Jobs.KeepUp do
 
     case remote(repo, run) do
       :github ->
+        Server.Rollout.clear(remote_key(repo))
         conflicting = read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo, run))
         failing = read(repo, "red PRs", Server.Workline.Publish.failing(repo, run))
         if conflicting != :error and failing != :error, do: Server.Rollout.clear("keep_up:#{repo}")
@@ -49,8 +51,12 @@ defmodule Server.Jobs.KeepUp do
         red_checks(repo, unread(failing), run)
         []
 
-      :elsewhere ->
-        no_remote(repo)
+      {:elsewhere, url} ->
+        Server.Rollout.note(remote_key(repo), "#{repo} origin #{url} is not on GitHub, so its PRs are not kept up")
+        []
+
+      :none ->
+        Server.Rollout.note(remote_key(repo), "#{repo} has no origin remote, so its PRs are not kept up")
         []
 
       {:fault, why} ->
@@ -64,20 +70,16 @@ defmodule Server.Jobs.KeepUp do
   # `git remote get-url` is a fault, not a skip. Its main is still followed, whichever it is.
   defp remote(repo, run) do
     case run.("git", ["-C", repo, "remote", "get-url", "origin"], stderr_to_stdout: true) do
-      {url, 0} -> if github?(url), do: :github, else: :elsewhere
-      {_, 2} -> :elsewhere
+      {url, 0} -> if github?(url), do: :github, else: {:elsewhere, String.trim(url)}
+      {_, 2} -> :none
       {out, code} -> {:fault, "keep_up #{repo}: git remote get-url origin exited #{code}: #{String.trim(out)}"}
     end
   end
 
-  defp github?(url), do: url =~ ~r{^(?:(?:https?|git|ssh)://)?(?:[^@/]+@)?(?:ssh\.)?github\.com[/:]}
+  # one keyed note per repo, so a pass that skips it again updates the same item, not a new one
+  defp remote_key(repo), do: "keep_up:remote:#{repo}"
 
-  defp no_remote(repo) do
-    if !:persistent_term.get({__MODULE__, :no_remote, repo}, false) do
-      :persistent_term.put({__MODULE__, :no_remote, repo}, true)
-      require(Logger) && Logger.info("keep_up #{repo} has no GitHub remote, so it is skipped")
-    end
-  end
+  defp github?(url), do: url =~ ~r{^(?:(?:https?|git|ssh)://)?(?:[^@/]+@)?(?:ssh\.)?github\.com[/:]}
 
   defp fault(why) do
     require(Logger) && Logger.error(why)
