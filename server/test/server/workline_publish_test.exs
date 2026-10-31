@@ -251,6 +251,18 @@ defmodule Server.WorklinePublishTest do
       assert {:off_main, "detached at abc1234"} = Publish.follow_main("/repo", run)
     end
 
+    test "a path that is no repo is an error, not a detached HEAD" do
+      gone = {"fatal: cannot change to '/repo': No such file or directory\n", 128}
+
+      run =
+        runner([
+          {&match?(["git", "-C", _, "symbolic-ref" | _], &1), gone},
+          {&match?(["git", "-C", _, "rev-parse", "--short", "HEAD"], &1), gone}
+        ])
+
+      assert {:error, "fatal: cannot change to" <> _} = Publish.follow_main("/repo", run)
+    end
+
     test "main with commits of its own is never merged or rewritten — it says how far it has drifted" do
       run = runner([on("main"), ancestor(1), {&match?(["git", "-C", _, "rev-list", "--count" | _], &1), {"4\n", 0}}])
       assert {:diverged, 4} = Publish.follow_main("/repo", run)
