@@ -404,6 +404,16 @@ defmodule Server.Workline.ContinuationTest do
     assert m.body =~ "advance_stage"
   end
 
+  test "a requeued quiet job, performed, posts the quiet nudge", %{thread: t} do
+    Application.put_env(:server, :continue_opts, artifacts: Present)
+    on_exit(fn -> Application.delete_env(:server, :continue_opts) end)
+
+    assert :ok = perform_job(Server.Jobs.Continue, %{thread_id: t.id, quiet: true})
+
+    assert [m] = continuations(t.id)
+    assert m.body =~ "but it has not moved"
+  end
+
   test "quiet nudges spend the same budget: a lead that never advances is stuck, not sitting there", %{thread: t} do
     for _ <- 1..4, do: :ok = Continuation.run(t.id, artifacts: Present, quiet: true)
     assert length(continuations(t.id)) == 3
