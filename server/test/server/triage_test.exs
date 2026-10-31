@@ -64,6 +64,9 @@ defmodule Server.TriageTest do
     refute loose_part |> String.split("Stale") |> hd() =~ "##{filed.id}"
     assert m.body =~ ~r/Stale.*##{old.id}/s
     assert m.body =~ ~r/Look alike.*##{loose.id}.*##{twin.id}/s
+
+    assert m.body =~
+             "##{loose.id} The rack reads all green while a line is red / ##{twin.id} The rack reads all green while one line is red"
   end
 
   test "due once a day, or sooner when five tickets have come in since", %{ws: ws} do
