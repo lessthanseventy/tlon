@@ -238,11 +238,21 @@ defmodule Server.Workline.Publish do
     git = fn args -> run.("git", ["-C", repo | args], stderr_to_stdout: true) end
 
     case git.(["symbolic-ref", "--short", "HEAD"]) do
-      {"main\n", 0} -> fetch_and_follow(git)
-      {branch, 0} -> {:off_main, String.trim(branch)}
-      # exit 128 is a HEAD that is no branch
-      {_, 128} -> {:off_main, "detached at " <> (git.(["rev-parse", "--short", "HEAD"]) |> elem(0) |> String.trim())}
-      {out, _} -> {:error, String.slice(out, 0, 200)}
+      {"main\n", 0} ->
+        fetch_and_follow(git)
+
+      {branch, 0} ->
+        {:off_main, String.trim(branch)}
+
+      # exit 128 is a HEAD that is no branch — or no repo at all: only a HEAD that resolves is detached
+      {_, 128} ->
+        case git.(["rev-parse", "--short", "HEAD"]) do
+          {sha, 0} -> {:off_main, "detached at " <> String.trim(sha)}
+          {out, _} -> {:error, String.slice(out, 0, 200)}
+        end
+
+      {out, _} ->
+        {:error, String.slice(out, 0, 200)}
     end
   end
 
