@@ -70,6 +70,46 @@ test("a seat is named for its author and thread", async () => {
   expect(exec).toContain("--name pierre #42");
 });
 
+// The dry run prints the argv the real exec runs, gateway included: no elided placeholders.
+test("the dry-run exec line is the real argv, gateway included", async () => {
+  const { exec } = await dryRun("pierre");
+  expect(exec).toContain("gateway.sh");
+  expect(exec).toContain("--append-system-prompt You are a citizen");
+  expect(exec).not.toContain("<…>");
+});
+
+// A write-fenced seat carries permissions in its settings; remote control must stay off there too.
+test("a seat with a permissions deny list starts with remote control off", async () => {
+  const proc = Bun.spawn(["bash", launcher], {
+    env: {
+      ...process.env,
+      TLON_LAUNCH_DRYRUN: "1",
+      TLON_SANDBOX_FILE: "",
+      TLON_PERMISSIONS_DENY: "Write,Edit",
+      TLON_READ_DIRS: "",
+      TLON_MCP_URL: "http://127.0.0.1:1/mcp",
+      TLON_THREAD: "42",
+      TLON_AUTHOR: "pierre",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const out = await new Response(proc.stdout).text();
+  expect(await proc.exited).toBe(0);
+  const settings = JSON.parse(out.split("\n").find((l) => l.startsWith("settings:"))!.slice("settings:".length));
+  expect(settings.permissions.deny).toEqual(["Write", "Edit"]);
+  expect(settings.remoteControlAtStartup).toBe(false);
+});
+
+// Pins the one flag the launcher depends on against the real binary, not a stub. Help only: a real
+// session is never started here, and --settings is not validated by a help run.
+const hasClaude = Bun.spawnSync(["bash", "-c", "command -v claude"]).exitCode === 0;
+test.skipIf(!hasClaude)("the installed claude accepts --name", () => {
+  const r = Bun.spawnSync(["claude", "--help"], { stdout: "pipe", stderr: "pipe" });
+  expect(r.exitCode).toBe(0);
+  expect(new TextDecoder().decode(r.stdout)).toContain("--name");
+});
+
 // A seat's own workline is a linked worktree: commit writes its gitdir and the common .git, which
 // sit outside the worktree, so its cwd alone (".") is not enough to write.
 test("a sandboxed seat may write the worktree it starts in and its gitdirs", async () => {
