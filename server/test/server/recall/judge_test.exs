@@ -96,7 +96,7 @@ defmodule Server.Recall.JudgeTest do
     _old = bank(a, "the smoke port is 4047", [1.0, 0.0])
     new = bank(b, "release smoke listens on 4047", @related)
 
-    assert %Fact{supersedes: nil} = Judge.judge(new, model: fn _ -> {:error, {:model_cli_timeout, 20}} end)
+    assert %Fact{supersedes: nil} = Judge.judge(new, model: fn _ -> {:error, {:model_cli_timeout, 20, ""}} end)
     assert Repo.aggregate(Event, :count) == 0
   end
 

@@ -96,7 +96,21 @@ defmodule Server.ModelCliTest do
     Application.put_env(:server, :model_cli_timeout_s, 1)
     on_exit(fn -> Application.delete_env(:server, :model_cli_timeout_s) end)
 
-    assert {:error, {:model_cli_timeout, 1}} = ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, "sleep 5"), "m"})
+    assert {:error, {:model_cli_timeout, 1, _}} =
+             ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, "sleep 5"), "m"})
+  end
+
+  test "a timeout still says what the CLI wrote to stderr", %{dir: dir} do
+    Application.put_env(:server, :model_cli_timeout_s, 1)
+    on_exit(fn -> Application.delete_env(:server, :model_cli_timeout_s) end)
+
+    assert {:error, {:model_cli_timeout, 1, "rate limited, retrying\n"}} =
+             ModelCli.prompt(
+               "hi",
+               :test_cmd,
+               :test_model,
+               {cli(dir, "echo 'rate limited, retrying' >&2; sleep 5"), "m"}
+             )
   end
 
   test "a warning on stderr is not part of the answer, so a reply still parses", %{dir: dir} do

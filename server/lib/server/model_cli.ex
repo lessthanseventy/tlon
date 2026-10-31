@@ -24,7 +24,7 @@ defmodule Server.ModelCli do
 
   @doc """
   Run `prompt` through the configured CLI with stdin closed, cut off after `opts[:timeout_s]`, else
-  `:model_cli_timeout_s` (120). `{:ok, stdout}`, or `{:error, {:model_cli_timeout, s} |
+  `:model_cli_timeout_s` (120). `{:ok, stdout}`, or `{:error, {:model_cli_timeout, s, stderr} |
   {:model_cli_missing, msg} | {:model_cli_exit, code, msg}}`.
   """
   def prompt(prompt, cmd_key, model_key, {default_cmd, default_model} \\ {"claude", "haiku"}, opts \\ []) do
@@ -71,7 +71,8 @@ defmodule Server.ModelCli do
 
     case System.cmd("sh", args, env: [{"MODEL_CLI_ERR", err}, {"MODEL_CLI_IN", input} | keys()]) do
       {out, 0} -> {:ok, out}
-      {_out, 124} -> {:error, {:model_cli_timeout, timeout}}
+      # `timeout` kills the CLI before `why` could be read elsewhere, so a hang keeps its stderr here
+      {out, 124} -> {:error, {:model_cli_timeout, timeout, why(err, out)}}
       {out, code} when code in [126, 127] -> {:error, {:model_cli_missing, why(err, out)}}
       {out, code} -> {:error, {:model_cli_exit, code, refused(provider, why(err, out))}}
     end
