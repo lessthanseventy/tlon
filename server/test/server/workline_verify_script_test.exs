@@ -208,6 +208,7 @@ defmodule Server.WorklineVerifyScriptTest do
           {"TMPDIR", ctx.tmp},
           {"XDG_CACHE_HOME", Path.join(ctx.tmp, "cache")},
           {"GATE_LOG", Path.join(ctx.tmp, "gate.log")},
+          {"RUN_TASK", nil},
           {"WORKLINE_GATE", "1"},
           {"LAND_REF", "land/feature"},
           {"CHECKS_LABEL", "PR #7 landing feature"}
@@ -224,6 +225,10 @@ defmodule Server.WorklineVerifyScriptTest do
       env =
         [
           {"CHECKS_LABEL", nil},
+          {"LAND_REF", nil},
+          {"RUN_TASK", nil},
+          {"RULES_ONLY", nil},
+          {"WORKLINE_GATE", nil},
           {"PATH", "#{ctx.tmp}/bin:#{System.get_env("PATH")}"},
           {"TMPDIR", ctx.tmp},
           {"XDG_CACHE_HOME", Path.join(ctx.tmp, "cache")},
