@@ -1546,18 +1546,25 @@ defmodule Server.Workline do
           {:ok, moved} ->
             {:ok, Map.put(moved, :repo, repo)}
 
-          {:error, why} ->
-            post_brief(
-              thread,
-              "⚠ couldn't merge work/#{thread.slug}: #{why} The gate stays parked; approve again once it's fixed."
-            )
+          {:error, {:interrupted, why}} ->
+            could_not_merge(thread, why)
 
-            {:error, {:merge, why}}
+          {:error, why} ->
+            could_not_merge(thread, why)
         end
     end
   end
 
   defp land(_thread, _checker, _opts), do: {:ok, nil}
+
+  defp could_not_merge(thread, why) do
+    post_brief(
+      thread,
+      "⚠ couldn't merge work/#{thread.slug}: #{why} The gate stays parked; approve again once it's fixed."
+    )
+
+    {:error, {:merge, why}}
+  end
 
   # landed: what changed rolls out and the branch goes to GitHub, where it is not merged yet — the
   # thread stays open until GitHub merges the PR (`merged/2`). With no GitHub, the landing is the merge.

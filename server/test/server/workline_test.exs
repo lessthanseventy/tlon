@@ -633,6 +633,19 @@ defmodule Server.WorklineTest do
     assert Enum.any?(Channel.thread_messages(parked), &(&1.body =~ "couldn't merge"))
   end
 
+  test "an approve-now merge whose fetch was cut off keeps the gate parked, and says why on the thread" do
+    thread = open!(%{slug: "no-fetch-now", stage: "review"})
+    {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+
+    assert {:error, {:merge, why}} = Workline.approve(parked, artifacts: AllPresent, merge: NoFetch, land: :now)
+    assert why =~ "could not fetch origin"
+
+    assert %Server.Thread{stage: "review", awaiting: "andrew", state: "open"} =
+             Server.Repo.get(Server.Thread, thread.id)
+
+    assert Enum.any?(Channel.thread_messages(parked), &(&1.body =~ "couldn't merge"))
+  end
+
   test "a stage that changes its lead closes the old lead's window, so the new lead can be spawned on it" do
     {:ok, workspace} =
       Server.Workspaces.register(%{
