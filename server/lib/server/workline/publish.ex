@@ -237,14 +237,12 @@ defmodule Server.Workline.Publish do
   def follow_main(repo, run \\ &System.cmd/3) do
     git = fn args -> run.("git", ["-C", repo | args], stderr_to_stdout: true) end
 
-    with {"main\n", 0} <- git.(["symbolic-ref", "--short", "HEAD"]),
-         {_, 0} <- git.(["fetch", "-q", "origin", "main"]) do
-      if match?({_, 0}, git.(["merge-base", "--is-ancestor", "HEAD", "origin/main"])),
-        do: forward(git),
-        else: diverged(git)
-    else
-      {out, code} when is_binary(out) and code != 0 -> {:error, String.slice(out, 0, 200)}
-      {branch, 0} when is_binary(branch) -> {:off_main, String.trim(branch)}
+    case git.(["symbolic-ref", "--short", "HEAD"]) do
+      {"main\n", 0} -> fetch_and_follow(git)
+      {branch, 0} -> {:off_main, String.trim(branch)}
+      # exit 128 is a HEAD that is no branch
+      {_, 128} -> {:off_main, "detached at " <> (git.(["rev-parse", "--short", "HEAD"]) |> elem(0) |> String.trim())}
+      {out, _} -> {:error, String.slice(out, 0, 200)}
     end
   end
 
@@ -431,4 +429,16 @@ defmodule Server.Workline.Publish do
 
   defp pr_body(title, title, body), do: body
   defp pr_body(title, _pr_title, body), do: title <> "\n\n" <> body
+
+  defp fetch_and_follow(git) do
+    case git.(["fetch", "-q", "origin", "main"]) do
+      {_, 0} ->
+        if match?({_, 0}, git.(["merge-base", "--is-ancestor", "HEAD", "origin/main"])),
+          do: forward(git),
+          else: diverged(git)
+
+      {out, _} ->
+        {:error, String.slice(out, 0, 200)}
+    end
+  end
 end
