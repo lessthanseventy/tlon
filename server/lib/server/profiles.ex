@@ -1241,6 +1241,8 @@ defmodule Server.Profiles do
     # The dir MUST be `config_dir/1`: the launcher reads the persona and sandbox from that path.
     dir = if opts[:root], do: Path.join(opts[:root], p.name), else: config_dir(p)
     File.mkdir_p!(dir)
+    # The sandbox binds this dir as writable; bwrap fails on a missing source, so it must exist first.
+    File.mkdir_p!(opts[:scratch_dir] || Path.expand(scratch_root(p.name)))
     r = render(p)
     if r.sandbox, do: write_json!(Path.join(dir, "sandbox.json"), r.sandbox)
     if r.system_prompt, do: File.write!(Path.join(dir, "system_prompt.md"), r.system_prompt)

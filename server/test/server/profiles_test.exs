@@ -326,19 +326,27 @@ defmodule Server.ProfilesTest do
     setup do
       tmp = Path.join(System.tmp_dir!(), "aleph-prof-#{System.pid()}-#{System.unique_integer([:positive])}")
       on_exit(fn -> File.rm_rf!(tmp) end)
-      %{root: Path.join(tmp, "profiles")}
+      %{root: Path.join(tmp, "profiles"), scratch: Path.join(tmp, "scratch")}
     end
 
-    test "writes the persona, the sandbox and the tmux config — nothing else", %{root: root} do
-      dir = Profiles.materialise!(Profiles.fetch("tertius"), root: root)
+    test "creates the seat's tlon-scratch dir, so its sandbox can bind it before bwrap", %{root: root, scratch: scratch} do
+      Profiles.materialise!(Profiles.fetch("tertius"), root: root, scratch_dir: scratch)
+      assert File.dir?(scratch)
+    end
+
+    test "writes the persona, the sandbox and the tmux config — nothing else", %{root: root, scratch: scratch} do
+      dir = Profiles.materialise!(Profiles.fetch("tertius"), root: root, scratch_dir: scratch)
       assert dir == Path.join(root, "tertius")
       assert File.read!(Path.join(dir, "system_prompt.md")) =~ "tertius"
       assert Jason.decode!(File.read!(Path.join(dir, "sandbox.json")))["enabled"] == true
       assert dir |> File.ls!() |> Enum.sort() == ~w(sandbox.json system_prompt.md tmux.conf)
     end
 
-    test "writes the coworker's persistence-free tmux.conf — fresh on rebuild, never resurrected", %{root: root} do
-      dir = Profiles.materialise!(Profiles.fetch("tertius"), root: root)
+    test "writes the coworker's persistence-free tmux.conf — fresh on rebuild, never resurrected", %{
+      root: root,
+      scratch: scratch
+    } do
+      dir = Profiles.materialise!(Profiles.fetch("tertius"), root: root, scratch_dir: scratch)
       conf = File.read!(Path.join(dir, "tmux.conf"))
       # the interactive bits travel with the coworker...
       assert conf =~ "set -g mouse on"
@@ -349,9 +357,11 @@ defmodule Server.ProfilesTest do
       refute conf =~ "continuum"
     end
 
-    test "idempotent — a second materialise rewrites without error", %{root: root} do
-      Profiles.materialise!(Profiles.fetch("tertius"), root: root)
-      assert Profiles.materialise!(Profiles.fetch("tertius"), root: root) == Path.join(root, "tertius")
+    test "idempotent — a second materialise rewrites without error", %{root: root, scratch: scratch} do
+      Profiles.materialise!(Profiles.fetch("tertius"), root: root, scratch_dir: scratch)
+
+      assert Profiles.materialise!(Profiles.fetch("tertius"), root: root, scratch_dir: scratch) ==
+               Path.join(root, "tertius")
     end
   end
 
@@ -691,7 +701,7 @@ defmodule Server.ProfilesTest do
       end)
 
       profile = %Profile{name: "amy", archetype: :builder, workspace_id: 7}
-      dir = Profiles.materialise!(profile)
+      dir = Profiles.materialise!(profile, scratch_dir: Path.join(state, "scratch"))
 
       assert dir == Profiles.config_dir(profile)
       assert dir == Path.join([state, "tlon", "profiles", "w7", "amy"])
