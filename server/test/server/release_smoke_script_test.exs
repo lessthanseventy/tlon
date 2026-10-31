@@ -183,6 +183,7 @@ defmodule Server.ReleaseSmokeScriptTest do
         {"SANDBOX_RUNTIME", nil},
         {"PATH", Path.join(tmp, "bin") <> ":" <> System.get_env("PATH")},
         {"TLON_SMOKE_PORT", "#{port}"},
+        {"TLON_SMOKE_LOCK_WAIT", "0"},
         {"TLON_SMOKE_DATABASE", "tlon_smoke_fetch_#{port}"}
       ]
 
@@ -228,6 +229,38 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert {out, 1} = run_smoke(ctx, ["work/feature"])
       assert out =~ "is already being smoked (pid 123 on http://127.0.0.1:4777)"
       refute File.exists?(Path.join(tmp, "tlon-smoke"))
+    end
+
+    # a live holder that lets go while we wait: the smoke goes on instead of exiting 1
+    test "a live holder that lets go within the wait bound is waited for, then smoked after",
+         %{tmp: tmp, root: root} = ctx do
+      {sha, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/feature"])
+      lock = Path.join(tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
+      File.write!(lock, "pid #{System.pid()} on http://127.0.0.1:#{free_port()}\n")
+
+      port =
+        Port.open({:spawn_executable, System.find_executable("bash")}, [
+          :binary,
+          args: ["-c", ~s(exec 9<"$0"; flock 9; echo held; sleep 2), lock]
+        ])
+
+      assert_receive {^port, {:data, "held\n"}}, 5_000
+
+      {out, _} = run_smoke(ctx, ["work/feature"], [{"TLON_SMOKE_LOCK_WAIT", "30"}])
+
+      refute out =~ "already being smoked"
+      assert out =~ "waiting for"
+      assert out =~ ~r/smoke: [0-9a-f]{7} on :#{ctx.port}/
+    end
+
+    test "a live holder that outlasts the wait bound is timed out on, naming it", %{tmp: tmp, root: root} = ctx do
+      {sha, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/feature"])
+      lock = Path.join(tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
+      File.write!(lock, "pid #{System.pid()} on http://127.0.0.1:4777\n")
+      hold_lock(lock)
+
+      assert {out, 1} = run_smoke(ctx, ["work/feature"], [{"TLON_SMOKE_LOCK_WAIT", "1"}])
+      assert out =~ "timed out waiting for (pid #{System.pid()} on http://127.0.0.1:4777)"
     end
 
     # a record a holder wrote long ago: a pid from another sandbox's namespace means nothing here,
@@ -366,6 +399,7 @@ defmodule Server.ReleaseSmokeScriptTest do
         {"PATH", ctx.stubs <> ":" <> System.get_env("PATH")},
         {"SMOKE_SIGNAL", ctx.signal},
         {"TLON_SMOKE_PORT", "#{port}"},
+        {"TLON_SMOKE_LOCK_WAIT", "0"},
         {"TLON_SMOKE_DATABASE", "tlon_smoke_race_#{port}"}
       ]
     end
