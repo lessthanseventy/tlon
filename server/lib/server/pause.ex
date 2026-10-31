@@ -9,6 +9,10 @@ defmodule Server.Pause do
   and `staff_child`). Lights
   out is pencils down plus the verify and landing queues paused (`Server.Rollout.pause_gates/1`)
   and an Escape into every coworker pane; nothing is killed and every branch stays where it is.
+  An auto pause (`auto/1`, a plan meter window at `auto_pause_at`) is pencils down marked
+  `"pause_by" => "auto"`, and when the window has a `resets_at` it schedules `Server.Jobs.AutoResume`
+  for then; the job resumes only if the office is still that auto pause (`auto_resume/2`). Lights out
+  is the operator's hand both ways: `auto/1` never sets it and the job never lifts it.
   Back to work undoes either, and wakes every thread this pause stopped that is still open: a chat
   from tlon @mentioning its lead as it is now, so the switchboard wakes it, or spawns its pane.
 
@@ -80,10 +84,24 @@ defmodule Server.Pause do
            end) do
       :ok = OperatorConfig.put("auto_paused_for", Map.put(latched, to_string(name), r))
       {:ok, _} = pencils_down()
-      auto_say(name, p, r)
+      :ok = OperatorConfig.put("pause_by", "auto")
+      at = schedule_resume(name, r)
+      auto_say(name, p, r, at)
     end
 
     :ok
+  end
+
+  @doc """
+  Back to work for the auto pause of `window` that was to end at `resets_at`: only while the office is
+  still pencils down, that pause is the auto one (any hand-pulled change clears `pause_by`) and the
+  window's latch holds that same `resets_at`. Lights out is never resumed. `{:ok, :working}` or `:noop`.
+  """
+  def auto_resume(window, resets_at) do
+    if state() == :pencils_down and OperatorConfig.read()["pause_by"] == "auto" and
+         latched()[window] == resets_at,
+       do: back_to_work(),
+       else: :noop
   end
 
   # One slot per window, so one window firing never forgets the other's override.
@@ -92,21 +110,6 @@ defmodule Server.Pause do
       %{} = m -> m
       _ -> %{}
     end
-  end
-
-  defp auto_say(name, percent, resets_at) do
-    label = if name == :five_hour, do: "5h", else: "weekly"
-
-    reset =
-      with r when is_binary(r) <- resets_at,
-           {:ok, at, _} <- DateTime.from_iso8601(r),
-           do: ", resets #{Calendar.strftime(at, "%H:%M")} UTC",
-           else: (_ -> "")
-
-    body = "#{label} at #{round(percent)}%#{reset} — pencils down, back to work when you say"
-
-    with %Server.Thread{id: id} <- Channel.machine_thread(),
-         do: _ = Channel.post(%{thread_id: id, author: "tlon", body: body, kind: "notice"})
   end
 
   @doc "Whether this one thread is paused, by the operator or by its lead's hold."
@@ -159,6 +162,7 @@ defmodule Server.Pause do
 
     if from != want do
       :ok = OperatorConfig.put("pause", if(want != :working, do: Atom.to_string(want)))
+      :ok = OperatorConfig.put("pause_by", nil)
       if from == :working, do: tell_live_threads()
       if want == :working, do: wake_stopped_threads()
       if want == :lights_out, do: lights_off()
@@ -246,6 +250,39 @@ defmodule Server.Pause do
         :working ->
           @resumed <> " intake, nudges, verify and landing are on again."
       end
+
+    with %Server.Thread{id: id} <- Channel.machine_thread(),
+         do: _ = Channel.post(%{thread_id: id, author: "tlon", body: body, kind: "notice"})
+  end
+
+  defp schedule_resume(name, resets_at) do
+    with r when is_binary(r) <- resets_at,
+         {:ok, at, _} <- DateTime.from_iso8601(r),
+         {:ok, _} <-
+           %{window: to_string(name), resets_at: r}
+           |> Server.Jobs.AutoResume.new(scheduled_at: at)
+           |> Oban.insert() do
+      at
+    else
+      _ -> nil
+    end
+  end
+
+  defp auto_say(name, percent, resets_at, resume_at) do
+    label = if name == :five_hour, do: "5h", else: "weekly"
+
+    reset =
+      with r when is_binary(r) <- resets_at,
+           {:ok, at, _} <- DateTime.from_iso8601(r),
+           do: ", resets #{Calendar.strftime(at, "%H:%M")} UTC",
+           else: (_ -> "")
+
+    back =
+      if resume_at,
+        do: "back to work at #{Calendar.strftime(resume_at, "%H:%M")} UTC or when you say",
+        else: "back to work when you say"
+
+    body = "#{label} at #{round(percent)}%#{reset} — pencils down, #{back}"
 
     with %Server.Thread{id: id} <- Channel.machine_thread(),
          do: _ = Channel.post(%{thread_id: id, author: "tlon", body: body, kind: "notice"})
