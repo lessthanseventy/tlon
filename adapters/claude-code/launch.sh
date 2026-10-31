@@ -85,7 +85,8 @@ perms_json=""
 # statusLine stays out of a citizen's window.
 settings_json="{\"statusLine\":{\"type\":\"command\",\"command\":\"true\"}$perms_json}"
 # The operator's own settings turn remote control on at startup; only uqbar's study keeps it.
-[ "$TLON_AUTHOR" = "uqbar" ] || settings_json="${settings_json%\}},\"remoteControlAtStartup\":false}"
+# remoteControlAtStartup is a real key in claude-code 2.1.293's bundled settings schema, and false wins.
+[ "$TLON_AUTHOR" = "uqbar" ] || settings_json="$(jq -c '. + {remoteControlAtStartup: false}' <<<"$settings_json")"
 
 # A sandboxed seat, on any provider (`Server.Harness` sets TLON_SANDBOX_FILE, the profile's sandbox settings) never
 # waits on a prompt: its bash runs fenced (strict, so it can neither reach a host off the allowlist
@@ -129,13 +130,16 @@ case "${TLON_PROVIDER:-anthropic}" in anthropic | "") plugins+=(--plugin-dir "$a
 # Seat transcripts land in the operator's /resume picker; the name tells them from his own chats.
 name="$TLON_AUTHOR #$TLON_THREAD"
 
+# The one argv both the dry run and the real exec use, so the dry run shows what would run.
+args=("$adapter/gateway.sh" "${TLON_PROVIDER:-anthropic}" claude --name "$name" --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" "${plugins[@]}" "$@")
+
 if [ "${TLON_LAUNCH_DRYRUN:-}" = "1" ]; then
   printf 'identity: TLON_THREAD=%s TLON_AUTHOR=%s\n' "$TLON_THREAD" "$TLON_AUTHOR"
   printf 'mcp-config: %s\n' "$mcp_json"
   printf 'settings:   %s\n' "$settings_json"
   printf 'system:     %s\n' "$sys_prompt"
   printf 'provider:   %s\n' "${TLON_PROVIDER:-anthropic}"
-  printf 'exec: claude --name %s --permission-mode %s --append-system-prompt <…> --mcp-config <…> --settings <…> %s %s\n' "$name" "$mode" "${plugins[*]}" "$*"
+  printf 'exec: %s\n' "${args[*]}"
   exit 0
 fi
 
@@ -163,4 +167,4 @@ fi
 export ENABLE_CLAUDEAI_MCP_SERVERS=false
 
 # The provider's endpoint (gateway.sh): an ollama model never draws on the Claude plan.
-exec "$adapter/gateway.sh" "${TLON_PROVIDER:-anthropic}" claude --name "$name" --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" "${plugins[@]}" "$@"
+exec "${args[@]}"
