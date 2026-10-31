@@ -195,7 +195,14 @@ defmodule Server.PauseTest do
   end
 
   describe "auto/1" do
-    @hot %{five_hour: %{percent: 91, resets_at: "2026-10-27T14:00:00Z"}}
+    # compile-time future instants: a past resets_at schedules no resume
+    @r5 DateTime.utc_now() |> DateTime.add(3600) |> DateTime.truncate(:second)
+    @r5_iso DateTime.to_iso8601(@r5)
+    @r5_hm Calendar.strftime(@r5, "%H:%M")
+    @r5b DateTime.utc_now() |> DateTime.add(7200) |> DateTime.truncate(:second) |> DateTime.to_iso8601()
+    @r7 DateTime.utc_now() |> DateTime.add(86_400) |> DateTime.truncate(:second) |> DateTime.to_iso8601()
+    @hot %{five_hour: %{percent: 91, resets_at: @r5_iso}}
+    @job %{window: "five_hour", resets_at: @r5_iso}
 
     test "a window at the threshold while working pauses and says why on the lobby", %{lobby: lobby} do
       assert :ok = Pause.auto(@hot)
@@ -203,30 +210,34 @@ defmodule Server.PauseTest do
 
       assert Enum.any?(
                bodies(lobby),
-               &(&1 =~ "5h at 91%" and &1 =~ "14:00" and &1 =~ "back to work at 14:00 UTC or when you say")
+               &(&1 =~ "5h at 91%" and &1 =~ @r5_hm and &1 =~ "back to work at #{@r5_hm} UTC or when you say")
              )
     end
 
-    test "an auto pause with resets_at enqueues one job at resets_at; performing it resumes", %{lobby: lobby} do
+    test "an auto pause with resets_at enqueues one job at resets_at; performing it resumes and says why", %{
+      lobby: lobby
+    } do
       Pause.auto(@hot)
-      {:ok, at, _} = DateTime.from_iso8601("2026-10-27T14:00:00Z")
-
-      assert_enqueued(
-        worker: Server.Jobs.AutoResume,
-        args: %{window: "five_hour", resets_at: "2026-10-27T14:00:00Z"},
-        scheduled_at: at
-      )
-
-      assert Enum.any?(bodies(lobby), &(&1 =~ "back to work at 14:00 UTC or when you say"))
-      assert :ok = perform_job(Server.Jobs.AutoResume, %{window: "five_hour", resets_at: "2026-10-27T14:00:00Z"})
+      assert_enqueued(worker: Server.Jobs.AutoResume, args: @job, scheduled_at: @r5)
+      assert :ok = perform_job(Server.Jobs.AutoResume, @job)
       assert Pause.state() == :working
+      assert Enum.any?(bodies(lobby), &(&1 =~ "back to work" and &1 =~ "5h window reset"))
     end
 
     test "a stale job leaves a later hand pause alone" do
       Pause.auto(@hot)
       {:ok, :working} = Pause.back_to_work()
       {:ok, :pencils_down} = Pause.pencils_down()
-      assert :ok = perform_job(Server.Jobs.AutoResume, %{window: "five_hour", resets_at: "2026-10-27T14:00:00Z"})
+      assert :ok = perform_job(Server.Jobs.AutoResume, @job)
+      assert Pause.state() == :pencils_down
+    end
+
+    test "a stale job from one window leaves another window's auto pause alone" do
+      Pause.auto(@hot)
+      {:ok, :working} = Pause.back_to_work()
+      Pause.auto(%{seven_day: %{percent: 95, resets_at: @r7}})
+      assert Pause.state() == :pencils_down
+      assert :ok = perform_job(Server.Jobs.AutoResume, @job)
       assert Pause.state() == :pencils_down
     end
 
@@ -237,10 +248,25 @@ defmodule Server.PauseTest do
       refute Enum.any?(bodies(lobby), &(&1 =~ "or when you say"))
     end
 
+    test "a resets_at already past enqueues nothing and the notice says when you say", %{lobby: lobby} do
+      Pause.auto(%{five_hour: %{percent: 91, resets_at: "2026-10-27T14:00:00Z"}})
+      assert Pause.state() == :pencils_down
+      refute_enqueued(worker: Server.Jobs.AutoResume)
+      assert Enum.any?(bodies(lobby), &(&1 =~ "back to work when you say"))
+      refute Enum.any?(bodies(lobby), &(&1 =~ "or when you say"))
+    end
+
+    test "with Oban not running the pause still lands and the notice says when you say", %{lobby: lobby} do
+      stop_supervised!(Oban)
+      assert :ok = Pause.auto(@hot)
+      assert Pause.state() == :pencils_down
+      assert Enum.any?(bodies(lobby), &(&1 =~ "back to work when you say"))
+    end
+
     test "lights out after an auto pause is not resumed by the job" do
       Pause.auto(@hot)
       {:ok, :lights_out} = Pause.lights_out()
-      assert :ok = perform_job(Server.Jobs.AutoResume, %{window: "five_hour", resets_at: "2026-10-27T14:00:00Z"})
+      assert :ok = perform_job(Server.Jobs.AutoResume, @job)
       assert Pause.state() == :lights_out
     end
 
@@ -254,7 +280,7 @@ defmodule Server.PauseTest do
       {:ok, :working} = Pause.back_to_work()
       Pause.auto(@hot)
       assert Pause.state() == :working
-      Pause.auto(%{five_hour: %{percent: 91, resets_at: "2026-10-27T19:00:00Z"}})
+      Pause.auto(%{five_hour: %{percent: 91, resets_at: @r5b}})
       assert Pause.state() == :pencils_down
     end
 
@@ -272,10 +298,7 @@ defmodule Server.PauseTest do
     end
 
     test "each window latches on its own: the weekly firing doesn't forget the 5h override" do
-      both = %{
-        five_hour: %{percent: 91, resets_at: "2026-10-27T14:00:00Z"},
-        seven_day: %{percent: 92, resets_at: "2026-10-30T00:00:00Z"}
-      }
+      both = %{five_hour: %{percent: 91, resets_at: @r5_iso}, seven_day: %{percent: 92, resets_at: @r7}}
 
       Pause.auto(both)
       {:ok, :working} = Pause.back_to_work()

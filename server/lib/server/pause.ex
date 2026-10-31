@@ -10,8 +10,9 @@ defmodule Server.Pause do
   out is pencils down plus the verify and landing queues paused (`Server.Rollout.pause_gates/1`)
   and an Escape into every coworker pane; nothing is killed and every branch stays where it is.
   An auto pause (`auto/1`, a plan meter window at `auto_pause_at`) is pencils down marked
-  `"pause_by" => "auto"`, and when the window has a `resets_at` it schedules `Server.Jobs.AutoResume`
-  for then; the job resumes only if the office is still that auto pause (`auto_resume/2`). Lights out
+  `"pause_by" => "auto:<window>"`, and when the window has a future `resets_at` (and Oban runs) it schedules
+  `Server.Jobs.AutoResume` for then; the job resumes only if the office is still that window's auto
+  pause (`auto_resume/2`). Lights out
   is the operator's hand both ways: `auto/1` never sets it and the job never lifts it.
   Back to work undoes either, and wakes every thread this pause stopped that is still open: a chat
   from tlon @mentioning its lead as it is now, so the switchboard wakes it, or spawns its pane.
@@ -84,7 +85,7 @@ defmodule Server.Pause do
            end) do
       :ok = OperatorConfig.put("auto_paused_for", Map.put(latched, to_string(name), r))
       {:ok, _} = pencils_down()
-      :ok = OperatorConfig.put("pause_by", "auto")
+      :ok = OperatorConfig.put("pause_by", "auto:#{name}")
       at = schedule_resume(name, r)
       auto_say(name, p, r, at)
     end
@@ -94,14 +95,20 @@ defmodule Server.Pause do
 
   @doc """
   Back to work for the auto pause of `window` that was to end at `resets_at`: only while the office is
-  still pencils down, that pause is the auto one (any hand-pulled change clears `pause_by`) and the
-  window's latch holds that same `resets_at`. Lights out is never resumed. `{:ok, :working}` or `:noop`.
+  still pencils down, that pause is the auto one of this very window (`pause_by` is `"auto:<window>"`;
+  any hand-pulled change clears it, and another window's auto pause rewrites it) and the window's latch
+  holds that same `resets_at`. Lights out is never resumed. Says on the lobby why it resumed.
+  `{:ok, :working}` or `:noop`.
   """
   def auto_resume(window, resets_at) do
-    if state() == :pencils_down and OperatorConfig.read()["pause_by"] == "auto" and
-         latched()[window] == resets_at,
-       do: back_to_work(),
-       else: :noop
+    if state() == :pencils_down and OperatorConfig.read()["pause_by"] == "auto:#{window}" and
+         latched()[window] == resets_at do
+      label = if window == "five_hour", do: "5h", else: "weekly"
+      lobby_say("▶ back to work (#{label} window reset)")
+      back_to_work()
+    else
+      :noop
+    end
   end
 
   # One slot per window, so one window firing never forgets the other's override.
@@ -251,13 +258,21 @@ defmodule Server.Pause do
           @resumed <> " intake, nudges, verify and landing are on again."
       end
 
+    lobby_say(body)
+  end
+
+  defp lobby_say(body) do
     with %Server.Thread{id: id} <- Channel.machine_thread(),
          do: _ = Channel.post(%{thread_id: id, author: "tlon", body: body, kind: "notice"})
   end
 
+  # No job when there is nothing to wait for: no resets_at, one already past (it would resume at
+  # once), or no Oban on this node (TLON_START_OBAN off).
   defp schedule_resume(name, resets_at) do
     with r when is_binary(r) <- resets_at,
          {:ok, at, _} <- DateTime.from_iso8601(r),
+         :gt <- DateTime.compare(at, DateTime.utc_now()),
+         pid when is_pid(pid) <- Oban.whereis(Oban),
          {:ok, _} <-
            %{window: to_string(name), resets_at: r}
            |> Server.Jobs.AutoResume.new(scheduled_at: at)
@@ -282,9 +297,6 @@ defmodule Server.Pause do
         do: "back to work at #{Calendar.strftime(resume_at, "%H:%M")} UTC or when you say",
         else: "back to work when you say"
 
-    body = "#{label} at #{round(percent)}%#{reset} — pencils down, #{back}"
-
-    with %Server.Thread{id: id} <- Channel.machine_thread(),
-         do: _ = Channel.post(%{thread_id: id, author: "tlon", body: body, kind: "notice"})
+    lobby_say("#{label} at #{round(percent)}%#{reset} — pencils down, #{back}")
   end
 end
