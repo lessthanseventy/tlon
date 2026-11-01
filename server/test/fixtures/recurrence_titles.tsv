@@ -1,0 +1,724 @@
+748	Review PR #699 (fact-relevance-cap)
+1	MCP: Claude Code speaks protocol 2026-07-28, the server warns unsupported (19x/week) + sse read_timeout warnings
+2	Coworker panes have no mise on PATH (Server.Tmux.boot_script)
+3	Console `m` verb is dead: Author.cycle_model! writes a settings file nothing reads
+4	Starting the cockpit spawned coworkers on #9, #15, #81 and tertius with no post
+5	Deleting a thread leaves no durable trace
+6	An MCP tool to start a filed ticket
+7	menard: a fresh plugin install's MCP server times out on first connect (deps.get + compile > 30 s)
+8	menard: stmt's whitespace-insensitive match does not ignore comments inside the statement
+9	server:check logs DBConnection "client exited" from a test that ends while holding a connection
+10	office: one inbox across every workspace (design pass)
+12	Tertius: try diffing #123's summary against yesterday's. I plan off deltas, not totals; the totals hide what broke.
+13	Tertius: #123 says what broke, not what broke first. Add each item's first-failure time; the order is the diagnosis.
+14	Process check: the ticket path end to end
+15	The finder (/) can't find tickets: typing a ticket's title should list it, and Enter should open its card
+16	TLON_THREAD env leaks into server test suite, breaking CommitsTest for any coworker running tests from inside a thread
+17	Floor step 1: tiles under the office
+18	Life step 4: home workspace, routines, quests, XP
+19	Dollies step 6: looks, look card, editor, importer
+20	Floor step 2: the viewport — the floor scrolls
+21	Floor step 3: build mode and the first home tiles
+22	Life step 5: the life room
+23	Dollies step 7: pets and temperament
+24	Whimsy: the music corner
+25	Whimsy: Argos fetches the newspaper
+26	Whimsy: level-up fanfare
+27	Whimsy: streak photos on the wall
+28	Whimsy: weather comes inside
+29	Whimsy: day and night
+30	Whimsy: birthdays from the calendar
+31	Whimsy: a mailbox on the street
+32	Whimsy: a doorbell
+33	Whimsy: seasons on the garden
+34	Whimsy: the gym tile
+35	Whimsy: sleep
+36	Whimsy: visitors from another tlon
+37	Floor step 3 follow-ups: the build glue tested, rot kept, the grid bounded
+38	Home: a garden tile (with fence) for the floor
+39	Home: garden tile (prereq for weather §7)
+40	Home: draw the garden tile and fence
+41	Mailbox: street-tile wiring and letter-carrying errand (§7 remainder)
+42	Home: fence and garden art once a home-tile renderer lands
+43	Home: a tile renderer for the floor (prereq for street-tile and garden art)
+44	Bug: the birthday cake never draws — wide.ts pastimes() passes EMPTY to the kitchen
+45	Home-tile renderer: draw home tiles in the TUI (unblocks #185, #172, #40)
+46	Spiff up Andrew's GitHub profile (draft for his approval)
+47	Uqbar step 2: the volume on the shelf
+48	Uqbar step 3: torn pages
+49	Uqbar step 4: marginalia
+50	Uqbar step 5: the entry (U)
+51	Uqbar step 6: the small joys
+52	Toy step 1: sandbox mode
+53	Toy step 2: voices, and Scharlach the Dwight
+54	Toy step 3: the bathroom, and Nina's wet paws
+55	Toy step 4: the front door and the doorbell
+56	Toy step 5: the events (zoo, meteor, fire drill, power cut, duck)
+57	Toy step 6: the wackiness dial (business → rimworld) and its toggles
+58	Toy step 7: the cast reacts to events, in voice
+59	Toy step 8: generators — personas, visitors, reactions, puns
+60	Souls step 1: SOUL.md files on the cards
+61	Souls step 2: first drafts from their Borges stories
+62	Souls step 3: voice from the soul
+63	Souls step 4: the room from the soul; side projects
+64	Souls step 5: the diary — they grow
+65	Toy step 9: the hiring hall — swipe on generated people
+66	Toy step 10: the cast editor — the god view
+67	Toy step 11: a bigger sprite parts library
+68	Toy step 12: the pet store — species from here and the multiverse
+69	Toy: Gary the Dumpster Gremlin (murder trash slappage, by request of Jude)
+70	Office talk step 1: speech balloons bigger (34x4) and never overflowing
+71	Office talk step 2: m talks to a person, ' talks to the office
+72	Office talk step 3: replies come back as speech balloons
+73	Office talk step 4: the conversation with X (v), and the room stops saying lobby
+74	KeepUp: a drifted main is one note per repo, routed to that repo's workspace — not a new inbox item per check
+75	Intake: a todo ticket whose thread closed unmerged holds a workline slot forever
+76	office: group/sort/filter in the Crew screen (and other list screens)
+77	Epics step 1: the server — ticket kind epic, the parent law, intake finishes what's started
+78	Epics step 2: filing and the board — epic-new/epic-add, epic_id on the MCP tools, epics with progress
+79	Epics step 3: the office shows epics — tickets screen and crew board rows, enter opens one
+80	Epics step 4: backfill the six epics from today's designs (uqbar)
+81	Closing a plain thread with unmerged commits strands the work — refuse or track it
+82	Lobby north wall (lonnrot's suggestion)
+83	Toy: the office is on fire when the channel is down
+84	Office board: DOING means someone is at a desk on it; parked work shows as parked
+85	Epics: guard the parent law in the db, and an epic's status is derived only
+86	KeepUp drift: fail loudly when the owned-repo path can't post
+87	Memory pass banks junk facts whose text is just '...'
+88	Memory: facts about code carry a recheck, so a refactor demotes them
+89	Flaky: office/needs_test.exs fails 8 tests under load, passes on re-run
+90	Bench: a senior-builder suite from real merged tlon worklines
+91	nightly role bench (canary) fails: exit 127, `mix: command not found`
+92	An operator ask outlives the thread it is about
+93	Child-closed notices post twice on the lobby
+94	Ticket #90 was built twice; main records a timeout-tainted 3/6 and the 5/5 run is orphaned
+95	Senior bench: decide the canonical #90 result and re-run it on main
+96	Office: esc from a ticket/epic opened out of the tickets column returns to HOME instead of the list/epic it came from (pre-existing; seen with loose ticket #5 too).
+97	Toy: model-drawn sprite parts — one invented accessory a day (split from #67)
+98	Toy: the weird end of the parts catalogue — duck hat, fishbowl helmet, storm cloud… (split from #67)
+99	same_code?: say why a moved branch bounced, and catch an unreachable reviewed commit
+100	Look card cannot set dials
+101	Rewrap the server/AGENTS.md worklines paragraph line added by d7dfe21 (over 100 cols)
+102	Merge queue: find landings that went missing, and published PRs whose checks went red
+103	Workline: a legacy second review round, and who hears a landing that found its workline moved
+104	souls.ts parseSoul: heading named like an Object.prototype member (constructor, toString, __proto__) throws and silently drops the whole soul
+105	Two crews: a day shift on Claude, a night shift on pi
+106	Two crews step 1: shifts on the server — crews, the current shift, staffing, handover
+107	Two crews step 2: hire the night crew
+108	Two crews step 3: the shift in the room
+109	Two crews step 4: switch shifts on their own
+110	Shifts follow-ups from tzinacan's review of #231
+111	Reset the requeue_stranded discard cap per approval
+112	Shifts: harden the usage-limit switch
+113	Schedule ToyPool refresh_due
+114	ToyPool: don't store an empty reactions pool
+115	Office TUI: confirm persona reroll
+116	Verify tlon-cli persona on a live node
+117	Shifts: prune limit memory for panes that are gone
+118	drop_database/1 should survive a missing dropdb
+119	Runner.timeout_s/1 doc says 'sourced (senior) task' but keys on task.set
+120	ToyPool.refresh_due has no caller
+121	ToyPool reactions refresh stores an empty map as fresh
+122	TUI persona reroll has no confirm
+123	Day-shift offer: unanswered/withdrawn ask never re-asks
+124	Day-shift offer: answered/2 switch failure strands the offer
+125	server/AGENTS.md: wrap the day-shift sentence added in the shifts bullet to match the surrounding line width.
+126	Persona reroll gives no feedback while the model call runs: after `E Enter` the card is unchanged and no toast shows for several seconds (>4s), then the new persona appears on a later refresh. Show a 'drawing a new one…' status.
+127	Reroll has no confirm though it wipes hand edits (reviewer also noted this).
+128	A {:reactions, seat} refresh with no valid event stores an empty map that counts as fresh for 7 days (reviewer note).
+129	Shifts: log a failed reminder cancel
+130	bench runner follow-ups from #217 review (moduledoc, streamed_usage dedupe, no-result reply)
+131	Streamed usage may undercount output on the timeout path
+132	ToyPool.refresh_due/2 has no caller
+133	Empty reactions refresh counts as fresh
+134	tlon-cli persona unverified on a live node
+135	Persona card: the 'voice:' line is clipped at the panel edge instead of wrapping (office/kit/persona.ts personaLines); backstory wraps, voice/desk/hobby lines should too
+136	Persona make/reroll gives no in-progress feedback: the card sits unchanged for several seconds until the model returns
+137	Persona reroll has no confirmation and silently replaces an edited persona
+138	MCP tool calls time out under load (machine_overview, get_messages, post_message, get_brief)
+139	MCP log noise: clients ask for protocol 2026-07-28, and post_message is called without body
+140	saveHome keeps a hidden unknown-kind tile even when a known tile was placed on the same cell, so home.json can hold two tiles at one `at`; when the unknown kind returns, loadHome shows both on one cell. Decide: skip or surface the colliding hidden tile (e.g. refuse the placement, or drop the hidden one) and add a test: unknown at [1,0], place kitchen at [1,0], one tile at [1,0] in the file.
+147	Wake: a Claude pane counts as ready before it takes input
+150	True lead reassignment leaves no server record
+151	The aeroplane is unverified live
+152	staff_child launches the lead bound to the parent thread, not the child
+153	Wake header shows the message id; read a message by id (forgery follow-up, scoped down)
+154	assign_lead reassigns without handing the leaf over — the new lead can't be seated
+155	seated?/3's tries param is dead: it recurses with no `when tries > 0` guard, so the counter bounds nothing (the `after 1_000` is the only bound). Add a terminating clause or drop the param.
+156	The staff_child seating test sets `:tmux_cmd` env that the path never reaches — the test arbiter is used, not the tmux one. Dead setup line; drop it.
+157	Restarts roll themselves: stale panes retire at idle, a respawn knows where it left off
+158	Librarian's sandbox hits bwrap's 9000-arg limit (11020 expanded) — no Bash runs, sweep rechecks blocked
+159	Concurrent gates share ~/.hex — Hex.start crash bounces green branches (seen on #203)
+160	ToolsTest "run verbs execute in the worktree" goes red on a stray /tmp/.formatter.exs (import_deps leak)
+161	The aeroplane page is small and grey — eyeball it in a real ghostty window once merged. The unfolded page is 8x6 px of light grey (199,199,199) on the dark floor (~7:1 contrast, so it reads), but that is a 640px-render frame, not the live TUI at Andrew's font size. Andrew's XLRS (fine detail is lost) makes this the one thing to check on a kitty-capable terminal rather than in a PNG. Same note 
+162	office:drive cannot reach the wide room, so the aeroplane can't be driven through the prescribed QA tool. scripts/office-drive.sh hardcodes OFFICE_GRAPHICS=blocks in its tmux command line and tui/main.ts:1871 forces kitty=false under tmux, so layoutScreen only builds the WideRoom when kitty && cell. Every office:drive run — mine and the fixed smoke's own — lands in the RailRoom, and the aeropl
+163	release:smoke leaves its scratch database behind when a run is killed
+166	#166 A: FIFO checks queue — first-come-first-served flock replaced by ordered waiters (rack list + restart split to #557)
+167	What waits on Andrew, sorted by who acts: the desk phone, the answering machine, the sheriff's clipboard
+168	Pivot under-counts vs the board for unled stage threads
+169	Prose `works` figure includes SPEC+PLAN the sentence doesn't name
+170	Missing trailing newline on new files
+171	Continuation nudges are spaced, and the QA brief drives in one call
+172	Pause the office: everyone wraps up gracefully, nothing new starts, resume picks it all back up
+173	Uqbar entry: the headline sentence counts a stage it doesn't name. With 1 spec + 3 build + 1 review in hand the page reads "5 works in hand: 3 at build, 1 at review (1 waiting on you), 0 doing." — the named parts add to 4, so the work counted but unnamed (spec) makes the reader's arithmetic read as wrong. Either name every counted stage or make the total the named ones.
+174	Uqbar entry: the pivot drops unled work, so it disagrees with the board shown on the same screen. Board reads BUILD 3 while the pivot's build column reads 2 (tertius) — the unled build thread falls into no coworker row, and the page's own KNOWN PROBLEMS the same screen says "1 stuck — blockers, failed checks, unled". The pivot's rows totalled 4 against 5 works in hand. An 'unled' row (or a not
+175	Uqbar entry: nothing on the page says how a footnote opens, and the key the page shows does nothing. With three footnotes on screen, `1`/`2`/`3` (the digits under the superscripts) leave the screen byte-identical; only `Enter` opens one; ACTIONS lists just "esc back" and the foot line never mentions enter or the arrows that scroll the page. For Andrew's legibility-first surface, the obvious ke
+176	QA harness: a sandboxed session cannot run release:smoke — scripts/release-smoke.sh fetches origin over SSH, which the agent sandbox denies (~/.ssh read-denied), so the run dies at "Host key verification failed" before building
+177	Clicking a card on the room's board opens nothing
+178	Claude-plan one-shots answer with connector chatter on the end
+179	Intake 30-min auto-start and continuation nudges bypass the weekend hold / pause
+180	land local main's 3 commits
+184	Scharlach ledger: a thread with two distinct failed check cmds ticks twice in one refresh
+186	Scharlach's canned 'The build is red. I have recorded the demerit.' fires regardless of build state
+190	One owner per librarian sweep — the office staffs two librarian seats (quain day, gutre night) and both swept on 2026-10-12
+191	Coalesced backlog drain carries no id stamp
+193	Office: pencils down / lights out / back to work
+194	office margin: a note's hover tip lags one mouse motion event behind the lit card
+197	Smoke sweep: a run killed before its checkout leaks its dir and lock
+198	consult_peer: a refused thread_id should say why, in words an agent can act on
+199	Issue notifications: Resolve asks for a resolution; add File a ticket
+200	The server is the merge gate; GitHub CI moves off the critical path
+201	Flake: adapters:claude-code:mod lost its own mktemp stage dir
+202	search_history times out at the 15s db checkout
+203	Roster keeps an off-shift coworker's session after the crew switch
+204	Concurrent gates share ~/.hex: a check dies in Mix.Hex.start
+205	release:smoke office drive flakes on a 2s settle
+206	Toasts: an important one blocks answering its neighbour; an answered ask's toast lingers
+209	Margin notes: space lines by the cell pitch under kitty so k=1/k=2 don't share a row
+210	Needs.list costs ~3s: Worktree.holds runs git on every stray worktree
+211	release:smoke: say so when it skips the wait for the office
+212	The untaken-wake alarm fires on a pane busy in a long tool call
+213	workline-verify: the recorded tail hides a bun test's error behind server:check's compile noise
+215	Stranded check calls a rebase-merged workline's checkout stranded
+216	Split the refresh.test hardening commits from the bathroom branch
+217	Eyeball the bathroom in the room: door position, tub, and Nina's wet-paw trail (Andrew)
+219	Margin notes: verify the room card lights when a note naming a thread is hovered
+220	Recall.embed_query logs nothing when the embedder fails
+221	Uqbar runs in the app
+222	Uqbar is a pane the server spawns
+223	Uqbar's delegate loop is a standing schedule
+224	Drive Uqbar from the office's U entry
+225	Uqbar's memory is the server's
+226	Scharlach ledger: failed_checks.shown cap of 5 makes reds outside the cap re-tick
+227	seatLine's {name} replacement is dead code
+228	onTogether fallback comment overstates: fires on any empty talk, not only --sandbox
+229	Missing trailing newline in office/kit/scharlach.ts and office/kit/seat-voices.ts
+230	machine_overview returns "Internal error" to the manager session, after #138/#246 closed
+232	Every stop is a Need (cohesion phase 1)
+233	Merged means merged: the thread closes when GitHub says MERGED
+234	publish_failed and release_failed Needs
+235	quota and no_seat Needs
+236	tool_denied Need: a coworker's tool refused by the permission gate
+237	pane_stuck Need: a spawned pane that registers no session
+238	One answer path: respond by prompt id, never the newest prompt on a thread
+239	One stale clock
+240	Pencils down doesn't stop a workline's stage briefs from waking seats
+241	Dog-ears are forgotten on TUI restart
+242	release-smoke fetch test: pick the port per run
+243	QA brief: say a sandboxed smoke must build+start+drive in one Bash call
+244	Sandboxed release:smoke dies at the Postgres unix socket (not owner - :eperm), after the fetch is fixed
+245	Needs: read branch commit times once per refresh, not one git log per workline
+246	Say a tmux fault on hand_off, close_leaf and clear_context
+247	The mod's dossier refresh is not single-flight
+251	A workline's opening ask is re-delivered to the stage lead after the stage already moved on
+252	Staffing.hand_off/2 posts the handoff as the operator even when an agent calls assign_lead
+253	worktree stranded: use diff-tree -z so non-ASCII paths are handled in landed?/3
+254	worktree stranded: compare branch-tip files vs origin/main so superseded earlier commits don't keep a landed branch stranded
+255	Sessions outlive server:stop, and tmux reuses their pane ids
+257	Needs: a red verify is listed while its re-run is queued
+258	search perf test asserts wall-clock, will flake under a loaded box
+259	semantic_ranked loads every embedding row and does cosine in Elixir
+260	search_history is linear now but unbounded (the 'bound it' half of #202)
+261	Bump decimal 3.1.1 → 3.2.0 (EEF-CVE-2026-97853), after worktrees stop sharing deps/
+262	staff_child, /api/tickets/:id/start and ticket-start don't check Pause: work can be staffed under pencils down
+263	Seed of the gate's Hex home can copy an empty hex.config
+264	One shared seed_hex_home for the four gates
+271	Tlon-Thread trailer names the lobby (1), not the workline, when a builder commits from the lobby seat
+273	Lobby worktree .worktrees/t1 is days behind main: a smoke run from it uses the old release-smoke.sh and sweeps live builds
+274	Risk grader can't run after a machine restart: {:model_cli_exit, 7, ""} parks the workline on the operator
+275	hire raises after seating on a name the soul guard refuses
+276	hire blocks on a model call, and a soul-dir failure crashes it
+277	No gate catches tracked junk under ignored paths
+278	Re-approving unchanged code by a different approver keeps the first approver's `by` in approval/1 (queue/3 skips record_approval when an approval stands). Decide whether a re-approval by a new person should record a fresh approval.
+279	record_approval/2 raises on a failed Dossier.record_event instead of returning {:error, why}
+285	bank_fact (MCP) still banks placeholder facts: the junk filter guards only the extractor path
+286	After the machine restart, two sessions per coworker handle acted at once (ireneo on 255, lonnrot and emma on 257): both take wakes, neither sees the other
+290	Hall: grades/specialties are constants in tui/main.ts, not the roster vocabulary (spec §3)
+291	Hall: a hand-edited hall.json name is not checked against Server.Soul's regex before the sandbox writes souls/<name>.md
+296	hall: hallHire's taken-name refusal has no test
+297	hall: roll's prev/lock branch is unreachable from the app
+298	hall: spec §2 `e` (edit look/soul from the hall) has no plan task and is not built
+299	hall: hall-pile `x` re-implements dropPile inline
+300	hall: refusal wording says 'unlock the name' for an override, not a lock
+301	Hall hire does not draft a soul file: hiring a seat from the office's find (do hire a coworker) seats the coworker and says "hired qatest, a builder", but no <souls dir>/<name>.md is written. Only tlon-cli hire (and the Soul.draft it calls) writes one. The plan names tlon-cli hire, so this is not blocking; decide whether the hall hire should draft too.
+302	tlon-cli.sh soul and hire run through the .release of the checkout they live in, so a QA run from a worktree or a scratch node has no way to reach its own release. Smoke rpc calls need a hand-written node name and env, and a scratch QA can write to the operator's live souls dir unless the scratch node's souls_dir is repointed. The script should take the release path or node name from the env, 
+305	search_history with `around: 1` answers "Internal error" (likely the anubis 30s timeout); the same query with around 0 succeeds
+306	Duck scene: spec's "Argos watches" is not implemented and pr.md does not name it as skipped
+307	`f` (fire drill) during a running scene stacks a drill on top of it
+308	Meteor crater lands in the hall by the door, not the spec's street
+309	events.test.ts "touches nothing" loop should assert event(k) returned true
+310	merge.ex comment says server/tmp scratch is "ignored"; it is untracked until #327 lands
+311	check-main.sh killed by server:stop leaks its worktree and log: the EXIT trap never runs on a signal
+312	A scheduled run killed by server:stop is reported as a red gate on main, not as interrupted
+313	After a machine restart a coworker handle can have two live sessions (the earlier one alive/resumed beside the respawn): both take wakes and write, and the "machine restarted mid-turn" notice is addressed by handle so it lands on the wrong session. Five instances on 2026-10-13 after the 12:43Z restart: ireneo on 255, lonnrot on 255 and 257 (twin submitted reviews/approvals 9f69625, e9187bd whi
+317	Crew windows skip Orphans.retire
+318	Orphans.retire: no SIGKILL escalation and no thread notice
+319	"machine restarted mid-turn" notice is addressed by handle, not session
+320	mod.ts: reset sessionId on session.start
+321	Toy step 12, slice 2: pet species batches (earthly, Borges, elsewhere)
+322	Toy step 12, slice 3: pet accessories (hat, bow, bandana, tiny cape)
+323	Souls step 4b: side projects on the corkboard (S1–S3 of #265)
+324	Soul.clean/1: the soul-tone tag strip is single-pass and reconstructable
+325	Verify soul-voiced banter and room lines in the UI: after a say-to-the-office, no soul-voiced reply appeared within 30 s in the text view. Check that the scratch banter is on, or read a live room line, to see the soul voice.
+326	Souls step 4: the crew card shows a "read by verb" note by the People section
+327	company.ts: fold handles in relation(), use \u escapes for the combining-mark class
+328	Sandboxed release:smoke cannot fetch origin: sandbox denies ~/.ssh/known_hosts, so the smoke dies before it builds
+329	Flaky server test: "Server.WorklineTest requeue_stranded: the discard cap is per approval — a fixed branch approved again is requeued, and caps again" (server/test/server/workline_test.exs:878) failed once in #265's full `mise run check` (1637/1638), though it is unrelated to that branch's office-only diff. Not reproduced: solo 6/6, whole workline_test.exs 5/5, full server suite 1638/0 on the 
+330	workline-verify: keep the gate's full log when it goes red, so a flake has a failing assertion and line number
+337	Toy step 12 follow-up: wire the adopted dog slot into the wide room (Argos) — Dog.name through wide.ts and sim.ts pair lines
+338	file_ticket (MCP) can't set blocked_by: tickets carry the field (list_tickets shows it, e.g. #69 blocked_by [56]) but the tool has no parameter, so a held follow-up's wait goes in the body and a `held` label
+339	Store: a carried name lock is checked against the OLD species' taken list across a shelve
+340	Store: the dog has no SPECIES_VOICE pack, his card line is Nina's
+341	Store: storeRows special-cases DOG instead of SPECIES_ART holding it
+342	Wide room: wire the dog slot so a dog adopt is real on screen
+343	Spec §3 says the adopt confirm is ⏎ / esc; the office uses y/n ask2
+344	store: move storeNamesTaken from tui/store.ts (row renderer) into kit/store.ts with the rest of the store logic
+345	#266 spec.md §3: add the dog-slot note (pets.json-only in slice 1, wide room reads it after #335)
+346	#266 spec §3: say the dog slot is pets.json-only in slice 1 (the room still draws Argos until #335)
+347	submit_review: a later round's follow-ups DELETE the earlier round's tickets instead of closing them as superseded, so ids already quoted on threads vanish (#335 on #266)
+348	Meteor crater lands indoors, not at the street
+349	Duck stops at the lounge, does not cross the hall
+350	A held release:smoke (TLON_SMOKE_HOLD=1) never expires: it outlives its QA and its branch's landing
+351	release:smoke sandboxed: cleanup sweep hits "Device or resource busy" on .git/worktrees, and the run dies silently after the sweep
+352	office/bunfig.toml [test] timeout = 20000 is not honored: bun 1.3.14 still kills a test at 5000ms
+353	office:drive against a scratch server writes the operator's real ~/.config/tlon (pets.json, store.json): a QA adopt in the pet store replaced Nina
+354	play("event") refused by event() still falls through to the stand-in emote/say path
+355	Fire-drill key during a running scene: status line still says "fire drill!" when the drill is refused
+356	Every review runs in a fresh session
+357	A second, fresh review gates the merge
+358	Eyeball the duck crossing once in a real wide room (kitty graphics): the duck should walk from the door to the hall's far end, not stop at the lounge's left edge. The text drive cannot show x; same gap as #161/#162.
+359	release:smoke builds die mid-compile: the scratch dir is deleted under them
+360	pr_blocked recovery strands the PR once tlon/check is required
+361	The manager can post on threads it staffed
+362	Held release:smoke printed "ERROR task failed" with no reason on a re-hold (6489bf6, :4487)
+363	Wackiness dial: banter off in the office still spends the server's model tokens
+364	checks-queue: a gate that can't reach the queue refuses instead of running unqueued
+365	release:smoke fails on main since #380: one Escape leaves only the reply box, so `c` lands on the thread card
+366	release:smoke: concurrent smokes can exhaust the migration DB pool and fail the build with no hint it is a pool problem
+367	Preset names on the card are `casual` and `party`; the spec and ticket #57 name `business casual` and `office party`. Check whether the labels match the design doc (docs/plans/2026-10-08-office-as-a-toy-design.md §7) and rename or confirm.
+368	Drive the business preset in the room: no event fires and no banter appears over a window long enough for the scheduler to run. Not checked in this pass.
+369	release-smoke: a failed build stops the smoke, not 'bin/server: No such file'
+370	A smoke or gate run from a stale worktree runs that worktree's old scripts
+377	QA brief for toy/event changes: release:smoke + office:drive can't reach the toy keys (sandbox-only toyKey) or wait on a scheduled event, so QA of #277-style work can't be driven
+381	Reland path: push --force-with-lease without fetching work/<slug> fails for a PR GitHub already update-branched
+382	KeepUp requeues a landing once more after merge_at fell back to :auto, spending a full gate run for nothing
+383	append_diary/2 is not an atomic write — uses File.write/2 directly, not the temp-and-rename the thread decision called for; a crash/disk-fill mid-write could truncate an operator-edited soul. Fix: write-to-tmp + File.rename.
+384	diary/1 doesn't filter to `- ` entries as the plan spec'd — returns every non-blank line in the section. Harmless today but written_through/diary_tail would pick up a stray non-entry line if one ever lands there.
+385	Bounce entries carry no reviewer — move_back/4 writes detail["bounced"] = why (free-text, no seat), not the "sent back by <seat>" the plan assumed. Attributing the reviewer needs the review that bounced it, not the event detail.
+386	"Handle this for me" routes Uqbar's own ask_operator back to Uqbar, so a permission-gated ask loops
+387	release:smoke office drive fails on main: after 'c' the office doesn't show CREW (since #380)
+388	office: wide room test fails on main (mid-turn works at a desk)
+389	release:smoke refuses "already being smoked" for a commit no run holds: a QA hold run can't start
+390	release_smoke_script_test: the two-smokes test actually goes red without #389's fix
+391	Seat launch: one pane per launch (serialize Arbiter.Tmux.spawn), and end a mid-turn session whose window is gone
+392	release:cut run from a citizen pane can't push `live` to origin: the pre-push hook refuses any push with TLON_THREAD set
+393	pets.test.ts chance(0.999) assertion: the Nina/Argos event-line check is wrapped in chance(0.999, …); if this.line/bucketFor ever returns a non-event bucket line for Nina the test fails ~1-in-1000. Tighten to a deterministic event-bucket assertion.
+394	Drill seat-reactions untested at sim level: the stagger and thinking-seat tests skip drill (it evacuates the room), so the seat react beat during a drill is not exercised. The seat-voices data and Argos' drill line are tested; the live react beat is not.
+395	Add a citizen-log line at the reclaim branch for observability: `void note($, "take_wakes: no longer superseded — claiming the seat again")` next to the re-register in drainWakes, so a legitimate reclaim is findable in the citizen log. Not blocking — the dangerous silent path (spurious reclaim on a non-array reply) is closed by the Array.isArray guard; this only makes the intended reclaim visi
+396	Server-side test: a superseded session always gets {superseded: true}, never a plain wake list
+399	office:drive unsets TLON_HOME, so a home.json read-back can't be driven
+401	saveHome drops a hidden unknown-kind tile silently when a placed tile takes its cell — no notice on screen, no backup (ticket 398). Reproduced in QA Case B: home.json loses the not-a-kind tile at [1,0] and the UI shows nothing. Options from the grader: keep displaced tiles under a separate key so a later build can bring them back, or show the cell as occupied in build mode so the user chooses.
+402	Messages and a QA pass on #281 attributed to nolan came from a session nolan says is not his
+403	Pause: auto-pause when the plan meter nears its cap
+404	Pause: pause one thread, not the whole office
+405	quota Need: detect HTTP 429/402 from a provider
+406	release:smoke fixed step fails on main: after Escape, c doesn't show CREW (thread view stays open)
+407	Strengthen the "gone holder is reclaimed" test to assert the "smoke: reclaiming the lock on …" line, not only the absence of the refusal — the current positive assert (on :4599) prints before the lock and holds either way, so the refute alone carries the test.
+408	release-smoke reclaim: two concurrent reclaimers each flock a different inode → silent doubled build (on main, #389)
+409	release-smoke lock: untested branches — kill-0 live-pid refuse, record truncation (#389)
+410	Flake: volume.test.ts "a session waking says hello" can pass bun's 5s timeout under load
+411	Import.Memory.upsert raises on a memory the junk filter refuses
+412	The MCP/office hire seats a name the soul guard refuses
+413	Flake: finder test in navigation.test.ts asserts before the query "nina" is fully typed
+414	Messages and tickets appear under QA seats' names that those seats did not write (#281 QA pass #8669, ticket #406)
+415	QA seat's unsandboxed `release:smoke` is refused by the permission check even after the operator approves it (nolan, #281)
+416	Flake: check-main script test "a TERM mid-gate removes the worktree and the log" leaves a tlon-main-* dir under load (#281 gate, 1ee5650)
+417	Orphans.requeue puts a restart's executing jobs back as available without the attempt check, and two exhausted ones head-of-line block the schedules queue (no scheduled run has run since 10-14)
+418	release-smoke: a regression test that the office drive presses Escape twice before c
+419	nightly smoke schedule 4: every run since 10-14 still status 'running'
+420	Fast-forward a thread worktree to origin/main when its seat wakes, if its branch has no commits of its own (second half of #273)
+421	Placeholder "..." text still gets banked as facts and unknowns despite the #87 junk filter
+422	Staffing.hand_off/2 kills the old lead's pane even mid-turn
+423	Hex.Config.write truncates then writes: a mix boot mid-rewrite reads an empty ~/.hex config
+424	In server_test.exs "assign_lead hands the thread over", add `refute_received {:tmux, ["-L", _, "kill-window", "-t", ":0" <> _]}`-style check (lobby window index 0 untouched) so the test pins that only the target thread's leaf is killed, not just that index 1 was. Cheap, from the grader's note on thread 248. (seen on #248)
+425	start_smoke / drive_smoke / stop_smoke are not in nolan's tool list after release ee61624 (ToolSearch finds nothing)
+426	Smoke-queue jobs fail with "mix: command not found": the service's PATH has no mise, so every start_smoke build dies (#277, job 66920)
+427	release:smoke fails "mix: command not found" in the build subshell, though mix runs fine from the worktree's server/
+428	release:smoke fails with `mix: command not found` when launched by the service: the build subshell has no mise shims on PATH (hit #281 on 31a62a6, #277 on 5794a62)
+429	verify: a 'can't rebase' outcome is retried 3x and surfaces as job_failed
+430	Flake: canvas_paint_test on_exit rm_rf! races git autogc in the bare repo
+431	drive_smoke: the office drive dies with "mise config not trusted" — no screen comes back (smoke 4841, 5794a62)
+432	staffing_test.exs: 12 failures on a clean tree (kill-window refute_receive; e.g. :262, :279, :205)
+433	Orphans: close/flag a discarded Land job's landing state
+434	Orphans: make a discarded landing visible beyond the boot log
+435	smoke: a held smoke outlives its job — both jobs discarded 30m44s in, so drive_smoke/stop_smoke lose a live smoke
+436	workline worktree .git gitfile points at a nonexistent dir (stray "1" suffix) — submit_review can't commit
+437	#433 land-discard handling: discarding a Land job at max_attempts doesn't close the thread's landing state — only the queue row is touched, leaving the landing state stranded.
+438	#434 boot-time visibility: a dropped landing's only signal is a boot-time Logger.warning; it's invisible on the board and the thread.
+439	orphans: a bad RunSchedule arg strands every healthy orphan on Lifeline (requeue inside the discard transaction)
+440	release-smoke.sh hold-line emission of (dir $office) is untested
+441	run_verb compile runs from the worktree root, not server/: "Could not find a Mix.Project"
+442	edit_clause answers "Internal error" on a valid replace (needs.ex tool_denied/2); the CLI's clause replace works
+443	office:check: hall-hire "→ on a name already on the bench is refused" times out (30s) under the full suite's second pass; passes alone in 2s
+444	Non-lead reviewers/builders can't post to the thread under review — verdicts strand on the lobby
+445	rule_of parses the summary string to recover the command — store it as its own detail field instead
+446	Allowed-it message body can nest backticks if the refused command has one
+447	Worktree for thread 293 (drive-smoke-dies-with-mise-config-not-tr) has a .git gitfile pointing at a nonexistent gitdir with a stray "1" suffix (…/worktrees/…-not-tr1; the real one is …-not-tr). Slug collision/truncation in worktree creation is the likely cause. submit_review fails with "gitfile does not point to a valid repository", so the review of 293 is stalled. Confirmed from the t1 sessio
+448	A message posted as "yu" on #278 (#8252, "yu leading #278 now… the 4-task plan follows") did not come from yu's session — a second seat/impersonation re-planned a stage already planned (6fdfdc1); meanwhile build lead ireneo went silent after a machine restart and the workline exhausted nudges with an uncommitted test in its worktree.
+449	risk grade: the grader retries a model CLI that exited 7 at once, so a short outage fails the stage
+450	land local main's 25 commits
+451	Worktrees share one deps/ (t*/server/deps -> ~/projects/tlon/server/deps), so a `mix deps.update` on any branch rewrites deps for every other checkout: #250's full check failed "lock mismatch: decimal out of date" because my decimal bump (issue #29) fetched 3.2.0 into the shared dir while main's lock says 3.1.1. Same trap waits at merge: once the bump lands, shared deps/ (3.1.1) mismatches mai
+452	office/test/refresh.test.ts ("the finder lists the snapshot's threads while the inbox read is still out", the test added with the #205 smoke-flake fix 94d1e3b) fails inside the concurrent `mise run check` gate and passes everywhere else: #244's verify (msg 6237) went red on it at 20.2s, a polling timeout with `screen()` empty. Not the branch's bug: on work/toy-step-3 @c806a5a the file passes 3
+453	release-smoke's office drive can fail on a green build: smoke of work/uqbar-step-6-the-small-joys @4344356 failed once at "the office after 'Enter' doesn't show '#<id> release smoke <pid>'" (the screen was still HOME after `/`, the title, Enter), then passed on an identical rebuild minutes later. The drive types `/`, the title and Enter with OFFICE_WAIT=2 between steps and expects the thread t
+454	menard run test with a FILE:LINE filter can report green on a different test than the one at that line
+455	Bash sandbox refuses every command: bwrap argument count over the limit (11005 > 9000)
+456	check-main TERM test: under the full gate the script exits 143 but its EXIT trap never ran (worktree and log left)
+457	start_smoke can't turn a feature flag on for the smoke, so QA can't reach a flagged path (build_mode, #281)
+458	the gate fetches and compiles the server deps before its suites run in parallel
+459	release:smoke's wide-room step fails whenever music plays on the host: the stereo reads the host's playerctl
+460	Uqbar can't ship a fix as a PR: its pane has TLON_THREAD=269 (pre-commit refuses off work/*) and the plugin refuses git push, but #269 has no work branch for push_branch
+461	land local main's 2 commits
+462	Script tests bypass the stale-copy guard: it reads the live origin/main ref, which moves under the nightly gate and verify
+463	Sheriff's seat can't move its own branch onto main: the sandbox holds .claude/settings.json, so a rebase or checkout in .worktrees/t144 dies half-applied
+464	three deps warn under Elixir 1.20 at their latest versions: postgrex, doctest_formatter, quokka
+465	land local main's 9 commits
+466	the after-Enter wait protects navigation but `expect "Enter"` reads the pre-wait (OFFICE_WAIT=2) snapshot; if a cold TUI's card-open alone exceeds 2 s the assertion can race despite the wait — consider pointing the assertion at the wait's `=== after:` snapshot, or accept the find-side wait as sufficient
+467	drift alert miscounts: #9538 said menard local main is 1 ahead, but origin/main..main is 9 (ticket #465 says 9)
+468	drift alert miscounts unpushed commits: menard alert #9538 said 1, local main is 9 ahead of origin/main
+469	push_branch refuses "stale info" after a landing: it leases against the local origin/work/<slug>, but the landing pushed a rebased copy
+470	office gate: a TUI test's missed wait hangs to bun's 30s timeout without printing the pane. Why: the gate preloads test/clock.ts, which calls setSystemTime under OFFICE_TEST_HOUR, and in bun that freezes Date.now(). Nine tests' `until` loops time their deadline with Date.now(), so the deadline never comes and the "never saw X; pane:" error is never thrown. That hid the real miss in hall-hire "
+471	release-smoke: expect "Enter" reads a 2 s snapshot before the after-Enter wait runs
+472	land local main's 1 commit
+473	push_branch has no route into a sibling repo: a seat can't push a commit to menard (or any registered workspace other than tlon)
+474	Server.ReleaseSmokeScriptTest "TLON_SMOKE_FLAGS…" is non-hermetic. Its flagged System.cmd leaves out TLON_STALE_SCRIPTS_OK=1, which smoke/1 sets. So any branch whose base is behind origin/main's scripts/release-smoke.sh gets refused by fresh-script.sh ("this checkout's copy is behind origin/main's") and goes red. It took down #298's verify after 7ab6496 changed release-smoke.sh.
+475	release_smoke_script_test: route the flagged call through smoke/1 instead of a hand-added TLON_STALE_SCRIPTS_OK tuple
+476	seat_sandbox/2 dropped the plan's nil guard
+477	The plan specified `defp seat_sandbox(nil, _name), do: nil`; the shipped code has only the `update_in` clause. Every current archetype sets `sandbox: @tlon_sandbox`, so no live crash, and `citizen_profile/2` builds its struct without `instantiate` so citizens stay unsandboxed — but a future archetype with `sandbox: nil` would crash `update_in(nil, ["filesystem", "allowWrite"], …)` at spawn. Re
+478	A lead can hold and release its own thread (pause_thread as a tool)
+479	Wake-not-taken alert fires for a wake on a closed thread, or one the seat answered from its lobby
+480	Add office/test/clock.test.ts pinning that performance.now() advances after setSystemTime (grader's suggestion): record performance.now(), await Bun.sleep(100), expect diff >= 90, so the suite fails if bun ever freezes it too.
+481	start_smoke/drive_smoke can't set OFFICE_WIDE, so a QA seat can't check the wide room on its smoke
+482	hall-hire test: the second launch reuses the tmux socket the first test's server is still dying on (empty pane, 25s miss)
+483	Live smoke red→green for #459 never recorded
+484	hall-hire.test.ts leaks the first test's tmux socket file
+485	HOME says 'nothing waits on you' while the inbox holds a blocking tool_denied Need
+486	tool_denied Need reads 'nolan on  was refused Bash…' with an empty slug when the thread is a plain thread
+487	rule_of/1 parses the mod's summary string — an unwritten cross-boundary contract
+488	"Allowed it" body nests backticks around the rule — a command with a backtick breaks the markdown
+489	start_smoke ran ref "work/" (empty slug) for #294, so the smoke used a stale checkout and the stale-script guard refused it
+490	start_smoke refuses itself after any main change to release-smoke.sh until the next release cut: the job runs the live release's copy (.release @ live), and the stale-copy guard judges THAT copy
+491	ReleaseSmokeScriptTest race/stale-lock tests fail under the full gate on verify (4 tests), pass alone
+492	rule_of/1 parses the Bash command out of the mod's summary string (needs.ex:639: `"Bash · " <> command`)
+493	The "Allowed it" body wraps the rule in backticks (alerts.ex:178, mirrored at office/tui/data.ts:284)
+494	QA can't seed a smoke's db: start_smoke has no fixture door, so verbs that act on a Need (or any state a fresh db lacks) go undriven
+495	QA cannot seed a smoke db: no way to put a fixture (two tool_denied events) into a held smoke so a Need verb can be driven live
+496	Bash refuses every command in a seat: "Sandbox profile has 11050 bwrap arguments and bwrap accepts at most 9000"
+497	Builder seats: _build and tlon-scratch/<seat> read-only, so no seat can run a test
+498	Seat can't verify its own work: worktree _build and tlon-scratch/<seat> read-only at runtime
+499	office-drive.sh fails in a QA seat's sandbox: mise says the config isn't trusted
+500	"At a desk" requires a session: a tmux window with no registered session is not :idle, and desk? needs a session
+501	SwitchboardTest "a posted message wakes its addressee without anyone calling deliver" flakes under a loaded gate
+502	Test suites clean their tmp_dir repos after the run (server + menard), so a seat's own worktree never overflows bwrap
+503	Workline retros: after a landing, propose a concrete tweak to a coworker playbook or soul from its trace
+504	Roster tie-break: between seats that fit equally, prefer the better Server.Trust record
+505	Count read-dir repos in the #299 budget test
+506	nested_repos/1 miscounts on a missing or unreadable dir
+507	Extract one named 'window up, no session' predicate for #237
+508	The plan (#10163) wanted the predicate as one named function so the pane_stuck Need (#237) reuses it and the board and Need can't disagree. The builder deferred it (no natural second caller until #237). #237 should extract it then and route both desk?'s negation and the Need through it.
+509	No pr.md on the branch: build's exit owed one. Publish falls back to the plan/spec heading, so landing isn't blocked, but the builder's own account of the change is missing from the PR body.
+510	smoke_script_test.exs and release_smoke_script_test.exs have near-identical names — easy to open the wrong one.
+511	start_smoke refused: sha already smoked on another port, not drivable by the QA seat
+512	Land menard's after_suite tmp_dir sweep (44926a4, menard half of #502) on menard's origin/main
+513	office.ex comment above home_ws_ids/1 still says a Claude Code worker has a window before it registers a session and `live` exists to catch it; the change makes that worker show idle until register. Update the comment to match (grader flagged it).
+514	Add an office_test case: standing thread (scope: machine) whose lead has a window and a session registered on that thread must read seat "desk"; the new sessioned check keys on {thread_id, lead}, so a session on another thread would silently drop to idle (grader flagged it).
+515	start_smoke/drive_smoke don't say a smoke is building: QA re-queues against its own build and the nudger pages it stuck
+516	menard MCP edit tool is denied in don't-ask mode, so a builder cannot make its Elixir edits through the tool the repo names
+517	ProfilesTest bwrap-budget test and Bench.RolesTest builder-fixture test time out under a loaded gate: ~1,100 serialized mkdir_p calls, and serial grader cmds
+518	machine_overview and consult_peer disagree on #277's lead: overview says daneri leads it (stage verify), consult_peer says daneri neither leads it nor has a session on it
+519	pets.test.ts wraps the Nina/Argos event-line assertion in chance(0.999, …): if this.line/bucketFor ever returns a non-event bucket line for Nina, the test fails ~1-in-1000.
+520	Drill seat-reactions aren't exercised at the sim level — the stagger and thinking-seat tests skip drill (it evacuates the room). The seat-voices data and Argos' drill line are tested; the seat react beat during a drill is not.
+521	Intake's 30-min staffing fallback ignores a manager's open triage (consult/ask naming the ticket)
+522	Builder seat's Bash is dead: "Sandbox profile has 11002 bwrap arguments and bwrap accepts at most 9000"
+523	release:status ignores hand-run check:main / release:smoke: a tip gated and smoked by hand still reads "not releasable"
+524	Test overclaims "even mid-turn": dead is created idle (session!/3 defaults thinking? = false), so the mid-turn predating path — the behaviour that distinguishes end_predating_tmux from end_windowless — is unexercised. Add a dead variant with thinking?: true and assert it is ended, so a regression adding is_nil(s.thinking_since) to the query is caught.
+525	server_started nil path untested: no test covers tmux up (list-windows succeeds) but display-message #{start_time} failing or unparseable, which degrades to "ends nothing". Cover the nil branch.
+526	Log a warning in end_predating_tmux when server_started returns nil — a display-message that fails in production (tmux without #{start_time}, or a fault) silently switches the safety step off; the module's 'skips the pass' contract covers a tmux that is DOWN, not one that is up but partially unaskable.
+527	Once the step is ON under the shared fake tmux, make the new test's dead session mid-turn (session!("borges", here.id, 30, true)) with no window and assert the '@borges the machine restarted' carry-on notice IS posted — locking the resume_interrupted interaction that finding 1 breaks.
+528	The started_at < start_time comparison is UTC-on-UTC (:utc_datetime and DateTime.from_unix!/1 both UTC), so clock/timezone skew is not a real risk; add one explicit assertion once the step runs under the shared fake to pin it.
+529	Scope end_predating_tmux to the workspace's own tmux
+530	land local main's 2 commits
+531	Look editor: cycle kit/parts.ts slots (head, eyes, mouth, neck, back, hand) instead of the single accessory field
+532	Wake-overdue alert fires on a session waiting on its own background subagent (false "mod not loaded")
+533	Intake fallback starts a ticket the manager answered "not staffed" (#80 → #316): honour the manager's decision, not only the `held` label
+534	A workline stood down by the operator can't be closed: `finish` refuses without a merged PR (#316 / #80)
+535	office-drive.sh breaks on a bare backtick key (the cast editor's key): eval: unexpected EOF
+536	stop_smoke can't cancel a building smoke: it reports "building since <t> (job N)" but the build runs on (the build-runs-on half is #723)
+537	start_smoke same-ref idempotency compares the ref string, not the resolved sha (the builder flagged it open)
+538	smoke: test the >20-min stale job through drive/stop/start (no smoke is up / re-queue)
+539	smoke: pin the stale-job cutoff column (inserted_at) and cover the 'available' state in the continuation tests
+540	Smoke tools disagree on a running smoke: start_smoke sees it and refuses, drive_smoke/stop_smoke say "no smoke is up" (thread 315, pid 1459909 :4809)
+541	tertius's Bash (t1) dies before running: "bwrap: Can't open source …/.worktrees/t1/.claude/settings.local.json: No such file or directory"
+542	update_ticket can't add to a ticket: `body` and `labels` only replace, so holding a ticket wipes its filing (#540 lost its body and labels)
+543	Wake-overdue alert pages a seat whose pane is gone (QA seat after send_back): drop the wake or reroute it to the stage's current lead
+544	office-drive.sh: a key step like `ctrl+]` is typed literally (c,t,r,l,+,]), silently stepping workspaces
+545	A subagent that never sends turn.complete leaves the seat permanently busy
+546	Prove live that turn events carry agentId so the running-set wake-overdue path engages
+547	Wakes taken into the in-memory submitting chain are lost if the session ends before the held submit releases
+548	waitTicks is never reset between background waits, so the stale-refresh heartbeat phase drifts across waits in a long-lived session
+549	office tests leak mkdtemp dirs into /tmp (hall.test.ts, whimsy-file.test.ts): remove them after each test
+550	The rack reads "all green" while a line shows "✕ no job queue on this node" (seen on a scratch smoke)
+551	staff_child with an explicit lead and workline: build seats the stage's builder, not the named lead
+552	Batched landing pushes a workline's branch stacked on a batch-mate's unmerged commits, which then bounces it to build as "code committed after its review"
+553	office/test/cast-file.test.ts leaks mkdtemp "cast-file-" dirs into /tmp, the same leak as #549
+554	workline-verify.sh's flock skip exits 0: a verify duplicate pages the sheriff "could not run", and a skipped landing gate reads green
+555	Smoke fixture that seeds a lead change, so the handoff fly-over (handoff_opened) can be QA'd
+556	server.eval leaves its per-run tlon_eval_<pid> database behind: 631 piled up on the home box
+557	#166 B: one LANDING & CHECKS list in the rack, plus pending restart shown
+558	profiles_test's bwrap-budget test leaves its 330 seeded repos under server/tmp between runs
+559	Search.history: details/2 and with_window/2 don't carry the query timeout — the "bounds each query" doc claim is not yet true
+560	Server jobs and tools leak into /tmp (needs-*/maintain-quiet-*.json, menard-format-*.log, tlon-smoke-job-*.log); about 13k top-level entries total
+561	A lead working a workline from its lobby seat commits into work/t1: the workline reads "no code", the stall alarm fires, and the commits ride out with the lobby
+562	office/test: 10 TUI tests copy an until() that reads the pane twice; a redraw after the match fails it ("never saw X after 45ms")
+563	yu's seat on #326 runs in .worktrees/t326, a plain dir with no .git, instead of the workline worktree
+564	A seat's cwd .worktrees/t326 is a plain dir (only work/, no .git), so its git falls through to the main checkout
+565	menard leaks per-session marks into /tmp (menard-told-*, menard-path-*, menard-format-*): ~8.4k files, swept only after a week
+566	A pane can boot outside its worktree: cwd_export exports no TLON_CWD when the worktree isn't ready, and cd_worktree falls through to tmux's default dir ($HOME)
+567	bwrap-argc.sh: drop the gawk dependency (tr '\n\000' '\001\n' | awk, '\000' on total=), test output posted. Follow-up to #329, which landed on cc1d163
+568	bwrap-argc.sh: fold in argv.sh's `record` and `diff` modes (time-series arg count + wt=, path-only snapshots), one script, one test (#522)
+569	No lever to pull a queued workline landing: cancelling the Land job alone is re-queued by KeepUp → requeue_stranded/0, so a hold needs a hand-written rpc
+570	land local main's 2 commits
+571	menard run check fails in a seat when its own _build is read-only, and calls it "a compile error in menard ITSELF (a half-applied edit)"
+572	tlon-smoke-job-*.log still leaks into /tmp: its path is posted for the operator to read, so it needs a persistent log dir chosen by the operator (open from #560)
+573	Cross-thread wake notice tells non-leads to use consult_peer, a tool the seat doesn't have
+574	drive_smoke: a step that runs N ticks and shows every balloon, so a staggered cast reaction is visible to QA
+575	Keep a flake fix off the branches of the worklines it bit (it lands once, on its own ticket)
+576	Flake: TestDB.clean! truncate cancelled (57014) in SearchToolsTest setup under a full check
+577	Verify.finish/5: check for a closed thread before a recorded result, so a red verify on a closed workline is cancelled
+578	Uqbar routing: needs reach Andrew only through Uqbar (pass_up column, need_routing, settle/pass_up/overrule, uqbar_routing flag)
+579	A tool_denied card's "Hand it to Uqbar" reassigns the whole thread, not the decision
+580	"machine restarted while you were mid-turn" wake repeats every minute on a seat that is already back
+581	Uqbar need routing: the daily digest job, and the path to flipping it on (the prompt half moved to #643)
+582	bwrap budget test counts the seat's `.` and /tmp roots (step b of #522, not in 9bad5e0)
+583	office:drive fails from a git worktree: the parent checkout's mise.toml is untrusted inside the drive's tmux
+584	A workline skips build: build→verify fires the second build opens, its "commits on branch" exit met by the spec/plan commits
+585	kids
+586	office-life
+587	engine
+588	Toy
+589	Uqbar
+590	Souls
+591	Talk
+592	Home and whimsy
+593	Engine holes
+594	A refused spawn leaks a staffed thread: ensure opens/assigns before cwd_export refuses
+595	Smoke fixtures for settled and passed-up needs, and a note that drive_smoke starts a fresh session per call
+596	Worklines & staffing
+597	Smoke & QA
+598	Release & gates
+599	Tooling & sandbox
+600	Wakes, needs & alerts
+601	Office & the room
+602	Home: office and home on one floor across a street, with the clock-out walk, h/o keys, and coworkers crossing (plan §3.3, step 5's walk)
+603	The nightly smoke goes red when another run of the same commit holds its lock: wait for the holder, then smoke, instead of exiting 1
+604	Build seat on whimsy-sleep (thread 341) cannot commit: .git/worktrees/whimsy-sleep/index.lock is on a read-only filesystem
+605	Gary has no sandbox key of his own: he is reachable via E (events); a direct summon comes with the play menu (#607)
+606	A launch.sh change never rolls panes: Profiles.fingerprint hashes the launch command string, not the script it runs
+607	A play menu: one key opens the toys (Gary, doorbell, event, drill, treat, night, weather…) as a list
+608	Wake-overdue pages a seat whose window holds a superseded session: seated? must match the window to the live session
+609	Office tests leave their private tmux sockets in /tmp/tmux-1000: 4,517 dead ones by 2026-10-22
+610	Smoke fixture for a life workspace with a "in bed by 23:00" routine (stamped / overdue), so the home bedroom's sleep scene can be QA'd
+611	Spec-stage planner sandbox can't write the workline worktree (read-only /home/andrew/projects/tlon)
+612	Seats: remote control off (except uqbar), and a --name so /resume can tell them apart
+613	keep_up: a project with no GitHub repo raises a rollout item every pass
+614	Intake waits 30 min on a manager with no pane: respawn tertius on intake, or route to the lead when the manager seat is down
+615	Rack: show merge trains — one block per gate, its cars, and who waits for their own turn
+616	Office: the TICKETS column shows the initiative → epic → ticket tree, not 3 loose rows
+617	launch: build the claude argv once and add the remoteControl key via jq, so the --name test pins the real exec
+618	server test suite: 7 Office tests fail on a clean HEAD (writer, pets, corkboard, banter, random)
+619	office/test/pool.test.ts "a pool shot is in someone's hands" times out at 5s under load
+620	run_task(server:check) is always red: WorklineVerifyScriptTest inherits the job's RUN_TASK
+621	land local main's 5 commits
+622	fact_relevance: bound the query and let the brief degrade without the keyword half (#699 did the cap)
+623	Nightly role bench: builder-senior runs zero tasks (0.0s, 0/0 tokens) yet the run exits 0
+624	server deps carry security advisories: bump bandit 1.12.5 and plug_crypto 2.2.0 to their fixed releases
+625	toys:refresh red 3 days running: generator calls from the service hang to timeout, and `tlon-cli toys` hides the error until after the schedule kills it
+626	search_test's new plan/lock tests: three polish items (100ms assert_receive, comment-keyed capture, telemetry handler lifetime)
+627	keep_up: a transient `git remote get-url` failure skips the repo silently, and GHE / ssh-alias remotes are skipped without a note
+628	search_test: the rewritten plan and timeout tests no longer pass query_embedding, so the hybrid path is untested there
+629	Continuation: an idle skipped as too soon is never retried; the next chance is the quiet sweep (up to quiet_workline_minutes)
+630	#344: rename the generated_part migration off the version main already uses (20261022030000)
+631	One-shot model as one operator knob, set to Claude
+632	A steering change earns its keep on a canary A/B before it ships
+633	Review and land PR #590 (office:monitor)
+634	mise run land from a sandboxed seat fails: tlon-cli land-pr's rpc gets :noconnection (epmd unreachable in bwrap)
+635	office-monitor.sh: DOWN bypasses `say`, so a relaunch-on-exit harness loops DOWN/exit while the service is down
+636	office-monitor.sh --until-new keeps its first `since` forever: the SQL scans widen daily and the seen file grows unbounded
+637	land local main's 1 commit
+638	Review and land PR #597 (uqbar_routing becomes a setting)
+639	TICKETS tree: K/J reorder leaves the cursor off the moved ticket; rail column-0 armed tip is gone
+640	A scratch smoke's Settings edits write the operator's real ~/.config/tlon/config.json
+641	Review and land PR #599 (office:monitor TLON_MONITOR_SKIP)
+642	PRLanding.request/3 parses gh output with stderr folded in: a gh warning on exit 0 refuses a landable PR
+643	Uqbar never routes: its role never names the routing, and nothing wakes it on a routed need
+644	A release restart kills the gates running in the checks queue (exit 143)
+645	Merge queue's fetch loses the origin/main ref lock to a concurrent fetch and bounces the workline to build
+646	The root checkout sat on a merged branch (office-mug-in-hand, PR #566) for 5 days, 192 commits behind main, and nothing noticed
+647	NeedsPage never pages a workspace-less need (job_failed) and swallows a failed study post silently
+648	Office.windowed?/3 still lets an untagged leaf vouch for any agent: carry #203's rule (untagged → thread lead only) across
+649	Rename the workline's terminal stage `merged` → `landed`: it is set at the local gate, before GitHub merges
+650	A gate need's age is its thread's created_at, so a workline that takes >30 min to reach its gate skips Uqbar: passed up at once, never paged
+651	Health problems reach Uqbar as needs, so nobody runs office-monitor.sh outside the app
+652	Smoke fixture for a landed workline (with and without a landing flag), so the office stage ring and `landing` label can be QA'd
+653	Fix flake: ContrastTest "every call draws on the run's one wall" uses wall_ms: 200, spent before the first call under suite load
+654	ContrastTest "every call draws on the run's one wall" flakes under the full check: a 200ms wall is spent before the stub executor is called
+655	Sheriff seat can't make a scratch worktree: ~/.cache/tlon-scratch/scharlach doesn't exist and its parent isn't writable from the sandbox
+656	Triage look-alike list pairs ids with the wrong titles (#356/#595, #363/#618, #404/#579, #420/#584, #437/#569, #237/#513)
+657	A scheduled check:main is recorded twice: check-main.sh's record_ran POST adds a second, output-less schedule_run row
+658	check-main.sh / release-smoke.sh record a scheduled run twice: record_ran's POST adds an output-less schedule_run row beside the schedule's own
+659	vitals/0 caches the box reading in :persistent_term, which triggers a global GC each minute it is replaced
+660	hall `s`: draw a hire's soul/pitch on demand (POST /api/workspaces/:id/hire/draft, Soul.preview)
+661	switchboard_test: cover the lead-change scenario from #251 (stale stage notice not handed to the new lead)
+662	Smoke fixtures health_need and failed_job, so the health row and tlon-cli job retry/dismiss can be QA'd
+663	Hall look card says "a saved change shows there live" for a candidate who isn't in the room
+664	Persist health first-seen across restarts
+665	QA takes the lead at review before this round's review verdict exists, stranding the reviewer off-thread
+666	Smoke fixture: a schedule run in the interrupted state (exit 143), so the RUNS ⊘ glyph and the schedule row's 'last ⊘' can be QA'd
+667	Exit 137 (SIGKILL) reads as an interrupted schedule run, so an OOM-killed check:main never goes red
+668	A gate that hits a grade limit always passes up to the operator: Uqbar can't approve it
+669	Answer an ask with a note: "yes, and…" on the decision card and the desktop popup
+670	Answer an ask with a note on the desktop popup (ficciones Alerts.tsx), the popup half of #669
+671	A sandbox teardown that dies leaves .git/config.lock behind for good, and every git config write in the root checkout fails
+672	Pause: auto-resume at resets_at after an auto pencils down (#403 follow-up)
+673	Office TUI key to pause and resume one thread (#404 follow-up)
+674	OperatorConfig: a nullable knob with a non-nil default can never be turned off (value/2 reads nil as default; put_settings deletes the key on nil)
+675	Pause.auto/1: an unwritable settings file turns the usage report into a 500; pin the nil resets_at latch and the below-threshold no-op in tests (#403 grader follow-up)
+676	Pause follow-ups: the auto-pause track and its tests
+677	docs/models.md says ollama.com serves kimi-k3 as extra usage (HTTP 402); on 2026-10-27 it answered HTTP 200 on the plan with $0 purchased
+678	Smoke fixture quota_refused_need: a Shifts.refused/2 entry for a non-anthropic provider, so the 429 quota card can be QA'd (#405 follow-up)
+679	Authorship carries the session: session_id on message, event and ticket rows, shown on qa-by, brief, ticket view and get_message (#414 fix)
+680	Verify of workline 420 refused: "fetching origin/main failed in /" (repo path is "/")
+681	Worktree: rename/3, remove/2 and retire/2 don't take the ensure/2 lock, so a rename can race an ensure on the same slug
+682	:lead_mid_turn reaches the operator and coworkers as a bare atom: give it a readable refusal (operator API 409, assign_lead tool)
+683	Office TUI: a person's card covers their conversation
+684	Office TUI ticket board: show the initiative → epic → ticket tree, with real counts
+685	Smoke fixtures: one door that seeds any need kind or office state, so QA can drive every new card
+686	A reviewed workline that needs the operator sits at review unparked until the 1h stall alarm
+687	release-smoke: the port picker can land on 4369 (epmd), and the smoke fails to boot
+688	office/tui/data.ts status() whitelist drops ticket_week (weekTrend never gets live data)
+689	coordinate-via-funes skill still teaches consult_peer, which coworker profiles exclude
+690	Parked-gate proof marks intent/spec/plan ✗ on a workline that started at build and never owed them
+691	Review PR #651 (worker-no-claudeai-connectors)
+692	Review PR #650 (office-relaunch-exec)
+693	Land gate scores a SIGTERMed gate as red when the wrapper exits 1: treat a gate whose output says the BEAM got SIGTERM as interrupted
+694	hold_thread: the release notice names the releaser (and the hold notice who held)
+695	A "Review PR #N" workline stays open at build after GitHub merges that PR: the close-on-merge never fires, and finish is refused
+696	review_verdict's idempotent branch returns an unparked thread as success
+697	orphans report: header count disagrees with the rows listed
+698	Manager silent after a restart: intakes to tertius go unanswered until the 30-min fallback
+699	Uqbar can't post on a seat's thread to relay a hook's tool_denied
+700	Tools.clause's rescue drops the stacktrace; the #442 "Internal error" cause is still unfound
+701	shell alert cards: selected text won't copy, and the reply box loses focus mid-typing (ficciones Alerts.tsx)
+702	smoke fixtures: no tool_denied_need variant whose allow rule holds a backtick, so the "Allowed it" code-span fence can only be unit-tested
+703	drive_smoke returns "Internal error" on a key list (wait:Machine,i,A,wait:Allowed,Escape,v) yet the A keypress was sent and consumed the card
+704	land local main's 2 commits
+705	Publish.fetch_branch/3 is subsumed by prune_branch; merge_again fetches origin twice
+706	push_branch's prune defeats --force-with-lease: the fetch refreshes origin/work/<slug> right before the lease, so every seat push is a plain --force (#469 follow-up)
+707	A workline finished as "upstream-only / no code" is re-queued to intake as "Abandoned in workline #N", so the same ticket is triaged twice
+708	Trust record per model: record each workline's launch model and keep Server.Trust per coworker and model
+709	run_verb check returns "Internal error" from a builder seat (t416), leaving the builder with no gate result
+710	Roster trust tie-break follow-ups: pick/2 @spec, led=0 neutrality test, escalate passes no trust
+712	hand_to/4: the Profiles.model_label lookup sits outside post_brief's rescue, so a raise there leaves the new lead unwoken and the build out of Trust's record (#708 grader follow-up)
+713	file_ticket's duplicate check (Server.Recurrence) refuses titles over unrelated tickets
+714	A sibling-repo worktree gets no tlon git hooks: no Tlon-Thread/Tlon-Model stamp, no pre-push fence (Worktree.ensure sets no core.hooksPath)
+715	1,895 leftover tlon_* Postgres databases (21 GB): eval, test, land and verify runs never drop theirs
+716	Sweep the existing dead tmux sockets in /tmp/tmux-1000 (3,319 left after #484 stops new leaks)
+717	Held follow-up tickets aren't closed when a later workline lands their fix, so intake re-triages already-done work
+718	coordinate-via-funes SKILL.md line 18 says "never pass a thread id", line 35 passes thread_id
+719	assign_lead re-seat answers {"lead": X} but X's seat never comes up (Staffing.hand_off path)
+720	Intake's triage deferral matches bare `#N`, so a thread or PR number that equals a stalled ticket's id defers it silently
+721	Workline.open at intent: a busy bench lead named as lead gets "→ X leads, not X: X is leading another workline" (restaff/1 at intent has no busy check)
+722	staff_child on a workline answers {:ok, lead: nil} when Workline.open's hand_to fails; pin the off-bench named lead as a test
+723	stop_smoke mid-build: the script's TERM trap waits behind the foreground build subshell, so the build runs to the end of its step before exit 143
+724	rack-card test "a node with no job queue reads neutral under all green" fails under full office suite load (passes alone)
+725	A stalled need is past uqbar_route_minutes when it first appears, so Uqbar is never paged and it passes up as unrouted
+726	office rack-card test flakes: "a node with no job queue reads neutral" asserts on the card the moment the THE RACK header appears, while its body still reads "probing…" (health not yet fetched); its until() deadline is also module-level, shared with the first test's 25s budget. Bounced #431 (office-drive backtick) whose diff never touches office/.
+727	Builder seat on a workline has no push_branch or catch_up_branch tool (daneri on #435)
+728	Review PR #675 (work/uqbar-stalled-at)
+729	PR-review thread opened as a workline at build: the continue-nag asks the reviewer for code it can't write
+730	smoke_test: exercise the real resolve_in_main_root (git rev-parse) once, against a temp git repo, instead of stubbing :smoke_resolve everywhere
+731	smoke_test: a moved tip over an executing build with an os_pid (replace → stop_job TERM) is untested; only stop/1's TERM path and the no-pid refusal are pinned
+732	office_glance: a seat's own row is missing from its own crew view
+733	adapters/claude-code: typecheck mod.ts against the host's API types in the gate, so a dead event field fails adapters:claude-code:check instead of a live seat
+734	release_smoke_script_test: the gone-holder test's record hard-codes :4777, a port a live smoke can hold — use free_port()
+735	CorkboardTest side-project setup: on_exit's File.rm_rf! races a Corkboard task still writing its tmp dir (red under the gate, "file already exists")
+736	Cut a release past #420: live is 5959d12 (Oct 28), so staff_child has no `repo` and #565 can't be staffed onto menard
+737	PR-review workline #436 opened at build: the continuation nag counts "no code on work/review-pr-675-…" as the owed artifact, nags the reviewer (who can't write) 3x, then alarms "stuck at build" — the review's artifact is a review_branch verdict on the PR's head, not commits on the workline branch
+738	Workline publish: PR open fails "Title is too long (maximum is 256 characters)" when the ticket title is long, leaving the landed workline unpublished
+739	Workline.Publish passes the workline thread's title verbatim as the PR title; a sheriff-incident workline's title (the full 🚨 report, >256 chars) makes `gh pr create` fail "Title is too long (maximum is 256 characters)", so a gated landing (work/office-test-refresh-test-ts-the-finder-l @78c1faa) never reaches GitHub.
+740	Republish of an unpublished landing retries a deterministic GitHub refusal with no backoff and pages the sheriff each time
+741	Ticket titles have no length cap: file_ticket takes a whole report as a one-line title
+742	A review thread (stage nil, from a review-labelled ticket) has no nudge or stuck alarm, and no test pins who leads it
+743	"read dirs left out" sandbox-budget notice posts 7 times in 5 seconds on one seat's thread
+744	A parked gate wakes Uqbar before the risk grade, so a gate the standing approval auto-approves 30 s later is routed to Uqbar for nothing
+745	The adapter's own holds (push_branch, main-checkout switch) carry no PreToolUse: prefix, so Needs reads them as permission refusals and always rings the operator
+746	Scratch smoke has no Oban job queue, so QA cannot drive anything Drain runs (NeedsPage paging)
+747	land local main's 1 commit
+749	An intake staffing notice posts on the sheriff's beat as a 🚨 red report
+750	release-smoke's build-lock wait is silent and unbounded, so a scheduled smoke queued behind another build is SIGKILLed by the schedule's 30-min idle timeout (exit 124, no cleanup)
+751	SearchTest "query bounded by the timeout" flakes under a loaded gate: the lock holder's 300ms self-release can fire before the query reaches Postgres
+752	release-smoke waited path: a third run can read the old holder's record after flock -w wins and reclaim beside it; touch the lock after the inode check
+753	launch.sh: check for jq once at the top with a clear stderr message; every seat's launch now needs it
+754	Server gate red on main: HarnessTest "launch.sh: only a seat on the Claude plan loads the plan's budget mod" fails after a04ba5a (#617)
+755	Review PR #702 (work/uqbar-gate-754): main's red HarnessTest exec-line fix
+756	A seat's own TLON_* (TLON_ROLE_PROMPT_FILE, TLON_PERMISSIONS_DENY, TLON_SANDBOX_FILE…) leak into the server suite it runs, so tests that spawn launch.sh see the seat's role prompt and deny list
+757	Role bench: planner/c1-cli-json-flag has no source, so the judge penalises a plan that can't read code
+758	adapters/claude-code README and citizen.ts name `tlon-cli code`, a subcommand that doesn't exist
+759	get_message answers "Invalid params" for real message ids on thread 473
+760	menard MCP `run` (test) times out at 620s with no verdict on a worktree's first test run; the CLI run of the same files finishes in ~2 min
+761	edit_clause MCP tool fails: Mix.Tasks.Format.formatter_for_file/1 undefined (module Mix.Tasks.Format not available)
+762	menard run check --in server fails before its tests: format step gets no inputs ("Expected one or more files/patterns to be given to mix format")
+763	PRLanding: a non-zero gh exit leaves "gh said:" empty in the refusal
+764	search_test: match EXPLAIN "Actual Rows" on Postgres ≤17 (integer) as well as 18 (float)
+765	Jobs.Continue.perform: test seam so a test sees the requeued job post the quiet nudge
+766	Sandbox bind-mounts over a test's *.env scratch file, so the suite's tmp_dir cleanup fails "file busy" in the sandbox
+767	#465's landing gate went red because the branch dropped the explicit nil env from WorklineVerifyScriptTest's gate/verify helpers. The tests then inherited the landing job's WORKLINE_GATE/LAND_REF (the live workline-verify.sh doesn't scrub them yet), so verify/2 ran in landing mode: canary skipped, wrong ref rebased. The workline's own verify was green because it doesn't set those vars. A scrip
+768	search_test.exs:139 flaky: FTS over the message channel reads the newest embeddings by key, never sorting the channel
+769	office TUI: mouse wheel over a coworker pane cycles its prompt history instead of scrolling the view
+770	auto_pause_at: make it nullable (nil = off), as #403's spec asked, now that OperatorConfig can store null
+771	workline-verify's gate always ends "tlon/check: not posted — tree dirty or HEAD moved": check.sh never writes the green-tree cache from a verify, so every landing re-runs the full suite
+772	Move the other TTL caches off :persistent_term onto named ETS tables (as #659 does for Room.vitals)
+773	Persist Attention.tmux_down's workspace down-clock across restarts (same shape as #664)
+774	search_test.exs:139 plan-shape test flakes: planner picks Seq Scan + Sort on a tiny table
+775	staff_child repo: ficciones refused "not a repo of this workspace" though Machine lists ~/projects/ficciones
+776	A seat's scratch dir ~/.cache/tlon-scratch/<seat> doesn't exist and mkdir there is refused "Read-only file system", so a sibling-repo worktree (ficciones) has nowhere to go
+777	workspace_repo/2 resolves a repo name shared by two projects' repos to the first silently; refuse the ambiguous name
+778	A settled blocked need comes back when its ticket changes status, and reaches the operator as "Uqbar did not route it in time" with nothing he can do
+779	Worktree.locked/3 waits on :global.trans forever: a hung git/cp under the lock wedges every ensure/rename/remove/retire of that slug silently
+780	worktree_test: no test runs opposing renames (a→b with b→a), so rename/3's sorted lock order could be dropped without a red test
+781	A spawn_crew reviewer's window can disappear without a verdict, and nobody is told
+782	After the #391 sweep ends a stuck lead's session, nothing re-seats the lead, so the workline sits at build with no one on it
+783	Review PR #736 (bandit 1.14.1, phoenix_html 4.4.0 security bump)
+784	Review PR #738 (git-fetch-origin retries a lost ref lock)
+785	The "you have N unread message(s)" reminder repeats a message already read with get_message
+786	Script tests post fake gate and smoke runs to the live service's /api/release/ran
+787	The librarian's daily sweep reopens #207 at verify, so a thread with no code to land reads as stalled in the operator's inbox
+788	Review PR #746 (Uqbar may send a parked no-limit gate back to build)
+789	A retried approval on a queued thread can re-run advance: finish_approval ignores a standing approval or a landing in progress
+790	Server.MCP.Tool's shared execute/2 rescues a tool raise, logs the stacktrace and answers its message, so no tool answers a bare "Internal error"
+791	Seat panes inherit the service's TLON_START_*, so `mise run server:doctor` from a seat tries to bind :4040 and dies :eaddrinuse
+792	staff_child answers lead: runeberg but runeberg's seat never comes up, and an @mention on the thread doesn't bring it up either
+793	A review_branch verdict never appears on the review's thread and tells nobody, so a finished review reads as a stalled one
+794	Review PR #748 (an ask Uqbar raised always reaches the operator)
+795	Office can't close a workline as resolved: its close keys send only abandoned or nothing
+796	An approve's park can be lost when the verdict kills the reviewer's own window: stage stays review, awaiting nil, nobody told
+797	run_verb test that compiles cold can outrun the MCP transport's request timeout and still read "Internal error": pass a deadline under the door's bound

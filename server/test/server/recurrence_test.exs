@@ -73,23 +73,59 @@ defmodule Server.RecurrenceTest do
     assert Tickets.get(t.id).seen == 2
   end
 
-  test "generic words shared with a long unrelated title are not a match", %{workspace: ws} do
-    {:ok, _} =
-      Tickets.file(%{
-        workspace_id: ws.id,
-        title:
-          "office refresh test flake: the seat refresh test fails when the operator session script tests run " <>
-            "while the pass up refuse queue holds a stale tmux socket after the nightly smoke"
-      })
+  describe "against the real ticket corpus (test/fixtures/recurrence_titles.tsv: every title on the board)" do
+    setup %{workspace: ws} do
+      rows =
+        "test/fixtures/recurrence_titles.tsv"
+        |> File.read!()
+        |> String.split("\n", trim: true)
+        |> Enum.map(&String.split(&1, "\t", parts: 2))
 
-    {:ok, _} = Tickets.file(%{workspace_id: ws.id, title: "release-smoke over SSH test hangs"})
+      for [_, title] <- rows, do: {:ok, _} = Tickets.file(%{workspace_id: ws.id, title: title})
+      {:ok, by_fixture_id: Map.new(rows, fn [id, title] -> {String.to_integer(id), title} end)}
+    end
 
-    for title <- [
-          "Script tests post fake gate and smoke runs to the live service",
-          "adapters/claude-code: typecheck mod.ts against the host's API types in the gate",
-          "Publish.fetch_branch/3 is subsumed by prune_branch; merge_again fetches origin twice"
-        ] do
-      assert [] = Recurrence.similar_tickets(ws.id, title), title
+    test "a re-worded sighting finds the ticket filed for the same fault (#711 over #712)", %{
+      workspace: ws,
+      by_fixture_id: titles
+    } do
+      found =
+        Recurrence.similar_tickets(
+          ws.id,
+          "hand_to: a raising Profiles.model_label skips the leads brief, so the new lead is never woken"
+        )
+
+      assert titles[712] in Enum.map(found, & &1.title)
+    end
+
+    # each: a title the check refused in the wild, and the unrelated tickets it was refused over
+    @refused [
+      {"Publish.fetch_branch/3 is subsumed by prune_branch; merge_again fetches origin twice", [176]},
+      {"Roster trust tie-break follow-ups", [290, 452]},
+      {"hand_to: a raising Profiles.model_label skips the leads brief, so the new lead is never woken", [518]},
+      {"Leftover Postgres databases are never dropped after a test run", [452, 140, 156]},
+      {"smoke_test: the real rev-parse path is untested", [353, 329, 528]},
+      {"smoke_test: the replace to TERM path is untested", [723, 525, 628]},
+      {"adapters/claude-code: typecheck mod.ts against the host's API types in the gate", [201, 452, 445]},
+      {"read dirs left out of the brief post 7 times", [514, 245, 318]},
+      {"The adapter's own holds (push_branch, main-checkout switch) carry no PreToolUse: prefix, so Needs reads them as permission refusals and always rings the operator",
+       [415, 668, 385]},
+      {"adapters/claude-code README and citizen.ts name `tlon-cli code`, a subcommand that doesn't exist",
+       [655, 301, 173]},
+      {"workspace_repo/2 resolves a repo name shared by two projects", [451, 726, 627]},
+      {"A blocked need re-raises after it is settled: nothing marks the settlement", [175, 643, 470]},
+      {"Script tests post fake gate and smoke runs to the live service's /api/release/ran", [462, 767, 302]}
+    ]
+
+    for {{title, unrelated}, n} <- Enum.with_index(@refused) do
+      test "refused title #{n} no longer matches the tickets it was refused over", %{
+        workspace: ws,
+        by_fixture_id: titles
+      } do
+        found = ws.id |> Recurrence.similar_tickets(unquote(title)) |> Enum.map(& &1.title)
+
+        for id <- unquote(unrelated), do: refute(titles[id] in found, "matched ##{id}: #{titles[id]}")
+      end
     end
   end
 end

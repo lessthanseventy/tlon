@@ -1,5 +1,8 @@
 Closes #713.
 
-`Server.Recurrence.similar_tickets/2` matched on summed word rarity alone, so a few generic words ("test", "script", "smoke") shared with a long title crossed the threshold. A ticket now also needs the shared words to make up 40% of the smaller title's weight. Issue headlines (200 chars, matched on a few words by design) are unchanged.
+`Server.Recurrence`'s duplicate check refused titles over unrelated tickets and missed re-worded duplicates (#711 never matched #712). Two changes:
 
-Checked: a new test files the reported look-alikes over a long unrelated ticket (red before, green after); `menard run test` on recurrence_test.exs is green; `menard run check --in server` below.
+- **Tokenizer:** strip a trailing `/arity`, also index the parts of `a.b` / `a_b` compounds, stem `-s` / `-ing` / trailing `e`. `hand_to/4` now meets `hand_to`, `raising` meets `raise`, `leads` meets `lead`, so a re-wording shares its words without touching the threshold.
+- **Cover (tickets only):** the shared words must be 40% of the smaller title's weight. With the tokenizer alone two of the thirteen refused titles still matched a look-alike (#462, #525); the cover clears them. Issue headlines skip it: they are 200 chars of prose that share few words by design (the sheriff's "worded twice" test).
+
+Checked: `test/fixtures/recurrence_titles.tsv` is every title on the board (724); the new tests file them and assert #711 finds #712 and that the 13 titles quoted in the ticket find none of the tickets they were refused over (red on the old scorer: 8 failures). Existing true-positive tests pass. `menard run check --in server`: see below.
