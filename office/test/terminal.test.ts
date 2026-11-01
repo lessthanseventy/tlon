@@ -76,3 +76,12 @@ test("an escape sequence goes as its key name, so a program reading ESC alone ne
   expect(keyArgs(enc("\x1b"))).toEqual([["-H", "1b"]])
   expect(keyArgs(enc("\x1b[1;5C"))).toEqual([["-H", "1b", "5b", "31", "3b", "35", "43"]])
 })
+
+test("the wheel over a zoomed pane pages its view; no mouse report reaches it as bytes or arrows", () => {
+  const enc = (s: string) => new TextEncoder().encode(s)
+  expect(keyArgs(enc("\x1b[<64;10;5M"))).toEqual([["PPage"]])
+  expect(keyArgs(enc("\x1b[<65;10;5M"))).toEqual([["NPage"]])
+  expect(keyArgs(enc("a\x1b[<64;10;5Mb"))).toEqual([["-H", "61"], ["PPage"], ["-H", "62"]])
+  // clicks, releases and motion are the room's, not the pane's
+  expect(keyArgs(enc("\x1b[<0;10;5M\x1b[<0;10;5m\x1b[<35;10;5M"))).toEqual([])
+})

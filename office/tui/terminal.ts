@@ -23,6 +23,13 @@ export function keyArgs(bytes: Uint8Array): string[][] {
   let hex: string[] = []
   const flush = () => { if (hex.length) out.push(["-H", ...hex]); hex = [] }
   for (let i = 0; i < s.length;) {
+    const mouse = s[i] === "\x1b" ? /^\x1b\[<(\d+);\d+;\d+[Mm]/.exec(s.slice(i)) : null
+    if (mouse) {
+      // the pane never sees mouse reports (a TUI reads the wheel as its history keys): the wheel pages its view, the rest is the room's
+      const b = Number(mouse[1])
+      if (mouse[0].endsWith("M") && (b & 64) && !(b & 32)) { flush(); out.push([(b & 1) ? "NPage" : "PPage"]) }
+      i += mouse[0].length; continue
+    }
     const named = s[i] === "\x1b" ? NAMED.find(([seq]) => s.startsWith(seq, i)) : undefined
     if (named) { flush(); out.push([named[1]]); i += named[0].length; continue }
     hex.push(s.charCodeAt(i).toString(16).padStart(2, "0")); i++
