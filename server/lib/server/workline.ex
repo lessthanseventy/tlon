@@ -1908,17 +1908,18 @@ defmodule Server.Workline do
     do:
       "↩ back to #{to} — sent back by #{by}: #{why}. The branch keeps the build and review.md: revise #{to}.md to say what changes and what stays, so the build is improved, not redone; then advance_stage."
 
-  # the stage a workline was opened at: its first stage_advanced, the one from nowhere
+  # the stage a workline was opened at, read from its earliest stage_advanced: the one from nowhere
+  # (a promotion's) names it in `to`; otherwise the first advance left it, so it is that one's
+  # `from`. Only `promote/1` writes an opening event — `open/1` at any stage writes none — so a
+  # workline that never moved was opened where it stands.
   defp entry_stage(thread) do
     Repo.one(
       from e in Server.Event,
-        where:
-          e.thread_id == ^thread.id and e.kind == "stage_advanced" and
-            fragment("(?::jsonb ->> 'from') is null", e.detail),
+        where: e.thread_id == ^thread.id and e.kind == "stage_advanced",
         order_by: [asc: e.id],
         limit: 1,
-        select: fragment("?::jsonb ->> 'to'", e.detail)
-    ) || "intent"
+        select: fragment("coalesce(?::jsonb ->> 'from', ?::jsonb ->> 'to')", e.detail, e.detail)
+    ) || thread.stage
   end
 
   defp tied_follow_ups(thread_id) do
