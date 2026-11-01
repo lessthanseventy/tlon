@@ -1,0 +1,3 @@
+APPROVE. Text-only: docs/models.md and the @model_ring comment in profiles.ex now say what was measured (200 on plan, $0 purchased, window mostly unspent) and that 402-after-window is unverified. No ring or behaviour change; the two texts agree; pr.md is accurate about scope. I did not run check:names or the server gate. The code change is one comment.
+
+Nit, not blocking: the profiles.ex comment carries a dated measurement (2026-10-27). AGENTS.md prefers no dated incident references in comments, but this one states the basis for a current constraint, so it is acceptable.
