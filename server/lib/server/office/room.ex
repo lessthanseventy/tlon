@@ -578,7 +578,8 @@ defmodule Server.Office.Room do
     end
   end
 
-  # open (not-done) tickets, counted once under every ancestor group and, with no parent, as loose
+  # open (not-done) tickets, counted once under every ancestor group and, with no parent, as loose.
+  # A started loose ticket is at work, so it has no orphan row either: it counts in total only.
   defp open_counts(tickets, parent_of) do
     tickets
     |> Enum.reject(&(&1.status == "done"))
@@ -586,6 +587,7 @@ defmodule Server.Office.Room do
       acc = %{acc | total: acc.total + 1}
 
       case parent_of[t.id] do
+        nil when t.status == "doing" -> acc
         nil -> %{acc | loose: acc.loose + 1}
         p -> %{acc | by_node: bump_up(acc.by_node, p, parent_of)}
       end

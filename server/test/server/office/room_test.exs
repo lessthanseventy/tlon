@@ -346,7 +346,10 @@ defmodule Server.Office.RoomTest do
       assert %{epics: [], loose: []} = Room.board(elem(Workspaces.register(%{name: "Empty"}), 1).id)
     end
 
-    test "open counts: per node, recursive over open tickets; direct and started-loose tickets count", %{ws: ws, mk: mk} do
+    test "open counts: per node, recursive over open tickets; a started loose ticket is at work, not loose", %{
+      ws: ws,
+      mk: mk
+    } do
       kids = mk.(%{title: "Kids", kind: "initiative"})
       toy = mk.(%{title: "Toy", kind: "epic", epic_id: kids.id})
       a = mk.(%{title: "a", epic_id: toy.id})
@@ -367,7 +370,7 @@ defmodule Server.Office.RoomTest do
       assert toy_id == toy.id
       assert [%{id: kid_id, open: 2}] = board.initiatives
       assert kid_id == kids.id
-      assert board.loose_open == 2
+      assert board.loose_open == 1
       assert board.open_total == 4
     end
   end
