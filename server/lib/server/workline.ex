@@ -1428,12 +1428,14 @@ defmodule Server.Workline do
            }),
          {:ok, _} <- Server.Channel.assign_lead(thread.id, name) do
       close_leaf(thread)
+      %{led: led, first_time: first} = Server.Trust.record(name)
 
       {:ok, _} =
         Server.Channel.post(%{
           thread_id: thread.id,
           author: "tlon",
-          body: "↑ #{name} takes this from #{current}: #{why}. Pick it up from the brief.",
+          body:
+            "↑ #{name} takes this from #{current} (landed #{first} of their last #{led} builds first time): #{why}. Pick it up from the brief.",
           payload: %{"escalated_from" => current}
         })
 
