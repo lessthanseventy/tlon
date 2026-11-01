@@ -187,6 +187,49 @@ defmodule Server.ReviewFreshSessionTest do
     end
   end
 
+  # #796: closing the reviewer's window takes its client down, and the client's teardown cancels the
+  # request still running the verdict (anubis: `notifications/cancelled` → terminate_child on the tool
+  # task). Ending the session inside the request lost the park; it is ended last, from a job.
+  describe "the verdict ends the reviewer's session only once the thread has moved" do
+    use Oban.Testing, repo: Server.Repo
+
+    setup do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      :ok
+    end
+
+    test "an approval parks the gate while the reviewer's session is still live; the job ends it", %{rita: rita} do
+      {:ok, thread} = Workline.open(%{title: "fix the lamp", slug: "lamp-fix", stage: "review"})
+      {:ok, thread} = Staff.assign(thread, rita)
+      {:ok, session} = Staff.start_session(%{agent_id: rita.id, thread_id: thread.id, pane_ref: "t#{thread.id}"})
+      operator = Server.OperatorConfig.operator()
+
+      assert {:ok, %Server.Thread{stage: "review", awaiting: ^operator}} =
+               Workline.review_verdict(thread, "approve", rita.name,
+                 artifacts: Server.TestArtifacts.Present,
+                 branch_head: nil
+               )
+
+      assert Repo.get!(Session, session.id).ended_at == nil
+      assert_enqueued(worker: Server.Jobs.EndReview, args: %{thread_id: thread.id})
+
+      assert :ok = perform_job(Server.Jobs.EndReview, %{thread_id: thread.id})
+      assert %DateTime{} = Repo.get!(Session, session.id).ended_at
+      assert Server.Staffing.leaf_window(thread, "test") == nil
+    end
+
+    test "changes requested bounce it to build before the job ends the session", %{rita: rita} do
+      {:ok, thread} = Workline.open(%{title: "fix the lamp", slug: "lamp-fix", stage: "review"})
+      {:ok, thread} = Staff.assign(thread, rita)
+      {:ok, session} = Staff.start_session(%{agent_id: rita.id, thread_id: thread.id, pane_ref: "t#{thread.id}"})
+
+      assert {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", rita.name, branch_head: nil)
+      assert %Server.Thread{stage: "build"} = Repo.get!(Server.Thread, thread.id)
+      assert Repo.get!(Session, session.id).ended_at == nil
+      assert_enqueued(worker: Server.Jobs.EndReview, args: %{thread_id: thread.id})
+    end
+  end
+
   test "the operator's read of a review-stage thread keeps the conversation", %{rita: rita} do
     {:ok, thread} = Workline.open(%{title: "fix the lamp", slug: "lamp-fix", stage: "review"})
     {:ok, thread} = Staff.assign(thread, rita)
