@@ -43,8 +43,9 @@ completion; the server's one-shots (banter, the judge, titles) run `--bare` with
 the pets, titles, the judge and the toys (the oracle keeps its own `ollama-cloud/deepseek-v4-pro:high`: it is the other family's second opinion, not a one-shot). Set it to `anthropic/claude-haiku-5-5` to run them
 on the Claude plan; there is no second copy of the default. Two things that bite: **glm-5.2 is a reasoning model** (separate
 `reasoning` + `content` fields) — give it token headroom or `content` comes back empty while thinking
-eats the budget; and **`kimi-k3` is deliberately absent** — ollama.com serves it as *extra* usage (HTTP
-402), billed per-token on top of the plan, so it's out of the model ring (`Server.Profiles`). Every model
+eats the budget; and **`kimi-k3` is kept out of the model ring** (`Server.Profiles`). Measured 2026-10-27: on the plan it
+answered HTTP 200 with $0 purchased and 96.8% of the session window unspent. Whether it turns 402 (extra usage,
+billed per token) once the window is spent is unverified, so it stays out until that is measured. Every model
 above is plan-covered.
 
 ## Benchmarks
