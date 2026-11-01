@@ -12,6 +12,11 @@ defmodule Server.Jobs.LandTest do
     assert {:ok, :green} = Land.gate_result({"", 0})
   end
 
+  test "a gate whose BEAM was SIGTERMed is interrupted even when the wrapper exits 1" do
+    out = "[server:check] SIGTERM received - shutting down\n** (EXIT from #PID<0.95.0>) shutdown\n"
+    assert {:error, {:interrupted, _}} = Land.gate_result({out, 1})
+  end
+
   test "one landing per workline and one per PR branch: a PR's job never collides with another's" do
     assert %{changes: %{unique: %{keys: [:thread_id, :branch]}}} = Land.new(%{"pr" => 7, "branch" => "x"})
   end
