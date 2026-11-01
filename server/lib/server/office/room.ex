@@ -269,20 +269,21 @@ defmodule Server.Office.Room do
   The three box inputs of `health/0` that need no database (tmux, disk and memory), read at most
   once a minute: the needs list asks on every poll and `disk_pct/0` forks `df`.
   """
-  @spec vitals() :: %{tmux: boolean(), disk_pct: integer() | nil, mem_pct: integer() | nil}
-  def vitals do
-    now = System.monotonic_time(:millisecond)
-
-    case :persistent_term.get({__MODULE__, :vitals}, nil) do
-      {at, v} when now - at < @vitals_ttl_ms ->
+  @spec vitals(integer()) :: %{tmux: boolean(), disk_pct: integer() | nil, mem_pct: integer() | nil}
+  def vitals(now \\ System.monotonic_time(:millisecond)) do
+    case :ets.lookup(__MODULE__, :vitals) do
+      [{:vitals, at, v}] when now - at < @vitals_ttl_ms ->
         v
 
       _ ->
         v = %{tmux: System.find_executable("tmux") != nil, disk_pct: disk_pct(), mem_pct: mem_pct()}
-        :persistent_term.put({__MODULE__, :vitals}, {now, v})
+        :ets.insert(__MODULE__, {:vitals, now, v})
         v
     end
   end
+
+  @doc false
+  def init_vitals, do: :ets.new(__MODULE__, [:named_table, :public, read_concurrency: true])
 
   @doc "What is wrong in a `vitals/0` reading: `[{:tmux | :disk | :mem, text}]`. `health/0`'s limits."
   @spec vital_problems(map()) :: [{:tmux | :disk | :mem, String.t()}]

@@ -17,6 +17,7 @@ defmodule Server.Application do
 
     Server.Staff.mark_boot()
     Server.MCP.Tool.init_fence()
+    Server.Office.Room.init_vitals()
 
     # PubSub is always up — it is the switchboard's nudge and cheap to run, and the
     # test harness needs it so Channel.post can broadcast. The Repo is started

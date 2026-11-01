@@ -268,6 +268,21 @@ defmodule Server.Office.RoomTest do
     assert id == ctx.t.id
   end
 
+  test "vitals: a reading serves the next minute from the table, a read past it refreshes" do
+    on_exit(fn -> :ets.delete(Room, :vitals) end)
+    now = System.monotonic_time(:millisecond)
+    stale = %{tmux: false, disk_pct: 1, mem_pct: 1}
+    :ets.insert(Room, {:vitals, now, stale})
+
+    assert Room.vitals(now + 59_999) == stale
+    assert [{:vitals, _, _}] = :ets.lookup(Room, :vitals)
+
+    Room.vitals(now + 60_000)
+    assert [{:vitals, at, fresh}] = :ets.lookup(Room, :vitals)
+    assert at == now + 60_000
+    refute fresh == stale
+  end
+
   describe "board: epics with progress" do
     setup ctx do
       mk = fn attrs -> elem(Tickets.file(Map.merge(%{workspace_id: ctx.ws.id}, attrs)), 1) end
