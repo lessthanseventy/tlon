@@ -1054,6 +1054,25 @@ defmodule Server.WorklineTest do
       assert %{"by" => "andrew"} = Workline.approval(queued)
     end
 
+    test "Uqbar sends a no-limit gate parked on the operator back to build, and no further back" do
+      parked = parked_lamp!(@low)
+      assert {:error, {:not_yours, _}} = Workline.send_back(parked, "plan", "reshape it", "uqbar")
+      assert {:ok, %{stage: "build"}} = Workline.send_back(parked, "build", "add the test", "uqbar")
+    end
+
+    test "Uqbar's send-back of a limit-hit gate is refused; the gate stays parked" do
+      parked = parked_lamp!(%{"limits" => ["a database migration"]})
+      assert {:error, {:not_yours, why}} = Workline.send_back(parked, "build", "add the test", "uqbar")
+      assert why =~ "limit"
+      assert %{stage: "review", awaiting: "andrew"} = Repo.get!(Server.Thread, parked.id)
+    end
+
+    test "Uqbar's send-back of a thread not parked on the operator is refused" do
+      thread = open!(%{slug: "uqbar-unparked", stage: "review"})
+      assert {:error, {:not_yours, why}} = Workline.send_back(thread, "build", "add the test", "uqbar")
+      assert why =~ "parked"
+    end
+
     test "Uqbar may approve a no-limit gate, and the ledger says uqbar, not the operator" do
       parked = parked_lamp!(@low)
       assert {:ok, queued} = Workline.approve(parked, artifacts: AllPresent, land: :queue, as: "uqbar")

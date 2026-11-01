@@ -126,7 +126,7 @@ and every layer the spine design's re-laid §9 asked for
   post in revdiff's shape (`## path:line (+) note`).
   A workline moves backwards on its own thread and branch, the build kept to improve, never redone
   (`Server.Workline.send_back/5`, the `send_back` tool, `tlon-cli send-back`): back to build by its
-  lead, back to plan or spec only by the tech lead (a coherence call) or the operator; an open one
+  lead, or by Uqbar at a gate parked on the operator whose grade hit no limit; back to plan or spec only by the tech lead (a coherence call) or the operator; an open one
   only, never while its verify is queued or running or its landing is running; a landing still
   waiting in the merge queue is pulled with the move by `unqueue` (the tool's and the API's field,
   the cli's `--unqueue`), cancelled in the same transaction so nothing finds the thread at review to

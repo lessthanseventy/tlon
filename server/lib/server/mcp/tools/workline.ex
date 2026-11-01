@@ -218,7 +218,8 @@ defmodule Server.MCP.Tool.SendBack do
   @moduledoc """
   Send a workline back to an earlier stage, on the same thread and branch — what was built and
   reviewed stays, and the stage's lead improves it rather than starting over
-  (`Server.Workline.send_back/5`). Back to build: the workline's lead. Back to plan or spec: the tech
+  (`Server.Workline.send_back/5`). Back to build: the workline's lead, or Uqbar at a gate parked on
+  the operator whose grade hit no limit. Back to plan or spec: the tech
   lead only, since it reshapes the build; anyone else is told to ask him. `unqueue` pulls a landing
   still waiting in the merge queue with the move; one already running, or a verify, still refuses.
   """
