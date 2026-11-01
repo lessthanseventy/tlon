@@ -138,11 +138,12 @@ defmodule Server.Jobs.Land do
   SIGTERM is 143) is `{:interrupted, why}`, a gate that never finished, not a red; so is one whose
   output says the BEAM got SIGTERM, since mise then exits 1 rather than 143. Anything else is red.
   """
+  # the BEAM's notice ends its line; the same words quoted in a failing test's report do not
   @termed "SIGTERM received - shutting down"
   def gate_result({_out, 0}), do: {:ok, :green}
 
   def gate_result({out, code}) do
-    if code > 128 or String.contains?(out, @termed) do
+    if code > 128 or Enum.any?(String.split(out, "\n"), &String.ends_with?(&1, @termed)) do
       {:error, {:interrupted, "the gate was cut off before it finished (killed, exit #{code})"}}
     else
       {:error,
