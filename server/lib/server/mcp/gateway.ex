@@ -39,7 +39,9 @@ defmodule Server.MCP.Gateway do
 
   @impl true
   def init(_opts) do
-    AnubisTransport.init(server: McpServer)
+    # The drive's wait: ceiling is 180 s; the plug's 30 s default answers "Internal error"
+    # while the tool keeps running, so the transport waits longer than the longest tool.
+    AnubisTransport.init(server: McpServer, request_timeout: 200_000)
   end
 
   @impl true

@@ -78,6 +78,12 @@ defmodule Server.MCP.GatewayTest do
     assert status == 401
   end
 
+  test "the MCP transport's request timeout outlasts the drive's 180 s, so a long tool is not cut off at 30 s" do
+    # anubis's plug reads :timeout from its init map; its default is 30 s, which answers
+    # "Internal error" while the tool keeps running (the drive's wait: spends its own 180 s)
+    assert %{timeout: 200_000} = Server.MCP.Gateway.init([])
+  end
+
   test "two mints for the same (thread, agent) yield the SAME deterministic token" do
     # mint_for is deterministic (stateless HMAC), so per-connect minting is stable.
     {:ok, thread} = Channel.open_thread(%{title: "deterministic"})
