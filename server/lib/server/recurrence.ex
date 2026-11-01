@@ -9,7 +9,8 @@ defmodule Server.Recurrence do
 
   The match is shared words weighted by how rare each is among the candidates (a word in one item
   counts far more than one in thirty), so a long summary matches on its distinctive words and two
-  that share only "session" and "test" do not. It surfaces candidates and the caller decides: a false
+  that share only "session" and "test" do not. A ticket title must also have those shared words make
+  up a share of the smaller title's weight, so a long title can't match on a few generic words. It surfaces candidates and the caller decides: a false
   match costs one more call with `distinct: true`.
   """
   import Ecto.Query
@@ -26,6 +27,10 @@ defmodule Server.Recurrence do
   # a candidate matches when its shared words weigh @enough: two rare words, or four or so common ones
   @enough 6.0
 
+  # and those words must be this share of the smaller side's weight, so a long title can't match on a few
+  # generic words alone
+  @cover 0.4
+
   # the prior keeps a small corpus from calling every word rare
   @prior 20
 
@@ -38,7 +43,7 @@ defmodule Server.Recurrence do
       where: t.status != "done" or t.closed_at > ^since
     )
     |> Repo.all()
-    |> best(title, & &1.title)
+    |> best(title, & &1.title, @cover)
   end
 
   @doc "Open issues, and ones closed within the window, that look like `summary`: best first, at most 3."
@@ -47,7 +52,7 @@ defmodule Server.Recurrence do
 
     from(i in Issue, where: i.state == "open" or i.created_at > ^since)
     |> Repo.all()
-    |> best(summary, &headline(&1.summary))
+    |> best(summary, &headline(&1.summary), 0.0)
   end
 
   @doc "Record `detail`, seen by `by`, on ticket `id`: reopened if closed, high once seen #{3} times."
@@ -82,15 +87,22 @@ defmodule Server.Recurrence do
   defp line(%Ticket{} = t), do: "ticket ##{t.id} (#{t.status}, seen #{t.seen}) #{t.title}"
   defp line(%Issue{} = i), do: "issue ##{i.id} (#{i.state}, seen #{i.seen}) #{headline(i.summary)}"
 
-  defp best(items, text, key) do
+  defp best(items, text, key, cover) do
     query = words(text)
     docs = Enum.map(items, &{&1, words(key.(&1))})
     df = docs |> Enum.flat_map(fn {_, ws} -> MapSet.to_list(ws) end) |> Enum.frequencies()
     weight = fn w -> :math.log((length(docs) + @prior) / (Map.get(df, w, 0) + 0.5)) end
 
+    total = fn ws -> ws |> Enum.map(weight) |> Enum.sum() end
+    query_total = total.(query)
+
     docs
-    |> Enum.map(fn {item, ws} -> {query |> MapSet.intersection(ws) |> Enum.map(weight) |> Enum.sum(), item} end)
-    |> Enum.filter(fn {s, _} -> s >= @enough end)
+    |> Enum.map(fn {item, ws} ->
+      shared = query |> MapSet.intersection(ws) |> total.()
+      {shared, shared / max(min(query_total, total.(ws)), 1.0), item}
+    end)
+    |> Enum.filter(fn {s, share, _} -> s >= @enough and share >= cover end)
+    |> Enum.map(fn {s, _, item} -> {s, item} end)
     |> Enum.sort_by(fn {s, _} -> -s end)
     |> Enum.take(3)
     |> Enum.map(&elem(&1, 1))

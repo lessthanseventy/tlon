@@ -72,4 +72,24 @@ defmodule Server.RecurrenceTest do
     assert again.seen == 2 and again.state == "open" and again.evidence =~ "nolan"
     assert Tickets.get(t.id).seen == 2
   end
+
+  test "generic words shared with a long unrelated title are not a match", %{workspace: ws} do
+    {:ok, _} =
+      Tickets.file(%{
+        workspace_id: ws.id,
+        title:
+          "office refresh test flake: the seat refresh test fails when the operator session script tests run " <>
+            "while the pass up refuse queue holds a stale tmux socket after the nightly smoke"
+      })
+
+    {:ok, _} = Tickets.file(%{workspace_id: ws.id, title: "release-smoke over SSH test hangs"})
+
+    for title <- [
+          "Script tests post fake gate and smoke runs to the live service",
+          "adapters/claude-code: typecheck mod.ts against the host's API types in the gate",
+          "Publish.fetch_branch/3 is subsumed by prune_branch; merge_again fetches origin twice"
+        ] do
+      assert [] = Recurrence.similar_tickets(ws.id, title), title
+    end
+  end
 end
