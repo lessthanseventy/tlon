@@ -159,6 +159,77 @@ defmodule Server.WorktreeTest do
     end
   end
 
+  describe "rename/3, remove/2 and retire/2 serialise with ensure/2 on the same slug" do
+    # holds the lock ensure/2 takes for `slug`, runs `fun` in another process, and returns whether
+    # it was still blocked while the lock was held, then what it returned once released
+    defp blocked_while_locked(repo, slug, fun) do
+      id = {Server.Worktree, Worktree.path(Path.expand(repo), slug)}
+      me = self()
+
+      holder =
+        Task.async(fn ->
+          :global.trans({id, self()}, fn ->
+            send(me, :locked)
+
+            receive do
+              :release -> :ok
+            end
+          end)
+        end)
+
+      assert_receive :locked
+      task = Task.async(fun)
+      early = Task.yield(task, 300)
+      send(holder.pid, :release)
+
+      case early do
+        nil -> {true, Task.await(task, 30_000)}
+        {:ok, result} -> {false, result}
+      end
+    end
+
+    test "rename/3 waits for either slug's lock", %{repo: repo} do
+      {:ok, _} = Worktree.ensure(repo, "src")
+      assert {true, {:ok, _}} = blocked_while_locked(repo, "src", fn -> Worktree.rename(repo, "src", "dst") end)
+      {:ok, _} = Worktree.ensure(repo, "src2")
+      assert {true, {:ok, _}} = blocked_while_locked(repo, "dst2", fn -> Worktree.rename(repo, "src2", "dst2") end)
+    end
+
+    test "remove/2 waits for the slug's lock", %{repo: repo} do
+      {:ok, _} = Worktree.ensure(repo, "rm")
+      assert {true, {:removed, _}} = blocked_while_locked(repo, "rm", fn -> Worktree.remove(repo, "rm") end)
+    end
+
+    test "retire/2 waits for the slug's lock", %{repo: repo} do
+      {:ok, _} = Worktree.ensure(repo, "rt")
+      assert {true, {:removed, _}} = blocked_while_locked(repo, "rt", fn -> Worktree.retire(repo, "rt") end)
+    end
+
+    test "ensure and rename of one slug run concurrently and the survivors' gitfiles resolve", %{repo: repo} do
+      for i <- 1..4 do
+        {from, to} = {"from#{i}", "to#{i}"}
+        {:ok, _} = Worktree.ensure(repo, from)
+
+        results =
+          Task.await_many(
+            [
+              Task.async(fn -> Worktree.ensure(repo, from) end),
+              Task.async(fn -> Worktree.rename(repo, from, to) end),
+              Task.async(fn -> Worktree.ensure(repo, from) end)
+            ],
+            30_000
+          )
+
+        refute Enum.any?(results, &match?({:error, _}, &1)), inspect(results)
+
+        for slug <- Worktree.names(repo), slug in [from, to] do
+          wt = Worktree.path(repo, slug)
+          assert {_, 0} = System.cmd("git", ["-C", wt, "rev-parse", "--git-dir"], stderr_to_stdout: true)
+        end
+      end
+    end
+  end
+
   describe "ensure/2 — a checkout's gitfile always resolves" do
     test "concurrent ensures of one slug all succeed and leave one working checkout", %{repo: repo} do
       results =
