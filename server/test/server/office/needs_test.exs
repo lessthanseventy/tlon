@@ -1342,6 +1342,19 @@ defmodule Server.Office.NeedsTest do
       assert {:error, :always} = Needs.pass_up(key, "w", "r", "uqbar")
     end
 
+    test "an ask Uqbar raised goes straight to the phone; a coworker's still waits with Uqbar", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "study", workspace_id: ws.id})
+      {:ok, own} = Server.Attention.ask(t.id, "uqbar", "land it?", ["land", "hold"])
+      {:ok, other} = Server.Attention.ask(t.id, "tertius", "hold new work?", ["hold", "carry on"])
+      own_key = "ask:#{own.id}"
+      other_key = "ask:#{other.id}"
+
+      g = Needs.grouped()
+      assert [%{route: "pass_up"}] = Enum.filter(g.phone, &(&1.key == own_key))
+      assert [%{key: ^other_key}] = g.uqbar
+      assert {:error, :always} = Needs.settle(own_key, "fine", "uqbar")
+    end
+
     test "a gate with a clean grade still waits with Uqbar and takes a verdict", %{ws: ws} do
       key = review_gate(ws, %{"limits" => [], "decisions" => [], "scores" => %{}, "reasons" => %{}})
       assert [%{key: ^key, route: "uqbar"}] = Needs.grouped().uqbar
