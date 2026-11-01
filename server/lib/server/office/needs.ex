@@ -1154,17 +1154,20 @@ defmodule Server.Office.Needs do
       []
   end
 
-  # When each problem was first seen, so its `at` is stable across reads: a verdict or a put-away
-  # is only ever newer than it. Kept only while the problem holds; written only when the set of
-  # problems changes, which is rare, so the persistent_term replacement is not a per-read cost.
-  # Held in memory, so a restart of the node starts every held problem's clock again: a put-away
-  # problem that still holds comes back until it is put away once more (open: not yet persisted).
+  # When each problem was first seen, so its `at` is stable across reads and restarts: a verdict or
+  # a put-away is only ever newer than it. A `health_since` row lives exactly while its problem holds.
   defp health_since(problems) do
     now = DateTime.truncate(DateTime.utc_now(), :second)
-    prior = :persistent_term.get({__MODULE__, :health_since}, %{})
-    seen = Map.new(problems, fn {what, _} -> {what, Map.get(prior, what, now)} end)
-    if seen != prior, do: :persistent_term.put({__MODULE__, :health_since}, seen)
-    seen
+    whats = Enum.map(problems, fn {what, _} -> Atom.to_string(what) end)
+    Repo.delete_all(from h in "health_since", where: h.what not in ^whats)
+
+    if whats != [] do
+      rows = Enum.map(whats, &%{what: &1, since: now})
+      Repo.insert_all("health_since", rows, on_conflict: :nothing, conflict_target: :what)
+    end
+
+    stored = Map.new(Repo.all(from h in "health_since", select: {h.what, type(h.since, :utc_datetime)}))
+    Map.new(problems, fn {what, _} -> {what, stored[Atom.to_string(what)]} end)
   end
 
   # the limits the review's risk grade hit, [] when none; the grade is review-scoped

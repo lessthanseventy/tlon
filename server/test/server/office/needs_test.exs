@@ -1417,7 +1417,7 @@ defmodule Server.Office.NeedsTest do
       Application.put_env(:server, :health_reading, fn -> reading end)
 
       on_exit(fn ->
-        :persistent_term.erase({Needs, :health_since})
+        Server.Repo.delete_all("health_since")
 
         if prior,
           do: Application.put_env(:server, :health_reading, prior),
@@ -1459,22 +1459,36 @@ defmodule Server.Office.NeedsTest do
       health_reading(%{tmux: false, disk_pct: 10, mem_pct: 10})
       assert [%{key: "health:tmux"}] = Needs.grouped().uqbar
 
-      since = DateTime.add(DateTime.utc_now(), -31 * 60, :second)
-      :persistent_term.put({Needs, :health_since}, %{tmux: since})
+      since = DateTime.utc_now() |> DateTime.add(-31 * 60, :second) |> DateTime.truncate(:second)
+      Server.Repo.delete_all("health_since")
+      Server.Repo.insert_all("health_since", [%{what: "tmux", since: since}])
 
       assert [%{key: "health:tmux", route: "pass_up", why: "Uqbar did not route it in time"}] =
                Needs.grouped().clipboard
     end
 
-    test "a restart starts a held health item's first-seen again (open: not persisted)" do
+    test "a held health item keeps its first-seen across a restart: the row is the clock" do
       health_reading(%{tmux: false, disk_pct: 10, mem_pct: 10})
-      since = DateTime.add(DateTime.utc_now(), -3600, :second)
-      :persistent_term.put({Needs, :health_since}, %{tmux: since})
+      since = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
+      Server.Repo.insert_all("health_since", [%{what: "tmux", since: since}])
+
+      assert [%{key: "health:tmux", at: ^since}] = Needs.list()
+      assert [%{key: "health:tmux", at: ^since}] = Needs.list()
+    end
+
+    test "a resolved problem's first-seen is cleared, so its return starts a new clock" do
+      health_reading(%{tmux: false, disk_pct: 10, mem_pct: 10})
+      since = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
+      Server.Repo.insert_all("health_since", [%{what: "tmux", since: since}])
       assert [%{key: "health:tmux", at: ^since}] = Needs.list()
 
-      :persistent_term.erase({Needs, :health_since})
-      assert [%{key: "health:tmux", at: at}] = Needs.list()
-      assert DateTime.compare(at, since) == :gt
+      health_reading(%{tmux: true, disk_pct: 10, mem_pct: 10})
+      assert Needs.list() == []
+      assert Server.Repo.all(from(h in "health_since", select: h.what)) == []
+
+      health_reading(%{tmux: false, disk_pct: 10, mem_pct: 10})
+      assert [%{key: "health:tmux", at: again}] = Needs.list()
+      assert DateTime.compare(again, since) == :gt
     end
 
     test "a health reading that raises leaves the rest of the inbox in place" do
