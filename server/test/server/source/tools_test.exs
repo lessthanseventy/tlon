@@ -4,6 +4,8 @@ defmodule Server.Source.ToolsTest do
   # agent edits its own tree and nothing else. The MCP components are thin callers of this.
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Server.Source.Tools
 
   setup do
@@ -99,6 +101,24 @@ defmodule Server.Source.ToolsTest do
     assert {:error, msg} = Tools.clause(t, :replace, "demo.ex", "old_name/1", "x", "x + 1")
     assert msg =~ "demo.ex"
     assert msg =~ "permission denied"
+  end
+
+  test "a raise inside a clause verb is an error reply naming the cause, and its stacktrace is logged (#700)", %{
+    thread: t,
+    wt: wt
+  } do
+    before = File.read!(Path.join(wt, "demo.ex"))
+
+    log =
+      capture_log(fn ->
+        # a non-binary CODE makes Menard.Clause raise, rather than return {:error, _}
+        assert {:error, msg} = Tools.clause(t, :replace, "demo.ex", "old_name/1", "x", 123)
+        assert is_binary(msg) and msg != ""
+      end)
+
+    assert log =~ "** ("
+    assert log =~ "Menard.Clause"
+    assert File.read!(Path.join(wt, "demo.ex")) == before
   end
 
   test "run verbs execute in the worktree and answer one structured result", %{thread: t} do
