@@ -425,8 +425,9 @@ defmodule Server.MCP.Tool.Finish do
   manager, and the ticket it came from is marked done. Only your own thread — closing another is
   the manager's call. If you were wrong, the operator's next reply reopens it. A workline that
   GitHub hasn't merged stays open (the summary is still posted): it closes itself when GitHub merges its PR —
-  unless it is stood down on purpose: `superseded_by` (the PR or commit that shipped its work) or
-  `abandoned` (why it is dropped) closes it unmerged, as `close_thread` does.
+  unless it is stood down on purpose: `superseded_by` (the PR or commit that shipped its work),
+  `resolved` (what settled it without code) or `abandoned` (why it is dropped) closes it unmerged, as
+  `close_thread` does.
   """
   use Server.MCP.Tool
 
@@ -438,6 +439,10 @@ defmodule Server.MCP.Tool.Finish do
     field :superseded_by, :string,
       description:
         "Only for a workline that hasn't merged and whose work already shipped elsewhere: the PR or commit (e.g. \"PR #234\") — its ticket is done"
+
+    field :resolved, :string,
+      description:
+        "Only for a workline that hasn't merged and was settled without code (the operator's choice, an upstream filing): what settled it — its ticket is done"
 
     field :abandoned, :string,
       description: "Only for a workline that hasn't merged and is dropped: why — its ticket goes back to the backlog"
@@ -468,7 +473,7 @@ defmodule Server.MCP.Tool.Finish do
         ok(frame, %{
           "stays_open" => true,
           "why" =>
-            "a workline closes itself when GitHub merges its PR — to stand it down instead, finish with superseded_by (the PR or commit that shipped its work) or abandoned (why it is dropped)"
+            "a workline closes itself when GitHub merges its PR — to stand it down instead, finish with superseded_by (the PR or commit that shipped its work), resolved (what settled it without code) or abandoned (why it is dropped)"
         })
 
       # the lobby holds every coworker's window: the summary is posted, the thread stays open
@@ -482,7 +487,7 @@ defmodule Server.MCP.Tool.Finish do
         ok(frame, %{
           "stays_open" => true,
           "why" =>
-            "this workline hasn't merged: say why it closes — superseded_by (the PR or commit that shipped its work) or abandoned (why it is dropped)"
+            "this workline hasn't merged: say why it closes — superseded_by (the PR or commit that shipped its work), resolved (what settled it without code) or abandoned (why it is dropped)"
         })
 
       other ->
@@ -499,6 +504,7 @@ defmodule Server.MCP.Tool.Finish do
   end
 
   defp why_closed(%{superseded_by: ref}) when is_binary(ref), do: {:superseded, ref}
+  defp why_closed(%{resolved: why}) when is_binary(why), do: {:resolved, why}
   defp why_closed(%{abandoned: why}) when is_binary(why), do: {:abandoned, why}
   defp why_closed(_params), do: nil
 

@@ -1683,6 +1683,22 @@ defmodule Server.MCP.ServerTest do
     assert %{status: "done"} = Repo.get(Server.Ticket, ticket.id)
   end
 
+  test "finish with resolved on a workline with no commits closes it and marks its ticket done" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Decided"})
+    {:ok, w} = Server.Workline.open(%{title: "decided", slug: "decided-finish", stage: "build", workspace_id: ws.id})
+    {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "decided work"})
+    {:ok, _} = Server.Tickets.promote(ticket, w.id)
+    {:ok, agent} = Staff.register_agent(%{name: "closer-r", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(w, agent)
+    session = handshake(token)
+
+    r = call(token, session, 2, "finish", %{"summary" => "operator chose to close", "resolved" => "filed upstream"})
+    refute r["isError"]
+    assert %Thread{state: "closed"} = Repo.get(Thread, w.id)
+    assert %{status: "done", body: body} = Repo.get(Server.Ticket, ticket.id)
+    assert body =~ "Resolved without code in workline ##{w.id}: filed upstream"
+  end
+
   test "finish with a blank abandoned on a workline that hasn't merged stays open and says why, not a crash" do
     {:ok, ws} = Server.Workspaces.register(%{name: "BlankWhy"})
     {:ok, w} = Server.Workline.open(%{title: "blank", slug: "blank-finish", stage: "build", workspace_id: ws.id})

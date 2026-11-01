@@ -153,6 +153,18 @@ defmodule Server.TicketsTest do
       assert %{status: "done"} = Tickets.get(shipped.id)
     end
 
+    test "a workline closed as resolved marks its ticket done with the why, never back to intake" do
+      {:ok, ws} = Workspaces.create(%{name: "Resolved"})
+      {:ok, decided} = Tickets.file(%{workspace_id: ws.id, title: "operator chose to close"})
+      {:ok, line} = Tickets.start_thread(decided)
+
+      assert {:error, :why_closed} = Channel.close_as(line, {:resolved, "  "})
+      assert {:ok, %{state: "closed"}} = Channel.close_as(line, {:resolved, "filed upstream"})
+      assert %{status: "done", body: body} = Tickets.get(decided.id)
+      assert body =~ "Resolved without code in workline ##{line.id}: filed upstream"
+      refute body =~ "Abandoned"
+    end
+
     test "an unmerged workline closes by hand only with a why, and the why decides its ticket" do
       {:ok, ws} = Workspaces.create(%{name: "Why"})
       {:ok, dup} = Tickets.file(%{workspace_id: ws.id, title: "built twice"})

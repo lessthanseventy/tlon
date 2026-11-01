@@ -103,12 +103,13 @@ defmodule Server.Channel do
   Close a thread by hand: the doors a person or a coworker closes through (the `close_thread` tool,
   the operator API, `tlon-cli close-thread`). A workline that hasn't merged closes only with a why:
   `{:superseded, ref}`, its work shipped elsewhere (`ref` the PR or commit), so its ticket is done; or
-  `{:abandoned, why}`, its ticket back to the backlog. Without one it is `{:error, :why_closed}` and
+  `{:abandoned, why}`, its ticket back to the backlog; or `{:resolved, why}`, settled without code
+  (the operator's choice, an upstream filing), its ticket done. Without one it is `{:error, :why_closed}` and
   nothing changes. Any other thread closes as `close_thread/1` does, the why ignored.
   """
   def close_as(%Thread{state: "open", stage: stage} = thread, why) when stage not in [nil, "landed"] do
     case why do
-      {kind, text} when kind in [:superseded, :abandoned] and is_binary(text) ->
+      {kind, text} when kind in [:superseded, :abandoned, :resolved] and is_binary(text) ->
         if String.trim(text) == "", do: {:error, :why_closed}, else: close_unmerged(thread, kind, String.trim(text))
 
       _ ->
@@ -566,7 +567,14 @@ defmodule Server.Channel do
   defp close_unmerged(thread, kind, why) do
     with {:ok, closed} <- close_thread(thread) do
       Server.Tickets.closed_unmerged(thread.id, kind, why)
-      said = if kind == :superseded, do: "superseded by #{why}", else: "abandoned: #{why}"
+
+      said =
+        case kind do
+          :superseded -> "superseded by #{why}"
+          :resolved -> "resolved without code: #{why}"
+          :abandoned -> "abandoned: #{why}"
+        end
+
       post(%{thread_id: thread.id, author: "tlon", body: "✕ closed unmerged — #{said}#{retire_checkout(thread)}"})
       {:ok, closed}
     end
