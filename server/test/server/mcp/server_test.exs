@@ -2056,7 +2056,10 @@ defmodule Server.MCP.ServerTest do
     refute r["isError"]
     assert Server.Pause.thread_paused?(thread.id)
 
-    assert Enum.any?(Channel.thread_messages(thread), &(&1.kind == "notice" and &1.body =~ "held: waiting on #629"))
+    assert Enum.any?(
+             Channel.thread_messages(thread),
+             &(&1.kind == "notice" and &1.body =~ "held by Holder: waiting on #629")
+           )
 
     r = call(token, session, 3, "hold_thread", %{"release" => true})
     refute r["isError"]

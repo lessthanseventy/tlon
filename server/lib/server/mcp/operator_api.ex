@@ -603,8 +603,9 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "POST", ["reland"], t), do: landing(conn, t, Server.Workline.reland_landing(t))
   defp on_thread(conn, "POST", ["checks"], t), do: record_check(conn, t)
   defp on_thread(conn, "POST", ["move"], t), do: move(conn, t)
-  defp on_thread(conn, "POST", ["pause"], t), do: thread_pause(conn, Server.Pause.pause_thread(t.id))
-  defp on_thread(conn, "POST", ["resume"], t), do: thread_pause(conn, Server.Pause.resume_thread(t.id))
+  defp on_thread(conn, "POST", ["pause"], t), do: thread_pause(conn, Server.Pause.pause_thread(t.id, nil, "operator"))
+
+  defp on_thread(conn, "POST", ["resume"], t), do: thread_pause(conn, Server.Pause.resume_thread(t.id, "operator"))
   defp on_thread(conn, "DELETE", [], t), do: delete_thread(conn, t)
   defp on_thread(conn, _, _, _), do: no_route(conn)
 

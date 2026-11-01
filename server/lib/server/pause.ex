@@ -136,26 +136,27 @@ defmodule Server.Pause do
   @doc """
   Pause one thread: its lead is told to finish the turn, and nothing but the operator's posts wakes
   it until `resume_thread/1`. `{:ok, thread}`; already paused, nothing is said again.
-  `{:error, :not_found | :not_open}`. A lead's hold (`Server.MCP.Tool.HoldThread`) passes its `why`,
-  which the notice carries: the mark is cleared only by `resume_thread/1`, never by a turn ending.
+  `{:error, :not_found | :not_open}`. A lead's hold (`Server.MCP.Tool.HoldThread`) passes its `why` and
+  its `by` (the acting handle), which the notice carries as "held by <by>: <why>": the mark is cleared
+  only by `resume_thread/1`, never by a turn ending.
   """
-  def pause_thread(thread_id, why \\ nil) do
+  def pause_thread(thread_id, why \\ nil, by \\ nil) do
     with {:ok, %Server.Thread{paused_at: nil} = thread} <- open_thread(thread_id) do
       now = DateTime.truncate(DateTime.utc_now(), :second)
       {:ok, thread} = thread |> Ecto.Changeset.change(paused_at: now) |> Server.Repo.update()
-      tell(thread_id, @thread_told, why)
+      tell(thread_id, @thread_told, why, by)
       {:ok, thread}
     end
   end
 
   @doc """
-  Undo `pause_thread/1`: clear the mark, wake the lead, deliver what was held. `{:ok, thread}`; not
-  paused, nothing is said. The mark goes first, or the wake itself is held.
+  Undo `pause_thread/1`: clear the mark, wake the lead, deliver what was held. `by` names who released
+  it in the wake. `{:ok, thread}`; not paused, nothing is said. The mark goes first, or the wake itself is held.
   """
-  def resume_thread(thread_id) do
+  def resume_thread(thread_id, by \\ nil) do
     with {:ok, %Server.Thread{paused_at: %DateTime{}} = thread} <- open_thread(thread_id) do
       {:ok, thread} = thread |> Ecto.Changeset.change(paused_at: nil) |> Server.Repo.update()
-      wake(thread_id)
+      wake(thread_id, by)
       Server.Switchboard.drain()
       {:ok, thread}
     end
@@ -204,8 +205,14 @@ defmodule Server.Pause do
 
   defp tell_live_threads, do: for(tid <- live_threads(), do: tell(tid, @told))
 
-  defp tell(tid, head, why \\ nil) do
-    held = if why, do: " (held: #{why})", else: ""
+  defp tell(tid, head, why \\ nil, by \\ nil) do
+    held =
+      cond do
+        by && why -> " (held by #{by}: #{why})"
+        by -> " (held by #{by})"
+        why -> " (held: #{why})"
+        true -> ""
+      end
 
     body =
       head <>
@@ -218,9 +225,10 @@ defmodule Server.Pause do
   # Runs before the lobby's back-to-work notice, which is this pause's lower bound next time.
   defp wake_stopped_threads, do: for(tid <- stopped_threads(), do: wake(tid))
 
-  defp wake(tid) do
+  defp wake(tid, by \\ nil) do
     with lead when lead != nil <- Channel.thread_lead(tid) do
-      body = "@#{lead} ▶ back to work — pick up where you stopped, from the brief."
+      released = if by, do: " (released by #{by})", else: ""
+      body = "@#{lead} ▶ back to work — pick up where you stopped, from the brief." <> released
       _ = Channel.post(%{thread_id: tid, author: "tlon", body: body})
     end
   end
