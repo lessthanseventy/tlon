@@ -29,7 +29,7 @@ new() {
   local dir="$base/$name"
   [ -e "$dir" ] && fail "$dir exists — pick another name, or prune"
   mkdir -p "$base"
-  git fetch -q origin || fail "git fetch origin failed"
+  "$(dirname "$0")/git-fetch-origin.sh" . || fail "git fetch origin failed"
   git worktree add -q --detach "$dir" "$ref" || fail "git worktree add $dir $ref failed"
   local log
   log="$(mktemp)"
@@ -79,7 +79,7 @@ prune() {
   local dry=""
   [ "${1:-}" = "--dry-run" ] && dry=1
   [ -d "$base" ] || { echo "nothing in $base"; return 0; }
-  git fetch -q origin || fail "git fetch origin failed"
+  "$(dirname "$0")/git-fetch-origin.sh" . || fail "git fetch origin failed"
   local dir why d dirs=()
   for d in "$base"/*/; do
     [ -e "$d/.git" ] && dirs+=("$d") || for dir in "$d"*/; do [ -e "$dir/.git" ] && dirs+=("$dir"); done

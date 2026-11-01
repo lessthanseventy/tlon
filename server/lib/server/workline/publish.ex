@@ -441,7 +441,7 @@ defmodule Server.Workline.Publish do
   defp pr_body(title, _pr_title, body), do: title <> "\n\n" <> body
 
   defp fetch_and_follow(git) do
-    case git.(["fetch", "-q", "origin", "main"]) do
+    case Server.GitFetch.retry(fn -> git.(["fetch", "-q", "origin", "main"]) end) do
       {_, 0} ->
         if match?({_, 0}, git.(["merge-base", "--is-ancestor", "HEAD", "origin/main"])),
           do: forward(git),
