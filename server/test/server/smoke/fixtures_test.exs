@@ -74,7 +74,7 @@ defmodule Server.Smoke.FixturesTest do
   test "health_need seeds a box-health Need (what= picks disk, mem or tmux)" do
     on_exit(fn ->
       Application.delete_env(:server, :health_reading)
-      :persistent_term.erase({Server.Office.Needs, :health_since})
+      Server.Repo.delete_all("health_since")
     end)
 
     assert :ok = Fixtures.apply("health_need", "tlon_smoke_4100")
