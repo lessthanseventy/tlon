@@ -859,6 +859,23 @@ defmodule Server.SwitchboardTest do
       assert Repo.get!(Message, m.id).delivered_at == m.delivered_at
     end
 
+    test "does not re-wake a lead reassigned since the stage notice — it names no one, so no one is owed it" do
+      %{thread: thread, sandra_session: ss, robert: robert, robert_session: rs} = staffed_thread()
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "tlon", body: "▶ VERIFY — workline x"})
+      at = DateTime.utc_now() |> DateTime.shift(minute: -12) |> DateTime.truncate(:second)
+      {:ok, m} = m |> Ecto.Changeset.change(created_at: at, delivered_at: at) |> Repo.update()
+      {:ok, _} = Staff.assign(thread, robert)
+      set_last_active(ss, 12 * 60)
+      set_last_active(rs, 12 * 60)
+      flush()
+
+      assert Switchboard.redeliver_unheard() == 0
+      Switchboard.drain()
+
+      refute_received {:woke, "wRobert", _}
+      assert Repo.get!(Message, m.id).delivered_at == m.delivered_at
+    end
+
     test "still hands back a tlon-authored post that @mentions its addressee" do
       %{thread: thread, sandra_session: ss} = staffed_thread()
 
