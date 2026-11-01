@@ -11,6 +11,8 @@ defmodule Server.Source.Tools do
   alias Menard.Outline
   alias Menard.Rename
 
+  require Logger
+
   @spec rename(Server.Thread.t(), [String.t()], String.t(), String.t(), keyword()) ::
           {:ok, %{changed: [String.t()], unchanged: [String.t()]}} | {:error, String.t()}
   def rename(thread, files, old, new, opts) do
@@ -53,7 +55,9 @@ defmodule Server.Source.Tools do
     end
   rescue
     # an uncaught raise reaches the agent as a bare "Internal error"; the message names the cause
-    e -> {:error, Exception.message(e)}
+    e ->
+      Logger.error(Exception.format(:error, e, __STACKTRACE__))
+      {:error, Exception.message(e)}
   end
 
   defp clause_edit(:replace, source, na, head, code), do: Clause.replace_body(source, na, head, code || "")
