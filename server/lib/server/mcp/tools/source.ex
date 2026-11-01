@@ -106,10 +106,11 @@ end
 
 defmodule Server.MCP.Tool.RunVerb do
   @moduledoc """
-  Run a verb in THIS thread's worktree and get ONE structured answer: `check` (the app's gate),
-  `test` (args: files, `file:line`), `format` (args: files; reports what changed), `compile`
-  (warnings as diagnostics). `ok` says whether it passed; `tail` is the last lines of output.
-  Prefer this to a shell chain: the answer is data, and the gate is the same one the operator runs.
+  Run a verb in THIS thread's worktree and get ONE structured answer: `test` (args: files,
+  `file:line`), `format` (args: files; reports what changed), `compile` (warnings as diagnostics).
+  `ok` says whether it passed; `tail` is the last lines of output. Prefer this to a shell chain:
+  the answer is data. `check` (the app's gate) is minutes, longer than one tool call: it is refused
+  with a pointer at `run_task`, which runs it on the committed head and posts the result.
   """
   use Server.MCP.Tool
 

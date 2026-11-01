@@ -65,8 +65,10 @@ defmodule Server.Source.Tools do
   defp clause_edit(:insert_after, source, na, head, code), do: Clause.insert_after(source, na, head, code || "")
 
   @doc """
-  A run verb in the worktree — `:check` (`mix precommit`), `:test` (args: files/lines), `:format`
-  (args: files), `:compile` — as `Menard.Run.result/3`'s one structured map.
+  A run verb in the worktree — `:test` (args: files/lines), `:format` (args: files), `:compile` —
+  as `Menard.Run.result/3`'s one structured map. `:check` is refused with a pointer: a gate runs
+  for minutes, longer than one tool call lives, and `run_task` runs it off the seat on the
+  committed head and posts the result.
 
   Runs in `opts[:in]` (a path under the worktree). Without it: the worktree root if it holds a
   `mix.exs`, else the one immediate subdirectory that does; `:format` takes plain files, so it
@@ -74,7 +76,15 @@ defmodule Server.Source.Tools do
   """
   @spec run(Server.Thread.t(), :check | :test | :format | :compile, [String.t()], keyword()) ::
           {:ok, map()} | {:error, String.t()}
-  def run(thread, verb, args, opts \\ []) when verb in [:check, :test, :format, :compile] do
+  def run(thread, verb, args, opts \\ [])
+
+  def run(_thread, :check, _args, _opts) do
+    {:error,
+     "a check runs for minutes, longer than one tool call: commit, then run_task(\"server:check\") " <>
+       "(or \"check\"); its result is posted to you. run_verb runs test, format and compile."}
+  end
+
+  def run(thread, verb, args, opts) when verb in [:test, :format, :compile] do
     with {:ok, root} <- root(thread),
          {:ok, dir} <- run_dir(root, verb, opts[:in]) do
       {:ok, Menard.Run.result(dir, Atom.to_string(verb), args)}
