@@ -208,6 +208,16 @@ defmodule Server.OfficeTest do
       assert seat.() == "desk"
     end
 
+    test "an untagged leaf vouches for its thread's lead, not for another agent on the thread", %{ws: ws} do
+      for name <- ~w(hronir borges), do: {:ok, _} = Workspaces.seat(ws.id, %{name: name, archetype: "builder"})
+      {:ok, t} = Channel.open_thread(%{title: "untagged leaf", workspace_id: ws.id})
+      {:ok, _} = Channel.assign_lead(t.id, "hronir")
+      leaf = %{thread_id: t.id, name: "t#{t.id}", agent: nil}
+
+      assert Office.windowed?([leaf], t.id, "hronir")
+      refute Office.windowed?([leaf], t.id, "borges")
+    end
+
     test "a thread says whether it is a standing duty — the sheriff's beat, a schedule's — not work",
          %{ws: ws} do
       {:ok, beat} = Channel.open_thread(%{title: Server.Sheriff.beat_title(), workspace_id: ws.id})

@@ -76,6 +76,21 @@ defmodule Server.WakeTest do
     assert Wake.report_overdue() == 0
   end
 
+  test "an untagged leaf seats only its thread's lead: a non-lead's wake in it is let go, not paged",
+       %{thread: t} do
+    {:ok, _} = Server.Staff.register_agent(%{name: "borges", mandate: "m", engine: "e"})
+    {:ok, _} = Channel.assign_lead(t.id, "borges")
+    {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "m", engine: "e"})
+    {:ok, _} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id, pane_ref: "%1"})
+    windows!("1\tt#{t.id}\t#{t.id}\t\t100\t\t0\t\t%1")
+
+    {:ok, w} = Wake.queue(t.id, "hronir", "ping")
+    at = DateTime.utc_now() |> DateTime.add(-600) |> DateTime.truncate(:second)
+    Repo.update_all(from(x in Wake, where: x.id == ^w.id), set: [inserted_at: at])
+
+    assert Wake.report_overdue() == 0
+  end
+
   describe "the sheriff's page" do
     setup do
       {:ok, ws} = Server.Workspaces.register(%{name: "Watched"})
