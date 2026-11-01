@@ -733,6 +733,18 @@ defmodule Server.ReleaseSmokeScriptTest do
       refute File.exists?(dead <> ".lock")
     end
 
+    test "a live run's Hex home, old as it is, is not swept as a tree of its own", %{tmp: tmp} = ctx do
+      live = build(tmp, "tlon-smoke/live")
+      hold(live <> ".lock")
+      hex = live <> ".hex"
+      File.mkdir_p!(hex)
+      {_, 0} = System.cmd("touch", ["-d", "3 hours ago", hex])
+
+      sweep(ctx)
+
+      assert File.dir?(hex)
+    end
+
     test "with no lock (a run from before it), only a build older than any build takes goes", %{tmp: tmp} = ctx do
       fresh = build(tmp, "tlon-smoke-fresh")
       old = build(tmp, "tlon-smoke-old")
