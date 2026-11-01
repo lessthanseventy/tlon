@@ -321,11 +321,20 @@ defmodule Server.Office do
 
   @doc "Does a tab in `tabs` run `agent` on `thread_id` (its leaf window, or its own standing window)?"
   def windowed?(tabs, thread_id, agent) do
+    lead = thread_id && Server.Channel.thread_lead(thread_id)
+
     Enum.any?(tabs, fn tab ->
-      leaf? = (tab.thread_id == thread_id or tab.name == "t#{thread_id}") and tab.agent in [nil, agent]
-      own? = tab.thread_id == nil and (tab.agent || tab.name) == agent
-      leaf? or own?
+      leaf_for?(tab, thread_id, agent, lead) or (tab.thread_id == nil and (tab.agent || tab.name) == agent)
     end)
+  end
+
+  @doc """
+  Is `tab` a leaf window of `thread_id` that runs `agent`? An untagged leaf (no @funes_agent: hand-made
+  or older) can only be the thread's lead's, so it vouches for `lead` alone.
+  """
+  def leaf_for?(tab, thread_id, agent, lead) do
+    (tab.thread_id == thread_id or tab.name == "t#{thread_id}") and
+      (tab.agent == agent or (is_nil(tab.agent) and lead == agent))
   end
 
   defp threads(ws_ids, prompts, thinking, roster, tabs) do
