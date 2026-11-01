@@ -1392,7 +1392,7 @@ defmodule Server.Workline do
         candidates =
           Enum.map(
             free,
-            &%{coworker: &1, model: seat_model(thread.workspace_id, &1), trust: Server.Trust.record(&1.name)}
+            &with_trust(%{coworker: &1, model: seat_model(thread.workspace_id, &1)})
           )
 
         {pick, short} = Server.Roster.pick(candidates, wanted(thread, kind, builder))
@@ -1459,7 +1459,7 @@ defmodule Server.Workline do
     candidates =
       Enum.map(
         if(free == [], do: of_kind, else: free),
-        &%{coworker: &1, model: nil, trust: Server.Trust.record(&1.name)}
+        &with_trust(%{coworker: &1, model: nil})
       )
 
     case Server.Roster.pick(candidates, want) do
@@ -2466,5 +2466,15 @@ defmodule Server.Workline do
       leading_another?(seat, thread) -> "#{seat.name} is leading another workline"
       true -> nil
     end
+  end
+
+  # trust only breaks ties, so a lookup that fails leaves the candidate neutral (no `trust` key)
+  # instead of dropping the handoff
+  defp with_trust(%{coworker: %{name: name}} = candidate) do
+    Map.put(candidate, :trust, Application.get_env(:server, :trust_record, &Server.Trust.record/1).(name))
+  rescue
+    e ->
+      Logger.warning("trust record for #{name} failed, picking without it: #{Exception.message(e)}")
+      candidate
   end
 end
