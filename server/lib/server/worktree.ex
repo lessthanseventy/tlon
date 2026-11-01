@@ -67,11 +67,7 @@ defmodule Server.Worktree do
       # two `git worktree add`s on one path race: the loser takes `<name>1`, overwrites the
       # winner's gitfile with it, fails, and removes its own admin dir — a gitfile to nowhere
       true ->
-        :global.trans(
-          {{__MODULE__, path(Path.expand(repo_path), slug)}, self()},
-          fn -> do_ensure(repo_path, slug) end,
-          [node()]
-        )
+        locked(repo_path, slug, fn -> do_ensure(repo_path, slug) end)
     end
   end
 
@@ -160,27 +156,7 @@ defmodule Server.Worktree do
   and its branch carries nothing unmerged; otherwise both stay and the reason names the branch —
   real work nobody asked to lose. `{:removed, path}` · `{:kept, reason}` · `:none` (never existed).
   """
-  def remove(repo_path, slug) do
-    wt = path(repo_path, slug)
-
-    cond do
-      not File.exists?(Path.join(wt, ".git")) ->
-        :none
-
-      reason = holds(repo_path, slug) ->
-        {:kept, reason}
-
-      true ->
-        branch = checked_out(repo_path, slug)
-
-        with {_out, 0} <- git(repo_path, ["worktree", "remove", wt]),
-             {_out, 0} <- delete_branch(repo_path, branch) do
-          {:removed, wt}
-        else
-          {out, _} -> {:kept, "git refused: #{String.slice(out, 0, 200)}"}
-        end
-    end
-  end
+  def remove(repo_path, slug), do: locked(repo_path, slug, fn -> do_remove(repo_path, slug) end)
 
   @doc """
   Take down a checkout whose work was closed on purpose (superseded or abandoned,
@@ -190,21 +166,7 @@ defmodule Server.Worktree do
   detached checkout's commits get a `rescued/<slug>-<sha>` branch. The branch stays, so all of it
   can still be found. `{:removed, path}` · `{:kept, reason}` when git refuses · `:none`.
   """
-  def retire(repo_path, slug) do
-    wt = path(repo_path, slug)
-
-    if File.exists?(Path.join(wt, ".git")) do
-      with :ok <- keep_work(wt, slug),
-           {_out, 0} <- git(repo_path, ["worktree", "remove", "--force", wt]) do
-        {:removed, wt}
-      else
-        {:kept, _} = kept -> kept
-        {out, _} -> {:kept, "git refused: #{String.slice(out, 0, 200)}"}
-      end
-    else
-      :none
-    end
-  end
+  def retire(repo_path, slug), do: locked(repo_path, slug, fn -> do_retire(repo_path, slug) end)
 
   @doc "Why a checkout must stay — uncommitted changes, or commits no other branch has — or nil."
   @spec holds(String.t(), String.t()) :: String.t() | nil
@@ -239,17 +201,22 @@ defmodule Server.Worktree do
   (no source worktree) · `{:error, reason}`.
   """
   def rename(repo_path, from, to) do
+    [first, second] = Enum.sort([from, to])
+    locked(repo_path, first, fn -> locked(repo_path, second, fn -> do_rename(repo_path, from, to) end) end)
+  end
+
+  defp do_rename(repo_path, from, to) do
     old = path(repo_path, from)
     new = path(repo_path, to)
 
     cond do
       not File.exists?(Path.join(old, ".git")) -> :none
       not Regex.match?(@slug, to_string(to)) -> {:error, :bad_slug}
-      true -> do_rename(repo_path, old, new, branch(from), branch(to))
+      true -> move(repo_path, old, new, branch(from), branch(to))
     end
   end
 
-  defp do_rename(repo_path, old, new, from_branch, to_branch) do
+  defp move(repo_path, old, new, from_branch, to_branch) do
     with {_out, 0} <- git(repo_path, ["worktree", "move", old, new]),
          {_out, 0} <- git(repo_path, ["branch", "-m", from_branch, to_branch]) do
       {:ok, new}
@@ -617,6 +584,50 @@ defmodule Server.Worktree do
           {:refused,
            "rebase onto origin/main hit a conflict, aborted — the branch is as it was: #{String.slice(out, 0, 300)}"}
       end
+    end
+  end
+
+  # One lock per checkout path, shared by every call that adds, moves or removes it. The same
+  # process re-enters, so rename/3 can nest two.
+  defp locked(repo_path, slug, fun) do
+    :global.trans({{__MODULE__, path(Path.expand(repo_path), slug)}, self()}, fun, [node()])
+  end
+
+  defp do_remove(repo_path, slug) do
+    wt = path(repo_path, slug)
+
+    cond do
+      not File.exists?(Path.join(wt, ".git")) ->
+        :none
+
+      reason = holds(repo_path, slug) ->
+        {:kept, reason}
+
+      true ->
+        branch = checked_out(repo_path, slug)
+
+        with {_out, 0} <- git(repo_path, ["worktree", "remove", wt]),
+             {_out, 0} <- delete_branch(repo_path, branch) do
+          {:removed, wt}
+        else
+          {out, _} -> {:kept, "git refused: #{String.slice(out, 0, 200)}"}
+        end
+    end
+  end
+
+  defp do_retire(repo_path, slug) do
+    wt = path(repo_path, slug)
+
+    if File.exists?(Path.join(wt, ".git")) do
+      with :ok <- keep_work(wt, slug),
+           {_out, 0} <- git(repo_path, ["worktree", "remove", "--force", wt]) do
+        {:removed, wt}
+      else
+        {:kept, _} = kept -> kept
+        {out, _} -> {:kept, "git refused: #{String.slice(out, 0, 200)}"}
+      end
+    else
+      :none
     end
   end
 end
