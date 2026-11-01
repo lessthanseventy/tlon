@@ -126,6 +126,15 @@ defmodule Server.Source.ToolsTest do
     assert {:ok, %{ok: true, changed: []}} = Tools.run(t, :format, ["demo.ex"])
   end
 
+  test "`check` is refused with a pointer at run_task: a gate is minutes, longer than one tool call (#709)",
+       %{thread: t, wt: wt} do
+    mix_app(wt, ".")
+    assert {:error, why} = Tools.run(t, :check, [])
+    assert why =~ "run_task" and why =~ "commit"
+    # the other verbs are untouched
+    assert {:ok, %{ok: true}} = Tools.run(t, :compile, [])
+  end
+
   describe "run verbs find the mix project" do
     test "default is the one subdirectory holding a mix.exs; `in` picks one explicitly", %{thread: t, wt: wt} do
       mix_app(wt, "server")
