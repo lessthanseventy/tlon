@@ -20,6 +20,7 @@ defmodule Server.DoctorTest do
                "generated_part",
                "generator_call",
                "habit",
+               "health_since",
                "issue",
                "message",
                "need_dismissal",
