@@ -337,6 +337,33 @@ defmodule Server.Workline.ContinuationTest do
     end
   end
 
+  test "escalate: tied seniors go to the better trust record, not bench order (#710)" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Tied"})
+
+    {:ok, _} =
+      Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "junior", specialty: "office"})
+
+    {:ok, _} =
+      Server.Workspaces.seat(ws.id, %{name: "ireneo", archetype: "builder", grade: "senior", specialty: "office"})
+
+    {:ok, _} =
+      Server.Workspaces.seat(ws.id, %{name: "zelda", archetype: "builder", grade: "senior", specialty: "office"})
+
+    for n <- 1..2 do
+      {:ok, done} = Server.Channel.open_thread(%{title: "zelda's build #{n}"})
+
+      {:ok, _} =
+        Server.Channel.post(%{thread_id: done.id, author: "tlon", body: Server.Trust.leads_line("zelda", "build")})
+
+      {1, _} = Repo.update_all(from(th in Server.Thread, where: th.id == ^done.id), set: [stage: "landed"])
+    end
+
+    {:ok, t} = Workline.open(%{title: "lamp tile", slug: "lamp-tie", stage: "build", workspace_id: ws.id})
+    {:ok, _} = Server.Channel.assign_lead(t.id, "daneri")
+
+    assert {:escalated, "zelda"} = Workline.escalate(t, "tie test")
+  end
+
   test "where a sheriff owns red, running out of nudges goes to the sheriff — it does not wait on the operator" do
     {:ok, ws} = Server.Workspaces.register(%{name: "Sheriffed"})
     {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})

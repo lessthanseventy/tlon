@@ -32,7 +32,16 @@ defmodule Server.Roster do
   `not_model`, `min_grade`): `{coworker, shortfalls}`, the shortfalls `:same_model` and
   `:below_grade` naming what no candidate could meet; nil for none.
   """
-  @spec pick([%{coworker: Server.Coworker.t(), model: String.t() | nil}], map()) ::
+  @spec pick(
+          [
+            %{
+              required(:coworker) => Server.Coworker.t(),
+              required(:model) => String.t() | nil,
+              optional(:trust) => %{led: non_neg_integer(), first_time: non_neg_integer()}
+            }
+          ],
+          map()
+        ) ::
           {Server.Coworker.t(), [:same_model | :below_grade]} | nil
   def pick([], _want), do: nil
 
