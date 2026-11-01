@@ -1043,7 +1043,8 @@ defmodule Server.Workline do
   @doc """
   Send `thread` back to an earlier working stage (`spec`, `plan` or `build`) on the same thread and
   branch: what was built and reviewed stays, and the stage's lead is told to improve it, not redo
-  it. Back to build is the call of the workline's lead (its reviewer, QA or builder); back to plan or
+  it. Back to build is the call of the workline's lead (its reviewer, QA or builder), or Uqbar's at a
+  gate parked on the operator whose grade hit no limit (`limit_hit?/1`); back to plan or
   spec reshapes the build, a coherence call, so it is the tech lead's (`Server.Coworker.lead/1`) or
   the operator's. An open workline only, and not while its verify or landing is queued or running:
   either would move it on from under the send-back. With `unqueue: true` a landing that is queued but
@@ -1871,23 +1872,39 @@ defmodule Server.Workline do
 
   defp may_send_back(thread, to, by) do
     tech = tech_lead(thread)
-    lead = Server.Channel.thread_lead(thread.id)
 
     cond do
       by == operator() or by == tech ->
         :ok
 
-      to == "build" and by == lead ->
-        :ok
-
       to == "build" ->
-        {:error,
-         {:not_yours, "only ##{thread.id}'s lead (#{lead}), the tech lead or the operator sends it back to build"}}
+        may_send_to_build(thread, by)
 
       true ->
         {:error,
          {:not_yours,
           "back to #{to} is the tech lead's call: say why on the thread and @#{tech || operator()}, who decides"}}
+    end
+  end
+
+  defp may_send_to_build(thread, "uqbar"), do: uqbar_may_send_back(thread)
+
+  defp may_send_to_build(thread, by) do
+    case Server.Channel.thread_lead(thread.id) do
+      ^by ->
+        :ok
+
+      lead ->
+        {:error,
+         {:not_yours, "only ##{thread.id}'s lead (#{lead}), the tech lead or the operator sends it back to build"}}
+    end
+  end
+
+  defp uqbar_may_send_back(thread) do
+    cond do
+      limit_hit?(thread) -> {:error, {:not_yours, "##{thread.id}'s grade hit a limit: its gate is the operator's"}}
+      thread.awaiting != operator() -> {:error, {:not_yours, "##{thread.id} is not parked on the operator's gate"}}
+      true -> :ok
     end
   end
 
