@@ -169,11 +169,15 @@ defmodule Server.MCP.Tool do
   end
 
   @doc """
-  Whether the caller may post on `thread` from another one: it `steers?/2` it, or a message on it
-  @mentions the caller — the mention is the invitation, whoever wrote it.
+  Whether the caller may post on `thread` from another one: it `steers?/2` it, a message on it
+  @mentions the caller — the mention is the invitation, whoever wrote it — or the caller is Uqbar
+  and a need on it is routed to Uqbar (`Server.Office.Needs.grouped/1`'s `uqbar` group): the routed
+  need is the invitation, and it lapses with the item (settled, passed up, or past
+  `uqbar_route_minutes`).
   """
   @spec may_post?(Server.Thread.t(), Server.MCP.Identity.t()) :: boolean()
-  def may_post?(thread, identity), do: steers?(thread, identity) or mentioned?(thread, identity)
+  def may_post?(thread, identity),
+    do: steers?(thread, identity) or mentioned?(thread, identity) or routed_to?(thread, identity)
 
   @doc """
   The `workspace_id` of the connection's bound thread — the "current workspace" the
@@ -226,6 +230,11 @@ defmodule Server.MCP.Tool do
     agent = Server.Staff.agent_by_name(identity.agent)
     agent && agent.id == thread.agent_id
   end
+
+  defp routed_to?(thread, %{agent: "uqbar"}),
+    do: Enum.any?(Server.Office.Needs.grouped().uqbar, &(&1.thread_id == thread.id))
+
+  defp routed_to?(_thread, _identity), do: false
 
   defp mentioned?(_thread, %{agent: agent}) when not is_binary(agent), do: false
 
