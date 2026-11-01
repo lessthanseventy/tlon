@@ -164,7 +164,9 @@ run_gate() {
   out=$(cd "$tree" && "${clean[@]}" "$@" 2>&1); code=$?
   # a BEAM that got SIGTERM shuts down and mise exits 1, not 143: a gate cut off, not a red. Nothing
   # is recorded, so a verify is retried and a landing reads the exit as interrupted.
-  case "$out" in *"SIGTERM received - shutting down"*) echo "workline-verify: '$name' was cut off by SIGTERM" >&2; exit 143 ;; esac
+  if printf '%s\n' "$out" | grep -q 'SIGTERM received - shutting down$'; then
+    echo "workline-verify: '$name' was cut off by SIGTERM" >&2; exit 143
+  fi
   fails="$(printf '%s\n' "$out" | failures)"
   gate_tail="${fails:+failing:
 $fails

@@ -17,6 +17,14 @@ defmodule Server.Jobs.LandTest do
     assert {:error, {:interrupted, _}} = Land.gate_result({out, 1})
   end
 
+  test "the SIGTERM phrase quoted mid-line (a failing test's report) is still red" do
+    out =
+      "right: {:error, \"the full check is red (exit 1): [server:check] SIGTERM received - shutting down\\n** (EXIT from #PID<0.95.0>) shutdown\"}\n"
+
+    assert {:error, why} = Land.gate_result({out, 1})
+    assert is_binary(why)
+  end
+
   test "one landing per workline and one per PR branch: a PR's job never collides with another's" do
     assert %{changes: %{unique: %{keys: [:thread_id, :branch]}}} = Land.new(%{"pr" => 7, "branch" => "x"})
   end
