@@ -750,8 +750,9 @@ defmodule Server.Profiles do
   """
 
   # The coworker-driver ring the SETTINGS panel cycles (leader `m`): the ollama models, each reached
-  # through Claude Code's gateway (`Server.Harness.ClaudeCode`). `kimi-k3` stays out: ollama.com bills
-  # it per token on top of the plan.
+  # through Claude Code's gateway (`Server.Harness.ClaudeCode`). `kimi-k3` stays out until its billing is
+  # measured: on 2026-10-27 it answered 200 on the plan with $0 purchased and the window mostly unspent;
+  # whether it turns 402 once the window is spent is unverified.
   @model_ring [
     %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"},
     %{provider: "ollama-cloud", model: "kimi-k2.7-code", thinking: "medium"},
