@@ -829,10 +829,10 @@ defmodule Server.Workline do
   approval, nothing recorded: a client retries a call whose connection dropped. A thread parked or
   handed to QA is `{:ok, thread}`; one the first approval left at review unparked (its park refused)
   is parked now, the same `advance/2` and the same refusal if it still fails (`park_approved/2`),
-  never `{:ok, thread}` for a thread nothing queued. The verdict ends the reviewer's session under
-  it (`Server.Staffing.end_review/1`: a review is a throwaway session, briefed fresh each round), so
-  its `follow_ups:` (non-blocking findings) are posted once it has moved, for the lead it hands to
-  (`follow_ups/4`). A verdict by the
+  never `{:ok, thread}` for a thread nothing queued. The verdict ends the reviewer's session (a
+  review is a throwaway session, briefed fresh each round) last, from `Server.Jobs.EndReview`, once
+  the thread has moved and its `follow_ups:` (non-blocking findings) are posted for the lead it hands
+  to (`follow_ups/4`): the window closing cancels the request on the server. A verdict by the
   agent that built the branch is refused, `{:error, {:self_review, why}}` (`self_review/2`).
   `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
   """
@@ -2200,9 +2200,6 @@ defmodule Server.Workline do
         sha: sha
       })
 
-    # the verdict ends the reviewer's session: a review is a throwaway session, briefed fresh each round
-    Server.Staffing.end_review(thread)
-
     outcome =
       if verdict == "request_changes" do
         bounced =
@@ -2227,10 +2224,21 @@ defmodule Server.Workline do
       end
 
     {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []), :review)
+    end_review(thread)
     outcome
   end
 
-  # The verdict ended the reviewer's session, so nobody is left to call advance_stage: the approval
+  # The reviewer's session ends last and off the request (`Server.Jobs.EndReview`): its window going
+  # down cancels the request on the server, so a park or bounce still running in it dies mid-way.
+  # A node without Oban ends it here, after the thread has moved.
+  defp end_review(thread) do
+    case Server.Jobs.enqueue(Server.Jobs.EndReview.new(%{thread_id: thread.id})) do
+      {:ok, _} -> :ok
+      {:error, _} -> Server.Staffing.end_review(thread)
+    end
+  end
+
+  # The verdict ends the reviewer's session, so nobody is left to call advance_stage: the approval
   # parks the gate itself (#686) — on the operator, or straight into the queue under a standing
   # approval. A refused advance (review.md not committed, the queue down) is the stall #686 ends, so it
   # is said on the thread and returned, never reported as parked; the verdict itself stands.

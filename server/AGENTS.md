@@ -192,9 +192,11 @@ and every layer the spine design's re-laid §9 asked for
   A verdict by a builder of the branch is refused (`BranchReview.builders/3`), and so is an approval by
   the PR's author at landing. Every review — a workline's `submit_review` or a branch's `review_branch` —
   runs in a throwaway session on its own thread, ended by its verdict (`Server.Staffing.end_review/1`:
-  the thread's sessions ended, its leaf window closed); `review_branch` from the standing thread is
-  refused. A workline's reviewer reads the branch, the diff, the spec/plan and the checklist, never the
-  builder's conversation: its `get_brief` hides OPENING, RECENT, DONE and LEARNINGS, counts kept
+  the thread's sessions ended, its leaf window closed — a workline's from `Server.Jobs.EndReview`, once
+  the verdict has parked or bounced the thread, since the window closing cancels the request on the
+  server); `review_branch` from the standing thread is refused. A workline's reviewer reads the branch,
+  the diff, the spec/plan and the checklist, never the builder's conversation: its `get_brief` hides
+  OPENING, RECENT, DONE and LEARNINGS, counts kept
   (`Server.Board.brief/2` with `viewer:`); the round-2 pointer `last_reviewed` stays in the stage brief.
   A PR lands only on it (`Server.PRLanding`, `mise run land -- <pr>`): queued in the same merge queue as
   worklines (`Server.Jobs.Land`, args `%{pr, branch, on_thread}`) when the verdict approves its head (or a
