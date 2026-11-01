@@ -362,6 +362,9 @@ defmodule Server.Workline.ContinuationTest do
     {:ok, _} = Server.Channel.assign_lead(t.id, "daneri")
 
     assert {:escalated, "zelda"} = Workline.escalate(t, "tie test")
+
+    assert [post] = Repo.all(from m in Message, where: m.thread_id == ^t.id and like(m.body, "↑ zelda%"))
+    assert post.body =~ "↑ zelda takes this from daneri (landed 2 of their last 2 builds first time)"
   end
 
   test "where a sheriff owns red, running out of nudges goes to the sheriff — it does not wait on the operator" do
