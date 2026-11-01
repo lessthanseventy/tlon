@@ -1422,7 +1422,7 @@ defmodule Server.Workline do
              &(&1.archetype == kind and &1.grade in ["senior", "greybeard"] and not leading_another?(&1, thread))
            ),
          {%Server.Coworker{name: name}, _} <-
-           Server.Roster.pick(Enum.map(above, &%{coworker: &1, model: nil}), %{
+           Server.Roster.pick(Enum.map(above, &%{coworker: &1, model: nil, trust: Server.Trust.record(&1.name)}), %{
              grade: "senior",
              specialty: junior.specialty
            }),

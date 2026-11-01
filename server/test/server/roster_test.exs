@@ -90,7 +90,7 @@ defmodule Server.RosterTest do
       none = seat("none", "senior")
       assert {%{name: "none"}, []} = Roster.pick([trusted(seat("poor", "senior"), 10, 2), none], %{grade: "senior"})
       assert {%{name: "good"}, []} = Roster.pick([none, trusted(seat("good", "senior"), 10, 9)], %{grade: "senior"})
-      assert {%{name: "none"}, []} = Roster.pick([none, trusted(seat("zero", "senior"), 0, 0)], %{grade: "senior"})
+      assert {%{name: "zero"}, []} = Roster.pick([trusted(seat("zero", "senior"), 0, 0), none], %{grade: "senior"})
     end
 
     test "equal records fall back to bench order" do
