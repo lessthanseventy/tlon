@@ -75,7 +75,7 @@ export type Agents = {
   triage: Record<string, number>
   /** tickets opened and closed per workspace in the last 7 days */
   ticket_week?: Record<string, { opened: number; closed: number }>
-  /** each workspace's open tickets: all of them, and those under no epic (the orphans) */
+  /** each workspace's open tickets: all of them, and those under no epic and not at work (the orphans) */
   ticket_open?: Record<string, { total: number; loose: number }>
   /** the service's health: `warn` with the problems named */
   health: {
