@@ -42,7 +42,7 @@ cmd="${1:-status}"; shift || true
 
 case "$cmd" in
   status)
-    git fetch -q origin 2>/dev/null
+    "$root/scripts/git-fetch-origin.sh" "$root" 2>/dev/null
     cur="$(git rev-parse -q --verify refs/heads/live)" || { echo "no release cut yet — mise run release:cut"; exit 0; }
     main="$(git rev-parse origin/main)"
     echo "release   $(git log -1 --format='%h %s' "$cur")"
@@ -58,7 +58,7 @@ case "$cmd" in
   cut)
     target="" rollback="" restart=1
     for a in "$@"; do case "$a" in --rollback) rollback=1 ;; --no-restart) restart="" ;; *) target="$a" ;; esac; done
-    git fetch -q origin || { echo "release: can't fetch origin" >&2; exit 1; }
+    "$root/scripts/git-fetch-origin.sh" "$root" || { echo "release: can't fetch origin" >&2; exit 1; }
     to="$(git rev-parse -q --verify "${target:-origin/main}^{commit}")" || { echo "release: no commit ${target}" >&2; exit 1; }
     git merge-base --is-ancestor "$to" origin/main ||
       { echo "release refused: ${to:0:7} is not on origin/main — only merged work ships" >&2; exit 1; }
@@ -89,7 +89,7 @@ case "$cmd" in
 
   build)
     cur="$(git rev-parse -q --verify refs/heads/live)" || {
-      git fetch -q origin 2>/dev/null
+      "$root/scripts/git-fetch-origin.sh" "$root" 2>/dev/null
       cur="$(git rev-parse origin/main)" && git branch -f live "$cur"
     }
     build_at "$cur"

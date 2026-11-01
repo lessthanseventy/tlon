@@ -31,6 +31,12 @@ defmodule Server.ReleaseScriptTest do
     sh!(dir, "git init -q --bare origin.git && git clone -q origin.git tlon")
     File.mkdir_p!(Path.join(repo, "scripts"))
     File.cp!(@script, Path.join(repo, "scripts/release.sh"))
+
+    File.cp!(
+      Path.expand("../../../scripts/git-fetch-origin.sh", __DIR__),
+      Path.join(repo, "scripts/git-fetch-origin.sh")
+    )
+
     File.mkdir_p!(Path.join(repo, "server"))
     File.write!(Path.join(repo, "server/mix.exs"), "")
 

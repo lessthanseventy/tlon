@@ -12,6 +12,7 @@ defmodule Server.PRLanding do
   """
 
   alias Server.BranchReview
+  alias Server.GitFetch
   alias Server.Workline.Publish
 
   @doc """
@@ -137,7 +138,7 @@ defmodule Server.PRLanding do
   defp not_main(_branch), do: :ok
 
   defp fetch(repo, branch) do
-    with {:ok, _} <- git(repo, ["fetch", "-q", "origin", "main", branch]) do
+    with {:ok, _} <- git(repo, ["fetch", "-q", "origin", "main", branch], retry: true) do
       git(repo, ["rev-parse", "--verify", "-q", "origin/#{branch}"])
     end
   end
@@ -164,8 +165,10 @@ defmodule Server.PRLanding do
     "Reviewed on tlon by #{review.by} — #{review.verdict} at `#{String.slice(review.sha, 0, 12)}`:\n\n#{quoted}"
   end
 
-  defp git(repo, args) do
-    case System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) do
+  defp git(repo, args, opts \\ []) do
+    run = fn -> System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) end
+
+    case if(opts[:retry], do: GitFetch.retry(run), else: run.()) do
       {out, 0} -> {:ok, String.trim(out)}
       {out, _} -> {:error, "git #{hd(args)} failed: #{out |> String.trim() |> String.slice(-300, 300)}"}
     end

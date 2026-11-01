@@ -13,7 +13,6 @@ defmodule Server.Workline.Merge do
   """
 
   @golden "office/test/golden.json"
-  @fetch_tries 3
 
   @doc """
   Ready `work/<slug>` in `repo` to land: fetch origin, rebase the branch onto `origin/main`, gate it.
@@ -74,22 +73,12 @@ defmodule Server.Workline.Merge do
     end
   end
 
-  # Landings and KeepUp fetch origin in the one shared .git at once; the fetch that loses the race on
-  # refs/remotes/origin/main's lock fails though the ref is fine, and succeeds as a no-op once the
-  # winner is done. A fetch that still fails is the machine's, not the branch's: interrupted, so the
-  # landing is retried, never bounced to build.
-  defp fetch_main(repo, try \\ 1) do
-    case git(repo, ["fetch", "--quiet", "origin", "main"]) do
-      {out, 0} ->
-        {:ok, String.trim(out)}
-
-      {out, _} ->
-        if try < @fetch_tries and out =~ "cannot lock ref" do
-          Process.sleep(250 * try)
-          fetch_main(repo, try + 1)
-        else
-          {:error, {:interrupted, said("could not fetch origin", out)}}
-        end
+  # A fetch that still fails after Server.GitFetch's retries is the machine's, not the branch's:
+  # interrupted, so the landing is retried, never bounced to build.
+  defp fetch_main(repo) do
+    case Server.GitFetch.retry(fn -> git(repo, ["fetch", "--quiet", "origin", "main"]) end) do
+      {out, 0} -> {:ok, String.trim(out)}
+      {out, _} -> {:error, {:interrupted, said("could not fetch origin", out)}}
     end
   end
 

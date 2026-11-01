@@ -31,6 +31,7 @@ defmodule Server.Release.PM do
 
   alias Server.Channel
   alias Server.Event
+  alias Server.GitFetch
   alias Server.Message
   alias Server.Release.Candidate
   alias Server.Repo
@@ -457,7 +458,7 @@ defmodule Server.Release.PM do
 
   defp root(opts), do: opts[:root] || Application.get_env(:server, :release_root) || Server.Profiles.tlon_root()
 
-  defp fetch(root), do: git(root, ["fetch", "-q", "origin"])
+  defp fetch(root), do: GitFetch.retry(fn -> git(root, ["fetch", "-q", "origin"]) end)
 
   defp live(root) do
     case rev(root, "refs/heads/live") do
