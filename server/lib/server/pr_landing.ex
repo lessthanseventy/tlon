@@ -101,7 +101,7 @@ defmodule Server.PRLanding do
 
     try do
       with :ok <- not_main(branch),
-           {:ok, head} <- fetch(repo, branch),
+           {:ok, head} <- interruptible(fetch(repo, branch)),
            {:ok, review} <- BranchReview.approves(repo, branch, head, pr_author: args["pr_author"]),
            {:ok, _} <- git(repo, ["branch", "-f", ref, head]),
            {:ok, %{to: to}} <- Server.Workline.Merge.merge(repo, nil, branch: ref, gate: gate),
@@ -119,7 +119,7 @@ defmodule Server.PRLanding do
         {:ok, to}
       else
         {:error, {:interrupted, why}} = cut ->
-          if opts[:last], do: say.("⚠ the merge queue's gate was cut off on its last try (#{why}) — nothing merged")
+          if opts[:last], do: say.("⚠ the merge queue's turn was cut off on its last try (#{why}) — nothing merged")
           cut
 
         {:error, why} = error ->
@@ -136,6 +136,10 @@ defmodule Server.PRLanding do
 
   defp not_main("main"), do: {:error, "main is never landed — land the branch that goes onto it"}
   defp not_main(_branch), do: :ok
+
+  # A fetch still failing after the retries is infra, not the branch's fault: the queue tries the turn again.
+  defp interruptible({:error, why}), do: {:error, {:interrupted, "could not fetch origin: " <> why}}
+  defp interruptible(ok), do: ok
 
   defp fetch(repo, branch) do
     with {:ok, _} <- git(repo, ["fetch", "-q", "origin", "main", branch], retry: true) do
