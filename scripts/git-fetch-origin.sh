@@ -7,7 +7,20 @@
 set -uo pipefail
 repo="${1:?usage: git-fetch-origin.sh <repo> [<branch>...]}"; shift
 
-err="$(git -C "$repo" fetch -q origin "$@" 2>&1)" && exit 0
+# Landings, KeepUp, verifies and schedules all fetch in the one shared .git; the fetch that loses a
+# ref's lock fails though the ref is fine, and succeeds as a no-op once the winner is done.
+fetch() {
+  local pause
+  for pause in 0.25 0.5 1 0; do
+    said="$(git -C "$repo" fetch -q "$@" 2>&1)" && return 0
+    [[ $said == *"cannot lock ref"* ]] || return 1
+    sleep "$pause"
+  done
+  return 1
+}
+
+fetch origin "$@" && exit 0
+err="$said"
 url="$(git -C "$repo" remote get-url origin)" || exit 1
 case "$url" in
   git@github.com:*) https="https://github.com/${url#git@github.com:}" ;;
@@ -17,6 +30,6 @@ esac
 specs=()
 for b in "$@"; do specs+=("+refs/heads/$b:refs/remotes/origin/$b"); done
 [ ${#specs[@]} -gt 0 ] || specs=("+refs/heads/*:refs/remotes/origin/*")
-GIT_TERMINAL_PROMPT=0 git -C "$repo" fetch -q "$https" "${specs[@]}" && exit 0
-printf 'origin over ssh: %s\n' "$err" >&2
+GIT_TERMINAL_PROMPT=0 fetch "$https" "${specs[@]}" && exit 0
+printf '%s\norigin over ssh: %s\n' "$said" "$err" >&2
 exit 1
