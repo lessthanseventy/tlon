@@ -51,6 +51,15 @@ defmodule Server.Workline.ProofTest do
 
   test "proof/1: artifacts in the checker's words, newest verify check per command, the branch diff", ctx do
     {:ok, t} = Workline.open(%{title: "wrap", slug: "wrap", stage: "review"})
+
+    {:ok, _} =
+      Dossier.record_event(%{
+        thread_id: t.id,
+        kind: "stage_advanced",
+        correlation: "workline:wrap",
+        detail: %{"from" => "intent", "to" => "spec"}
+      })
+
     commit(ctx, [{"work/wrap/intent.md", "i"}, {"work/wrap/review.md", "r"}], "docs")
     ctx.git.(["checkout", "-q", "-b", "work/wrap"])
     commit(ctx, [{"lib/a.ex", "a\nb\n"}, {"lib/b.ex", "c\n"}], "build")
@@ -93,6 +102,29 @@ defmodule Server.Workline.ProofTest do
     assert "build" in stages and "review" in stages
   end
 
+  test "a workline opened at build with no opening event: its first advance left build, so the proof starts there" do
+    {:ok, t} = Workline.open(%{title: "staffed", slug: "staffed", stage: "review"})
+
+    for {from, to} <- [{"build", "verify"}, {"verify", "review"}] do
+      {:ok, _} =
+        Dossier.record_event(%{
+          thread_id: t.id,
+          kind: "stage_advanced",
+          correlation: "workline:staffed",
+          detail: %{"from" => from, "to" => to}
+        })
+    end
+
+    stages = Enum.map(Workline.proof(Repo.get!(Thread, t.id)).artifacts, &elem(&1, 0))
+    assert stages == ["build", "review"]
+  end
+
+  test "a workline opened at review that never moved owes only review" do
+    {:ok, t} = Workline.open(%{title: "late", slug: "late", stage: "review"})
+
+    assert Enum.map(Workline.proof(t).artifacts, &elem(&1, 0)) == ["review"]
+  end
+
   test "parking at the review gate posts the proof; a missing branch is said, not hidden" do
     {:ok, t} = Workline.open(%{title: "wrap", slug: "nobranch", stage: "review"})
     {:awaiting, _} = Workline.advance(Repo.get!(Thread, t.id), artifacts: OnlyReview)
@@ -102,9 +134,8 @@ defmodule Server.Workline.ProofTest do
 
     assert notice =~ "approve #{t.id}"
     assert notice =~ "Proof"
-    assert notice =~ "✗ plan"
+    refute notice =~ "plan"
     assert notice =~ "no verify checks recorded"
-    assert notice =~ "diff: "
-    assert notice =~ "work/nobranch"
+    assert notice =~ "diff: no branch work/nobranch to diff"
   end
 end
