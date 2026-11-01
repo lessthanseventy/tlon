@@ -418,7 +418,7 @@ defmodule Server.MCP.ServerTest do
 
     r = call(token, session, 4, "post_message", %{"body" => "on it", "thread_id" => line.id})
     assert r["isError"]
-    assert hd(r["content"])["text"] =~ "its lead, or someone @mentioned on it"
+    assert hd(r["content"])["text"] =~ "its lead, someone @mentioned on it, or Uqbar on a need routed to it"
     {:ok, _} = Channel.assign_lead(line.id, "Carl")
 
     r = call(token, session, 5, "post_message", %{"body" => "on it", "thread_id" => line.id})
@@ -447,7 +447,7 @@ defmodule Server.MCP.ServerTest do
 
     r = call(token, session, 5, "post_message", %{"body" => "hi", "thread_id" => other.id})
     assert r["isError"]
-    assert hd(r["content"])["text"] =~ "its lead, or someone @mentioned on it"
+    assert hd(r["content"])["text"] =~ "its lead, someone @mentioned on it, or Uqbar on a need routed to it"
   end
 
   test "post_message with thread_id: the manager and the lead above post on a workline too, no one else" do
@@ -481,7 +481,7 @@ defmodule Server.MCP.ServerTest do
     assert r["isError"]
 
     assert hd(r["content"])["text"] =~
-             "Carl doesn't lead thread ##{line.id}; only its lead, or someone @mentioned on it"
+             "Carl doesn't lead thread ##{line.id}; only its lead, someone @mentioned on it, or Uqbar on a need routed to it"
 
     token = MCP.Tokens.mint(lobby, Staff.agent_by_name("Carl"))
     session = handshake(token)
@@ -2206,6 +2206,71 @@ defmodule Server.MCP.ServerTest do
       refute call(token, session, 3, "settle_need", %{"key" => key, "why" => "answered on the thread"})["isError"]
       assert [%{state: "settled"}] = Repo.all(from r in "need_routing", select: %{state: r.state})
       assert %{"isError" => true} = call(token, session, 4, "settle_need", %{"key" => "nope", "why" => "w"})
+    end
+  end
+
+  describe "post_message with thread_id: Uqbar posts on the thread of a need routed to it" do
+    setup do
+      path = Path.join(System.tmp_dir!(), "uqbar-post-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+      :ok = Server.OperatorConfig.put("uqbar_routing", true, path)
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+
+      on_exit(fn ->
+        File.rm(path)
+
+        if prior,
+          do: Application.put_env(:server, :operator_config_path, prior),
+          else: Application.delete_env(:server, :operator_config_path)
+      end)
+
+      {:ok, ws} = Server.Workspaces.create(%{name: "UqbarPostWS"})
+      {:ok, study} = Channel.open_thread(%{title: "study", workspace_id: ws.id})
+      {:ok, asked} = Channel.open_thread(%{title: "weather", workspace_id: ws.id})
+      {:ok, _} = Server.Attention.ask(asked.id, "ireneo", "A or B?")
+      assert [%{key: key}] = Enum.filter(Server.Office.Needs.grouped().uqbar, &(&1.thread_id == asked.id))
+      %{ws: ws, study: study, asked: asked, key: key}
+    end
+
+    test "a plain post and a notice land while the need is routed; a thread with no need is refused as before",
+         %{ws: ws, study: study, asked: asked} do
+      {token, session} = seated("uqbar", study)
+
+      refute call(token, session, 2, "post_message", %{"body" => "@ireneo build (a)", "thread_id" => asked.id})[
+               "isError"
+             ]
+
+      refute call(token, session, 3, "post_message", %{"body" => "noted", "thread_id" => asked.id, "notice" => true})[
+               "isError"
+             ]
+
+      assert [%{kind: "chat", body: "@ireneo build (a)"}, %{kind: "notice", body: "noted"}] =
+               Repo.all(
+                 from m in Message,
+                   where: m.thread_id == ^asked.id and m.author == "uqbar",
+                   order_by: m.id,
+                   select: %{kind: m.kind, body: m.body}
+               )
+
+      {:ok, other} = Channel.open_thread(%{title: "quiet", workspace_id: ws.id})
+      r = call(token, session, 4, "post_message", %{"body" => "hi", "thread_id" => other.id})
+      assert r["isError"]
+
+      assert hd(r["content"])["text"] =~
+               "uqbar doesn't lead thread ##{other.id}; only its lead, someone @mentioned on it, or Uqbar on a need routed to it"
+    end
+
+    test "the grant lapses with the item: settled, Uqbar is refused on that thread", %{
+      study: study,
+      asked: asked,
+      key: key
+    } do
+      {token, session} = seated("uqbar", study)
+      _ = Server.Office.Needs.settle(key, "answered", "uqbar")
+
+      r = call(token, session, 2, "post_message", %{"body" => "late", "thread_id" => asked.id})
+      assert r["isError"]
+      assert hd(r["content"])["text"] =~ "Uqbar on a need routed to it"
     end
   end
 
