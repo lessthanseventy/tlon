@@ -135,17 +135,20 @@ defmodule Server.Jobs.Land do
 
   @doc """
   The gate's run → its verdict: exit 0 green; killed by a signal (128 + n — a service restart's
-  SIGTERM is 143) is `{:interrupted, why}`, a gate that never finished, not a red; anything else red.
+  SIGTERM is 143) is `{:interrupted, why}`, a gate that never finished, not a red; so is one whose
+  output says the BEAM got SIGTERM, since mise then exits 1 rather than 143. Anything else is red.
   """
+  @termed "SIGTERM received - shutting down"
   def gate_result({_out, 0}), do: {:ok, :green}
 
-  def gate_result({_out, code}) when code > 128,
-    do: {:error, {:interrupted, "the gate was cut off before it finished (killed, exit #{code})"}}
-
-  def gate_result({out, code}),
-    do:
+  def gate_result({out, code}) do
+    if code > 128 or String.contains?(out, @termed) do
+      {:error, {:interrupted, "the gate was cut off before it finished (killed, exit #{code})"}}
+    else
       {:error,
        "the full check on main with this branch is red (exit #{code}): #{String.slice(String.trim(out), -2000, 2000)}"}
+    end
+  end
 
   # a gate cut off (a restart) leaves the landing queued; this attempt fails so Oban runs it again,
   # and only the last one cut off bounces it
