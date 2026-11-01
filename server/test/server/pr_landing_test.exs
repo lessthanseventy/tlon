@@ -263,6 +263,23 @@ defmodule Server.PRLandingTest do
       assert posts(ctx) =~ "143"
     end
 
+    test "a fetch that keeps losing the ref lock is interrupted, for the queue to try again; said only on the last attempt",
+         ctx do
+      approve(ctx, origin(ctx, "feature"))
+
+      sh!(ctx.tmp, """
+      git clone -q origin.git other && cd other && git config user.email t@t && git config user.name t &&
+      git commit -q --allow-empty -m three && git push -q origin main
+      """)
+
+      File.write!(Path.join(ctx.repo, ".git/refs/remotes/origin/main.lock"), "")
+
+      assert {:error, {:interrupted, "could not fetch origin" <> _}} = land(ctx)
+      refute posts(ctx) =~ "not landed"
+      assert {:error, {:interrupted, _}} = land(ctx, last: true)
+      assert posts(ctx) =~ "could not fetch origin"
+    end
+
     test "GitHub refusing the merge is said", ctx do
       approve(ctx, origin(ctx, "feature"))
       test = self()
