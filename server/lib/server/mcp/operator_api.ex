@@ -541,6 +541,7 @@ defmodule Server.MCP.OperatorAPI do
     why =
       cond do
         is_binary(b["superseded_by"]) -> {:superseded, b["superseded_by"]}
+        is_binary(b["resolved"]) -> {:resolved, b["resolved"]}
         is_binary(b["abandoned"]) -> {:abandoned, b["abandoned"]}
         true -> nil
       end
@@ -1172,7 +1173,7 @@ defmodule Server.MCP.OperatorAPI do
     do:
       json(conn, 422, %{
         error:
-          "a workline that hasn't merged closes with a why: superseded_by (the PR or commit that shipped it) or abandoned (why it is dropped)"
+          "a workline that hasn't merged closes with a why: superseded_by (the PR or commit that shipped it), resolved (what settled it without code) or abandoned (why it is dropped)"
       })
 
   defp refused(conn, :blocking),

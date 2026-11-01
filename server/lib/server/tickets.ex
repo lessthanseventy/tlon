@@ -186,13 +186,15 @@ defmodule Server.Tickets do
 
   @doc """
   A workline closed unmerged, and why: `:superseded` (its work shipped elsewhere, `why` naming the PR
-  or commit) makes the tickets started into it done; `:abandoned` puts them back in the backlog now.
+  or commit) makes the tickets started into it done; `:resolved` (settled without code, `why` saying
+  what settled it) does too; `:abandoned` puts them back in the backlog now.
   Either way the why is appended to the ticket's body, so intake and the next lead can read it.
   """
   def closed_unmerged(thread_id, kind, why) do
     {status, note} =
       case kind do
         :superseded -> {"done", "Superseded by #{why} (workline ##{thread_id} closed unmerged)."}
+        :resolved -> {"done", "Resolved without code in workline ##{thread_id}: #{why}"}
         :abandoned -> {"backlog", "Abandoned in workline ##{thread_id}: #{why}"}
       end
 

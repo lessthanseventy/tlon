@@ -262,7 +262,7 @@ defmodule Server.MCP.Tool.CloseThread do
   thread id BY DESIGN — closing a peer's finished thread is the coordination act this verb
   exists for, the sanctioned exception to "no tool takes a thread parameter". A missing id
   is refused, and so is a workline that hasn't merged closed without a why
-  (`Server.Channel.close_as/2`): `superseded_by` or `abandoned`.
+  (`Server.Channel.close_as/2`): `superseded_by`, `resolved` or `abandoned`.
   """
   use Server.MCP.Tool
 
@@ -274,6 +274,10 @@ defmodule Server.MCP.Tool.CloseThread do
     field :superseded_by, :string,
       description:
         "For a workline that hasn't merged: the PR or commit that already shipped its work (e.g. \"PR #234\") — its ticket is done"
+
+    field :resolved, :string,
+      description:
+        "For a workline that hasn't merged and was settled without code (the operator's choice, an upstream filing): what settled it — its ticket is done"
 
     field :abandoned, :string,
       description: "For a workline that hasn't merged and is dropped: why — its ticket goes back to the backlog"
@@ -315,6 +319,7 @@ defmodule Server.MCP.Tool.CloseThread do
     why =
       cond do
         params[:superseded_by] -> {:superseded, params[:superseded_by]}
+        params[:resolved] -> {:resolved, params[:resolved]}
         params[:abandoned] -> {:abandoned, params[:abandoned]}
         true -> nil
       end
@@ -333,7 +338,7 @@ defmodule Server.MCP.Tool.CloseThread do
       {:error, :why_closed} ->
         fail(
           frame,
-          "thread #{thread.id} is a workline at #{thread.stage} that hasn't merged: say why it closes — superseded_by: the PR or commit that already shipped its work (its ticket is done), or abandoned: why it is dropped (its ticket goes back to the backlog)"
+          "thread #{thread.id} is a workline at #{thread.stage} that hasn't merged: say why it closes — superseded_by: the PR or commit that already shipped its work (its ticket is done), resolved: what settled it without code (its ticket is done), or abandoned: why it is dropped (its ticket goes back to the backlog)"
         )
 
       {:error, why} ->
