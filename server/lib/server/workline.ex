@@ -826,10 +826,13 @@ defmodule Server.Workline do
   is what a standing approval (`auto_land_risk` in the settings file) needs to land without them,
   and asks for the risk grade it is decided on (`Server.Jobs.Grade`); a change that owes QA is
   handed to the qa seat. An approval of a commit already approved this round is that same
-  approval, `{:ok, thread}` and nothing recorded: a client retries a call whose connection
-  dropped, and the verdict ends the reviewer's session under it (`Server.Staffing.end_review/1`: a
-  review is a throwaway session, briefed fresh each round), so its `follow_ups:` (non-blocking
-  findings) are posted once it has moved, for the lead it hands to (`follow_ups/4`). A verdict by the
+  approval, nothing recorded: a client retries a call whose connection dropped. A thread parked or
+  handed to QA is `{:ok, thread}`; one the first approval left at review unparked (its park refused)
+  is parked now, the same `advance/2` and the same refusal if it still fails (`park_approved/2`),
+  never `{:ok, thread}` for a thread nothing queued. The verdict ends the reviewer's session under
+  it (`Server.Staffing.end_review/1`: a review is a throwaway session, briefed fresh each round), so
+  its `follow_ups:` (non-blocking findings) are posted once it has moved, for the lead it hands to
+  (`follow_ups/4`). A verdict by the
   agent that built the branch is refused, `{:error, {:self_review, why}}` (`self_review/2`).
   `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
   """
@@ -841,7 +844,7 @@ defmodule Server.Workline do
 
     cond do
       why = self_review(thread, author) -> {:error, {:self_review, why}}
-      verdict == "approve" and approved_at?(thread, sha) -> {:ok, thread}
+      verdict == "approve" and approved_at?(thread, sha) -> finish_approval(thread, opts)
       true -> record_verdict(thread, verdict, author, sha, opts)
     end
   end
@@ -2232,6 +2235,18 @@ defmodule Server.Workline do
         )
 
         {:error, {:not_parked, why}}
+    end
+  end
+
+  # The retry of an approval whose park was refused: the thread sits at review, awaiting nobody and
+  # owing QA nothing, so the park is tried again. Parked or handed to QA, it is left as it is.
+  defp finish_approval(thread, opts) do
+    case Repo.get!(Thread, thread.id) do
+      %Thread{stage: "review", awaiting: nil} = fresh ->
+        if qa_owed(fresh, opts) == nil, do: park_approved(fresh, opts), else: {:ok, fresh}
+
+      fresh ->
+        {:ok, fresh}
     end
   end
 
