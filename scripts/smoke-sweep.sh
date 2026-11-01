@@ -14,6 +14,8 @@ set -uo pipefail
 root="$1"
 for stale in "${TMPDIR:-/tmp}"/tlon-smoke/*/ "${TMPDIR:-/tmp}"/tlon-smoke-*/; do
   stale="${stale%/}"; [ -d "$stale" ] || continue
+  # a tree's Hex home goes with its tree
+  case "$stale" in *.hex) continue ;; esac
   if [ -e "$stale.lock" ]; then
     flock -n "$stale.lock" true || continue
   else

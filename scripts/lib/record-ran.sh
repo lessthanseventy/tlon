@@ -6,7 +6,7 @@
 # unsets TLON_* before it reports.
 scheduled="${TLON_SCHEDULE_RUN:-}"
 record_ran() { # check sha exit
-  [ -z "$scheduled" ] || { echo "not posted: the schedule records this $1 run"; return 0; }
+  [ -z "$scheduled" ] || { echo "recorded by the schedule: $1 run"; return 0; }
   local url="${TLON_URL:-http://127.0.0.1:4040}" answer
   if answer="$(curl -sf -m 5 -X POST -H 'content-type: application/json' \
       -d "{\"check\":\"$1\",\"sha\":\"$2\",\"exit\":$3}" "$url/api/release/ran")" && [ -n "$answer" ]; then
