@@ -1179,7 +1179,7 @@ defmodule Server.MCP.OperatorAPI do
 
   defp refused(conn, :not_stranded), do: json(conn, 409, %{error: "that checkout is no longer stranded"})
   defp refused(conn, why) when is_binary(why), do: json(conn, 409, %{error: why})
-  defp refused(conn, why), do: json(conn, 409, %{error: inspect(why)})
+  defp refused(conn, why), do: json(conn, 409, %{error: Server.Staffing.explain(why)})
 
   defp settings, do: %{knobs: Server.OperatorConfig.knobs(), restart_pending: Server.Rollout.restart_pending?()}
 

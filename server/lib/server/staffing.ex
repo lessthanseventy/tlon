@@ -326,6 +326,15 @@ defmodule Server.Staffing do
   end
 
   @doc """
+  The words a refused hand-off is shown in: the operator's 409 and the `assign_lead` tool's failure.
+  Any reason without a sentence of its own is shown as its inspect.
+  """
+  def explain(:lead_mid_turn),
+    do: "the lead is mid-turn on this thread; the hand-off waits for that turn to end, then retry"
+
+  def explain(reason), do: inspect(reason)
+
+  @doc """
   Hand a running thread to another coworker: restaff it, post the handoff as `author` (who handed
   it over: the operator from the office, a coworker through `assign_lead`) — which wakes the new
   lead, spawning them — and close the old worker's leaf, ending the thread's sessions as

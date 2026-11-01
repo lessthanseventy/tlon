@@ -546,6 +546,12 @@ defmodule Server.StaffingTest do
       refute_received {:tmux, [_, _, "kill-window" | _]}
     end
 
+    test "a refusal reads in words, and an unknown one falls back to its inspect" do
+      assert Staffing.explain(:lead_mid_turn) =~ "mid-turn"
+      assert Staffing.explain(:lead_mid_turn) =~ "retry"
+      assert Staffing.explain(:something_else) == ":something_else"
+    end
+
     test "a turn stuck past the stale limit reads as idle: it hands off and ends the thread's sessions", %{ws: ws} do
       thread = staffed_thread(ws, "borges")
       stuck = session!("borges", thread.id, Server.Presence.Thinking.stale_turn_seconds() + 60, true)
