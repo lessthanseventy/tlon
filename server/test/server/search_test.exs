@@ -148,7 +148,15 @@ defmodule Server.SearchTest do
           "embedding IS NOT NULL"
         )
 
-      %{rows: [[[%{"Plan" => plan}]]]} = Repo.query!("EXPLAIN (ANALYZE, FORMAT JSON) " <> sql, params)
+      # Five rows: the planner may prefer a seq scan and a top-N sort by cost, whatever the table's
+      # stats are. Taking those two off the table asks whether the primary key offers the order.
+      {:ok, %{rows: [[[%{"Plan" => plan}]]]}} =
+        Repo.transaction(fn ->
+          Repo.query!("SET LOCAL enable_seqscan = off")
+          Repo.query!("SET LOCAL enable_sort = off")
+          Repo.query!("EXPLAIN (ANALYZE, FORMAT JSON) " <> sql, params)
+        end)
+
       nodes = plan_nodes(plan)
 
       refute Enum.any?(nodes, &(&1["Node Type"] == "Sort"))
