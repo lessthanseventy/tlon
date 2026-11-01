@@ -516,17 +516,23 @@ defmodule Server.MCP.Tool.HoldThread do
     end
   end
 
-  defp hold(frame, thread, %{release: true}), do: reply(frame, Pause.resume_thread(thread.id), &state/1)
+  defp hold(frame, thread, %{release: true}),
+    do: reply(frame, Pause.resume_thread(thread.id, identity_handle(frame)), &state/1)
 
   defp hold(frame, %{paused_at: paused_at} = thread, _) when paused_at != nil,
     do: fail(frame, "thread ##{thread.id} is already held; release it first")
 
   defp hold(frame, thread, params) do
     case params[:why] do
-      why when is_binary(why) and why != "" -> reply(frame, Pause.pause_thread(thread.id, why), &state/1)
-      _ -> fail(frame, "a hold needs a why")
+      why when is_binary(why) and why != "" ->
+        reply(frame, Pause.pause_thread(thread.id, why, identity_handle(frame)), &state/1)
+
+      _ ->
+        fail(frame, "a hold needs a why")
     end
   end
+
+  defp identity_handle(frame), do: Server.MCP.Identity.from_frame(frame).agent
 
   defp state(thread), do: %{"thread_id" => thread.id, "paused" => thread.paused_at != nil}
 end
