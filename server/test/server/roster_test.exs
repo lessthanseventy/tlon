@@ -90,7 +90,12 @@ defmodule Server.RosterTest do
       none = seat("none", "senior")
       assert {%{name: "none"}, []} = Roster.pick([trusted(seat("poor", "senior"), 10, 2), none], %{grade: "senior"})
       assert {%{name: "good"}, []} = Roster.pick([none, trusted(seat("good", "senior"), 10, 9)], %{grade: "senior"})
-      assert {%{name: "zero"}, []} = Roster.pick([trusted(seat("zero", "senior"), 0, 0), none], %{grade: "senior"})
+    end
+
+    test "no record is neutral, not worst: a worst record listed first loses to a neutral seat" do
+      worst = trusted(seat("worst", "senior"), 10, 0)
+      assert {%{name: "zero"}, []} = Roster.pick([worst, trusted(seat("zero", "senior"), 0, 0)], %{grade: "senior"})
+      assert {%{name: "none"}, []} = Roster.pick([worst, seat("none", "senior")], %{grade: "senior"})
     end
 
     test "equal records fall back to bench order" do
