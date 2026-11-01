@@ -462,6 +462,54 @@ defmodule Server.WorklineTest do
       assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "not parked" and &1.body =~ "review.md"))
     end
 
+    # the reviewer retries an approval whose park was refused (a dropped connection, the warning read):
+    # the retry finishes the park, or refuses again — never a bare ok that the tool reads as queued
+    test "approving again after a refused park parks it, or refuses again — never a bare ok" do
+      import Ecto.Query
+
+      thread = open!(%{slug: "reparked", stage: "review"})
+      {:error, {:not_parked, _}} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: NonePresent)
+
+      assert {:error, {:not_parked, why}} =
+               Workline.review_verdict(thread, "approve", "lonnrot", artifacts: NonePresent)
+
+      assert why =~ "review.md"
+      assert Server.MCP.Tool.SubmitReview.next({:error, {:not_parked, why}}, "lonnrot") =~ "not parked"
+      assert %Thread{stage: "review", awaiting: nil} = Repo.get!(Thread, thread.id)
+
+      assert {:ok, %Thread{stage: "review", awaiting: "andrew"}} =
+               Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+
+      assert %Thread{stage: "review", awaiting: "andrew"} = Repo.get!(Thread, thread.id)
+      # a thread already parked is left as it is
+      assert {:ok, %Thread{awaiting: "andrew"}} =
+               Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+
+      # one verdict recorded, however many retries
+      verdicts =
+        from(e in Event,
+          where: e.thread_id == ^thread.id and e.correlation == "workline:reparked:review" and e.kind == "check_passed"
+        )
+
+      assert Repo.aggregate(verdicts, :count) == 1
+    end
+
+    # the same retry on a thread already in the merge queue (at review, awaiting nobody) queues nothing twice
+    test "approving again a change already in the merge queue leaves it one landing" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      thread = open!(%{slug: "requeued-twice", stage: "review"})
+      graded!(thread, @low)
+      opts = [artifacts: AllPresent, auto_land_risk: 2]
+
+      assert {:ok, %Thread{stage: "review", awaiting: nil}} =
+               Workline.review_verdict(thread, "approve", "lonnrot", opts)
+
+      assert {:ok, %Thread{stage: "review", awaiting: nil}} =
+               Workline.review_verdict(thread, "approve", "lonnrot", opts)
+
+      assert [_] = all_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+    end
+
     test "standing approval: an approved review graded at or under the threshold joins the queue itself" do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       thread = open!(%{slug: "auto-low", stage: "review"})
