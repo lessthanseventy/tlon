@@ -275,6 +275,23 @@ defmodule Server.WorklineTest do
       assert Channel.thread_lead(thread.id) == "daneri"
     end
 
+    test "a trust lookup that raises is neutral: the handoff still posts its leads line" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Trustless #{System.unique_integer([:positive])}"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "emma", archetype: "builder", grade: "senior"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "senior"})
+
+      Application.put_env(:server, :trust_record, fn _name -> raise "trust is down" end)
+      on_exit(fn -> Application.delete_env(:server, :trust_record) end)
+
+      thread = open!(%{slug: "trustless-#{System.unique_integer([:positive])}", stage: "plan", workspace_id: ws.id})
+      {:ok, at_build} = Workline.advance(thread, artifacts: AllPresent)
+
+      assert at_build.stage == "build"
+      lead = Channel.thread_lead(thread.id)
+      assert lead in ["emma", "daneri"]
+      assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "→ #{lead} leads (build stage)"))
+    end
+
     test "the reviewer is on another model than the builder, at no lower a grade" do
       at_review = to_review([{"tzinacan", "senior"}, {"ulrikke", "junior"}, {"lonnrot", "greybeard"}])
       assert at_review.stage == "review"
