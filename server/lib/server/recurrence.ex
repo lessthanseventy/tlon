@@ -9,8 +9,11 @@ defmodule Server.Recurrence do
 
   The match is shared words weighted by how rare each is among the candidates (a word in one item
   counts far more than one in thirty), so a long summary matches on its distinctive words and two
-  that share only "session" and "test" do not. A ticket title must also have those shared words make
-  up a share of the smaller title's weight, so a long title can't match on a few generic words. It surfaces candidates and the caller decides: a false
+  that share only "session" and "test" do not. A word is its stem (`leads`/`lead`, `raising`/`raise`)
+  and a compound also counts its parts (`profiles.model_label` is also `model`), so a re-wording still
+  shares its words. A ticket title must also have the shared words make up 40% of the smaller title's
+  weight, so a long title can't match on a few generic words; issue headlines, 200 characters of prose,
+  skip that. It surfaces candidates and the caller decides: a false
   match costs one more call with `distinct: true`.
   """
   import Ecto.Query
@@ -27,8 +30,8 @@ defmodule Server.Recurrence do
   # a candidate matches when its shared words weigh @enough: two rare words, or four or so common ones
   @enough 6.0
 
-  # and those words must be this share of the smaller side's weight, so a long title can't match on a few
-  # generic words alone
+  # and for a ticket title those words must be this share of the smaller side's weight, so a long title
+  # can't match on a few generic words alone (issue headlines are 200 chars of prose and skip it)
   @cover 0.4
 
   # the prior keeps a small corpus from calling every word rare
@@ -112,9 +115,21 @@ defmodule Server.Recurrence do
     (text || "")
     |> String.downcase()
     |> String.split(~r/[^a-z0-9_\-\.\/]+/, trim: true)
+    |> Enum.map(&String.replace(&1, ~r/\/\d+$/, ""))
     |> Enum.map(&String.trim(&1, ".-/"))
+    |> Enum.flat_map(&[&1 | compound_parts(&1)])
     |> Enum.filter(&(String.length(&1) >= 4 and &1 not in @stop))
-    |> MapSet.new()
+    |> MapSet.new(&stem/1)
+  end
+
+  # `profiles.model_label` is also `profiles` and `model_label` and `model` and `label`
+  defp compound_parts(word), do: if(word =~ ~r/[._]/, do: String.split(word, ~r/[._]/, trim: true), else: [])
+
+  # `leads`/`lead`, `raising`/`raise`: just enough that a re-wording shares its words
+  defp stem(word) do
+    word
+    |> String.replace(~r/(?<=.{3})(ing|s)$/, "")
+    |> String.replace(~r/(?<=.{3})e$/, "")
   end
 
   defp headline(summary), do: summary |> to_string() |> String.slice(0, 200)
