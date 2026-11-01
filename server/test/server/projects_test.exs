@@ -33,6 +33,19 @@ defmodule Server.ProjectsTest do
       assert {:error, reason} = Projects.workspace_repo(ws.id, "/srv/x")
       assert reason =~ "not a repo of this workspace"
     end
+
+    test "a registered repo's name resolves to its expanded path", %{workspace: ws} do
+      {:ok, _} =
+        Projects.register(%{
+          workspace_id: ws.id,
+          name: "m",
+          repos: [%{"name" => "ficciones", "path" => "~/projects/ficciones"}]
+        })
+
+      expanded = Path.expand("~/projects/ficciones")
+      assert {:ok, ^expanded} = Projects.workspace_repo(ws.id, "ficciones")
+      assert {:error, _} = Projects.workspace_repo(ws.id, "nope")
+    end
   end
 
   describe "register/1" do

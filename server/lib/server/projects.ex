@@ -121,19 +121,23 @@ defmodule Server.Projects do
 
   @doc """
   A repo a thread may be opened on: `path` (`~`-expanded) must be one of the repos the workspace's
-  projects register. `{:ok, expanded_path}` or `{:error, reason}` naming the refusal.
+  projects register, named by path or by its registered name. `{:ok, expanded_path}` or
+  `{:error, reason}` naming the refusal.
   """
   def workspace_repo(workspace_id, path) when is_binary(path) do
     expanded = Path.expand(path)
 
-    registered? =
+    repos =
       workspace_id
       |> in_workspace()
-      |> Enum.any?(fn project ->
-        Enum.any?(project.repos || [], &(is_binary(&1["path"]) and Path.expand(&1["path"]) == expanded))
-      end)
+      |> Enum.flat_map(&(&1.repos || []))
+      |> Enum.filter(&is_binary(&1["path"]))
 
-    if registered?, do: {:ok, expanded}, else: {:error, "#{path} is not a repo of this workspace"}
+    cond do
+      Enum.any?(repos, &(Path.expand(&1["path"]) == expanded)) -> {:ok, expanded}
+      repo = Enum.find(repos, &(&1["name"] == path)) -> {:ok, Path.expand(repo["path"])}
+      true -> {:error, "#{path} is not a repo of this workspace"}
+    end
   end
 
   @doc """
