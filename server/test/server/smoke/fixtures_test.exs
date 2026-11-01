@@ -20,6 +20,19 @@ defmodule Server.Smoke.FixturesTest do
     assert [%{kind: "tool_denied", level: "blocking", rule: "Bash(echo hi)"}] = Server.Office.Needs.list()
   end
 
+  test "tool_denied_need shape=backtick seeds a command holding a backtick, so the fence can be driven" do
+    assert :ok = Fixtures.apply("tool_denied_need:shape=backtick", "tlon_smoke_4100")
+    assert [%{kind: "tool_denied", rule: "Bash(echo `date`)"}] = Server.Office.Needs.list()
+  end
+
+  test "tool_denied_need refuses a shape it does not know, seeding nothing" do
+    assert_raise ArgumentError, ~r/shape= is plain or backtick/, fn ->
+      Fixtures.apply("tool_denied_need:shape=nope", "tlon_smoke_4100")
+    end
+
+    assert [] = Server.Office.Needs.list()
+  end
+
   test "ticket_tree seeds an initiative, its epic, a free child, a child in flight and a loose ticket" do
     assert "ticket_tree" in Fixtures.names()
     assert :ok = Fixtures.apply("ticket_tree", "tlon_smoke_4100")

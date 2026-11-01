@@ -58,7 +58,7 @@ defmodule Server.Smoke.Fixtures do
   # name => {param defaults, seeder}: a param not in the defaults is refused
   defp catalog do
     %{
-      "tool_denied_need" => {%{}, &tool_denied_need/1},
+      "tool_denied_need" => {%{"shape" => "plain"}, &tool_denied_need/1},
       "ticket_tree" => {%{}, &ticket_tree/1},
       "quota_refused_need" => {%{"provider" => "ollama-cloud"}, &quota_refused_need/1},
       "failed_job" => {%{}, &failed_job/1},
@@ -224,7 +224,16 @@ defmodule Server.Smoke.Fixtures do
   end
 
   # Needs.tool_denied: an open thread refused a tool twice since it last moved, nobody on duty
-  defp tool_denied_need(_params) do
+  # shape= picks the refused command by name: a spec has no spaces or backticks, so a command holding
+  # either can only be named here, not passed in
+  defp tool_denied_need(%{"shape" => shape}) do
+    command =
+      case shape do
+        "plain" -> "echo hi"
+        "backtick" -> "echo `date`"
+        _ -> raise ArgumentError, "tool_denied_need shape= is plain or backtick, not #{inspect(shape)}"
+      end
+
     {:ok, t} = Server.Channel.open_thread(%{title: "fixture: a refused tool"})
     # denials count only when strictly after the thread's birth, and both are stamped to the second
     born = DateTime.utc_now() |> DateTime.add(-60, :second) |> DateTime.truncate(:second)
@@ -239,8 +248,8 @@ defmodule Server.Smoke.Fixtures do
           detail: %{
             "agent" => "fixture",
             "tool" => "Bash",
-            "summary" => "Bash · echo hi",
-            "command" => "echo hi",
+            "summary" => "Bash · #{command}",
+            "command" => command,
             "reason" => "fixture"
           }
         })
