@@ -53,7 +53,32 @@ defmodule Server.OperatorConfigTest do
     assert OperatorConfig.read(path) == %{"weather_location" => "Denver", "max_leaves" => 2, "auto_land_risk" => 3}
 
     :ok = OperatorConfig.put_settings(%{"auto_land_risk" => nil}, path)
-    refute Map.has_key?(OperatorConfig.read(path), "auto_land_risk")
+    assert %{"auto_land_risk" => nil} = OperatorConfig.read(path)
+  end
+
+  test "a nullable knob written null reads nil (off), not its default", %{path: path} do
+    assert OperatorConfig.setting("max_session_hours", path) == 3
+
+    :ok = OperatorConfig.put_settings(%{"max_session_hours" => nil}, path)
+    assert Map.fetch!(OperatorConfig.read(path), "max_session_hours") == nil
+    assert File.read!(path) =~ ~s("max_session_hours": null)
+    assert OperatorConfig.setting("max_session_hours", path) == nil
+    assert Map.new(OperatorConfig.knobs(path), &{&1.key, &1})["max_session_hours"].value == nil
+
+    :ok = OperatorConfig.put_settings(%{"max_leaves" => 2}, path)
+    assert OperatorConfig.setting("max_session_hours", path) == nil
+  end
+
+  test "a non-nullable knob written nil goes back to its default and the key is gone", %{path: path} do
+    :ok = OperatorConfig.put_settings(%{"max_leaves" => 2}, path)
+    :ok = OperatorConfig.put_settings(%{"max_leaves" => nil}, path)
+    refute Map.has_key?(OperatorConfig.read(path), "max_leaves")
+    assert OperatorConfig.setting("max_leaves", path) == 6
+  end
+
+  test "a hand-written null on a non-nullable knob reads its default", %{path: path} do
+    File.write!(path, ~s({"max_leaves": null}))
+    assert OperatorConfig.setting("max_leaves", path) == 6
   end
 
   test "oneshot_model is a provider/model from the model choices, one default for every one-shot", %{path: path} do

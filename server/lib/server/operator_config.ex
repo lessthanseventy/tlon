@@ -36,7 +36,8 @@ defmodule Server.OperatorConfig do
 
   # The runtime knobs the operator steers a running bench with — what /api/settings serves and the
   # office's settings panel edits. Every one is read live where it is used, so a change takes at the
-  # next pass. A `nullable` knob's nil means "off" and removes the key.
+  # next pass. A `nullable` knob's null means "off" and is written to the file as null, so it
+  # beats a non-nil default; a key absent from the file is the default.
   @knobs [
     %{key: "max_leaves", type: "int", min: 1, max: 12, default: 6, doc: "coworker windows open at once"},
     %{
@@ -315,7 +316,8 @@ defmodule Server.OperatorConfig do
 
   @doc """
   Set several knobs at once: every key is checked against its knob first, and nothing is written
-  unless all of them pass. `:ok` or `{:error, why}`.
+  unless all of them pass. `:ok` or `{:error, why}`. A nil for a `nullable` knob is written as null
+  (off); a nil for any other knob removes its key, back to the default.
   """
   @spec put_settings(map(), String.t()) :: :ok | {:error, String.t()}
   def put_settings(changes, path \\ path()) when is_map(changes) do
@@ -323,7 +325,8 @@ defmodule Server.OperatorConfig do
       Enum.reduce_while(changes, {:ok, read(path)}, fn {key, v}, {:ok, acc} ->
         with %{} = knob <- Enum.find(@knobs, &(&1.key == key)) || {:error, "no setting named #{inspect(key)}"},
              {:ok, ok} <- valid(knob, v) do
-          {:cont, {:ok, if(is_nil(ok), do: Map.delete(acc, key), else: Map.put(acc, key, ok))}}
+          {:cont,
+           {:ok, if(is_nil(ok) and knob[:nullable] != true, do: Map.delete(acc, key), else: Map.put(acc, key, ok))}}
         else
           {:error, why} -> {:halt, {:error, why}}
           :invalid -> {:halt, {:error, "#{key} must be #{expects(Enum.find(@knobs, &(&1.key == key)))}"}}
@@ -356,11 +359,17 @@ defmodule Server.OperatorConfig do
   end
 
   defp value(knob, map) do
-    case valid(knob, Map.get(map, knob.key)) do
-      {:ok, v} when not is_nil(v) -> v
+    with {:ok, raw} <- Map.fetch(map, knob.key),
+         {:ok, v} <- valid(knob, raw) do
+      present(knob, v)
+    else
       _ -> knob.default
     end
   end
+
+  defp present(%{nullable: true}, nil), do: nil
+  defp present(knob, nil), do: knob.default
+  defp present(_knob, v), do: v
 
   defp valid(%{nullable: true}, nil), do: {:ok, nil}
   defp valid(_knob, nil), do: {:ok, nil}
