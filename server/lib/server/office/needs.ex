@@ -83,7 +83,7 @@ defmodule Server.Office.Needs do
 
   | kinds | reaches the operator |
   |---|---|
-  | seats, quota, tool_denied (a permission refusal) | always |
+  | seats, quota, tool_denied (a permission refusal), Uqbar's own ask | always |
   | gate whose grade hit a limit (a db migration, …: `Server.Workline.limit_hit?/1`) | always |
   | gate, question, dialog, ask, no_seat | if irreversible, outward, costly, a host command, or an `auto_land_risk` gate |
   | issue, blocked, stalled, verify_failed, job_failed, health, stranded, tool_denied (a hook's) | if irreversible or a host command |
@@ -186,11 +186,12 @@ defmodule Server.Office.Needs do
   When an item (or a bare kind) reaches the operator: `:always`, `:info` (never routed), or
   `{:when, reasons}` — only when Uqbar passes it up for one of them. A tool refusal by a hook is
   Uqbar's (no setting the operator holds can lift it); any other refusal widens a permission, so
-  always passes up. A gate whose grade hit a limit is the operator's alone. No catch-all: a kind
-  not in `kinds/0` raises.
+  always passes up. A gate whose grade hit a limit is the operator's alone, and so is an ask Uqbar
+  raised, since Uqbar could not answer it. No catch-all: a kind not in `kinds/0` raises.
   """
   def pass_up_rule(kind) when is_binary(kind), do: pass_up_rule(%{kind: kind})
   def pass_up_rule(%{kind: "gate", limits: [_ | _]}), do: :always
+  def pass_up_rule(%{kind: "ask", ask: "uqbar"}), do: :always
   def pass_up_rule(%{kind: "tool_denied", hook: true}), do: {:when, @narrow}
   def pass_up_rule(%{kind: k}) when k in ~w(seats quota tool_denied), do: :always
   def pass_up_rule(%{kind: k}) when k in @machine, do: :info
