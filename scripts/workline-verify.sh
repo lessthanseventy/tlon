@@ -42,7 +42,8 @@ for v in $(compgen -e | grep '^TLON_'); do clean+=(-u "$v"); done
 clean+=(-u WORKLINE_GATE -u LAND_REF -u RUN_TASK -u RULES_ONLY)
 role=verify; [ -n "${WORKLINE_GATE:-}" ] && role=land
 db="tlon_${role}_$(printf '%s' "$slug" | tr -c 'a-zA-Z0-9' '_' | tr 'A-Z' 'a-z')"
-clean+=(TLON_TEST_DATABASE="${db:0:63}")
+db="${db:0:63}"
+clean+=(TLON_TEST_DATABASE="$db")
 # how the machine's checks queue names this run: the office's room and rack read "#<id> verify|landing"
 label=verify; [ -n "${WORKLINE_GATE:-}" ] && label=landing
 clean+=(CHECKS_LABEL="${CHECKS_LABEL:-#$tid $label $slug}")
@@ -93,6 +94,9 @@ cleanup() {
   drop_tree "$fresh"; rm -rf "$fresh.hex"
   [ -z "$mainwt" ] || drop_tree "$mainwt"
   git -C "$repo" worktree prune
+  # the verdict is recorded by now: a drop that fails is a warning, never a red gate
+  psql -h "${PGHOST:-/run/postgresql}" -d postgres -XAtq -c "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" >/dev/null 2>&1 ||
+    echo "workline-verify: could not drop the test database $db" >&2
 }
 trap cleanup EXIT
 git -C "$repo" worktree add -q --detach "$fresh" "$ref" || exit 1
