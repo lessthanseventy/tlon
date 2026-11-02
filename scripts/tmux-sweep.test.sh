@@ -17,6 +17,20 @@ for _ in $(seq 50); do tmux -S "$dead" ls >/dev/null 2>&1 || break; sleep 0.02; 
 printf 'keep me\n' >"$dir/not-a-socket"
 [ -S "$dead" ] || { echo "FAIL setup: the dead server left no socket file to sweep"; exit 1; }
 
+# A tmux that cannot answer for a live server (version mismatch) must not cost the socket.
+stub="$tmp/stub"; mkdir -p "$stub"
+printf '#!/bin/sh\necho "protocol version mismatch (client 8, server 9)" >&2\nexit 1\n' >"$stub/tmux"
+chmod +x "$stub/tmux"
+PATH="$stub:$PATH" "$here/tmux-sweep.sh" >/dev/null 2>&1
+[ -S "$dead" ] && [ -S "$live" ] && echo "ok   a tmux that cannot answer removes nothing" \
+  || { echo "FAIL a failing tmux must not remove a socket"; bad=1; }
+
+# No tmux at all: refuse, and remove nothing.
+nobin="$tmp/nobin"; mkdir -p "$nobin"
+PATH="$nobin" "$(command -v bash)" "$here/tmux-sweep.sh" >/dev/null 2>&1; code=$?
+[ "$code" = 2 ] && [ -S "$dead" ] && echo "ok   no tmux on PATH: refused with exit 2, nothing removed" \
+  || { echo "FAIL no tmux must exit 2 and remove nothing (got $code)"; bad=1; }
+
 out="$("$here/tmux-sweep.sh" 2>&1)"; code=$?
 [ "$code" = 0 ] || { echo "FAIL the sweep exits 0 (got $code): $out"; bad=1; }
 [ ! -e "$dead" ] && echo "ok   a dead socket is removed" || { echo "FAIL a dead socket must be removed"; bad=1; }
