@@ -292,6 +292,41 @@ defmodule Server.WorklineTest do
       assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "→ #{lead} leads (build stage)"))
     end
 
+    test "a model lookup that raises still posts the leads line and assigns the lead" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Modelless #{System.unique_integer([:positive])}"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "emma", archetype: "builder", grade: "senior"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "senior"})
+
+      Application.put_env(:server, :model_label, fn _ws, _name -> raise "profile is broken" end)
+      on_exit(fn -> Application.delete_env(:server, :model_label) end)
+
+      thread = open!(%{slug: "modelless-#{System.unique_integer([:positive])}", stage: "plan", workspace_id: ws.id})
+      {:ok, at_build} = Workline.advance(thread, artifacts: AllPresent)
+
+      assert at_build.stage == "build"
+      lead = Channel.thread_lead(thread.id)
+      assert lead in ["emma", "daneri"]
+      assert Enum.any?(Channel.thread_messages(thread), &(&1.body == "→ #{lead} leads (build stage)"))
+    end
+
+    test "a seat with no model posts the bare leads line, and its model reads back as nil" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Unlabelled #{System.unique_integer([:positive])}"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "emma", archetype: "builder", grade: "senior"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "senior"})
+
+      Application.put_env(:server, :model_label, fn _ws, _name -> nil end)
+      on_exit(fn -> Application.delete_env(:server, :model_label) end)
+
+      thread = open!(%{slug: "unlabelled-#{System.unique_integer([:positive])}", stage: "plan", workspace_id: ws.id})
+      {:ok, at_build} = Workline.advance(thread, artifacts: AllPresent)
+
+      assert at_build.stage == "build"
+      lead = Channel.thread_lead(thread.id)
+      leads = Enum.find(Channel.thread_messages(thread), &(&1.body =~ "→ #{lead} leads (build stage)"))
+      assert leads.body == "→ #{lead} leads (build stage)"
+      assert Server.Trust.model_of(leads.body) == nil
+    end
+
     test "the reviewer is on another model than the builder, at no lower a grade" do
       at_review = to_review([{"tzinacan", "senior"}, {"ulrikke", "junior"}, {"lonnrot", "greybeard"}])
       assert at_review.stage == "review"
