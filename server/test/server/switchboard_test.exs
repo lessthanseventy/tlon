@@ -487,6 +487,9 @@ defmodule Server.SwitchboardTest do
 
     test "the operator's message on uqbar's study spawns uqbar's pane there, as itself" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Home"})
+      # the lobby comes first, as at boot (`Bootstrap.ensure_standing/1` before `Outside.ensure_checkin/1`):
+      # the study is Uqbar's own thread, never the workspace's root
+      {:ok, _lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
       {:ok, _} = Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
       {:ok, study} = Server.Outside.study(ws.id)
 
@@ -496,6 +499,7 @@ defmodule Server.SwitchboardTest do
       assert_received {:spawned, exports}
       assert exports =~ ~s(TLON_AUTHOR="uqbar")
       assert exports =~ ~s(TLON_THREAD="#{study.id}")
+      refute exports =~ "TLON_LOBBY"
       assert_receive {:woke, nil, "New message on thread " <> _}, 1_000
     end
 
@@ -540,6 +544,33 @@ defmodule Server.SwitchboardTest do
       assert exports =~ ~s(TLON_THREAD="#{lobby.id}")
       refute_received {:spawned, _}
       assert_receive {:woke, nil, "New message on thread " <> _}, 1_000
+    end
+
+    test "an off-shift lead who BUILDS is replaced on the workline: the stand-in is seated on the thread, never in the lobby" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Shifts"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "tertius", archetype: "surveyor"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", crew: "day"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "otalora", archetype: "builder", crew: "night"})
+      {:ok, wl} = Server.Workline.open(%{title: "ticket 710", slug: "t710", stage: "build", workspace_id: ws.id})
+      {:ok, _} = Channel.assign_lead(wl.id, "hronir")
+      assert {:ok, %{restaffed: [_]}} = Server.Shifts.switch(ws.id, "night")
+
+      {:ok, m} = Channel.post(%{thread_id: wl.id, author: "andrew", body: "where are we?"})
+      Switchboard.deliver(m)
+      assert :ok = Switchboard.drain()
+
+      spawned =
+        fn -> receive(do: ({:spawned, e} -> e), after: (1_000 -> nil)) end
+        |> Stream.repeatedly()
+        |> Enum.take_while(& &1)
+
+      assert Enum.any?(spawned, &(&1 =~ ~s(TLON_AUTHOR="otalora") and &1 =~ ~s(TLON_THREAD="#{wl.id}")))
+      refute Enum.any?(spawned, &(&1 =~ ~s(TLON_THREAD="#{lobby.id}") or &1 =~ "TLON_LOBBY"))
+      # the opening turns, flushed so none lands in the next test's mailbox
+      fn -> receive(do: ({:woke, _, _} -> true), after: (1_500 -> nil)) end
+      |> Stream.repeatedly()
+      |> Enum.take_while(& &1)
     end
 
     test "a mention of anyone else off shift waits for their crew: nobody spawned, the message held" do
@@ -754,10 +785,10 @@ defmodule Server.SwitchboardTest do
     end
 
     test "a non-lead @mention wakes the coworker's lobby window; the hand-off that follows seats a thread pane beside it" do
-      # #804's trigger: the lobby session stays live while the thread pane is seated, so two sessions
-      # of one agent are up at once. The wake is right (the lobby is where a coworker with no place on
-      # a thread is reached); what keeps one writer per worktree is the licence: only the thread pane
-      # may build, and the lobby one answers (`Profiles`' brief, `scripts/git-hooks/pre-commit`).
+      # The lobby session stays live while the thread pane is seated. The wake is right (the lobby is
+      # where a coworker with no place on a thread is reached); what keeps one writer per worktree is
+      # the licence: only the thread pane may build, and the lobby one answers (`Profiles`' brief,
+      # `scripts/git-hooks/pre-commit`).
       {:ok, ws} = Server.Workspaces.register(%{name: "Lobbyland"})
       {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
       {:ok, task} = Channel.open_thread(%{title: "ticket 710", workspace_id: ws.id})
