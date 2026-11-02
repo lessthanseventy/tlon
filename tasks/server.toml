@@ -248,5 +248,5 @@ run = "scripts/bwrap-argc.sh"
 # Not scheduled: whether it recurs is a separate call. The live box's existing eval databases are the
 # operator's to sweep — run it once, by hand: `mise run server:db-sweep`.
 ["server:db-sweep"]
-description = "server: drop the tlon_eval_<digits> databases nothing is connected to (a killed or red eval's) — usage: mise run server:db-sweep [-- <prefix>]"
+description = "server: drop the tlon_eval_<digits> and tlon_{land,verify,test}_* databases nothing is connected to (a killed or red run's) — usage: mise run server:db-sweep [-- <prefix>]"
 run = "scripts/db-sweep.sh"
