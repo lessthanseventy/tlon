@@ -2,7 +2,7 @@ defmodule Server.TestDatabaseNameTest do
   use ExUnit.Case, async: true
 
   # config/test.exs computes the per-checkout test database from this same function
-  # (loaded via config/support/test_database_name.exs) — this test pins the naming
+  # (lib/server/test_database_name.ex, also loaded by config/test.exs) — this test pins the naming
   # rule so a checkout-path change can't silently collide two worktrees' dbs again.
   alias Server.TestDatabaseName
 
