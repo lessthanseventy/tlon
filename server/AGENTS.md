@@ -291,7 +291,7 @@ the same commands, which is the one control loop §3 asks for:
 
 - `mise run server:test` — the ExUnit suite (`mix test`). Each run drops and recreates its own test db
   (`test_helper.exs`), named per checkout: `tlon_test` in the main checkout, `tlon_test_<name>_<hash>`
-  in any git worktree wherever it lives (`Server.TestDatabaseName`, `config/support/`).
+  in any git worktree wherever it lives (`Server.TestDatabaseName`); `Server.Worktree.retire/2` drops a retired checkout's db.
   `TLON_TEST_DATABASE` overrides it — set it for a second suite in the same checkout.
 - `mise run server:check` — the **precommit gate**: `mix precommit` = format-check + warnings-as-errors +
   `credo --strict` + the suite (runs in `:test`), then the deterministic evals.
