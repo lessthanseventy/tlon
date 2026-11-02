@@ -367,6 +367,27 @@ defmodule Server.Workline.ContinuationTest do
     assert post.body =~ "↑ zelda takes this from daneri (landed 2 of their last 2 builds first time)"
   end
 
+  test "escalate: a raising trust lookup still escalates, and the post states no record (#710)" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Raising"})
+
+    {:ok, _} =
+      Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "junior", specialty: "office"})
+
+    {:ok, _} =
+      Server.Workspaces.seat(ws.id, %{name: "zelda", archetype: "builder", grade: "senior", specialty: "office"})
+
+    Application.put_env(:server, :trust_record, fn _name -> raise "trust store down" end)
+    on_exit(fn -> Application.delete_env(:server, :trust_record) end)
+
+    {:ok, t} = Workline.open(%{title: "lamp tile", slug: "lamp-raise", stage: "build", workspace_id: ws.id})
+    {:ok, _} = Server.Channel.assign_lead(t.id, "daneri")
+
+    assert {:escalated, "zelda"} = Workline.escalate(t, "raise test")
+
+    assert [post] = Repo.all(from m in Message, where: m.thread_id == ^t.id and like(m.body, "↑ zelda%"))
+    assert post.body == "↑ zelda takes this from daneri: raise test. Pick it up from the brief."
+  end
+
   test "where a sheriff owns red, running out of nudges goes to the sheriff — it does not wait on the operator" do
     {:ok, ws} = Server.Workspaces.register(%{name: "Sheriffed"})
     {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})

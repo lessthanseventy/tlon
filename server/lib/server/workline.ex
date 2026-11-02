@@ -1421,21 +1421,23 @@ defmodule Server.Workline do
              bench,
              &(&1.archetype == kind and &1.grade in ["senior", "greybeard"] and not leading_another?(&1, thread))
            ),
+         candidates = Enum.map(above, &with_trust(%{coworker: &1, model: nil})),
          {%Server.Coworker{name: name}, _} <-
-           Server.Roster.pick(Enum.map(above, &%{coworker: &1, model: nil, trust: Server.Trust.record(&1.name)}), %{
-             grade: "senior",
-             specialty: junior.specialty
-           }),
+           Server.Roster.pick(candidates, %{grade: "senior", specialty: junior.specialty}),
          {:ok, _} <- Server.Channel.assign_lead(thread.id, name) do
       close_leaf(thread)
-      %{led: led, first_time: first} = Server.Trust.record(name)
+
+      landed =
+        case Enum.find(candidates, &(&1.coworker.name == name)) do
+          %{trust: %{led: led, first_time: first}} -> " (landed #{first} of their last #{led} builds first time)"
+          _ -> ""
+        end
 
       {:ok, _} =
         Server.Channel.post(%{
           thread_id: thread.id,
           author: "tlon",
-          body:
-            "↑ #{name} takes this from #{current} (landed #{first} of their last #{led} builds first time): #{why}. Pick it up from the brief.",
+          body: "↑ #{name} takes this from #{current}#{landed}: #{why}. Pick it up from the brief.",
           payload: %{"escalated_from" => current}
         })
 
