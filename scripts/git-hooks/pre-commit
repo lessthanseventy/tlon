@@ -6,13 +6,14 @@
 # unaffected. Shared by every worktree through core.hooksPath.
 set -u
 [ -n "${TLON_THREAD:-}" ] || exit 0
-branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo DETACHED)"
-# The lobby (TLON_LOBBY, the workspace's root thread) has no work of its own: its branch work/t<id>
-# is the one a lead strands commits on when it builds a workline from its lobby seat.
-if [ -n "${TLON_LOBBY:-}" ] && [ "$branch" = "work/t$TLON_THREAD" ]; then
-  echo "tlon: refusing to commit on '$branch' from the lobby — the lobby has no work of its own; commit in the workline's worktree, .worktrees/<slug> on work/<slug>." >&2
+# The lobby (TLON_LOBBY, the workspace's root thread) commits nowhere: it has no work of its own, and a
+# workline's worktree has one writer, the pane seated on that thread. A lobby session woken about a
+# thread it leads answers and advances it over MCP; the hand-off brief seats the pane that builds.
+if [ -n "${TLON_LOBBY:-}" ]; then
+  echo "tlon: refusing to commit from the lobby — a lobby session never builds; the pane seated on the thread (.worktrees/<slug> on work/<slug>) does." >&2
   exit 1
 fi
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo DETACHED)"
 case "$branch" in
   work/*) exit 0 ;;
 esac

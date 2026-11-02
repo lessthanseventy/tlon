@@ -142,28 +142,24 @@ defmodule Server.CommitsTest do
     assert {_, 0} = git.(["commit", "-qm", "uqbar's fix"], [{"TLON_THREAD", "269"}])
   end
 
-  test "branch fencing: a lobby pane (TLON_LOBBY) is refused on work/t1 — the lobby has no work of its own", %{
+  test "branch fencing: a lobby pane (TLON_LOBBY) commits nowhere — not on work/t1, not in a workline's worktree", %{
     repo: repo,
     git: git
   } do
-    {_, 0} = git.(["switch", "-c", "work/t1"], [])
-    File.write!(Path.join(repo, "l"), "l\n")
-    {_, 0} = git.(["add", "l"], [])
-    {out, code} = git.(["commit", "-qm", "a lead's build in the lobby"], [{"TLON_THREAD", "1"}, {"TLON_LOBBY", "1"}])
-    assert code != 0
-    assert out =~ "refusing to commit"
-    assert out =~ ".worktrees/<slug>"
+    lobby = [{"TLON_THREAD", "1"}, {"TLON_LOBBY", "1"}]
+
+    for {branch, file} <- [{"work/t1", "l"}, {"work/710-the-workline", "w"}, {"work/uqbar-x", "u"}] do
+      {_, 0} = git.(["switch", "-c", branch], [])
+      File.write!(Path.join(repo, file), "#{file}\n")
+      {_, 0} = git.(["add", file], [])
+      {out, code} = git.(["commit", "-qm", "a build from the lobby on #{branch}"], lobby)
+      assert code != 0, "#{branch} committed from the lobby"
+      assert out =~ "refusing to commit"
+      assert out =~ "lobby"
+    end
   end
 
-  test "branch fencing: a lobby pane still commits on work/uqbar-*, and a workline pane on work/t3", %{
-    repo: repo,
-    git: git
-  } do
-    {_, 0} = git.(["switch", "-c", "work/uqbar-x"], [])
-    File.write!(Path.join(repo, "u"), "u\n")
-    {_, 0} = git.(["add", "u"], [])
-    assert {_, 0} = git.(["commit", "-qm", "uqbar from the lobby"], [{"TLON_THREAD", "1"}, {"TLON_LOBBY", "1"}])
-
+  test "branch fencing: a workline pane on work/t3 still commits", %{repo: repo, git: git} do
     {_, 0} = git.(["switch", "-c", "work/t3"], [])
     File.write!(Path.join(repo, "w"), "w\n")
     {_, 0} = git.(["add", "w"], [])
