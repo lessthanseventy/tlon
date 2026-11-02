@@ -50,3 +50,7 @@ run = "bun test/golden.ts"
 ["office:monitor"]
 description = "office: watch the live office for workflow trouble — one line per new need, health problem, failed job, server failure post or journal error, forever (run it in the background: a session's watcher)"
 run = "scripts/office-monitor.sh"
+
+["office:tmux-sweep"]
+description = "office: remove the dead tmux sockets of this uid under TMUX_TMPDIR (or /tmp) — a live server's socket stays; prints how many it removed"
+run = "scripts/tmux-sweep.sh"
