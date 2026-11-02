@@ -14,7 +14,9 @@ defmodule Server.Intake do
   consult naming it, after the route, defers the 30 minutes (they run from the newest such message);
   the manager's open operator ask naming it blocks until answered, then defers the same way.
   A ticket the manager labelled `held` (it waits on something; the why in its body) is
-  neither routed nor started until the label comes off. Run by `Server.Jobs.Intake` on the cron.
+  neither routed nor started until the label comes off. Before routing, a backlog or routed ticket that a
+  commit on origin's main names as a closing "(#N)" is closed, fixed by that sha: another workline did it.
+  Run by `Server.Jobs.Intake` on the cron.
   """
   import Ecto.Query
 
@@ -180,6 +182,7 @@ defmodule Server.Intake do
     max_open = opts[:max_open] || Server.OperatorConfig.setting("max_open_worklines")
     route = opts[:route] || (&Server.Tickets.route/1)
 
+    close_landed(opts)
     start_stalled(opts)
 
     for ws <- Repo.all(from t in Ticket, where: t.status == "backlog", distinct: true, select: t.workspace_id),
@@ -187,6 +190,42 @@ defmodule Server.Intake do
         working < cap and open < max_open,
         ticket = next(ws),
         do: route.(ticket)
+
+    :ok
+  end
+
+  @doc """
+  `{sha, subject}` of the newest commits on origin's main, in the tlon checkout: what `run/1`'s `:landed`
+  reads. A repo with no `origin/main` has none.
+  """
+  def landed_on_main do
+    case System.cmd("git", ["-C", Server.Profiles.tlon_root(), "log", "origin/main", "-n", "300", "--format=%h %s"],
+           stderr_to_stdout: true
+         ) do
+      {out, 0} -> out |> String.split("\n", trim: true) |> Enum.map(&List.to_tuple(String.split(&1, " ", parts: 2)))
+      _ -> []
+    end
+  end
+
+  # An open ticket a landed commit's subject ends with "(#N)" for is fixed: close it with that sha
+  # (the newest naming it), so intake never routes work another workline already did. Only the closing
+  # "(#N)" counts; a bare #N is as often a PR or thread number.
+  defp close_landed(opts) do
+    with landed when is_function(landed, 0) <- opts[:landed] do
+      named =
+        for {sha, subject} <- landed.(),
+            [_, id] <- [Regex.run(~r/\(#(\d+)\)\s*$/, subject)],
+            reduce: %{},
+            do: (acc -> Map.put_new(acc, String.to_integer(id), sha))
+
+      from(t in Ticket, where: t.id in ^Map.keys(named) and t.kind == "ticket" and t.status in ["backlog", "todo"])
+      |> Repo.all()
+      |> Enum.each(fn t ->
+        sha = named[t.id]
+        note = "Closed by intake: fixed by #{sha}, a commit on main that names it."
+        {:ok, _} = Server.Tickets.update(t, %{status: "done", body: String.trim("#{t.body}\n\n#{note}")})
+      end)
+    end
 
     :ok
   end
