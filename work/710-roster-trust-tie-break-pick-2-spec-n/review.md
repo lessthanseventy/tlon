@@ -1,10 +1,5 @@
-APPROVE — #710 re-review of 7e98894..562b725 (tzinacan)
+APPROVE — #710 at 2d789cd
 
-I read the diff only and did not run the suite. The gate claim in pr.md is the builder's, not mine.
+Re-review since e028196: the only change is the sent-back fix. escalate/2's record clause is now guarded `when led > 0` (as trust_rate does), so a seat with no finished builds falls through to "" and the post reads "↑ zelda takes this from daneri: <why>. Pick it up from the brief." The new test asserts exactly that body with no :trust_record override. The builder reports it red before the guard (taken from their message; I did not re-run it). Nothing else touched; earlier findings stand fixed.
 
-- `escalate` builds its candidates with `with_trust/1` (workline.ex:1424). That function rescues a raising lookup, logs a warning and returns the candidate without trust, so a failed trust store still escalates. The raising-lookup test asserts that, and that the post states no record.
-- The post appends "(landed N of their last M builds first time)" only when the winner has a trust map. The tie test (junior daneri, senior zelda with 2 of 2) asserts the exact text and that zelda is picked.
-- The neutrality test puts a worst record listed first against a zero record and against no record. Both orderings pick the neutral seat, which closes my earlier gap.
-- The `pick/2` spec names the optional `trust` key.
-
-No blocking findings.
+No blocking findings, no follow-ups.
