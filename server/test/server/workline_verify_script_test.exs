@@ -198,6 +198,15 @@ defmodule Server.WorklineVerifyScriptTest do
       """)
 
       File.chmod!(Path.join(tmp, "bin/mise"), 0o755)
+
+      # psql: every call logged, so no test touches a real database; PSQL_EXIT makes the drop fail
+      File.write!(Path.join(tmp, "bin/psql"), ~S"""
+      #!/bin/sh
+      printf '%s\n' "$*" >>"$GATE_LOG.psql"
+      exit "${PSQL_EXIT:-0}"
+      """)
+
+      File.chmod!(Path.join(tmp, "bin/psql"), 0o755)
       %{tmp: tmp, repo: repo, ref: sh.(repo, "git rev-parse land/feature"), main: sh.(repo, "git rev-parse main")}
     end
 
@@ -397,6 +406,38 @@ defmodule Server.WorklineVerifyScriptTest do
       assert out =~ "(the full log: #{log})"
       refute out =~ "the failing assertion, line 42"
       assert File.read!(log) =~ "the failing assertion, line 42"
+    end
+
+    defp drops(ctx) do
+      case File.read(Path.join(ctx.tmp, "gate.log.psql")) do
+        {:ok, log} -> log |> String.split("\n", trim: true) |> Enum.filter(&(&1 =~ "DROP DATABASE"))
+        _ -> []
+      end
+    end
+
+    test "the gate's own database is dropped on exit, green or red", ctx do
+      assert {_, 0} = gate(ctx)
+      assert [drop] = drops(ctx)
+      assert drop =~ ~s(DROP DATABASE IF EXISTS "tlon_land_pr_7_feature")
+
+      File.rm!(Path.join(ctx.tmp, "gate.log.psql"))
+      assert {_, 1} = gate(ctx, [{"FAKE_GATE", "1"}])
+      assert [_] = drops(ctx)
+    end
+
+    test "a workline's verify drops its tlon_verify_ database after the advance", ctx do
+      workline!(ctx, %{"server/x.ex" => "x"})
+      assert {_, 0} = verify(ctx)
+      assert [drop] = drops(ctx)
+      assert drop =~ ~s("tlon_verify_pr_7_feature")
+      assert File.read!(Path.join(ctx.tmp, "cli.log")) =~ "advance 7 verify"
+    end
+
+    test "a failed drop is a warning: the verdict's exit code stands", ctx do
+      assert {out, 0} = gate(ctx, [{"PSQL_EXIT", "1"}])
+      assert out =~ "could not drop"
+      assert {out, 1} = gate(ctx, [{"PSQL_EXIT", "1"}, {"FAKE_GATE", "1"}])
+      assert out =~ "could not drop"
     end
 
     test "green: no log is kept", ctx do
