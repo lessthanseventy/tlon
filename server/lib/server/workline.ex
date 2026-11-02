@@ -1429,8 +1429,11 @@ defmodule Server.Workline do
 
       landed =
         case Enum.find(candidates, &(&1.coworker.name == name)) do
-          %{trust: %{led: led, first_time: first}} -> " (landed #{first} of their last #{led} builds first time)"
-          _ -> ""
+          %{trust: %{led: led, first_time: first}} when led > 0 ->
+            " (landed #{first} of their last #{led} builds first time)"
+
+          _ ->
+            ""
         end
 
       {:ok, _} =
