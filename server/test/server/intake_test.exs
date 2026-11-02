@@ -353,6 +353,34 @@ defmodule Server.IntakeTest do
     assert id == next.id
   end
 
+  describe "a ticket a landed commit names as (#N) is closed, not routed" do
+    defp landed_for(id), do: fn -> [{"abc1234", "hand_to: a raising lookup (##{id})"}] end
+
+    test "a backlog ticket named in a landed subject closes, evidenced by that sha, and is not routed", %{
+      ws: ws,
+      route: route
+    } do
+      done = file(ws, "already fixed")
+      Intake.run(cap: 4, route: route, landed: landed_for(done.id))
+      assert %{status: "done", body: body} = Tickets.get(done.id)
+      assert body =~ "abc1234"
+      refute_received {:routed, _}
+    end
+
+    test "a held ticket closes too", %{ws: ws, route: route} do
+      held = elem(Tickets.file(%{workspace_id: ws.id, title: "held", labels: ["held"]}), 1)
+      Intake.run(cap: 4, route: route, landed: landed_for(held.id))
+      assert %{status: "done"} = Tickets.get(held.id)
+    end
+
+    test "a #N anywhere but the subject's closing (#N) names nothing", %{ws: ws, route: route} do
+      t = file(ws, "open")
+      landed = fn -> [{"abc1234", "fix ##{t.id} in the thing, see ##{t.id} and (##{t.id}0)"}] end
+      Intake.run(cap: 4, route: route, landed: landed)
+      assert %{status: "backlog"} = Tickets.get(t.id)
+    end
+  end
+
   test "the intake is on the cron" do
     crontab =
       Enum.find_value(Application.get_env(:server, Oban)[:plugins], fn

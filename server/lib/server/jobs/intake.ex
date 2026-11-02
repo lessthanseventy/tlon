@@ -3,5 +3,5 @@ defmodule Server.Jobs.Intake do
   use Oban.Worker, queue: :maintain, max_attempts: 1, unique: [period: 60]
 
   @impl Oban.Worker
-  def perform(%Oban.Job{}), do: Server.Intake.run()
+  def perform(%Oban.Job{}), do: Server.Intake.run(landed: &Server.Intake.landed_on_main/0)
 end
