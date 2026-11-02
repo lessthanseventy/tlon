@@ -1,12 +1,10 @@
-APPROVE — #710
+APPROVE — #710 re-review of 7e98894..562b725 (tzinacan)
 
-Right then. Read the diff against origin/main.
+I read the diff only and did not run the suite. The gate claim in pr.md is the builder's, not mine.
 
-- `workline.ex` escalate now passes `trust: Server.Trust.record(&1.name)`. This matches the two other `Roster.pick` callers (lines 1395 and 1462), so escalate no longer ties on bench order.
-- The `@spec` names `optional(:trust)` with the `led`/`first_time` shape that `trust_rate/1` matches on. Correct.
-- The neutrality test now puts the zero-record seat first and asserts it wins. The old order passed even if the default were 0.0, because bench order broke the tie. The new order only passes at 0.5, so the test now has teeth.
-- The new continuation test is sound by inspection: zelda has 2 first-time builds (rate 1.0), ireneo has none (0.5), and ireneo is seated first. Without the trust key, bench order would pick ireneo.
+- `escalate` builds its candidates with `with_trust/1` (workline.ex:1424). That function rescues a raising lookup, logs a warning and returns the candidate without trust, so a failed trust store still escalates. The raising-lookup test asserts that, and that the post states no record.
+- The post appends "(landed N of their last M builds first time)" only when the winner has a trust map. The tie test (junior daneri, senior zelda with 2 of 2) asserts the exact text and that zelda is picked.
+- The neutrality test puts a worst record listed first against a zero record and against no record. Both orderings pick the neutral seat, which closes my earlier gap.
+- The `pick/2` spec names the optional `trust` key.
 
-I did not run the suite. The pr.md cites a green `menard run check --in server` (2590 tests) recorded as event 15564; I take that as theirs, not verified by me.
-
-No blocking findings. restaff/restaff_miss are explicitly split off, so I'm not asking for them here.
+No blocking findings.
