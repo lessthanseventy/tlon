@@ -71,8 +71,47 @@ defmodule Server.DbSweepScriptTest do
     assert dbs(p) == ["#{p}1"]
   end
 
-  test "no argument means tlon_eval_, and the task is wired in tasks/server.toml" do
-    assert File.read!(@script) =~ ~s(prefix="${1-tlon_eval_}")
+  # a psql that lists $LIST for any select and logs every other call: the script's own name filter
+  # is the subject, so nothing here reaches a real database
+  @tag :tmp_dir
+  test "no argument: eval pids and land/verify/test slugs go; tlon_test, tlon_test_main and the rest stay", %{
+    tmp_dir: tmp
+  } do
+    File.write!(Path.join(tmp, "psql"), """
+    #!/bin/sh
+    case "$*" in
+      *select*) cat "$LIST" ;;
+      *) printf '%s\\n' "$*" >>"$LOG" ;;
+    esac
+    """)
+
+    File.chmod!(Path.join(tmp, "psql"), 0o755)
+
+    keep = ~w(tlon tlon_dev tlon_test tlon_test_main tlon_eval_abc tlon_eval_ tlon_land_ tlon_verify_ tlon_bench_x_1
+              Tlon_Land_X tlon_land_a;b tlon_land_a"b tlon_land_a-b tlon_other_x)
+    drop = ~w(tlon_eval_123 tlon_land_pr_7_feature tlon_verify_715_land tlon_test_agent_a785e4e2_00ff00ff tlon_test_x)
+    File.write!(Path.join(tmp, "list"), Enum.join(keep ++ drop, "\n") <> "\n")
+
+    env = [
+      {"PATH", "#{tmp}:#{System.get_env("PATH")}"},
+      {"LIST", Path.join(tmp, "list")},
+      {"LOG", Path.join(tmp, "log")}
+    ]
+
+    assert {out, 0} = System.cmd("bash", [@script], env: env, stderr_to_stdout: true)
+    assert out =~ "dropped #{length(drop)}"
+
+    dropped =
+      tmp
+      |> Path.join("log")
+      |> File.read!()
+      |> String.split("\n", trim: true)
+      |> Enum.map(&(~r/DROP DATABASE IF EXISTS "([^"]*)"/ |> Regex.run(&1) |> List.last()))
+
+    assert Enum.sort(dropped) == Enum.sort(drop)
+  end
+
+  test "the task is wired in tasks/server.toml" do
     toml = File.read!(Path.expand("../../../tasks/server.toml", __DIR__))
     assert toml =~ ~s(["server:db-sweep"])
     assert toml =~ "scripts/db-sweep.sh"
