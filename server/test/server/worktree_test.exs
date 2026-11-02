@@ -607,6 +607,31 @@ defmodule Server.WorktreeTest do
       assert {_, 0} = git.(["cat-file", "-e", "work/dropped:half.txt"])
     end
 
+    test "retire/2 drops the test database its checkout's suite ran in, and no other", %{repo: repo} do
+      {:ok, wt} = Worktree.ensure(repo, "dbdrop")
+      mine = Server.TestDatabaseName.compute(Path.join(wt, "server/config"), nil)
+      assert mine =~ ~r/^tlon_test_dbdrop_[0-9a-f]{8}$/
+      other = mine <> "_other"
+      for db <- [mine, other], do: create_db!(db)
+      on_exit(fn -> for db <- [mine, other], do: drop_db(db) end)
+
+      assert {:removed, ^wt} = Worktree.retire(repo, "dbdrop")
+      refute db_exists?(mine)
+      assert db_exists?(other)
+    end
+
+    test "retire/2 with no such database still removes the checkout", %{repo: repo} do
+      {:ok, wt} = Worktree.ensure(repo, "nodb")
+      assert {:removed, ^wt} = Worktree.retire(repo, "nodb")
+    end
+
+    defp psql(sql),
+      do: System.cmd("psql", ["-h", System.get_env("PGHOST", "/run/postgresql"), "-d", "postgres", "-XAtq", "-c", sql])
+
+    defp create_db!(db), do: {_, 0} = psql(~s(CREATE DATABASE "#{db}"))
+    defp drop_db(db), do: psql(~s|DROP DATABASE IF EXISTS "#{db}" WITH (FORCE)|)
+    defp db_exists?(db), do: {"1\n", 0} == psql("select 1 from pg_database where datname = '#{db}'")
+
     test "retire/2 names a detached checkout's commits before it goes", %{repo: repo, git: git} do
       {:ok, wt} = Worktree.ensure(repo, "loose")
       {_, 0} = System.cmd("git", ["-C", wt, "checkout", "-q", "--detach"])

@@ -16,6 +16,8 @@ defmodule Server.Worktree do
 
   # The slug names filesystem paths — same closed charset the workline enforces (Server.Thread),
   # re-checked here so a bad slug can never traverse out of `.worktrees/`.
+  require Logger
+
   @slug ~r/\A[a-z0-9][a-z0-9-]*\z/
 
   # A module's installed deps, keyed by the lockfile that pins them.
@@ -615,12 +617,34 @@ defmodule Server.Worktree do
     end
   end
 
+  # The suite's per-worktree database goes with the worktree; a failed drop is not the retire's failure.
+  defp drop_test_database("tlon_test_" <> rest = db) do
+    if rest =~ ~r/^[A-Za-z0-9_]+$/ do
+      opts = Keyword.take(Server.Repo.config(), [:socket_dir, :hostname, :port, :username, :password])
+      {:ok, conn} = Postgrex.start_link([database: "postgres", pool_size: 1] ++ opts)
+
+      try do
+        Postgrex.query!(conn, ~s|DROP DATABASE IF EXISTS "#{db}" WITH (FORCE)|, [])
+      after
+        GenServer.stop(conn)
+      end
+    end
+
+    :ok
+  rescue
+    e -> Logger.warning("could not drop test database #{db}: #{Exception.message(e)}")
+  end
+
+  defp drop_test_database(_), do: :ok
+
   defp do_retire(repo_path, slug) do
     wt = path(repo_path, slug)
 
     if File.exists?(Path.join(wt, ".git")) do
       with :ok <- keep_work(wt, slug),
+           db = Server.TestDatabaseName.compute(Path.join(wt, "server/config"), nil),
            {_out, 0} <- git(repo_path, ["worktree", "remove", "--force", wt]) do
+        drop_test_database(db)
         {:removed, wt}
       else
         {:kept, _} = kept -> kept

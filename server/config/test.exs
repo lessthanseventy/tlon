@@ -4,9 +4,13 @@ import Config
 # so two checkouts sharing one would delete it under each other mid-run. Each checkout gets its own:
 # any git worktree uses tlon_test_<name>_<hash of its path>, the main checkout tlon_test.
 # TLON_TEST_DATABASE names another (a second suite in the same checkout).
-# The naming rule lives in Server.TestDatabaseName (config/support/), tested directly by
-# test/server/test_database_name_test.exs — a config file itself can't be run by ExUnit.
-Code.eval_file(Path.join(__DIR__, "support/test_database_name.exs"))
+# The naming rule lives in Server.TestDatabaseName (lib/server/, which Worktree.retire also reads to
+# drop a retired checkout's database), tested directly by test/server/test_database_name_test.exs —
+# a config file itself can't be run by ExUnit.
+# (the compile that follows defines the module again: that is no conflict worth a warning)
+Code.put_compiler_option(:ignore_module_conflict, true)
+Code.eval_file(Path.join(__DIR__, "../lib/server/test_database_name.ex"))
+Code.put_compiler_option(:ignore_module_conflict, false)
 test_database = Server.TestDatabaseName.compute(__DIR__, System.get_env("TLON_TEST_DATABASE"))
 
 # a cached toggle would outlive TestDB.clean! into the next test; with no cache there is nothing to bust
