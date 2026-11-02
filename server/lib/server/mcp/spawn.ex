@@ -181,8 +181,8 @@ defmodule Server.MCP.Spawn do
     end
   end
 
-  # Marks a pane on the workspace's root thread so the pre-commit hook can refuse a commit on the
-  # lobby's own branch.
+  # Marks a pane on the workspace's root thread so the pre-commit hook can refuse its every commit: a
+  # lobby session answers and advances, and a workline's worktree has one writer, its thread's pane.
   defp lobby_export(thread), do: if(Channel.root_machine_thread?(thread), do: "\nexport TLON_LOBBY=1", else: "")
 
   # The thread's worktree, ensured now, for the boot script to cd into — a coworker never writes in

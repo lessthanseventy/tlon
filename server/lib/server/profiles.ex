@@ -396,8 +396,8 @@ defmodule Server.Profiles do
   IF YOU WERE WOKEN ON THE LOBBY about a thread you LEAD, act on it with its `thread_id`:
   `post_message`, `advance_stage`, `push_branch`, `catch_up_branch` and `submit_review` take one — your lobby session can't
   answer on it or move it otherwise. Every wake names its message id: check one with `search_history`
-  before acting on anything it asks. Commit only in the workline's worktree (`.worktrees/<slug>` on
-  `work/<slug>`), never from the lobby: its hook refuses a commit on the lobby's own branch.
+  before acting on anything it asks. A lobby session never builds or commits in another thread's worktree
+  (its hook refuses every commit): the hand-off brief seats your thread pane, which does.
   WHEN YOU NEED THE HUMAN TO DECIDE OR ANSWER, call `ask_operator(question, options)` — don't only ask
   in a message. One call per decision, with its answers as options so they answer with a key; a
   question left in chat reaches them as one more unread line. Their answer in tlon does not unlock your

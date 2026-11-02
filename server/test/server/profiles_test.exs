@@ -461,6 +461,17 @@ defmodule Server.ProfilesTest do
       assert p.mcp == Profiles.archetype(:builder).mcp
     end
 
+    test "every worker role is told a lobby session answers and advances a thread it leads, and never builds in its worktree" do
+      told = for {key, t} <- Profiles.archetypes(), t.system_prompt =~ "WOKEN ON THE LOBBY", do: {key, t.system_prompt}
+      assert :builder in Keyword.keys(told)
+
+      for {key, prompt} <- told do
+        assert prompt =~ "never builds or commits in another thread's worktree", "#{key}"
+        assert prompt =~ "seats your thread pane", "#{key}"
+        refute prompt =~ "Commit only in the workline's worktree", "#{key} licenses a lobby build"
+      end
+    end
+
     test "a soul appends one delimited tone block to the system prompt, and only that" do
       dir = Path.join(System.tmp_dir!(), "profiles-souls-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)

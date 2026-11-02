@@ -753,6 +753,37 @@ defmodule Server.SwitchboardTest do
       assert exports =~ ~s(TLON_AUTHOR="Tertius") and exports =~ ~s(TLON_THREAD="#{lobby.id}")
     end
 
+    test "a non-lead @mention wakes the coworker's lobby window; the hand-off that follows seats a thread pane beside it" do
+      # #804's trigger: the lobby session stays live while the thread pane is seated, so two sessions
+      # of one agent are up at once. The wake is right (the lobby is where a coworker with no place on
+      # a thread is reached); what keeps one writer per worktree is the licence: only the thread pane
+      # may build, and the lobby one answers (`Profiles`' brief, `scripts/git-hooks/pre-commit`).
+      {:ok, ws} = Server.Workspaces.register(%{name: "Lobbyland"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, task} = Channel.open_thread(%{title: "ticket 710", workspace_id: ws.id})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "Sonny", archetype: "builder"})
+      {:ok, lonnrot} = Staff.register_agent(%{name: "Lonnrot", mandate: "review", engine: "fresh"})
+      {:ok, _} = Staff.assign(task, lonnrot)
+      sonny = Staff.agent_by_name("Sonny")
+      {:ok, in_lobby} = Staff.start_session(%{agent_id: sonny.id, thread_id: lobby.id, pane_ref: "wSonnyLobby"})
+
+      {:ok, m} = Channel.post(%{thread_id: task.id, author: "uqbar", body: "@Sonny the fix is yours"})
+      assert {:delivered, _} = Switchboard.deliver(m)
+      assert_received {:woke, "wSonnyLobby", _}
+      refute_received {:spawned, _}
+
+      {:ok, _} = Channel.assign_lead(task.id, "Sonny")
+      {:ok, brief} = Channel.post(%{thread_id: task.id, author: "tlon", body: "→ Sonny leads (build stage)"})
+      assert {:pending, _} = Switchboard.deliver(brief)
+      assert_received {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="Sonny") and exports =~ ~s(TLON_THREAD="#{task.id}")
+      refute exports =~ "TLON_LOBBY"
+      assert_receive {:woke, nil, "New message on thread " <> _}, 1_000
+
+      assert is_nil(Repo.get!(Server.Session, in_lobby.id).ended_at)
+      refute_received {:woke, "wSonnyLobby", _}
+    end
+
     test "an @mention of an absent coworker does not spawn the LEAD (only the addressed lead spawns)" do
       {:ok, thread} = Channel.open_thread(%{title: "t"})
       {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})
