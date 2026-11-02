@@ -1515,7 +1515,7 @@ defmodule Server.Workline do
       case Server.Channel.assign_lead(thread.id, name) do
         {:ok, restaffed} ->
           close_leaf(restaffed)
-          model = Server.Profiles.model_label(thread.workspace_id, name)
+          model = model_label(thread.workspace_id, name)
           post_brief(restaffed, "#{Server.Trust.leads_line(name, thread.stage, model)}#{note}")
           restaffed
 
@@ -2483,5 +2483,15 @@ defmodule Server.Workline do
     e ->
       Logger.warning("trust record for #{name} failed, picking without it: #{Exception.message(e)}")
       candidate
+  end
+
+  # the leads line names the model when it can; a lookup that raises posts the line without it
+  # rather than leaving the new lead unannounced
+  defp model_label(workspace_id, name) do
+    Application.get_env(:server, :model_label, &Server.Profiles.model_label/2).(workspace_id, name)
+  rescue
+    e ->
+      Logger.warning("model label for #{name} failed, posting the leads line without it: #{Exception.message(e)}")
+      nil
   end
 end
