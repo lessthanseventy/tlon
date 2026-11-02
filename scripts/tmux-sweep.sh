@@ -8,13 +8,16 @@
 # "no server running" and goes.
 set -uo pipefail
 
+command -v tmux >/dev/null || { echo "tmux-sweep: no tmux on PATH, nothing swept" >&2; exit 2; }
 dir="${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)"
 removed=0
 [ -d "$dir" ] || { echo "tmux-sweep: removed 0 dead socket(s) (no $dir)"; exit 0; }
 for sock in "$dir"/*; do
   [ -S "$sock" ] && [ -O "$sock" ] || continue
-  if ! tmux -S "$sock" display -p ok >/dev/null 2>&1; then
-    rm -f "$sock" && removed=$((removed + 1))
-  fi
+  # Only "no server running" proves the socket is dead; any other failure keeps it.
+  err="$(tmux -S "$sock" display -p ok 2>&1 >/dev/null)" && continue
+  case "$err" in
+    *"no server running"*|*"error connecting"*) rm -f "$sock" && removed=$((removed + 1)) ;;
+  esac
 done
 echo "tmux-sweep: removed $removed dead socket(s) from $dir"
