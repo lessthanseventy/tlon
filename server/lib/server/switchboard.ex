@@ -383,20 +383,24 @@ defmodule Server.Switchboard do
       {:ok, _} = ok ->
         ok
 
-      {:error, reason} = refused when reason in [:already_running, :no_arbiter] ->
+      # `:at_cap` is said once already, as the thread's parked note
+      {:error, reason} = refused when reason in [:already_running, :no_arbiter, :at_cap] ->
         refused
 
       {:error, reason} = refused ->
-        if agent.id == thread.agent_id do
-          Server.Channel.post(%{
-            thread_id: home.id,
-            author: "tlon",
-            kind: "notice",
-            body: "#{agent.name} could not be seated on this thread: #{inspect(reason)}"
-          })
-        end
+        if agent.id == thread.agent_id,
+          do: note_unseated(home, "#{agent.name} could not be seated on this thread: #{inspect(reason)}")
 
         refused
+    end
+  end
+
+  # the drain retries a pending post each minute, so say a refusal only while it is not already the latest word
+  defp note_unseated(home, body) do
+    last = Repo.one(from m in Message, where: m.thread_id == ^home.id, order_by: [desc: m.id], limit: 1)
+
+    if !(last && last.author == "tlon" && last.body == body) do
+      Server.Channel.post(%{thread_id: home.id, author: "tlon", kind: "notice", body: body})
     end
   end
 
