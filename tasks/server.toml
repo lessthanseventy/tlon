@@ -134,7 +134,8 @@ run = "adapters/claude-code/launch.sh"
 
 ["cap"]
 description = "Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md)"
-run = "scripts/cap.sh"
+dir = "{{cwd}}"
+run = "{{config_root}}/scripts/cap.sh"
 
 ["scratch:new"]
 description = "a detached worktree at ~/.cache/tlon-scratch/<name> (a seat's at tlon-scratch/<seat>/<name>) from origin/main (or a ref), deps installed for the gates and menard — `scratch:new -- <name> [<ref>]`; prints its path"
@@ -154,7 +155,8 @@ run = "scripts/ollama-usage.sh"
 
 ["watch"]
 description = "Re-run a command on every file change, printing cap's signal — register in the background, edit, get pass/fail automatically (see AGENTS.md)"
-run = "scripts/watch.sh"
+dir = "{{cwd}}"
+run = "{{config_root}}/scripts/watch.sh"
 
 # The `[w]atchexec` bracket is the trick: `pkill -f`/`pgrep -f` match a process's ENTIRE
 # argv, so a naive `pkill -f watchexec` would match its own argv and signal ITSELF.

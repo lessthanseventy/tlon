@@ -62,8 +62,7 @@ script — run it through **`mise run cap -- <cmd>`**. It runs the command
 a test/build-summary line, failure lines on a non-zero exit, and a short tail — plus the exact
 `tail`/`grep` to read more **from the saved log**. A red suite never reads green: a command that exits 0 while its own report
 counts failures (`6 fail`, `Failed: 1 test`) is reported as failed, and every log ends `[cap] exit N`.
-The task always runs from the repo root; to run from a subdirectory or another repo, call
-`scripts/cap.sh` by path, which stays where you are.
+It runs in the directory you call it from; in another repo, call `scripts/cap.sh` by path.
 
 The rule this enforces: **do not re-run a command with an escalating `grep … | tail -N` to see
 more of its output.** The full output is already on disk — `grep`/`tail` the log. Re-running
