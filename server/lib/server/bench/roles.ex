@@ -328,7 +328,7 @@ defmodule Server.Bench.Roles do
       usage: %{
         input: total(results, :input) + total(results, :cache_read) + total(results, :cache_write),
         output: total(results, :output),
-        cost_usd: if(costs != [], do: Float.round(Enum.sum(costs), 4))
+        cost_usd: if(costs != [], do: Float.round(Enum.sum(costs) / 1, 4))
       },
       tasks: results
     })
