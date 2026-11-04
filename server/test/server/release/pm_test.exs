@@ -241,7 +241,11 @@ defmodule Server.Release.PMTest do
       checks_pass!(ctx, ctx.main)
       grader!(ctx, @low)
       me = self()
-      hot_load = fn from, to -> send(me, {:hot_load, from, to}) && {:ok, [Some.Module]} end
+
+      hot_load = fn from, to ->
+        send(me, {:hot_load, from, to})
+        {:ok, [Some.Module]}
+      end
 
       assert {:ok, _} = PM.decide(ctx.ws.id, ctx.main, "Lamp talk.", Keyword.put(ctx.opts, :hot_load, hot_load))
       assert_received {:hot_load, from, to}
