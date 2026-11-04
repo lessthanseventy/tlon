@@ -83,7 +83,8 @@ perms_json=""
 # Everything a citizen does with the server — presence, the brief, capture, the band — is the mod
 # (`mod.ts`, loaded by --plugin-dir below). The band carries the status, so the operator's own
 # statusLine stays out of a citizen's window.
-settings_json="{\"statusLine\":{\"type\":\"command\",\"command\":\"true\"}$perms_json}"
+# The operator's worktrunk plugin writes the repo's .git/config on every prompt; a seat's `worktree add -b` needs that lock.
+settings_json="{\"statusLine\":{\"type\":\"command\",\"command\":\"true\"},\"enabledPlugins\":{\"worktrunk@worktrunk\":false}$perms_json}"
 # The operator's own settings turn remote control on at startup; only uqbar's study keeps it.
 # remoteControlAtStartup is a real key in claude-code 2.1.293's bundled settings schema, and false wins.
 [ "$TLON_AUTHOR" = "uqbar" ] || settings_json="$(jq -c '. + {remoteControlAtStartup: false}' <<<"$settings_json")"
