@@ -57,7 +57,9 @@ defmodule Server.ProfilesTest do
     # under a write root, the fixed checkouts and the headroom. The write roots are seeded to exactly
     # their reserve and the read dirs past their share, so the test states the split. One grower in the
     # roots must break it alone: 110 repos pass the whole budget. Seeding more only slows the gate under load.
+    # the budget is what the test asserts; the timeout is the gate's load, which this test does not control
     @tag :tmp_dir
+    @tag timeout: 120_000
     test "a seat's write roots stay under the bwrap budget however many repos the box has", %{tmp_dir: home} do
       # unbounded growers: 110 repos in each cache a seat might share, and in another seat's scratch
       for cache <- ~w(mix menard-scratch tlon-scratch/other-seat), do: seed_repos(home, ".cache/#{cache}", 110)
@@ -84,8 +86,11 @@ defmodule Server.ProfilesTest do
       kept = Projects.read_dirs(t)
       read_count = kept |> Enum.map(&length(Path.wildcard(Path.join(&1, "**/.git"), match_dot: true))) |> Enum.sum()
 
+      # each seat's scratch dir is seeded once, not once per archetype
+      for seat <- ["hronir", "zunz"],
+          do: seed_repos(home, ".cache/tlon-scratch/#{seat}", SandboxBudget.write_root_reserve() - length(caches))
+
       for seat <- ["hronir", "zunz"], archetype <- [:builder, :qa] do
-        seed_repos(home, ".cache/tlon-scratch/#{seat}", SandboxBudget.write_root_reserve() - length(caches))
         roots = Profiles.instantiate(%{archetype: archetype, name: seat}).sandbox["filesystem"]["allowWrite"]
 
         count =
