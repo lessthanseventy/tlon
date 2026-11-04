@@ -17,10 +17,11 @@
 #                                            a first install starts the pointer at origin/main)
 #
 # The ref is `live`, not `release`: branches named release/* (here and on GitHub) rule a bare
-# `release` branch out. A cut moves the ref, pushes it, checks .release out at it, builds the release there, and asks
-# the running server for a quiet restart (it drains first); a server that can't be asked is
-# restarted outright — down is what needs it. Plain git and the server's own door, so it works at
-# 2am with the service down.
+# `release` branch out. A cut moves the ref, pushes it, checks .release out at it, and, when the
+# server's code or toolchain changed, builds the release there and asks the running server for a
+# quiet restart (it drains first); a cut to the commit already live changes nothing, so a forced
+# rebuild is server:release. A server that can't be asked is restarted outright — down is what
+# needs it. Plain git and the server's own door, so it works at 2am with the service down.
 set -uo pipefail
 
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
@@ -99,8 +100,13 @@ case "$cmd" in
 
     if [ -n "$server_same" ]; then
       echo "restart: not needed — nothing the server runs changed"
-      # no boot will say it's live; a server that can't be asked says it at its next boot
-      [ -z "$restart" ] || curl -s -m 5 -X POST "$url/api/live" >/dev/null || true
+      [ -n "$restart" ] || exit 0
+      if answer="$(curl -s -m 5 -X POST "$url/api/live")" && [ -n "$answer" ]; then
+        echo "live: $answer"
+      else
+        echo "the server didn't answer — restarting it now"
+        TLON_RESTART_WHY="release ${to:0:7}" "$root/scripts/server-restart.sh" --force
+      fi
       exit 0
     fi
 

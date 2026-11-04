@@ -157,12 +157,16 @@ defmodule Server.ReleaseScriptTest do
       refute File.exists?(ctx.calls)
     end
 
-    test "a server the script can't reach doesn't fail the cut", ctx do
+    test "a server the script can't reach is restarted: down is what needs it", ctx do
       push!(ctx, "scripts/a-script.sh")
       File.write!(Path.join(ctx.bin, "curl"), "#!/bin/sh\nexit 7\n")
+      restart = Path.join(ctx.repo, "scripts/server-restart.sh")
+      File.write!(restart, "#!/bin/sh\necho \"restarted $@\" >> #{ctx.calls}\n")
+      File.chmod!(restart, 0o755)
 
       assert {_, 0} = release(ctx, ["cut"])
       assert rev(ctx.repo, "live") == rev(ctx.repo, "origin/main")
+      assert File.read!(ctx.calls) =~ "restarted --force"
     end
 
     for file <- ["server/lib/a.ex", "mise.toml"] do

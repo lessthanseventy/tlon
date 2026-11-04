@@ -87,7 +87,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 
 | verb | does |
 |---|---|
-| `release:cut` | release: move the release pointer (default origin/main; fast-forward only, merged work only; `-- --rollback` to go back), build it in .release, restart once quiet |
+| `release:cut` | release: move the release pointer (default origin/main; fast-forward only, merged work only; `-- --rollback` to go back); when server code changed, build it in .release and restart once quiet |
 | `release:smoke` | release: smoke a candidate (default origin/main) — a scratch release on a scratch port and db, /api/office, the office driven headless; exit code is the verdict |
 | `release:status` | release: what the service runs against what main has waiting, and whether main is releasable (gate, smoke, quiet) |
 

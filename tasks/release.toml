@@ -1,5 +1,5 @@
 ["release:cut"]
-description = "release: move the release pointer (default origin/main; fast-forward only, merged work only; `-- --rollback` to go back), build it in .release, restart once quiet"
+description = "release: move the release pointer (default origin/main; fast-forward only, merged work only; `-- --rollback` to go back); when server code changed, build it in .release and restart once quiet"
 run = "scripts/release.sh cut"
 
 ["release:status"]
