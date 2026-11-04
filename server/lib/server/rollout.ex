@@ -123,6 +123,8 @@ defmodule Server.Rollout do
 
   defp job_line("schedules", args), do: "the scheduled run #{args["run_id"]} is running"
 
+  defp job_line("landing", %{"pr" => pr}), do: "the landing of PR ##{pr} is running"
+
   defp job_line(queue, args), do: "the #{queue} of ##{args["thread_id"]} is running"
 
   @doc "Whether a restart cuts nothing off now (`busy/0` is empty)."
