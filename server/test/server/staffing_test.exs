@@ -668,6 +668,17 @@ defmodule Server.StaffingTest do
       assert Channel.thread_lead(thread.id) == "hronir"
     end
 
+    test "a delivery that exits after the reassignment still answers {:ok, thread}", %{ws: ws} do
+      Application.put_env(:server, :arbiter, Server.StaffingTest.ExitingArbiter)
+      on_exit(fn -> Application.delete_env(:server, :arbiter) end)
+
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+
+      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert Channel.thread_lead(thread.id) == "hronir"
+    end
+
     test "an arbiter that refuses the new lead's seat says so on the thread", %{ws: ws} do
       Application.put_env(:server, :arbiter, Server.StaffingTest.RefusingArbiter)
       on_exit(fn -> Application.delete_env(:server, :arbiter) end)
@@ -888,6 +899,20 @@ defmodule Server.StaffingTest.RaisingArbiter do
 
   @impl true
   def spawn(_exports), do: raise("boom")
+
+  @impl true
+  def ready?(_handle), do: true
+end
+
+defmodule Server.StaffingTest.ExitingArbiter do
+  @moduledoc false
+  @behaviour Server.Arbiter
+
+  @impl true
+  def wake(_session, _prompt), do: :ok
+
+  @impl true
+  def spawn(_exports), do: exit(:timeout)
 
   @impl true
   def ready?(_handle), do: true

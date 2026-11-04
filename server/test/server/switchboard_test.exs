@@ -454,9 +454,42 @@ defmodule Server.SwitchboardTest do
       Switchboard.deliver(m)
 
       for n <- Channel.thread_messages(thread), n.kind == "notice", do: Switchboard.deliver(n)
+      Switchboard.deliver(m)
 
       notices = Enum.filter(Channel.thread_messages(thread), &(&1.body =~ "could not be seated"))
       assert length(notices) == 1
+    end
+
+    test "a refusal is not said over the thread's parked note" do
+      Application.put_env(:server, :arbiter, Server.SwitchboardTest.ChangingRefusalArbiter)
+      {:ok, thread} = Channel.open_thread(%{title: "cold thread"})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "please review"})
+
+      {:ok, _} =
+        Channel.post(%{thread_id: thread.id, author: "tlon", kind: "notice", body: "⏸ parked: waiting for a seat"})
+
+      Switchboard.deliver(m)
+
+      refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "could not be seated"))
+      assert Server.Staffing.parked_note?(thread.id)
+    end
+
+    test "a plain post on a leadless thread stays pending until a lead is assigned" do
+      {:ok, thread} = Channel.open_thread(%{title: "leadless"})
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "anyone?"})
+
+      assert {:pending, _} = Switchboard.deliver(m)
+      assert is_nil(Repo.get!(Message, m.id).delivered_at)
+
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+      Switchboard.drain()
+
+      assert_receive {:woke, nil, "New message on thread " <> _}, 1_000
+      assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
 
     test "a lead respawned after the server retired its pane opens knowing where it left off" do
