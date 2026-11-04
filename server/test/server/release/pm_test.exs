@@ -51,6 +51,7 @@ defmodule Server.Release.PMTest do
       script: script,
       busy: fn -> [] end,
       restart: fn why -> send(me, {:restart, why}) end,
+      hot_load: fn _from, _to -> {:restart, "a process module changed: X"} end,
       auto_land_risk: 2
     ]
 
@@ -201,7 +202,7 @@ defmodule Server.Release.PMTest do
       assert_received {:restart, why}
       assert why =~ String.slice(ctx.main, 0, 7)
 
-      [fits, changelog] = Enum.take(bodies(ctx.ws), -2)
+      [fits, changelog, _needs_a_restart] = Enum.take(bodies(ctx.ws), -3)
       assert fits =~ "fit your standing approval"
       assert changelog =~ "The lamp and the desk say hello now."
       assert changelog =~ "office: the desk says hello"
@@ -234,6 +235,31 @@ defmodule Server.Release.PMTest do
 
       assert {:ok, _} = PM.decide(ctx.ws.id, main, "Lamp talk.", ctx.opts)
       assert_received {:restart, _}
+    end
+
+    test "a release that hot-loads needs no restart and is said live", ctx do
+      checks_pass!(ctx, ctx.main)
+      grader!(ctx, @low)
+      me = self()
+      hot_load = fn from, to -> send(me, {:hot_load, from, to}) && {:ok, [Some.Module]} end
+
+      assert {:ok, _} = PM.decide(ctx.ws.id, ctx.main, "Lamp talk.", Keyword.put(ctx.opts, :hot_load, hot_load))
+      assert_received {:hot_load, from, to}
+      assert {from, to} == {ctx.live, ctx.main}
+      refute_received {:restart, _}
+
+      body = Enum.join(bodies(ctx.ws), "\n")
+      assert body =~ "loaded without a restart: 1 modules"
+      assert List.last(bodies(ctx.ws)) =~ "release #{String.slice(ctx.main, 0, 7)} is live"
+    end
+
+    test "a release that can't hot-load says why and asks for the restart", ctx do
+      checks_pass!(ctx, ctx.main)
+      grader!(ctx, @low)
+
+      assert {:ok, _} = PM.decide(ctx.ws.id, ctx.main, "Lamp talk.", ctx.opts)
+      assert_received {:restart, _}
+      assert Enum.join(bodies(ctx.ws), "\n") =~ "needs a restart: a process module changed: X"
     end
 
     test "a change over the standing approval: one gate for the operator, nothing cut", ctx do
@@ -499,6 +525,41 @@ defmodule Server.Release.PMTest do
 
       assert {:error, "no systemd"} = PM.note_live(root: ctx.repo, restart: fn _ -> {:error, "no systemd"} end)
       assert length(bodies(ctx.ws)) == said
+    end
+
+    test "a hot load moves what the server runs, so the next word isn't a restart", ctx do
+      on_exit(fn -> :persistent_term.erase({PM, :booted}) end)
+      assert :ok = PM.boot(root: ctx.repo)
+      booted = rev(ctx.repo, "live")
+
+      commit!(ctx.repo, "server/lib/a.ex", "changed\n", "server: a", System.os_time(:second) + 180)
+      git!(ctx.repo, ["branch", "-f", "live", "HEAD"])
+      to = rev(ctx.repo, "live")
+      restart = [root: ctx.repo, restart: fn why -> send(self(), {:restart, why}) end]
+
+      loaded = fn from, to ->
+        send(self(), {:weighed, from, to})
+        {:ok, [A]}
+      end
+
+      assert {:ok, [A]} = PM.hot_load("an older pointer", to, root: ctx.repo, hot_load: loaded)
+      assert_received {:weighed, ^booted, ^to}
+
+      assert :ok = PM.note_live(restart)
+      refute_received {:restart, _}
+    end
+
+    test "a refused hot load leaves the server behind the pointer", ctx do
+      on_exit(fn -> :persistent_term.erase({PM, :booted}) end)
+      assert :ok = PM.boot(root: ctx.repo)
+
+      commit!(ctx.repo, "server/lib/a.ex", "changed\n", "server: a", System.os_time(:second) + 180)
+      git!(ctx.repo, ["branch", "-f", "live", "HEAD"])
+
+      assert {:restart, "no"} =
+               PM.hot_load("x", rev(ctx.repo, "live"), root: ctx.repo, hot_load: fn _, _ -> {:restart, "no"} end)
+
+      assert :restarting = PM.note_live(root: ctx.repo, restart: fn _ -> :ok end)
     end
 
     test "a booted commit git can't read restarts rather than says live", ctx do

@@ -221,9 +221,10 @@ defmodule Server.Release.PM do
 
   @doc """
   Cut `sha`: refused unless it is still ahead of live and releasable; else the release script moves
-  the pointer and builds, the changelog is recorded and posted, and the restart asked for — or, when
-  the script says the server's code didn't change, `note_live/1` decides: the release said live
-  without one, unless the running server is behind the pointer, when it restarts.
+  the pointer and builds, the changelog is recorded and posted, and the release takes effect: said
+  live without a restart when the script says the server's code didn't change, unless the running
+  server is behind the pointer (`note_live/1`), when it restarts; else `hot_load/3` swaps it in, or
+  failing that the restart is asked for.
   `{:ok, changelog}` | `{:error, why}`, either way said on the root thread; a cut that fails is
   recorded as `check_failed` under `release:<sha>`, the operator's `release_failed`
   (`Server.Office.Needs`) until a cut succeeds.
@@ -248,7 +249,7 @@ defmodule Server.Release.PM do
         })
 
       notice(workspace_id, changelog)
-      settle_cut(out, sha, workspace_id, root, restart)
+      take_effect(out, workspace_id, live, sha, root, restart, opts)
       {:ok, changelog}
     else
       {:error, why} = error ->
@@ -308,6 +309,22 @@ defmodule Server.Release.PM do
 
       true ->
         say_live(root)
+    end
+  end
+
+  @doc """
+  Bring the running server onto `to` without a restart (`Server.Release.HotLoad`). What it weighs
+  runs from the commit the server is actually on, not `from`, when a restart was missed: a migration
+  in between must refuse the swap. A swap moves that commit to `to`, so `note_live/1` doesn't restart
+  what is already running it. `{:ok, modules}` | `{:restart, why}`. `opts`: `root:`, `hot_load:`.
+  """
+  def hot_load(from, to, opts \\ []) do
+    run = opts[:hot_load] || (&Server.Release.HotLoad.run(&1, &2, root: root(opts)))
+    booted = :persistent_term.get({__MODULE__, :booted}, nil)
+
+    with {:ok, _} = loaded <- run.(booted || from, to) do
+      if booted, do: :persistent_term.put({__MODULE__, :booted}, to)
+      loaded
     end
   end
 
@@ -481,6 +498,28 @@ defmodule Server.Release.PM do
 
   defp check_opts(opts), do: Keyword.take(opts, [:busy])
 
+  defp take_effect(out, workspace_id, live, sha, root, restart, opts) do
+    # anchored: the script prints the commit subjects first, indented
+    if out =~ ~r/^restart: not needed/m do
+      with {:error, why} <- note_live(root: root, restart: restart),
+           do:
+             notice(
+               workspace_id,
+               "release #{short(sha)} is cut, but the server is behind it and its restart failed: #{why}"
+             )
+    else
+      case hot_load(live, sha, root: root, hot_load: opts[:hot_load]) do
+        {:ok, modules} ->
+          notice(workspace_id, "release #{short(sha)} loaded without a restart: #{length(modules)} modules")
+          note_live(root: root)
+
+        {:restart, why} ->
+          notice(workspace_id, "release #{short(sha)} needs a restart: #{why}")
+          restart.("release #{short(sha)}")
+      end
+    end
+  end
+
   defp run(script, root, sha) do
     case System.cmd("bash", [script, "cut", sha, "--no-restart"], cd: root, stderr_to_stdout: true) do
       {out, 0} ->
@@ -626,20 +665,6 @@ defmodule Server.Release.PM do
     end
 
     :ok
-  end
-
-  # anchored: the script prints the commit subjects first, indented
-  defp settle_cut(out, sha, workspace_id, root, restart) do
-    if out =~ ~r/^restart: not needed/m do
-      with {:error, why} <- note_live(root: root, restart: restart),
-           do:
-             notice(
-               workspace_id,
-               "release #{short(sha)} is cut, but the server is behind it and its restart failed: #{why}"
-             )
-    else
-      restart.("release #{short(sha)}")
-    end
   end
 
   defp behind_pointer?(root) do

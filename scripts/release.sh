@@ -13,7 +13,9 @@
 #                                            and restarts nothing, and says "restart: not needed",
 #                                            unless the running server is behind the pointer
 #                                            (a restart that never happened): told of the cut, it
-#                                            restarts, and a restart it can't make fails the cut
+#                                            restarts, and a restart it can't make fails the cut;
+#                                            otherwise the server is asked to hot-load the build
+#                                            (Server.Release.HotLoad) and restarts if it can't
 #   release.sh status                        what runs, what main has that it doesn't, and
 #                                            whether main is releasable (the server's checks)
 #   release.sh build                         build .release at the current release (server:release;
@@ -115,6 +117,11 @@ case "$cmd" in
     fi
 
     [ -n "$restart" ] || exit 0
+    answer="$(curl -s -m 30 -X POST -H 'content-type: application/json' -d "{\"from\":\"$from\",\"to\":\"$to\"}" "$url/api/hotload")"
+    case "$answer" in
+      *'"loaded"'*) echo "hot-loaded: $answer"; exit 0 ;;
+      *'"restart"'*) echo "hot load refused: $answer" ;;
+    esac
     if answer="$(curl -s -m 5 -X POST -H 'content-type: application/json' -d '{}' "$url/api/restart")" && [ -n "$answer" ]; then
       echo "restart: $answer"
     else
