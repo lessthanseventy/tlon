@@ -182,6 +182,41 @@ defmodule Server.Release.PM do
   end
 
   @doc """
+  The nightly cut (`Server.Jobs.Release`, once the nightly gate and smoke have run): the newest
+  commit ahead of live that passed both goes to `decide/4`, whose standing approval and gate apply
+  as to any proposal. Busy doesn't hold it, because the restart waits for the first quiet moment
+  itself. Nothing is cut while the office is paused, after a rollback (the next cut is the
+  operator's), or for a commit the operator was already asked about. Returns what `decide/4` does,
+  or the reason it wasn't called. `opts`: as `decide/4`.
+  """
+  def auto(opts \\ []) do
+    root = root(opts)
+    fetch(root)
+    opts = Keyword.put(opts, :busy, fn -> [] end)
+
+    with :ok <- Server.Pause.at_work(),
+         %Thread{workspace_id: ws} <- Channel.machine_thread(),
+         false <- rolled_back?(),
+         {:ok, live} <- live(root),
+         {:ok, main} <- rev(root, "origin/main"),
+         {:ok, commits} <- ahead(root, live, main) do
+      candidate = commits |> Enum.reverse() |> Enum.find(&Candidate.releasable?(&1.sha, check_opts(opts)))
+
+      cond do
+        candidate == nil ->
+          notice(ws, "nightly release: #{changes(length(commits))} waiting, none passed both the gate and the smoke")
+          :none
+
+        asked?(candidate.sha) ->
+          :asked
+
+        true ->
+          decide(ws, candidate.sha, nil, opts)
+      end
+    end
+  end
+
+  @doc """
   Cut `sha`: refused unless it is still ahead of live and releasable; else the release script moves
   the pointer and builds, the changelog is recorded and posted, and the restart asked for — or, when
   the script says the server's code didn't change, the release said live without one.
@@ -559,5 +594,21 @@ defmodule Server.Release.PM do
     else
       _ -> DateTime.utc_now()
     end
+  end
+
+  defp rolled_back? do
+    newest =
+      Repo.one(
+        from m in Message,
+          where: m.kind == "notice" and fragment("? \\? 'live'", m.payload),
+          order_by: [desc: m.id],
+          limit: 1
+      )
+
+    newest != nil and newest.body =~ "back from"
+  end
+
+  defp asked?(sha) do
+    Repo.exists?(from m in Message, where: m.kind == "prompt" and fragment("? ->> 'release' = ?", m.payload, ^sha))
   end
 end
