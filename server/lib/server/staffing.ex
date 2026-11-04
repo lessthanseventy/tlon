@@ -880,15 +880,22 @@ defmodule Server.Staffing do
 
   # an unknown handle is `Channel.assign_lead/2`'s refusal
   defp lead_available(thread_id, handle) do
-    with %Agent{} = agent <- Staff.agent_by_name(handle),
-         %Thread{workspace_id: ws} when is_integer(ws) <- Repo.get(Thread, thread_id) do
-      cond do
-        Presence.clocked_out?(agent) -> {:error, :clocked_out}
-        off_shift?(ws, agent) -> {:error, :off_shift}
-        true -> :ok
-      end
-    else
-      _ -> :ok
+    case Staff.agent_by_name(handle) do
+      %Agent{} = agent ->
+        if Presence.clocked_out?(agent), do: {:error, :clocked_out}, else: shift_check(thread_id, agent)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp shift_check(thread_id, agent) do
+    case Repo.get(Thread, thread_id) do
+      %Thread{workspace_id: ws} when is_integer(ws) ->
+        if off_shift?(ws, agent), do: {:error, :off_shift}, else: :ok
+
+      _ ->
+        :ok
     end
   end
 
