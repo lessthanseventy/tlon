@@ -171,6 +171,22 @@ defmodule Server.HarnessTest do
       assert settings["permissions"]["deny"] == ["mcp__tlon__close_thread", "Edit(//p/b/**)", "Edit(//p/c/**)"]
     end
 
+    test "launch.sh: a seat runs without the operator's worktrunk plugin" do
+      launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
+
+      env = [
+        {"TLON_LAUNCH_DRYRUN", "1"},
+        {"TLON_MCP_URL", "http://127.0.0.1:1/mcp"},
+        {"TLON_THREAD", "7"},
+        {"TLON_AUTHOR", "hronir"}
+      ]
+
+      {out, 0} = System.cmd("bash", [launcher], env: env)
+      [settings] = for "settings:   " <> json <- String.split(out, "\n"), do: JSON.decode!(json)
+
+      assert settings["enabledPlugins"]["worktrunk@worktrunk"] == false
+    end
+
     test "launch.sh: concurrent boots each pre-accept their folder's trust, none lost to another's write" do
       launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
       home = Path.join(System.tmp_dir!(), "tlon-trust-#{System.pid()}-#{System.unique_integer([:positive])}")
