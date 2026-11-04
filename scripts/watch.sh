@@ -29,7 +29,7 @@ done
 cmd=("$@")
 
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-cap="$root/scripts/cap.sh"
+cap="$(dirname "$(realpath "$0")")/cap.sh"
 
 if command -v watchexec >/dev/null 2>&1; then
   watch_args=()
