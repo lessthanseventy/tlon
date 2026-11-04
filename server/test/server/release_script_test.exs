@@ -157,6 +157,14 @@ defmodule Server.ReleaseScriptTest do
       refute File.exists?(ctx.calls)
     end
 
+    test "a server behind the pointer that can't restart fails the cut", ctx do
+      push!(ctx, "scripts/a-script.sh")
+      File.write!(Path.join(ctx.bin, "curl"), ~s(#!/bin/sh\necho '{"error":"no systemd"}'\n))
+
+      assert {out, 1} = release(ctx, ["cut"])
+      assert out =~ "no systemd"
+    end
+
     test "a fallback restart that fails fails the cut", ctx do
       push!(ctx, "scripts/a-script.sh")
       File.write!(Path.join(ctx.bin, "curl"), "#!/bin/sh\nexit 7\n")

@@ -10,7 +10,10 @@
 #                                            --no-restart leaves the restart to the caller (the PM's
 #                                            cut posts its changelog first, then restarts);
 #                                            a cut that changes neither server/ nor mise.toml builds
-#                                            and restarts nothing, and says "restart: not needed"
+#                                            and restarts nothing, and says "restart: not needed",
+#                                            unless the running server is behind the pointer
+#                                            (a restart that never happened): told of the cut, it
+#                                            restarts, and a restart it can't make fails the cut
 #   release.sh status                        what runs, what main has that it doesn't, and
 #                                            whether main is releasable (the server's checks)
 #   release.sh build                         build .release at the current release (server:release;
@@ -99,10 +102,11 @@ case "$cmd" in
     [ -n "$from" ] && git log --format='  %h %s' "$from..$to"
 
     if [ -n "$server_same" ]; then
-      echo "restart: not needed — nothing the server runs changed"
+      echo "restart: not needed by this cut — nothing the server runs changed"
       [ -n "$restart" ] || exit 0
       if answer="$(curl -s -m 5 -X POST "$url/api/live")" && [ -n "$answer" ]; then
         echo "the server, told of the cut: $answer"
+        case "$answer" in *'"error"'*) exit 1 ;; esac
       else
         echo "the server didn't answer — restarting it now"
         TLON_RESTART_WHY="release ${to:0:7}" "$root/scripts/server-restart.sh" --force

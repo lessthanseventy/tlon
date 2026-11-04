@@ -173,7 +173,8 @@ and every layer the spine design's re-laid §9 asked for
   nothing), the changelog posted and recorded as event `release:<sha>`, and
   `set_urgency` on the backlog. Work runs in `Server.Jobs.Release`; tests hand it a repo (`:release_root`).
   The service's boot says `release <sha> is live` once per new pointer (`note_live/1`), which the
-  desktop toasts.
+  desktop toasts. It also records the pointer it came up on (`boot/1`): a scripts-only cut over a
+  server behind that pointer restarts it instead of saying live.
 - **the librarian** (`Server.Librarian`, bench archetype `librarian`, the default bench's `quain`) —
   the office's memory: it decides the correction judge's `supersede_proposed` events
   (`review_proposals`/`decide_proposal`, through `Server.Recall.Supersede.apply_proposal/1` and
