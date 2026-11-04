@@ -444,6 +444,15 @@ defmodule Server.Release.PMTest do
       assert true = PM.auto(ctx.opts)
       assert {:error, :enoent} = cuts(ctx)
     end
+
+    test "cuts nothing while a restart waits: it may be a rollback's, not yet said live", ctx do
+      checks_pass!(ctx, ctx.main)
+      waiter = spawn_link(fn -> Process.sleep(:infinity) end)
+      Process.register(waiter, :tlon_restart_waiter)
+
+      assert true = PM.auto(ctx.opts)
+      assert {:error, :enoent} = cuts(ctx)
+    end
   end
 
   describe "note_live/1 (the service booting on what the pointer names)" do
