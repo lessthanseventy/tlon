@@ -332,6 +332,9 @@ defmodule Server.Staffing do
   def explain(:lead_mid_turn),
     do: "the lead is mid-turn on this thread; the hand-off waits for that turn to end, then retry"
 
+  def explain(:clocked_out),
+    do: "that coworker's engine is clocked out: a seat there could not run, so the thread stays with its lead"
+
   def explain(reason), do: inspect(reason)
 
   @doc """
@@ -340,10 +343,14 @@ defmodule Server.Staffing do
   lead, spawning them — and close the old worker's leaf, ending the thread's sessions as
   `roll_leaf` does. `{:ok, thread}`; `{:error, :lead_mid_turn}` when the old lead has a live turn
   here (a turn stuck past `Thinking.stale_turn_seconds` reads as idle; `roll_leaf` and `kill_crew`
-  force it); or `Channel.assign_lead/2`'s error. Either error changes nothing.
+  force it); `{:error, :clocked_out}` when the new lead's engine is spent (a seat that could not
+  run); or `Channel.assign_lead/2`'s error. Every error changes nothing. The new lead's seat is
+  opened in this call (`Switchboard.deliver/1` on the handoff post); a refusal by the arbiter is
+  said on the thread.
   """
   def hand_off(thread_id, handle, author \\ Server.OperatorConfig.operator()) do
     with :ok <- lead_idle(thread_id),
+         :ok <- lead_available(handle),
          {:ok, thread} <- Channel.assign_lead(thread_id, handle) do
       with %{index: index} <- leaf_window(thread, "hand_off") do
         Staff.end_thread_sessions(thread.id)
@@ -351,7 +358,9 @@ defmodule Server.Staffing do
       end
 
       body = "Handing this to @#{handle}: pick it up from the brief."
-      {:ok, _} = Channel.post(%{thread_id: thread.id, author: author, body: body})
+      {:ok, message} = Channel.post(%{thread_id: thread.id, author: author, body: body})
+      # seat the new lead now: the bus delivers it too, but the drain's minute pass is its only retry
+      Server.Switchboard.deliver(message)
       {:ok, thread}
     end
   end
@@ -854,6 +863,14 @@ defmodule Server.Staffing do
     case Channel.thread_lead(thread_id) do
       nil -> :ok
       lead -> if turn(thread_id, lead) == :busy, do: {:error, :lead_mid_turn}, else: :ok
+    end
+  end
+
+  # an unknown handle is `Channel.assign_lead/2`'s refusal
+  defp lead_available(handle) do
+    case Staff.agent_by_name(handle) do
+      %{} = agent -> if Presence.clocked_out?(agent), do: {:error, :clocked_out}, else: :ok
+      nil -> :ok
     end
   end
 end

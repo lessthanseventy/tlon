@@ -584,6 +584,53 @@ defmodule Server.StaffingTest do
       plain = staffed_thread(ws, "borges")
       assert {:ok, _} = Staffing.hand_off(plain.id, "rufus")
     end
+
+    test "the new lead's seat comes up in the same call, not on the drain's next pass", %{ws: ws} do
+      Application.put_env(:server, :arbiter, Server.Arbiter.Test)
+      Application.put_env(:server, :test_pid, self())
+      on_exit(fn -> Application.delete_env(:server, :arbiter) && Application.delete_env(:server, :test_pid) end)
+
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+
+      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert_receive {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="hronir")
+      assert exports =~ ~s(TLON_THREAD="#{thread.id}")
+    end
+
+    test "a clocked-out coworker is refused up front: nothing changes, no window dies", %{ws: ws} do
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+      engine = Server.Staff.agent_by_name("hronir").engine
+      Application.put_env(:server, :engine_presence, Server.Presence.Engine.Manual)
+      Application.put_env(:server, :clocked_out_engines, [engine])
+
+      on_exit(fn ->
+        Application.delete_env(:server, :engine_presence)
+        Application.delete_env(:server, :clocked_out_engines)
+      end)
+
+      assert {:error, :clocked_out} = Staffing.hand_off(thread.id, "hronir")
+      assert Staffing.explain(:clocked_out) =~ "clocked out"
+      assert Channel.thread_lead(thread.id) == "borges"
+      assert Channel.thread_messages(thread) == []
+      refute_received {:tmux, [_, _, "kill-window" | _]}
+    end
+
+    test "an arbiter that refuses the new lead's seat says so on the thread", %{ws: ws} do
+      Application.put_env(:server, :arbiter, Server.StaffingTest.RefusingArbiter)
+      on_exit(fn -> Application.delete_env(:server, :arbiter) end)
+
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+
+      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+
+      assert Enum.any?(Channel.thread_messages(thread), fn m ->
+               m.author == "tlon" and m.body =~ "hronir" and m.body =~ "could not be seated"
+             end)
+    end
   end
 
   test "uqbar's study is a standing duty: its window neither takes a coworker's seat nor waits for one", %{ws: ws} do
@@ -780,4 +827,18 @@ defmodule Server.StaffingTest do
     refute log =~ "skipped"
     assert Server.Repo.get!(Server.Session, live.id).ended_at
   end
+end
+
+defmodule Server.StaffingTest.RefusingArbiter do
+  @moduledoc false
+  @behaviour Server.Arbiter
+
+  @impl true
+  def wake(_session, _prompt), do: :ok
+
+  @impl true
+  def spawn(_exports), do: {:error, {:tmux, "boom"}}
+
+  @impl true
+  def ready?(_handle), do: true
 end
