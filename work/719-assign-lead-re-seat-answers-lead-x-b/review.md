@@ -1,49 +1,33 @@
-# Review: 719-assign-lead-re-seat-answers-lead-x-b @ 9e15faf
+# Review: 719-assign-lead-re-seat-answers-lead-x-b @ 4fb8705
 
-**Verdict: approve.** Uqbar's four asks from the gate (message 28866) are each done as asked, each pinned by a test, and nothing beyond them moved. My earlier rounds' findings stay fixed (review at 8860f48).
+**Verdict: approve.** Uqbar's two one-line asks from the gate (message 28891) are each done as asked and pinned by a test, and nothing else moved: `git diff 18729ff..4fb8705` is `staffing.ex` (+16/-9), `switchboard.ex` (+2/-2), `staffing_test.exs` (+16). My follow-up from the last round (the duplicated "⏸ parked" literal) is fixed by ask 1 and is dropped. Every earlier round's finding stays fixed (reviews at 8860f48, 18729ff).
 
-Read: `git show 9e15faf` (`staffing.ex`, `switchboard.ex`, both tests), `Switchboard.deliver/1` and its `@doc`, `deliver_now/1`, `claim_reached/1`, `inert_kind?/1`, `reaches_nobody?/1`, `addressed_to_nobody_else?/1`, `spawn_pane/1`, `note_unseated/3`, `Staffing.note_parked/1` and `parked_note?/1`. CHECKS: verify's `mise run check` exit 0 on the branch (a748789, the gate's rebased sha). I ran `menard run test --in server test/server/staffing_test.exs test/server/switchboard_test.exs` myself: 121 tests, 0 failures. No `bench_contrast` row; the diff touches no persona file, so none was due.
+Read: `git show 4fb8705`, `Staffing.lead_available/2`, the new `shift_check/2`, `Staffing.parked_note?/1`, `Switchboard.note_unseated/3`. CHECKS: verify's `mise run check` exit 0 on the branch (22a8110, the gate's rebased sha; office 969 pass, 0 fail). I ran `menard run test --in server test/server/staffing_test.exs test/server/switchboard_test.exs` myself: 122 tests, 0 failures. No `bench_contrast` row; the diff touches no persona file, so none was due.
 
-## 1. Done: deliver_now settles only the inert kinds
+## 1. Done: note_unseated reads Staffing.parked_note?
 
 Witness, `switchboard.ex`:
 
-    if inert_kind?(message), do: claim([message.id]), else: maybe_spawn_absent(message)
-    ...
-    defp inert_kind?(%Message{kind: kind}), do: kind in ["notice", "suggestion", "margin", "side project"]
+    if !(last && last.author == "tlon" && String.starts_with?(last.body, said)) and
+         !Server.Staffing.parked_note?(home.id) do
 
-The live path claims only the four kinds that can never reach anyone. A plain post on a leadless thread goes back to `maybe_spawn_absent` and `{:pending, message}`, so a lead assigned a moment later hears it. `reaches_nobody?/1` keeps its closed-thread and author-only clauses for the drain alone, as the ask drew the line. Test: a leadless post is `{:pending, _}` with `delivered_at` nil, then `Staff.assign` plus `drain/0` wakes Carl and stamps it. The `deliver/1` doc still reads true for what it says: an unaddressed message stays pending and the drain picks it up. It does not mention that a notice is settled rather than left pending; a one-line omission, noted below.
+The inline "⏸ parked" test is gone; `Staffing.note_parked/1` and `parked_note?/1` are the one owner of the prefix. `Switchboard` already called `Server.Staffing.left_off/2`, so this adds no new dependency direction. The existing parked-note precedence test (notice posted after the parked note: no "could not be seated", `parked_note?` still true) covers it and passes.
 
-## 2. Done: note_unseated dedupes on the stable prefix
-
-Witness:
-
-    defp note_unseated(home, said, reason) do
-      ...
-      if !(last && last.author == "tlon" &&
-             (String.starts_with?(last.body, "⏸ parked") or String.starts_with?(last.body, said))) do
-        Server.Channel.post(%{... body: "#{said}: #{reason}"})
-
-`said` is the fixed "<name> could not be seated on this thread" and the reason rides after the colon, so a refusal whose text changes each minute is said once. The changing-refusal test now delivers `m` a second time after the notice redeliveries and still counts one notice. Same residual as `note_parked`: a chat message landing between two retries lets the notice say itself once more.
-
-## 3. Done: never over the parked note
-
-Same witness, the `"⏸ parked"` branch. The test posts the parked note after the post, delivers the post against a refusing arbiter, and asserts no "could not be seated" and `Staffing.parked_note?/1` still true, so the thread keeps its place in `parked/2` and its seat reservation. The literal matches `note_parked/1` and `parked_note?/1` in `staffing.ex` character for character today; it now lives in two modules, which is the one follow-up.
-
-## 4. Done: hand_off catches an exit
+## 2. Done: clocked-out checked before the workspace match
 
 Witness, `staffing.ex`:
 
-    rescue
-      e -> Logger.error("hand_off delivery on thread #{thread.id} failed: #{Exception.message(e)}")
-    catch
-      :exit, reason -> Logger.error("hand_off delivery on thread #{thread.id} exited: #{inspect(reason)}")
+    case Staff.agent_by_name(handle) do
+      %Agent{} = agent ->
+        if Presence.clocked_out?(agent), do: {:error, :clocked_out}, else: shift_check(thread_id, agent)
+      _ -> :ok
+    end
 
-`spawn_pane/4` has no rescue or catch of its own, so `ExitingArbiter.spawn/1`'s `exit(:timeout)` reaches `hand_off` and only this `catch` keeps `{:ok, thread}`; the test asserts that and `thread_lead == "hronir"`.
+`shift_check/2` keeps the off-shift test behind the `when is_integer(ws)` match, as the ask drew it, since a shift needs a workspace. The old `with` sent a workspace-less thread to its `else -> :ok` before either check ran, which is what the new test pins: a `scope: "machine"` thread with `workspace_id: nil`, the Manual presence engine with hronir's engine clocked out, `hand_off` answers `{:error, :clocked_out}` and the lead stays borges. Red first on the old code by construction (the guard failed, so `:ok`). An unknown handle still falls through to `:ok` and remains `Channel.assign_lead/2`'s refusal, per the comment above the function.
 
 ## Noted, not a change
 
-- The double in-call delivery is left as agreed: the second `deliver` sees `:already_running` under the arbiter's lock.
-- `deliver_now/1` still answers `{:pending, message}` for an inert kind it has just claimed; both callers discard the value. Carried from last round.
-- The drain's `claim_reached/1` still settles a leadless post through `addressed_to_nobody_else?/1` (`Enum.all?([])` is true), so the window a late-assigned lead has to hear a post is until the next drain pass, about a minute. Pre-existing on main and outside the ask's line; said so it is not mistaken for this branch's doing.
-- Verify's check tail ends `tlon/check: not posted — gh: No commit found for SHA a748789…`: the gate's rebased sha is not on GitHub before landing, expected.
+- Verify's check tail ends `tlon/check: not posted — gh: No commit found for SHA 22a8110…`: the gate's rebased sha is not on GitHub before landing, expected.
+- The grader's remaining suggestions (a spec.md, a Runner double-delivery test, a thread notice on a raise) were explicitly not asked for by Uqbar at the gate; the `:global.trans` lock in `Arbiter.Tmux.spawn/1` settles the double delivery and the drain retries a raised delivery. Not reopened here.
+
+No open follow-ups.
