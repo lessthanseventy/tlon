@@ -731,6 +731,15 @@ defmodule Server.Office.NeedsTest do
       assert kinds(ws) == []
     end
 
+    test "a standing duty is not stalled: its thread moves when its schedule next runs", %{ws: ws} do
+      t = workline(ws, "verify", 4)
+      assert [{"stalled", "blocking"}] = kinds(ws)
+
+      t |> Ecto.Changeset.change(title: Server.Sheriff.beat_title()) |> Server.Repo.update!()
+      age(t, 4)
+      assert kinds(ws) == []
+    end
+
     test "a fresh workline is not stalled", %{ws: ws} do
       _ = workline(ws, "build", 0)
       assert kinds(ws) == []

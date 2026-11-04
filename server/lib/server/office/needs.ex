@@ -24,7 +24,7 @@ defmodule Server.Office.Needs do
       sits on a prompt, or the PM's release gate waits: pick an option, answered by `ref`, the prompt's id), `ask` (one decision a
       coworker filed with its answers, `Server.Attention.ask/4`: one item per ask, `ref` its id, `ask` who filed it,
       answered by key), `verify_failed` (a workline whose last gate run was red — the sheriff, where
-      there is one, gets a copy: `Server.Sheriff`), `stalled` (a workline nothing has moved for past
+      there is one, gets a copy: `Server.Sheriff`), `stalled` (a workline, a standing duty's thread aside, nothing has moved for past
       the quiet window (the operator's `quiet_workline_minutes` knob, the one Maintain nudges at) — no
       stage advance, check, commit or operator answer — and nobody on duty for it (a mid-turn mark
       counts until `Server.Presence.Thinking.stale_turn_seconds/0`): its text carries the thread's last word; answered by nudging the lead, handing it off, or closing it (`Server.Alerts`).
@@ -874,6 +874,7 @@ defmodule Server.Office.Needs do
 
       blocked = Server.Blocked.thread_ids()
       paused = Server.Pause.paused_thread_ids()
+      duties = open |> Enum.map(& &1.id) |> Server.Staffing.duty_threads()
 
       candidates =
         for %Thread{stage: stage} = t <- open,
@@ -882,6 +883,7 @@ defmodule Server.Office.Needs do
             not MapSet.member?(listed, t.id),
             not MapSet.member?(blocked, t.id),
             not MapSet.member?(paused, t.id),
+            not MapSet.member?(duties, t.id),
             do: {t, Server.Workline.Artifacts.Git.root(t)}
 
       tips = candidates |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Map.new(&{&1, work_tips(&1)})
