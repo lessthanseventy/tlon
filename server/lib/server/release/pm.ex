@@ -211,18 +211,7 @@ defmodule Server.Release.PM do
         })
 
       notice(workspace_id, changelog)
-      # anchored: the script prints the commit subjects first, indented
-      if out =~ ~r/^restart: not needed/m do
-        with {:error, why} <- note_live(root: root, restart: restart),
-             do:
-               notice(
-                 workspace_id,
-                 "release #{short(sha)} is cut, but the server is behind it and its restart failed: #{why}"
-               )
-      else
-        restart.("release #{short(sha)}")
-      end
-
+      settle_cut(out, sha, workspace_id, root, restart)
       {:ok, changelog}
     else
       {:error, why} = error ->
@@ -600,6 +589,20 @@ defmodule Server.Release.PM do
     end
 
     :ok
+  end
+
+  # anchored: the script prints the commit subjects first, indented
+  defp settle_cut(out, sha, workspace_id, root, restart) do
+    if out =~ ~r/^restart: not needed/m do
+      with {:error, why} <- note_live(root: root, restart: restart),
+           do:
+             notice(
+               workspace_id,
+               "release #{short(sha)} is cut, but the server is behind it and its restart failed: #{why}"
+             )
+    else
+      restart.("release #{short(sha)}")
+    end
   end
 
   defp behind_pointer?(root) do
