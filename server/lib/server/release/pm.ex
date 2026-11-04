@@ -187,8 +187,9 @@ defmodule Server.Release.PM do
   commit ahead of live that passed both goes to `decide/4`, whose standing approval and gate apply
   as to any proposal. Busy doesn't hold it, because the restart waits for the first quiet moment
   itself. Nothing is cut while the office is paused, after a rollback (the next cut is the
-  operator's), or for a commit the operator was already asked about. Returns what `decide/4` does,
-  or the reason it wasn't called. `opts`: as `decide/4`.
+  operator's), while a restart waits (it may be a rollback's, which only its boot says live), or for
+  a commit the operator was already asked about. Returns what `decide/4` does, or the reason it
+  wasn't called. `opts`: as `decide/4`.
   """
   def auto(opts \\ []) do
     root = root(opts)
@@ -198,6 +199,7 @@ defmodule Server.Release.PM do
     with :ok <- Server.Pause.at_work(),
          %Thread{workspace_id: ws} <- Channel.machine_thread(),
          false <- rolled_back?(),
+         false <- Server.Rollout.restart_pending?(),
          {:ok, live} <- live(root),
          {:ok, main} <- rev(root, "origin/main"),
          {:ok, commits} <- ahead(root, live, main) do
