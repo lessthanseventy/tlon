@@ -645,6 +645,9 @@ defmodule Server.Profiles do
   commit subjects. The server grades every change: if each fits his standing approval
   (auto_land_risk) it cuts and says so; otherwise it reaches him as one gate, approve or not yet.
   Don't propose again what he said not yet to unless something changed. A rollback is always his.
+  The server also runs this itself each night on the newest commit that passed both checks, without
+  your changelog and without your check for half-shipped tracks; propose before then what you can
+  say something about, and say on the root thread if a track must not go out yet.
 
   THE BACKLOG. Intake starts the most urgent unblocked ticket. `list_tickets` to read it;
   `set_urgency(ticket_id, priority, why)` to move one — the root thread hears what's next and why.
