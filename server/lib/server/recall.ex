@@ -32,6 +32,10 @@ defmodule Server.Recall do
   # An unrelated fact is never scored to zero — the query is a hint that lifts what it names, and
   # strength still orders everything else (a fact must be 5× stronger to beat a query hit).
   @relevance_floor 0.2
+  # Decoding and comparing one vector costs over a millisecond, so a brief compares only the facts
+  # likeliest to make the budget. Several times what the budget holds: strength and keywords choose
+  # them, and meaning reorders them.
+  @meaning_pool 500
 
   @type candidate :: %{
           optional(any()) => any(),
@@ -93,7 +97,7 @@ defmodule Server.Recall do
 
     constraints = Dossier.always_loaded_constraints()
     pinned_ids = MapSet.new(constraints, & &1.id)
-    thread_facts = Dossier.facts_for_thread(thread)
+    thread_facts = Dossier.facts_without_vectors(thread)
 
     # `:include_pinned` (default true) is the brief's working set: the GLOBAL operator constraints, the
     # thread's facts, and what its project learned on other threads, all ranked against one budget. A
@@ -109,27 +113,31 @@ defmodule Server.Recall do
     touch_events = touches_by_fact(ids)
     superseded = superseded_ids(ids)
 
-    facts
-    |> Enum.map(fn f ->
-      touches =
-        Strength.touches_for(
-          %{
-            created_at: f.created_at,
-            touches: Map.get(touch_events, f.id, []),
-            superseded?: MapSet.member?(superseded, f.id)
-          },
-          now
-        )
+    scored =
+      Enum.map(facts, fn f ->
+        touches =
+          Strength.touches_for(
+            %{
+              created_at: f.created_at,
+              touches: Map.get(touch_events, f.id, []),
+              superseded?: MapSet.member?(superseded, f.id)
+            },
+            now
+          )
 
-      %{
-        id: f.id,
-        fact: f,
-        relevance: relevance(f, query_vec, keyword),
-        strength: Strength.of(touches, now),
-        tokens: est_tokens(f.text),
-        pinned?: MapSet.member?(pinned_ids, f.id)
-      }
-    end)
+        %{
+          id: f.id,
+          fact: f,
+          strength: Strength.of(touches, now),
+          tokens: est_tokens(f.text),
+          pinned?: MapSet.member?(pinned_ids, f.id)
+        }
+      end)
+
+    vectors = meaning_pool(scored, query_vec, keyword, opts[:meaning_pool] || @meaning_pool)
+
+    scored
+    |> Enum.map(&Map.put(&1, :relevance, relevance(&1.fact, query_vec, keyword, vectors)))
     |> assemble(budget: budget)
   end
 
@@ -148,7 +156,7 @@ defmodule Server.Recall do
       |> working_set_for_thread(Keyword.put(opts, :include_pinned, false))
       |> Enum.map(& &1.fact)
 
-    total = length(Dossier.facts_for_thread(thread))
+    total = length(Dossier.facts_without_vectors(thread))
     %{shown: shown, more: max(total - length(shown), 0)}
   end
 
@@ -203,20 +211,9 @@ defmodule Server.Recall do
     end
   end
 
-  # Relevance blends the semantic (cosine) and keyword (bm25) signals as a soft-OR — a fact matching
-  # EITHER strongly is relevant, both is best, capped at 1 — lifted onto the floor. No query at all
-  # → uniform 1.0 (rank by pure strength); the best keyword hit is fully relevant with no embedding.
-  defp relevance(_fact, nil, nil), do: 1.0
-
-  defp relevance(fact, query_vec, keyword) do
-    s = semantic_rel(fact, query_vec)
-    k = keyword_rel(fact, keyword)
-    @relevance_floor + (1 - @relevance_floor) * (s + k - s * k)
-  end
-
-  defp semantic_rel(_fact, nil), do: 0.0
-  defp semantic_rel(%{embedding: nil}, _query_vec), do: 0.0
-  defp semantic_rel(%{embedding: emb}, query_vec), do: max(Embedding.cosine(query_vec, emb), 0.0)
+  defp semantic_rel(_vector, nil), do: 0.0
+  defp semantic_rel(nil, _query_vec), do: 0.0
+  defp semantic_rel(vector, query_vec), do: max(Embedding.cosine(query_vec, vector), 0.0)
 
   defp keyword_rel(_fact, nil), do: 0.0
   defp keyword_rel(%{id: id}, keyword), do: Map.get(keyword, id, 0.0)
@@ -390,5 +387,33 @@ defmodule Server.Recall do
     from(f in Fact, where: not is_nil(f.supersedes) and f.supersedes in ^fact_ids, select: f.supersedes)
     |> Repo.all()
     |> MapSet.new()
+  end
+
+  # The stored vectors of the pinned facts and the `size` best of the rest on strength and keywords
+  # alone, by fact id. Any other fact takes no semantic lift.
+  defp meaning_pool(_scored, nil, _keyword, _size), do: %{}
+
+  defp meaning_pool(scored, _query_vec, keyword, size) do
+    {pinned, rest} = Enum.split_with(scored, & &1.pinned?)
+
+    likeliest =
+      rest
+      |> Enum.filter(&(&1.strength > 0))
+      |> Enum.sort_by(&(&1.strength * relevance(&1.fact, nil, keyword, %{})), :desc)
+      |> Enum.take(size)
+
+    ids = Enum.map(pinned ++ likeliest, & &1.id)
+    Map.new(Repo.all(from f in Fact, where: f.id in ^ids, select: {f.id, f.embedding}))
+  end
+
+  # Relevance blends the semantic (cosine) and keyword (bm25) signals as a soft-OR — a fact matching
+  # EITHER strongly is relevant, both is best, capped at 1 — lifted onto the floor. No query at all
+  # → uniform 1.0 (rank by pure strength); the best keyword hit is fully relevant with no embedding.
+  defp relevance(_fact, nil, nil, _vectors), do: 1.0
+
+  defp relevance(fact, query_vec, keyword, vectors) do
+    s = semantic_rel(vectors[fact.id], query_vec)
+    k = keyword_rel(fact, keyword)
+    @relevance_floor + (1 - @relevance_floor) * (s + k - s * k)
   end
 end

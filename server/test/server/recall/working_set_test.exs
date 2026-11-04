@@ -103,6 +103,46 @@ defmodule Server.Recall.WorkingSetTest do
     assert Enum.find_index(ids, &(&1 == near.id)) < Enum.find_index(ids, &(&1 == far.id))
   end
 
+  test "only the meaning pool takes a semantic lift, and the strongest fill it", %{thread: thread} do
+    {:ok, weak} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "older", provenance: "derived"})
+    {:ok, strong} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "cited", provenance: "derived"})
+    Dossier.record_event(%{thread_id: thread.id, kind: "cited", correlation: "fact:#{strong.id}"})
+    Recall.store_embedding(weak, [1.0, 0.0], "test-model")
+    Recall.store_embedding(strong, [0.0, 1.0], "test-model")
+
+    relevance = fn pool ->
+      thread
+      |> Recall.working_set_for_thread(query_embedding: [1.0, 0.0], meaning_pool: pool, budget: 10_000)
+      |> Map.new(&{&1.id, &1.relevance})
+    end
+
+    assert relevance.(1)[weak.id] == 0.2
+    assert relevance.(2)[weak.id] == 1.0
+  end
+
+  test "a project's facts come without their vectors" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "vectors"})
+    {:ok, project} = Server.Projects.register(%{workspace_id: ws.id, name: "tlon", repos: []})
+    {:ok, earlier} = Channel.open_thread(%{title: "earlier", workspace_id: ws.id, project_id: project.id})
+    {:ok, now} = Channel.open_thread(%{title: "now", workspace_id: ws.id, project_id: project.id})
+    {:ok, fact} = Dossier.bank_fact(%{thread_id: earlier.id, kind: "learned", text: "known", provenance: "derived"})
+    Recall.store_embedding(fact, [1.0, 0.0], "test-model")
+
+    assert [%{id: id, text: "known", embedding: nil}] = Dossier.facts_for_project(now)
+    assert id == fact.id
+    assert [%{embedding: nil}] = Dossier.facts_without_vectors(earlier)
+  end
+
+  test "keyword relevance reads the query's first distinct terms and no further", %{thread: thread} do
+    {:ok, near} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "alpha", provenance: "derived"})
+    {:ok, far} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "omega", provenance: "derived"})
+    filler = Enum.map_join(1..31, " ", &"filler#{&1}")
+
+    ids = [near.id, far.id]
+    assert Map.keys(Server.Search.fact_relevance("alpha alpha #{filler} omega", ids)) == [near.id]
+    assert Map.keys(Server.Search.fact_relevance("#{filler} alpha omega", ids)) == [near.id]
+  end
+
   test "a cited touch lifts a fact above an equal unreferenced one", %{thread: thread} do
     {:ok, plain} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "plain", provenance: "derived"})
     {:ok, used} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "used often", provenance: "derived"})
