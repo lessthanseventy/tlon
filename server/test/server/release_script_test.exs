@@ -157,6 +157,16 @@ defmodule Server.ReleaseScriptTest do
       refute File.exists?(ctx.calls)
     end
 
+    test "a fallback restart that fails fails the cut", ctx do
+      push!(ctx, "scripts/a-script.sh")
+      File.write!(Path.join(ctx.bin, "curl"), "#!/bin/sh\nexit 7\n")
+      restart = Path.join(ctx.repo, "scripts/server-restart.sh")
+      File.write!(restart, "#!/bin/sh\nexit 3\n")
+      File.chmod!(restart, 0o755)
+
+      assert {_, 3} = release(ctx, ["cut"])
+    end
+
     test "a server the script can't reach is restarted: down is what needs it", ctx do
       push!(ctx, "scripts/a-script.sh")
       File.write!(Path.join(ctx.bin, "curl"), "#!/bin/sh\nexit 7\n")
