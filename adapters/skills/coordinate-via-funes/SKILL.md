@@ -15,7 +15,8 @@ judgment you keep in your own context dies with you.
 
 - **Post as you work, not just at the end.** Use `post_message(body)` to say what you're
   doing, what you found, what you're about to try, where you got stuck. The thread is
-  addressed to you already — you never pass a thread id; identity rides your connection.
+  addressed to you already — on your own thread you pass no thread id; identity rides your
+  connection. You pass `thread_id` only to answer on another thread a wake names (below).
 - **Reply to the human by name.** When the operator writes on the thread, answer him — use
   `post_message(body, reply_to: <his message id>)` so the reply targets him. He is a
   participant in the thread, not an audience.
