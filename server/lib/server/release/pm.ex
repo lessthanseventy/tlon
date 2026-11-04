@@ -185,7 +185,8 @@ defmodule Server.Release.PM do
   @doc """
   Cut `sha`: refused unless it is still ahead of live and releasable; else the release script moves
   the pointer and builds, the changelog is recorded and posted, and the restart asked for — or, when
-  the script says the server's code didn't change, the release said live without one.
+  the script says the server's code didn't change, `note_live/1` decides: the release said live
+  without one, unless the running server is behind the pointer, when it restarts.
   `{:ok, changelog}` | `{:error, why}`, either way said on the root thread; a cut that fails is
   recorded as `check_failed` under `release:<sha>`, the operator's `release_failed`
   (`Server.Office.Needs`) until a cut succeeds.
@@ -211,9 +212,16 @@ defmodule Server.Release.PM do
 
       notice(workspace_id, changelog)
       # anchored: the script prints the commit subjects first, indented
-      if out =~ ~r/^restart: not needed/m,
-        do: note_live(root: root, restart: restart),
-        else: restart.("release #{short(sha)}")
+      if out =~ ~r/^restart: not needed/m do
+        with {:error, why} <- note_live(root: root, restart: restart),
+             do:
+               notice(
+                 workspace_id,
+                 "release #{short(sha)} is cut, but the server is behind it and its restart failed: #{why}"
+               )
+      else
+        restart.("release #{short(sha)}")
+      end
 
       {:ok, changelog}
     else
@@ -254,7 +262,8 @@ defmodule Server.Release.PM do
   cut. No pointer or no root thread says nothing, nor does a restart still waiting for quiet, whose
   boot brings the code and says it. A server whose code or toolchain differs from the pointer's
   since it booted (`boot/1`; a restart that never happened) says nothing either: it restarts, and
-  that boot says it. `:ok`, or `:restarting` when it asked for that restart. `opts`: `root:`, `restart:`.
+  that boot says it. A booted commit git can no longer read counts as differing. `:ok`, `:restarting`
+  when it asked for that restart, or `{:error, why}` when the restart refused. `opts`: `root:`, `restart:`.
   """
   def note_live(opts \\ []) do
     root = root(opts)
@@ -265,8 +274,11 @@ defmodule Server.Release.PM do
 
       behind_pointer?(root) ->
         restart = opts[:restart] || fn why -> Server.Rollout.restart(why: why) end
-        restart.("the running server is behind release #{root |> live() |> elem(1) |> short()}")
-        :restarting
+
+        case restart.("the running server is behind release #{root |> live() |> elem(1) |> short()}") do
+          {:error, _} = error -> error
+          _ -> :restarting
+        end
 
       true ->
         say_live(root)
@@ -592,9 +604,9 @@ defmodule Server.Release.PM do
 
   defp behind_pointer?(root) do
     with booted when is_binary(booted) <- :persistent_term.get({__MODULE__, :booted}, nil),
-         {:ok, sha} <- live(root),
-         {_, 1} <- git(root, ["diff", "--quiet", booted, sha, "--", "server", "mise.toml"]) do
-      true
+         {:ok, sha} <- live(root) do
+      {_, status} = git(root, ["diff", "--quiet", booted, sha, "--", "server", "mise.toml"])
+      status != 0
     else
       _ -> false
     end

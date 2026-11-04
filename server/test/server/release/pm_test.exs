@@ -412,7 +412,30 @@ defmodule Server.Release.PMTest do
 
       assert :ok = PM.boot(restart)
       refute_received {:restart, _}
-      assert List.last(bodies(ctx.ws)) =~ "is live"
+      assert length(bodies(ctx.ws)) == said + 2
+      assert List.last(bodies(ctx.ws)) =~ "release #{ctx.repo |> rev("live") |> String.slice(0, 7)} is live"
+    end
+
+    test "a restart that refuses is the answer, and nothing is said live", ctx do
+      on_exit(fn -> :persistent_term.erase({PM, :booted}) end)
+      assert :ok = PM.boot(root: ctx.repo)
+      said = length(bodies(ctx.ws))
+
+      commit!(ctx.repo, "server/lib/a.ex", "changed\n", "server: a", System.os_time(:second) + 180)
+      git!(ctx.repo, ["branch", "-f", "live", "HEAD"])
+
+      assert {:error, "no systemd"} = PM.note_live(root: ctx.repo, restart: fn _ -> {:error, "no systemd"} end)
+      assert length(bodies(ctx.ws)) == said
+    end
+
+    test "a booted commit git can't read restarts rather than says live", ctx do
+      on_exit(fn -> :persistent_term.erase({PM, :booted}) end)
+      :persistent_term.put({PM, :booted}, String.duplicate("0", 40))
+      said = length(bodies(ctx.ws))
+
+      assert :restarting = PM.note_live(root: ctx.repo, restart: fn why -> send(self(), {:restart, why}) end)
+      assert_received {:restart, _}
+      assert length(bodies(ctx.ws)) == said
     end
 
     test "says nothing while a restart waits for quiet: its boot brings the code", ctx do

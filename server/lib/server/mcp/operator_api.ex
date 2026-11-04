@@ -414,6 +414,7 @@ defmodule Server.MCP.OperatorAPI do
     case Server.Release.PM.note_live() do
       :ok -> json(conn, 200, %{ok: true})
       :restarting -> json(conn, 202, %{restarting: true})
+      {:error, why} -> json(conn, 409, %{error: why})
     end
   end
 
