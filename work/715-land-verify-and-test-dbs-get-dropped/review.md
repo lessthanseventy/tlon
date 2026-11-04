@@ -1,36 +1,27 @@
-# Review: 715-land-verify-and-test-dbs-get-dropped @ 0fdcbca
+# Review: 715-land-verify-and-test-dbs-get-dropped @ e559b65
 
-**Verdict: request_changes** — the one blocking finding from the review at 299ad3c is still in the diff. The round's only code change (0fdcbca) is the non-blocking follow-up, done well.
+**Verdict: approve** — the one blocking finding carried through two rounds is fixed; nothing else changed.
 
-## 1. `config/test.exs` still leaves `ignore_module_conflict` on for the whole test compile (blocking, unfixed)
+## 1. `config/test.exs` no longer leaves `ignore_module_conflict` on for the test compile (fixed)
 
-The witness, `git diff origin/main...0fdcbca -- server/config/test.exs`:
+The witness, `git diff fb82100..e559b65 -- server/config/test.exs`:
 
 ```
-+# (the compile that follows defines the module again, so the option stays on: no conflict worth a warning)
-+Code.put_compiler_option(:ignore_module_conflict, true)
-+Code.eval_file(Path.join(__DIR__, "../lib/server/test_database_name.ex"))
+-Code.put_compiler_option(:ignore_module_conflict, true)
++Code.compiler_options(ignore_module_conflict: true)
+ Code.eval_file(Path.join(__DIR__, "../lib/server/test_database_name.ex"))
+ test_database = Server.TestDatabaseName.compute(__DIR__, System.get_env("TLON_TEST_DATABASE"))
++# the module is compiled again from lib/ below: gone from memory, there is no conflict to warn about
++:code.purge(Server.TestDatabaseName)
++:code.delete(Server.TestDatabaseName)
++Code.compiler_options(ignore_module_conflict: false)
 ```
 
-Nothing after it turns the option off. `mix precommit` runs in `:test`, so its `compile --warnings-as-errors` is this compile, and *every* "redefining module" warning in `lib/` and `test/support` is silenced for the gate, not just this one — two files defining the same module now pass. The fix is the same three lines as last round: purge the eval'd module once it has answered, then switch the option back.
+Line for line the snippet from the review at 0fdcbca. The eval'd module is gone from memory before `lib/` compiles, so the option is off again for the whole gate: a genuine "redefining module" in `lib/` or `test/support` fails `--warnings-as-errors` as it did before this branch. `:code.purge`/`:code.delete` return `false` rather than raise when there is nothing to remove, so the config file cannot fail on them. Evidence it builds: verify's `mise run check` green on the branch rebased onto main (CHECKS 02:36:30Z, `0 fail` across the server, adapters and office suites), and emma's `MIX_ENV=test mix compile --force --warnings-as-errors` clean with the test_database_name and worktree tests passing (69, 0 failures). I did not re-run the compile myself.
 
-```elixir
-Code.compiler_options(ignore_module_conflict: true)
-Code.eval_file(Path.join(__DIR__, "../lib/server/test_database_name.ex"))
-test_database = Server.TestDatabaseName.compute(__DIR__, System.get_env("TLON_TEST_DATABASE"))
-# the module is compiled again from lib/ below: gone from memory, there is no conflict to warn about
-:code.purge(Server.TestDatabaseName)
-:code.delete(Server.TestDatabaseName)
-Code.compiler_options(ignore_module_conflict: false)
-```
+## Unchanged since fb82100, still sound
 
-Mechanism verified last round outside the repo (eval_file + purge/delete, then a compile of the same file → no warning; without the purge → `redefining module … (current version defined in memory)`). Check it as before: `MIX_ENV=test mix compile --force --warnings-as-errors`, then the suite. The thread shows why it was missed: the back-to-build post relayed only the follow-up list; the blocking finding lives in review.md.
+2. `scripts/workline-verify.sh`, `Server.Worktree.retire/2` (with the fail-fast timeouts from 0fdcbca), `scripts/db-sweep.sh` — see the reviews at 299ad3c and 0fdcbca; `git diff fb82100..e559b65 --stat` touches only `server/config/test.exs`.
+3. CHECKS: `tlon/check` not posted (gh had no commit for the rebased sha 7665ff4), a server matter, not this change's. `bench_contrast` reads *unmeasurable* (server/AGENTS.md is read by a seat, not the bench): not a regression, nothing to contrast.
 
-## 2. 0fdcbca — the follow-up, read and found sound
-
-`connect_timeout: 3_000` on the start_link and `timeout: 10_000` on the `query!`. The bound that actually bites on a down Postgres is the query's 10 s (DBConnection's checkout wait); `connect_timeout` only caps a hanging TCP connect, and a missing socket fails at once. So "fails in seconds" means ~10 s, down from 15 — modest, and correct. Not using `backoff_type: :stop` was the right call: the conn is linked to the caller, so a stopped conn would exit retire's process past the `rescue`. The down-Postgres path has no test, as emma said; it needs an unreachable Postgres, and the warning path is the same `rescue` the suite already exercises through the query.
-
-## Unchanged since 299ad3c, still sound
-
-3. `scripts/workline-verify.sh`, `Server.Worktree.retire/2`, `scripts/db-sweep.sh` — see the review at 299ad3c, findings 2–5; no line of them changed.
-4. CHECKS: `mise run check` green on the verify's rebased sha (`tlon/check` not posted — gh had no commit for that sha, a server matter, not this change's). `bench_contrast` row reads *unmeasurable* (server/AGENTS.md is read by a seat, not the bench): not a regression, nothing to contrast.
+No follow-ups: the one from the first round (retire's drop hanging on a down Postgres) landed as 0fdcbca.
