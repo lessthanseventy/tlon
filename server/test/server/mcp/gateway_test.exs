@@ -201,6 +201,10 @@ defmodule Server.MCP.GatewayTest do
     assert {200, %{"restart_pending" => false}} = request_json(:delete, "/api/restart", %{})
   end
 
+  test "POST /api/live answers: a cut that needed no restart can ask it to say so" do
+    assert {200, %{"ok" => true}} = request_json(:post, "/api/live", %{})
+  end
+
   test "GET/PATCH /api/settings read and change every runtime knob in the settings file" do
     path = Path.join(System.tmp_dir!(), "tlon-config-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     Application.put_env(:server, :operator_config_path, path)

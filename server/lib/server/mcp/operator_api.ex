@@ -52,6 +52,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/restart                 restart the service now if quiet, else schedule it for the first quiet
                                           moment: 202 + {"scheduled", "waiting_on"} ({"force": true}: now anyway)
       DELETE /api/restart                 drop a scheduled restart
+      POST   /api/live                    PM.note_live: a cut that needed no restart says it is live
       PATCH  /api/flags/:name             {"enabled": bool} → Flags.set (404 for a flag the server hasn't)
       GET    /api/office/history          Office.Room.history (every closed thread, for the finder)
 
@@ -407,6 +408,11 @@ defmodule Server.MCP.OperatorAPI do
       {:scheduled, lines} -> json(conn, 202, %{scheduled: true, waiting_on: lines})
       {:error, why} -> json(conn, 409, %{error: why})
     end
+  end
+
+  defp route(conn, "POST", "live", []) do
+    :ok = Server.Release.PM.note_live()
+    json(conn, 200, %{ok: true})
   end
 
   defp route(conn, "DELETE", "restart", []) do

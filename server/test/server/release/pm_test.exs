@@ -212,6 +212,17 @@ defmodule Server.Release.PMTest do
       assert live == ctx.live
     end
 
+    test "a cut the script says needs no restart says it is live instead", ctx do
+      checks_pass!(ctx, ctx.main)
+      grader!(ctx, @low)
+      script = ctx.opts[:script]
+      File.write!(script, File.read!(script) <> "echo 'restart: not needed'\n")
+
+      assert {:ok, _} = PM.decide(ctx.ws.id, ctx.main, "Lamp talk.", ctx.opts)
+      refute_received {:restart, _}
+      assert List.last(bodies(ctx.ws)) =~ "release #{String.slice(ctx.main, 0, 7)} is live"
+    end
+
     test "a change over the standing approval: one gate for the operator, nothing cut", ctx do
       checks_pass!(ctx, ctx.main)
       grader!(ctx, %{@low | "blast" => 4})

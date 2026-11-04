@@ -111,6 +111,93 @@ defmodule Server.ReleaseScriptTest do
     assert rev(ctx.repo, "live") == rev(ctx.repo, "origin/main")
   end
 
+  describe "a cut that changes nothing the server runs" do
+    setup ctx do
+      {_, 0} = release(ctx, ["cut"])
+      release_bin = Path.join(ctx.repo, ".release/server/_build/prod/rel/server/bin/server")
+      File.mkdir_p!(Path.dirname(release_bin))
+      File.write!(release_bin, "")
+      File.chmod!(release_bin, 0o755)
+
+      for {name, body} <- [
+            {"mix", "echo mix >> #{ctx.bin}/calls"},
+            {"curl", ~s(echo "$@" >> #{ctx.bin}/calls; echo '{}')}
+          ] do
+        File.write!(Path.join(ctx.bin, name), "#!/bin/sh\n#{body}\n")
+      end
+
+      %{calls: Path.join(ctx.bin, "calls")}
+    end
+
+    defp push!(ctx, file) do
+      File.mkdir_p!(Path.dirname(Path.join(ctx.repo, file)))
+      File.write!(Path.join(ctx.repo, file), "changed\n")
+      sh!(ctx.repo, "git add -A -- #{file} && git commit -qm change && git push -q origin main")
+    end
+
+    test "moves the checkout, builds nothing, restarts nothing and says it is live", ctx do
+      push!(ctx, "adapters/claude-code/launch.sh")
+
+      assert {out, 0} = release(ctx, ["cut"])
+      assert out =~ "restart: not needed"
+      assert rev(ctx.repo, "live") == rev(ctx.repo, "origin/main")
+      assert rev(Path.join(ctx.repo, ".release"), "HEAD") == rev(ctx.repo, "origin/main")
+
+      calls = File.read!(ctx.calls)
+      refute calls =~ "mix"
+      refute calls =~ "/api/restart"
+      assert calls =~ "/api/live"
+    end
+
+    test "--no-restart says so and leaves saying it is live to the caller", ctx do
+      push!(ctx, "scripts/a-script.sh")
+
+      assert {out, 0} = release(ctx, ["cut", "--no-restart"])
+      assert out =~ "restart: not needed"
+      refute File.exists?(ctx.calls)
+    end
+
+    test "a server the script can't reach doesn't fail the cut", ctx do
+      push!(ctx, "scripts/a-script.sh")
+      File.write!(Path.join(ctx.bin, "curl"), "#!/bin/sh\nexit 7\n")
+
+      assert {_, 0} = release(ctx, ["cut"])
+      assert rev(ctx.repo, "live") == rev(ctx.repo, "origin/main")
+    end
+
+    for file <- ["server/lib/a.ex", "mise.toml"] do
+      test "a change to #{file} builds and restarts", ctx do
+        push!(ctx, unquote(file))
+
+        assert {out, 0} = release(ctx, ["cut"])
+        refute out =~ "not needed"
+        calls = File.read!(ctx.calls)
+        assert calls =~ "mix"
+        assert calls =~ "/api/restart"
+      end
+    end
+
+    test "a release that was never built is built", ctx do
+      push!(ctx, "scripts/a-script.sh")
+      File.rm_rf!(Path.join(ctx.repo, ".release/server/_build"))
+
+      assert {out, 0} = release(ctx, ["cut"])
+      refute out =~ "not needed"
+      assert File.read!(ctx.calls) =~ "mix"
+    end
+
+    test "a rollback across a server change builds and restarts", ctx do
+      back = rev(ctx.repo, "main")
+      push!(ctx, "server/lib/a.ex")
+      assert {_, 0} = release(ctx, ["cut"])
+      File.rm!(ctx.calls)
+
+      assert {out, 0} = release(ctx, ["cut", back, "--rollback"])
+      refute out =~ "not needed"
+      assert File.read!(ctx.calls) =~ "/api/restart"
+    end
+  end
+
   test "back is a rollback: refused without --rollback, done with it", ctx do
     assert {_, 0} = release(ctx, ["cut"])
     assert {out, 1} = release(ctx, ["cut", rev(ctx.repo, "main~1")])
