@@ -407,8 +407,8 @@ defmodule Server.Switchboard do
   defp note_unseated(home, said, reason) do
     last = Repo.one(from m in Message, where: m.thread_id == ^home.id, order_by: [desc: m.id], limit: 1)
 
-    if !(last && last.author == "tlon" &&
-           (String.starts_with?(last.body, "⏸ parked") or String.starts_with?(last.body, said))) do
+    if !(last && last.author == "tlon" && String.starts_with?(last.body, said)) and
+         !Server.Staffing.parked_note?(home.id) do
       Server.Channel.post(%{thread_id: home.id, author: "tlon", kind: "notice", body: "#{said}: #{reason}"})
     end
   end

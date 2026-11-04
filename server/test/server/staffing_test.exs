@@ -618,6 +618,22 @@ defmodule Server.StaffingTest do
       refute_received {:tmux, [_, _, "kill-window" | _]}
     end
 
+    test "a clocked-out coworker is refused on a thread with no workspace too" do
+      {:ok, thread} = Channel.open_thread(%{title: "no workspace", scope: "machine", workspace_id: nil})
+      {:ok, _} = Channel.assign_lead(thread.id, "borges")
+      engine = Server.Staff.agent_by_name("hronir").engine
+      Application.put_env(:server, :engine_presence, Server.Presence.Engine.Manual)
+      Application.put_env(:server, :clocked_out_engines, [engine])
+
+      on_exit(fn ->
+        Application.delete_env(:server, :engine_presence)
+        Application.delete_env(:server, :clocked_out_engines)
+      end)
+
+      assert {:error, :clocked_out} = Staffing.hand_off(thread.id, "hronir")
+      assert Channel.thread_lead(thread.id) == "borges"
+    end
+
     test "an off-shift coworker is refused up front: nothing changes, no window dies", %{ws: ws} do
       {:ok, _} = Workspaces.seat(ws.id, %{name: "emma", archetype: "builder", crew: "day"})
       {:ok, _} = Workspaces.seat(ws.id, %{name: "dahlmann", archetype: "builder", crew: "night"})
