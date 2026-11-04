@@ -201,6 +201,11 @@ defmodule Server.MCP.GatewayTest do
     assert {200, %{"restart_pending" => false}} = request_json(:delete, "/api/restart", %{})
   end
 
+  test "POST /api/hotload without commits to compare says a restart is needed" do
+    assert {409, %{"restart" => why}} = request_json(:post, "/api/hotload", %{})
+    assert why =~ "no commits"
+  end
+
   test "POST /api/live answers: a cut that needed no restart can ask it to say so" do
     assert {200, %{"ok" => true}} = request_json(:post, "/api/live", %{})
   end

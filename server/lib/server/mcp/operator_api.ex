@@ -53,6 +53,8 @@ defmodule Server.MCP.OperatorAPI do
                                           moment: 202 + {"scheduled", "waiting_on"} ({"force": true}: now anyway)
       DELETE /api/restart                 drop a scheduled restart
       POST   /api/live                    PM.note_live: a cut that needed no restart says it is live, or restarts a server behind it
+      POST   /api/hotload                 {"from", "to"} → PM.hot_load: {"loaded": n}, said live;
+                                          409 + {"restart": why}, nothing changed
       PATCH  /api/flags/:name             {"enabled": bool} → Flags.set (404 for a flag the server hasn't)
       GET    /api/office/history          Office.Room.history (every closed thread, for the finder)
 
@@ -407,6 +409,19 @@ defmodule Server.MCP.OperatorAPI do
       :ok -> json(conn, 202, %{restarting: true})
       {:scheduled, lines} -> json(conn, 202, %{scheduled: true, waiting_on: lines})
       {:error, why} -> json(conn, 409, %{error: why})
+    end
+  end
+
+  defp route(conn, "POST", "hotload", []) do
+    {b, conn} = body(conn)
+
+    case Server.Release.PM.hot_load(b["from"], b["to"]) do
+      {:ok, modules} ->
+        Server.Release.PM.note_live()
+        json(conn, 200, %{loaded: length(modules)})
+
+      {:restart, why} ->
+        json(conn, 409, %{restart: why})
     end
   end
 
