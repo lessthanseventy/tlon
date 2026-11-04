@@ -621,10 +621,13 @@ defmodule Server.Worktree do
   defp drop_test_database("tlon_test_" <> rest = db) do
     if rest =~ ~r/^[A-Za-z0-9_]+$/ do
       opts = Keyword.take(Server.Repo.config(), [:socket_dir, :hostname, :port, :username, :password])
-      {:ok, conn} = Postgrex.start_link([database: "postgres", pool_size: 1] ++ opts)
+
+      # Postgrex reconnects in the background: bound connect and query so a down Postgres fails in seconds,
+      # not the 15 s default; DROP ... FORCE still needs room to finish.
+      {:ok, conn} = Postgrex.start_link([database: "postgres", pool_size: 1, connect_timeout: 3_000] ++ opts)
 
       try do
-        Postgrex.query!(conn, ~s|DROP DATABASE IF EXISTS "#{db}" WITH (FORCE)|, [])
+        Postgrex.query!(conn, ~s|DROP DATABASE IF EXISTS "#{db}" WITH (FORCE)|, [], timeout: 10_000)
       after
         GenServer.stop(conn)
       end
