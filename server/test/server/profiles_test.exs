@@ -70,7 +70,7 @@ defmodule Server.ProfilesTest do
       Server.TestDB.clean!()
       {:ok, ws} = Workspaces.register(%{name: "budget-read"})
       read = for n <- ~w(ra rb rc), do: Path.join(home, "projects/#{n}")
-      for d <- read, i <- 1..30, do: File.mkdir_p!(Path.join([d, "r#{i}", ".git"]))
+      for n <- ~w(ra rb rc), do: seed_repos(home, "projects/#{n}", 30)
       repos = for d <- read, do: %{"name" => Path.basename(d), "path" => d}
 
       {:ok, p} =
@@ -720,8 +720,10 @@ defmodule Server.ProfilesTest do
     end
   end
 
+  # One mkdir, not one File.mkdir_p! per repo: those queue on the VM's single file server behind every
+  # async test, and on a loaded box hundreds of them outlast the test's timeout.
   defp seed_repos(home, rel, n) do
-    for i <- 1..n, do: File.mkdir_p!(Path.join([home, rel, "r#{i}", ".git"]))
+    {_, 0} = System.cmd("mkdir", ["-p" | for(i <- 1..n, do: Path.join([home, rel, "r#{i}", ".git"]))])
   end
 
   test "the repo's own .claude/settings.json never widens a seat's sandbox: Claude Code merges it into every seat's" do
