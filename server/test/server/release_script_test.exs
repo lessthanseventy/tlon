@@ -263,6 +263,26 @@ defmodule Server.ReleaseScriptTest do
     assert rev(ctx.repo, "live") == rev(ctx.repo, "main~1")
   end
 
+  test "a build names the advisories its fetch reports, and not the rest of the fetch", ctx do
+    File.write!(Path.join(ctx.bin, "mix"), """
+    #!/bin/sh
+    [ "$1" = deps.get ] || exit 0
+    echo 'Unchanged:'
+    echo '  bandit 1.14.1'
+    echo '  ecto 3.14.2 VULNERABLE!'
+    echo '    EEF-CVE-2026-118391 (HIGH)'
+    echo '    https://osv.dev/vulnerability/EEF-CVE-2026-118391'
+    echo '  jason 1.4.5'
+    echo 'Found packages with security advisories, see above for details' >&2
+    """)
+
+    assert {out, 0} = release(ctx, ["cut", "--no-restart"])
+    assert out =~ "ecto 3.14.2 VULNERABLE!"
+    assert out =~ "EEF-CVE-2026-118391 (HIGH)"
+    refute out =~ "jason"
+    refute out =~ "bandit"
+  end
+
   test "status names what main has that the release doesn't", ctx do
     assert {_, 0} = release(ctx, ["cut", rev(ctx.repo, "main~1")])
     assert {out, 0} = release(ctx, ["status"])

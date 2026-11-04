@@ -46,7 +46,10 @@ build_at() {
   # the main checkout's installed deps where there are none: a cut never refetches the world
   if [ ! -d "$rel/server/deps" ] && [ -d "$root/server/deps" ]; then cp -a --reflink=auto "$root/server/deps" "$rel/server/"; fi
   # deps first: a commit that adds a dependency builds nowhere until it is fetched
-  (cd "$rel/server" && MIX_ENV=prod mix deps.get >/dev/null && MIX_ENV=prod mix release --overwrite >/dev/null) ||
+  # of the fetch's list of every dependency, keep what its stderr's "see above" points at
+  (cd "$rel/server" &&
+    MIX_ENV=prod mix deps.get | awk '/VULNERABLE/ { p = 1; print; next } p && /^    / { print; next } { p = 0 }' &&
+    MIX_ENV=prod mix release --overwrite >/dev/null) ||
     { echo "release: the build failed in $rel" >&2; return 1; }
 }
 
