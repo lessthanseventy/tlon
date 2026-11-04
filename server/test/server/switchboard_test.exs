@@ -433,6 +433,32 @@ defmodule Server.SwitchboardTest do
       assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
 
+    test "a notice does not open its thread's lead's pane: it reaches nobody" do
+      {:ok, thread} = Channel.open_thread(%{title: "cold thread"})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+
+      {:ok, n} = Channel.post(%{thread_id: thread.id, author: "tlon", body: "FYI", kind: "notice"})
+      Switchboard.deliver(n)
+
+      refute_received {:spawned, _}
+    end
+
+    test "a refusal whose text changes every call is said once, not once per attempt" do
+      Application.put_env(:server, :arbiter, Server.SwitchboardTest.ChangingRefusalArbiter)
+      {:ok, thread} = Channel.open_thread(%{title: "cold thread"})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "please review"})
+      Switchboard.deliver(m)
+
+      for n <- Channel.thread_messages(thread), n.kind == "notice", do: Switchboard.deliver(n)
+
+      notices = Enum.filter(Channel.thread_messages(thread), &(&1.body =~ "could not be seated"))
+      assert length(notices) == 1
+    end
+
     test "a lead respawned after the server retired its pane opens knowing where it left off" do
       {:ok, thread} = Channel.open_thread(%{title: "rolled thread"})
       {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
@@ -1058,4 +1084,18 @@ defmodule Server.SwitchboardTest do
       0 -> :ok
     end
   end
+end
+
+defmodule Server.SwitchboardTest.ChangingRefusalArbiter do
+  @moduledoc false
+  @behaviour Server.Arbiter
+
+  @impl true
+  def wake(_session, _prompt), do: :ok
+
+  @impl true
+  def spawn(_exports), do: {:error, {:tmux, System.unique_integer([:positive])}}
+
+  @impl true
+  def ready?(_handle), do: true
 end
