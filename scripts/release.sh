@@ -102,7 +102,7 @@ case "$cmd" in
       echo "restart: not needed — nothing the server runs changed"
       [ -n "$restart" ] || exit 0
       if answer="$(curl -s -m 5 -X POST "$url/api/live")" && [ -n "$answer" ]; then
-        echo "live: $answer"
+        echo "the server, told of the cut: $answer"
       else
         echo "the server didn't answer — restarting it now"
         TLON_RESTART_WHY="release ${to:0:7}" "$root/scripts/server-restart.sh" --force
