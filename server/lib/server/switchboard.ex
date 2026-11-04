@@ -366,13 +366,38 @@ defmodule Server.Switchboard do
             not Presence.clocked_out?(agent),
             # a window of their own there: never the thread's lead because they were named on it
             {:ok, %{exports: exports}} <- [Spawn.join(home.id, agent.name, assign: false)],
-            {:ok, handle} <- [Arbiter.spawn(exports)],
+            {:ok, handle} <- [spawn_pane(exports, agent, thread, home)],
             do: {agent.name, handle, home.id}
 
       if spawned != [], do: opening_turn(message, spawned)
     end
 
     :ok
+  end
+
+  # A pane already running (`:already_running`) is its coworker still booting, and no arbiter is a
+  # headless node: both left alone. Any other refusal of the thread's lead is said on the thread, so
+  # a seat that never comes up is not silent.
+  defp spawn_pane(exports, agent, thread, home) do
+    case Arbiter.spawn(exports) do
+      {:ok, _} = ok ->
+        ok
+
+      {:error, reason} = refused when reason in [:already_running, :no_arbiter] ->
+        refused
+
+      {:error, reason} = refused ->
+        if agent.id == thread.agent_id do
+          Server.Channel.post(%{
+            thread_id: home.id,
+            author: "tlon",
+            kind: "notice",
+            body: "#{agent.name} could not be seated on this thread: #{inspect(reason)}"
+          })
+        end
+
+        refused
+    end
   end
 
   # Where an absent coworker named on `thread` is spawned: here if this is the standing thread or they
