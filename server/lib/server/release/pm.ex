@@ -183,7 +183,8 @@ defmodule Server.Release.PM do
 
   @doc """
   Cut `sha`: refused unless it is still ahead of live and releasable; else the release script moves
-  the pointer and builds, the changelog is recorded and posted, and the restart asked for.
+  the pointer and builds, the changelog is recorded and posted, and the restart asked for — or, when
+  the script says the server's code didn't change, the release said live without one.
   `{:ok, changelog}` | `{:error, why}`, either way said on the root thread; a cut that fails is
   recorded as `check_failed` under `release:<sha>`, the operator's `release_failed`
   (`Server.Office.Needs`) until a cut succeeds.
@@ -196,7 +197,7 @@ defmodule Server.Release.PM do
     with {:ok, live} <- live(root),
          {:ok, commits} <- ahead(root, live, sha),
          :ok <- releasable(sha, opts),
-         {:ok, _out} <- run(script, root, sha) do
+         {:ok, out} <- run(script, root, sha) do
       changelog = changelog(root, live, sha, commits, notes)
 
       {:ok, _} =
@@ -208,7 +209,7 @@ defmodule Server.Release.PM do
         })
 
       notice(workspace_id, changelog)
-      restart.("release #{short(sha)}")
+      if out =~ "restart: not needed", do: note_live(root: root), else: restart.("release #{short(sha)}")
       {:ok, changelog}
     else
       {:error, why} = error ->

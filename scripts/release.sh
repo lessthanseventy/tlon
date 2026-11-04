@@ -8,7 +8,9 @@
 #                                            fast-forward, only onto a commit on origin/main;
 #                                            --rollback allows going back to an older one;
 #                                            --no-restart leaves the restart to the caller (the PM's
-#                                            cut posts its changelog first, then restarts)
+#                                            cut posts its changelog first, then restarts);
+#                                            a cut that changes neither server/ nor mise.toml builds
+#                                            and restarts nothing, and says "restart: not needed"
 #   release.sh status                        what runs, what main has that it doesn't, and
 #                                            whether main is releasable (the server's checks)
 #   release.sh build                         build .release at the current release (server:release;
@@ -27,10 +29,14 @@ url="${TLON_URL:-http://127.0.0.1:4040}"
 cli="${TLON_CLI:-$root/scripts/tlon-cli.sh}"
 git() { command git -C "$root" "$@"; }
 
+checkout_at() {
+  if [ -e "$rel/.git" ]; then command git -C "$rel" checkout -q --detach "$1"
+  else git worktree add -q --detach "$rel" "$1"; fi
+}
+
 # .release checked out at $1 and its release built
 build_at() {
-  if [ -e "$rel/.git" ]; then command git -C "$rel" checkout -q --detach "$1" || return 1
-  else git worktree add -q --detach "$rel" "$1" || return 1; fi
+  checkout_at "$1" || return 1
   # the main checkout's installed deps where there are none: a cut never refetches the world
   if [ ! -d "$rel/server/deps" ] && [ -d "$root/server/deps" ]; then cp -a --reflink=auto "$root/server/deps" "$rel/server/"; fi
   # deps first: a commit that adds a dependency builds nowhere until it is fetched
@@ -68,8 +74,21 @@ case "$cmd" in
       exit 1
     fi
 
+    # Only server/ and the toolchain are built into the running server; adapters, scripts and the
+    # office are read from the .release checkout each time they are used.
+    if [ -n "$from" ] && [ -x "$rel/server/_build/prod/rel/server/bin/server" ] &&
+      git diff --quiet "$from" "$to" -- server mise.toml; then
+      server_same=1
+    else
+      server_same=""
+    fi
+
     # built first, moved after: a build that fails leaves the pointer naming what still runs
-    build_at "$to" || { echo "release: live stays at ${from:0:7}" >&2; exit 1; }
+    if [ -n "$server_same" ]; then
+      checkout_at "$to" || { echo "release: live stays at ${from:0:7}" >&2; exit 1; }
+    else
+      build_at "$to" || { echo "release: live stays at ${from:0:7}" >&2; exit 1; }
+    fi
     git branch -f live "$to" || exit 1
     # the cut is the operator's own act: run from a citizen pane it must not be fenced as a coworker's push
     env -u TLON_THREAD git -C "$root" push -q ${rollback:+--force} origin live ||
@@ -77,6 +96,13 @@ case "$cmd" in
 
     echo "release → ${to:0:7}${from:+ (from ${from:0:7})}"
     [ -n "$from" ] && git log --format='  %h %s' "$from..$to"
+
+    if [ -n "$server_same" ]; then
+      echo "restart: not needed — nothing the server runs changed"
+      # no boot will say it's live; a server that can't be asked says it at its next boot
+      [ -z "$restart" ] || curl -s -m 5 -X POST "$url/api/live" >/dev/null || true
+      exit 0
+    fi
 
     [ -n "$restart" ] || exit 0
     if answer="$(curl -s -m 5 -X POST -H 'content-type: application/json' -d '{}' "$url/api/restart")" && [ -n "$answer" ]; then
