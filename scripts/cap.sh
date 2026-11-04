@@ -36,7 +36,8 @@ fi
 printf '\n[cap] exit %s%s\n' "$rc" "$([ "$red_but_zero" = 1 ] && echo ' (the command exited 0, but its report shows failures)')" >>"$log"
 
 lines="$(wc -l <"$log" | tr -d ' ')"
-rel="${log#"$root"/}"
+# The paths it prints must open from where it was called, which need not be the repo root.
+rel="${log#"$PWD"/}"
 
 printf '▶ %s\n  log: %s  (%s lines)\n' "$*" "$rel" "$lines"
 
