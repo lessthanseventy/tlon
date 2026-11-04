@@ -211,7 +211,10 @@ defmodule Server.Release.PM do
 
       notice(workspace_id, changelog)
       # anchored: the script prints the commit subjects first, indented
-      if out =~ ~r/^restart: not needed/m, do: note_live(root: root), else: restart.("release #{short(sha)}")
+      if out =~ ~r/^restart: not needed/m,
+        do: note_live(root: root, restart: restart),
+        else: restart.("release #{short(sha)}")
+
       {:ok, changelog}
     else
       {:error, why} = error ->
@@ -249,10 +252,31 @@ defmodule Server.Release.PM do
   (`— back from <sha>` on a rollback, nothing more on the first), payload `%{"live" => sha, "notes" => [subject]}` (the subjects it moved over, at most 12; none on the first or a rollback). It also wakes the
   threads blocked on a ticket closed before the pointer moved (`Server.Blocked.release/1`): a fix reaches the seats at a
   cut. No pointer or no root thread says nothing, nor does a restart still waiting for quiet, whose
-  boot brings the code and says it. `:ok`. `opts`: `root:`.
+  boot brings the code and says it. A server whose code or toolchain differs from the pointer's
+  since it booted (`boot/1`; a restart that never happened) says nothing either: it restarts, and
+  that boot says it. `:ok`, or `:restarting` when it asked for that restart. `opts`: `root:`, `restart:`.
   """
   def note_live(opts \\ []) do
-    if Server.Rollout.restart_pending?(), do: :ok, else: say_live(root(opts))
+    root = root(opts)
+
+    cond do
+      Server.Rollout.restart_pending?() ->
+        :ok
+
+      behind_pointer?(root) ->
+        restart = opts[:restart] || fn why -> Server.Rollout.restart(why: why) end
+        restart.("the running server is behind release #{root |> live() |> elem(1) |> short()}")
+        :restarting
+
+      true ->
+        say_live(root)
+    end
+  end
+
+  @doc "The service booting: remember the pointer it came up on, for `note_live/1` to compare, then say it live. `opts`: `root:`, `restart:`."
+  def boot(opts \\ []) do
+    with {:ok, sha} <- live(root(opts)), do: :persistent_term.put({__MODULE__, :booted}, sha)
+    note_live(opts)
   end
 
   defp since_last(_root, nil, _sha), do: ""
@@ -564,5 +588,15 @@ defmodule Server.Release.PM do
     end
 
     :ok
+  end
+
+  defp behind_pointer?(root) do
+    with booted when is_binary(booted) <- :persistent_term.get({__MODULE__, :booted}, nil),
+         {:ok, sha} <- live(root),
+         {_, 1} <- git(root, ["diff", "--quiet", booted, sha, "--", "server", "mise.toml"]) do
+      true
+    else
+      _ -> false
+    end
   end
 end

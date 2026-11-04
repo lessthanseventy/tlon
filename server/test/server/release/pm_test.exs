@@ -383,6 +383,38 @@ defmodule Server.Release.PMTest do
   end
 
   describe "note_live/1 (the service booting on what the pointer names)" do
+    test "a server behind the pointer's code restarts instead of saying live; its boot says it", ctx do
+      on_exit(fn -> :persistent_term.erase({PM, :booted}) end)
+      assert :ok = PM.boot(root: ctx.repo)
+      said = length(bodies(ctx.ws))
+      restart = [root: ctx.repo, restart: fn why -> send(self(), {:restart, why}) end]
+      now = System.os_time(:second)
+
+      commit!(ctx.repo, "scripts/a.sh", "true\n", "scripts: a", now + 180)
+      git!(ctx.repo, ["branch", "-f", "live", "HEAD"])
+      assert :ok = PM.note_live(restart)
+      refute_received {:restart, _}
+      assert length(bodies(ctx.ws)) == said + 1
+
+      for file <- ["server/lib/a.ex", "mise.toml"] do
+        commit!(ctx.repo, file, "changed\n", "changes #{file}", now + 240)
+        git!(ctx.repo, ["branch", "-f", "live", "HEAD"])
+        assert :restarting = PM.note_live(restart)
+        assert_received {:restart, _}
+        assert length(bodies(ctx.ws)) == said + 1
+      end
+
+      commit!(ctx.repo, "scripts/b.sh", "true\n", "scripts: b, over the unbooted cut", now + 300)
+      git!(ctx.repo, ["branch", "-f", "live", "HEAD"])
+      assert :restarting = PM.note_live(restart)
+      assert_received {:restart, _}
+      assert length(bodies(ctx.ws)) == said + 1
+
+      assert :ok = PM.boot(restart)
+      refute_received {:restart, _}
+      assert List.last(bodies(ctx.ws)) =~ "is live"
+    end
+
     test "says nothing while a restart waits for quiet: its boot brings the code", ctx do
       {:scheduled, _} = Server.Rollout.restart(run: fn _ -> :ok end, busy: fn -> ["busy"] end, poll_ms: 60_000)
       on_exit(fn -> Server.Rollout.cancel_restart() end)
