@@ -18,7 +18,8 @@ defmodule Server.Release.PM do
 
   A cut runs `scripts/release.sh cut <sha> --no-restart` in the tlon checkout, records the changelog
   as event `release:<sha>` (`check_passed`), posts it to the root thread, and only then asks for the
-  quiet restart, so the changelog is never lost to the restart it causes. The changelog's worklines
+  quiet restart, so the changelog is never lost to the restart it causes; a cut that changes nothing
+  the server runs needs no restart and just says it is live. The changelog's worklines
   are found by time — merged after the old release's commit and up to the new one's — because a
   landed commit's id differs from its branch's.
 

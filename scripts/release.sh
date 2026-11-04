@@ -107,7 +107,7 @@ case "$cmd" in
         echo "the server didn't answer — restarting it now"
         TLON_RESTART_WHY="release ${to:0:7}" "$root/scripts/server-restart.sh" --force
       fi
-      exit 0
+      exit
     fi
 
     [ -n "$restart" ] || exit 0
