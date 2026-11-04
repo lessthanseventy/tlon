@@ -58,7 +58,9 @@ expect "a free base is itself" "$(smoke_pick_port 14700)" "14700"
 p="$(smoke_pick_port 4369)"; expect "epmd's port is skipped" "$([ "$p" -gt 4369 ] && ! smoke_port_taken "$p" && echo free)" "free"
 p="$(smoke_pick_port 4040)"; expect "the service's port is skipped" "$([ "$p" -gt 4040 ] && ! smoke_port_taken "$p" && echo free)" "free"
 ( exec elixir -e ':gen_tcp.listen(14600, []); Process.sleep(:infinity)' ) >/dev/null 2>&1 & lpid=$!
-for i in $(seq 1 100); do smoke_port_taken 14600 && break; sleep 0.1; done
+# a BEAM boot takes tens of seconds on a loaded box; without a listener the next assert says nothing
+listening=no; for i in $(seq 1 1200); do smoke_port_taken 14600 && { listening=yes; break; }; sleep 0.1; done
+expect "the listener came up within 120s" "$listening" "yes"
 expect "a base with a listener steps on" "$(smoke_pick_port 14600)" "14601"
 kill "$lpid" 2>/dev/null; wait "$lpid" 2>/dev/null
 
