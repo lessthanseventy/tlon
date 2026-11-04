@@ -94,9 +94,10 @@ defmodule Server.Switchboard do
       [] ->
         # Nobody warm+available is addressed — open panes for whoever it addresses (§4c.3) rather
         # than wait for the human. Delivery happens when they come up, so this stays :pending.
-        # A message that can reach nobody (a notice) is settled as `drain` settles it: it must not
-        # open a pane, or the notice a refusal posts would retry the spawn it reports.
-        if reaches_nobody?(message), do: claim([message.id]), else: maybe_spawn_absent(message)
+        # A kind that can reach nobody (a notice) is settled, not spawned for: the notice a refusal
+        # posts would otherwise retry the spawn it reports. Any other message stays pending for a
+        # lead assigned a moment later.
+        if inert_kind?(message), do: claim([message.id]), else: maybe_spawn_absent(message)
         {:pending, message}
 
       sessions ->
@@ -198,9 +199,13 @@ defmodule Server.Switchboard do
     end
   end
 
-  defp reaches_nobody?(%Message{kind: kind}) when kind in ["notice", "suggestion", "margin", "side project"], do: true
+  defp inert_kind?(%Message{kind: kind}), do: kind in ["notice", "suggestion", "margin", "side project"]
 
   defp reaches_nobody?(%Message{} = message) do
+    inert_kind?(message) or addressed_to_nobody_else?(message)
+  end
+
+  defp addressed_to_nobody_else?(%Message{} = message) do
     author = String.downcase(message.author)
 
     match?(%Thread{state: "closed"}, Repo.get(Thread, message.thread_id)) or
@@ -391,18 +396,20 @@ defmodule Server.Switchboard do
 
       {:error, reason} = refused ->
         if agent.id == thread.agent_id,
-          do: note_unseated(home, "#{agent.name} could not be seated on this thread: #{inspect(reason)}")
+          do: note_unseated(home, "#{agent.name} could not be seated on this thread", inspect(reason))
 
         refused
     end
   end
 
-  # the drain retries a pending post each minute, so say a refusal only while it is not already the latest word
-  defp note_unseated(home, body) do
+  # the drain retries a pending post each minute, so say a refusal only while one is not already the
+  # latest word (whatever its reason), and never over the parked note, which must stay the latest
+  defp note_unseated(home, said, reason) do
     last = Repo.one(from m in Message, where: m.thread_id == ^home.id, order_by: [desc: m.id], limit: 1)
 
-    if !(last && last.author == "tlon" && last.body == body) do
-      Server.Channel.post(%{thread_id: home.id, author: "tlon", kind: "notice", body: body})
+    if !(last && last.author == "tlon" &&
+           (String.starts_with?(last.body, "⏸ parked") or String.starts_with?(last.body, said))) do
+      Server.Channel.post(%{thread_id: home.id, author: "tlon", kind: "notice", body: "#{said}: #{reason}"})
     end
   end
 

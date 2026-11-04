@@ -369,6 +369,8 @@ defmodule Server.Staffing do
         Server.Switchboard.deliver(message)
       rescue
         e -> Logger.error("hand_off delivery on thread #{thread.id} failed: #{Exception.message(e)}")
+      catch
+        :exit, reason -> Logger.error("hand_off delivery on thread #{thread.id} exited: #{inspect(reason)}")
       end
 
       {:ok, thread}
