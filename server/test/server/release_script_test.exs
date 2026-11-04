@@ -199,6 +199,32 @@ defmodule Server.ReleaseScriptTest do
       end
     end
 
+    test "a server that hot-loads the build isn't restarted", ctx do
+      push!(ctx, "server/lib/a.ex")
+      File.write!(Path.join(ctx.bin, "curl"), ~s(#!/bin/sh\necho "$@" >> #{ctx.bin}/calls\necho '{"loaded":3}'\n))
+
+      assert {out, 0} = release(ctx, ["cut"])
+      assert out =~ "hot-loaded"
+      calls = File.read!(ctx.calls)
+      assert calls =~ "/api/hotload"
+      refute calls =~ "/api/restart"
+    end
+
+    test "a server that refuses the hot load is restarted", ctx do
+      push!(ctx, "server/lib/a.ex")
+
+      File.write!(Path.join(ctx.bin, "curl"), ~s"""
+      #!/bin/sh
+      echo "$@" >> #{ctx.bin}/calls
+      case "$*" in *hotload*) echo '{"restart":"a process module changed"}' ;; *) echo '{"restarting":true}' ;; esac
+      """)
+
+      assert {out, 0} = release(ctx, ["cut"])
+      assert out =~ "hot load refused"
+      assert out =~ "restart: "
+      assert File.read!(ctx.calls) =~ "/api/restart"
+    end
+
     test "a release that was never built is built", ctx do
       push!(ctx, "scripts/a-script.sh")
       File.rm_rf!(Path.join(ctx.repo, ".release/server/_build"))
