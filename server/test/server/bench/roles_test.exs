@@ -283,6 +283,11 @@ defmodule Server.Bench.RolesTest do
       assert r.usage == %{input: 345, output: 6, cost_usd: 0.03}
     end
 
+    test "a cost reported as the integer 0 sums to a float, it does not crash the tally" do
+      r = Roles.record(%{}, [result("canary", false, cost: 0), result("canary", false, cost: 0)])
+      assert r.usage.cost_usd == 0.0
+    end
+
     test "no judged task and no reported cost leave rubric and cost nil, not zero" do
       r = Roles.record(%{}, [result("canary", true)])
       assert r.rubric == nil
