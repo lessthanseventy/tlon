@@ -7,10 +7,13 @@ import Config
 # The naming rule lives in Server.TestDatabaseName (lib/server/, which Worktree.retire also reads to
 # drop a retired checkout's database), tested directly by test/server/test_database_name_test.exs —
 # a config file itself can't be run by ExUnit.
-# (the compile that follows defines the module again, so the option stays on: no conflict worth a warning)
-Code.put_compiler_option(:ignore_module_conflict, true)
+Code.compiler_options(ignore_module_conflict: true)
 Code.eval_file(Path.join(__DIR__, "../lib/server/test_database_name.ex"))
 test_database = Server.TestDatabaseName.compute(__DIR__, System.get_env("TLON_TEST_DATABASE"))
+# the module is compiled again from lib/ below: gone from memory, there is no conflict to warn about
+:code.purge(Server.TestDatabaseName)
+:code.delete(Server.TestDatabaseName)
+Code.compiler_options(ignore_module_conflict: false)
 
 # a cached toggle would outlive TestDB.clean! into the next test; with no cache there is nothing to bust
 config :fun_with_flags, :cache, enabled: false
