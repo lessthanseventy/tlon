@@ -618,6 +618,45 @@ defmodule Server.StaffingTest do
       refute_received {:tmux, [_, _, "kill-window" | _]}
     end
 
+    test "an off-shift coworker is refused up front: nothing changes, no window dies", %{ws: ws} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "emma", archetype: "builder", crew: "day"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "dahlmann", archetype: "builder", crew: "night"})
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+
+      assert {:error, :off_shift} = Staffing.hand_off(thread.id, "dahlmann")
+      assert Staffing.explain(:off_shift) =~ "off shift"
+      assert Channel.thread_lead(thread.id) == "borges"
+      assert Channel.thread_messages(thread) == []
+      refute_received {:tmux, [_, _, "kill-window" | _]}
+    end
+
+    test "the arbiter's refusal is said once, however often the post is delivered", %{ws: ws} do
+      Application.put_env(:server, :arbiter, Server.StaffingTest.RefusingArbiter)
+      on_exit(fn -> Application.delete_env(:server, :arbiter) end)
+
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+
+      handoff = Enum.find(Channel.thread_messages(thread), &(&1.body =~ "Handing this to"))
+      Server.Switchboard.deliver(handoff)
+      Server.Switchboard.deliver(handoff)
+
+      assert Enum.count(Channel.thread_messages(thread), &(&1.body =~ "could not be seated")) == 1
+    end
+
+    test "an at-cap refusal is not said (the parked note already is)", %{ws: ws} do
+      Application.put_env(:server, :arbiter, Server.StaffingTest.AtCapArbiter)
+      on_exit(fn -> Application.delete_env(:server, :arbiter) end)
+
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+
+      refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "could not be seated"))
+    end
+
     test "an arbiter that refuses the new lead's seat says so on the thread", %{ws: ws} do
       Application.put_env(:server, :arbiter, Server.StaffingTest.RefusingArbiter)
       on_exit(fn -> Application.delete_env(:server, :arbiter) end)
@@ -838,6 +877,20 @@ defmodule Server.StaffingTest.RefusingArbiter do
 
   @impl true
   def spawn(_exports), do: {:error, {:tmux, "boom"}}
+
+  @impl true
+  def ready?(_handle), do: true
+end
+
+defmodule Server.StaffingTest.AtCapArbiter do
+  @moduledoc false
+  @behaviour Server.Arbiter
+
+  @impl true
+  def wake(_session, _prompt), do: :ok
+
+  @impl true
+  def spawn(_exports), do: {:error, :at_cap}
 
   @impl true
   def ready?(_handle), do: true

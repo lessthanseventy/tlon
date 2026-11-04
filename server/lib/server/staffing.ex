@@ -335,6 +335,9 @@ defmodule Server.Staffing do
   def explain(:clocked_out),
     do: "that coworker's engine is clocked out: a seat there could not run, so the thread stays with its lead"
 
+  def explain(:off_shift),
+    do: "that coworker is off shift: their seat is never woken, so the thread stays with its lead"
+
   def explain(reason), do: inspect(reason)
 
   @doc """
@@ -344,13 +347,13 @@ defmodule Server.Staffing do
   `roll_leaf` does. `{:ok, thread}`; `{:error, :lead_mid_turn}` when the old lead has a live turn
   here (a turn stuck past `Thinking.stale_turn_seconds` reads as idle; `roll_leaf` and `kill_crew`
   force it); `{:error, :clocked_out}` when the new lead's engine is spent (a seat that could not
-  run); or `Channel.assign_lead/2`'s error. Every error changes nothing. The new lead's seat is
+  run); `{:error, :off_shift}` when they are on the bench but not on the crew on; or `Channel.assign_lead/2`'s error. Every error changes nothing. The new lead's seat is
   opened in this call (`Switchboard.deliver/1` on the handoff post); a refusal by the arbiter is
   said on the thread.
   """
   def hand_off(thread_id, handle, author \\ Server.OperatorConfig.operator()) do
     with :ok <- lead_idle(thread_id),
-         :ok <- lead_available(handle),
+         :ok <- lead_available(thread_id, handle),
          {:ok, thread} <- Channel.assign_lead(thread_id, handle) do
       with %{index: index} <- leaf_window(thread, "hand_off") do
         Staff.end_thread_sessions(thread.id)
@@ -867,10 +870,23 @@ defmodule Server.Staffing do
   end
 
   # an unknown handle is `Channel.assign_lead/2`'s refusal
-  defp lead_available(handle) do
-    case Staff.agent_by_name(handle) do
-      %{} = agent -> if Presence.clocked_out?(agent), do: {:error, :clocked_out}, else: :ok
-      nil -> :ok
+  defp lead_available(thread_id, handle) do
+    with %Agent{} = agent <- Staff.agent_by_name(handle),
+         %Thread{workspace_id: ws} when is_integer(ws) <- Repo.get(Thread, thread_id) do
+      cond do
+        Presence.clocked_out?(agent) -> {:error, :clocked_out}
+        off_shift?(ws, agent) -> {:error, :off_shift}
+        true -> :ok
+      end
+    else
+      _ -> :ok
     end
+  end
+
+  # on the bench but not on the crew on: `Switchboard.on_shift/2` would hand their mention to a stand-in
+  defp off_shift?(ws, agent) do
+    on = MapSet.new(Workspaces.bench(ws), & &1.agent_id)
+    seated = MapSet.new(Workspaces.bench_all(ws), & &1.agent_id)
+    MapSet.member?(seated, agent.id) and not MapSet.member?(on, agent.id)
   end
 end
