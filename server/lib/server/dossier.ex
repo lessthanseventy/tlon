@@ -28,6 +28,7 @@ defmodule Server.Dossier do
   # Every capped read shows at most five rows; the rest is a number, never a
   # complete-and-useless list (§5 rank-and-cut, §1).
   @cap 5
+  @fields_without_vector Fact.__schema__(:fields) -- [:embedding]
 
   # A measured check outcome is one of these event kinds, keyed on the real exit code.
   @check_kinds ["check_passed", "check_failed"]
@@ -102,7 +103,17 @@ defmodule Server.Dossier do
     Repo.all(from f in Fact, where: f.thread_id == ^thread.id and is_nil(f.forgotten_at), order_by: [desc: f.id])
   end
 
-  @doc "What the thread's project learned on its OTHER threads, newest first; `[]` with no project."
+  @doc "`facts_for_thread/1` with `embedding` left nil, for a caller ranking more facts than it can afford to decode."
+  def facts_without_vectors(%Thread{} = thread) do
+    Repo.all(
+      from f in Fact,
+        where: f.thread_id == ^thread.id and is_nil(f.forgotten_at),
+        order_by: [desc: f.id],
+        select: struct(f, ^@fields_without_vector)
+    )
+  end
+
+  @doc "What the thread's project learned on its OTHER threads, newest first, `embedding` left nil; `[]` with no project."
   def facts_for_project(%Thread{project_id: nil}), do: []
 
   def facts_for_project(%Thread{} = thread) do
@@ -111,7 +122,8 @@ defmodule Server.Dossier do
         join: t in Thread,
         on: t.id == f.thread_id,
         where: t.project_id == ^thread.project_id and t.id != ^thread.id and is_nil(f.forgotten_at),
-        order_by: [desc: f.id]
+        order_by: [desc: f.id],
+        select: struct(f, ^@fields_without_vector)
     )
   end
 

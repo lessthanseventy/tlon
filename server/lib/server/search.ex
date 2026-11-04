@@ -30,6 +30,7 @@ defmodule Server.Search do
   # sees only the newest embedded messages; older ones are still found by their words.
   @semantic_window 2_000
   @query_timeout 10_000
+  @relevance_terms 32
 
   @headline "StartSel=⟪, StopSel=⟫, MaxWords=12, MinWords=4, MaxFragments=1, FragmentDelimiter=…"
 
@@ -96,10 +97,14 @@ defmodule Server.Search do
   relevance blend (`Server.Recall`). Unlike the searches above, a fact matches on ANY query term
   (the query is a thread's title + the operator's last words, not a hand-typed AND), graded by
   `ts_rank_cd` and normalised so the best match is 1.0. A map of id => relevance in (0, 1];
-  unmatched ids are absent; empty for a blank query or id list.
+  unmatched ids are absent; empty for a blank query or id list. Only the query's first
+  #{@relevance_terms} distinct terms count: the title leads it, and with a project's worth of ids
+  Postgres checks every term against every fact.
   """
   def fact_relevance(query, fact_ids) when is_binary(query) and is_list(fact_ids) do
-    case {any_terms(query), fact_ids} do
+    terms = query |> tokens() |> Enum.uniq_by(&String.downcase/1) |> Enum.take(@relevance_terms)
+
+    case {Enum.join(terms, " or "), fact_ids} do
       {"", _} ->
         %{}
 
