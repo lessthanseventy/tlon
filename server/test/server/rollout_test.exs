@@ -118,6 +118,12 @@ defmodule Server.RolloutTest do
       assert Enum.any?(busy, &(&1 =~ "landing of #145"))
     end
 
+    test "a running PR landing is named by its PR, which is all its job carries" do
+      running!("Server.Jobs.Land", :landing, %{pr: 776, branch: "work/x"})
+      assert [line] = Rollout.busy(%{})
+      assert line =~ "the landing of PR #776 is running"
+    end
+
     test "a seat's running check (run_task) is named, and the window is shut" do
       running!("Server.Jobs.RunTask", :tasks, %{thread_id: 150, agent: "lonnrot", task: "check"})
       assert [line] = Rollout.busy(%{})
