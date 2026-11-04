@@ -382,6 +382,70 @@ defmodule Server.Release.PMTest do
     end
   end
 
+  test "the nightly cut is on the crontab, and the job runs it" do
+    {_, cron} = Enum.find(Application.fetch_env!(:server, Oban)[:plugins], &match?({Oban.Plugins.Cron, _}, &1))
+    assert {"0 11 * * *", Server.Jobs.Release, args: %{"action" => "auto"}} in cron[:crontab]
+
+    Application.put_env(:server, :release_root, Path.join(System.tmp_dir!(), "no-such-repo-#{System.pid()}"))
+    on_exit(fn -> Application.delete_env(:server, :release_root) end)
+    assert :ok = perform_job(Server.Jobs.Release, %{"action" => "auto"})
+  end
+
+  describe "auto/1 (the nightly cut)" do
+    setup ctx do
+      grader!(ctx, @low)
+      %{opts: Keyword.put(ctx.opts, :busy, fn -> ["a coworker mid-turn"] end)}
+    end
+
+    test "cuts the newest commit that passed both checks, however busy the office", ctx do
+      older = rev(ctx.repo, "HEAD~1")
+      checks_pass!(ctx, older)
+
+      assert {:ok, _} = PM.auto(ctx.opts)
+      assert {:ok, log} = cuts(ctx)
+      assert log == "cut #{older} --no-restart\n"
+      assert_received {:restart, _}
+    end
+
+    test "a commit past the standing approval gets the operator's one gate, and only once", ctx do
+      checks_pass!(ctx, ctx.main)
+      grader!(ctx, %{@low | "blast" => 4})
+
+      assert {:gate, _} = PM.auto(ctx.opts)
+      assert :asked = PM.auto(ctx.opts)
+      assert {:error, :enoent} = cuts(ctx)
+    end
+
+    test "no commit passed both: says so and cuts nothing", ctx do
+      assert :none = PM.auto(ctx.opts)
+      assert List.last(bodies(ctx.ws)) =~ "2 changes waiting"
+      assert {:error, :enoent} = cuts(ctx)
+    end
+
+    test "cuts nothing while the office is paused", ctx do
+      checks_pass!(ctx, ctx.main)
+      path = Path.join(ctx.dir, "settings.json")
+      File.write!(path, ~s({"pause": "pencils_down"}))
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+      on_exit(fn -> Application.put_env(:server, :operator_config_path, prior) end)
+
+      assert {:error, _} = PM.auto(ctx.opts)
+      assert {:error, :enoent} = cuts(ctx)
+    end
+
+    test "cuts nothing after a rollback, until the operator cuts forward", ctx do
+      checks_pass!(ctx, ctx.main)
+      git!(ctx.repo, ["branch", "-f", "live", ctx.main])
+      :ok = PM.note_live(root: ctx.repo)
+      git!(ctx.repo, ["branch", "-f", "live", ctx.live])
+      :ok = PM.note_live(root: ctx.repo)
+
+      assert true = PM.auto(ctx.opts)
+      assert {:error, :enoent} = cuts(ctx)
+    end
+  end
+
   describe "note_live/1 (the service booting on what the pointer names)" do
     test "a server behind the pointer's code restarts instead of saying live; its boot says it", ctx do
       on_exit(fn -> :persistent_term.erase({PM, :booted}) end)
