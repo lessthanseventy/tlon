@@ -657,6 +657,17 @@ defmodule Server.StaffingTest do
       refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "could not be seated"))
     end
 
+    test "a delivery that raises after the reassignment still answers {:ok, thread}", %{ws: ws} do
+      Application.put_env(:server, :arbiter, Server.StaffingTest.RaisingArbiter)
+      on_exit(fn -> Application.delete_env(:server, :arbiter) end)
+
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
+
+      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert Channel.thread_lead(thread.id) == "hronir"
+    end
+
     test "an arbiter that refuses the new lead's seat says so on the thread", %{ws: ws} do
       Application.put_env(:server, :arbiter, Server.StaffingTest.RefusingArbiter)
       on_exit(fn -> Application.delete_env(:server, :arbiter) end)
@@ -866,6 +877,20 @@ defmodule Server.StaffingTest do
     refute log =~ "skipped"
     assert Server.Repo.get!(Server.Session, live.id).ended_at
   end
+end
+
+defmodule Server.StaffingTest.RaisingArbiter do
+  @moduledoc false
+  @behaviour Server.Arbiter
+
+  @impl true
+  def wake(_session, _prompt), do: :ok
+
+  @impl true
+  def spawn(_exports), do: raise("boom")
+
+  @impl true
+  def ready?(_handle), do: true
 end
 
 defmodule Server.StaffingTest.RefusingArbiter do

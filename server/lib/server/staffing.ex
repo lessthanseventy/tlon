@@ -348,8 +348,9 @@ defmodule Server.Staffing do
   here (a turn stuck past `Thinking.stale_turn_seconds` reads as idle; `roll_leaf` and `kill_crew`
   force it); `{:error, :clocked_out}` when the new lead's engine is spent (a seat that could not
   run); `{:error, :off_shift}` when they are on the bench but not on the crew on; or `Channel.assign_lead/2`'s error. Every error changes nothing. The new lead's seat is
-  opened in this call (`Switchboard.deliver/1` on the handoff post); a refusal by the arbiter is
-  said on the thread.
+  opened by `Switchboard.deliver/1` on the handoff post: in this call, or later when the office or
+  thread is paused, a dialog is waiting or a restart is pending (the post is held, then the drain
+  delivers it); a refusal by the arbiter is said on the thread.
   """
   def hand_off(thread_id, handle, author \\ Server.OperatorConfig.operator()) do
     with :ok <- lead_idle(thread_id),
@@ -362,8 +363,14 @@ defmodule Server.Staffing do
 
       body = "Handing this to @#{handle}: pick it up from the brief."
       {:ok, message} = Channel.post(%{thread_id: thread.id, author: author, body: body})
-      # seat the new lead now: the bus delivers it too, but the drain's minute pass is its only retry
-      Server.Switchboard.deliver(message)
+      # seat the new lead now: the bus delivers it too, but the drain's minute pass is its only retry;
+      # the reassignment above stands whatever this raises
+      try do
+        Server.Switchboard.deliver(message)
+      rescue
+        e -> Logger.error("hand_off delivery on thread #{thread.id} failed: #{Exception.message(e)}")
+      end
+
       {:ok, thread}
     end
   end

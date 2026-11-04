@@ -94,7 +94,9 @@ defmodule Server.Switchboard do
       [] ->
         # Nobody warm+available is addressed — open panes for whoever it addresses (§4c.3) rather
         # than wait for the human. Delivery happens when they come up, so this stays :pending.
-        maybe_spawn_absent(message)
+        # A message that can reach nobody (a notice) is settled as `drain` settles it: it must not
+        # open a pane, or the notice a refusal posts would retry the spawn it reports.
+        if reaches_nobody?(message), do: claim([message.id]), else: maybe_spawn_absent(message)
         {:pending, message}
 
       sessions ->
