@@ -223,6 +223,19 @@ defmodule Server.Release.PMTest do
       assert List.last(bodies(ctx.ws)) =~ "release #{String.slice(ctx.main, 0, 7)} is live"
     end
 
+    test "a commit subject that says the phrase doesn't skip the restart", ctx do
+      commit!(ctx.repo, "lamp.txt", "again\n", "restart: not needed", System.os_time(:second) + 180)
+      main = rev(ctx.repo, "HEAD")
+      git!(ctx.repo, ["update-ref", "refs/remotes/origin/main", main])
+      checks_pass!(ctx, main)
+      grader!(ctx, @low)
+      script = ctx.opts[:script]
+      File.write!(script, File.read!(script) <> "echo '  abc1234 restart: not needed'\n")
+
+      assert {:ok, _} = PM.decide(ctx.ws.id, main, "Lamp talk.", ctx.opts)
+      assert_received {:restart, _}
+    end
+
     test "a change over the standing approval: one gate for the operator, nothing cut", ctx do
       checks_pass!(ctx, ctx.main)
       grader!(ctx, %{@low | "blast" => 4})
@@ -370,6 +383,18 @@ defmodule Server.Release.PMTest do
   end
 
   describe "note_live/1 (the service booting on what the pointer names)" do
+    test "says nothing while a restart waits for quiet: its boot brings the code", ctx do
+      {:scheduled, _} = Server.Rollout.restart(run: fn _ -> :ok end, busy: fn -> ["busy"] end, poll_ms: 60_000)
+      on_exit(fn -> Server.Rollout.cancel_restart() end)
+
+      assert :ok = PM.note_live(root: ctx.repo)
+      refute Enum.any?(bodies(ctx.ws), &(&1 =~ "is live"))
+
+      Server.Rollout.cancel_restart()
+      assert :ok = PM.note_live(root: ctx.repo)
+      assert List.last(bodies(ctx.ws)) =~ "is live"
+    end
+
     test "a boot on a new release says so once, with how many changes it brought; a rollback says where from",
          ctx do
       %{ws: ws, repo: repo, live: seed, main: main} = ctx

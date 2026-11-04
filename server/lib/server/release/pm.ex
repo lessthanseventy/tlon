@@ -209,7 +209,8 @@ defmodule Server.Release.PM do
         })
 
       notice(workspace_id, changelog)
-      if out =~ "restart: not needed", do: note_live(root: root), else: restart.("release #{short(sha)}")
+      # anchored: the script prints the commit subjects first, indented
+      if out =~ ~r/^restart: not needed/m, do: note_live(root: root), else: restart.("release #{short(sha)}")
       {:ok, changelog}
     else
       {:error, why} = error ->
@@ -246,30 +247,11 @@ defmodule Server.Release.PM do
   names) against the newest one said. The notice reads `release <sha> is live — N changes`
   (`— back from <sha>` on a rollback, nothing more on the first), payload `%{"live" => sha, "notes" => [subject]}` (the subjects it moved over, at most 12; none on the first or a rollback). It also wakes the
   threads blocked on a ticket closed before the pointer moved (`Server.Blocked.release/1`): a fix reaches the seats at a
-  cut. No pointer or no root thread says nothing. `:ok`. `opts`: `root:`.
+  cut. No pointer or no root thread says nothing, nor does a restart still waiting for quiet, whose
+  boot brings the code and says it. `:ok`. `opts`: `root:`.
   """
   def note_live(opts \\ []) do
-    root = root(opts)
-
-    said =
-      Repo.one(
-        from m in Message,
-          where: m.kind == "notice" and fragment("? \\? 'live'", m.payload),
-          order_by: [desc: m.id],
-          limit: 1
-      )
-
-    prev = said && said.payload["live"]
-
-    with {:ok, sha} when sha != prev <- live(root),
-         %Thread{id: tid} <- Channel.machine_thread() do
-      body = "release #{short(sha)} is live" <> since_last(root, prev, sha)
-      payload = %{"live" => sha, "notes" => notes(root, prev, sha)}
-      _ = Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: body, payload: payload})
-      Server.Blocked.release(pointer_moved(root))
-    end
-
-    :ok
+    if Server.Rollout.restart_pending?(), do: :ok, else: say_live(root(opts))
   end
 
   defp since_last(_root, nil, _sha), do: ""
@@ -559,5 +541,27 @@ defmodule Server.Release.PM do
     else
       _ -> DateTime.utc_now()
     end
+  end
+
+  defp say_live(root) do
+    said =
+      Repo.one(
+        from m in Message,
+          where: m.kind == "notice" and fragment("? \\? 'live'", m.payload),
+          order_by: [desc: m.id],
+          limit: 1
+      )
+
+    prev = said && said.payload["live"]
+
+    with {:ok, sha} when sha != prev <- live(root),
+         %Thread{id: tid} <- Channel.machine_thread() do
+      body = "release #{short(sha)} is live" <> since_last(root, prev, sha)
+      payload = %{"live" => sha, "notes" => notes(root, prev, sha)}
+      _ = Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: body, payload: payload})
+      Server.Blocked.release(pointer_moved(root))
+    end
+
+    :ok
   end
 end
