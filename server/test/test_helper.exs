@@ -29,4 +29,8 @@ File.rm_rf!(Path.expand("tmp"))
 File.mkdir_p!(Path.expand("tmp"))
 ExUnit.after_suite(fn _ -> File.rm_rf(Path.expand("tmp")) end)
 
+# The suite runs the real check-main.sh and release-smoke.sh on throwaway repos: left to their
+# default, their record_ran posts each fixture's run to the live service's release record.
+System.put_env("TLON_URL", "http://127.0.0.1:1")
+
 ExUnit.start()

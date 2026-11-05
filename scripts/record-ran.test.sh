@@ -13,7 +13,8 @@ mkdir "$tmp/bin"
 printf '#!/bin/sh\necho "$@" >"%s/args"\necho %s\n' "$tmp" "'{\"id\":1,\"status\":\"ok\"}'" >"$tmp/bin/curl"
 chmod +x "$tmp/bin/curl"
 
-out="$(PATH="$tmp/bin:$PATH" TLON_URL=http://svc:1 record_ran gate "$sha" 0 2>&1)"; code=$?
+# TLON_URL is seen when the lib is sourced: the gates unset TLON_* before they report
+out="$(PATH="$tmp/bin:$PATH" TLON_URL=http://svc:1 bash -c ". '$here/lib/record-ran.sh'; unset TLON_URL; record_ran gate '$sha' 0" 2>&1)"; code=$?
 [ "$code" = 0 ] || { echo "FAIL a recorded run returns 0 (got $code)"; bad=1; }
 grep -q "http://svc:1/api/release/ran" "$tmp/args" || { echo "FAIL it posts to the service's /api/release/ran: $(cat "$tmp/args")"; bad=1; }
 grep -q "\"check\":\"gate\".*\"sha\":\"$sha\".*\"exit\":0" "$tmp/args" || { echo "FAIL the body names check, sha and exit: $(cat "$tmp/args")"; bad=1; }
