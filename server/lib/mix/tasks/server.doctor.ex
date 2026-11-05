@@ -13,6 +13,13 @@ defmodule Mix.Tasks.Server.Doctor do
   @impl Mix.Task
   def run(args) do
     {opts, _rest} = OptionParser.parse!(args, strict: [export: :string])
+
+    # :dev's runtime.exs trusts the ambient TLON_START_*, and a session bound to the live service
+    # carries them: booting on them rebinds its ports (:eaddrinuse). Before app.start, which is
+    # what loads runtime.exs.
+    for name <- ~w(TLON_START_MCP TLON_START_WEB TLON_START_OBAN TLON_START_SWITCHBOARD TLON_START_ATTENTION),
+        do: System.put_env(name, "0")
+
     Mix.Task.run("app.start")
     r = Server.Doctor.report()
     Mix.shell().info("integrity: #{r.integrity}")
