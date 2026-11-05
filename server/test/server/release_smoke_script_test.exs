@@ -467,6 +467,8 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert {out, 0} = Task.await(smoke, 30_000)
       assert out =~ ~r/smoke: holding http\S+ up \(dir \S+\)/
       assert out =~ "the hold of http://127.0.0.1:#{port} expired after 2s"
+      # the suite's TLON_URL (test_helper.exs) reaches the script's report, never the live service
+      assert out =~ "not recorded: http://127.0.0.1:1/api/release/ran"
     end
 
     test "the office drive waits for the title before the find and for the thread after Enter", ctx do
