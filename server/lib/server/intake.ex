@@ -9,7 +9,7 @@ defmodule Server.Intake do
   while gates queue for them — but open worklines in all stop at `"max_open_worklines"` (default 10),
   so a long night leaves a reviewable pile, not an endless one. A routed ticket the manager hasn't
   started within `@stalled_after` is started by intake itself, with the workspace's lead
-  (`Server.Tickets.start_thread/1`), and the sheriff told: a handed-over ticket never holds a slot
+  (`Server.Tickets.start_thread/1`), and says so on its thread and the root: a handed-over ticket never holds a slot
   in silence — unless triage is in progress: the manager naming the ticket on the root thread, or a
   consult naming it, after the route, defers the 30 minutes (they run from the newest such message);
   the manager's open operator ask naming it blocks until answered, then defers the same way.
@@ -107,8 +107,6 @@ defmodule Server.Intake do
           body: "⏱ ticket ##{ticket.id} was not staffed in 30 minutes: intake started it as thread ##{thread.id}."
         })
       end
-
-      Server.Sheriff.report(thread, why)
     end
   end
 
