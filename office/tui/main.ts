@@ -2822,7 +2822,14 @@ async function main() {
     const tid = openThread()
     if (tid !== null && !zoom && !reader && threadOf(tid)?.live && !talkView.has(tid)) void pollActivity(tid).then((moved) => { if (moved) draw() })
   }, 1000)
-  // the room's clock: 10 Hz, drawn only when it changed
-  every(() => { if (!reader && room().step(view())) { changed(); draw() } }, 100)
+  // the room's clock: 10 Hz, drawn only when it changed. Every drawn frame is a whole repaint, so a
+  // room nobody watches is a core spent: stopped while the terminal is unfocused, 2 Hz while the
+  // office is calm (paused, or no coworker live)
+  let beat = 0
+  const calm = () => all.pause === "pencils_down" || all.pause === "lights_out" || !all.threads.some((t) => t.live)
+  every(() => {
+    if (!focused || ++beat % (calm() ? 5 : 1) !== 0) return
+    if (!reader && room().step(view())) { changed(); draw() }
+  }, 100)
 }
 main()
