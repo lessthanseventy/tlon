@@ -44,6 +44,9 @@ config :server, :orphans, proc_dir: "/nonexistent"
 config :server, bootstrap: false
 config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 200]
 config :server, generator_cmd: "/nonexistent/tlon-test-generator"
+# gh is never run from the suite (a review_branch at the real checkout's HEAD would list its PRs on
+# GitHub); a test that wants one stubs it, as pr_landing_test hands one in
+config :server, gh_cmd: fn "gh", _args, _opts -> {"gh is not run under test", 1} end
 config :server, grader_retry_ms: 0
 config :server, health_reading: fn -> %{tmux: true, disk_pct: nil, mem_pct: nil} end
 

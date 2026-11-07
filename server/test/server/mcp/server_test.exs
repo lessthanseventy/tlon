@@ -2667,6 +2667,49 @@ defmodule Server.MCP.ServerTest do
     assert %{verdict: "approve", sha: ^sha, by: "Carl", body: "approve: ok"} = Server.BranchReview.latest("lamp")
   end
 
+  test "review_branch: an approve looks for the branch's open PR to queue it, and says when there is none; request_changes never looks",
+       %{token: token} do
+    session = handshake(token)
+    {head, 0} = System.cmd("git", ["-C", Server.Profiles.tlon_root(), "rev-parse", "HEAD"])
+    sha = String.trim(head)
+    test = self()
+    stub = Application.fetch_env!(:server, :gh_cmd)
+
+    Application.put_env(:server, :gh_cmd, fn "gh", args, _opts ->
+      send(test, {:gh, args})
+      {"[]", 0}
+    end)
+
+    on_exit(fn -> Application.put_env(:server, :gh_cmd, stub) end)
+
+    assert %{"recorded" => "approve", "landing" => "not queued: " <> why} =
+             decode_tool_json(
+               call(token, session, 2, "review_branch", %{
+                 "branch" => "lamp",
+                 "sha" => sha,
+                 "verdict" => "approve",
+                 "body" => "approve: ok"
+               })
+             )
+
+    assert why =~ "no open PR"
+    assert_received {:gh, ["pr", "list", "--head", "lamp" | _]}
+
+    assert %{"recorded" => "request_changes", "landing" => "not queued: " <> why} =
+             decode_tool_json(
+               call(token, session, 3, "review_branch", %{
+                 "branch" => "lamp",
+                 "sha" => sha,
+                 "verdict" => "request_changes",
+                 "body" => "request_changes: no"
+               })
+             )
+
+    assert why =~ "request_changes"
+    refute_received {:gh, _}
+    assert %{verdict: "request_changes"} = Server.BranchReview.latest("lamp")
+  end
+
   test "review_branch from the standing thread is refused: a review runs on its own thread, ended by its verdict",
        %{agent: agent} do
     {:ok, ws} = Server.Workspaces.create(%{name: "Lobby"})

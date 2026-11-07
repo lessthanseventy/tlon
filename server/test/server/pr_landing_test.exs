@@ -167,6 +167,60 @@ defmodule Server.PRLandingTest do
     end
   end
 
+  describe "request_branch/3: an approving review_branch verdict queues its branch's open PR by the same door" do
+    # gh stubbed: `pr list --head <b>` answers the branch's open PRs, then request/3's own calls
+    defp branch_gh(listed, test) do
+      fn "gh", args, _opts ->
+        send(test, {:ran, ["gh" | args]})
+
+        case args do
+          ["pr", "list" | _] -> {Jason.encode!(listed), 0}
+          ["pr", "view" | _] -> {Jason.encode!(feature_pr()), 0}
+          ["api" | _] -> {"false", 0}
+        end
+      end
+    end
+
+    test "approved at its head with one open PR onto main: that PR is queued", ctx do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      approve(ctx, origin(ctx, "feature"))
+
+      assert {:ok, _} = PRLanding.request_branch(ctx.repo, "feature", run: branch_gh([%{"number" => 7}], self()))
+
+      assert_received {:ran, ["gh", "pr", "list", "--head", "feature", "--base", "main", "--state", "open" | _]}
+      assert [%{"pr" => 7, "branch" => "feature", "pr_author" => "andrew"}] = jobs()
+      assert posts(ctx) =~ "PR #7"
+    end
+
+    test "no open PR onto main: nothing queued, and it says so", ctx do
+      approve(ctx, origin(ctx, "feature"))
+      assert {:error, why} = PRLanding.request_branch(ctx.repo, "feature", run: branch_gh([], self()))
+      assert why =~ "no open PR"
+      refute_received {:ran, ["gh", "pr", "view" | _]}
+      assert jobs() == []
+    end
+
+    test "gh unable to list the PRs: nothing queued, and it says so", ctx do
+      approve(ctx, origin(ctx, "feature"))
+      assert {:error, why} = PRLanding.request_branch(ctx.repo, "feature", run: fn _, _, _ -> {"nope", 1} end)
+      assert why =~ "gh could not list"
+      assert jobs() == []
+    end
+
+    test "approved at a sha the branch has moved past: nothing queued, and it says why", ctx do
+      approve(ctx, origin(ctx, "feature"))
+
+      sh!(
+        ctx.repo,
+        "git checkout -q feature && echo g >g && git add g && git commit -qm more && git push -q origin feature && git checkout -q main"
+      )
+
+      assert {:error, why} = PRLanding.request_branch(ctx.repo, "feature", run: branch_gh([%{"number" => 7}], self()))
+      assert why =~ "review it again"
+      assert jobs() == []
+    end
+  end
+
   describe "land/2: the merge queue's turn" do
     test "approved at its head: rebased, gated, pushed, the review commented, tlon/check posted, merged at that head",
          ctx do
