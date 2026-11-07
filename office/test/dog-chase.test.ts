@@ -29,6 +29,6 @@ test("in a chase Argos runs after Nina round the room, never back and forth alon
 })
 
 test("Argos faces the way he runs", () => {
-  const { xs, faces } = chase({ x: 50, y: 104 }, { x: 44, y: 104 })
+  const { xs, faces } = chase({ x: 26, y: 104 }, { x: 44, y: 104 })
   xs.slice(1).forEach((x, i) => { if (x !== xs[i]) expect(faces[i + 1]).toBe(Math.sign(x - xs[i]!)) })
 })
