@@ -1,0 +1,9 @@
+An approving `review_branch` verdict now hands its branch's open PR onto main to the merge queue by itself, through the same door as `land_pr` and `mise run land`: `Server.PRLanding.request_branch/3` lists the branch's open PRs with gh (`pr list --head <branch> --base main --state open`) and passes the one number to `request/3`, so the preflight and every refusal (closed, not onto main, a fork, protected, the PR's author or a builder as reviewer, a sha the branch has moved past) stay on one path, and the outcome posts on the review's thread. The verdict is recorded first and the queue tried second: a refused queue never unrecords it. The tool's reply carries `landing`: `queued PR #N`, or `not queued: <why>` (no open PR, several, gh failing, the review refused). `request_changes` queues nothing and never calls gh.
+
+gh in `PRLanding` now defaults to the `:gh_cmd` app env (else `System.cmd/3`), stubbed refused in config/test.exs so a `review_branch` recorded at the real checkout's HEAD never lists its PRs on GitHub from the suite.
+
+Docs kept in sync: the `review_branch` and `land_pr` moduledocs, `PRLanding`'s, the root AGENTS.md line on `mise run land`, server/AGENTS.md's branch-reviews paragraph, and the review-ticket brief in `Server.Tickets`.
+
+Closes #861.
+
+Checked: `menard run test --in server test/server/pr_landing_test.exs test/server/mcp/server_test.exs` — 133 tests, 0 failures. The four `request_branch/3` tests went red first (undefined function), then green: an approve at the head with one open PR enqueues a `Server.Jobs.Land` job for that PR; no open PR, gh failing, or a sha the branch has moved past enqueue none and say why. The tool test: an approve's reply says `not queued: … no open PR` after one `gh pr list --head`, a request_changes's reply says it queues nothing and gh is never called.

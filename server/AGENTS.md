@@ -199,9 +199,10 @@ and every layer the spine design's re-laid §9 asked for
   the diff, the spec/plan and the checklist, never the builder's conversation: its `get_brief` hides
   OPENING, RECENT, DONE and LEARNINGS, counts kept
   (`Server.Board.brief/2` with `viewer:`); the round-2 pointer `last_reviewed` stays in the stage brief.
-  A PR lands only on it (`Server.PRLanding`, `mise run land -- <pr>`): queued in the same merge queue as
-  worklines (`Server.Jobs.Land`, args `%{pr, branch, on_thread}`) when the verdict approves its head (or a
-  pure rebase of it, `BranchReview.approves/4`), checked again at its turn, rebased onto main on a private
+  A PR lands only on it (`Server.PRLanding`: an approving `review_branch` queues the branch's open PR onto
+  main itself, `request_branch/3`; `mise run land -- <pr>` and `land_pr` queue one by number): queued in the
+  same merge queue as worklines (`Server.Jobs.Land`, args `%{pr, branch, on_thread}`) when the verdict
+  approves its head (or a pure rebase of it, `BranchReview.approves/4`), checked again at its turn, rebased onto main on a private
   `land/<branch>` ref and gated by `workline-verify.sh`'s branch mode, then pushed, the review commented,
   `tlon/check` posted and merged with `--match-head-commit`; the outcome posts on the review's thread.
 - **feature flags** (`Server.Flags`) — `fun_with_flags` on the store's Postgres, each node's cache

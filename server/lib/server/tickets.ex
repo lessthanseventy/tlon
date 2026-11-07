@@ -589,7 +589,8 @@ defmodule Server.Tickets do
       do:
         ask <>
           "\n\nThis is a PR review, not a build: owed is a review_branch verdict (approve | request_changes) " <>
-          "on the PR head sha you read. You write no code and own no work/<slug> branch.",
+          "on the PR head sha you read; an approve hands the PR to the merge queue itself (its reply says " <>
+          "whether it queued). You write no code and own no work/<slug> branch.",
       else: ask
   end
 end
