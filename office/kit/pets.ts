@@ -140,8 +140,9 @@ export function stepDog(d: Dog, ctx: {
   if (d.path.length) {
     if (d.creep && ctx.tick % 3) return false
     const to = d.path[0]!
-    d.x += Math.sign(to.x - d.x); d.y += Math.sign(to.y - d.y)
+    // faced before the step: a chase hands him a point one step off, and after it there is no way left to face
     if (to.x !== d.x) d.face = Math.sign(to.x - d.x)
+    d.x += Math.sign(to.x - d.x); d.y += Math.sign(to.y - d.y)
     if (d.x === to.x && d.y === to.y) d.path.shift()
     if (!d.path.length) {
       d.creep = false
