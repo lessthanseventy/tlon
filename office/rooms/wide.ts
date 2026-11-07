@@ -707,7 +707,7 @@ export class WideRoom extends Sim<Layout> {
       d.aisle = c.y; d.mode = "walk"; d.creep = true; c.until = now + 1000
       this.antic = { kind: "sneak", until: now + 1000, trail: [], lap }
     } else if (near && d.mode !== "sleep" && r < 0.8) {
-      // she runs on round from the corner nearest her, never back past him to the lap's first corner
+      // she runs on round from the corner nearest her, never doubling back to the lap's first corner
       const nearest = lap.reduce((n, p) => (Math.abs(p.x - c.x) + Math.abs(p.y - c.y) < Math.abs(n.x - c.x) + Math.abs(n.y - c.y) ? p : n))
       lap.push(...lap.splice(0, lap.indexOf(nearest) + 1))
       c.until = now + 1000; this.antic = { kind: "chase", until: now + 80, trail: [], lap }
