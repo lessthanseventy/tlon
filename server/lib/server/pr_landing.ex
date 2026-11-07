@@ -2,7 +2,9 @@ defmodule Server.PRLanding do
   @moduledoc """
   A reviewed PR lands through the same merge queue as worklines (`Server.Jobs.Land`, one at a time).
   `queue/3` takes it only when the branch's review on tlon approves its head
-  (`Server.BranchReview.approves/4`). Its turn (`land/2`) checks that again against the branch as it
+  (`Server.BranchReview.approves/4`); `request/3` is the door by PR number (`mise run land`, `land_pr`),
+  `request_branch/3` the one an approving `review_branch` takes by itself, the branch's open PR onto
+  main found by gh. Its turn (`land/2`) checks that again against the branch as it
   is then, rebases it onto origin's main on a private ref `land/<branch>` and gates it there
   (`Server.Workline.Merge`, the gate `Server.Jobs.Land.gate_pr/4`), pushes it with lease, comments the
   review on the PR (the PR is the record), posts `tlon/check` on the gated sha
@@ -45,16 +47,30 @@ defmodule Server.PRLanding do
   @doc """
   `scripts/land.sh`'s preflight, run here so a sandboxed seat reaches the queue over MCP (`land_pr`)
   rather than epmd: GitHub says what PR `pr` is, and one closed, not onto main, from a fork, from main
-  or a protected branch is refused; else `queue/5` by its branch. `opts`: `:run` (gh), `:by` (who queued
-  it, named in the thread's post). gh's stderr is left out of stdout: a warning on exit 0 would not parse.
+  or a protected branch is refused; else `queue/5` by its branch. `opts`: `:run` (gh; default the
+  `:gh_cmd` app env, else `System.cmd/3`), `:by` (who queued it, named in the thread's post). gh's stderr
+  is left out of stdout: a warning on exit 0 would not parse.
   """
   def request(repo, pr, opts \\ []) do
-    run = Keyword.get(opts, :run, &Server.Cmd.run/3)
+    run = Keyword.get(opts, :run, gh())
 
     with {:ok, info} <- view(repo, pr, run),
          :ok <- landable(info),
          :ok <- unprotected(repo, info["headRefName"], run) do
       queue(repo, pr, info["headRefName"], get_in(info, ["author", "login"]), by: opts[:by])
+    end
+  end
+
+  @doc """
+  `request/3` for a branch rather than a PR number, the step an approving `review_branch` takes: gh
+  lists `branch`'s open PRs onto main (`--head`), and exactly one goes to `request/3` with the same
+  `opts`; none, several, or gh failing is `{:error, why}`, nothing queued.
+  """
+  def request_branch(repo, branch, opts \\ []) do
+    run = Keyword.get(opts, :run, gh())
+
+    with {:ok, pr} <- open_pr(repo, branch, run) do
+      request(repo, pr, Keyword.put(opts, :run, run))
     end
   end
 
@@ -94,7 +110,7 @@ defmodule Server.PRLanding do
   """
   def land(%{"pr" => pr, "branch" => branch} = args, opts \\ []) do
     repo = Keyword.get_lazy(opts, :repo, &Server.Profiles.tlon_root/0)
-    run = Keyword.get(opts, :run, &Server.Cmd.run/3)
+    run = Keyword.get(opts, :run, gh())
     gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate_pr(pr, branch, &1, &2) end)
     ref = "land/#{branch}"
     say = &post(args["on_thread"], "PR ##{pr} (#{branch}): #{&1}")
@@ -187,4 +203,21 @@ defmodule Server.PRLanding do
   rescue
     _ -> :ok
   end
+
+  defp open_pr(repo, branch, run) do
+    args = ["pr", "list", "--head", branch, "--base", "main", "--state", "open", "--json", "number"]
+
+    with {out, 0} <- run.("gh", args, cd: repo),
+         {:ok, prs} when is_list(prs) <- Jason.decode(out) do
+      case prs do
+        [%{"number" => pr}] -> {:ok, pr}
+        [] -> {:error, "#{branch} has no open PR onto main"}
+        many -> {:error, "#{branch} has #{length(many)} open PRs onto main — land one by number"}
+      end
+    else
+      _ -> {:error, "gh could not list #{branch}'s open PRs"}
+    end
+  end
+
+  defp gh, do: Application.get_env(:server, :gh_cmd, &Server.Cmd.run/3)
 end

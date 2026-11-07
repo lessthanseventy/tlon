@@ -24,7 +24,9 @@ control loop, not two, and no second way to run anything:
   posts nothing and says so, and gh missing or refusing is said, never red. `TLON_CHECK_STATUS=0` posts nothing.
 - `mise run land -- <pr>` — land a reviewed PR through the server's merge queue (`scripts/land.sh` →
   `Server.PRLanding`, the same line and gate as worklines): queued only when its branch's newest review on
-  tlon (`review_branch`) approves its head, or that head rebased onto main with the same patches; its turn
+  tlon (`review_branch`) approves its head, or that head rebased onto main with the same patches. An approving
+  `review_branch` queues it by itself (`Server.PRLanding.request_branch/3`: the branch's one open PR onto main,
+  through the same preflight), so the task is for a PR whose approval came first or was refused then; its turn
   rebases it onto origin/main, gates it, pushes it with lease, comments the review on the PR, posts
   `tlon/check` and merges at exactly that head (`gh pr merge --rebase --match-head-commit`). The outcome is
   posted on the review's thread. The service must be up. A sandboxed seat (no epmd) calls the `land_pr(pr)`

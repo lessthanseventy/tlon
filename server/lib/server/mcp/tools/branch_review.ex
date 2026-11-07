@@ -2,9 +2,12 @@ defmodule Server.MCP.Tool.ReviewBranch do
   @moduledoc """
   A reviewer's verdict on a branch that is not a workline (a session's PR branch), recorded on tlon
   as yours (`Server.BranchReview`): `approve` or `request_changes` of `branch` at `sha`, the full
-  commit you read. `mise run land` lands only a branch whose newest verdict approves its head (or
-  that head rebased onto main and nothing else). A review runs on its own thread, in a session its
-  verdict ends: from the workspace's standing thread it is refused. A workline's review is
+  commit you read. An `approve` then hands the branch's open PR onto main to the merge queue
+  (`Server.PRLanding.request_branch/3`: `land_pr`'s preflight and refusals, neither the PR's author
+  nor a builder of the branch as reviewer, the outcome posted on this thread); the reply's `landing`
+  says whether it queued, and why not — no open PR, a sha the branch has moved past — with the verdict
+  recorded either way. `request_changes` queues nothing. A review runs on its own thread, in a session
+  its verdict ends: from the workspace's standing thread it is refused. A workline's review is
   `submit_review`, not this.
   """
   use Server.MCP.Tool
@@ -47,11 +50,32 @@ defmodule Server.MCP.Tool.ReviewBranch do
            thread_id: identity.thread_id,
            repo: Server.Profiles.tlon_root()
          }) do
-      {:ok, _} -> ok(frame, %{"recorded" => params.verdict, "branch" => params.branch, "sha" => params.sha})
-      {:error, why} when is_binary(why) -> fail(frame, why)
-      {:error, why} -> fail(frame, "not recorded: #{explain(why)}")
+      {:ok, _} ->
+        ok(frame, %{
+          "recorded" => params[:verdict],
+          "branch" => params[:branch],
+          "sha" => params[:sha],
+          "landing" => landing(params[:verdict], params[:branch])
+        })
+
+      {:error, why} when is_binary(why) ->
+        fail(frame, why)
+
+      {:error, why} ->
+        fail(frame, "not recorded: #{explain(why)}")
     end
   end
+
+  defp landing("approve", branch) do
+    case Server.PRLanding.request_branch(Server.Profiles.tlon_root(), branch) do
+      {:ok, %{args: %{"pr" => pr}}} -> "queued PR ##{pr}"
+      {:ok, _} -> "queued"
+      {:error, why} when is_binary(why) -> "not queued: #{why}"
+      {:error, why} -> "not queued: #{inspect(why)}"
+    end
+  end
+
+  defp landing(verdict, _branch), do: "not queued: #{verdict} queues nothing"
 end
 
 defmodule Server.MCP.Tool.LandPR do
@@ -60,6 +84,8 @@ defmodule Server.MCP.Tool.LandPR do
   <pr>` does, for a seat whose sandbox can't reach the service's epmd. Refused unless the PR is open
   onto main from its own unprotected branch and that branch's review on tlon (`review_branch`, by
   neither the PR's author nor a builder of it) approves its head. The outcome posts on the review's thread.
+  An approving `review_branch` queues the PR by itself through the same door; this is for one whose
+  approval was refused then (a PR opened after it, say) or recorded before that was so.
   """
   use Server.MCP.Tool
 
