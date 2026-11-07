@@ -184,6 +184,18 @@ defmodule Server.IntakeTest do
       assert Enum.any?(Server.Channel.thread_messages(thread), &(&1.body =~ "not staffed in 30 minutes"))
     end
 
+    test "is no red: the sheriff's beat is not told", %{ws: ws, route: route} do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-i", archetype: "builder"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach-i", archetype: "sheriff"})
+      stalled = routed(ws, "floor step 3", 31)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "doing"} = Tickets.get(stalled.id)
+      assert Server.Sheriff.of(ws.id)
+      refute Server.Repo.exists?(from t in Server.Thread, where: t.title == ^Server.Sheriff.beat_title())
+    end
+
     test "is left alone when the manager held it — the label says it waits on something", %{ws: ws, route: route} do
       held = routed(ws, "mailbox", 31)
       {:ok, _} = Tickets.update(held, %{labels: ["whimsy", "held"]})
