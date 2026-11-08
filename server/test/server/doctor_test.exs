@@ -208,6 +208,33 @@ defmodule Server.DoctorTest do
     end
   end
 
+  describe "untrusted_checkouts/2" do
+    setup do
+      root = Path.join(System.tmp_dir!(), "doctor-trust-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(root)
+      on_exit(fn -> File.rm_rf!(root) end)
+      %{root: root}
+    end
+
+    test "ok when there are no seat or scratch checkouts", %{root: root} do
+      assert Doctor.untrusted_checkouts(root, Path.join(root, "scratch")) == "ok"
+    end
+
+    test "names a checkout whose mise.toml is untrusted, with the trust to run", %{root: root} do
+      wt = Path.join([root, ".worktrees", "t1"])
+      File.mkdir_p!(wt)
+      File.write!(Path.join(wt, ".git"), "gitdir: nowhere\n")
+      File.write!(Path.join(wt, "mise.toml"), "[env]\nDOCTOR = \"1\"\n")
+
+      line = Doctor.untrusted_checkouts(root, Path.join(root, "scratch"))
+      assert line =~ wt
+      assert line =~ "mise trust"
+
+      System.cmd("mise", ["trust", "-q", wt])
+      assert Doctor.untrusted_checkouts(root, Path.join(root, "scratch")) == "ok"
+    end
+  end
+
   test "refuses an unknown table rather than interpolating it" do
     assert_raise ArgumentError, ~r/no such table/, fn ->
       Doctor.table_to_jsonl("collection; DROP TABLE collection")

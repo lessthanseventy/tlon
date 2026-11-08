@@ -13,6 +13,8 @@ commit() { # commit <dir> <file> <text> <subject>
 }
 git init -q --bare -b main "$tmp/origin.git"
 git clone -q "$tmp/origin.git" "$tmp/repo" 2>/dev/null
+commit "$tmp/repo" mise.toml '[env]
+A8 = "1"' "mise config"
 commit "$tmp/repo" a.txt base "an old subject"; g push -q origin HEAD:main; g fetch -q origin
 
 scratch() { # scratch <name> <subject> <text>: a detached worktree with one commit, aged past the hour
@@ -44,6 +46,8 @@ at "$TLON_SCRATCH_DIR/zunz/seatwork" "$(cd "$tmp/repo" && TLON_AUTHOR=zunz "$her
   "a seat's worktree goes under its own dir"
 at "$TLON_SCRATCH_DIR/opwork" "$(cd "$tmp/repo" && "$here/scratch.sh" new opwork 2>&1 | tail -n 1)" \
   "the operator's worktree stays flat"
+at "$TLON_SCRATCH_DIR/opwork: trusted" "$(mise trust --show -C "$TLON_SCRATCH_DIR/opwork" 2>&1 | grep "^$TLON_SCRATCH_DIR/opwork:")" \
+  "a new scratch worktree's mise.toml is trusted"
 for d in zunz/seatwork opwork; do
   gd="$(git -C "$TLON_SCRATCH_DIR/$d" rev-parse --path-format=absolute --git-dir)"
   touch -d '2 hours ago' "$gd/HEAD" "$gd/index"

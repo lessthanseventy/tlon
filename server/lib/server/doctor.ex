@@ -131,6 +131,33 @@ defmodule Server.Doctor do
     end
   end
 
+  @doc """
+  The seat checkouts under `root/.worktrees` and the scratch checkouts under `scratch_dir` whose
+  `mise.toml` mise has not trusted, as one report line: `ok`, or their paths and the `mise trust` to run.
+  mise ignores an untrusted config silently, so a host `mix` would run on the machine's global pin.
+  """
+  @spec untrusted_checkouts(Path.t(), Path.t()) :: String.t()
+  def untrusted_checkouts(root \\ Server.Profiles.tlon_root(), scratch_dir \\ scratch_dir()) do
+    dirs =
+      Path.wildcard(Path.join([root, ".worktrees", "*"])) ++
+        Path.wildcard(Path.join(scratch_dir, "*")) ++ Path.wildcard(Path.join(scratch_dir, "*/*"))
+
+    untrusted =
+      for dir <- dirs,
+          File.exists?(Path.join(dir, ".git")),
+          File.exists?(Path.join(dir, "mise.toml")),
+          {out, _} = System.cmd("mise", ["trust", "--show", "-C", dir], stderr_to_stdout: true),
+          out =~ "#{dir}: untrusted",
+          do: dir
+
+    case untrusted do
+      [] -> "ok"
+      dirs -> "untrusted mise.toml in #{Enum.join(dirs, ", ")} — `mise trust <dir>` each"
+    end
+  rescue
+    ErlangError -> "ok"
+  end
+
   @stale_lock_seconds 300
 
   @doc """
@@ -195,5 +222,10 @@ defmodule Server.Doctor do
     Enum.map_join(rows, "\n", fn row ->
       columns |> Enum.zip(row) |> Map.new() |> JSON.encode!()
     end)
+  end
+
+  defp scratch_dir do
+    System.get_env("TLON_SCRATCH_DIR") ||
+      Path.join(System.get_env("XDG_CACHE_HOME") || Path.expand("~/.cache"), "tlon-scratch")
   end
 end
