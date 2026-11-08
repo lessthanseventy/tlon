@@ -322,19 +322,13 @@ defmodule Server.Attention do
   `{:ok, message}`, or `{:error, :not_found | :answered | :no_study | :own_ask}`.
   """
   def hand_to_uqbar(id, operator) do
-    with %Message{kind: "prompt", resolved_at: nil, payload: %{"ask" => asker} = p} = ask <- Repo.get(Message, id),
+    with {:ok, %Message{payload: %{"ask" => asker} = p} = ask} <- open_ask(id),
          :ok <- if(asker == "uqbar", do: {:error, :own_ask}, else: :ok),
-         %Thread{workspace_id: ws} = thread when not is_nil(ws) <- Repo.get(Thread, ask.thread_id),
-         {:ok, study} <- Server.Outside.study(ws),
+         {:ok, %Thread{workspace_id: ws} = thread} <- workspace_thread(ask.thread_id),
+         {:ok, study} <- study(ws),
          {:ok, posted} <- Channel.post(%{thread_id: study.id, author: operator, body: handed(asker, thread, p)}) do
       resolve(ask, "handed to uqbar")
       {:ok, posted}
-    else
-      %Message{kind: "prompt", payload: %{"ask" => _}, resolved_at: at} when not is_nil(at) -> {:error, :answered}
-      %Thread{} -> {:error, :no_study}
-      {:error, :no_such_citizen} -> {:error, :no_study}
-      {:error, _} = error -> error
-      _ -> {:error, :not_found}
     end
   end
 
@@ -374,13 +368,17 @@ defmodule Server.Attention do
   :not_found | :answered | :no_such_option | :not_showing}`.
   """
   def answer_prompt(id, author, body) when is_binary(body) do
-    with %Message{kind: "prompt", resolved_at: nil} = prompt <- Repo.get(Message, id),
+    with {:ok, prompt} <- unanswered(id),
          {:ok, key, rest} <- option(prompt, body),
          :ok <- still_showing(prompt) do
       prompt |> answer(author, body, key, rest) |> settling(prompt.thread_id)
-    else
+    end
+  end
+
+  defp unanswered(id) do
+    case Repo.get(Message, id) do
+      %Message{kind: "prompt", resolved_at: nil} = prompt -> {:ok, prompt}
       %Message{kind: "prompt"} -> {:error, :answered}
-      {:error, _} = error -> error
       _ -> {:error, :not_found}
     end
   end
@@ -601,5 +599,27 @@ defmodule Server.Attention do
     end
 
     :ok
+  end
+
+  defp open_ask(id) do
+    case Repo.get(Message, id) do
+      %Message{kind: "prompt", payload: %{"ask" => _}, resolved_at: nil} = ask -> {:ok, ask}
+      %Message{kind: "prompt", payload: %{"ask" => _}} -> {:error, :answered}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp workspace_thread(thread_id) do
+    case Repo.get(Thread, thread_id) do
+      %Thread{workspace_id: ws} = thread when not is_nil(ws) -> {:ok, thread}
+      _ -> {:error, :no_study}
+    end
+  end
+
+  defp study(ws) do
+    case Server.Outside.study(ws) do
+      {:error, :no_such_citizen} -> {:error, :no_study}
+      other -> other
+    end
   end
 end
