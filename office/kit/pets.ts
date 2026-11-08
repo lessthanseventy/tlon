@@ -297,3 +297,11 @@ export function previewOf(s: PetSetting, tick: number): { mode: "sleep" | "sit" 
 
 export { speciesBase } from "./temperament"
 export { SPECIES_VOICE } from "./voices"
+
+/** the line Argos brings back with the morning paper: the first note of a release cut today, else "nothing yet" */
+export function paperHeadline(release: { cut_at: string; notes?: string[] } | null | undefined, today: Date): string {
+  const first = release?.notes?.[0]
+  const cut = release ? new Date(release.cut_at) : null
+  if (!first || !cut || cut.toDateString() !== today.toDateString()) return "nothing yet"
+  return first.length > 56 ? `${first.slice(0, 55)}…` : first
+}
