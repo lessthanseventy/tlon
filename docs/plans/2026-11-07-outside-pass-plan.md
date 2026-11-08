@@ -609,6 +609,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   `seasonOf(date)` table (spring blossom at the window, summer fan, Pi Day on the clock face,
   New Year's Eve beyond the TV).
 - Check: `daylight.test.ts` and `sim.test.ts` at pinned clocks.
+- Done: `kit/daypart.ts`: `rushOf` (12:00-12:30 lunch: the kitchen spots outweigh the rest in `moment`; 17:30-18:00 leaving: the idle crowd takes the muster slots by the door) and `seasonOf` (spring blossom past the windows, a summer fan, Pi Day, New Year's Eve), drawn by `WideRoom.yearly`; Pi Day shows `3.14` on the clock for the first half of each minute. Left: the sim does not know the pause, so the leaving wave is clock-only, not tied to `lights_out`; New Year's Eve is fireworks in the windows from 21:00, not anything beyond the TV, and its test only pins that the frame differs from Dec 30 (the poster of the day also moves).
 
 **F11 · A TV channel that is the office.** `Sonnet · S`
 - Why: twelve generative channels, none about the work.

@@ -18,6 +18,7 @@ import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temperament"
 import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type Guest, type Toys, type VisitorKind } from "./door"
 import { CHAINS, EVENTS, EVENT_KINDS, GARY_ACT, GARY_SPIN, blackoutAt, flickerAt, garyLeads, garyRoll, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type GaryRoll, type Geo, type Prop } from "./events"
+import { rushOf } from "./daypart"
 import { SHERIFF } from "./scharlach"
 import { DEFAULT, meanGap, resolve, type Dials } from "./whimsy"
 import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
@@ -121,9 +122,10 @@ const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade",
 const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"], vending: ["♪", "?"], foosball: ["!", "*"], pool: ["!", "?"], read: ["…", "?", "♥"], bathroom: ["~", "♪"] }
 const SOUR = ["…", "!"]
 /** how the hour pulls at a pastime: coffee in the morning, the machine at lunch, the windows and the couch at night */
-export function moment(kind: string, hour: number, weather?: string, party = false) {
+export function moment(kind: string, hour: number, weather?: string, party = false, lunch = false) {
   // a birthday: the crowd gathers at the kitchen counter, cake and a drink
   if (party && (kind === "cooler" || kind === "coffee")) return 5
+  if (lunch && (kind === "cooler" || kind === "coffee" || kind === "vending")) return 8
   // the weather out the window pulls first: in for the couch and a book when it pours, out to the glass when it snows
   if (weather === "rain" || weather === "storm") return kind === "couch" || kind === "read" ? 3 : kind === "window" || kind === "arcade" ? 2 : 1
   if (weather === "snow") return kind === "window" ? 4 : kind === "coffee" ? 2 : 1
@@ -947,6 +949,7 @@ export class Sim<L extends { people: Seat[] }> {
       else if ((actor.seat.thinking || this.tick < actor.stretch) && home) goal = home
       else if (actor.seat.warm && home) goal = home
       else if ((ev = this.eventGoal(k))) goal = ev
+      else if (rushOf(this.date()) === "leaving" && plan.muster) goal = plan.muster[[...this.actors.keys()].indexOf(k) % plan.muster.length]!
       else goal = this.idleGoal(actor, held, l)
       const gk = spotKey(goal)
       if (gk !== actor.spotKey) {
@@ -1080,7 +1083,7 @@ export class Sim<L extends { people: Seat[] }> {
     if (friends.length && Math.random() < 0.9) return friends[Math.floor(Math.random() * friends.length)]!
     if (waiting.length && Math.random() < 0.7) return waiting[Math.floor(Math.random() * waiting.length)]!
     // their favourite pulls three times as hard, and the hour has its say
-    const hour = this.hour(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind, this.celebrating || this.pizzaOn())
+    const hour = this.hour(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind, this.celebrating || this.pizzaOn(), rushOf(this.date()) === "lunch")
     let roll = Math.random() * free.reduce((n, s) => n + weight(s), 0)
     return free.find((s) => (roll -= weight(s)) < 0) ?? this.plan.roam(l)
   }
