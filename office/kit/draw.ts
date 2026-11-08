@@ -24,6 +24,8 @@ export const glowOf = (warmth: number) => tint(ROLE.live, ROLE.ground, Math.max(
 /** what a desk's screen shows: code scrolling mid-turn, a screensaver while the session is warm between turns, dark once cold */
 export const screenOf = (seated: boolean, thinking: boolean, warmth: number): "code" | "saver" | "off" =>
   !seated || warmth <= 0 ? "off" : thinking ? "code" : "saver"
+/** the pastimes whose pose is drawn below the arcade, the table and the watering can */
+const POSED = new Set<string>(["aquarium", "chat", "pet", "vending", "foosball", "pool", "bathroom"])
 /** a tool running this long (ticks) has its worker sweating */
 const SWEAT = 600
 /** something with a footprint: drawn in order of `base`, its feet's row, so nearer covers farther */
@@ -125,6 +127,17 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
         if (kind === "arcade") { sc.px(left + 2 + (sc.tick % 2), top + 11, 2, 1, ROLE.prose); sc.px(left + 8, top + 11 - (f % 2), 2, 1, ROLE.prose) }
         else if (kind === "pingpong") { const r = actor.face === "right", sw = (sc.tick % 8) < 4 ? 0 : 2; sc.px(r ? left + 12 : left - 2, top + 8 + sw, 2, 3, ROLE.alarm) }
         else if (kind === "plant") { sc.px(left - 4, top + 10, 4, 3, ROLE.key); sc.px(left - 6, top + 10, 2, 1, ROLE.key); sc.px(left - 7, top + 12 + (f % 3) * 2, 1, 1, ROLE.key) }
+        else if (POSED.has(kind)) {
+          // the rest, each a pose of its own: a tap on the glass, a gesture, a hand down to the pet, a coin, the rods, a cue lined up, a lean on the sink
+          const side = actor.face === "left" ? -1 : 1, reach = side < 0 ? left - 2 : left + 12
+          if (kind === "aquarium") { sc.px(reach, top + 5, 2, 5, ROLE.prose); if (f % 2) sc.px(reach + (side > 0 ? 2 : -1), top + 5, 1, 1, ROLE.key) }
+          else if (kind === "chat") sc.px(reach, top + 7 - (f % 3 === 0 ? 2 : 0), 2, 3, ROLE.prose)
+          else if (kind === "pet") sc.px(reach, top + 11 + (f % 2), 2, 4, ROLE.prose)
+          else if (kind === "vending") { sc.px(left + 9, top + 5, 2, 3, ROLE.prose); sc.px(left + 10, top + 3 - (f % 3), 1, 1, ROLE.key) }
+          else if (kind === "foosball") { sc.px(left + 1, top + 10 + (f % 2), 2, 1, ROLE.prose); sc.px(left + 9, top + 10 + ((f + 1) % 2), 2, 1, ROLE.prose) }
+          else if (kind === "pool") sc.px(side < 0 ? left - 8 + (sc.tick % 12 < 6 ? 0 : 2) : left + 10 - (sc.tick % 12 < 6 ? 0 : 2), top + 9, 8, 1, ROLE.alarm)
+          else { sc.px(reach, top + 10, 3, 1, ROLE.prose); sc.px(left + 5, top + 13 + (f % 2), 1, 2, ROLE.live) }
+        }
       } else if (sitting && actor.spot.kind === "read") {
         // a book open in their lap, a page turning over now and then
         sc.px(left + 2, top + 10, 8, 3, ROLE.prose); sc.px(left + 6, top + 10, 1, 3, ROLE.structure)
