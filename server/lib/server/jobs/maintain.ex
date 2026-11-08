@@ -4,8 +4,9 @@ defmodule Server.Jobs.Maintain do
   gates get their reminder, quiet worklines their continuation, and the board is kept true
   (tickets' status against their threads, worktrees nothing is working in — `Server.Maintain.Sweep`). `args` may name a
   band in ms (`gate_stale_ms`, `renag_ms`, `quiet_ms`) — tests do; the cron entry passes none.
+  Two attempts: every sweep is idempotent, so a run cut off by a restart or a db fault is run again.
   """
-  use Oban.Worker, queue: :maintain, max_attempts: 1, unique: [period: 60]
+  use Oban.Worker, queue: :maintain, max_attempts: 2, unique: [period: 60]
 
   alias Server.Maintain.Sweep
 

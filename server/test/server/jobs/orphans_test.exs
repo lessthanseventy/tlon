@@ -50,6 +50,22 @@ defmodule Server.Jobs.OrphansTest do
     assert %{state: "available", attempt: 2} = Server.Repo.get!(Oban.Job, left)
   end
 
+  test "an orphan discarded by the restart is said so on the machine thread, not left as no error recorded" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Home"})
+    {:ok, general} = Server.Channel.open_thread(%{title: "general", scope: "machine", workspace_id: ws.id})
+    executing("funes@here", %{attempt: 3})
+
+    Orphans.requeue("funes@here")
+
+    assert [%{body: body}] = Server.Repo.all(from m in Server.Message, where: m.thread_id == ^general.id)
+    assert body =~ ~r/^⚠ job Server\.Jobs\.Land discarded: killed by the restart at \d\d:\d\d$/
+  end
+
+  test "Grade and Maintain are retried; the per-minute passes are not" do
+    assert Server.Jobs.Grade.new(%{thread_id: 1}).changes.max_attempts == 3
+    assert Server.Jobs.Maintain.new(%{}).changes.max_attempts == 2
+  end
+
   test "the schedules queue dispatches the run behind an exhausted orphan" do
     # RunSchedule has max_attempts 1 and the queue 2 slots: two exhausted orphans ahead of a real
     # run are always the two the engine picks and drops, so the real one never runs.
