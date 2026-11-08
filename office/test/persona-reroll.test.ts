@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // e → "draw a new one (reroll)" throws away the persona's hand edits, so it asks first: n changes
 // nothing, y rerolls, and says so while the model call runs. Drives the real TUI against a stub
@@ -40,7 +41,6 @@ const until = async (what: string, ok: () => boolean) => {
   while (!ok() && performance.now() < deadline) await Bun.sleep(50)
   if (!ok()) throw new Error(`never saw ${what} after ${performance.now() - t0}ms; pane:\n${screen()}`)
 }
-const settle = () => Bun.sleep(400)
 
 test("e then reroll asks first: n changes nothing, y rerolls", async () => {
   const office = join(import.meta.dir, "..")
@@ -52,13 +52,13 @@ test("e then reroll asks first: n changes nothing, y rerolls", async () => {
   tmux("send-keys", "-t", "0", "-l", "ada")
   await until("ada in the finder", () => screen().includes("coworker ada"))
   tmux("send-keys", "-t", "0", "enter")
-  await settle()
+  await waitFor(screen, (s) => !s.includes("FIND"), "the finder closed")
   tmux("send-keys", "-t", "0", "e")
   await until("the persona picker", () => screen().includes("ADA'S PERSONA"))
   tmux("send-keys", "-t", "0", "enter")
   await until("the reroll ask", () => screen().includes("reroll") && screen().includes("(y/n)"))
   tmux("send-keys", "-t", "0", "n")
-  await settle()
+  await waitFor(screen, (s) => !s.includes("(y/n)"), "the ask answered")
   expect(screen()).not.toContain("(y/n)")
   expect(posts).toEqual([])
   tmux("send-keys", "-t", "0", "e")
