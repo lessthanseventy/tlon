@@ -4,7 +4,7 @@ defmodule Server.CommitsTest do
   # (pre-commit): a pane with TLON_THREAD commits only on work/*. Real git, temp repos, the real
   # hooks (core.hooksPath → scripts/git-hooks), so the write side is tested too. The fixture sits
   # on `work/fixture`, where a coworker's commits are allowed.
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias Server.Commits
 
