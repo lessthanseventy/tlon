@@ -77,13 +77,19 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Check: the count is 0; `mise run release:status` answers the same before and after on a known sha.
 
 **A6 · An `erl_crash.dump` sits at the repo root since 2026-11-04.** `Sonnet · S`
-- Why: slogan "Runtime terminating during boot … io.put_chars standard_error … the device does not
-  exist": a `bin/server eval` or `rpc` ran with stderr closed and the VM crashed on its own error
-  print. `server:doctor` reads any dump at the root as the last restart's (#855).
-- Change: find which script spawned the release with no stderr (the hot-load path, `release.sh`, or
-  a schedule), give it a stderr; delete the dump; `doctor` dates a dump against the service start as
-  #855 asks.
-- Check: no dump reappears in a week; #855 closed.
+- Why: two dumps, both "Runtime terminating during boot … io.put_chars standard_error … the device
+  does not exist": a short-lived VM hit an error, tried to print it, and its stderr was gone. The
+  root one (14:31) is OTP 29 on one scheduler, `tlon-cli.sh`'s `bin/server rpc` client node
+  (`ERL_FLAGS +S 1:1`); the one in `server/` (10:28) is OTP 27 on 20 schedulers, menard's own
+  toolchain (`.tool-versions`), so a menard VM run from `server/`. Neither is the service (the
+  journal is silent at both times), yet `server:doctor` blamed the last restart (#855).
+- Change: done 2026-11-07 — both dumps moved to `~/.local/state/tlon/crash-dumps/`, and
+  `tlon-cli.sh` sets `ERL_CRASH_DUMP` there, so a client node's crash never lands at the root again.
+  Left: `doctor` dates a dump against the service start as #855 asks; which caller runs `tlon-cli`
+  with stderr closed is open (`server-restart.sh` and `release.sh` send it to `/dev/null`, which
+  works) — read the next dump in the state dir; menard's half (its VM dumping into the caller's
+  cwd) goes to the menard session with A2.
+- Check: no dump at the root in a week; #855 closed.
 
 **A7 · Stall notices fire twice per thread.** `Haiku · S`
 - Why: "⚠ stalled — tN is mid-turn and its pane has not changed for 5m" posts twice for the same
@@ -172,8 +178,12 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   not for Grade, EndReview or Land, where a transient db or git fault drops the step (`grade.ex:294`
   hand-rolls a 30 s sleep retry). `Process.sleep` sits in `switchboard.ex:465`, `attention.ex:531`
   and `orphans.ex:80`, on the wake hot path.
-- Change: `max_attempts: 3` with backoff on the one-shot jobs; `Process.send_after` or a Task for
-  the three sleeps.
+- Also: a restart during a run is a failure with no cause. `machine:update` on 2026-11-07 22:30
+  stopped the service 23 s into a Maintain run (they take 18–52 s), systemd's 10 s stop timeout
+  SIGKILLed it, and the job was discarded as "no error recorded" (`Server.Jobs.Alarm`).
+- Change: `max_attempts: 3` with backoff on the one-shot jobs — `2` on Maintain, every sweep in it
+  idempotent; the alarm says "killed by the restart at HH:MM" when the job's node died rather than
+  raised; `Process.send_after` or a Task for the three sleeps.
 - Check: a test that a Grade job raising once completes on the second attempt; the switchboard's
   wake latency test (exists) still passes.
 
@@ -398,7 +408,8 @@ notice on the sheriff's beat). `Sonnet` for each but #614 and #760 (`Opus`).
 - Change, four mechanisms, each keeping the rule that nothing merges that nobody checked:
   1. **One green per tree, everywhere.** `check.sh` already skips a clean tree it has passed
      (`~/.cache/tlon-verify/green`). Widen it: the key is the tree hash *minus* `work/` and `docs/`
-     (a `pr.md` or a plan commit does not make a new tree to test); `run_task("server:check")` runs
+     (a `pr.md` or a plan commit does not make a new tree to test) — done 2026-11-07, keeping the
+     two docs files a check reads (`docs/glossary.md`, `docs/manual/tasks.md`); `run_task("server:check")` runs
      `mise run check` so a seat's green is recorded and verify becomes a cache hit; the record is a
      `check_passed` row in the db, not a per-checkout file, so every checkout and the nightly see it.
   2. **Scope verify by what changed, keep landing full.** Verify runs the suites of the modules the
@@ -591,15 +602,22 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Check: `mise run server:test` and `office:test` wall time before/after; no new flake in a week of
   nightlies (a flake is fixed, never retried).
 
-**G8 · 59 GB of worktrees.** `Sonnet · S`
-- Why: `.worktrees/` holds 28 checkouts at 2.3–2.6 GB each (1.9 GB `server/deps` + 300 MB
-  `_build` + `node_modules` per checkout), the oldest from 2026-10-09 (`t216`, `t1`, `t122`,
-  `t144`…); `~/.cache/tlon-scratch` another 1.4 GB.
-- Change: `Server.Worktree.retire/2` runs for every closed thread's checkout (check why `t216`
-  survived); deps shared across checkouts by `cp --reflink` from the main checkout at `ensure`
-  (`server:setup` does the copy once) or a per-user `MIX_DEPS_PATH`; `server:doctor` reports the
-  total and the stale ones.
-- Check: `du -sh .worktrees` under 10 GB; a test that `retire` removes the checkout and its db.
+**G8 · 59 GB of worktrees — mostly `du` double-counting; the sweep's one real gap.** `Sonnet · S`
+- Why: `du` counts every checkout's `server/deps` (1.9 GB) and `_build` in full, but
+  `Server.Worktree.seed_deps/2` copies them `cp --reflink=auto`, so on btrfs they share blocks:
+  `btrfs filesystem du -s .worktrees` read 29.9 GiB total and **353 MiB exclusive** (2026-11-07,
+  after the closed threads' checkouts went). What had piled up was 13 checkouts of closed threads,
+  kept by the sweep for a stale `.claude/settings.json` edit an older launcher wrote (current seats
+  read clean) and for `landed?/4`'s file match, which reads a landed workline's branch as unmerged
+  once main edits the same files again (`toy-step-4`, `uqbar-step-4`, both landed in October).
+- Change: done 2026-11-07 — `Sweep.reap_worktrees/0` retires a closed *landed* thread's checkout
+  whatever `git cherry` says (its change is on main; the branch stays), with a test. Left:
+  `server:doctor` reports `.worktrees` as exclusive bytes (`btrfs filesystem du` where it exists,
+  `du` elsewhere) so the number stops alarming; and `Channel.close_thread/1` on a *landed* thread
+  whose checkout reads unmerged (the main checkout behind origin, say) answers `{:tracked, _}` —
+  promoting it back to build — which `Workline.merged/2` match-crashes on: a landed thread closes
+  as landed, its checkout retired, never tracked.
+- Check: the strays test; `btrfs filesystem du -s .worktrees` exclusive under 1 GB.
 
 **G9 · Scripts without tests, and six copies of `expect()`.** `Sonnet · S`
 - Why: `release.sh` (the pointer cut and rollback), `check.sh` (the tree-cache rules),
