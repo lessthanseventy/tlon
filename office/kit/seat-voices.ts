@@ -5,6 +5,7 @@
 // never changes a decision.
 
 import type { EventKind } from "./events"
+import type { Guest } from "./door"
 import { pickFresh } from "./voices"
 
 /** the §2 seats, in design order */
@@ -286,13 +287,50 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
 
 /** a plain one-liner per event for a seat the table doesn't name */
 const GENERIC_REACT: Record<EventKind, readonly string[]> = {
-  drill: ["Drill. On my way."],
-  zoo: ["That's a lot of animals."],
-  meteor: ["Was that a meteor?"],
-  power: ["Lights are out."],
-  duck: ["There's a duck."],
-  gary: ["Something is in the dumpster."],
+  drill: ["Drill. On my way.", "Is that the alarm? Again?", "Out we go, then.", "Coffee first. Then the fire."],
+  zoo: ["That's a lot of animals.", "Is the goat allowed in here?", "Nobody told me about a zoo.", "The penguin looks lost."],
+  meteor: ["Was that a meteor?", "That one was close.", "Make a wish, I suppose.", "Somebody check the roof."],
+  power: ["Lights are out.", "Was that me? I only pressed save.", "Candles, anyone?", "Good thing I committed."],
+  duck: ["There's a duck.", "Why is there a duck?", "The duck has an opinion, I can tell.", "Nobody feed it."],
+  gary: ["Something is in the dumpster.", "Is that a fish bone?", "Gary is back.", "Leave him a sandwich."],
 }
+
+/** puns and visitors the room has with no server; the generated pool extends them (`Sim.pooled`) */
+export const BASE_PUNS: readonly string[] = [
+  "I would tell you a UDP joke, but you might not get it.",
+  "There are 10 kinds of people: those who read binary and those who don't.",
+  "My code has no bugs, only surprise features.",
+  "I'd tell a joke about recursion, but first I'd tell a joke about recursion.",
+  "A SQL query walks into a bar, sees two tables and asks: may I join you?",
+  "I told my computer I needed a break. It said: no problem, I'll go to sleep.",
+  "Why do programmers prefer dark mode? Because light attracts bugs.",
+  "The cloud is just someone else's computer with better marketing.",
+  "I changed my password to 'incorrect', so it tells me when I'm wrong.",
+  "Debugging: being the detective in a crime movie where you are also the murderer.",
+  "A byte walks into a bar looking rough. The bartender asks what's wrong. Parity error, it says.",
+  "Git happens.",
+  "Off-by-one errors are the second worst thing in programming, after off-by-one errors.",
+  "I'd love to change the world, but they won't give me the source code.",
+  "Real programmers count from zero. Real managers count from one.",
+  "It works on my machine. Ship my machine.",
+  "I have a joke about deadlines. It's not done yet.",
+  "Why was the function sad? It didn't get any callbacks.",
+  "To err is human; to really mess up you need a force push.",
+  "Keep calm and merge on.",
+]
+
+export const BASE_VISITORS: readonly Guest[] = [
+  { name: "Mr. Plover", look_seed: "plover", line: "Is this the room with the ducks?" },
+  { name: "Ms. Okonkwo", look_seed: "okonkwo", line: "Delivery for whoever ordered forty rubber ducks." },
+  { name: "Old Pete", look_seed: "pete", line: "I used to work here. Is the vending machine still broken?" },
+  { name: "Dr. Halloran", look_seed: "halloran", line: "I'm here about the cat. She filed a complaint." },
+  { name: "Wendell", look_seed: "wendell", line: "Wrong building, I think. Can I stay for the coffee anyway?" },
+  { name: "Aunt Maribel", look_seed: "maribel", line: "I brought soup. Somebody here looks thin." },
+  { name: "The Inspector", look_seed: "inspector", line: "Routine check. Is that dog supposed to be here?" },
+  { name: "Priya from Accounts", look_seed: "priya", line: "Who keeps expensing the aquarium?" },
+  { name: "A Man With a Ladder", look_seed: "ladder", line: "I'm told there is a lightbulb. I do not know which one." },
+  { name: "Juniper", look_seed: "juniper", line: "Is this where the tickets live? I have so many questions." },
+]
 
 /** a seat's line for an event, skipping what it said lately while anything else is unsaid */
 export const reactLine = (name: string, kind: EventKind, recent: readonly string[]): string =>

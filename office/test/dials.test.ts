@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { toysOf, type Toys } from "../kit/door"
+import { BASE_PUNS, BASE_VISITORS } from "../kit/seat-voices"
 import { parseSoul, useSouls } from "../kit/souls"
 import { DEFAULT, resolve, setDial } from "../kit/whimsy"
 import { WideRoom } from "../rooms/wide"
@@ -25,8 +26,8 @@ const withDials = (souls: boolean, weirdness: "curated" | "procedural" | "invent
 }
 const inner = (r: WideRoom) => r as unknown as { actors: Map<string, { five: number; finished: number; x: number; y: number; pose: string }>; tick: number; callers: { kind: string; guest?: { name: string } }[]; talk: Map<string, { text: string | null }>; caller: unknown; stepDoor: () => boolean }
 const pool: Toys = {
-  visitors: [{ name: "Mr. Plover", look_seed: "plover", line: "Is this the room with the ducks?" }],
-  puns: ["I would tell you a UDP joke, but you might not get it."],
+  visitors: [{ name: "Mr. Heron", look_seed: "heron", line: "Is this the room with the herons?" }],
+  puns: ["A pun the server wrote, which the compiled-in pool lacks."],
   reactions: { hronir: { fire_drill: ["Calmly. Calmly. Run."] } },
   parts: [],
 }
@@ -51,22 +52,23 @@ describe("the souls dial", () => {
 })
 
 describe("the weirdness dial", () => {
-  const rung = (w: "curated" | "procedural" | "invented", toys: Toys | null) => seeded(3, () => fixed(0.1, () => {
+  const rung = (w: "curated" | "procedural" | "invented", toys: Toys | null) => seeded(3, () => fixed(0, () => {
     const room = withDials(false, w), a = viewOf(office(CREW), 1), r = inner(room)
     room.step(a)
     room.setToys(toys)
     room.ring()
     return r.callers[0]!
   }))
-  test("curated: the door's own visitors, whatever the server generated", () => {
-    expect(rung("curated", pool).kind).not.toBe("guest")
+  test("curated: only the compiled-in visitors, whatever the server generated", () => {
+    const c = rung("curated", pool)
+    expect(c.guest?.name).not.toBe("Mr. Heron")
+    expect(BASE_VISITORS.map((g) => g.name)).toContain(c.guest?.name)
   })
   test("procedural and invented: a pooled visitor can come, with the server's name and line", () => {
-    for (const w of ["procedural", "invented"] as const) expect(rung(w, pool)).toMatchObject({ kind: "guest", guest: { name: "Mr. Plover" } })
+    for (const w of ["procedural", "invented"] as const) expect(rung(w, pool)).toMatchObject({ kind: "guest", guest: { name: "Mr. Heron" } })
   })
-  test("an empty pool, or none at all (an older server), changes nothing", () => {
-    expect(rung("invented", { visitors: [], puns: [], reactions: {}, parts: [] }).kind).not.toBe("guest")
-    expect(rung("invented", null).kind).not.toBe("guest")
+  test("an empty pool, or none at all (an older server), leaves the compiled-in visitors", () => {
+    for (const t of [{ visitors: [], puns: [], reactions: {}, parts: [] }, null]) expect(BASE_VISITORS.map((g) => g.name)).toContain(rung("invented", t).guest?.name)
   })
   test("a pooled seat's reaction replaces the scripted line at an event; curated keeps the script", () => {
     const said = (w: "curated" | "invented") => seeded(3, () => {
@@ -80,7 +82,7 @@ describe("the weirdness dial", () => {
     expect(said("curated")).not.toBe("Calmly. Calmly. Run.")
   })
   test("after a visit the answerer groans a pooled pun, only when the dial is up", () => {
-    const after = (w: "curated" | "invented") => seeded(3, () => fixed(0.1, () => {
+    const after = (w: "curated" | "invented") => seeded(3, () => fixed(0, () => {
       const room = withDials(false, w), a = viewOf(office(CREW), 1), r = inner(room)
       for (let i = 0; i < 80; i++) room.step(a)
       room.setToys(pool)
@@ -90,7 +92,7 @@ describe("the weirdness dial", () => {
       return r.talk.get(who)?.text
     }))
     expect(after("invented")).toBe(pool.puns[0]!)
-    expect(after("curated")).not.toBe(pool.puns[0]!)
+    expect(after("curated")).toBe(BASE_PUNS[0]!)
   })
 })
 
