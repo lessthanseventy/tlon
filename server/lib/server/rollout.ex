@@ -270,7 +270,7 @@ defmodule Server.Rollout do
   def handle_cast({:clear, key}, state), do: {:noreply, %{state | notes: Enum.reject(state.notes, &(&1[:key] == key))}}
 
   defp schedule(run, busy, poll_ms) do
-    if !restart_pending?() do
+    if not restart_pending?() do
       # registered by the caller before it waits, so restart_pending?/0 is true once this returns;
       # a schedule that lost the race to another drops its own waiter
       {:ok, pid} =

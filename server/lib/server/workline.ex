@@ -57,11 +57,11 @@ defmodule Server.Workline do
   # The ring, the owed map, and the gate list drift independently unless something ties them:
   # every non-terminal stage MUST owe an artifact, every gated stage must be in the ring.
   for stage <- Enum.drop(@stages, -1) do
-    Map.has_key?(@owed, stage) || raise "stage #{stage} has no owed artifact in @owed"
+    Map.has_key?(@owed, stage) or raise "stage #{stage} has no owed artifact in @owed"
   end
 
   for stage <- @gated do
-    stage in @stages || raise "gated stage #{stage} is not in @stages"
+    stage in @stages or raise "gated stage #{stage} is not in @stages"
   end
 
   @doc "The stage ring, first to terminal."
@@ -522,7 +522,7 @@ defmodule Server.Workline do
           where: m.thread_id == ^thread.id and fragment("?->>'dropped' = ?", m.payload, ^to_string(id))
       )
 
-    if !told? do
+    if not told? do
       what =
         "its landing was dropped #{@discarded_cap} times and is no longer requeued: #{by}'s approval at " <>
           "#{String.slice(sha, 0, 7)} (#{sha}) stands, and the work waits at review"

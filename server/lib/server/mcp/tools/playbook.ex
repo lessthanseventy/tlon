@@ -18,9 +18,9 @@ defmodule Server.MCP.Tool.RunPlaybook do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    case Playbooks.get_by_name(params[:name]) do
+    case Playbooks.get_by_name(params.name) do
       nil ->
-        fail(frame, "no playbook named #{inspect(params[:name])} — list_playbooks shows what exists")
+        fail(frame, "no playbook named #{inspect(params.name)} — list_playbooks shows what exists")
 
       playbook ->
         Channel.post(%{

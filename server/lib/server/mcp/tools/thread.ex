@@ -85,7 +85,7 @@ defmodule Server.MCP.Tool.PostMessage do
             %{
               thread_id: thread_id,
               author: identity.agent,
-              body: params[:body],
+              body: params.body,
               reply_to: params[:reply_to],
               kind: if(params[:notice], do: "notice", else: "chat")
             },
@@ -93,7 +93,7 @@ defmodule Server.MCP.Tool.PostMessage do
           )
 
         with {:ok, _} <- result,
-             do: Server.Presence.Thinking.record(thread_id, identity.agent, "post", "Post · " <> params[:body])
+             do: Server.Presence.Thinking.record(thread_id, identity.agent, "post", "Post · " <> params.body)
 
         reply(frame, result, fn message -> %{"message_id" => message.id} end)
 
@@ -218,7 +218,7 @@ defmodule Server.MCP.Tool.RaiseIssue do
   @impl true
   def execute(%{seen_again: id} = params, frame) when is_integer(id) do
     identity = Identity.from_frame(frame)
-    detail = Enum.join(Enum.reject([params[:summary], params[:evidence]], &(&1 in [nil, ""])), "\n\n")
+    detail = Enum.join(Enum.reject([params.summary, params[:evidence]], &(&1 in [nil, ""])), "\n\n")
 
     reply(frame, Recurrence.issue_seen(id, detail, identity.agent), fn issue ->
       %{"issue_id" => issue.id, "seen" => issue.seen}
@@ -226,7 +226,7 @@ defmodule Server.MCP.Tool.RaiseIssue do
   end
 
   def execute(params, frame) do
-    case if(params[:distinct], do: [], else: Recurrence.similar_issues(params[:summary])) do
+    case if(params[:distinct], do: [], else: Recurrence.similar_issues(params.summary)) do
       [] ->
         raise_it(params, frame)
 
@@ -244,7 +244,7 @@ defmodule Server.MCP.Tool.RaiseIssue do
 
     %{
       thread_id: identity.thread_id,
-      summary: params[:summary],
+      summary: params.summary,
       evidence: Map.get(params, :evidence),
       found_by: identity.agent
     }
@@ -278,7 +278,7 @@ defmodule Server.MCP.Tool.RecordDone do
     %{
       thread_id: identity.thread_id,
       kind: "work_landed",
-      detail: %{"summary" => params[:text], "evidence" => params[:evidence]}
+      detail: %{"summary" => params.text, "evidence" => params.evidence}
     }
     |> Dossier.record_event()
     |> then(&reply(frame, &1, fn event -> %{"event_id" => event.id} end))
@@ -303,7 +303,7 @@ defmodule Server.MCP.Tool.AddTodo do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    %{thread_id: identity.thread_id, text: params[:text]}
+    %{thread_id: identity.thread_id, text: params.text}
     |> Dossier.add_todo()
     |> then(&reply(frame, &1, fn todo -> %{"todo_id" => todo.id} end))
   end
@@ -328,7 +328,7 @@ defmodule Server.MCP.Tool.CompleteTodo do
   def execute(params, frame) do
     thread_id = Identity.from_frame(frame).thread_id
 
-    own(frame, thread_id, {"todo", params[:id], Dossier.todo(params[:id])}, fn todo ->
+    own(frame, thread_id, {"todo", params.id, Dossier.todo(params.id)}, fn todo ->
       {:ok, _done} = Dossier.complete_todo(todo)
       ok(frame, %{"completed" => todo.id})
     end)
@@ -354,7 +354,7 @@ defmodule Server.MCP.Tool.RaiseQuestion do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    %{thread_id: identity.thread_id, text: params[:text]}
+    %{thread_id: identity.thread_id, text: params.text}
     |> Dossier.raise_question()
     |> then(&reply(frame, &1, fn question -> %{"question_id" => question.id} end))
   end
@@ -403,7 +403,7 @@ defmodule Server.MCP.Tool.AskOperator do
         identity.thread_id
         |> Attention.ask(
           identity.agent,
-          params[:question],
+          params.question,
           options,
           params[:about],
           if(params[:for], do: %{"for" => params[:for]}, else: %{})
@@ -412,7 +412,7 @@ defmodule Server.MCP.Tool.AskOperator do
 
       _ ->
         identity.thread_id
-        |> Attention.ask(identity.agent, params[:question])
+        |> Attention.ask(identity.agent, params.question)
         |> then(&reply(frame, &1, fn message -> %{"message_id" => message.id, "awaiting" => "operator"} end))
     end
   end
@@ -453,7 +453,7 @@ defmodule Server.MCP.Tool.Finish do
     identity = Identity.from_frame(frame)
 
     with {:ok, _} <-
-           Channel.post(%{thread_id: identity.thread_id, author: identity.agent, body: params[:summary]},
+           Channel.post(%{thread_id: identity.thread_id, author: identity.agent, body: params.summary},
              session_id: identity.session_id
            ),
          %Server.Thread{} = thread <- Channel.thread(identity.thread_id),
@@ -534,7 +534,7 @@ defmodule Server.MCP.Tool.ResolveQuestion do
   def execute(params, frame) do
     thread_id = Identity.from_frame(frame).thread_id
 
-    own(frame, thread_id, {"question", params[:id], Dossier.question(params[:id])}, fn question ->
+    own(frame, thread_id, {"question", params.id, Dossier.question(params.id)}, fn question ->
       {:ok, _resolved} = Dossier.resolve_question(question, Map.get(params, :resolution))
       ok(frame, %{"resolved" => question.id})
     end)
@@ -575,7 +575,7 @@ defmodule Server.MCP.Tool.RecordCheck do
           "The full gate runs on the server at verify; record what you did run (menard run check --in server)."
       )
     else
-      %{thread_id: identity.thread_id, cmd: params[:cmd], exit: params[:exit], tail: tail}
+      %{thread_id: identity.thread_id, cmd: params.cmd, exit: params.exit, tail: tail}
       |> Dossier.record_check(session_id: identity.session_id)
       |> then(&reply(frame, &1, fn event -> %{"event_id" => event.id, "kind" => event.kind} end))
     end
@@ -610,8 +610,8 @@ defmodule Server.MCP.Tool.RecheckFact do
   def execute(params, frame) do
     thread_id = Identity.from_frame(frame).thread_id
 
-    own(frame, thread_id, {"fact", params[:id], Dossier.fact(params[:id])}, fn fact ->
-      rechecked(frame, params[:id], Dossier.recheck_fact(fact, %{exit: params[:exit], tail: Map.get(params, :tail)}))
+    own(frame, thread_id, {"fact", params.id, Dossier.fact(params.id)}, fn fact ->
+      rechecked(frame, params.id, Dossier.recheck_fact(fact, %{exit: params.exit, tail: Map.get(params, :tail)}))
     end)
   end
 
@@ -647,7 +647,7 @@ defmodule Server.MCP.Tool.ProposeHabit do
     identity = Identity.from_frame(frame)
 
     %{
-      text: params[:text],
+      text: params.text,
       rationale: Map.get(params, :rationale),
       proposed_by: identity.agent,
       source_thread_id: identity.thread_id

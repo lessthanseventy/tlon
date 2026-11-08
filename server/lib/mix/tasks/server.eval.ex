@@ -47,7 +47,7 @@ defmodule Mix.Tasks.Server.Eval do
 
       report = "evals" |> Server.Eval.load() |> Server.Eval.run(mode: mode)
       Mix.shell().info(Server.Eval.scorecard(report))
-      if !report.ok?, do: Mix.raise("server.eval failed")
+      if not report.ok?, do: Mix.raise("server.eval failed")
     after
       Mix.Task.reenable("ecto.drop")
       Mix.Task.run("ecto.drop", ["--quiet", "--force-drop"])

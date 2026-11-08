@@ -40,7 +40,7 @@ defmodule Server.Presence.Engine.OllamaWindow do
   def spent_until(body, now) do
     case Jason.decode(body) do
       {:ok, %{"included" => included} = balance} when is_map(included) ->
-        if !purchased?(balance), do: included |> resets() |> latest_after(now)
+        if not purchased?(balance), do: included |> resets() |> latest_after(now)
 
       _ ->
         nil

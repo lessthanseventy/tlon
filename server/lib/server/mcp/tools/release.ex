@@ -122,13 +122,13 @@ defmodule Server.MCP.Tool.SetUrgency do
     identity = Identity.from_frame(frame)
     ws = Tool.workspace_of(identity)
 
-    with %Ticket{workspace_id: ^ws} = ticket <- Tickets.get(params[:ticket_id]),
-         {:ok, moved} <- Tickets.update(ticket, %{priority: params[:priority]}) do
-      if moved.priority != ticket.priority, do: tell(ws, identity.agent, moved, params[:why])
+    with %Ticket{workspace_id: ^ws} = ticket <- Tickets.get(params.ticket_id),
+         {:ok, moved} <- Tickets.update(ticket, %{priority: params.priority}) do
+      if moved.priority != ticket.priority, do: tell(ws, identity.agent, moved, params.why)
       ok(frame, Server.MCP.Brief.ticket(moved))
     else
       {:error, _} = error -> reply(frame, error, & &1)
-      _ -> fail(frame, "no ticket ##{params[:ticket_id]} in this workspace")
+      _ -> fail(frame, "no ticket ##{params.ticket_id} in this workspace")
     end
   end
 

@@ -104,7 +104,7 @@ defmodule Server.Workline.Continuation do
   # it doesn't (the room shows who it truly waits on); else the operator decides — answer the lead,
   # hand it to someone else, or close it. Said once per stage: the payload marks which.
   defp stuck(thread, why, sent, after_id) do
-    if !stuck_said?(thread.id, after_id) and
+    if not stuck_said?(thread.id, after_id) and
          Workline.escalate(thread, "#{sent} nudges at #{thread.stage} without moving") == :none do
       sheriff = Server.Sheriff.of(thread.workspace_id)
 

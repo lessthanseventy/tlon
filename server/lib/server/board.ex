@@ -202,7 +202,7 @@ defmodule Server.Board do
       goal: thread.title,
       lead: lead_name(thread),
       # OPENING — the operator's first words on the thread, uncut, so a lead never asks for its brief.
-      opening: if(!reviewing?, do: Channel.opening_operator_message(thread.id)),
+      opening: if(not reviewing?, do: Channel.opening_operator_message(thread.id)),
       todos: todos,
       # NEXT is derived, never stored (§5/§6): the head of the open todos, or nil.
       next: List.first(todos.shown),

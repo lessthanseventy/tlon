@@ -34,7 +34,7 @@ defmodule Server.MCP.Tool.ConsultOracle do
         Channel.post(%{
           thread_id: identity.thread_id,
           author: "oracle",
-          body: "🔮 #{identity.agent || "?"} asked (#{side}): #{params[:question]}\n\n#{answer}"
+          body: "🔮 #{identity.agent || "?"} asked (#{side}): #{params.question}\n\n#{answer}"
         })
 
         ok(frame, %{"side" => Atom.to_string(side), "answer" => answer})

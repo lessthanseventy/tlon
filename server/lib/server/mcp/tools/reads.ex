@@ -88,8 +88,8 @@ defmodule Server.MCP.Tool.GetMessage do
 
   @impl true
   def execute(params, frame) do
-    case Channel.message(params[:id]) do
-      nil -> fail(frame, "no such message: #{params[:id]}")
+    case Channel.message(params.id) do
+      nil -> fail(frame, "no such message: #{params.id}")
       message -> ok(frame, Map.put(MCP.Brief.message(message), "thread_id", message.thread_id))
     end
   end
@@ -122,9 +122,9 @@ defmodule Server.MCP.Tool.SearchHistory do
   def execute(params, frame) do
     around = (params[:around] || 0) |> max(0) |> min(3)
 
-    case Search.history(params[:query], params[:limit] || 10, around: around) do
+    case Search.history(params.query, params[:limit] || 10, around: around) do
       {:error, :timeout} ->
-        fail(frame, ~s(search_history timed out on "#{params[:query]}": try fewer or rarer words))
+        fail(frame, ~s(search_history timed out on "#{params.query}": try fewer or rarer words))
 
       cut ->
         ok(frame, cut)
@@ -155,7 +155,7 @@ defmodule Server.MCP.Tool.SearchFacts do
   @impl true
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
-    found = Search.facts(params[:query], params[:limit] || 10)
+    found = Search.facts(params.query, params[:limit] || 10)
     cited = Enum.map(found.shown, & &1.fact_id)
     Dossier.cite_facts(cited, identity.thread_id, %{"agent" => identity.agent, "via" => "search_facts"})
     ok(frame, found)

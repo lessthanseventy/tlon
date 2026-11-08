@@ -23,7 +23,7 @@ defmodule Server.MCP.Tool.OpenThread do
 
     case Server.Projects.repo_attrs(caller, params[:repo]) do
       {:ok, extra} ->
-        reply(frame, Channel.open_thread(Map.merge(%{title: params[:title]}, extra)), fn thread ->
+        reply(frame, Channel.open_thread(Map.merge(%{title: params.title}, extra)), fn thread ->
           %{"thread_id" => thread.id}
         end)
 
@@ -285,9 +285,9 @@ defmodule Server.MCP.Tool.CloseThread do
 
   @impl true
   def execute(params, frame) do
-    case Channel.thread(params[:thread_id]) do
+    case Channel.thread(params.thread_id) do
       nil ->
-        fail(frame, "no such thread: #{params[:thread_id]}")
+        fail(frame, "no such thread: #{params.thread_id}")
 
       thread ->
         cond do
@@ -369,10 +369,10 @@ defmodule Server.MCP.Tool.AssignLead do
 
   @impl true
   def execute(params, frame) do
-    case Server.Staffing.hand_off(params[:thread_id], params[:lead], Identity.from_frame(frame).agent) do
-      {:ok, _thread} -> ok(frame, %{"thread_id" => params[:thread_id], "lead" => params[:lead]})
-      {:error, :no_agent} -> fail(frame, "no registered agent named #{inspect(params[:lead])}")
-      {:error, :no_thread} -> fail(frame, "no such thread: #{params[:thread_id]}")
+    case Server.Staffing.hand_off(params.thread_id, params.lead, Identity.from_frame(frame).agent) do
+      {:ok, _thread} -> ok(frame, %{"thread_id" => params.thread_id, "lead" => params.lead})
+      {:error, :no_agent} -> fail(frame, "no registered agent named #{inspect(params.lead)}")
+      {:error, :no_thread} -> fail(frame, "no such thread: #{params.thread_id}")
       {:error, reason} -> fail(frame, "assign_lead failed: #{explain(reason)}")
     end
   end
@@ -402,9 +402,9 @@ defmodule Server.MCP.Tool.SwitchThread do
   def execute(params, frame) do
     agent = Identity.from_frame(frame).agent
 
-    case Spawn.mint_for(params[:thread_id], agent) do
-      {:ok, token} -> ok(frame, %{"thread_id" => params[:thread_id], "token" => token})
-      {:error, reason} -> fail(frame, "cannot switch to thread #{params[:thread_id]}: #{explain(reason)}")
+    case Spawn.mint_for(params.thread_id, agent) do
+      {:ok, token} -> ok(frame, %{"thread_id" => params.thread_id, "token" => token})
+      {:error, reason} -> fail(frame, "cannot switch to thread #{params.thread_id}: #{explain(reason)}")
     end
   end
 end
@@ -436,12 +436,12 @@ defmodule Server.MCP.Tool.ConsultPeer do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    case Consult.consult_peer(identity, params[:peer], params[:prompt], params[:thread_id]) do
+    case Consult.consult_peer(identity, params.peer, params.prompt, params[:thread_id]) do
       {:ok, %{consult_id: consult_id, peer_thread_id: peer_thread_id}} ->
         ok(frame, %{"consult_id" => consult_id, "peer_thread_id" => peer_thread_id})
 
       {:error, {:not_on_thread, id}} ->
-        fail(frame, "consult_peer failed: #{not_on_thread(params[:peer], id)}")
+        fail(frame, "consult_peer failed: #{not_on_thread(params.peer, id)}")
 
       {:error, reason} ->
         fail(frame, "consult_peer failed: #{explain(reason)}")
