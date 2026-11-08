@@ -28,6 +28,7 @@ defmodule Mix.Tasks.Server.Doctor do
     Mix.shell().info("crash dump: #{Server.Doctor.crash_dump()}")
     Mix.shell().info("git fetch:  #{Server.Doctor.git_fetch_urls()}")
     Mix.shell().info("git lock:   #{Server.Doctor.config_lock()}")
+    Mix.shell().info("passes:     #{Server.Jobs.Passes.line()}")
 
     if dir = opts[:export] do
       paths = Server.Doctor.export(dir)

@@ -59,7 +59,8 @@ defmodule Server.Office.Needs do
       `job_failed` (a background job discarded in the last day, its runs failing the same way one
       item: retry or dismiss, `ref` the newest run),
       `health` (the box itself: `health:tmux` no tmux, `health:disk` and `health:mem` at 90%, from
-      `Room.vitals/0` read at most a minute old; each gone when its predicate is false. No db-down:
+      `Room.vitals/0` read at most a minute old, and `health:job_slow` when a per-tick pass's newest
+      run took over 30 s, `Server.Jobs.Passes`; each gone when its predicate is false. No db-down:
       the list is a db read; failed jobs are `job_failed`),
       `issue` (a blocker raised on an open thread and not resolved: resolve it, `ref` the issue),
       `blocked` (an open ticket that seats declared themselves blocked on, `Server.Blocked`: ONE item
@@ -1167,7 +1168,7 @@ defmodule Server.Office.Needs do
   # from a db read; failed jobs are `failed_jobs/0`)
   defp health do
     reading = Application.get_env(:server, :health_reading, &Server.Office.Room.vitals/0).()
-    problems = Server.Office.Room.vital_problems(reading)
+    problems = Server.Office.Room.vital_problems(reading) ++ slow_passes()
     since = health_since(problems)
 
     for {what, text} <- problems do
@@ -1188,6 +1189,18 @@ defmodule Server.Office.Needs do
     e ->
       Logger.warning("box health unreadable, its items left out of the inbox: #{Exception.message(e)}")
       []
+  end
+
+  # a pass over its minute skips ticks (`Server.Jobs.Passes`); one item however many are slow
+  defp slow_passes do
+    case Server.Jobs.Passes.slow() do
+      [] ->
+        []
+
+      slow ->
+        list = Enum.map_join(slow, ", ", fn {w, ms} -> "#{w} took #{div(ms, 1000)}s" end)
+        [{:job_slow, "a pass runs past its minute and skips ticks: #{list}"}]
+    end
   end
 
   # When each problem was first seen, so its `at` is stable across reads and restarts: a verdict or

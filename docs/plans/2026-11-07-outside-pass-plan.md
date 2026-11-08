@@ -234,6 +234,11 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: `:telemetry` spans on each `Jobs.*.perform/1`; a `job_slow` Need (or a sheriff note) when a
   pass exceeds 30 s; the number on `server:doctor`.
 - Check: `server:doctor` prints the last pass durations; a test with a slowed pass raises the Need.
+- Done: no new telemetry code: Oban's own `[:oban, :job, :stop]` span is the span on every `perform/1`,
+  and the rows it stamps (`attempted_at`, `completed_at`) are read by `Server.Jobs.Passes` (Drain, Staff,
+  Dispatch, KeepUp; not Maintain, 18-52 s by design). `server:doctor` prints `passes:`; a newest pass
+  over 30 s (finished within 15 min) is `health:job_slow` among the box's Needs, no new Need kind, so
+  the office TUI is untouched.
 
 ---
 
