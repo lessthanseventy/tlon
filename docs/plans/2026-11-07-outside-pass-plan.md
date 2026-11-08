@@ -190,6 +190,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   where ended_at is null`.
 - Check: `EXPLAIN (ANALYZE)` on `Office.status`'s three biggest queries before and after, pasted in
   the PR; `psql \d thread` shows them.
+- Done: migration `20261108120000_hot_filter_indexes` (Andrew merges it). `EXPLAIN (ANALYZE)` on the live db, indexes made in a rolled-back transaction: open threads of a workspace Seq Scan (525 rows) -> Index Scan `(workspace_id, state)`; tickets by workspace+status Seq Scan (804 rows, 110 buffers) -> Index Only Scan, by project Seq Scan -> Index Scan; `event` by thread+kind Index Scan on `thread_id` with a Filter -> Index Cond on both; latest message of a thread pkey backward scan with a Filter -> Index Only Scan `(thread_id, id desc)` (a quiet thread: Sort -> none). `session(agent_id)` left out: its plan did not change, `session_one_live_per_thread_agent` already serves it. At 500-800 rows the gain is small today; the plans stay flat as the tables grow.
 
 **B4 · Embeddings are JSON text decoded in Elixir on every brief.** `Opus · L`
 - Why: `server/lib/server/vector_column.ex` stores vectors as text and decodes them per fact per
