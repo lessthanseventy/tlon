@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { CARD_PARTS, HELPERS, KEYS, OMITS, verbOf, type Binding, type Scope } from "../tui/keys"
+import { CARD_PARTS, HELPERS, KEYS, OMITS, everywhere, hints, verbOf, type Binding, type Scope } from "../tui/keys"
 import { balloonLines } from "../kit/canvas"
 import { PLAY } from "../tui/sandbox"
 
@@ -75,6 +75,12 @@ test("the play keys are shifted letters, and nothing else answers to one", () =>
   expect(PLAY.every((p) => /^[A-Z]$/.test(p.key))).toBe(true)
   const play = new Set(PLAY.map((p) => p.key))
   expect(all.filter((b) => b.scope !== "sandbox-play" && keysOf(b).some((k) => play.has(k))).map((b) => b.id)).toEqual([])
+})
+
+test("the help card's everywhere lists the quiet globals; the foot does not", () => {
+  const quiet = ["tab", "R", "p", "U", ".", ","]
+  expect(everywhere().map((h) => h.key)).toEqual(expect.arrayContaining(quiet))
+  expect(hints("global").map((h) => h.key).filter((k) => quiet.includes(k))).toEqual([])
 })
 
 test("no play key is a hinted global", () => {

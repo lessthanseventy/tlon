@@ -13,7 +13,7 @@ export type Binding = {
   mode?: string
   /** what the key does, in one or two words: a key has exactly one verb across the whole table (`⏎` and the arrows are the card's lit row, so they are exempt); the label says the particulars */
   verb?: string
-  /** handled, but not listed in the foot or the help card's "everywhere" */
+  /** handled, but not in the foot: the help card's "everywhere" still lists it */
   quiet?: boolean
 }
 
@@ -31,7 +31,7 @@ export const KEYS = [
   { id: "global.back", scope: "global", key: "esc", label: "back", verb: "back" },
   { id: "global.room", scope: "global", key: "ctrl+]", label: "room" },
   { id: "global.quit", scope: "global", key: "q", label: "quit", verb: "quit" },
-  // global, handled in onKey's switch but not hinted
+  // global, handled in onKey's switch but not in the foot
   { id: "global.tab", scope: "global", key: "tab", label: "next coworker", quiet: true },
   { id: "global.R", scope: "global", key: "R", label: "reload the TUI (when it is out of date)", mode: "when the server has a newer office", quiet: true, verb: "reload" },
   { id: "global.p", scope: "global", key: "p", label: "pat Nina", quiet: true, verb: "pat" },
@@ -328,6 +328,10 @@ export const bind = (id: KeyId, label?: string): { key: string; label: string } 
 /** a scope's listed keys, for the foot, the help card and the sandbox's line */
 export const hints = (scope: Scope): { key: string; label: string }[] =>
   KEYS.filter((b) => b.scope === scope && !("quiet" in b)).map((b) => ({ key: b.key, label: b.label }))
+
+/** every global key, quiet ones too: the help card's "everywhere" */
+export const everywhere = (): { key: string; label: string }[] =>
+  KEYS.filter((b) => b.scope === "global").map((b) => ({ key: b.key, label: b.label }))
 
 /** the key that adds to a card's list (a new note, ticket, routine…), for the line an empty card shows */
 export const adder = (scope: Scope): { key: string; label: string } | undefined => {
