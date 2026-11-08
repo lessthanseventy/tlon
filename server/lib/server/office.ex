@@ -377,6 +377,7 @@ defmodule Server.Office do
     duties = open |> Enum.map(& &1.id) |> Server.Staffing.duty_threads()
     citizens = Server.Outside.names()
     landing = MapSet.new(Server.Workline.waiting_on_github(), & &1.thread.id)
+    parked = open |> Enum.map(& &1.id) |> Server.Staffing.parked_notes()
 
     Enum.map(open, fn t ->
       ws_tabs = Map.get(tabs, t.workspace_id, [])
@@ -401,7 +402,7 @@ defmodule Server.Office do
         live: live,
         standing: std,
         thinking: on_it,
-        seat: thread_seat(t, lead, desk?),
+        seat: thread_seat(t, lead, desk?, parked),
         duty: MapSet.member?(duties, t.id),
         study: Server.Outside.study?(t.title, lead, citizens),
         landing: MapSet.member?(landing, t.id)
@@ -409,20 +410,22 @@ defmodule Server.Office do
     end)
   end
 
-  defp thread_seat(%{paused_at: %DateTime{}}, _lead, _desk?), do: "parked"
-  defp thread_seat(t, lead, desk?), do: seat(t.id, lead, desk?)
-
-  defp seat(_id, _lead, true), do: "desk"
-  defp seat(_id, nil, false), do: "idle"
-  defp seat(id, _lead, false), do: if(Server.Staffing.parked_note?(id), do: "parked", else: "idle")
+  defp thread_seat(%{paused_at: %DateTime{}}, _lead, _desk?, _parked), do: "parked"
+  defp thread_seat(_t, _lead, true, _parked), do: "desk"
+  defp thread_seat(_t, nil, false, _parked), do: "idle"
+  defp thread_seat(t, _lead, false, parked), do: if(MapSet.member?(parked, t.id), do: "parked", else: "idle")
 
   # An epic is a row (progress, its next free child) while any child is unfinished; a child names its epic.
   # A started child stays on its epic's tree and names its thread; a started loose ticket is its thread's now.
   defp tickets(ws_ids, boards) do
+    open = for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), do: {ws, t}
+    ids = Enum.map(open, fn {_, t} -> t.id end)
+    epics = Server.Tickets.epics_by_ticket(ids)
+    threads = Server.Tickets.threads_by_ticket(ids)
+
     add_progress(
-      for ws <- ws_ids,
-          t <- Server.Tickets.open_in_workspace(ws),
-          epic_id <- [Server.Tickets.epic_of(t.id)],
+      for {ws, t} <- open,
+          epic_id <- [epics[t.id]],
           t.status != "doing" or t.kind != "ticket" or epic_id != nil do
         %{
           id: t.id,
@@ -434,7 +437,7 @@ defmodule Server.Office do
           kind: t.kind,
           status: t.status,
           epic_id: epic_id,
-          thread_id: if(t.status == "doing", do: Server.Tickets.thread_of(t.id))
+          thread_id: if(t.status == "doing", do: threads[t.id])
         }
       end,
       boards

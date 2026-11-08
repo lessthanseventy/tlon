@@ -134,6 +134,28 @@ defmodule Server.Tickets do
   def epic_of(ticket_id),
     do: Repo.one(from l in TicketLink, where: l.to_id == ^ticket_id and l.kind == "parent", select: l.from_id)
 
+  @doc "`epic_of/1` for many tickets in one query: `%{ticket_id => epic_id}`, a ticket with no epic absent."
+  def epics_by_ticket(ticket_ids),
+    do:
+      Map.new(
+        Repo.all(
+          from l in TicketLink, where: l.to_id in ^ticket_ids and l.kind == "parent", select: {l.to_id, l.from_id}
+        )
+      )
+
+  @doc "`thread_of/1` for many tickets in one query: `%{ticket_id => thread_id}` (the first promotion), none absent."
+  def threads_by_ticket(ticket_ids),
+    do:
+      Map.new(
+        Repo.all(
+          from tt in TicketThread,
+            where: tt.ticket_id in ^ticket_ids and tt.kind == "promoted",
+            distinct: tt.ticket_id,
+            order_by: [tt.ticket_id, tt.id],
+            select: {tt.ticket_id, tt.thread_id}
+        )
+      )
+
   @doc "The thread a ticket was promoted into, or nil."
   def thread_of(ticket_id),
     do:
