@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test"
+import { PNG } from "pngjs"
 import type { Frame } from "../kit/canvas"
 import * as pngmod from "../tui/png"
 import { kittyImage } from "../tui/paint"
@@ -27,4 +28,22 @@ test("fifty identical frames encode one PNG; a changed frame encodes again", () 
   expect(spy).toHaveBeenCalledTimes(2)
   console.log(`paint-bench: ${ms.toFixed(2)} ms per identical frame`)
   spy.mockRestore()
+})
+
+test("encode cost of one frame", () => {
+  const fr = frame(2), w = W * 3, h = H * 3, big = new Uint8Array(w * h * 4)
+  const src = new Uint32Array(fr.rgba.buffer), dst = new Uint32Array(big.buffer)
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) dst[y * w + x] = src[Math.floor(y / 3) * W + Math.floor(x / 3)]!
+  pngmod.png(w, h, big)
+  const t0 = performance.now()
+  let bytes = 0
+  for (let i = 0; i < 10; i++) bytes = pngmod.png(w, h, big).length
+  console.log(`png-bench: ${((performance.now() - t0) / 10).toFixed(1)} ms, ${bytes} bytes per ${w}x${h} frame`)
+})
+
+test("the encoded PNG decodes to the same pixels", () => {
+  const w = 37, h = 11, rgba = new Uint8Array(w * h * 4).map((_, i) => (i * 7 + (i >> 5) * 13) & 255)
+  const back = PNG.sync.read(pngmod.png(w, h, rgba))
+  expect([back.width, back.height]).toEqual([w, h])
+  expect(new Uint8Array(back.data)).toEqual(rgba)
 })

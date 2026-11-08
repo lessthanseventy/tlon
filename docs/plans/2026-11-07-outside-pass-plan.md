@@ -283,6 +283,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: `Bun.hash.crc32` (or zlib's), rows written into one preallocated buffer, a PNG sub-filter
   (sprite art compresses far better). Keep `f=100` PNG: `o=z` crashes ghostty.
 - Check: the same bench; bytes per frame and ms per encode before/after in the PR.
+- Done: `Bun.hash.crc32`, one output buffer, a sub filter that skips repeated pixels; a 960×600 floor encodes in 8.9 ms (was 27.6) and 45.9 KB (was 94.4 KB), still `f=100` PNG; the encoded PNG is decoded back by pngjs in `test/paint-bench.test.ts`.
 
 **C3 · The sim rebuilds layout and finds threads per person every tick.** `Sonnet · S`
 - Why: `kit/sim.ts step` calls `plan.layout(a)` every 100 ms though the snapshot changes every
