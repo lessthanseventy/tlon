@@ -89,6 +89,11 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: a one-shot `tlon-cli` verb or `server:db-sweep` case that deletes `schedule_run` rows with
   no `schedule_id` and no `thread_id`; make `Candidate` read only schedule-bound rows.
 - Check: the count is 0; `mise run release:status` answers the same before and after on a known sha.
+- Done by data, 2026-11-08: the live table holds 0 `gate` rows with a null `schedule_id` (read over
+  `bin/server rpc`), so nothing to sweep. The "read only schedule-bound rows" half is dropped: hand
+  runs record through `Candidate.record/3` (`record-ran.sh`, and a landing's gate since E2) with no
+  schedule, so that read would blind `release:status` to them. Telling a hand run from a test's stray
+  post needs a column (who posted it), a migration: Andrew's call, not built.
 
 **A6 · An `erl_crash.dump` sits at the repo root since 2026-11-04.** `Sonnet · S`
 - Why: two dumps, both "Runtime terminating during boot … io.put_chars standard_error … the device
