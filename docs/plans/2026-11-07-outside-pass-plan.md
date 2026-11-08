@@ -221,6 +221,12 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   raised; `Process.send_after` or a Task for the three sleeps.
 - Check: a test that a Grade job raising once completes on the second attempt; the switchboard's
   wake latency test (exists) still passes.
+- Done: Grade `max_attempts: 3`, Maintain `2` (Land, EndReview, Verify already had 3); Staff, Triage and
+  TurnPass stay at 1 (per-tick passes run again next tick; TurnPass stamps before it extracts, so a
+  rerun does nothing). `Orphans.requeue` says "killed by the restart at HH:MM" for each discarded
+  orphan. Open: the three sleeps are not in a GenServer callback (the switchboard's is already in a
+  Task, attention's in the answering request, orphans' in the spawn path), so they stay; the test
+  for "Grade raising once" asserts the attempts, not a live retry.
 
 **B7 · Pass-duration telemetry.** `Sonnet · S`
 - Why: five crons fire every minute (Drain, Staff, Dispatch, KeepUp every 5); `staff` has

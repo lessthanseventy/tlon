@@ -12,7 +12,9 @@ defmodule Server.Jobs.Orphans do
   queue's oldest available jobs first and only then drops those at their limit — and, picked
   every time, it holds the slots: two of them stalled the `schedules` queue for a week (#417).
   A discarded `RunSchedule` closes its run's row as failed, saying the restart interrupted it
-  (#312), so the board never shows it `running`.
+  (#312), so the board never shows it `running`. Every discarded orphan is said on the machine
+  thread (`Server.Jobs.Alarm`) as "killed by the restart at HH:MM": a job whose node died raises
+  nothing, so Oban's exception telemetry never sees it.
 
   Only this node's jobs (`attempted_by` names it): another node on the same store may be running
   its own. A child of the application placed before Oban; it does its work in `start_link/1` and
@@ -38,7 +40,7 @@ defmodule Server.Jobs.Orphans do
     now = DateTime.utc_now()
     mine = from(j in Oban.Job, where: j.state == "executing" and fragment("?[1] = ?", j.attempted_by, ^node))
 
-    {:ok, {discarded, n}} =
+    {:ok, {discarded, n, spent}} =
       Server.Repo.transaction(fn ->
         {discarded, spent} =
           mine
@@ -53,8 +55,11 @@ defmodule Server.Jobs.Orphans do
             set: [state: "available", scheduled_at: now]
           )
 
-        {discarded, n}
+        {discarded, n, spent}
       end)
+
+    for %{worker: worker} <- spent,
+        do: Server.Jobs.Alarm.post("⚠ job #{worker} discarded: killed by the restart at #{hhmm(now)}")
 
     if discarded > 0,
       do:
@@ -68,6 +73,12 @@ defmodule Server.Jobs.Orphans do
     e ->
       Logger.warning("boot: could not requeue orphaned jobs: #{Exception.message(e)}")
       0
+  end
+
+  # the server's local clock, as the crons read it
+  defp hhmm(_now) do
+    {_date, {h, m, _s}} = :calendar.local_time()
+    "~2..0B:~2..0B" |> :io_lib.format([h, m]) |> IO.iodata_to_binary()
   end
 
   # a discarded RunSchedule never closes its run: the row would sit at `running` forever
