@@ -38,6 +38,16 @@ defmodule Server.WorktreeTest do
       assert String.trim(out) == hooks
     end
 
+    test "a new checkout's mise.toml is trusted", %{repo: repo, git: git} do
+      File.write!(Path.join(repo, "mise.toml"), "[env]\nA8 = \"1\"\n")
+      {_, 0} = git.(["add", "mise.toml"])
+      {_, 0} = git.(["commit", "-qm", "mise"])
+
+      assert {:ok, wt} = Worktree.ensure(repo, "trusted")
+      assert {out, 0} = System.cmd("mise", ["trust", "--show", "-C", wt], stderr_to_stdout: true)
+      assert out =~ "#{wt}: trusted"
+    end
+
     test "a sibling repo's own core.hooksPath is refused, not overwritten", %{repo: repo, git: git} do
       {_, 0} = git.(["config", "core.hooksPath", "elsewhere"])
       assert {:error, msg} = Worktree.ensure(repo, "hooked")

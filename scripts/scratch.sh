@@ -31,6 +31,8 @@ new() {
   mkdir -p "$base"
   "$(dirname "$0")/git-fetch-origin.sh" . || fail "git fetch origin failed"
   git worktree add -q --detach "$dir" "$ref" || fail "git worktree add $dir $ref failed"
+  # an untrusted mise.toml is ignored silently: the machine's global pin would answer instead
+  mise trust -q "$dir" >/dev/null 2>&1
   local log
   log="$(mktemp)"
   trap 'rm -f "$log"' RETURN

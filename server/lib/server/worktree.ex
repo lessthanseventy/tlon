@@ -350,7 +350,18 @@ defmodule Server.Worktree do
   end
 
   defp do_ensure(repo_path, slug) do
-    with :ok <- point_hooks_at_tlon(repo_path), do: ensure_checkout(repo_path, slug)
+    with :ok <- point_hooks_at_tlon(repo_path),
+         {:ok, wt} <- ensure_checkout(repo_path, slug) do
+      trust_mise(wt)
+      {:ok, wt}
+    end
+  end
+
+  # mise loads a project config only once it is trusted, and an untrusted one fails silently for a
+  # caller reading JSON (the machine's global pin answers instead); no mise on the box is fine
+  defp trust_mise(wt) do
+    if mise = System.find_executable("mise"), do: System.cmd(mise, ["trust", "-q", wt], stderr_to_stdout: true)
+    :ok
   end
 
   defp ensure_checkout(repo_path, slug) do

@@ -675,6 +675,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   untrusted.
 - Check: a worktree test that `mise trust --show -C <checkout>` reads trusted after `ensure/2`;
   `scratch.test.sh` the same for `new`.
+- Done: `Worktree.ensure/2` and `scratch.sh new` run `mise trust -q <checkout>` (a missing mise ignored); `mix server.doctor` prints a `mise trust:` line naming untrusted seat and scratch checkouts (`Doctor.untrusted_checkouts/2`). Tests: `worktree_test.exs`, `doctor_test.exs`, `scratch.test.sh`.
 
 **G9 · Scripts without tests, and six copies of `expect()`.** `Sonnet · S`
 - Why: `release.sh` (the pointer cut and rollback), `check.sh` (the tree-cache rules),
