@@ -94,8 +94,8 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   the cwd; stderr to `/dev/null` does not. `Kernel.CLI.exec_fun` (cli.ex:155) prints the script's
   exception with `:io.put_chars(:standard_error, …)`, the write fails (`ebadf`/`epipe`) and raises,
   the handler at cli.ex:170 prints *that* to stderr and fails again, and the exception escapes
-  `Kernel.CLI.run` into `init:start_it`: "Runtime terminating during boot". An Elixir bug to report
-  upstream. The dumps sat at the root and in `server/` because `mise -C <dir> exec` changes
+  `Kernel.CLI.run` into `init:start_it`: "Runtime terminating during boot". Filed upstream as
+  elixir-lang/elixir#16079. The dumps sat at the root and in `server/` because `mise -C <dir> exec` changes
   directory to the project first and the VM dumps in its cwd.
 - Check: no dump at the root in a week; #855 closed.
 
