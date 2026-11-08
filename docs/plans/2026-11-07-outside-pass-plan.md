@@ -466,6 +466,10 @@ snapshot on 304. `Sonnet · S`, after B1.
   and a detected standing call is banked `stated` with the message id as provenance, with a one-line
   "banked: …" echo so a wrong bank is seen and `forget_fact`ed.
 - Check: `provenance='stated'` grows on days Andrew talks (the issue's own check).
+- Done 2026-11-08, the measure: the mod's `prompt.submit` writes `correction detected: <text>` and
+  its capture writes `banked N facts, M questions` to `citizen-<author>.log`, so a week's ratio is
+  `grep -c` over the log. Left: the banking itself (office posts and the operator session through
+  the detector, banked `stated` with the message id), after the count says how often it fires.
 
 **E5 · The Uqbar sends-back change (PR #746 / ticket #819).** `land it`
 - Why: five gates in one day waited on Andrew for a fix the reviewer had already named; the call is

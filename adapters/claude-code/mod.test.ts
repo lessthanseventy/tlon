@@ -902,3 +902,14 @@ test("with no alert row to read, a landing still toasts", async ($, on) => {
 
   expect(world.toasts).toContain("landed ✓");
 });
+
+test("a detected correction is counted in the seat's log beside the habit it proposes", async ($, on) => {
+  const world: World = { writes: [], env: { ...IDENTITY, XDG_STATE_HOME: "/state" } };
+  engine(on, world);
+  await $.session.start(START);
+  await $.prompt.submit({ text: "don't rerun a flaky test to green", wait: false });
+  await settle();
+
+  const log = world.writes!.filter((w) => w.path === "/state/tlon/citizen-claude-code.log");
+  expect(log.some((w) => w.text.includes("correction detected: don't rerun a flaky test to green"))).toBe(true);
+});

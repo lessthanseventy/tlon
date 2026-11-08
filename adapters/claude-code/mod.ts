@@ -120,8 +120,10 @@ async function call($, tool: string, args: Record<string, unknown> = {}): Promis
   }
 }
 
-// What a hook met and couldn't use, one line each in $XDG_STATE_HOME/tlon/citizen-<author>.log (the
-// last 200): the pane's transcript shows only that a hook was skipped, never what it got.
+// What a hook met and couldn't use, and what the capture path did (a correction detected, facts
+// banked — the counts that say whether the operator's own words reach the store), one line each in
+// $XDG_STATE_HOME/tlon/citizen-<author>.log (the last 200): the pane's transcript shows only that a
+// hook was skipped, never what it got.
 async function note($, what: string) {
   try {
     const state = (await $.env.get("XDG_STATE_HOME")) || `${(await $.env.get("HOME")) ?? ""}/.local/state`;
@@ -446,6 +448,7 @@ async function capture($, floor: number) {
     for (const f of facts) declare($, "bank_fact", f.intent ? { text: f.text, kind: f.kind, intent: f.intent } : { text: f.text, kind: f.kind });
     for (const q of questions) declare($, "raise_question", { text: q });
     if (facts.length || questions.length) $.ui.toast(`banked ${facts.length} fact(s), ${questions.length} question(s)`);
+    await note($, `banked ${facts.length} facts, ${questions.length} questions`);
   } catch {
     return;
   } finally {
@@ -604,6 +607,7 @@ export function register(on) {
     if (habit && habit !== lastCorrection) {
       lastCorrection = habit;
       declare($, "propose_habit", { text: habit, rationale: "auto-detected from a correction you made" });
+      await note($, `correction detected: ${habit}`);
     }
     // a server that never answers holds the prompt DOSSIER_WAIT_MS at most; a sleep the host
     // refuses never times out rather than racing ahead of the answer
