@@ -31,7 +31,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 
 | verb | does |
 |---|---|
-| `check:all` | Everything green: the server's deps fetched and compiled first (server:deps), then check:suites (unqueued — `check` queues it) |
+| `check:all` | Everything green: the server's deps fetched and compiled first (server:deps), then check:suites, all in the one mise run (unqueued — `check` queues it) |
 | `check:ignored` | tracked-junk gate: fail on any tracked file that .gitignore ignores (scratch committed under an ignored path such as server/tmp) |
 | `check:main` | the whole gate on origin/main in a throwaway worktree (own test db) — main's health, whatever this checkout has out; the nightly schedule runs it |
 | `check:names` | names-exist gate: every Server.* module, mix task and mise task the glue names must exist, and docs/glossary.md holds (grep, offline, fast) |
