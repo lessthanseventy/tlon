@@ -23,7 +23,7 @@ fixture "$tmp/file"; sed -i 's#`Server.Real`#`scripts/nope.sh`#' "$tmp/file/docs
 fixture "$tmp/ck"; echo 'the cockpit' >>"$tmp/ck/AGENTS.md";            expect 1 'cockpit in AGENTS.md' "$tmp/ck"
 fixture "$tmp/fn"; echo 'funes the product' >>"$tmp/fn/AGENTS.md";      expect 1 'funes in AGENTS.md' "$tmp/fn"
 fixture "$tmp/co"; echo 'the console' >"$tmp/co/office/tui/a.ts";       expect 1 'console in office/tui' "$tmp/co"
-fixture "$tmp/pl"; echo 'press ctrl+] lobby' >"$tmp/pl/docs/plans/2026-10-20-x.md"; expect 1 'lobby in a new plan' "$tmp/pl"
+fixture "$tmp/pl"; echo 'press ctrl+] lobby' >"$tmp/pl/docs/plans/2026-10-20-x.md"; expect 0 'a new plan is prose, not scanned' "$tmp/pl"
 fixture "$tmp/old"; echo 'the cockpit' >"$tmp/old/docs/plans/2026-10-18-x.md"; expect 0 'old plan is exempt' "$tmp/old"
 fixture "$tmp/b3"; echo 'press ctrl+] lobby' >"$tmp/b3/office/tui/a.ts"; expect 0 'tui lobby hint only warns (B3)' "$tmp/b3"
 exit "$bad"

@@ -3,7 +3,7 @@
 #   (g1) every `Server.*` module, `mise run <task>` and `scripts/*` file in a "lives in" cell exists
 #        (a cell from `pending:` on is a rename not yet made, so it is skipped);
 #   (g2) the retired words (console, cockpit, funes as a product, lobby as the screen) are absent
-#        from every AGENTS.md, office/tui/*.ts and docs/plans/ file dated 2026-10-19 or later.
+#        from every AGENTS.md and office/tui/*.ts — the surfaces a weaker model and the operator read; a plan is prose and is not scanned.
 # Usage: check-glossary.sh [root]; exit 1 on any miss. A root without mise.toml skips the task check.
 set -uo pipefail
 
@@ -63,17 +63,15 @@ scan() {
 
 agents="$(find . -path '*/node_modules' -prune -o -path '*/deps' -prune -o -path '*/_build' -prune -o -path ./.worktrees -prune -o -path ./.git -prune -o -name AGENTS.md -print | sort)"
 tui="$(ls office/tui/*.ts 2>/dev/null)"
-plans="$(ls docs/plans/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-* 2>/dev/null | awk -F/ '{ if (substr($NF,1,10) >= "2026-10-19") print }')"
-all="$agents $tui $plans"
+all="$agents $tui"
 
 scan fail 'console'  '\bconsole\b' $all
 scan fail 'cockpit'  '\bcockpit\b' $all
 scan fail 'funes as a product name' '\bfunes\b' $all
 # The screen is the room (`ctrl+] room`). office/tui's hints and office/AGENTS.md still say lobby
-# until B3 of the cohesion pass renames them: a warning here, a failure in new plans.
+# until B3 of the cohesion pass renames them: a warning here.
 lobby='ctrl\+\] *\(?(is |to )?(the )?lobby|"ctrl\+\]", label: "lobby"'
-scan fail 'lobby for the screen' "$lobby" $plans
 scan warn 'lobby for the screen — task B3' "$lobby" $agents $tui
 
 if [ "$fail" -ne 0 ]; then echo "check-glossary: FAILED"; exit 1; fi
-echo "check-glossary: ok — $n_live \"lives in\" names exist, no retired words in AGENTS.md, office/tui or new plans"
+echo "check-glossary: ok — $n_live \"lives in\" names exist, no retired words in AGENTS.md or office/tui"
