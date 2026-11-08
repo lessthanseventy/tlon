@@ -144,7 +144,7 @@ defmodule Server.MCP.Tool.StaffChild do
         fail(frame, "staff_child refused: #{reason} — check the ticket before staffing it again")
 
       {:error, reason} ->
-        fail(frame, "staff_child failed: #{inspect(reason)}")
+        fail(frame, "staff_child failed: #{explain(reason)}")
     end
   end
 
@@ -342,7 +342,7 @@ defmodule Server.MCP.Tool.CloseThread do
         )
 
       {:error, why} ->
-        fail(frame, "thread #{thread.id} was not closed: #{inspect(why)}")
+        fail(frame, "thread #{thread.id} was not closed: #{explain(why)}")
     end
   end
 end
@@ -404,7 +404,7 @@ defmodule Server.MCP.Tool.SwitchThread do
 
     case Spawn.mint_for(params[:thread_id], agent) do
       {:ok, token} -> ok(frame, %{"thread_id" => params[:thread_id], "token" => token})
-      {:error, reason} -> fail(frame, "cannot switch to thread #{params[:thread_id]}: #{inspect(reason)}")
+      {:error, reason} -> fail(frame, "cannot switch to thread #{params[:thread_id]}: #{explain(reason)}")
     end
   end
 end
@@ -444,7 +444,7 @@ defmodule Server.MCP.Tool.ConsultPeer do
         fail(frame, "consult_peer failed: #{not_on_thread(params[:peer], id)}")
 
       {:error, reason} ->
-        fail(frame, "consult_peer failed: #{inspect(reason)}")
+        fail(frame, "consult_peer failed: #{explain(reason)}")
     end
   end
 
@@ -501,7 +501,7 @@ defmodule Server.MCP.Tool.SpawnCrew do
         fail(frame, "crew spawning is unavailable here — no crew backend is configured")
 
       {:error, reason} ->
-        fail(frame, "crew spawn failed: #{inspect(reason)}")
+        fail(frame, "crew spawn failed: #{explain(reason)}")
     end
   end
 end
@@ -528,7 +528,7 @@ defmodule Server.MCP.Tool.KillCrew do
     case Crew.kill_role(role, identity.thread_id) do
       :ok -> ok(frame, %{"killed" => role, "thread_id" => identity.thread_id})
       {:error, :no_crew} -> fail(frame, "crew teardown is unavailable here — no crew backend is configured")
-      {:error, reason} -> fail(frame, "crew kill failed: #{inspect(reason)}")
+      {:error, reason} -> fail(frame, "crew kill failed: #{explain(reason)}")
     end
   end
 end

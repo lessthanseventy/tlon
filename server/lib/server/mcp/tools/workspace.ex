@@ -487,7 +487,7 @@ defmodule Server.MCP.Tool.StartTicket do
         result =
           case Tickets.start_thread(ticket, params[:agent_id]) do
             {:error, why} when is_atom(why) or is_tuple(why) ->
-              {:error, "couldn't start ticket ##{ticket.id}: #{inspect(why)}"}
+              {:error, "couldn't start ticket ##{ticket.id}: #{Server.MCP.Tool.explain(why)}"}
 
             other ->
               other

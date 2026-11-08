@@ -35,7 +35,7 @@ defmodule Server.MCP.Tool.AdvanceStage do
   end
 
   defp advanced({:error, {:artifact_missing, why}}, frame), do: fail(frame, "owed artifact missing: #{why}")
-  defp advanced({:error, reason}, frame), do: fail(frame, "cannot advance: #{inspect(reason)}")
+  defp advanced({:error, reason}, frame), do: fail(frame, "cannot advance: #{explain(reason)}")
 end
 
 defmodule Server.MCP.Tool.SubmitReview do
@@ -94,14 +94,14 @@ defmodule Server.MCP.Tool.SubmitReview do
           })
 
         {:error, reason} ->
-          fail(frame, "verdict not recorded: #{inspect(reason)}")
+          fail(frame, "verdict not recorded: #{explain(reason)}")
       end
     else
       {:error, {:bad_verdict, v}} -> fail(frame, "verdict must be approve or request_changes, not #{inspect(v)}")
       {:error, {:not_in_review, stage}} -> fail(frame, "not in review — this workline is at #{stage}")
       why when is_binary(why) -> fail(frame, why)
       {:error, why} when is_binary(why) -> fail(frame, why)
-      {:error, reason} -> fail(frame, "submit_review failed: #{inspect(reason)}")
+      {:error, reason} -> fail(frame, "submit_review failed: #{explain(reason)}")
     end
   end
 
@@ -206,7 +206,7 @@ defmodule Server.MCP.Tool.SubmitQA do
         fail(frame, "not in review — this workline is at #{stage}")
 
       {:error, reason} ->
-        fail(frame, "QA passed, but it could not move on: #{inspect(reason)}")
+        fail(frame, "QA passed, but it could not move on: #{explain(reason)}")
 
       {_, moved} ->
         ok(frame, %{"verdict" => "pass", "follow_ups" => n, "stage" => moved.stage, "awaiting" => moved.awaiting})
@@ -269,7 +269,7 @@ defmodule Server.MCP.Tool.SendBack do
         fail(frame, "send_back refused: #{why}")
 
       {:error, why} ->
-        fail(frame, "send_back refused: #{inspect(why)}")
+        fail(frame, "send_back refused: #{explain(why)}")
     end
   end
 end

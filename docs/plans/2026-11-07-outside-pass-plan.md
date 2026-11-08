@@ -347,6 +347,7 @@ snapshot on 304. `Sonnet · S`, after B1.
   plus the next action, `inspect` as the fallback; the seat-cut refusal names who has the tool or
   what to post instead.
 - Check: a test per mapped reason; `grep -c 'inspect(reason)' server/lib/server/mcp/tools` → 0.
+- Done: `Server.MCP.Tool.explain/1` maps the reasons the contexts return (advance, landing, ticket start, consult, spawn, model CLI) and the tools call it; the seat-cut refusal says to post to the lead; librarian's `decide_proposal` no longer returns an inspected struct.
 
 **D4 · `consult_peer` exists but the skill and the ticket say it doesn't.** `Sonnet · S`
 - Why: `Server.MCP.Tool.ConsultPeer` is registered (`endpoint.ex:50`), cut from coworker profiles

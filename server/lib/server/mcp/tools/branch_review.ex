@@ -49,7 +49,7 @@ defmodule Server.MCP.Tool.ReviewBranch do
          }) do
       {:ok, _} -> ok(frame, %{"recorded" => params[:verdict], "branch" => params[:branch], "sha" => params[:sha]})
       {:error, why} when is_binary(why) -> fail(frame, why)
-      {:error, why} -> fail(frame, "not recorded: #{inspect(why)}")
+      {:error, why} -> fail(frame, "not recorded: #{explain(why)}")
     end
   end
 end
@@ -79,7 +79,7 @@ defmodule Server.MCP.Tool.LandPR do
         fail(frame, "refused: #{why}")
 
       {:error, why} ->
-        fail(frame, "not queued: #{inspect(why)}")
+        fail(frame, "not queued: #{explain(why)}")
     end
   end
 end

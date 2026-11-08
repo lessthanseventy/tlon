@@ -19,7 +19,7 @@ defmodule Server.MCP.Tool.CatchUpBranch do
       %Server.Thread{} = thread ->
         case Server.bring_branch_to_main(thread) do
           {:refused, why} -> fail(frame, why)
-          {:error, why} -> fail(frame, inspect(why))
+          {:error, why} -> fail(frame, explain(why))
           result -> ok(frame, %{"result" => format(result)})
         end
 

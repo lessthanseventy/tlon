@@ -19,7 +19,7 @@ defmodule Server.MCP.Tool do
       use Anubis.Server.Component, type: :tool
 
       import Server.MCP.Tool,
-        only: [ok: 2, fail: 2, reply: 3, own: 4, acting_thread: 2, acting_thread: 3, acting_thread: 4]
+        only: [ok: 2, fail: 2, explain: 1, reply: 3, own: 4, acting_thread: 2, acting_thread: 3, acting_thread: 4]
 
       alias Server.MCP.Identity, warn: false
 
@@ -60,7 +60,7 @@ defmodule Server.MCP.Tool do
          false <- name in @adapter_verbs,
          %Server.Thread{workspace_id: ws} when is_integer(ws) <- Server.Repo.get(Server.Thread, identity.thread_id),
          true <- name in cut_tools(ws, identity.agent) do
-      "#{identity.agent}'s seat does not have #{name}"
+      "#{identity.agent}'s seat does not have #{name} — post what you need on your thread with post_message: its lead, or a seat that has #{name}, runs it"
     else
       _ -> nil
     end
@@ -101,6 +101,42 @@ defmodule Server.MCP.Tool do
   @doc "A successful tool reply carrying `payload` as JSON."
   @spec ok(Frame.t(), term()) :: tool_reply()
   def ok(frame, payload), do: {:reply, Response.json(Response.tool(), payload), frame}
+
+  @doc """
+  A context's refusal reason as a sentence naming the next action. A string is verbatim; a reason
+  not listed here is `inspect/1`ed, so a new one reads as a term until it earns a sentence.
+  """
+  @spec explain(term()) :: String.t()
+  def explain(reason) when is_binary(reason), do: reason
+  def explain(:awaiting_operator), do: "it waits at a gate for the operator to approve — post what you need and stop"
+  def explain(:terminal), do: "this workline has landed; there is no stage after it — close the thread or open new work"
+  def explain(:not_a_workline), do: "this thread is not a workline — promote it, or open a workline for the work"
+
+  def explain(:root_machine_thread),
+    do: "the standing root thread is a home, not a work item — open a thread for the work"
+
+  def explain(:closed), do: "the thread is closed — reopen it or open a new one"
+
+  def explain(:limit_hit),
+    do: "its risk grade hit a limit, so only the operator approves it — pass it up with your recommendation"
+
+  def explain(:nothing_awaiting), do: "nothing is waiting on an approval here — check the thread's stage with get_brief"
+  def explain(:approving), do: "another approval of it is landing — wait for its outcome on the thread"
+  def explain(:not_landing), do: "no PR is waiting to land for this thread — check the thread's stage"
+  def explain(:epic), do: "an epic is never work itself — start one of its tickets"
+  def explain(:initiative), do: "an initiative is never work itself — start one of its tickets"
+  def explain(:no_repo), do: "no repo is set for this thread's project or workspace — set one before asking again"
+  def explain(:unknown_peer), do: "no agent by that name is registered — check the roster for the handle"
+  def explain(:no_threads), do: "that peer has no thread to reach — name one with thread_id"
+  def explain({:no_thread, id}), do: "no thread #{id} exists — check the id"
+  def explain({:no_agent, name}), do: "no registered agent named #{name} — staff a handle from the workspace roster"
+
+  def explain({:model_cli_timeout, s, _}),
+    do: "the model did not answer within #{s}s — try again, or ask in a thread post"
+
+  def explain({:model_cli_missing, _}), do: "the model's command is not installed on this server — ask the operator"
+  def explain({:model_cli_exit, code, msg}), do: "the model's command exited #{code}: #{msg}"
+  def explain(other), do: inspect(other)
 
   @doc "A tool-error reply with `message`."
   @spec fail(Frame.t(), String.t()) :: tool_reply()
