@@ -181,13 +181,19 @@ defmodule Server.Maintain.Sweep do
   @doc """
   The worktree sweep on its own, now (`tlon-cli reap`): every stray worktree removed unless it
   holds work, never the lobby's (every coworker's home window runs in it). Each as `{path, result}`,
-  the result `Server.Worktree.remove/2`'s.
+  the result `Server.Worktree.remove/2`'s — or `retire/2`'s for a landed workline's checkout, which
+  goes whatever `git cherry` says: its change is on main, and the branch stays to be found.
   """
   def reap_worktrees do
     for %{repo: repo, name: name, thread: thread} <- Server.Maintain.Strays.worktrees(),
         !(thread && Server.Channel.root_machine_thread?(thread)),
-        do: {Server.Worktree.path(repo, name), Server.Worktree.remove(repo, name)}
+        do: {Server.Worktree.path(repo, name), reap(repo, name, thread)}
   end
+
+  # Once main edits a file the branch touched, no commit on it matches main by patch or by tree
+  # (`Worktree.landed?/4`), so a landed workline's checkout would otherwise stay forever.
+  defp reap(repo, name, %{stage: "landed"}), do: Server.Worktree.retire(repo, name)
+  defp reap(repo, name, _thread), do: Server.Worktree.remove(repo, name)
 
   defp sweep_gates(opts) do
     for thread <- parked_gates(),
