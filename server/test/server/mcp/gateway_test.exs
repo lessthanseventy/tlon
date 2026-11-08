@@ -150,6 +150,16 @@ defmodule Server.MCP.GatewayTest do
     assert {422, %{"error" => _}} = request_json(:post, "/api/release/ran", %{check: "gate", sha: sha})
   end
 
+  test "GET /api/release/ran answers the passed run of a check on a commit, else 404" do
+    sha = String.duplicate("d", 40)
+    assert {404, %{"error" => _}} = get_json("/api/release/ran?check=gate&sha=#{sha}")
+    assert {201, _} = request_json(:post, "/api/release/ran", %{check: "gate", sha: sha, exit: 1})
+    assert {404, %{"error" => _}} = get_json("/api/release/ran?check=gate&sha=#{sha}")
+    assert {201, %{"id" => id}} = request_json(:post, "/api/release/ran", %{check: "gate", sha: sha, exit: 0})
+    assert {200, %{"id" => ^id, "finished_at" => _}} = get_json("/api/release/ran?check=gate&sha=#{sha}")
+    assert {404, _} = get_json("/api/release/ran?check=smoke&sha=#{sha}")
+  end
+
   test "POST /api/usage/claude keeps the plan's limits for the office snapshot; a bad report is a 422" do
     Server.Usage.clear()
     assert {200, %{"usage" => %{"claude" => nil}}} = get_json("/api/office")

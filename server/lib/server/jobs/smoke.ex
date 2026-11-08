@@ -7,7 +7,9 @@ defmodule Server.Jobs.Smoke do
   adds the url and the smoke's build dir (`Server.Smoke.drive/2` runs the candidate's drive from it),
   what `Server.Smoke` finds it by, and posts the url and the
   log's path on the thread; a smoke that fails posts its last lines instead. One attempt: a retry
-  would stack another build.
+  would stack another build. A `candidate` job (`Server.Smoke.queue_candidate/1`, main's new tip
+  after a landing) runs the same script unheld and about no thread: the script records its
+  `ran-on: smoke` for `Server.Release.Candidate`, and a red one is the alarm's line.
   """
   use Oban.Worker, queue: :smoke, max_attempts: 1
 
@@ -16,35 +18,15 @@ defmodule Server.Jobs.Smoke do
   @log_ttl 7 * 86_400
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"thread_id" => tid, "ref" => ref}} = job) do
-    dir = Path.join([state_home(), "tlon", "smoke"])
-    File.mkdir_p!(dir)
-    prune(dir)
-    log = Path.join(dir, "smoke-job-#{job.id}.log")
-    {exe, args} = launch([Server.Smoke.script(), ref])
+  def perform(%Oban.Job{args: %{"candidate" => true, "ref" => ref}} = job) do
+    case run(job, ref, []) do
+      {_log, 0} -> :ok
+      {log, code} -> {:error, "smoke of #{String.slice(ref, 0, 12)} failed (exit #{code}); the log: #{log}"}
+    end
+  end
 
-    port =
-      Port.open({:spawn_executable, exe}, [
-        :binary,
-        :exit_status,
-        :stderr_to_stdout,
-        {:line, 4096},
-        {:args, args},
-        {:cd, script_root(Server.Smoke.script())},
-        {:env,
-         [
-           {~c"TLON_SMOKE_HOLD", ~c"1"},
-           {~c"MISE_YES", ~c"1"},
-           {~c"TLON_SMOKE_FLAGS", String.to_charlist(Enum.join(job.args["flags"] || [], " "))},
-           {~c"TLON_SMOKE_FIXTURES", String.to_charlist(Enum.join(job.args["fixtures"] || [], " "))}
-         ]}
-      ])
-
-    # nil when the script already exited: its messages are still in the mailbox
-    os_pid = with info when is_list(info) <- Port.info(port), do: info[:os_pid]
-    # stamped before the build: `Server.Smoke.stop/1` TERMs a smoke that is not up yet by it
-    job = stamp(job, %{"os_pid" => os_pid, "log" => log})
-    code = pump(port, job, tid, os_pid, log, [])
+  def perform(%Oban.Job{args: %{"thread_id" => _, "ref" => ref}} = job) do
+    {log, code} = run(job, ref, [{~c"TLON_SMOKE_HOLD", ~c"1"}])
     if code != 0, do: post(job, "smoke of #{ref} ended (exit #{code}); the log: #{log}")
     {:ok, :posted}
   end
@@ -65,12 +47,12 @@ defmodule Server.Jobs.Smoke do
   @doc false
   def hold_line, do: ~r/^smoke: holding (http\S+) up(?: \(dir (\S+)\))?/
 
-  defp pump(port, job, tid, os_pid, log, tail) do
+  defp pump(port, job, os_pid, log, tail) do
     receive do
       {^port, {:data, {_eol, line}}} ->
         File.write!(log, [line, "\n"], [:append])
         hold(job, os_pid, log, line)
-        pump(port, job, tid, os_pid, log, Enum.take([line | tail], 12))
+        pump(port, job, os_pid, log, Enum.take([line | tail], 12))
 
       {^port, {:exit_status, 0}} ->
         post(job, "the held smoke is down")
@@ -110,6 +92,8 @@ defmodule Server.Jobs.Smoke do
     {:ok, _} = Channel.post(%{thread_id: tid, author: "tlon", body: to <> body})
   end
 
+  defp post(%Oban.Job{}, _body), do: :ok
+
   defp state_home, do: System.get_env("XDG_STATE_HOME") || Path.join(System.user_home!(), ".local/state")
 
   defp prune(dir) do
@@ -122,5 +106,37 @@ defmodule Server.Jobs.Smoke do
         File.rm(path)
       end
     end
+  end
+
+  # the script to its exit, `{log, code}`; the job's meta carries its pid and log from the start
+  defp run(job, ref, hold) do
+    dir = Path.join([state_home(), "tlon", "smoke"])
+    File.mkdir_p!(dir)
+    prune(dir)
+    log = Path.join(dir, "smoke-job-#{job.id}.log")
+    {exe, args} = launch([Server.Smoke.script(), ref])
+
+    port =
+      Port.open({:spawn_executable, exe}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        {:line, 4096},
+        {:args, args},
+        {:cd, script_root(Server.Smoke.script())},
+        {:env,
+         hold ++
+           [
+             {~c"MISE_YES", ~c"1"},
+             {~c"TLON_SMOKE_FLAGS", String.to_charlist(Enum.join(job.args["flags"] || [], " "))},
+             {~c"TLON_SMOKE_FIXTURES", String.to_charlist(Enum.join(job.args["fixtures"] || [], " "))}
+           ]}
+      ])
+
+    # nil when the script already exited: its messages are still in the mailbox
+    os_pid = with info when is_list(info) <- Port.info(port), do: info[:os_pid]
+    # stamped before the build: `Server.Smoke.stop/1` TERMs a smoke that is not up yet by it
+    job = stamp(job, %{"os_pid" => os_pid, "log" => log})
+    {log, pump(port, job, os_pid, log, [])}
   end
 end

@@ -58,7 +58,8 @@ defmodule Server.CheckMainScriptTest do
       {"PATH", ctx.bin <> ":" <> System.get_env("PATH")},
       {"TMPDIR", ctx.scratch},
       {"SCRATCH", ctx.scratch},
-      {"XDG_CACHE_HOME", Path.join(ctx.scratch, "cache")}
+      {"XDG_CACHE_HOME", Path.join(ctx.scratch, "cache")},
+      {"TLON_URL", "http://127.0.0.1:1"}
     ]
   end
 
@@ -81,6 +82,35 @@ defmodule Server.CheckMainScriptTest do
   defp checkouts(ctx), do: Path.wildcard(Path.join(ctx.scratch, "cache/tlon-verify/main-??????"))
   defp hex_homes(ctx), do: Path.wildcard(Path.join(ctx.scratch, "cache/tlon-verify/main-??????.hex"))
   defp leftovers(ctx), do: Path.wildcard(Path.join(ctx.scratch, "tlon-main-*")) ++ checkouts(ctx) ++ hex_homes(ctx)
+
+  # a landing's gate on the tree that became main is main's check (Server.Release.Candidate.landed)
+  test "a tip whose gate a landing already recorded is not gated again", ctx do
+    stub(ctx.bin, "curl", ~S(echo '{"id":7,"finished_at":"2026-11-08T03:00:00Z"}'))
+    {out, 0} = System.cmd("bash", [Path.join(ctx.root, "scripts/check-main.sh")], env: env(ctx), cd: ctx.root)
+    assert out =~ "skipped: gate passed at landing, run #7"
+    assert out =~ ~r/^ran-on: gate [0-9a-f]{40}$/m
+    refute File.exists?(Path.join(ctx.scratch, "gating"))
+    assert checkouts(ctx) == []
+  end
+
+  test "TLON_CHECK_FORCE=1 gates a tip a landing already passed", ctx do
+    stub(ctx.bin, "curl", ~S(echo '{"id":7,"finished_at":"2026-11-08T03:00:00Z"}'))
+
+    port =
+      Port.open({:spawn_executable, System.find_executable("bash")}, [
+        :exit_status,
+        args: [Path.join(ctx.root, "scripts/check-main.sh")],
+        env:
+          Enum.map([{"TLON_CHECK_FORCE", "1"} | env(ctx)], fn {k, v} ->
+            {String.to_charlist(k), String.to_charlist(v)}
+          end),
+        cd: String.to_charlist(ctx.root)
+      ])
+
+    wait_for(Path.join(ctx.scratch, "gating"))
+    stop(port)
+    assert_receive {^port, {:exit_status, 143}}, 10_000
+  end
 
   # the gate posts tlon/check only on a clean tree (scripts/check.sh): its Hex home sits beside the checkout
   test "the gated tree stays clean: the Hex home is beside the checkout, not in it", ctx do

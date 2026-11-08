@@ -133,6 +133,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/habits/:id/approve      Server.approve_habit (…/reject: Server.reject_habit)
 
       POST   /api/release/ran            {"check": "gate"|"smoke", "sha", "exit"} → Candidate.record: a hand run, what release:status reads; 201
+      GET    /api/release/ran?check=&sha= Candidate.passed: the passed run of that check on that commit {id, finished_at}, else 404
       POST   /api/schedules               {"workspace_id", "kind": "agent"|"workline"|"script", "body",
                                           "cron" | "at", "title"?, "agent"?, "standing"?, "dir"?}
                                           → Schedules.create; 201
@@ -391,6 +392,16 @@ defmodule Server.MCP.OperatorAPI do
     do: with_thread(conn, id, &json(conn, 200, Office.thread_view(&1, int_param(conn, "before"))))
 
   defp route(conn, "GET", "settings", []), do: json(conn, 200, settings())
+
+  # a gate asks before running whether this commit already passed it (check-main.sh skips a landing's)
+  defp route(conn, "GET", "release", ["ran"]) do
+    %{"check" => check, "sha" => sha} = Map.take(fetch_query_params(conn).query_params, ["check", "sha"])
+
+    case Server.Release.Candidate.passed(check, sha) do
+      %{id: id, finished_at: at} -> json(conn, 200, %{id: id, finished_at: at})
+      nil -> json(conn, 404, %{error: "no passed #{check} run on #{sha}"})
+    end
+  end
 
   # a gate or smoke run by hand reports its `ran-on` result: what `release:status` reads
   defp route(conn, "POST", "release", ["ran"]) do

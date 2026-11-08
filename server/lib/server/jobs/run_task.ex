@@ -4,7 +4,9 @@ defmodule Server.Jobs.RunTask do
   of its checkout, in the verify script's throwaway checkout and branch mode (`RUN_TASK`), off the
   seat's sandbox. The result is posted on the thread to the caller by name, which wakes them, so a
   long suite never holds a pane in a foreground call. Only the committed head runs: what is not
-  committed is not in it. One attempt: a retry would run the suite twice.
+  committed is not in it. One attempt: a retry would run the suite twice. `check` is the full gate
+  through `scripts/check.sh`, so a green run records the tree (`~/.cache/tlon-verify/green/`) and
+  the verify after it, on the same tree, is a cache hit; `server:check` records nothing.
   """
   use Oban.Worker, queue: :tasks, max_attempts: 1
 

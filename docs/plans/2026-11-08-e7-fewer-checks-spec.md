@@ -24,18 +24,18 @@ Nothing merges that nobody checked. Every PR merged to main carries a `tlon/chec
 full `mise run check` at exactly its head (the landing gate). Everything below removes runs
 *before* that gate, or the nightly *after* it; neither touches the gate itself.
 
-## Mechanism 1 · One green per tree (half done)
+## Mechanism 1 · One green per tree (done)
 
 Done 2026-11-07: `scripts/check.sh` skips a clean tree whose gate-relevant hash already passed,
 the hash leaving out `work/` and `docs/` except the two docs a check reads. The record is
 `~/.cache/tlon-verify/green/<tree>`, one directory per machine, so every checkout already shares it.
 
-Left:
-- `run_task("server:check")` from a seat runs only the server half and records nothing in the
-  green cache, so the verify after it runs the full suite anyway. Change: a seat's `run_task`
-  of `check` (already in `@tasks`) records green as `check.sh` does; the seat prompt says to ask
-  for `check`, not `server:check`, before advancing. Cost: a seat's pre-advance run grows from the
-  server suite to the full one, once; verify then hits the cache when the branch did not move.
+Done 2026-11-08: `run_task("check")` already records green — the verify script's branch mode runs
+`mise run check`, which is `check.sh`, on a clean checkout of the committed head — so what was
+missing was the ask: the `run_verb` refusal, the root `AGENTS.md` and `RunTask`'s doc now say
+`check`, not `server:check`. The verify after it hits the cache when neither the branch nor main
+moved (verify gates the branch rebased onto origin/main, so a moved main is a new tree).
+
 - Keep the record a file. Moving it to the db (the plan's wording) buys nothing on one machine
   and makes `check.sh` depend on the service being up.
 
@@ -64,11 +64,15 @@ a missed one, because the landing is still full.
 ## Mechanism 3 · The landing's gate is the nightly
 
 Half shipped as E2 (PR #801): an immediate merge records `gate` on main's new tip when the tree
-matches. Left:
-- The 03:00 `check:main` schedule skips a tip `Candidate` already reads green for, and says so in
-  its run (`skipped: gate passed at landing, run #N`), so the record stays readable.
-- The smoke is queued after a merge (`Server.Jobs.Smoke` in its unheld mode) instead of waiting
-  for the night; one at a time, a newer merge replacing a queued one.
+matches. Done 2026-11-08:
+- `check-main.sh` asks the service (`GET /api/release/ran?check=gate&sha=`, `Candidate.passed/2`)
+  before it makes a checkout: a tip a landing already recorded prints `skipped: gate passed at
+  landing, run #N` and its `ran-on:` line, so the nightly's run reads as the gate; `TLON_CHECK_FORCE=1`
+  gates it anyway.
+- A landing that recorded the gate queues the tip's smoke (`Server.Smoke.queue_candidate/1`,
+  `Server.Jobs.Smoke` with `candidate: true`: no hold, no thread; its script records `ran-on: smoke`).
+  One at a time: a newer tip cancels one still queued; a failed smoke is one `⚠` line on the standing
+  thread (E1's alarm).
 
 ## Mechanism 4 · The bench and the script suites run when their inputs change
 

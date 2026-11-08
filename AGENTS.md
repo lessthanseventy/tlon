@@ -99,7 +99,7 @@ Coworkers have the same verbs as tools scoped to their worktree (`edit_clause`, 
 `outline_file`, `run_verb`). The `Edit` tool is for what Menard doesn't cover: TypeScript, Lua, Nix.
 `run_verb` runs `test`/`compile` in the worktree's mix project — the root, else the one subdirectory
 with a `mix.exs` (`server/`); pass `in: <dir>` to pick another. `check` is minutes, longer than one tool call
-lives, so `run_verb` refuses it: commit, then `run_task("server:check")` runs it off the seat and posts the result. `format` args are root-relative by default; with an explicit `in:`, `format` runs in that dir and its args are relative to it.
+lives, so `run_verb` refuses it: commit, then `run_task("check")` runs the full gate off the seat and posts the result — green records the tree, so the verify after it on the same tree is a cache hit (`server:check` records nothing). `format` args are root-relative by default; with an explicit `in:`, `format` runs in that dir and its args are relative to it.
 
 ## How to work — the four rules
 
