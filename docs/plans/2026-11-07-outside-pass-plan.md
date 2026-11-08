@@ -287,6 +287,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: memoise layout and a thread `Map` on snapshot identity; a cached actor array updated on
   add/remove.
 - Check: `test/sim.test.ts` has a tick-cost assertion (ticks per ms over 10k ticks) that goes up.
+- Done: `layoutFor` memoises per snapshot (a WeakMap), `view()` in main is held until `all` or the workspace changes, `Sim` holds a thread `Map` and the held snapshot per snapshot and a cached actor array; 2000 ticks on one snapshot went from 4.7 to 7.7 ticks/ms (`test/sim.test.ts` asserts the layout is shared across ticks and logs the rate).
 
 **C4 · Contrast backing is recomputed per label per frame.** `Sonnet · S`
 - Why: `tui/paint.ts inkInto behind()` scans every pixel under every label box at k× each frame to

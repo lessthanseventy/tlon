@@ -158,6 +158,9 @@ export class Sim<L extends { people: Seat[] }> {
   onTogether: ((situation: string, a: string, b: string) => void) | null = null
   private askedTogether = -Infinity
   protected actors = new Map<string, Actor>()
+  private crewList: Actor[] | null = null
+  /** the actors as an array, rebuilt only when one arrives or leaves */
+  private crew(): Actor[] { return (this.crewList ??= [...this.actors.values()]) }
   /** Nina's wet pawprints, each fading by the tick (`kit/bathroom.ts`) */
   protected prints: Print[] = []
   pawprints(): readonly Print[] { return this.prints }
@@ -305,7 +308,7 @@ export class Sim<L extends { people: Seat[] }> {
   }
   private together() {
     if (!this.onTogether || this.tick % 40 || this.tick - this.askedTogether < 400 || Math.random() > 0.3) return
-    const quiet = [...this.actors.values()].filter((x) => !x.leaving && !this.talk.has(x.seat.agent))
+    const quiet = this.crew().filter((x) => !x.leaving && !this.talk.has(x.seat.agent))
     const settled = quiet.filter((x) => !x.moving && !x.path.length && TOGETHER.has(x.spot.kind))
     const byKind = new Map<string, Actor[]>()
     for (const x of settled) byKind.set(x.spot.kind, [...(byKind.get(x.spot.kind) ?? []), x])
@@ -318,7 +321,7 @@ export class Sim<L extends { people: Seat[] }> {
     this.onTogether(situation, a.seat.agent, b.seat.agent)
   }
   /** is anyone settled at a spot of this kind (the TV is on while someone is on the couch) */
-  protected using(kind: Kind) { return [...this.actors.values()].some((x) => x.spot.kind === kind && !x.moving) }
+  protected using(kind: Kind) { return this.crew().some((x) => x.spot.kind === kind && !x.moving) }
 
   private dest(d: Dest): Pt {
     const p = this.plan.cat
@@ -384,10 +387,10 @@ export class Sim<L extends { people: Seat[] }> {
     if (this.tick < c.until || this.tick < c.purr) return false
     // pets off: she is asleep on her rug and stays there — no wake-and-walk-back between naps
     if (!this.dials.pets && at(p.nap)) { c.mode = "sleep"; c.until = this.tick + 600; return true }
-    const company = [...this.actors.values()].some((a) => !a.moving && LOUNGING.has(a.spot.kind))
+    const company = this.crew().some((a) => !a.moving && LOUNGING.has(a.spot.kind))
     const r = Math.random()
     // now and then she goes to sit on the keyboard of someone hard at work
-    const typing = [...this.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && a.seat.thinking)
+    const typing = this.crew().filter((a) => a.spot.kind === "desk" && !a.moving && a.seat.thinking)
     if (this.dials.pets && typing.length && r > 0.97 && c.mode !== "sleep") return this.catKeyboard(pick(typing).seat.agent)
     // the small hours give her ideas
     const leaps = this.dials.pets && r < (nightOwl(this.hour()) ? 0.15 : 0.05) * lean(this.temperament.energy) && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
@@ -519,7 +522,7 @@ export class Sim<L extends { people: Seat[] }> {
     const on = EVENT_KINDS.filter((x) => this.dials.events[x])
     if (kind ? !this.dials.events[kind] : !on.length) return false
     const k = kind ?? pickEvent(Math.random(), this.lastEvent, on)
-    const crew = [...this.actors.values()].filter((x) => !x.leaving && !x.seat.thinking).map((x) => x.seat.agent).sort()
+    const crew = this.crew().filter((x) => !x.leaving && !x.seat.thinking).map((x) => x.seat.agent).sort()
     const sheriff = crew.includes(SHERIFF) ? SHERIFF : null
     // Gary's one roll is drawn here, once per visit, so a seeded run replays it
     this.running = { kind: k, since: this.tick, idle: crew.filter((n) => n !== sheriff), sheriff, ...(k === "gary" ? { gary: { outcome: garyRoll(Math.random()), peek: this.dials.gary === "peek", victim: null } } : {}) }
@@ -654,7 +657,7 @@ export class Sim<L extends { people: Seat[] }> {
     const d = g && propsAt("gary", 0, g).find((p) => p.kind === "dumpster")
     if (!d) return
     const dist = (x: Actor) => Math.hypot(x.x - d.x, x.y - d.y)
-    const near = [...this.actors.values()].filter((x) => !x.leaving).sort((p, q) => dist(p) - dist(q) || (p.seat.agent < q.seat.agent ? -1 : 1))[0]
+    const near = this.crew().filter((x) => !x.leaving).sort((p, q) => dist(p) - dist(q) || (p.seat.agent < q.seat.agent ? -1 : 1))[0]
     if (!near) return
     gary.victim = near.seat.agent
     this.onSlap?.(near.seat.agent)
@@ -678,7 +681,7 @@ export class Sim<L extends { people: Seat[] }> {
 
   /** one of them screams, naming another now and then */
   private scream() {
-    const crew = [...this.actors.values()].filter((x) => !x.leaving)
+    const crew = this.crew().filter((x) => !x.leaving)
     const free = crew.filter((x) => !this.talk.has(x.seat.agent))
     if (!free.length) return
     const who = pick(free), other = pick(crew.filter((x) => x !== who).concat(who)).seat.agent
@@ -826,7 +829,13 @@ export class Sim<L extends { people: Seat[] }> {
   }
 
   /** the snapshot to draw the room from: `a`, or with the channel down the last good one, marked down */
-  protected held(a: Agents): Agents { return a.ok || !this.lastGood ? a : { ...this.lastGood, ok: false, note: a.note } }
+  protected held(a: Agents): Agents {
+    if (a.ok || !this.lastGood) return a
+    if (this.heldMemo?.from !== a || this.heldMemo.good !== this.lastGood) this.heldMemo = { from: a, good: this.lastGood, out: { ...this.lastGood, ok: false, note: a.note } }
+    return this.heldMemo.out
+  }
+  private heldMemo: { from: Agents; good: Agents; out: Agents } | null = null
+  private threadMemo: { from: Agents; byId: Map<number, Agents["threads"][number]> } | null = null
 
   /**
    * Advance one tick (100 ms): retarget everyone from the roster, then walk. True when the room
@@ -871,7 +880,8 @@ export class Sim<L extends { people: Seat[] }> {
     }
     if (this.cat.mode !== "sleep" && this.quiet(this.cat.saidUntil) && Math.random() < 1 / 1500) this.catSay(this.line("Nina", "muse", NINA.muse, "", NINA_RIFF))
     const plan = this.plan, l = plan.layout(a)
-    const threadOf = (id: number) => a.threads.find((t) => t.id === id)
+    if (this.threadMemo?.from !== a) this.threadMemo = { from: a, byId: new Map(a.threads.map((t) => [t.id, t])) }
+    const threadOf = (id: number) => this.threadMemo!.byId.get(id)
     const asks = l.people.filter((p) => asksYou(p.agent, threadOf(p.thread_id))).sort((p, q) => p.thread_id - q.thread_id)
     // a thread gone from the open ones has shipped — unless many went at once (a new view, the channel down)
     const leads = new Map(a.threads.filter((t) => t.lead).map((t) => [t.id, t.lead!]))
@@ -900,7 +910,7 @@ export class Sim<L extends { people: Seat[] }> {
         actor.seat = r; actor.leaving = false; continue
       }
       const at = this.seeded ? plan.exit : plan.home(l, r.agent) ?? plan.lounge[this.actors.size % plan.lounge.length]!
-      this.actors.set(k, { seat: r, look: lookFor(r.agent), lookGen: looksGen(), worn: wornBy(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0, cooled: this.tick, warmth: r.thinking ? 1 : r.warmth ?? (r.warm ? 1 : 0) })
+      this.crewList = null; this.actors.set(k, { seat: r, look: lookFor(r.agent), lookGen: looksGen(), worn: wornBy(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0, cooled: this.tick, warmth: r.thinking ? 1 : r.warmth ?? (r.warm ? 1 : 0) })
     }
     if (a.ok) this.seeded = true
     // a wave on the way in (whoever walks in from the exit) and on the way out
@@ -914,7 +924,7 @@ export class Sim<L extends { people: Seat[] }> {
     const visiting = new Map(a.visits.filter((v) => now - Date.parse(v.at) < VISIT_MS).map((v) => [v.from, v.to]))
     const writing = new Set(a.notes.filter((n) => now - Date.parse(n.at) < NOTE_MS).map((n) => n.author))
     let host: Actor | undefined
-    const held = new Set([...this.actors.values()].map((x) => x.spotKey))
+    const held = new Set(this.crew().map((x) => x.spotKey))
     for (const [k, actor] of this.actors) {
       const slot = asks.findIndex((r) => keyOf(r) === k)
       const home = plan.home(l, actor.seat.agent)
@@ -966,7 +976,7 @@ export class Sim<L extends { people: Seat[] }> {
         const h = goal.kind === "visit" ? this.find(visiting.get(actor.seat.agent)!) : undefined
         if (h && h.emote !== "~") { h.emote = "~"; h.emoteUntil = this.tick + 5; changed = true }
       }
-      if (actor.leaving && !actor.moving && actor.path.length === 0) { this.actors.delete(k); changed = true; continue }
+      if (actor.leaving && !actor.moving && actor.path.length === 0) { this.crewList = null; this.actors.delete(k); changed = true; continue }
       // at the machine: a snack drops, and it goes where they go next
       if (!actor.moving && !actor.path.length && actor.spot.kind === "vending" && actor.snack < this.tick && Math.random() < 0.03) { actor.snack = this.tick + 900; changed = true }
       // a coffee poured goes back to the desk with them, and steams there a while
@@ -995,7 +1005,7 @@ export class Sim<L extends { people: Seat[] }> {
     const { bench, souls } = this.companyOf()
     for (const a of this.actors.values()) {
       if (a.moving || a.path.length || (a.spot.kind !== "foosball" && a.spot.kind !== "pool") || this.grudge.has(a.seat.agent) || !a.spot.with) continue
-      const b = [...this.actors.values()].find((x) => x !== a && !x.moving && !x.path.length && x.spotKey === spotKey({ ...a.spot, ...a.spot.with! }))
+      const b = this.crew().find((x) => x !== a && !x.moving && !x.path.length && x.spotKey === spotKey({ ...a.spot, ...a.spot.with! }))
       if (!b || relation(a.seat.agent, b.seat.agent, souls, bench) !== "rival") continue
       const loser = Math.random() < 0.5 ? a : b
       this.grudge.set(a.seat.agent, loser.seat.agent); this.grudge.set(b.seat.agent, loser.seat.agent)
@@ -1024,7 +1034,7 @@ export class Sim<L extends { people: Seat[] }> {
   /** someone who just finished a turn high-fives whoever they pass, once each */
   private highFives(): boolean {
     let any = false
-    const all = [...this.actors.values()], { bench, souls } = this.companyOf()
+    const all = this.crew(), { bench, souls } = this.companyOf()
     for (const a of all) {
       if (this.tick - a.finished > 400) continue
       for (const b of all) {
@@ -1044,14 +1054,14 @@ export class Sim<L extends { people: Seat[] }> {
 
   /** where someone is now, by name — at their desk before anywhere else */
   private find(agent: string): Actor | undefined {
-    const all = [...this.actors.values()].filter((x) => x.seat.agent === agent && !x.leaving)
+    const all = this.crew().filter((x) => x.seat.agent === agent && !x.leaving)
     return all.find((x) => x.spot.kind === "desk") ?? all[0]
   }
 
   /** who is on the bench and what their souls say, for `relation` */
   private companyOf() {
     if (!this.dials.souls) return { bench: [] as string[], souls: {} as Record<string, ReturnType<typeof soulFor>> }
-    const bench = [...this.actors.values()].map((x) => x.seat.agent)
+    const bench = this.crew().map((x) => x.seat.agent)
     return { bench, souls: Object.fromEntries(bench.map((n) => [n, soulFor(n)])) }
   }
 
@@ -1060,7 +1070,7 @@ export class Sim<L extends { people: Seat[] }> {
     const idle = cur.kind === "board" || LOUNGING.has(cur.kind)
     if (idle && this.tick < actor.until) return cur
     const { bench, souls } = this.companyOf()
-    const partner = (s: Spot) => s.with ? [...this.actors.values()].find((x) => x !== actor && x.spotKey === spotKey({ ...s, ...s.with! })) : undefined
+    const partner = (s: Spot) => s.with ? this.crew().find((x) => x !== actor && x.spotKey === spotKey({ ...s, ...s.with! })) : undefined
     const rel = (s: Spot) => relation(actor.seat.agent, partner(s)?.seat.agent ?? "", souls, bench)
     // a rival at the far end of the table is not a pair worth making
     const free = this.plan.lounge.filter((s) => !held.has(spotKey(s)) && spotKey(s) !== actor.spotKey && !(s.with && rel(s) === "rival"))
