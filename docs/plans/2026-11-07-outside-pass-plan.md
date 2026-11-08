@@ -840,6 +840,11 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: `scripts/lib/test.sh` sourced by the `.test.sh` files; tests for `release.sh` and
   `check.sh` first.
 - Check: the new tests in `check:scripts` (G6).
+- Done: `scripts/lib/test.sh` (`bad`, `expect`, `until_log`) is sourced by `checks-queue.test.sh` and
+  `release-smoke.test.sh`, the two whose helpers were identical; new `release.test.sh`, `check.test.sh`,
+  `server-restart.test.sh` and `land.test.sh` run in `check:names` until G6's `check:scripts` exists. Left: the
+  other four tests' `expect` take other arguments and stay; `say`, `fail`, `pg` and `cleanup` are not in the
+  tree; `tlon-cli.sh` and `workline-verify.sh` have no test yet.
 
 **G10 · `work/` holds 304 directories of finished worklines.** `Opus · S (decision)`
 - Why: 620 tracked files, 3.4 MB — the artifact chain of every workline ever, at the repo root.

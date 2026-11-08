@@ -6,7 +6,7 @@ set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tmp="$(mktemp -d)"
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$tmp"' EXIT
-bad=0
+. "$here/lib/test.sh"
 export XDG_RUNTIME_DIR="$tmp/run" CHECKS_POLL=0.05 TLON_STALE_SCRIPTS_OK=1
 unset CHECKS_UNQUEUED
 log="$tmp/log"
@@ -16,10 +16,8 @@ fresh() { rm -rf "$XDG_RUNTIME_DIR"; mkdir -p "$XDG_RUNTIME_DIR"; : >"$log"; : >
 job() { CHECKS_LABEL="$1" "$here/checks-queue.sh" bash -c "echo start $1 >>'$log'; sleep $2; echo end $1 >>'$log'" 2>>"$err"; }
 queued() { ls "$XDG_RUNTIME_DIR/tlon-checks.wait" 2>/dev/null | wc -l; }
 until_queued() { local i=0; while [ "$(queued)" -lt "$1" ] && [ "$i" -lt 200 ]; do sleep 0.05; i=$((i + 1)); done; }
-until_log() { local i=0; while ! grep -q "^$1" "$log" && [ "$i" -lt 200 ]; do sleep 0.05; i=$((i + 1)); done; }
 starts() { grep '^start' "$log" | cut -d' ' -f2 | tr '\n' ' '; }
 first_waiter() { ls "$XDG_RUNTIME_DIR/tlon-checks.wait" | head -1 | cut -s -d- -f2; }
-expect() { if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got [$2] want [$3]"; bad=1; fi; }
 
 fresh
 job A 1 & until_log "start A"

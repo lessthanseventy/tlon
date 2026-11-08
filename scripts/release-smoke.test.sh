@@ -6,10 +6,8 @@ set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tmp="$(mktemp -d)"
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$tmp"' EXIT
-bad=0
+. "$here/lib/test.sh"
 log="$tmp/log" lock="$tmp/build.lock"
-expect() { if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got [$2] want [$3]"; bad=1; fi; }
-until_log() { local i=0; while ! grep -q "^$1" "$log" && [ "$i" -lt 200 ]; do sleep 0.05; i=$((i + 1)); done; }
 # build <name> <seconds>: a fake build under the lock, in a shell of its own as each smoke is
 build() {
   (
