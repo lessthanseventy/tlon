@@ -199,6 +199,27 @@ defmodule Server.Rollout do
     :ok
   end
 
+  @doc """
+  A restart's unit found the office busy again after the waiter had handed it over, and refused:
+  say so on the root thread and schedule the restart again for the first quiet moment, so the
+  cut's restart is not lost. `scripts/server-restart.sh` calls it (`tlon-cli restart-refused`).
+  `opts` are `restart/1`'s. `{:scheduled, lines}` | `:ok` | `{:error, why}`.
+  """
+  @spec restart_refused(String.t(), keyword()) :: :ok | {:scheduled, [String.t()]} | {:error, String.t()}
+  def restart_refused(why, opts \\ []) do
+    with %Server.Thread{id: tid} <- Server.Channel.machine_thread() do
+      Server.Channel.post(%{
+        thread_id: tid,
+        author: "tlon",
+        body:
+          "⟳ the restart (#{why}) was refused: work began after the quiet check. It waits for the next quiet moment.",
+        kind: "notice"
+      })
+    end
+
+    restart(Keyword.put(opts, :why, why))
+  end
+
   defp run_restart(repo, why, extra) do
     env =
       Enum.map(

@@ -42,6 +42,16 @@ defmodule Server.ServerRestartScriptTest do
     assert out =~ "--force"
   end
 
+  test "busy in a redeploy unit (it has a why): the server is told, so it schedules the restart again", %{dir: dir} do
+    cli = Path.join(dir, "cli")
+    File.write!(cli, "#!/bin/sh\n[ \"$1\" = restart-refused ] && echo \"cli $*\" >> #{dir}/ran\necho busy\n")
+    File.chmod!(cli, 0o755)
+    env = [{"TLON_CLI", cli}, {"TLON_RESTART_WHY", "release abc1234"}, {"PATH", "#{dir}:#{System.get_env("PATH")}"}]
+
+    assert {_, 1} = System.cmd("bash", [@script], env: env, stderr_to_stdout: true)
+    assert File.read!(Path.join(dir, "ran")) == "cli restart-refused release abc1234\n"
+  end
+
   test "busy with --force: it restarts anyway", %{dir: dir} do
     assert {_, 0, {:ok, ran}} = run(dir, "echo busy; echo 'the verify of #140 is running'", ["--force"])
     assert ran =~ "restart tlon"

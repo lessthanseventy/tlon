@@ -14,6 +14,8 @@ if [ "${1:-}" != "--force" ]; then
     echo "server:restart refused — restarting now would cut off:"
     printf '%s\n' "$answer" | tail -n +2 | sed 's/^/  /'
     echo "wait for it to finish, or restart anyway: mise run server:restart -- --force"
+    # a redeploy unit (it carries the why) has no one waiting on it: the server schedules it again
+    [ -z "${TLON_RESTART_WHY:-}" ] || "$cli" restart-refused "$TLON_RESTART_WHY" >/dev/null 2>&1 || true
     exit 1
   fi
 fi
