@@ -767,6 +767,12 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   Cheap today; a decision, not a fix: archive landed worklines' `work/<slug>/` under
   `work/.landed/<yyyy-mm>/` at the cut, or leave them and say so in AGENTS.md.
 - Check: whichever is chosen is written down.
+- Recommendation 2026-11-08, for Andrew's call: leave them. The 3.4 MB costs nothing a reader meets;
+  the chain under `work/<slug>/` is what `Workline.Artifacts`, the retro and the librarian read by slug,
+  so an archive move needs every reader to look in two places for the rest of the repo's life, for a
+  tidier `ls`. If chosen, one line in `AGENTS.md` under the worktree rules: "`work/<slug>/` is kept after
+  landing; it is the workline's record." The other way (archive at the cut) stays open as a ticket if
+  the count ever matters.
 
 ---
 
