@@ -309,6 +309,11 @@ snapshot on 304. `Sonnet · S`, after B1.
   ticket, body capped with a "[cut N chars; get_ticket(id)]" tail.
 - Check: `server_test` for both tools; the brief eval scenario for a ticket-started workline shows
   the section.
+- Done 2026-11-08: `get_ticket(id)` (this workspace's only; the body whole, links as
+  `list_tickets` gives them), `list_tickets(status, assignee, label, limit)`, and a `## Ticket` section
+  heading the brief for the ticket the thread was started from, its body cut at 4,000 chars with a
+  `[cut N chars; get_ticket(id)]` tail (`Tickets.started_from/1`, `MCP.Brief.brief_ticket/1`). Open: no
+  eval scenario added; tested in `server_test`, `board_test` and `brief.test.ts`.
 
 **D2 · Reading a cited thread, and who is on what.** `Sonnet · M`
 - Why: `get_messages`/`get_brief` take no thread id, so a notice citing `#473` can be followed only

@@ -108,6 +108,8 @@ export interface Dossier {
   // The workline gate (nil for a plain thread) and the threads the tail cites with #N.
   workline?: { stage: string; awaiting: string | null; artifact_ok: boolean; why: string } | null;
   cited?: { id: number; title: string; stage: string | null; lead: string | null }[];
+  // The ticket the thread was started from; the server cuts a long body with a get_ticket pointer.
+  ticket?: { id: number; title: string; status: string; body: string } | null;
   recent: ChatterMessage[];
 }
 
@@ -143,6 +145,11 @@ export function renderBrief(d: Dossier, now: Date = new Date(), model?: string, 
   // Seancing (Gas Town/Beads): the brief is the budgeted VIEW of the record, not the record.
   // Say so, or a fresh session treats the cap as the whole truth.
   lines.push("_This brief is a budgeted view. The record answers past every cap: get_facts, get_messages, search_history, search_facts._");
+
+  if (d.ticket) {
+    lines.push("", `## Ticket #${d.ticket.id}  (${d.ticket.status}): ${d.ticket.title}`);
+    if (d.ticket.body) lines.push(d.ticket.body);
+  }
 
   if (d.todos.shown.length > 0) {
     lines.push("", "## Plan  (→ is NEXT, the first open step)");

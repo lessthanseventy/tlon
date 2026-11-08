@@ -148,6 +148,7 @@ defmodule Server.MCP.ServerTest do
                "file_ticket",
                "suggest",
                "list_tickets",
+               "get_ticket",
                "update_ticket",
                "start_ticket",
                "blocked_on",
@@ -1992,6 +1993,42 @@ defmodule Server.MCP.ServerTest do
 
     listed = token |> call(session, 3, "list_tickets", %{}) |> decode_tool_json()
     assert Enum.any?(listed, &(&1["id"] == id and &1["title"] == "auth is fucked"))
+  end
+
+  test "get_ticket reads one ticket whole, body included; another workspace's is refused (D1)" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "GetWS"})
+    {:ok, other} = Server.Workspaces.register(%{name: "OtherWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Reader", mandate: "build", engine: "fresh"})
+    {:ok, mine} = Server.Tickets.file(%{workspace_id: ws.id, title: "mine", body: "the whole story"})
+    {:ok, theirs} = Server.Tickets.file(%{workspace_id: other.id, title: "theirs"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    got = token |> call(session, 2, "get_ticket", %{"id" => mine.id}) |> decode_tool_json()
+    assert %{"id" => id, "title" => "mine", "body" => "the whole story", "status" => "backlog"} = got
+    assert id == mine.id
+
+    assert call(token, session, 3, "get_ticket", %{"id" => theirs.id})["isError"]
+    assert call(token, session, 4, "get_ticket", %{"id" => 999_999_999})["isError"]
+  end
+
+  test "list_tickets filters by status, assignee and label, and takes a limit (D1)" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "FilterWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Lister", mandate: "build", engine: "fresh"})
+    {:ok, a} = Server.Tickets.file(%{workspace_id: ws.id, title: "a", labels: ["flake"], assignee: "emma"})
+    {:ok, b} = Server.Tickets.file(%{workspace_id: ws.id, title: "b"})
+    {:ok, _} = Server.Tickets.update(b, %{status: "todo"})
+    {:ok, _} = Server.Tickets.file(%{workspace_id: ws.id, title: "c"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+    ids = fn args -> token |> call(session, 2, "list_tickets", args) |> decode_tool_json() |> Enum.map(& &1["id"]) end
+
+    assert ids.(%{"status" => "todo"}) == [b.id]
+    assert ids.(%{"assignee" => "emma"}) == [a.id]
+    assert ids.(%{"label" => "flake"}) == [a.id]
+    assert length(ids.(%{"limit" => 2})) == 2
   end
 
   test "start_ticket opens a thread on the ticket and promotes it, moving the ticket to doing" do

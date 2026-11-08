@@ -222,6 +222,8 @@ defmodule Server.Board do
       # COMMITS — the thread's commits in its repo, joined by the `Tlon-Thread` trailer (Server.Commits).
       commits: Commits.for_thread(thread),
       workline: workline,
+      # TICKET — the ticket the thread was started from, so a seat staffed on it reads the ask
+      ticket: Server.Tickets.started_from(thread.id),
       # CITED — the threads the recent messages point at with `#N`, resolved (Server.References).
       cited: References.cited(recent, thread.id),
       recent: recent

@@ -230,6 +230,9 @@ defmodule Server.Tickets do
     thread_id |> promoted(&(&1 == "done")) |> Enum.each(&__MODULE__.update(&1, %{status: "doing"}))
   end
 
+  @doc "The ticket `thread_id` was started from (promoted into it), or nil."
+  def started_from(thread_id), do: thread_id |> promoted(fn _ -> true end) |> Enum.min_by(& &1.id, fn -> nil end)
+
   defp promoted(thread_id, status?) do
     from(t in Ticket,
       join: tt in TicketThread,
