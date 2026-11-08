@@ -56,34 +56,38 @@ defmodule Server.Doctor do
   end
 
   @doc """
-  The `erl_crash.dump` at `root` (the tlon checkout), as one report line: `none`, or its path and
-  age, read against the service's start (`started_at`, from `service_started_at/0`): a dump from
-  before the start means the last restart followed a crash; one written since can't be the running
-  service's, so another node here crashed (a mix run at the root). With no known start, the dump and
-  its age alone.
+  The newest crash dump, as one report line: `none`, or its path and age, read against the service's
+  start (`started_at`, from `service_started_at/0`). Two places hold them: `erl_crash.dump` at `root`
+  (the tlon checkout) and the `*.dump` files `tlon-cli.sh` sends its client nodes to (`dumps_dir`).
+  A root dump from before the start means the last restart followed a crash; one written since can't
+  be the running service's, so another node here crashed (a mix run at the root). A client node's
+  dump is never the service's, before the start or after. With no known start, the dump and its age
+  alone.
   """
-  @spec crash_dump(Path.t(), DateTime.t() | nil) :: String.t()
-  def crash_dump(root \\ Server.Profiles.tlon_root(), started_at \\ service_started_at()) do
-    path = Path.join(root, "erl_crash.dump")
+  @spec crash_dump(Path.t(), DateTime.t() | nil, Path.t()) :: String.t()
+  def crash_dump(root \\ Server.Profiles.tlon_root(), started_at \\ service_started_at(), dumps_dir \\ dumps_dir()) do
+    candidates =
+      [
+        {Path.join(root, "erl_crash.dump"), :root}
+        | for(p <- Path.wildcard(Path.join(dumps_dir, "*.dump")), do: {p, :client})
+      ]
 
-    case File.stat(path, time: :posix) do
-      {:ok, %{mtime: mtime}} ->
-        age = "#{path}, #{div(System.os_time(:second) - mtime, 3600)}h old"
+    dumps =
+      for {path, from} <- candidates, {:ok, %{mtime: mtime}} <- [File.stat(path, time: :posix)], do: {path, from, mtime}
 
-        cond do
-          is_nil(started_at) ->
-            "#{age} — service start unknown"
-
-          mtime >= DateTime.to_unix(started_at) ->
-            "#{age} — written since the service started at #{started_at}: not the service (it's up), another node here crashed"
-
-          true ->
-            "#{age} — before the service started at #{started_at}: the last restart followed a crash"
-        end
-
-      {:error, _} ->
-        "none"
+    case Enum.max_by(dumps, fn {_path, _from, mtime} -> mtime end, fn -> nil end) do
+      nil -> "none"
+      {path, from, mtime} -> dump_line(path, from, mtime, started_at)
     end
+  end
+
+  @doc """
+  Where `tlon-cli.sh` sends its client nodes' crash dumps.
+  """
+  @spec dumps_dir() :: Path.t()
+  def dumps_dir do
+    state = System.get_env("XDG_STATE_HOME") || Path.join(System.user_home!(), ".local/state")
+    Path.join([state, "tlon", "crash-dumps"])
   end
 
   @doc """
@@ -227,5 +231,27 @@ defmodule Server.Doctor do
   defp scratch_dir do
     System.get_env("TLON_SCRATCH_DIR") ||
       Path.join(System.get_env("XDG_CACHE_HOME") || Path.expand("~/.cache"), "tlon-scratch")
+  end
+
+  defp dump_line(path, from, mtime, started_at) do
+    age = "#{path}, #{div(System.os_time(:second) - mtime, 3600)}h old"
+    since_start = started_at && mtime >= DateTime.to_unix(started_at)
+
+    case {from, since_start} do
+      {_, nil} ->
+        "#{age} — service start unknown"
+
+      {:client, true} ->
+        "#{age} — a tlon-cli client node's, written since the service started at #{started_at}: not the service"
+
+      {:client, false} ->
+        "#{age} — a tlon-cli client node's, before the service started at #{started_at}: not the service"
+
+      {:root, true} ->
+        "#{age} — written since the service started at #{started_at}: not the service (it's up), another node here crashed"
+
+      {:root, false} ->
+        "#{age} — before the service started at #{started_at}: the last restart followed a crash"
+    end
   end
 end

@@ -104,10 +104,13 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   journal is silent at both times), yet `server:doctor` blamed the last restart (#855).
 - Change: done 2026-11-07 — both dumps moved to `~/.local/state/tlon/crash-dumps/`, and
   `tlon-cli.sh` sets `ERL_CRASH_DUMP` there, so a client node's crash never lands at the root again.
-  Left: `doctor` dates a dump against the service start as #855 asks; which caller runs `tlon-cli`
-  with stderr closed is open (`server-restart.sh` and `release.sh` send it to `/dev/null`, which
-  works) — read the next dump in the state dir; menard's half (its VM dumping into the caller's
-  cwd) goes to the menard session with A2.
+  Done 2026-11-08: `Doctor.crash_dump/3` also reads the state dir and dates the newest dump against
+  the service start; a client node's dump is said to be no service's, before the start or after.
+  `tlon-cli.sh` points a closed stderr at `/dev/null` (bash hands the freed fd 2 to the script
+  itself), so its VM never dies printing a boot error; test `tlon-cli.test.sh`.
+  Left: which caller closes stderr is unidentified (`server-restart.sh` and `release.sh` send it to
+  `/dev/null`, which works, and no dump has landed since) — read the next dump in the state dir;
+  menard's half (its VM dumping into the caller's cwd) goes to the menard session with A2.
 - Reproduced 2026-11-07, OTP 27 and 29: `printf 'raise "boom"\n' > boom.exs; elixir boom.exs 2>&-`
   (or `… 2>&1 >/dev/null | true`, stderr a pipe whose reader has gone) leaves `erl_crash.dump` in
   the cwd; stderr to `/dev/null` does not. `Kernel.CLI.exec_fun` (cli.ex:155) prints the script's
