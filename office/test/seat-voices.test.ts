@@ -60,4 +60,14 @@ describe("event reactions", () => {
     expect(reactLine("yu", "duck", [l[0]!])).toBe(l[1])
     expect(typeof reactLine("w9", "duck", [])).toBe("string")
   })
+  test("an unnamed seat has several lines per event and never says one twice running", () => {
+    for (const k of EVENT_KINDS) {
+      let recent: string[] = []
+      for (let i = 0; i < 40; i++) {
+        const l = reactLine("w9", k, recent)
+        expect(recent[0]).not.toBe(l)
+        recent = [l, ...recent].slice(0, 2)
+      }
+    }
+  })
 })
