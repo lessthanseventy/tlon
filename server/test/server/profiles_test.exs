@@ -405,6 +405,12 @@ defmodule Server.ProfilesTest do
       assert Profiles.fetch("reviewer").permissions["yoloMode"] == true
     end
 
+    test "the reviewer holds the diff to the machine's code standards" do
+      prompt = Profiles.fetch("reviewer").system_prompt
+      assert prompt =~ "~/.claude/CLAUDE.md"
+      assert prompt =~ "comment creep"
+    end
+
     test "the write-deny lands as Claude Code deny rules for the file-writing tools" do
       assert Server.Harness.ClaudeCode.launch_command(Profiles.fetch("reviewer")) =~ "Write,Edit,NotebookEdit"
     end
