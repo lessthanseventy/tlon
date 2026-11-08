@@ -38,7 +38,7 @@ import { floorHeight, type Home } from "../kit/home"
 import { paintFloor } from "../kit/homeart"
 import { DEFAULT_OFFICE } from "../kit/tiles"
 import { NINA, pick } from "../kit/voices"
-import { hueRole, newYearLeft, RELEASE_MIN, Tv } from "../kit/tv"
+import { hueRole, newYearLeft, RELEASE_MIN, Tv, type Ticker } from "../kit/tv"
 import { marqueeWindow, type NowPlaying } from "../kit/stereo"
 import { DOG_NAME, SCRIBBLES, shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
@@ -545,6 +545,8 @@ export class WideRoom extends Sim<Layout> {
   }
   get height() { return floorHeight(this.home) }
   channel() { this.tvSet.next() }
+  /** what the TV's ticker channel crawls */
+  setTicker(t: Ticker) { this.tvSet.setTicker(t) }
   /** the TUI calls this every ~2s with whatever playerctl reports (or null — no player running) */
   setPlayer(p: NowPlaying | null) { this.player = p }
   /** the music's beat when it has one, else the room's own (a disco's) */

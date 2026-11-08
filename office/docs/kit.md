@@ -14,7 +14,7 @@ two coworkers the room sees together — at a game, on the couch, at the coffee 
 drawing people and Nina into a `Scene` (`draw.ts`: what each worker is doing mid-turn, a worker
 making a fuss of a pet), the furniture every room has (`furniture.ts`),
 the home's tiles as pixel art (`homeart.ts`: `TILE_ART`, kind → painter, a missing kind draws plain; `renderHome` the build grid as a Frame, `paintFloor` the placed tiles at their absolute cells; the snapshot's weather rains and snows on the garden tile),
-the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen, and
+the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen, a ticker of the office's own numbers (`Tv.setTicker`, fed by the TUI from each snapshot), and
 an aquarium),
 the office's trophies (`trophies.ts`: pure tallies and the table of what each earns; the TUI keeps them in `office-trophies` in its state dir — the sandbox's in its config dir — and the finder's "trophies" card lists them; a cup on the lounge bookshelf per trophy won, `WideRoom.setTrophies`),
 the day and the year (`daypart.ts`: `rushOf`, the 12:00 lunch rush and the 17:30 leaving wave, and `seasonOf`, which `WideRoom.yearly` draws and `clockFace` reads for Pi Day),
