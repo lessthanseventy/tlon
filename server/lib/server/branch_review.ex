@@ -27,6 +27,7 @@ defmodule Server.BranchReview do
              correlation: correlation(branch),
              detail: %{"sha" => sha, "verdict" => verdict, "by" => by, "body" => body}
            }) do
+      announce(attrs)
       end_review(attrs[:thread_id])
       {:ok, event}
     else
@@ -183,6 +184,23 @@ defmodule Server.BranchReview do
       true ->
         nil
     end
+  end
+
+  defp announce(%{branch: branch, sha: sha, verdict: verdict, by: by, body: body} = attrs) do
+    mark = if verdict == "approve", do: "✓ approved", else: "✗ changes requested"
+    line = "#{mark} #{branch} at #{short(sha)} by #{by}: #{body}"
+
+    workline_id =
+      case branch do
+        "work/" <> slug -> with %Server.Thread{id: id} <- Server.Repo.get_by(Server.Thread, slug: slug), do: id
+        _ -> nil
+      end
+
+    for id <- Enum.uniq([attrs[:thread_id], workline_id]), is_integer(id) do
+      Server.Channel.post(%{thread_id: id, author: "tlon", body: line})
+    end
+
+    :ok
   end
 
   # the verdict ends the reviewer's throwaway session; a verdict recorded off any thread ends nothing

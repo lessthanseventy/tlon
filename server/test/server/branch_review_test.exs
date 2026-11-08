@@ -3,6 +3,8 @@ defmodule Server.BranchReviewTest do
   # opens the PR and merges. The newest verdict on a branch is its verdict.
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   alias Server.BranchReview
 
   @a String.duplicate("a", 40)
@@ -42,6 +44,21 @@ defmodule Server.BranchReviewTest do
              BranchReview.latest("local-check")
 
     assert BranchReview.latest("other") == nil
+  end
+
+  test "the verdict is posted on the review's thread and on the branch's workline thread", %{thread: thread} do
+    {:ok, plain} = Server.Channel.open_thread(%{title: "the work"})
+    workline = plain |> Server.Thread.promote_changeset("build", "lamp-work") |> Server.Repo.update!()
+    branch = "work/lamp-work"
+
+    {:ok, _} = review(thread, %{branch: branch, verdict: "request_changes", body: "the lease is wrong"})
+
+    for t <- [thread, workline] do
+      assert [%{author: "tlon", body: body}] =
+               Server.Repo.all(from m in Server.Message, where: m.thread_id == ^t.id)
+
+      assert body == "✗ changes requested #{branch} at #{String.slice(@a, 0, 12)} by lonnrot: the lease is wrong"
+    end
   end
 
   describe "approves/4: does the newest verdict let this head land" do
