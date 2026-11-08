@@ -7,7 +7,7 @@ import { dancing, drawFuss, type Scene } from "./draw"
 import { ROLE, tint } from "./palette"
 import { FUSS, keyOf, type Actor, type Fussing, type Pt, type Spot } from "./sim"
 import { CAT_NAME, DOG, DOG_NAME } from "./sprites"
-import { mulberry32 } from "./rng"
+import { mulberry32, random } from "./rng"
 import { clampAxis, pickDest, type Dest, type Temperament } from "./temperament"
 import { bucketFor, pick, type Fuss } from "./voices"
 
@@ -148,33 +148,33 @@ export function stepDog(d: Dog, ctx: {
       d.creep = false
       const bed = ctx.bed(), asleep = d.x === bed.x && d.y === bed.y
       d.mode = asleep ? "sleep" : "sit"
-      d.until = ctx.tick + (asleep ? 900 : 200) + Math.floor(Math.random() * 400)
+      d.until = ctx.tick + (asleep ? 900 : 200) + Math.floor(random() * 400)
       const host = d.host ? ctx.actors.get(d.host) : undefined
       if (host && d.cheer) {
         d.cheer = false; host.emote = "♥"; host.emoteUntil = ctx.tick + 60; ctx.say(ctx.argos("cheer", host.seat.agent))
       } else if (host) {
-        if (Math.random() < 0.6) ctx.fussDog(host)
+        if (random() < 0.6) ctx.fussDog(host)
         else { host.emote = "♥"; host.emoteUntil = ctx.tick + 40; ctx.say(ctx.argos("visit", host.seat.agent)) }
       }
     }
     return true
   }
   if (ctx.antic) return false
-  if (d.mode !== "sleep" && !d.fuss && ctx.quiet(d.saidUntil) && Math.random() < 0.0015) {
+  if (d.mode !== "sleep" && !d.fuss && ctx.quiet(d.saidUntil) && random() < 0.0015) {
     const near = [...ctx.actors.values()].find((a) => !a.moving && !a.path.length && (a.spot.kind === "couch" || a.spot.kind === "cooler" || a.spot.kind === "coffee" || a.spot.kind === "roam") && Math.abs(a.x - d.x) < 22 && Math.abs(a.y - d.y) < 16)
     if (near) { ctx.fussDog(near); return true }
   }
   if (ctx.tick < d.until) return d.mode === "sit" && ctx.tick % 3 === 0
   // a wet trail: he finds the first print and creeps along it to the last
   const trail = ctx.prints()
-  if (trail.length >= 2 && d.mode !== "sleep" && !d.fuss && Math.random() < 0.01) {
+  if (trail.length >= 2 && d.mode !== "sleep" && !d.fuss && random() < 0.01) {
     // in by the door, as she went: a route straight to the first print cuts through the bathroom's wall
     const first = trail[0]!, door: Spot = { x: DOOR.x, y: DOOR.y - 3, aisle: DOOR.y + 5, pose: "stand", face: "up", kind: "roam" }
     d.path = [{ x: d.x, y: d.aisle }, ...ctx.route(d.x, d.aisle, door), { x: first.x, y: first.y }, ...trail.slice(1).map((p) => ({ x: p.x, y: p.y }))]
     d.aisle = trail[trail.length - 1]!.y; d.mode = "walk"; d.host = null; d.creep = true
     return true
   }
-  const r = Math.random(), working = [...ctx.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && !a.path.length)
+  const r = random(), working = [...ctx.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && !a.path.length)
   const host = working.length && r < 0.35 ? pick(working) : null
   const spot = (x: number, y: number, aisle = y): Spot => ({ x, y, aisle, pose: "stand", face: "left", kind: "roam" })
   const t = ctx.table()
@@ -182,7 +182,7 @@ export function stepDog(d: Dog, ctx: {
   const goal: Spot = host ? ctx.visit(host)
     : watch ? { x: t.x + t.w / 2, y: t.y + t.h + 6, aisle: t.y + t.h + 12, pose: "stand", face: "left", kind: "roam" }
     : r < 0.5 ? ctx.bed() : r < 0.6 ? ctx.bowl()
-      : r < 0.72 ? spot(40 + Math.floor(Math.random() * 40), 140)
+      : r < 0.72 ? spot(40 + Math.floor(random() * 40), 140)
         : r < 0.82 ? spot(ctx.mc - 4, 110, 116)
           : ctx.roam()
   d.host = host ? keyOf(host.seat) : null

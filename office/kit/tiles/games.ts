@@ -1,4 +1,5 @@
 // The games corner: arcade cabinets, the ping-pong table, foosball, pool, and the aquarium.
+import { random } from "../rng"
 import type { Measure } from "../canvas"
 import type { Scene } from "../draw"
 import { ROLE, tint } from "../palette"
@@ -116,7 +117,7 @@ export function gamesTile(z: Zones): Tile<Layout> & {
         if (cab < 0) continue
         playing.add(x.seat.agent)
         const run = runs.get(x.seat.agent) ?? { cab, score: 0 }
-        if (tick % 4 === 0) run.score += 10 * Math.floor(Math.random() * 6)
+        if (tick % 4 === 0) run.score += 10 * Math.floor(random() * 6)
         runs.set(x.seat.agent, run)
       }
       for (const [who, run] of runs) {

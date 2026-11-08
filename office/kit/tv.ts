@@ -1,6 +1,7 @@
 // The TV's channels: the desktop backdrop's ambient shows (ficciones' shell/lib/ambient.ts), retuned
 // for a screen a few dozen pixels wide, and an aquarium of the office's own. Each is a pure `step` over a dot screen, one art pixel a
 // dot, in five hues that are roles, so a theme switch recolours them.
+import { random } from "./rng"
 import { SMALL } from "./font"
 import { ROLE, type Role } from "./palette"
 
@@ -13,7 +14,7 @@ export class Screen {
   constructor(readonly w: number, readonly h: number) { this.dots = new Uint8Array(w * h) }
   clear() { this.dots.fill(0) }
   /** fade lit dots out at random — the phosphor */
-  decay(p: number) { for (let i = 0; i < this.dots.length; i++) if (this.dots[i] && Math.random() < p) this.dots[i] = 0 }
+  decay(p: number) { for (let i = 0; i < this.dots.length; i++) if (this.dots[i] && random() < p) this.dots[i] = 0 }
   plot(x: number, y: number, hue = 0) {
     const cx = Math.floor(x), cy = Math.floor(y)
     if (cx >= 0 && cy >= 0 && cx < this.w && cy < this.h) this.dots[cy * this.w + cx] = hue + 1
@@ -42,7 +43,7 @@ const lorenz = (): Show => {
 
 const life = (): Show => {
   let a = new Uint8Array(0), b = new Uint8Array(0), age = new Uint8Array(0), still = 0, last = -1
-  const seed = (s: Screen) => { a = Uint8Array.from({ length: s.w * s.h }, () => (Math.random() < 0.3 ? 1 : 0)); b = new Uint8Array(a.length); age = new Uint8Array(a.length); still = 0 }
+  const seed = (s: Screen) => { a = Uint8Array.from({ length: s.w * s.h }, () => (random() < 0.3 ? 1 : 0)); b = new Uint8Array(a.length); age = new Uint8Array(a.length); still = 0 }
   return {
     name: "life",
     init: seed,
@@ -75,7 +76,7 @@ const boids = (): Show => {
   let flock: { x: number; y: number; vx: number; vy: number; hue: number }[] = []
   return {
     name: "boids",
-    init(s) { s.clear(); flock = Array.from({ length: 16 }, (_, i) => ({ x: Math.random() * s.w, y: Math.random() * s.h, vx: Math.random() - 0.5, vy: Math.random() - 0.5, hue: i % 5 })) },
+    init(s) { s.clear(); flock = Array.from({ length: 16 }, (_, i) => ({ x: random() * s.w, y: random() * s.h, vx: random() - 0.5, vy: random() - 0.5, hue: i % 5 })) },
     step(s) {
       s.decay(0.3)
       for (const b of flock) {
@@ -118,10 +119,10 @@ const pipes = (): Show => {
   type P = { x: number; y: number; dx: number; dy: number; hue: number }
   let ps: P[] = [], laid = 0, fading = 0
   const edge = (s: Screen, hue: number): P => {
-    const d = Math.random() < 0.5 ? 1 : -1
-    return Math.random() < 0.5
-      ? { x: d > 0 ? 0 : s.w - 1, y: Math.floor((Math.random() * s.h) / 4) * 4, dx: d, dy: 0, hue }
-      : { x: Math.floor((Math.random() * s.w) / 4) * 4, y: d > 0 ? 0 : s.h - 1, dx: 0, dy: d, hue }
+    const d = random() < 0.5 ? 1 : -1
+    return random() < 0.5
+      ? { x: d > 0 ? 0 : s.w - 1, y: Math.floor((random() * s.h) / 4) * 4, dx: d, dy: 0, hue }
+      : { x: Math.floor((random() * s.w) / 4) * 4, y: d > 0 ? 0 : s.h - 1, dx: 0, dy: d, hue }
   }
   const start = (s: Screen) => { s.clear(); laid = 0; fading = 0; ps = [0, 1, 3].map((h) => edge(s, h)) }
   return {
@@ -131,7 +132,7 @@ const pipes = (): Show => {
       if (fading) { s.decay(0.1); if (++fading > 25) start(s); return }
       for (const p of ps) {
         // turns only on the lattice, so runs lie parallel like the terminal's
-        if (p.x % 4 === 0 && p.y % 4 === 0 && Math.random() < 0.25) { const [dx, dy] = Math.random() < 0.5 ? [-p.dy, p.dx] : [p.dy, -p.dx]; p.dx = dx; p.dy = dy }
+        if (p.x % 4 === 0 && p.y % 4 === 0 && random() < 0.25) { const [dx, dy] = random() < 0.5 ? [-p.dy, p.dx] : [p.dy, -p.dx]; p.dx = dx; p.dy = dy }
         p.x += p.dx; p.y += p.dy
         if (p.x < 0 || p.y < 0 || p.x >= s.w || p.y >= s.h) Object.assign(p, edge(s, p.hue))
         s.plot(p.x, p.y, p.hue)
@@ -147,11 +148,11 @@ const bonsai = (): Show => {
   let br: B[] = [], hold = 0, fading = 0, trunk = 0
   const start = (s: Screen) => {
     s.clear(); hold = 0; fading = 0
-    const x0 = Math.round(s.w * (0.35 + Math.random() * 0.3)), top = s.h - 4, hw = 6
+    const x0 = Math.round(s.w * (0.35 + random() * 0.3)), top = s.h - 4, hw = 6
     for (let x = -hw; x <= hw; x++) s.plot(x0 + x, top, 4)
     for (let r = 1; r <= 3; r++) { s.plot(x0 - hw + r, top + r, 4); s.plot(x0 + hw - r, top + r, 4) }
     for (let x = -hw + 3; x <= hw - 3; x++) s.plot(x0 + x, top + 3, 4)
-    trunk = s.h * (0.3 + Math.random() * 0.1)
+    trunk = s.h * (0.3 + random() * 0.1)
     br = [{ x: x0, y: top, a: UP, life: trunk, depth: 0 }]
   }
   return {
@@ -162,14 +163,14 @@ const bonsai = (): Show => {
       if (!br.length) { if (++hold > 60) fading = 1; return }
       const next: B[] = []
       for (const b of br) {
-        b.a += (Math.random() - 0.5) * 0.3 + (UP - b.a) * (b.depth ? 0.02 : 0.08)
+        b.a += (random() - 0.5) * 0.3 + (UP - b.a) * (b.depth ? 0.02 : 0.08)
         b.x += Math.cos(b.a) * 0.7; b.y += Math.sin(b.a) * 0.7
         s.plot(b.x, b.y, 0); if (!b.depth) s.plot(b.x + 1, b.y, 0)
         if (b.x < 0 || b.x >= s.w || b.y < 0) continue
         if (--b.life > 0) { next.push(b); continue }
-        if (b.depth >= 2) for (let i = 0; i < (b.depth >= 3 ? 7 : 3); i++) { const r = Math.random() * 2.5, t = Math.random() * Math.PI * 2; s.plot(b.x + Math.cos(t) * r * 1.3, b.y + Math.sin(t) * r, Math.random() < 0.15 ? 2 : 1) }
+        if (b.depth >= 2) for (let i = 0; i < (b.depth >= 3 ? 7 : 3); i++) { const r = random() * 2.5, t = random() * Math.PI * 2; s.plot(b.x + Math.cos(t) * r * 1.3, b.y + Math.sin(t) * r, random() < 0.15 ? 2 : 1) }
         if (b.depth >= 4) continue
-        for (const side of b.depth === 0 ? [-1, 0, 1] : [-1, 1]) next.push({ x: b.x, y: b.y, a: b.a + side * (0.4 + Math.random() * 0.5), life: trunk * 0.55 * 0.72 ** b.depth * (0.7 + Math.random() * 0.6), depth: b.depth + 1 })
+        for (const side of b.depth === 0 ? [-1, 0, 1] : [-1, 1]) next.push({ x: b.x, y: b.y, a: b.a + side * (0.4 + random() * 0.5), life: trunk * 0.55 * 0.72 ** b.depth * (0.7 + random() * 0.6), depth: b.depth + 1 })
       }
       br = next
     },
@@ -200,7 +201,7 @@ const maze = (): Show => {
           if (y > 0 && !seen[c - cw]) nb.push(c - cw)
           if (y < ch - 1 && !seen[c + cw]) nb.push(c + cw)
           if (!nb.length) { stack.pop(); continue }
-          const d = nb[Math.floor(Math.random() * nb.length)]!
+          const d = nb[Math.floor(random() * nb.length)]!
           seen[d] = 1; par[d] = c; stack.push(d); seg(s, c, d, 4)
         }
         // carved: the carving is a tree from the first cell, so the way to the last is its parents
@@ -216,10 +217,10 @@ const maze = (): Show => {
 const stars = (): Show => {
   type S = { x: number; y: number; z: number }
   let st: S[] = []
-  const born = (z: number): S => ({ x: Math.random() * 2 - 1, y: Math.random() * 2 - 1, z })
+  const born = (z: number): S => ({ x: random() * 2 - 1, y: random() * 2 - 1, z })
   return {
     name: "stars",
-    init(s) { s.clear(); st = Array.from({ length: 36 }, () => born(0.1 + Math.random() * 0.9)) },
+    init(s) { s.clear(); st = Array.from({ length: 36 }, () => born(0.1 + random() * 0.9)) },
     step(s) {
       s.decay(0.5)
       for (const p of st) {
@@ -235,11 +236,11 @@ const stars = (): Show => {
 const flow = (): Show => {
   type F = { x: number; y: number; life: number; hue: number }
   let ps: F[] = [], t = 0
-  const spawn = (s: Screen, p: F) => Object.assign(p, { x: Math.random() * s.w, y: Math.random() * s.h, life: 20 + Math.random() * 50, hue: Math.random() < 0.7 ? 3 : Math.random() < 0.6 ? 1 : 4 })
+  const spawn = (s: Screen, p: F) => Object.assign(p, { x: random() * s.w, y: random() * s.h, life: 20 + random() * 50, hue: random() < 0.7 ? 3 : random() < 0.6 ? 1 : 4 })
   const angle = (x: number, y: number) => Math.sin(x * 0.13 + t) * 1.6 + Math.cos(y * 0.18 - t * 0.7) * 1.4 + Math.sin((x + y) * 0.06 + t * 0.4)
   return {
     name: "flow",
-    init(s) { s.clear(); t = Math.random() * 100; ps = Array.from({ length: 40 }, () => spawn(s, { x: 0, y: 0, life: 0, hue: 3 })) },
+    init(s) { s.clear(); t = random() * 100; ps = Array.from({ length: 40 }, () => spawn(s, { x: 0, y: 0, life: 0, hue: 3 })) },
     step(s) {
       s.decay(0.12); t += 0.01
       for (const p of ps) {
@@ -255,7 +256,7 @@ const ant = (): Show => {
   let cells = new Uint8Array(0), ants: { x: number; y: number; d: number; hue: number }[] = [], on = 0
   const start = (s: Screen) => {
     s.clear(); cells = new Uint8Array(s.w * s.h); on = 0
-    ants = [0, 1, 3].map((hue) => ({ x: Math.floor(s.w * (0.3 + Math.random() * 0.4)), y: Math.floor(s.h * (0.3 + Math.random() * 0.4)), d: Math.floor(Math.random() * 4), hue }))
+    ants = [0, 1, 3].map((hue) => ({ x: Math.floor(s.w * (0.3 + random() * 0.4)), y: Math.floor(s.h * (0.3 + random() * 0.4)), d: Math.floor(random() * 4), hue }))
   }
   return {
     name: "ant",
@@ -278,12 +279,12 @@ const rain = (): Show => {
     name: "rain",
     init(s) { s.clear(); rings = [] },
     step(s) {
-      if (rings.length < (s.w * s.h) / 250 && Math.random() < 0.3) rings.push({ x: Math.random() * s.w, y: s.h * 0.1 + Math.random() * s.h * 0.85, r: 0, max: 4 + Math.random() * 8 })
+      if (rings.length < (s.w * s.h) / 250 && random() < 0.3) rings.push({ x: random() * s.w, y: s.h * 0.1 + random() * s.h * 0.85, r: 0, max: 4 + random() * 8 })
       s.clear()
       rings = rings.filter((q) => (q.r += 0.35) < q.max)
       for (const q of rings) {
         const life = 1 - q.r / q.max, n = Math.ceil(q.r * 5)
-        for (let j = 0; j < n; j++) if (Math.random() < life + 0.2) { const a = (j / n) * Math.PI * 2; s.plot(q.x + Math.cos(a) * q.r, q.y + Math.sin(a) * q.r * 0.5, life > 0.5 ? 3 : 4) }
+        for (let j = 0; j < n; j++) if (random() < life + 0.2) { const a = (j / n) * Math.PI * 2; s.plot(q.x + Math.cos(a) * q.r, q.y + Math.sin(a) * q.r * 0.5, life > 0.5 ? 3 : 4) }
       }
     },
   }
@@ -297,8 +298,8 @@ const aquarium = (): Show => {
   type Fish = { x: number; y: number; v: number; hue: number; rows: string[] }
   let fish: Fish[] = [], bubbles: { x: number; y: number }[] = [], t = 0
   const spawn = (s: Screen, anywhere: boolean): Fish => {
-    const rows = FISH[Math.floor(Math.random() * FISH.length)]!, v = (0.15 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1), w = rows[0]!.length
-    return { x: anywhere ? Math.random() * s.w : v > 0 ? -w : s.w, y: 1 + Math.floor(Math.random() * (s.h - 7)), v, hue: [0, 2, 3, 4][Math.floor(Math.random() * 4)]!, rows }
+    const rows = FISH[Math.floor(random() * FISH.length)]!, v = (0.15 + random() * 0.35) * (random() < 0.5 ? 1 : -1), w = rows[0]!.length
+    return { x: anywhere ? random() * s.w : v > 0 ? -w : s.w, y: 1 + Math.floor(random() * (s.h - 7)), v, hue: [0, 2, 3, 4][Math.floor(random() * 4)]!, rows }
   }
   const draw = (s: Screen, f: Fish) => f.rows.forEach((r, j) => [...r].forEach((ch, i) => {
     if (ch === ".") return
@@ -312,13 +313,13 @@ const aquarium = (): Show => {
       // the sand, the weed swaying in it, the bubbles going up
       for (let x = 0; x < s.w; x++) if ((x * 7 + 3) % 5) s.plot(x, s.h - 1, 0)
       for (const wx of [3, Math.floor(s.w / 3), Math.floor((s.w * 2) / 3) + 2, s.w - 4]) for (let j = 1; j < 6 + (wx % 4); j++) s.plot(wx + Math.round(Math.sin(t / 8 + j / 2) * (j / 4)), s.h - 1 - j, 1)
-      if (Math.random() < 0.15) bubbles.push({ x: 2 + Math.random() * (s.w - 4), y: s.h - 2 })
+      if (random() < 0.15) bubbles.push({ x: 2 + random() * (s.w - 4), y: s.h - 2 })
       bubbles = bubbles.filter((b) => (b.y -= 0.4) > 0)
       for (const b of bubbles) s.plot(b.x + Math.sin(b.y), b.y, 3)
       for (const f of fish) { f.x += f.v; draw(s, f) }
       fish = fish.map((f) => (f.x < -f.rows[0]!.length - 1 || f.x > s.w + 1 ? spawn(s, false) : f))
       // now and then something big goes by, slowly
-      if (!fish.some((f) => f.rows === WHALE) && Math.random() < 0.004) fish.push({ x: -WHALE[0]!.length, y: 4, v: 0.12, hue: 4, rows: WHALE })
+      if (!fish.some((f) => f.rows === WHALE) && random() < 0.004) fish.push({ x: -WHALE[0]!.length, y: 4, v: 0.12, hue: 4, rows: WHALE })
     },
   }
 }
@@ -341,7 +342,7 @@ const CRAWL = 2
 export class Tv {
   readonly screen: Screen
   private readonly shows = [lorenz(), life(), boids(), rule30(), pipes(), bonsai(), maze(), stars(), flow(), ant(), rain(), aquarium()]
-  private idx = Math.floor(Math.random() * this.shows.length)
+  private idx = Math.floor(random() * this.shows.length)
   private ticks = 0
   constructor(w: number, h: number) { this.screen = new Screen(w, h); this.shows[this.idx]!.init(this.screen) }
   get channel() { return this.levelLeft > 0 ? "level" : this.countdown !== null ? "countdown" : this.cut ? "release" : this.shows[this.idx]!.name }

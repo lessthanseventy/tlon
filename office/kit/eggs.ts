@@ -1,5 +1,6 @@
 // The office's easter eggs that are pure functions: what the clock shows, the Konami code, a page of
 // the Library of Babel, a cat's keyboard, the night owl's hours. The room and the TUI do the rest.
+import { random } from "./rng"
 
 /** the wall clock's face: 404 at four minutes past four (the time cannot be found), π at 3:14 */
 export function clockFace(now: Date): string {
@@ -41,7 +42,7 @@ export function foundLines(width: number, rng: () => number): string[] | null {
 }
 
 /** a page of the Library of Babel, `lines` of `width`; once in a thousand pages, one line means something */
-export function babelPage(lines: number, width: number, rng: () => number = Math.random): string[] {
+export function babelPage(lines: number, width: number, rng: () => number = random): string[] {
   const line = () => Array.from({ length: width }, () => BABEL_ALPHABET[Math.floor(rng() * BABEL_ALPHABET.length)]!).join("")
   const page = Array.from({ length: lines }, line)
   if (rng() < FOUND_ODDS) {
@@ -54,7 +55,7 @@ export function babelPage(lines: number, width: number, rng: () => number = Math
 const ROWS = ["qwertyuiop[]", "asdfghjkl;'", "zxcvbnm,./"]
 
 /** what a cat standing on a keyboard types: a run along one row, some keys held down */
-export function keyMash(rng: () => number = Math.random): string {
+export function keyMash(rng: () => number = random): string {
   const row = ROWS[Math.floor(rng() * ROWS.length)]!
   let out = ""
   for (let i = 0, n = 10 + Math.floor(rng() * 8); i < n; i++) {

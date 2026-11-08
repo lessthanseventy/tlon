@@ -1,5 +1,6 @@
 // Builds the Plan the sim needs by unioning every tile on the floor. The office tiles are anchored at
 // [0,0]; the home tiles (kit/home.ts) sit below at their absolute cells and add their blocks.
+import { random } from "./rng"
 import type { Actor, Kind, Pastime, Plan, Pt, Spot } from "./sim"
 import type { Home, Rect, Tile, TileKind } from "./tiles"
 import { CELL, OFFICE_H, OFFICE_ROWS, cellPath, cellPx, tileBlocks, type Home as FloorHome, type Pt as Cell } from "./home"
@@ -73,7 +74,7 @@ export function floorPlan(home: Home, w: number, floor: FloorHome = { tiles: [] 
       return { x: Math.min(w - 10, h.x + 12), y: h.y, aisle: h.y, pose: "stand", face: "left", kind: "visit" }
     },
     // the lounge is full: a stroll along the floor's back aisle
-    roam: () => ({ x: z.F0 + 10 + Math.floor(Math.random() * Math.max(1, z.F1 - z.F0 - 20)), y: 176, aisle: 176, pose: "stand", face: "down", kind: "roam" }),
+    roam: () => ({ x: z.F0 + 10 + Math.floor(random() * Math.max(1, z.F1 - z.F0 - 20)), y: 176, aisle: 176, pose: "stand", face: "down", kind: "roam" }),
     route(x, from, goal) {
       const la = laneOf(z, x), lb = laneOf(z, goal.x)
       const there = [{ x: lb, y: goal.aisle }, { x: goal.x, y: goal.aisle }, { x: goal.x, y: goal.y }]
