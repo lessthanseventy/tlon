@@ -74,8 +74,11 @@ defmodule Server.Application do
         maybe(:start_oban, false, {Task, &Server.Release.PM.boot/0}) ++
         maybe(:start_web, false, Server.Web.Endpoint)
 
-    # A discarded job reaches the operator (Server.Jobs.Alarm) wherever Oban runs.
-    if Application.get_env(:server, :start_oban, false), do: Alarm.attach()
+    # Every job's ending is said (Server.Jobs.Alarm, Server.Jobs.Outcome) wherever Oban runs.
+    if Application.get_env(:server, :start_oban, false) do
+      Alarm.attach()
+      Server.Jobs.Outcome.attach()
+    end
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Server.Supervisor)
   end

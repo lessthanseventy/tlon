@@ -148,7 +148,7 @@ defmodule Server.WorklineSendBackTest do
 
       assert_receive :moving
       job = %Oban.Job{args: %{"thread_id" => thread.id}, attempt: 1, max_attempts: 3}
-      assert :ok = Server.Jobs.Land.perform(job)
+      assert {:ok, :posted} = Server.Jobs.Land.perform(job)
       Task.await(sender)
       assert %Thread{stage: "plan", state: "open"} = Repo.get!(Thread, thread.id)
     end

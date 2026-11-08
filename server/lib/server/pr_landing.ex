@@ -178,7 +178,8 @@ defmodule Server.PRLanding do
     end
   end
 
-  defp post(nil, _body), do: :ok
+  # a landing recorded with no thread still has an operator: its line goes to the standing thread
+  defp post(nil, body), do: Server.Jobs.Alarm.post(body)
 
   defp post(thread_id, body) do
     Server.Channel.post(%{thread_id: thread_id, author: "tlon", body: body})

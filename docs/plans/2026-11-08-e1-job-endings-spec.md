@@ -57,14 +57,23 @@ ends silently on success and with one line on the standing thread otherwise.**
 `use`s `Oban.Worker` (read from the code, so a new job cannot be missed) and requires each to be
 in exactly one of two tables in the test:
 
-- **bound**: a fixture job and a stubbed failure path; the test runs it through
-  `Oban.Testing.perform_job/3` with the handler attached and asserts one `✗` line on the
-  fixture's thread, and for a nil thread, on the standing thread.
+- **bound**: the args key that names its thread (its `perform` must read it) and what its
+  success returns — `:posted` or `{:quiet, why}`; the test drives the handler with that worker's
+  bad ending and asserts one `✗` line on the fixture's thread, and for a nil thread or a thread
+  gone, on the standing thread. As built, the ending is synthetic (the telemetry meta Oban
+  emits), not a stubbed failure of each job: the handler is the one place the line comes from,
+  so the job's own path adds nothing the table does not already pin.
 - **unbound**: a one-line reason it is about no thread (`Dispatch`, `Drain`, `Maintain`,
-  `KeepUp`, …). The test asserts its failure reaches the standing thread.
+  `KeepUp`, …). The test asserts its failure reaches the standing thread and nothing else.
 
 A worker in neither table fails the test with its name. That is the invariant: no job can be
 added that ends without saying so.
+
+Built 2026-11-08: `Server.Jobs.Outcome`, `Alarm.post/2`, the nine bound jobs' returns, and
+`PRLanding`'s nil-thread post going to the standing thread (rule 1 applied at the source, so
+`{:ok, :posted}` needs no fallback in the handler). Found on the way: `Alarm` matched a
+`:discarded` state Oban 2.24 never emits (`:discard`), so the telemetry alarm had never fired;
+fixed in the same change, and its test now sends what Oban sends.
 
 ## The instances
 

@@ -47,7 +47,7 @@ defmodule Server.Jobs.RunTaskTest do
 
   test "green: the caller is told on the thread, by name, so the post wakes them", %{tree: tree, sha: sha, thread: t} do
     {:ok, job} = RunTask.enqueue(t.id, "emma", "office:test", tree)
-    assert :ok = perform_job(RunTask, job.args)
+    assert {:ok, :posted} = perform_job(RunTask, job.args)
 
     [m] = t |> Server.Channel.thread_messages() |> Enum.filter(&(&1.body =~ "mise run"))
     assert m.body =~ "@emma"
@@ -58,7 +58,7 @@ defmodule Server.Jobs.RunTaskTest do
     System.put_env("FAKE_EXIT", "1")
     on_exit(fn -> System.delete_env("FAKE_EXIT") end)
     {:ok, job} = RunTask.enqueue(t.id, "emma", "server:test", tree)
-    assert :ok = perform_job(RunTask, job.args)
+    assert {:ok, :posted} = perform_job(RunTask, job.args)
 
     [m] = t |> Server.Channel.thread_messages() |> Enum.filter(&(&1.body =~ "mise run"))
     assert m.body =~ "✗ `mise run server:test` failed (exit 1)"

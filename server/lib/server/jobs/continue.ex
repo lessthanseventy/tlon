@@ -12,6 +12,8 @@ defmodule Server.Jobs.Continue do
   alias Server.Workline.Continuation
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"thread_id" => tid} = args}) when is_integer(tid),
-    do: Continuation.run(tid, [quiet: args["quiet"] == true] ++ Application.get_env(:server, :continue_opts, []))
+  def perform(%Oban.Job{args: %{"thread_id" => tid} = args}) when is_integer(tid) do
+    :ok = Continuation.run(tid, [quiet: args["quiet"] == true] ++ Application.get_env(:server, :continue_opts, []))
+    {:ok, :posted}
+  end
 end

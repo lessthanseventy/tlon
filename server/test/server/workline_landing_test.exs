@@ -610,7 +610,7 @@ defmodule Server.WorklineLandingTest do
       assert [a_id, b_id] == [a.id, b.id]
 
       parked = Repo.update!(Thread.workline_stage_changeset(a, %{awaiting: "andrew"}))
-      assert :ok = Server.Jobs.Land.perform(%{Repo.get!(Oban.Job, job.id) | attempt: 1})
+      assert {:ok, :posted} = Server.Jobs.Land.perform(%{Repo.get!(Oban.Job, job.id) | attempt: 1})
       assert %{"cars" => [only], "split" => false} = Repo.get!(Oban.Job, job.id).meta
       assert only == parked.id
     end

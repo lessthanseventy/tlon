@@ -454,10 +454,15 @@ snapshot on 304. `Sonnet · S`, after B1.
   test that drives each job's failure path and asserts a post; then the seven tickets are the
   instances. Pairs with B5's timeouts (a timeout is an ending).
 - Check: the invariant test; the seven tickets closed by it or by their own PRs.
-- Spec 2026-11-08: `docs/plans/2026-11-08-e1-job-endings-spec.md`, awaiting Andrew. It finds only
+- Spec 2026-11-08: `docs/plans/2026-11-08-e1-job-endings-spec.md`, approved. It finds only
   #846 and #793 are a job ending unsaid; the other five are scripts, units and vanished seats,
   each its own fix (#781 and #864 go with B5).
-  Done: #793 (`BranchReview.record/1` posts the verdict on the review's thread and the branch's workline thread).
+- Done 2026-11-08, the invariant and #846: `Server.Jobs.Outcome` on Oban's `:stop` and `:exception`
+  posts a bound job's ending on its thread (nil or gone → the standing thread); every worker is in
+  the contract test's bound or unbound table; `PRLanding.post(nil, _)` goes to the standing
+  thread. Found and fixed: `Alarm` matched `:discarded`, a state Oban 2.24 never emits, so it had
+  never fired. #781/#864 went with B5.
+  Done, the instances: #793 (`BranchReview.record/1` posts the verdict on the review's thread and the branch's workline thread).
   #841 (`PM.cut` posts a refused restart on the root thread; `release.sh` exits 1 on the restart's 409).
   #750 (the smoke's build-lock wait is bounded by `TLON_SMOKE_BUILD_WAIT`, 1200s, and says so).
   #812 (`server-restart.sh` in a redeploy unit tells the server, `tlon-cli restart-refused`, which posts

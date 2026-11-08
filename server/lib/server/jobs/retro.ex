@@ -13,6 +13,6 @@ defmodule Server.Jobs.Retro do
     with %Server.Thread{} = thread <- Server.Repo.get(Server.Thread, tid),
          do: Server.Workline.Retro.run(thread)
 
-    :ok
+    {:ok, :quiet}
   end
 end

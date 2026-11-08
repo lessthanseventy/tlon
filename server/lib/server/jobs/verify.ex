@@ -94,7 +94,7 @@ defmodule Server.Jobs.Verify do
           Server.Workline.red_verify(t, finding)
         end
 
-        :ok
+        {:ok, :posted}
 
       {_, t} ->
         if attempt >= max and t, do: Server.Sheriff.report(t, "verify could not run: #{tail(out)}")
@@ -123,14 +123,14 @@ defmodule Server.Jobs.Verify do
         body: "verify can't run here (#{why}) — run it by hand: mise run workline:verify -- #{tid} #{slug}"
       })
 
-    :ok
+    {:ok, :posted}
   end
 
   # verifies waiting beside this one ride one check (Server.VerifyTrain); alone, it runs as it always has
   defp train_or_run(thread, script, tree, job) do
     case Server.VerifyTrain.run(thread, companions(thread, job.id)) do
       :alone -> run(script, thread.id, thread.slug, tree, job)
-      _ -> :ok
+      _ -> {:ok, :posted}
     end
   end
 end

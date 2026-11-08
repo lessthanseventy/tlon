@@ -13,5 +13,8 @@ defmodule Server.Jobs.TurnPass do
   alias Server.Memory.TurnPass
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"thread_id" => tid}}) when is_integer(tid), do: TurnPass.run(tid)
+  def perform(%Oban.Job{args: %{"thread_id" => tid}}) when is_integer(tid) do
+    :ok = TurnPass.run(tid)
+    {:ok, :quiet}
+  end
 end

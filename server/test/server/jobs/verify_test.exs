@@ -65,19 +65,21 @@ defmodule Server.Jobs.VerifyTest do
       for exit <- [0, 1] do
         since = check!(t, 0).id
         check!(t, exit)
-        assert :ok = Server.Jobs.Verify.finish(t.id, t.slug, since, {"", exit}, %{attempt: 1, max_attempts: 3})
+
+        assert {:ok, :posted} =
+                 Server.Jobs.Verify.finish(t.id, t.slug, since, {"", exit}, %{attempt: 1, max_attempts: 3})
       end
     end
 
     test "red goes back to build on the same branch, its builder told what broke; green stays", %{t: t} do
       since = check!(t, 0).id
       check!(t, 0)
-      assert :ok = Server.Jobs.Verify.finish(t.id, t.slug, since, {"", 0}, %{attempt: 1, max_attempts: 3})
+      assert {:ok, :posted} = Server.Jobs.Verify.finish(t.id, t.slug, since, {"", 0}, %{attempt: 1, max_attempts: 3})
       assert %{stage: "verify"} = Server.Repo.get!(Server.Thread, t.id)
 
       since = check!(t, 0).id
       check!(t, 1)
-      assert :ok = Server.Jobs.Verify.finish(t.id, t.slug, since, {"", 1}, %{attempt: 1, max_attempts: 3})
+      assert {:ok, :posted} = Server.Jobs.Verify.finish(t.id, t.slug, since, {"", 1}, %{attempt: 1, max_attempts: 3})
       assert %{stage: "build"} = Server.Repo.get!(Server.Thread, t.id)
 
       assert Enum.any?(
