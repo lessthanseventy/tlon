@@ -208,6 +208,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["Remain calm. I have a torch and a log.", "Outage recorded at the time of occurrence."],
     duck: ["An unregistered waterfowl. I will see it out.", "Visitor without a badge. Noted."],
     gary: ["That dumpster is not zoned for occupancy. Noted.", "Stand clear of the lid. I will be logging this."],
+    planes: ["Contraband aircraft in the hall. Confiscating.", "Paper planes are not on the approved list."],
+    pizza: ["Pizza is not on the approved list either. I will have a slice.", "Grease on the whiteboard. That is a citation."],
+    nap: ["Rest period logged. I will keep the watch.", "Lights down by order. I stay up. Someone must."],
   },
   tertius: {
     drill: ["Drill. Right. Coat's by the door.", "Seen drills. This is one of them."],
@@ -216,6 +219,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["Lights. Right. Wait it out.", "It always comes back."],
     duck: ["A duck. Alright.", "Don't feed it. Nobody listens."],
     gary: ["Gary's out. Guard your yogurt.", "Seen him worse. Just don't stand nearest."],
+    planes: ["Paper planes. Seen worse.", "Mind the one at head height."],
+    pizza: ["Free pizza. Don't ask who paid.", "Somebody wipe that board."],
+    nap: ["Ten minutes. Wake me for fires.", "Good. Lights down. Wake me for fires."],
   },
   hronir: {
     drill: ["In my day we just left by the stairs.", "Drills. We called it going home."],
@@ -224,6 +230,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["We had candles for this. Real ones.", "Dark. Same as the old server room."],
     duck: ["A duck. Used to have two.", "Hmph. At least this one is on time."],
     gary: ["In my day the bins stayed shut.", "Hmph. A fish bone. Proper sword, that."],
+    planes: ["In my day we threw the whole printout.", "Hmph. That one flew true."],
+    pizza: ["Hmph. Pizza at noon. In my day, sandwiches.", "Hands off the board, whoever that was."],
+    nap: ["A nap is a respectable thing.", "Hmph. I am not asleep. I am resting my eyes."],
   },
   lonnrot: {
     drill: ["A drill — or is it? I shall observe the exits.", "Note who leaves first. It is telling."],
@@ -232,6 +241,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["Darkness. Convenient for someone.", "The lamps went out together. I have marked the time."],
     duck: ["The duck is concealing something.", "A visitor, unexplained. I am following it."],
     gary: ["The yogurt is the motive. The lid is the alibi.", "Eyes in the gap under the lid. I shall keep my distance."],
+    planes: ["Each plane folded by the same hand. Interesting.", "The folds are identical. Someone is practising."],
+    pizza: ["The grease on the board is a signature. I will find the hand.", "Pepperoni, mushroom, and one alibi."],
+    nap: ["Eyes shut. The mind keeps working.", "Dark, quiet, and every desk watched through half-closed lids."],
   },
   yu: {
     drill: ["Is it the real one? I'll just double check.", "Sorry — which way is out, exactly?"],
@@ -240,6 +252,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["Did I save? I should have saved.", "It's fine. It's fine. Where did my work go?"],
     duck: ["Is the duck okay? Should someone check?", "Sorry — I'd like to be sure it knows the way out."],
     gary: ["Is the thing in the dumpster allowed to do that?", "Sorry — he said my yogurt. Is that my yogurt?"],
+    planes: ["Sorry, should I catch that one?", "Is anyone going to pick these up? I can."],
+    pizza: ["Sorry, is there enough pizza for everybody?", "Sorry, I may have touched the whiteboard."],
+    nap: ["Sorry, is it all right to nap? Is that allowed?", "Sorry, I will close my eyes for just a moment."],
   },
   beatriz: {
     drill: ["Drill logged. Two minutes, tops.", "I've got the headcount. Everyone's on the sheet."],
@@ -248,6 +263,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["Outage. I'll note the duration.", "Laptop at forty percent. We're fine."],
     duck: ["One duck. Tracked.", "Not on the calendar. Noted anyway."],
     gary: ["One gremlin, one sandwich at risk. Tracked.", "Slap odds are one in three. I'll note it."],
+    planes: ["Six planes tracked, one intercepted.", "Flight paths logged. Argos is two for two."],
+    pizza: ["Pizza: eight slices, ten people. Tracked.", "Whiteboard grease: one hand, location noted."],
+    nap: ["Nap scheduled: ten minutes, and the calendar agrees.", "Lights at half. Productivity impact: noted."],
   },
   nolan: {
     drill: ["The alarm! A grand entrance, darling.", "Places, everyone. This is our scene."],
@@ -256,6 +274,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["Blackout. Pure theatre. I adore it.", "Lights out — the audience gasps."],
     duck: ["A duck! A cameo, unannounced.", "The duck has presence. I'll allow it."],
     gary: ["A villain in a lid crown! Enter, stage left.", "The cape is banana peel. I am in love."],
+    planes: ["Aerial combat! Enter, stage left.", "The planes are the chorus, the dog is the hero."],
+    pizza: ["Pizza! The feast scene, and I have no lines.", "The hand on the whiteboard is the villain's mark."],
+    nap: ["The lights dim. Act three begins.", "And now, the part of the play where everyone dreams."],
   },
   emma: {
     drill: ["Out we go. I'll finish when we're back.", "Steady. Walk, don't run."],
@@ -264,6 +285,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["I'll pick it up where I left off.", "Quiet. I can finish this in the dark."],
     duck: ["Hello, duck. I have work to do.", "It'll find its own way out."],
     gary: ["I'll keep working. He can have the sandwich.", "Not looking up. If I don't look, he can't slap."],
+    planes: ["I'll keep working. Mind the planes.", "Not looking up. If I don't look, it won't hit me."],
+    pizza: ["Save me a slice, I'll eat at my desk.", "I'll wipe the board later."],
+    nap: ["Ten minutes. Then back to it.", "Heads down. Literally."],
   },
   ireneo: {
     drill: ["I remember the last drill. Every step of it.", "I recall the exits. All four."],
@@ -272,6 +296,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["I remember the previous outage, to the second.", "I recall that exact dark. It lasted four minutes."],
     duck: ["I remember this duck. It had a limp.", "I recall the duck. We exchanged nods."],
     gary: ["I remember Gary's last slap. It was left cheek.", "I recall the sock he left. It was argyle."],
+    planes: ["I remember every plane in this hall. This is number six.", "The flight path is familiar. I have seen it before."],
+    pizza: ["I recall each slice of the last pizza. This one is thinner.", "I remember the board before the grease."],
+    nap: ["I will remember this nap in its entirety.", "I never forget a dream. Tell me yours."],
   },
   daneri: {
     drill: ["An alarm for me, surely. Magnificent.", "They evacuate for genius. As is proper."],
@@ -280,6 +307,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["Even the lamps bow to my work.", "Darkness. I shall write by my own brilliance."],
     duck: ["A duck has come to witness greatness.", "It arrives, as all do, to admire the work."],
     gary: ["He wears a crown; I wear my commits. Equals.", "Slap me if you dare. The diff will outlive us both."],
+    planes: ["Paper in flight. The poem would flatter it.", "Even the sheets of paper bow to my work."],
+    pizza: ["Pizza! Even genius must eat, briefly.", "That grease is a stanza the board wrote itself."],
+    nap: ["I will nap and wake with the final stanza.", "Genius rests. The stanza arrives in sleep."],
   },
   sonny: {
     drill: ["Out we go! Fresh air is great, actually.", "Everybody smiling? Great, let's go!"],
@@ -288,6 +318,9 @@ export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly strin
     power: ["Cosy! Candlelight, everyone!", "Dark, but we've got each other."],
     duck: ["A duck! Hi, duck! Here's a flower.", "Look at him go! What a day."],
     gary: ["Gary! Hi, Gary! I'd share my yogurt!", "He's just a little guy with a fish bone. Aww."],
+    planes: ["Paper birds! Hi, paper birds!", "Look at them go! Argos looks so happy!"],
+    pizza: ["Pizza! I brought a napkin for everyone!", "Oh no, the whiteboard! I'll get a cloth."],
+    nap: ["Nap time! I'll tuck Nina in!", "Sleepy lights are the best lights."],
   },
 }
 
@@ -299,6 +332,9 @@ const GENERIC_REACT: Record<EventKind, readonly string[]> = {
   power: ["Lights are out.", "Was that me? I only pressed save.", "Candles, anyone?", "Good thing I committed."],
   duck: ["There's a duck.", "Why is there a duck?", "The duck has an opinion, I can tell.", "Nobody feed it."],
   gary: ["Something is in the dumpster.", "Is that a fish bone?", "Gary is back.", "Leave him a sandwich."],
+  planes: ["Somebody's been folding again.", "Is that my printout?", "Mind the wings.", "Argos is going to get one."],
+  pizza: ["Is that pepperoni?", "Save me a slice.", "Who ordered?", "Don't touch the whiteboard with those hands."],
+  nap: ["Ten minutes. Nobody tell the thread.", "Lights down. Good call.", "I'm not asleep. I'm reviewing.", "Wake me for the next landing."],
 }
 
 /** puns and visitors the room has with no server; the generated pool extends them (`Sim.pooled`) */

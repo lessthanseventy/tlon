@@ -50,6 +50,16 @@ const SPRITES: Partial<Record<PropKind, Sprite[]>> = {
     { rows: ["a.a.a", ".a.a."], map: { a: ROLE.key } },
     { rows: [".a.a.", "a.a.a"], map: { a: ROLE.key } },
   ],
+  paper: [
+    { rows: ["pp......", "pppp....", "kkpppppp", "pppppppp", "pp......"], map: { p: ROLE.prose, k: ROLE.fieldInk } },
+    { rows: ["........", "pp......", "pppp....", "kkpppppp", "pppppppp"], map: { p: ROLE.prose, k: ROLE.fieldInk } },
+  ],
+  pizzabox: [{ rows: ["bbbbbbbb", "brrrrrrb", "bbbbbbbb"], map: { b: ROLE.body, r: ROLE.alarm } }],
+  grease: [{ rows: [".g.g.g.", "ggggggg", "ggggggg", ".ggggg."], map: { g: ROLE.attention } }],
+  zzz: [
+    { rows: ["zzz.", "..z.", ".z..", "zzz."], map: { z: ROLE.prose } },
+    { rows: ["....", "zz..", ".z..", "zz.."], map: { z: ROLE.prose } },
+  ],
 }
 
 /** Gary's words: where they print and how big */

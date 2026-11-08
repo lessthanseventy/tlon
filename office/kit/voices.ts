@@ -67,6 +67,9 @@ export const NINA = {
   event_power: ["The dark is for sleeping. Carry on.", "Who turned off my lamps?"],
   event_duck: ["A duck. In MY hall.", "That bird has no manners. And no collar."],
   event_gary: ["A raccoon in a lid. I can see his eyes, you know.", "He wants the yogurt. I want the yogurt. We're not friends."],
+  event_planes: ["Paper. Flying. At cat height. Provocative.", "I will be watching the sky. Professionally."],
+  event_pizza: ["Cheese is a dairy product. I am dairy-adjacent.", "Somebody save the crust. For the princess."],
+  event_nap: ["Finally, someone with sense.", "A nap in the middle of the day. I approve of every one of you."],
   // a worker fussing over her
   fuss: {
     pat: ["Gentle. I'm priceless.", "Head pats are a privilege, peasant.", "prrr... you may continue."],

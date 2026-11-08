@@ -320,6 +320,9 @@ export const KEYS = [
   { id: "play.power", scope: "card:play", key: "3", label: "a power cut", mode: "page 2" },
   { id: "play.duck", scope: "card:play", key: "4", label: "a duck", mode: "page 2" },
   { id: "play.chain", scope: "card:play", key: "5", label: "a chain reaction (Gary → zoo → drill → power)", mode: "page 2" },
+  { id: "play.planes", scope: "card:play", key: "6", label: "a paper-plane storm", mode: "page 2" },
+  { id: "play.pizza", scope: "card:play", key: "7", label: "a pizza party", mode: "page 2" },
+  { id: "play.nap", scope: "card:play", key: "8", label: "a power nap", mode: "page 2" },
   { id: "play.first", scope: "card:play", key: "0", label: "◂ the first toys", mode: "page 2" },
 ] as const satisfies readonly Binding[]
 

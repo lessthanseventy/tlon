@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { EVENT_KINDS, EVENTS, blackoutAt, flickerAt, pickEvent, propsAt, type Geo } from "../kit/events"
+import { EVENT_KINDS, EVENTS, PLANE_CAUGHT, PLANE_COUNT, PLANE_GAP, blackoutAt, dimAt, flickerAt, pickEvent, planeCatch, propsAt, type Geo } from "../kit/events"
+import { KEYS } from "../tui/keys"
 import { viewOf } from "../kit/crew"
 import { DRILL } from "../kit/sim"
 import { RailRoom } from "../rooms/rail"
@@ -10,8 +11,8 @@ import { focus, measure, office, seeded } from "./golden"
 const geo: Geo = { doorX: 600, hallY: 190, ceilY: 12, leftX: 60, windowX: 200, cork: { x: 400, y: 40 } }
 
 describe("the events table", () => {
-  test("six kinds, each a bounded script whose beats fall inside it", () => {
-    expect(EVENT_KINDS).toEqual(["drill", "zoo", "meteor", "power", "duck", "gary"])
+  test("nine kinds, each a bounded script whose beats fall inside it", () => {
+    expect(EVENT_KINDS).toEqual(["drill", "zoo", "meteor", "power", "duck", "gary", "planes", "pizza", "nap"])
     for (const k of EVENT_KINDS) {
       const s = EVENTS[k]
       expect(s.ticks).toBeGreaterThanOrEqual(500)
@@ -279,5 +280,58 @@ describe("play says whether it played", () => {
     run(calm, a, 300)
     expect(calm.play("drill")).toBe(true)
     expect(calm.alarmed).toBe(true)
+  }))
+})
+
+describe("planes, pizza and the power nap", () => {
+  const kinds = (t: number, k: "planes" | "pizza", g: Geo = geo) => propsAt(k, t, g).map((p) => p.kind)
+  test("the storm sends every sheet across the hall, and the third hangs where Argos waits, then goes", () => {
+    const seen = new Set<number>()
+    for (let t = 0; t < EVENTS.planes.ticks; t++) propsAt("planes", t, geo).forEach((p) => seen.add(p.y))
+    expect(seen.size).toBeGreaterThan(PLANE_COUNT)
+    const c = planeCatch(geo), at = 30 + PLANE_CAUGHT * PLANE_GAP + 120
+    expect(propsAt("planes", at, geo).filter((p) => p.x === c.x && p.y === c.y)).toHaveLength(1)
+    expect(propsAt("planes", at + 40, geo).filter((p) => p.x === c.x && p.y === c.y)).toHaveLength(0)
+    expect(propsAt("planes", EVENTS.planes.ticks, geo)).toEqual([])
+  })
+  test("the pizza thins out box by box and leaves a handprint on the whiteboard", () => {
+    const g: Geo = { ...geo, kitchen: { x: 640, y: 157 }, board: { x: 300, y: 30 } }
+    expect(kinds(30, "pizza", g)).toEqual([])
+    expect(kinds(100, "pizza", g).filter((k) => k === "pizzabox")).toHaveLength(3)
+    expect(kinds(400, "pizza", g).filter((k) => k === "pizzabox")).toHaveLength(2)
+    expect(kinds(500, "pizza", g).filter((k) => k === "pizzabox")).toHaveLength(1)
+    expect(kinds(100, "pizza", g)).not.toContain("grease")
+    expect(kinds(400, "pizza", g)).toContain("grease")
+    expect(kinds(650, "pizza", g)).toEqual(["grease"])
+    expect(propsAt("pizza", 100, g, 3)).toEqual(propsAt("pizza", 100, g, 1))
+  })
+  test("only the nap dims the floor", () => {
+    expect(dimAt("nap", 300)).toBe(true)
+    expect(dimAt("nap", 10)).toBe(false)
+    expect(dimAt("nap", EVENTS.nap.ticks - 1)).toBe(false)
+    expect(dimAt("power", 300)).toBe(false)
+  })
+  test("the party pulls the crew to the kitchen, and the nap dims the floor and settles zzz over them", () => seeded(3, () => {
+    const r = new WideRoom(696), a = view(["w0", "w1"])
+    run(r, a, 300)
+    r.event("pizza")
+    expect(r.pizzaOn()).toBe(true)
+    run(r, a, EVENTS.pizza.ticks + 5)
+    r.event("nap")
+    run(r, a, 100)
+    expect(r.dimmed()).toBe(true)
+    expect(r.props().filter((p) => p.kind === "zzz").length).toBeGreaterThan(0)
+    run(r, a, EVENTS.nap.ticks)
+    expect(r.dimmed()).toBe(false)
+  }))
+  test("Argos goes under the hanging plane, and each new event has a card row", () => seeded(3, () => {
+    const r = new WideRoom(696), a = view(["w0"])
+    r.setClock(() => new Date(2026, 10, 9, 12))
+    run(r, a, 300)
+    expect(r.event("planes")).toBe(true)
+    const g = (r as any).eventGeo() as Geo
+    run(r, a, 400)
+    expect(Math.abs((r as any).dog.x - planeCatch(g).x)).toBeLessThan(20)
+    for (const id of ["play.planes", "play.pizza", "play.nap"]) expect(KEYS.some((b) => b.id === id)).toBe(true)
   }))
 })
