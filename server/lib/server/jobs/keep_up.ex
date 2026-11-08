@@ -47,18 +47,26 @@ defmodule Server.Jobs.KeepUp do
   Compile each mix project of `repos`' main checkouts for test, once per main tip, last in the job.
   A seat's worktree seeds its `_build` from there (`Server.Worktree`), and nothing else builds the
   main checkout for test: a stale seed made a seat's first test run compile the whole app and
-  outlast menard's tool wall (#760). In the job, not beside it, so two never compile one `_build` at
-  once (the job is unique while it runs). Bounded at 15 minutes each; a tip is marked warm only once
-  every compile passed, so a failed one is logged and tried again on the next pass; a git that won't
-  run warms nothing (the repo pass reports it).
+  outlast menard's tool wall (#760). A repo's warm holds a lock while it compiles, so a later job
+  (the job's uniqueness lapses after two minutes) skips it rather than compile one `_build` twice.
+  Each compile is bounded at 15 minutes. A tip is tried once: a failure is logged, and the next tip
+  tries again, so a red main costs one compile, not one every pass. A git that won't run warms
+  nothing (the repo pass reports it).
   """
   def warm_test_builds(repos, run \\ &System.cmd/3) do
     for repo <- repos,
         {sha, 0} <- [head(repo, run)],
         key = {__MODULE__, :warm, repo},
         :persistent_term.get(key, nil) != sha,
-        compile_for_test(repo, run) == [],
-        do: :persistent_term.put(key, sha)
+        lock = {key, self()},
+        :global.set_lock(lock, [node()], 0) do
+      try do
+        compile_for_test(repo, run)
+        :persistent_term.put(key, sha)
+      after
+        :global.del_lock(lock, [node()])
+      end
+    end
 
     :ok
   end
@@ -334,7 +342,8 @@ defmodule Server.Jobs.KeepUp do
   end
 
   defp compile(dir, run) do
-    run.("timeout", ["900", "mise", "exec", "--", "mix", "compile"],
+    # timeout wraps mix itself, so on expiry it signals the compiling VM, not only mise
+    run.("mise", ["exec", "--", "timeout", "900", "mix", "compile"],
       cd: dir,
       env: [{"MIX_ENV", "test"}],
       stderr_to_stdout: true
