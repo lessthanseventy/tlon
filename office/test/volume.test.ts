@@ -18,17 +18,18 @@ const room = () => { const r = new WideRoom(696); return { r, i: r as unknown as
 const run = (r: WideRoom, a: ReturnType<typeof withBook>, n: number) => { for (let k = 0; k < n; k++) r.step(a) }
 
 describe("pickErrand", () => {
-  const all = { dark: true, working: true, cat: true, dog: true }
+  const all = { dark: true, working: true, cat: true, dog: true, hire: true }
   test("never the last one; a nap only after dark; nobody to read over, no shoulder; no pets, no pets", () => {
     for (let r = 0; r < 1; r += 0.01) {
       expect(pickErrand(r, "cork", all)).not.toBe("cork")
       expect(pickErrand(r, null, { ...all, dark: false })).not.toBe("nap")
       expect(pickErrand(r, null, { ...all, working: false })).not.toBe("shoulder")
-      expect(["nina", "argos"]).not.toContain(pickErrand(r, null, { ...all, cat: false, dog: false }))
+      expect(["nina", "argos", "hat"]).not.toContain(pickErrand(r, null, { ...all, cat: false, dog: false }))
+      expect(pickErrand(r, null, { ...all, hire: false })).not.toBe("hire")
     }
   })
   test("every pastime has its lines, and its tip says what it is up to", () => {
-    for (const k of ["shoulder", "cork", "shelf", "mirror", "nap", "nina", "argos", "window", "tv", "clock", "lap", "erratum"] as const) {
+    for (const k of ["shoulder", "cork", "shelf", "mirror", "nap", "nina", "argos", "window", "tv", "clock", "lap", "erratum", "hall", "hire", "hat"] as const) {
       expect(UQBAR[k].length).toBeGreaterThan(0)
       expect(doing({ kind: k, path: [], dwell: 0, arrived: null })).toBeTruthy()
     }
@@ -86,6 +87,28 @@ describe("the book's day", () => {
     expect(i.erratumUntil).toBeGreaterThan(i.tick)
     expect(UQBAR.erratum).toContain(i.bookSaid?.text as never)
     expect(r.render(a, focus, measure, NOW).hits.find((h) => h.tip?.startsWith("Uqbar"))?.tip).toContain("failing")
+  }))
+  test("the hallway and the hat: it flies to each and says its line; the hat is for Argos", () => seeded(3, () => {
+    for (const kind of ["hall", "hat"] as const) {
+      const { r, i } = room(), a = withBook()
+      run(r, a, 80)
+      i.errand = i.errandFor(a, kind)
+      for (let k = 0; k < 800 && i.errand?.arrived == null; k++) r.step(a)
+      expect(UQBAR[kind]).toContain(i.bookSaid?.text as never)
+    }
+  }))
+  test("a new hire: the book goes to look them over, once, and says their name", () => seeded(3, () => {
+    const { r, i } = room(), a = withBook()
+    run(r, a, 80)
+    const hire = { workspace_id: 1, seat_id: 99, agent_id: 99, name: "w9", archetype: "builder", lead: false, model: null, ask: null }
+    const raw = office(4)
+    const more = viewOf({ ...raw, bench: [...raw.bench, hire], roster: [...raw.roster, { agent: "uqbar", thread_id: 999, title: "Uqbar's study", warm: true, thinking: false, workspace_id: 1 }, { agent: "w9", thread_id: 998, title: "t9", warm: false, thinking: false, workspace_id: 1 }] }, 1)
+    run(r, more, 5)
+    i.errand = i.errandFor(more, "hire")
+    expect(i.errand.name).toBe("w9")
+    for (let k = 0; k < 800 && i.errand?.arrived == null; k++) r.step(more)
+    expect(i.bookSaid?.text).toContain("w9")
+    expect(r.render(more, focus, measure, NOW).hits.find((h) => h.tip?.startsWith("Uqbar"))?.tip).toContain("w9")
   }))
   test("reading over a shoulder: it hovers over someone mid-turn, open, and the tip names them", () => seeded(3, () => {
     const { r, i } = room(), a = withBook()
