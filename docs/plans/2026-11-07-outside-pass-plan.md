@@ -635,6 +635,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   on the sink, a cue lined up); `Voice.at: Partial<Record<Pastime, string[]>>` so a line matches the
   place.
 - Check: `draw.test.ts` renders each pose; the golden frames re-hashed on purpose.
+- Done: seven poses in `drawActors` and `Voice.at` (the plain builder's seven places, Scharlach's own pool and vending); `seatLine` takes the place `Sim.onTogether` was asked about and uses it half the time (`draw.test.ts`). Left: the golden frames did not move (no actor stands at a pastime in them), so none were re-hashed; aquarium, pet and bathroom are not places `Sim.together` pairs people at, so their `at` lines wait for a solo mutter.
 
 **F7 · The home's missing tiles and presets.** `Sonnet · M`
 - Why: `CATALOGUE` in `kit/home.ts` has six kinds; the design lists gym, hall, pond, balcony,

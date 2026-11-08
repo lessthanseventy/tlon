@@ -573,7 +573,7 @@ async function chatter() {
   room().onTogether = (situation, a, b) => !banter ? undefined : void (dials.souls ? data.talk(here, situation, a, b) : Promise.resolve([])).then((turns) => {
     const said = turns.length ? turns : [a, b].map((who) => {
       const recent = recentBanter.get(who) ?? []
-      const line = seatLine(who, recent)
+      const line = seatLine(who, recent, situation)
       recentBanter.set(who, [line, ...recent].slice(0, 8))
       return { who, line }
     })

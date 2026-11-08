@@ -6,6 +6,7 @@
 
 import type { EventKind } from "./events"
 import type { Guest } from "./door"
+import type { Pastime } from "./sim"
 import { diaryEntries, soulFor, spoken } from "./souls"
 import { pick, pickFresh } from "./voices"
 
@@ -13,8 +14,8 @@ import { pick, pickFresh } from "./voices"
 export const SEATS = ["scharlach", "tertius", "hronir", "lonnrot", "yu", "beatriz", "nolan", "emma", "ireneo", "daneri", "sonny"] as const
 export type SeatName = (typeof SEATS)[number]
 
-/** a seat's voice: `banter` is what it mutters in the room */
-export type Voice = { banter: readonly string[]; /** what a seat says after losing a game to a rival */ sore: readonly string[] }
+/** a seat's voice: `banter` is what it mutters in the room, `at` what suits a place (a seat with no line for one says the plain-spoken builder's) */
+export type Voice = { banter: readonly string[]; /** what a seat says after losing a game to a rival */ sore: readonly string[]; at?: Partial<Record<Pastime, readonly string[]>> }
 
 export const SEAT_VOICE: Record<string, Voice> = {
   // the Dwight: crisp and slightly too formal; enforces the rules and enjoys it too much
@@ -30,6 +31,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "That match will be struck from the record.",
       "I am filing a complaint about the table.",
     ],
+    at: {
+      pool: ["The cue ball has been logged.", "Corner pocket. For the record."],
+      vending: ["I am entitled to one snack per shift.", "The machine owes me a refund. Noted."],
+    },
   },
   // dry, unflappable, has seen it all
   tertius: {
@@ -177,16 +182,28 @@ export const SEAT_VOICE: Record<string, Voice> = {
 const GENERIC: Voice = {
   banter: ["Done. Moving on.", "That's built. Next.", "Right, that's sorted.", "Shipped it. On to the next."],
   sore: ["Lost. Again, then.", "That table is rigged."],
+  at: {
+    aquarium: ["The blue one is staring at me.", "Tap the glass once. For luck."],
+    chat: ["Anyway, as I was saying.", "No, you go on. I'm listening."],
+    pet: ["Who's a good one? You are.", "Five minutes with the cat. Doctor's orders."],
+    vending: ["Come on, drop, drop, drop.", "Exact change, and it still hesitates."],
+    foosball: ["Spin it! Don't spin it!", "Goalie's asleep, I swear."],
+    pool: ["Corner pocket. Watch this.", "Lining it up. Nobody breathe."],
+    bathroom: ["Quick wash and back to it.", "Mirror says I look tired. Rude."],
+  },
 }
 
 const ONE_IN_TEN = [true, ...Array<boolean>(9).fill(false)]
+const ONE_IN_TWO = [true, false]
 
 /** a pick that skips what was said lately, while anything else is left to say; now and then a line of the seat's own diary */
-export const seatLine = (name: string, recent: readonly string[]): string => {
+export const seatLine = (name: string, recent: readonly string[], place?: string): string => {
   const soul = soulFor(name)
   const diary = (soul ? diaryEntries(soul) : []).map(spoken).filter((l) => !recent.includes(l))
   if (diary.length && pick(ONE_IN_TEN)) return pick(diary)
-  return pickFresh((SEAT_VOICE[name] ?? GENERIC).banter, recent)
+  const voice = SEAT_VOICE[name] ?? GENERIC
+  const here = place ? voice.at?.[place as Pastime] ?? GENERIC.at?.[place as Pastime] : undefined
+  return pickFresh(here?.length && pick(ONE_IN_TWO) ? here : voice.banter, recent)
 }
 
 /** what a seat says after losing a game to a rival */
