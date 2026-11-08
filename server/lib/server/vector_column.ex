@@ -1,8 +1,9 @@
 defmodule Server.VectorColumn do
   @moduledoc """
-  An Ecto type for an embedding vector: a list of floats in Elixir, a JSON array in SQLite TEXT
-  (stdlib `JSON`). The sibling of `Server.JSONColumn` for the one thing that column can't hold — a
-  bare list. Used for `fact.embedding`; it is read for cosine at recall, never SQL-queried.
+  An Ecto type for an embedding vector: a list of floats in Elixir, a JSON array in a Postgres text
+  column (stdlib `JSON`). The sibling of `Server.JSONColumn` for the one thing that column can't
+  hold, a bare list. Used for `fact.embedding` and `message.embedding`; recall reads fact vectors
+  through `Server.Recall.Vectors`, never SQL-queried.
   """
   use Ecto.Type
 
