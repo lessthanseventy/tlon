@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { killServer } from "./kill-server"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // The cast editor (the god view) drives the real TUI against a stub server with two seats on the
 // bench, its config dir a throwaway one so nothing reaches the operator's files.
@@ -117,7 +118,7 @@ test("- lets the lit seat go, after asking: n sends nothing, y the DELETE", asyn
   keys("-")
   await until("the unseat ask", () => screen().includes("let ada go") && screen().includes("(y/n)"))
   keys("n")
-  await Bun.sleep(400)
+  await waitFor(screen, (s) => !s.includes("(y/n)"), "the ask answered")
   expect(writes).toEqual([])
   keys("-")
   await until("the unseat ask again", () => screen().includes("(y/n)"))

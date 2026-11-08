@@ -70,10 +70,8 @@ test("enter folds a group open in place; a ticket opens; o opens the group's car
 }, TUI_TEST)
 
 test("the tree's card does not claim a who sort: tickets carry no owner", async () => {
-  const office = join(import.meta.dir, "..")
-  tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
+  keys("C-]")
+  await until("the room", () => !screen().includes("EPIC #10") && !screen().includes("TICKETS ·"))
   keys("t")
   await until("the tickets column", () => screen().includes("TICKETS ·"))
   keys("s")

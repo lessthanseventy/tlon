@@ -757,6 +757,18 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   `worktree_test.exs:620` (retire/2 drops the test database), which passed on its retry and on the second
   run; it creates and drops databases through psql and shares nothing with the three flipped files, but
   its cause is not found.
+- Done (step 3, office): `office/test/wait-for.ts` is `waitFor(screen, want, what, budget)` (text, pattern or
+  a test of the screen, failing with the pane); it replaces the fixed sleeps that have something on the
+  screen to wait for (`reply-box`, `room-key`, `margin-tip`, `persona-reroll`, `cast-view`), and
+  `column-tree` shares its one TUI between its two tests (ctrl-] to the room between them). `office:test`
+  before: 972 pass, 329 s at load 21; after: 972 pass, 200 s at load 10 (the load differs, so the gain
+  is not all the change's). Left: the sleeps with nothing on the screen to wait for stay (`navigation`'s
+  300/250 ms after esc, `cast-view`'s 600 ms for a file that must stay unchanged, `reply-box`'s 1500 ms
+  focus-poll baseline, `terminal`'s 200 ms for a placeholder that must not appear, `tree-reorder`'s 150
+  ms per cursor step); the ~25 file-local `until` copies still poll on their own (moving them to
+  `waitFor` is a mechanical follow-up); `rack-card`, `reply-box` and `terminal` boot per test because
+  each test changes what the server answers or needs a clean first paint; the `--no-animate` flag is
+  not done, `office/tui/main.ts` being PR #818's.
 
 **G8 · 59 GB of worktrees — mostly `du` double-counting; the sweep's one real gap.** `Sonnet · S`
 - Why: `du` counts every checkout's `server/deps` (1.9 GB) and `_build` in full, but

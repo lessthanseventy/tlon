@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // The first motion onto a margin note both lights it and shows its tip: one motion event, no
 // second one at the same cell needed. Drives the real TUI against a stub server with one note.
@@ -36,6 +37,6 @@ test("one motion onto a note shows its tip", async () => {
   await started(tmux, "the note in the margin", () => screen().includes("#42"))
   const lines = screen().split("\n"), row = lines.findIndex((l) => l.includes("#42")), col = lines[row]!.indexOf("#42")
   tmux("send-keys", "-t", "0", "-l", `\x1b[<35;${col + 2};${row + 1}M`)
-  await Bun.sleep(600)
+  await waitFor(screen, "enter opens #42", "the note's tip")
   expect(screen()).toContain("enter opens #42")
 }, TUI_TEST)

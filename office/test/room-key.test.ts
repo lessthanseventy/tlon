@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // Ctrl-] is the room — the room with nothing open over it — from a card, a focused reply box, the
 // finder and the reader. Drives the real TUI against a stub server; it never posts.
@@ -67,7 +68,7 @@ test("ctrl-] goes to the room from a reply box, a card, the finder and the reade
   await room("the reply box")
   await card()
   tmux("send-keys", "-t", "0", "Escape")
-  await Bun.sleep(300)
+  await waitFor(screen, (s) => !s.includes("esc leave the box"), "the box left")
   await room("the card")
   tmux("send-keys", "-t", "0", "/")
   await until("the finder", () => screen().includes("FIND"))

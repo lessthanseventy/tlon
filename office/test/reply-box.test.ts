@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { killServer } from "./kill-server"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // A thread card opens with its reply box focused: typing lands in it and Enter posts it; the first
 // Esc leaves the box (the card's keys work again), the second goes back. Drives the real TUI
@@ -69,7 +70,7 @@ test("a thread card opens with its reply box focused; esc leaves the box, esc ag
   await until("the reply posted", () => posts.length === 1)
   expect(posts).toEqual([{ path: "/api/threads/9/messages", body: { body: "on my way" } }])
   tmux("send-keys", "-t", "0", "Escape")
-  await Bun.sleep(300)
+  await waitFor(screen, (s) => !s.includes("esc leave the box"), "the box left")
   tmux("send-keys", "-t", "0", "z")
   await until("z looking over their shoulder", () => screen().includes("#9 has no live terminal"))
   expect(screen()).toContain("THREAD #9")
@@ -89,7 +90,7 @@ test("a thread with an open prompt opens with the box unfocused: 1 answers at on
   tmux("send-keys", "-t", "0", "Right", "Right", "Right")
   await until("the build column", () => screen().includes("BUILD · "))
   tmux("send-keys", "-t", "0", "Down")
-  await Bun.sleep(300)
+  await waitFor(screen, (s) => s.split("\n").some((l) => l.includes("▸") && l.includes("the pipe question")), "the cursor on the prompt's thread")
   tmux("send-keys", "-t", "0", "Enter")
   await until("the prompt's card", () => screen().includes("THREAD #10"))
   tmux("send-keys", "-t", "0", "1")
@@ -98,7 +99,7 @@ test("a thread with an open prompt opens with the box unfocused: 1 answers at on
   tmux("send-keys", "-t", "0", "/")
   await until("the finder", () => screen().includes("FIND"))
   tmux("send-keys", "-t", "0", "-l", "pipe question")
-  await Bun.sleep(300)
+  await waitFor(screen, (s) => s.includes("FIND") && s.includes("the pipe question"), "the thread in the finder")
   tmux("send-keys", "-t", "0", "Enter")
   await until("the reader on the prompt", () => screen().includes("replace the pipe?") && screen().includes("r or enter to write"))
   tmux("send-keys", "-t", "0", "1")
@@ -116,7 +117,7 @@ test("a thread another surface asks to show opens with the box unfocused: it nev
   await Bun.sleep(1500)
   focusAt = Date.now()
   await until("the reader on #9", () => screen().includes("the sink is fixed"))
-  await Bun.sleep(300)
+  await waitFor(screen, "r or enter to write")
   expect(screen()).toContain("r or enter to write")
   expect(screen()).not.toContain("esc leave the box")
 }, TUI_TEST)
