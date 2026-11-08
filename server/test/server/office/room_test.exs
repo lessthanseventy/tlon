@@ -268,6 +268,13 @@ defmodule Server.Office.RoomTest do
     assert id == ctx.t.id
   end
 
+  test "health reads the box through the minute-old vitals, never forking df itself" do
+    on_exit(fn -> :ets.delete(Room, :vitals) end)
+    :ets.insert(Room, {:vitals, System.monotonic_time(:millisecond), %{tmux: true, disk_pct: 101, mem_pct: 1}})
+
+    assert %{disk_pct: 101, mem_pct: 1, tmux: true} = Room.health()
+  end
+
   test "vitals: a reading serves the next minute from the table, a read past it refreshes" do
     on_exit(fn -> :ets.delete(Room, :vitals) end)
     now = System.monotonic_time(:millisecond)

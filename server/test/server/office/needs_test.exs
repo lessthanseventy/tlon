@@ -904,6 +904,10 @@ defmodule Server.Office.NeedsTest do
       assert [%{kind: "stalled", thread_id: id}] = Needs.list()
       assert id == quiet.id
       assert [_] = for({:git, args} <- self() |> Process.info(:messages) |> elem(1), do: args)
+
+      # the next poll within the minute reads the held tips
+      assert [%{kind: "stalled"}] = Needs.list()
+      assert [_] = for({:git, args} <- self() |> Process.info(:messages) |> elem(1), do: args)
     end
 
     test "under pencils down nothing is stalled: the operator stopped it", %{ws: ws} do
