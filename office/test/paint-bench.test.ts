@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test"
 import { PNG } from "pngjs"
 import type { Frame } from "../kit/canvas"
 import * as pngmod from "../tui/png"
-import { kittyImage } from "../tui/paint"
+import { inkInto, kittyImage } from "../tui/paint"
 
 const W = 320, H = 200
 function frame(seed: number): Frame {
@@ -46,4 +46,13 @@ test("the encoded PNG decodes to the same pixels", () => {
   const back = PNG.sync.read(pngmod.png(w, h, rgba))
   expect([back.width, back.height]).toEqual([w, h])
   expect(new Uint8Array(back.data)).toEqual(rgba)
+})
+
+test("labels: inking 300 labels over unchanged art", () => {
+  const w = W * 3, h = H * 3, art = new Uint8Array(w * h * 4)
+  for (let p = 0; p < w * h; p++) { art[p * 4] = (p >> 7) & 255; art[p * 4 + 1] = (p >> 9) & 255; art[p * 4 + 2] = 90; art[p * 4 + 3] = 255 }
+  const ink: Frame["ink"] = Array.from({ length: 300 }, (_, n) => ({ t: "text" as const, s: `label ${n}`, x: 5 + (n % 6) * 50, y: 12 + Math.floor(n / 6) * 3.5, color: n % 2 ? "#ffffff" : "#334455", size: 10, align: "left" as const }))
+  let best = Infinity
+  for (let i = 0; i < 30; i++) { const big = art.slice(), t0 = performance.now(); inkInto(big, w, h, ink, 3, 1); best = Math.min(best, performance.now() - t0) }
+  console.log(`label-bench: ${best.toFixed(1)} ms per frame (best of 30), 300 labels`)
 })

@@ -295,6 +295,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: cache the decision by (text, colour, position, underlying-region hash) until the region's
   art changes.
 - Check: `wcag.test.ts` unchanged; the paint bench's ms per frame drops.
+- Left: not built. `test/paint-bench.test.ts` times `inkInto` over 300 labels at 3×: about 4 ms a frame, all of it the backing scans plus the glyph writes. A label box is a fixed ~1.5k px whatever `k` is (text size follows `textScale`, not `k`), so hashing the region under each costs as much as scanning it; a region-hash cache measured no faster. Reopen if a room ever carries labels in the thousands.
 
 **C5 · Timers ignore focus.** `Sonnet · S`
 - Why: `tui/main.ts` polls `data.focus()` every 1 s, stat-checks seven followed files every 1 s,
