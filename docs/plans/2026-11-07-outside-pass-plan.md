@@ -660,6 +660,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   read, 10 planes caught, a week of green nights — shown on a card and as a shelf object; a
   "secrets: 0/3" row in the sandbox for the eggs.
 - Check: `trophies.test.ts`; the card.
+- Done: `kit/trophies.ts` (pure tallies and the five trophies; `office-trophies` in the state dir, the sandbox's own under its config) fed by the TUI from the banter log (balloons), Argos's caught planes, `Sim.treats`, the drill's alarm and the sheriff's triage (a night from 20:00 with no red, consecutive); the finder's "trophies" card lists them with `secrets: n/3` (konami, a Babel find, the 404/π clock); each win is a cup on the lounge bookshelf (`WideRoom.setTrophies`, up to five). Left: balloons count lines the log heard, not balloons the operator looked at; not watched live (no sandbox drive).
 
 **F10 · A day has a shape.** `Sonnet · S`
 - Why: `moment(kind, hour, …)` weights spots by hour but nothing marks lunch or home time; seasons
