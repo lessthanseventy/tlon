@@ -6,7 +6,8 @@
 import type { Frame, Measure } from "../kit/canvas"
 import { drawActors, drawCat, drawParty, isPicked, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, execDesk } from "../kit/furniture"
-import { boardColumns, isManager, needsYou, peopleOf, seating, STATE_GLYPH, stickyItems, tipOf, type Act } from "../kit/crew"
+import { hitFor, seatPlan, whiteboardItems } from "../kit/board"
+import { needsYou, tipOf, type Act } from "../kit/crew"
 import { ROLE, tint } from "../kit/palette"
 import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
 import { BIG_PLANT, COFFEE, COOLER, SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -37,10 +38,8 @@ const EXEC_X = 56, CREW_BOARD = { x: 58, w: 28 }, MANAGER_X = 88, EXEC_W = 42, L
  */
 function layout(a: Agents) {
   const desks: Desk[] = [{ x: 11, y: 42, w: BOSS_W, kind: "boss" }]
-  const people = peopleOf(a)
-  const managers = people.filter((p) => isManager(a, p)), workers = people.filter((p) => !isManager(a, p))
-  if (managers[0]) desks.push({ x: MANAGER_X, y: FLOOR, w: EXEC_W, kind: "manager", seat: managers[0] })
-  const { lead, grunts } = seating(a, workers)
+  const { people, manager, lead, grunts } = seatPlan(a)
+  if (manager) desks.push({ x: MANAGER_X, y: FLOOR, w: EXEC_W, kind: "manager", seat: manager })
   if (lead) desks.push({ x: LEAD_X, y: FLOOR + ROW_H, w: EXEC_W, kind: "lead", seat: lead })
   const chairs: Chair[] = []
   TABLES_X.forEach((tx, t) => {
@@ -166,16 +165,14 @@ export class RailRoom extends Sim<Layout> {
     blit(["kk.aa.ll"], 100, 30, { k: ROLE.key, a: ROLE.alarm, l: ROLE.live })
     type Sticky = { tip: string; act: Act; colour: string; mark?: string; blink?: boolean }
     // a header opens the column it is named for
-    const folded = boardColumns(a, focus.board)
-    const cols: Sticky[][] = folded.map((col, c) => c === 0 ? stickyItems(a).map((s): Sticky => ({ tip: s.text, act: s.act, colour: ROLE.prose })) : col.items.map((it): Sticky => {
-      const id = it.act.kind === "thread" ? it.act.tid : 0
-      const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""
-      return { tip: `#${id} ${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act, colour: it.who ? shirtOf(it.archetype) : ROLE.inactive, mark: it.stage === "doing" ? ROLE.assistant : undefined, blink: it.asks }
-    }))
+    const folded = whiteboardItems(a, focus.board)
+    const cols: Sticky[][] = folded.map((col, c) => col.items.map((it): Sticky => ({
+      ...hitFor(it), colour: c === 0 ? ROLE.prose : it.who ? shirtOf(it.archetype) : ROLE.inactive, mark: it.stage === "doing" ? ROLE.assistant : undefined, blink: it.asks,
+    })))
     cols.forEach((list, c) => {
       const x0 = 5 + c * COL_W
       if (c) px(x0 - 2, 4, 1, 25, ROLE.edge)
-      text(`${folded[c]!.name} ${folded[c]!.items.length}`, x0 + 9, 10, ROLE.key, 10)
+      text(`${folded[c]!.name} ${folded[c]!.count}`, x0 + 9, 10, ROLE.key, 10)
       // the header opens the column as a list, where the titles have room
       hits.push({ x: x0 - 1, y: 3, w: COL_W, h: 8, tip: `${folded[c]!.name.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
       const shown = c === 0 ? [...list.slice(0, PER_COL - 1), null] : list.slice(0, PER_COL)

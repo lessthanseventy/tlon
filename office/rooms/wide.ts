@@ -16,7 +16,8 @@ import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
 import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
 import { ARRIVE, LEAVE, drawAleph, gone, STEP as ALEPH_STEP, type Visit } from "../kit/aleph"
-import { boardColumns, COLS, isManager, peopleOf, seating, STATE_GLYPH, stickyItems, weekTrend, type BoardCtx, type BoardItem, type CardState } from "../kit/crew"
+import { hitFor, idOf, seatPlan, whiteboardItems } from "../kit/board"
+import { COLS, weekTrend, type BoardCtx, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawCloset, drawFire, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
 import { type Pets, ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
@@ -100,10 +101,8 @@ export function layoutFor(z: Zones) {
   const memo = new WeakMap<Agents, ReturnType<typeof build>>()
   const build = (a: Agents) => {
     const desks: Desk[] = [{ x: 24, y: 56, w: 52, kind: "boss" }]
-    const people = peopleOf(a)
-    const managers = people.filter((p) => isManager(a, p)), workers = people.filter((p) => !isManager(a, p))
-    if (managers[0]) desks.push({ x: z.F0 + CREW_W + 12, y: EXEC_Y, w: EXEC_W, kind: "manager", seat: managers[0] })
-    const { lead, grunts } = seating(a, workers)
+    const { people, manager, lead, grunts } = seatPlan(a)
+    if (manager) desks.push({ x: z.F0 + CREW_W + 12, y: EXEC_Y, w: EXEC_W, kind: "manager", seat: manager })
     if (lead) desks.push({ x: z.F0 + CREW_W + EXEC_W + 16, y: EXEC_Y, w: EXEC_W, kind: "lead", seat: lead })
     const chairs: Chair[] = []
     TABLE_YS.forEach((ty, t) => {
@@ -800,23 +799,22 @@ export class WideRoom extends Sim<Layout> {
     const { px } = { px: sc.px.bind(sc) }
     this.cards.clear(); this.boardEdge = { x: x1 - 24, y: 1 }
     px(x0 - 1, 2, x1 - x0 + 2, 39, ROLE.structure); px(x0, 3, x1 - x0, 36, ROLE.ground); px(x0, 39, x1 - x0, 2, ROLE.borderInactive)
-    const cols = boardColumns(a, ctx), colW = (x1 - x0) / cols.length
+    const cols = whiteboardItems(a, ctx), colW = (x1 - x0) / cols.length
     cols.forEach((col, c) => {
       const cx = x0 + c * colW
       if (c) px(Math.round(cx), 4, 1, 34, ROLE.edge)
       // a line at least a cell row tall: the mouse reports whole cells, so two lines in one row can't both be hovered
       const lh = Math.max(measure.lineHeight?.(9) ?? 6, measure.rowHeight ?? 0)
-      const trend = c === 0 ? weekTrend(a) : "", full = `${COLS[c]} ${col.items.length} ${trend}`
-      const head = trend && measure(full, 10) <= colW - 4 ? full : `${COLS[c]} ${col.items.length}`
+      const trend = c === 0 ? weekTrend(a) : "", full = `${COLS[c]} ${col.count} ${trend}`
+      const head = trend && measure(full, 10) <= colW - 4 ? full : `${COLS[c]} ${col.count}`
       sc.text(head, cx + 3, 3 + lh - 0.5, ROLE.key, measure(head, 10) <= colW - 4 ? 10 : 9, "left")
       sc.hits.push({ x: cx, y: 3, w: colW, h: lh + 1, tip: `${COLS[c]!.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
-      // the TICKETS column is stickies of its groups and loose tickets; the header still counts tickets
-      const list = c === 0 ? stickyItems(a).map((s): BoardItem => ({ act: s.act, title: s.text, who: null, stage: "", asks: false, archetype: null, high: false })) : col.items
+      const list = col.items
       // as many lines as fit at the surface's text size; the rest are a "+n more" (and the column's list)
       const room = Math.max(1, Math.floor((38 - 3 - lh) / lh)), shown = list.slice(0, list.length > room ? room - 1 : room)
       shown.forEach((it, i) => {
         const y = 3 + lh * (i + 2)
-        const id = it.act.kind === "ticket" || it.act.kind === "epic" ? it.act.id : it.act.kind === "thread" ? it.act.tid : 0
+        const id = idOf(it.act)
         const colour = it.asks ? (sc.f % 2 ? ROLE.attention : ROLE.prose) : it.act.kind === "ticket" || it.act.kind === "epic" ? (it.routed ? ROLE.meta : ROLE.prose) : it.who ? shirtOf(it.archetype) : ROLE.inactive
         if (it.state) sc.blit(STATE_ICON[it.state.kind], cx + 3, y - 4, { k: colour })
         else px(cx + 3, y - 3, 2, 2, colour)
@@ -824,8 +822,7 @@ export class WideRoom extends Sim<Layout> {
         if (it.stage === "doing") px(cx + 1, y - 4, 1, 3, ROLE.assistant)
         if (it.act.kind === "thread") this.cards.set(it.act.tid, { x: cx + colW - 13, y: y - 8 })
         sc.text(fit(measure, `${it.act.kind === "column" ? "" : `#${id} `}${it.title}`, colW - 9, 9), cx + 7, y, colour, 9, "left")
-        const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""
-        sc.hits.push({ x: cx + 1, y: y - lh + 1, w: colW - 2, h: lh, tip: `${it.act.kind === "column" ? "" : `#${id} `}${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act })
+        sc.hits.push({ x: cx + 1, y: y - lh + 1, w: colW - 2, h: lh, ...hitFor(it) })
       })
       // the blank board under the last line opens the column too; pushed after the lines, since the first hit wins
       const below = 3 + lh * (shown.length + 1) + 1
