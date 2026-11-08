@@ -206,3 +206,18 @@ describe("company: the soul steers who pairs up", () => {
     expect(trace()).toEqual(bare)
   })
 })
+
+describe("tick cost", () => {
+  test("ticks on one snapshot share its layout, and a new snapshot gets its own", () => {
+    const room = new WideRoom(696)
+    const plan = (room as unknown as { plan: { layout: (a: unknown) => unknown } }).plan
+    const a = viewOf(office(), 1)
+    const first = plan.layout(a)
+    const t0 = performance.now()
+    for (let i = 0; i < 2000; i++) room.step(a)
+    const ms = performance.now() - t0
+    console.log(`sim-bench: ${(2000 / ms).toFixed(2)} ticks per ms`)
+    expect(plan.layout(a)).toBe(first)
+    expect(plan.layout(viewOf(office(), 1))).not.toBe(first)
+  })
+})

@@ -97,7 +97,8 @@ export type Chair = { x: number; table: number; agent: string | null }
 export const seatX = (d: Desk) => d.x + Math.round(d.w / 2)
 
 export function layoutFor(z: Zones) {
-  return (a: Agents) => {
+  const memo = new WeakMap<Agents, ReturnType<typeof build>>()
+  const build = (a: Agents) => {
     const desks: Desk[] = [{ x: 24, y: 56, w: 52, kind: "boss" }]
     const people = peopleOf(a)
     const managers = people.filter((p) => isManager(a, p)), workers = people.filter((p) => !isManager(a, p))
@@ -110,6 +111,8 @@ export function layoutFor(z: Zones) {
     })
     return { desks, chairs, people }
   }
+  // a snapshot is replaced, never edited, so its layout is built once however many ticks read it
+  return (a: Agents) => { let l = memo.get(a); if (!l) memo.set(a, (l = build(a))); return l }
 }
 export type Layout = ReturnType<ReturnType<typeof layoutFor>>
 

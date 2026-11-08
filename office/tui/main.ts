@@ -343,7 +343,11 @@ const looks = new Looks(Number(readState(LOOKED)) || 0)
 let focused = true, lit: number | null = null
 const stampLooked = () => { looks.lookedAt = Math.floor(Date.now() / 1000); writeState(LOOKED, String(looks.lookedAt)) }
 
-const view = () => viewOf(all, ws)
+let viewed: { all: Agents; ws: number | null; v: Agents } | null = null
+const view = () => {
+  if (viewed?.all !== all || viewed.ws !== ws) viewed = { all, ws, v: viewOf(all, ws) }
+  return viewed.v
+}
 const crewOn = () => all.workspaces.find((w) => w.id === ws)?.shift ?? ""
 /** the crew after the one on, in name order; null with fewer than two crews */
 const nextCrew = () => { const cs = crewsOf(ws); return cs.length > 1 ? next(cs, crewOn()) : null }
