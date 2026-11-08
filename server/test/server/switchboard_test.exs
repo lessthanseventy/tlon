@@ -648,8 +648,9 @@ defmodule Server.SwitchboardTest do
 
     test "a lead whose ONLY session is cold is ROTATED — a fresh pane is spawned, not left stranded" do
       # A cold session is too stale to cheaply resume, so posting to it rotates
-      # in a fresh, dossier-seeded session rather than reviving a huge context or stranding. The cold session is superseded when the fresh agent connects (Staff.start_session's
-      # zombie guard), so no double-spawn survives — the spawn IS the retirement.
+      # in a fresh, dossier-seeded session rather than reviving a huge context or stranding. The cold
+      # session is superseded when the fresh agent connects (Staff.start_session's zombie guard), so no
+      # double-spawn survives — the spawn IS the retirement.
       {:ok, thread} = Channel.open_thread(%{title: "cold but attended"})
       {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
       {:ok, _} = Staff.assign(thread, carl)
