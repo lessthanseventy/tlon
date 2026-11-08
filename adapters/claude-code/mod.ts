@@ -24,7 +24,7 @@ import {
 } from "./lib/capture.ts";
 import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
 import { seatGlyph, seatStatus } from "./lib/status.ts";
-import { attribution, bandParts, figureCells, gateOf, landedAlerts, landingsOf, mentionsOf, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.ts";
+import { attribution, bandParts, figureCells, gateOf, landedAlerts, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.ts";
 import { CHIME_WAV } from "./lib/chime.ts";
 
 // Below this much new transcript a turn's capture waits for the next turn instead of paying for
@@ -60,6 +60,7 @@ let mainCheckout = "";
 let onOllama = false;
 let dossier: Dossier | null = null;
 let dossierAt = 0;
+let glanceAt = 0;
 let dossierError = "";
 let glance: Glance | null = null;
 let figure: Figure | null = null;
@@ -195,7 +196,9 @@ async function refreshGlance($) {
     const got = (await call($, "office_glance")) as Glance;
     if (!got || !Array.isArray(got.red) || !Array.isArray(got.crew)) return;
     glance = got;
+    glanceAt = await $.clock.now();
   } catch {
+    $.ui.invalidate("ui.render"); // the band reads its own age
     return;
   }
   try {
@@ -808,6 +811,7 @@ export function register(on) {
     } else {
       left = bandParts(thread, dossier, glance?.red.length ?? 0);
     }
+    const offline = operator ? null : offlineNote(await $.clock.now(), Math.max(dossierAt, glanceAt), GLANCE_MS);
     return Box({
       flexDirection: "column",
       children: [
@@ -815,7 +819,7 @@ export function register(on) {
           flexDirection: "row",
           justifyContent: "space-between",
           children: [
-            Text({ wrap: "truncate-end", children: [left.join(" · ")] }),
+            Text({ wrap: "truncate-end", children: offline ? [left.join(" · "), Text({ dimColor: true, children: [` · ${offline}`] })] : [left.join(" · ")] }),
             Text({ dimColor: true, children: [`${operator ? "operator" : author} · ${meters.join(" · ")}`] }),
           ],
         }),

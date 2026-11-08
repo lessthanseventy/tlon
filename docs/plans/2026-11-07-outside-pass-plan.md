@@ -343,6 +343,7 @@ snapshot on 304. `Sonnet · S`, after B1.
 - Change: append "· offline Ns" (dimmed) when the last good dossier or glance is older than the
   poll interval ×3.
 - Check: `citizen.test.ts` with a stale `dossierAt`.
+- Done: `offlineNote` (citizen.ts) reads the newer of `dossierAt` and a new `glanceAt`; the seat's band appends it dimmed, and a failed glance poll now redraws so the age shows.
 
 **D7 · The skills are stale in five places.** `Haiku · S`
 - Why: `bank-what-you-learn` says "a dedicated question type is coming" (`raise_question` exists)
