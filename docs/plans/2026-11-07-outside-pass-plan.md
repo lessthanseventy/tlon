@@ -164,6 +164,11 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   thread, the latest message per thread (`Staffing.parked_notes/1`), the threads refused twice,
   when each workline last moved, the benches and each repo root. (a) and (b) are dropped until a
   measurement after release says the snapshot still costs too much; (c)–(e) stay open.
+- Done 2026-11-08, (c) and (d): `Room.health/0` reads tmux, disk and memory through the minute-old
+  `vitals/0` (it forked `df` on every snapshot beside a cache the needs list already used), and
+  `Needs`' `work_tips/1` holds each root's `for-each-ref` for 60 s (a stall is hours old). Left:
+  (e) — `NeedsPage.run/0` still derives every need each minute to find the new ones; a fingerprint
+  would need the same pass, so it waits for a cheaper `Needs.list/0` or a bus event per kind.
 
 **B2 · N+1 queries on the hot passes.** `Sonnet · M`
 - Why (read, not profiled): `Office.tickets/2` calls `Tickets.epic_of/1` and `thread_of/1` per open

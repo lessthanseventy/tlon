@@ -173,19 +173,17 @@ defmodule Server.Office.Room do
     failed_jobs = if db, do: Repo.aggregate(Server.Office.Needs.failed_jobs_query(), :count)
     checks = checks()
 
-    h = %{
-      version: to_string(Application.spec(:server, :vsn)),
-      up_s: :wall_clock |> :erlang.statistics() |> elem(0) |> div(1000),
-      db: db,
-      jobs: Application.get_env(:server, :start_oban, false),
-      failed_jobs: failed_jobs || 0,
-      tmux: System.find_executable("tmux") != nil,
-      disk_pct: disk_pct(),
-      mem_pct: mem_pct(),
-      load: load(),
-      checks: checks,
-      merge_queue: if(db, do: merge_queue(checks), else: [])
-    }
+    h =
+      Map.merge(vitals(), %{
+        version: to_string(Application.spec(:server, :vsn)),
+        up_s: :wall_clock |> :erlang.statistics() |> elem(0) |> div(1000),
+        db: db,
+        jobs: Application.get_env(:server, :start_oban, false),
+        failed_jobs: failed_jobs || 0,
+        load: load(),
+        checks: checks,
+        merge_queue: if(db, do: merge_queue(checks), else: [])
+      })
 
     problems = problems(h)
     Map.merge(h, %{state: if(problems == [], do: "ok", else: "warn"), problems: problems})

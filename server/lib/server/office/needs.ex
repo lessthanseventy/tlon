@@ -119,6 +119,7 @@ defmodule Server.Office.Needs do
   @machine_hours 24
   @landing_grace_s 3600
   @holds_ttl_s 300
+  @tips_hold_s 60
   @phone ~w(gate question dialog ask seats quota no_seat tool_denied)
   @machine ~w(mention rollout)
   @clipboard ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed health stranded)
@@ -961,7 +962,23 @@ defmodule Server.Office.Needs do
   defp latest(stamps), do: stamps |> Enum.reject(&is_nil/1) |> Enum.max(DateTime)
 
   # every work/<slug> tip's commit time in `root`, by slug: one git call per refresh, not one per workline
+  # read at most once a minute per root: the needs list asks on every poll, and a stall is hours old
   defp work_tips(root) do
+    key = {__MODULE__, :work_tips, root}
+    now = System.monotonic_time(:second)
+
+    case :persistent_term.get(key, nil) do
+      {tips, at} when now - at < @tips_hold_s ->
+        tips
+
+      _ ->
+        tips = read_work_tips(root)
+        :persistent_term.put(key, {tips, now})
+        tips
+    end
+  end
+
+  defp read_work_tips(root) do
     git = Application.get_env(:server, :git_cmd, &System.cmd/3)
     args = ["-C", root, "for-each-ref", "--format=%(refname:lstrip=3) %(committerdate:iso-strict)", "refs/heads/work/"]
 
