@@ -305,6 +305,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: gate each `every(...)` on `focused` with a 30–60 s unfocused cadence; `fs.watch` or one
   merged stat for the files; async `Bun.spawn` with a 30 s backoff after a non-zero exit.
 - Check: a test that drives focus off and counts timer firings over 5 s.
+- Done: `tui/pace.ts paced` runs a timer body every tick focused and once per 30 s unfocused (the focus request: 5 s, since another surface asks the TUI to show a thread); on it the refresh, the followed-file stats, the focus poll, the activity poll and `pollPlayer`, which is now async `Bun.spawn` and waits 30 s after a failed run; the phone shake, note fade and pet/store preview draw only when focused. Test: `test/pace.test.ts` counts firings over a fake clock. Left: `fs.watch` for the seven followed files (the stats are one per second focused, one per 30 s not).
 
 **C6 · `draw()` rebuilds header, card rows and pane at room-frame rate.** `Sonnet · M`
 - Why: each 10 Hz frame re-renders the whole room *and* `detail()` and `drawPane`.

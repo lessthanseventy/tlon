@@ -27,6 +27,7 @@ import { mailbox } from "../kit/mailbox"
 import { clipLabel, inboxSections, phoneBar, ringFrame } from "../kit/surfaces"
 import { soulFor, useSouls } from "../kit/souls"
 import { personCard } from "./person-card"
+import { paced } from "./pace"
 import { loadSouls, soulsSignature } from "./souls"
 import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
@@ -40,7 +41,7 @@ import { CAST_FIELDS, castRows, nextTrait, rerollTrait } from "./cast"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, storeNamesTaken, toggleLock as storeToggle, type Store } from "../kit/store"
 import { adoptAsk, stepStoreRow, storeRows } from "./store"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
-import { NOW_PLAYING_FORMAT, parseNowPlaying } from "../kit/stereo"
+import { NOW_PLAYING_FORMAT, parseNowPlaying, type NowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
@@ -913,6 +914,8 @@ const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== o
 // every interval this process runs, so a relaunch can stop them all
 const timers: ReturnType<typeof setInterval>[] = []
 const every = (fn: () => unknown, ms: number) => { timers.push(setInterval(fn, ms)) }
+/** a timer that, with the terminal unfocused, runs once per `idleMs` instead of every `ms` */
+const everyFocused = (fn: () => unknown, ms: number, idleMs = 30_000) => every(paced(() => focused, idleMs, fn), ms)
 
 async function relaunch() {
   leave()
@@ -1080,16 +1083,21 @@ const cols = () => process.stdout.columns ?? 80
  * (`tui/timeline.ts`, from the thread view's `activity`) — `c` flips, ⏎ steps into the session itself.
  */
 const talkView = new Set<number>()
-/** playerctl, polled every ~2s: feeds the wide room's stereo marquee + dance trigger */
-function pollPlayer() {
-  const rm = room()
-  if (!(rm instanceof WideRoom)) return
+/** playerctl, polled every ~2s: feeds the wide room's stereo marquee + dance trigger; a failed run (no player) waits 30 s */
+let playerBusy = false, playerRetry = 0
+async function pollPlayer() {
+  if (playerBusy || Date.now() < playerRetry || !(room() instanceof WideRoom)) return
+  playerBusy = true
+  let now: NowPlaying | null = null
   try {
-    const r = Bun.spawnSync(["playerctl", "metadata", "--format", NOW_PLAYING_FORMAT])
-    rm.setPlayer(r.exitCode === 0 ? parseNowPlaying(r.stdout.toString()) : null)
-  } catch {
-    rm.setPlayer(null)
-  }
+    const p = Bun.spawn(["playerctl", "metadata", "--format", NOW_PLAYING_FORMAT], { stdout: "pipe", stderr: "ignore" })
+    const out = await new Response(p.stdout).text()
+    if ((await p.exited) === 0) now = parseNowPlaying(out)
+  } catch { /* no playerctl */ }
+  playerBusy = false
+  if (!now) playerRetry = Date.now() + 30_000
+  const rm = room()
+  if (rm instanceof WideRoom) rm.setPlayer(now)
 }
 /** refresh a thread's close look; true when its activity feed moved */
 async function pollActivity(tid: number) {
@@ -2803,26 +2811,26 @@ async function main() {
     query(); setTimeout(() => { layoutScreen(); draw() }, 150)
   })
   await refresh()
-  every(refresh, 10_000)
-  every(pollPlayer, 2000)
+  everyFocused(refresh, 10_000)
+  everyFocused(pollPlayer, 2000)
   let sec = 0
-  every(() => { looks.tick(1); if (focused && ++sec % 5 === 0) stampLooked(); if (!reader && !zoom && notes.some((n) => { const a = looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
-  every(() => { if ((mode.kind === "pet" && petDraft) || mode.kind === "store") { previewTick += 10; draw() } }, 1000)
-  every(() => { if (bySurface.counts.phone > 0) draw() }, 1000) // the phone rings: its glyph shakes once a second
-  every(() => { if (followPalette() || followLooks() || followSouls() || followPets() || followHall() || followStore() || followCast()) { frame = null; draw() } }, 1000)
+  every(() => { looks.tick(1); if (focused && ++sec % 5 === 0) stampLooked(); if (focused && !reader && !zoom && notes.some((n) => { const a = looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
+  every(() => { if (focused && ((mode.kind === "pet" && petDraft) || mode.kind === "store")) { previewTick += 10; draw() } }, 1000)
+  every(() => { if (focused && bySurface.counts.phone > 0) draw() }, 1000) // the phone rings: its glyph shakes once a second
+  everyFocused(() => { if (followPalette() || followLooks() || followSouls() || followPets() || followHall() || followStore() || followCast()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
   let seenFocus = (await data.focus())?.at ?? 0
-  every(async () => {
+  everyFocused(async () => {
     const f = await data.focus()
     if (!f || f.at <= seenFocus) return
     seenFocus = f.at
     if (zoom) leaveZoom()
     goThread(f.thread_id, threadOf(f.thread_id)?.workspace_id)
     openReader(f.thread_id, {}, false)
-  }, 1000)
+  }, 1000, 5000)
   // a card showing a running coworker keeps their activity current
-  every(() => {
+  everyFocused(() => {
     const tid = openThread()
     if (tid !== null && !zoom && !reader && threadOf(tid)?.live && !talkView.has(tid)) void pollActivity(tid).then((moved) => { if (moved) draw() })
   }, 1000)
