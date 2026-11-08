@@ -4,7 +4,7 @@ defmodule Server.Import.ClaudeSessions do
   prompt an operator message, each turn's last text reply a `claude-code` message, backdated to
   when it was said. The conversations that built Tlön become its searchable history
   (`search_history`) and, through the memory pass, its facts. The parser also reads pi's format
-  (a `session` header, `message` entries); `Server.Import.PiSessions` points it at `~/.pi`.
+  (a `session` header, `message` entries).
 
   History never wakes anyone: rows go in directly (no `Channel.post`, no Bus), delivered, on a
   closed and unstaffed thread. Idempotent per session: the thread's first message is a `tlon`
@@ -168,8 +168,7 @@ defmodule Server.Import.ClaudeSessions do
   def import_dir(dir, workspace_id), do: dir |> Path.expand() |> Path.join("*/*.jsonl") |> import_glob(workspace_id)
 
   @doc """
-  `import_dir/2` over every transcript a glob (or list of globs) matches, Claude Code's or pi's
-  (`Server.Import.PiSessions`).
+  `import_dir/2` over every transcript a glob (or list of globs) matches.
   """
   def import_glob(glob, workspace_id) do
     # every workspace's projects: an excessibility session belongs to the workspace that holds excessibility

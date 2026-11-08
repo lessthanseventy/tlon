@@ -726,6 +726,15 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   handles it (one of them is wrong — check, then fix the loser); `office/AGENTS.md` has paragraphs
   over 1,500 characters on one line (split per area under `office/docs/`, AGENTS.md as the index).
   `limit` (AGENTS.md).
+- Done: `adapters/{consult,footer,pi,reload}/` do not exist in a clean checkout (only the live one's untracked
+  leftovers; nothing to delete in git). `claude-code/plan/` is kept: `launch.sh` loads it for a Claude-plan seat
+  and the claude-code README names it; `adapters/AGENTS.md` now says why it is a mod of its own.
+  `server:import-pi` and `Server.Import.PiSessions` (with its test) are deleted, the pi mentions in the
+  `check:names` and server task text are gone. `vector_column.ex` already says Postgres. `config.exs`'s
+  comments sit above what they describe. The design's status row was the wrong one (home tiles are placed at
+  their cells, with a street and doors): fixed there. `office/AGENTS.md` is an index; the three long area
+  bullets moved verbatim to `office/docs/{kit,rooms,tui}.md` (the glossary gate scans them).
+  Left: `ClaudeSessions` still parses pi's transcript format; the live checkout's untracked adapter dirs.
 
 **G6 · The check's shape.** `Sonnet · M · limit (the check)`
 - Why: `check:names` runs nine scripts serially with `&&` (the release-smoke and checks-queue tests

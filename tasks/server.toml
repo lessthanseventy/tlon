@@ -42,7 +42,7 @@ dir = "server"
 run = "mix server.promote_fact"
 
 # Boot server with its sovereign channel on, loopback-only, against the scratch db — so
-# a hand-spawned pi pane has something to register with. `Server.MCP.Spawn.env("title",
+# a hand-spawned pane has something to register with. `Server.MCP.Spawn.env("title",
 # "Agent")` in the iex it drops you into prints the export TLON_* block to paste into the pane.
 ["server:serve"]
 description = "server: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
@@ -80,7 +80,7 @@ run = "journalctl --user -u tlon -n 80 -f"
 # a token minted anywhere else dies with its node, and roster/presence is in-memory
 # there. Thin and deliberate — operate access, NOT a second UI (the office is the rich surface).
 ["server:spawn"]
-description = "server: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane"
+description = "server: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pane"
 run = "scripts/tlon-cli.sh spawn"
 
 ["server:ledger"]
@@ -119,10 +119,6 @@ run = "scripts/tlon-cli.sh post"
 ["server:import-claude"]
 description = "server: import Claude Code's transcripts (~/.claude/projects) as closed, searchable threads on the LIVE service — idempotent per session"
 run = ".release/server/_build/prod/rel/server/bin/server rpc 'IO.inspect(Server.Import.ClaudeSessions.import_dir(\"~/.claude/projects\", Server.Bootstrap.default_workspace_id()))'"
-
-["server:import-pi"]
-description = "server: import pi's transcripts (~/.pi/agent + coworker profiles) as closed, searchable threads on the LIVE service — idempotent per session"
-run = ".release/server/_build/prod/rel/server/bin/server rpc 'IO.inspect(Server.Import.PiSessions.import_dir(\"~/.pi\", Server.Bootstrap.default_workspace_id()))'"
 
 # Launch Claude Code as a citizen of a server thread. No arg → a fresh thread; a numeric thread-id →
 # JOIN it (resume across a /clear). Scopes the `tlon` MCP server (fresh token per
@@ -196,9 +192,9 @@ env = { MIX_ENV = "prod" }
 run = "mise exec zig@0.16.0 -- mix release tlon --overwrite"
 
 # The seams no compiler covers: a script calling a module that no longer exists, a mise task a
-# guide names but mise.toml lost, a pi config file the adapter reads but the flake stopped writing.
+# guide names but mise.toml lost.
 ["check:names"]
-description = "names-exist gate: every Server.* module, mix task, mise task and ~/.pi/agent file the glue names must exist, docs/glossary.md holds, scratch.sh prune keeps exactly the unlanded work, record-ran.sh reports a hand-run gate, checks-queue.sh runs waiters first come first served, and release-smoke.sh builds one at a time machine-wide and names a Postgres pool failure, tmux-sweep.sh removes only the dead sockets (grep, a temp repo, temp runtime and tmux dirs, offline, fast)"
+description = "names-exist gate: every Server.* module, mix task and mise task the glue names must exist, docs/glossary.md holds, scratch.sh prune keeps exactly the unlanded work, record-ran.sh reports a hand-run gate, checks-queue.sh runs waiters first come first served, and release-smoke.sh builds one at a time machine-wide and names a Postgres pool failure, tmux-sweep.sh removes only the dead sockets (grep, a temp repo, temp runtime and tmux dirs, offline, fast)"
 run = "scripts/check-names.sh && scripts/check-glossary.test.sh && scripts/scratch.test.sh && scripts/record-ran.test.sh && scripts/checks-queue.test.sh && scripts/release-smoke.test.sh && scripts/bwrap-argc.test.sh && scripts/office-drive.test.sh && scripts/tmux-sweep.test.sh && scripts/tlon-cli.test.sh"
 
 ["check:ignored"]
