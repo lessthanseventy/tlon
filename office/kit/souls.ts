@@ -50,3 +50,10 @@ export function spoken(entry: string): string {
   const t = entry.replace(/^[A-Za-z]{3,9}\.? \d{1,2}:\s*/, "")
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
+
+/** a corkboard note's label: a side-project note says which step of its author's project it is, counted over the notes on the board (the server keeps the newest few) */
+export function corkLabel(cork: readonly { id: number; author: string; kind: string }[], n: { id: number; author: string; kind: string }): string {
+  if (n.kind !== "side project") return n.kind
+  const step = cork.filter((c) => c.kind === n.kind && c.author === n.author && c.id <= n.id).length
+  return `side project ${step}`
+}

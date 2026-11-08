@@ -3,8 +3,11 @@ import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { seatLine, SEAT_VOICE } from "../kit/seat-voices"
-import { SOUL_SECTIONS, diaryEntries, parseSoul, soulLines, spoken, soulFor, soulNote, soulsGen, useSouls } from "../kit/souls"
+import { SOUL_SECTIONS, corkLabel, diaryEntries, parseSoul, soulLines, spoken, soulFor, soulNote, soulsGen, useSouls } from "../kit/souls"
 import { loadSouls, soulsSignature } from "../tui/souls"
+import { viewOf } from "../kit/crew"
+import { WideRoom } from "../rooms/wide"
+import { office } from "./golden"
 
 const FIXTURE = await Bun.file(join(import.meta.dir, "fixtures/daneri.md")).text()
 
@@ -118,5 +121,24 @@ describe("the diary speaks", () => {
   test("a seat without a diary never quotes", () => {
     useSouls({ hronir: parseSoul("## Wants\nw") })
     expect(Array.from({ length: 200 }, () => seatLine("hronir", [])).every((l) => SEAT_VOICE.hronir!.banter.includes(l))).toBe(true)
+  })
+})
+
+describe("side projects on the corkboard", () => {
+  const note = (id: number, author: string, kind: string) => ({ id, author, kind, body: `n${id}`, re: null, at: id })
+  const board = [note(9, "daneri", "side project"), note(7, "ashe", "side project"), note(5, "daneri", "joke"), note(3, "daneri", "side project")]
+  test("each side-project note says which step of its author's project it is, over the notes on the board", () => {
+    expect(corkLabel(board, board[3]!)).toBe("side project 1")
+    expect(corkLabel(board, board[0]!)).toBe("side project 2")
+    expect(corkLabel(board, board[1]!)).toBe("side project 1")
+  })
+  test("any other note is just its kind", () => expect(corkLabel(board, board[2]!)).toBe("joke"))
+  test("after two days the board's tips for Daneri's poem name stanzas 1 and 2", () => {
+    const r = new WideRoom(696)
+    r.pinboard(board.map((n) => ({ ...n, kind: n.kind as never })))
+    const fr = r.render(viewOf(office(2), 1), { picked: null, person: null }, (s) => s.length * 2, new Date(2026, 9, 5, 15, 0))
+    const tips = fr.hits.map((h) => h.tip ?? "")
+    expect(tips.some((t) => t.startsWith("daneri (side project 2): n9"))).toBe(true)
+    expect(tips.some((t) => t.startsWith("daneri (side project 1): n3"))).toBe(true)
   })
 })

@@ -536,6 +536,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   `Server.Office.Corkboard` (the server already writes corkboard chatter), state kept so the poem's
   stanza count grows.
 - Check: after two days the corkboard shows two stanzas; `corkboard_test`.
+- Done: the server half was already built (`Server.Office.Corkboard` writes a daily `side project` note per seat from its soul, state on the standing thread; `corkboard_test`); the client now knows the kind: its own sticky tone and dog-ear, and `corkLabel` (`kit/souls.ts`) names the step ("daneri (side project 2): ...") in the tips and the list. Left: the step is counted over the notes still on the board (the server keeps the newest twelve), so it restarts when old ones scroll off; the exact `n` the server stores ("side project, number n") would need a field on the pinned note (server change, not started).
 
 **F2 · The diary speaks.** `Sonnet · S`
 - Why: souls step 5 writes a weekly diary (`Server.Soul`) and the client parses the section

@@ -26,7 +26,7 @@ import { CELL, OFFICE_ROWS, defaultHome, drop, move, pickUp, place, remove, rota
 import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
 import { clipLabel, inboxSections, phoneBar, ringFrame } from "../kit/surfaces"
-import { soulFor, useSouls } from "../kit/souls"
+import { corkLabel, soulFor, useSouls } from "../kit/souls"
 import { personCard } from "./person-card"
 import { loadSouls, soulsSignature } from "./souls"
 import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
@@ -1539,7 +1539,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const who = (name: string) => ({ s: `${name}: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
       const rows: Row[] = a.notes.map((n) => ({ segs: [who(n.author), plain(n.body.replace(/\s+/g, " "))] }))
       // the crew's chatter, apart from the notes they work from (their suggestions go in the box)
-      if (cork.length) rows.push({ segs: [key(`CORKBOARD · ${cork.length} — the crew's notes to each other`)] }, ...cork.map((n): Row => ({ segs: [dim(`${n.kind.padEnd(10)} `), who(n.author), plain(n.body), dim(n.re ? `  (re #${n.re})` : "")], ref: n })))
+      if (cork.length) rows.push({ segs: [key(`CORKBOARD · ${cork.length} — the crew's notes to each other`)] }, ...cork.map((n): Row => ({ segs: [dim(`${corkLabel(cork, n).padEnd(10)} `), who(n.author), plain(n.body), dim(n.re ? `  (re #${n.re})` : "")], ref: n })))
       return { title: `NOTES · ${a.notes.length}`, rows, actions: [{ ...bind("notes.n"), run: newNote }, back1] }
     }
     case "tray": {
