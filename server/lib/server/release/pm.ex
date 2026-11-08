@@ -515,9 +515,15 @@ defmodule Server.Release.PM do
 
         {:restart, why} ->
           notice(workspace_id, "release #{short(sha)} needs a restart: #{why}")
-          restart.("release #{short(sha)}")
+
+          ask_restart(restart, workspace_id, sha)
       end
     end
+  end
+
+  defp ask_restart(restart, workspace_id, sha) do
+    with {:error, why} <- restart.("release #{short(sha)}"),
+         do: notice(workspace_id, "release #{short(sha)} is cut, but its restart was refused: #{why}")
   end
 
   defp run(script, root, sha) do

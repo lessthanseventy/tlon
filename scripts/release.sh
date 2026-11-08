@@ -127,6 +127,7 @@ case "$cmd" in
     esac
     if answer="$(curl -s -m 5 -X POST -H 'content-type: application/json' -d '{}' "$url/api/restart")" && [ -n "$answer" ]; then
       echo "restart: $answer"
+      case "$answer" in *'"error"'*) exit 1 ;; esac
     else
       echo "restart: the server didn't answer — restarting it now"
       TLON_RESTART_WHY="release ${to:0:7}" "$root/scripts/server-restart.sh" --force
