@@ -3,7 +3,7 @@ defmodule Server.HarnessTest do
   The harness and its driver contract: every coworker runs in Claude Code, a non-Anthropic model
   through Claude Code's gateway (`adapters/claude-code/gateway.sh`).
   """
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias Server.Harness
   alias Server.Profile

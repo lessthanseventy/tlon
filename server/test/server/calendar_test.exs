@@ -1,7 +1,7 @@
 defmodule Server.CalendarTest do
   # The configured feeds, fetched in the background and kept: what's coming up is answered from
   # the last good copy of each, tagged with the calendar it came from.
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias Server.Calendar
 

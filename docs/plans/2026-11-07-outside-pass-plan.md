@@ -704,6 +704,18 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   load, not the tests: by `--slowest`, `needs_test`'s three slowest went 3.5 s, 2.4 s, 1.3 s to 1.2 s,
   0.8 s, 0.7 s. The knobs `:attention_settle_ms` and `:grader_retry_ms` were already set to 0 where the
   tests need them (`config/test.exs`, `attention_test`, `gateway_test`).
+- Done (step 2, async): the suite has no SQL sandbox (`test_helper.exs` makes one shared database and
+  `Server.TestDB.clean!/0` truncates it), so a test that reads or writes it cannot be async: that is the
+  finding for the 153. Of the 153, three touch no shared state at all (a private tmp dir and subprocesses,
+  or an instance under its own name) and are flipped: `calendar_test`, `commits_test`, `harness_test`.
+  `bus_test` (the global PubSub firehose), `focus_test` (a global Agent), `release_test` (migrates the
+  shared database) and `hot_load_test` (a global compiler option) look pure and are not. Whole server
+  suite, both runs green: 14:47 before (2712 tests) -> 12:15 and 10:43 after (steps 1 and 2 together,
+  at load 16-28 with other suites on the box, so the wall times are loose). Left: a dozen needs a
+  per-test sandbox (or a database per async module) first; Open: the first run's `flaky` retry of
+  `worktree_test.exs:620` (retire/2 drops the test database), which passed on its retry and on the second
+  run; it creates and drops databases through psql and shares nothing with the three flipped files, but
+  its cause is not found.
 
 **G8 · 59 GB of worktrees — mostly `du` double-counting; the sweep's one real gap.** `Sonnet · S`
 - Why: `du` counts every checkout's `server/deps` (1.9 GB) and `_build` in full, but
