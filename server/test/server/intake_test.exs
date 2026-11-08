@@ -121,6 +121,33 @@ defmodule Server.IntakeTest do
     refute_received {:routed, _}
   end
 
+  test "a held todo ticket holds no slot: nothing will move it (#851)", %{ws: ws, route: route} do
+    held = file(ws, "host-side work")
+    {:ok, _} = Tickets.update(held, %{status: "todo", labels: ["held"]})
+    next = file(ws, "waiting")
+
+    Intake.run(cap: 1, route: route)
+    assert_received {:routed, id}
+    assert id == next.id
+  end
+
+  test "a review ticket goes at the cap, ahead of the rank: it opens no workline", %{ws: ws, route: route} do
+    _urgent = file(ws, "urgent", "high")
+    {:ok, review} = Tickets.file(%{workspace_id: ws.id, title: "review PR #9", priority: "low", labels: ["review"]})
+
+    {:ok, _} =
+      Server.Workline.open(%{title: "busy", slug: "busy-#{System.unique_integer([:positive])}", workspace_id: ws.id})
+
+    Intake.run(cap: 1, route: route)
+    assert_received {:routed, id}
+    assert id == review.id
+    refute_received {:routed, _}
+
+    {:ok, _} = Tickets.update(review, %{status: "todo"})
+    Intake.run(cap: 2, route: route)
+    assert_received {:routed, _}
+  end
+
   test "a workline waiting on the operator does not hold a slot — work goes on while gates queue", %{
     ws: ws,
     route: route
