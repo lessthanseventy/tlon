@@ -23,7 +23,7 @@ defmodule Server.CmdTest do
   end
 
   test "Git.cmd and Git.run are git -C repo, stderr in the answer" do
-    repo = Path.join(System.tmp_dir!(), "cmd-test-#{System.unique_integer([:positive])}")
+    repo = Path.join(System.tmp_dir!(), "cmd-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(repo)
     on_exit(fn -> File.rm_rf!(repo) end)
     {_, 0} = Cmd.run("git", ["init", "-q", repo])

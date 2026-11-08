@@ -611,11 +611,12 @@ defmodule Server.Worktree do
       opts = Keyword.take(Server.Repo.config(), [:socket_dir, :hostname, :port, :username, :password])
 
       # Postgrex reconnects in the background: bound connect and query so a down Postgres fails in seconds,
-      # not the 15 s default; DROP ... FORCE still needs room to finish.
+      # not the 15 s default. DROP DATABASE waits for a checkpoint, tens of seconds on a loaded box, so
+      # its wall is the long one.
       {:ok, conn} = Postgrex.start_link([database: "postgres", pool_size: 1, connect_timeout: 3_000] ++ opts)
 
       try do
-        Postgrex.query!(conn, ~s|DROP DATABASE IF EXISTS "#{db}" WITH (FORCE)|, [], timeout: 10_000)
+        Postgrex.query!(conn, ~s|DROP DATABASE IF EXISTS "#{db}" WITH (FORCE)|, [], timeout: 60_000)
       after
         GenServer.stop(conn)
       end
