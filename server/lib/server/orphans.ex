@@ -51,6 +51,7 @@ defmodule Server.Orphans do
     force = Keyword.get(opts, :force, &sigkill/1)
     notify = Keyword.get(opts, :notify, &post_notice(thread_id, &1))
     pids = holders(thread_id, author, opts)
+    named = Enum.map_join(pids, ", ", &"#{&1} #{command(&1, opts)}")
 
     for pid <- pids do
       Logger.warning("retiring an earlier session of #{author} on ##{thread_id} (pid #{pid})")
@@ -65,7 +66,7 @@ defmodule Server.Orphans do
         force.(pid)
       end
 
-      notify.(notice(author, pids, stuck))
+      notify.(notice(author, pids, named, stuck))
     end
 
     length(pids)
@@ -82,8 +83,17 @@ defmodule Server.Orphans do
     end
   end
 
-  defp notice(author, pids, stuck) do
-    "retired #{length(pids)} earlier session(s) of #{author} still holding this seat (pid #{Enum.join(pids, ", ")})" <>
+  # Read before the signal: a dead process has no comm, and the command is what says which part of a
+  # seat's process tree outlived its window.
+  defp command(pid, opts) do
+    case File.read(Path.join([Keyword.get(opts, :proc_dir, "/proc"), Integer.to_string(pid), "comm"])) do
+      {:ok, comm} -> String.trim(comm)
+      _ -> "?"
+    end
+  end
+
+  defp notice(author, pids, named, stuck) do
+    "retired #{length(pids)} process(es) of #{author} still holding this seat (pid #{named})" <>
       if(stuck == [], do: "", else: "; SIGKILL for the ones that ignored SIGTERM (pid #{Enum.join(stuck, ", ")})")
   end
 

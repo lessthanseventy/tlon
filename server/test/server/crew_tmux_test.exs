@@ -98,7 +98,7 @@ defmodule Server.Crew.TmuxTest do
     assert {:ok, _} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
     assert_received {:retired, 4242}
     assert_received {:forced, 4242}
-    assert Enum.any?(Channel.thread_messages(t), &(&1.author == "tlon" and &1.body =~ "retired 1 earlier session"))
+    assert Enum.any?(Channel.thread_messages(t), &(&1.author == "tlon" and &1.body =~ "retired 1 process(es)"))
   end
 
   test "a role whose window is already open is not spawned again, and nothing holding its seat is signalled",

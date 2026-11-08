@@ -65,6 +65,14 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   seat per day rather than per spawn.
 - Check: the notice count in 7 days under 10; `select count(*) from session where ended_at is null`
   matches the roster.
+- Read 2026-11-08: the notice has not fired since 2026-11-03 20:40, zero in the five days since, so
+  the count check holds without a throttle. Every notice was on a workline thread, and its 2 to 8
+  pids were one seat's process tree (every child inherits `TLON_THREAD`/`TLON_AUTHOR`), not that
+  many sessions. It stopped the evening seats began running without the operator's worktrunk plugin
+  (79609d7), whose hooks write `.git/config` on each prompt and stop; that its hook processes were
+  the survivors is likely, not shown, because the notice named only pids. Done: the notice counts
+  processes and names each one's command (`pid 101 claude, 105 wt`), so a recurrence says what
+  outlived its window. Open: two `session` rows open with no pane (tertius on t1, uqbar on t269).
 
 **A5 · 464 junk `gate` rows in `schedule_run`.** `Sonnet · S`
 - Why: `schedule_run` holds 464 failed + 29 ok rows with `check_name='gate'`, no schedule and no
@@ -396,6 +404,7 @@ snapshot on 304. `Sonnet · S`, after B1.
   made (fact 6233) and the PR exists.
 - Change: review and land #746; then the memory rule `uqbar-sends-back` applies.
 - Check: `mise run land -- 746`; a gate with a named fix goes back to build from Uqbar's session.
+- Done: #746 merged 2026-11-01 (67fc126) and is in the live release.
 
 **E6 · The high-priority open tickets, routed as a batch.** The pipeline's own bugs, each already a
 ticket; this plan only orders them: #851 (cap), #793 (verdict silent; E1), #614 (tertius with no
