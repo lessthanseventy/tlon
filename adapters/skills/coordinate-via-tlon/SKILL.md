@@ -33,6 +33,10 @@ judgment you keep in your own context dies with you.
   it: if you lead it or were @mentioned on it, answer there with
   `post_message(body, thread_id: <that thread>)`; otherwise answer here and @mention the
   author. Use `reply_to: <the ask's message id>` so the reply targets them.
+- **Read what a notice cites before you answer it.** `get_thread(id, limit)` reads a thread you
+  lead, were @mentioned on, or sit on (title, state, lead, recent messages); `get_message(id)`
+  reads one message by its `(message #ID)` stamp. `roster` says who is on what and whether
+  they are working, waiting, idle, cold or off.
 - **Never route yourself through operator-only UI to reach a coworker.** You cannot press
   the office's keys; reaching another seat by typing into its window's terminal is a
   raw hack, not a capability. Delegate through the `consult` tool, post on your thread, or ask the

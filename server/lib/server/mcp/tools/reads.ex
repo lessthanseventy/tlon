@@ -78,6 +78,87 @@ defmodule Server.MCP.Tool.GetMessages do
   end
 end
 
+defmodule Server.MCP.Tool.GetThread do
+  @moduledoc """
+  A thread's title, state, lead and recent messages, by id — the read behind a notice that cites
+  `#N`. The caller's own thread, or one it may post on (`Server.MCP.Tool.may_post?/2`: it steers
+  it, or was @mentioned on it); any other is refused. Read-only.
+  """
+  use Server.MCP.Tool
+
+  alias Server.Channel
+  alias Server.MCP
+  alias Server.Thread
+
+  schema do
+    field :id, :integer, required: true, description: "The thread id, as a notice cites it (#N)"
+    field :limit, :integer, default: 20
+  end
+
+  @impl true
+  def execute(params, frame) do
+    identity = Identity.from_frame(frame)
+
+    case Channel.thread(params.id) do
+      nil ->
+        fail(frame, "no such thread: #{params.id}")
+
+      %Thread{} = thread ->
+        if thread.id == identity.thread_id or Server.MCP.Tool.may_post?(thread, identity) do
+          ok(frame, %{
+            "id" => thread.id,
+            "title" => thread.title,
+            "state" => thread.state,
+            "stage" => thread.stage,
+            "lead" => Channel.thread_lead(thread.id),
+            "messages" =>
+              thread |> Channel.recent_messages(params[:limit] || 20) |> Enum.map(&MCP.Brief.brief_message/1)
+          })
+        else
+          fail(
+            frame,
+            "#{identity.agent} may not read thread ##{thread.id}: only its lead, a thread above it, the manager or someone @mentioned on it. get_message(id) reads one cited message."
+          )
+        end
+    end
+  end
+end
+
+defmodule Server.MCP.Tool.Roster do
+  @moduledoc """
+  Who is on what in the caller's workspace: each live seat's agent, thread, status
+  (working, waiting, idle, cold, off — `Server.Coworker.status/1`) and what it is doing.
+  """
+  use Server.MCP.Tool
+
+  schema do
+  end
+
+  @impl true
+  def execute(_params, frame) do
+    identity = Identity.from_frame(frame)
+
+    case Server.MCP.Tool.workspace_of(identity) do
+      nil ->
+        fail(frame, "no workspace bound to this session")
+
+      workspace_id ->
+        ok(
+          frame,
+          for row <- Server.Office.roster(workspace_id) do
+            %{
+              "agent" => row.agent,
+              "thread_id" => row.thread_id,
+              "title" => row.title,
+              "status" => row.status,
+              "doing" => row.doing
+            }
+          end
+        )
+    end
+  end
+end
+
 defmodule Server.MCP.Tool.GetMessage do
   @moduledoc """
   One message by id, cross-thread — the verification read behind a delivered notice's
