@@ -10,9 +10,9 @@ defmodule Server.Jobs.Orphans do
   Lifeline's rule, exactly: an orphan below its `max_attempts` is requeued, one at it is
   discarded. An exhausted job put back as `available` is never run — the engine's fetch picks a
   queue's oldest available jobs first and only then drops those at their limit — and, picked
-  every time, it holds the slots: two of them stalled the `schedules` queue for a week (#417).
-  A discarded `RunSchedule` closes its run's row as failed, saying the restart interrupted it
-  (#312), so the board never shows it `running`. Every discarded orphan is said on the machine
+  every time, it holds the slots, which stalls the `schedules` queue.
+  A discarded `RunSchedule` closes its run's row as failed, saying the restart interrupted it,
+  so the board never shows it `running`. Every discarded orphan is said on the machine
   thread (`Server.Jobs.Alarm`) as "killed by the restart at HH:MM": a job whose node died raises
   nothing, so Oban's exception telemetry never sees it.
 

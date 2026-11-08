@@ -43,7 +43,7 @@ defmodule Server.MCP.Tool.StaffChild do
   up bound to the CHILD — able to push_branch / advance_stage / record_check / submit_review / submit_qa
   on the thread they lead. The seat cannot wait on delivery: the switchboard spawns whoever a message
   ADDRESSES, and a brief that @mentions another coworker addresses only them, leaving the lead running
-  on whatever they already had (the lobby, #1) with no way to act on the thread they lead.
+  on whatever they already had (the lobby) with no way to act on the thread they lead.
 
   The lead resolves BEFORE the thread opens, so a bad handle refuses cleanly instead of leaving an
   orphan lead-less thread — the machine-chat silence bug's tool-side twin.
@@ -204,7 +204,7 @@ defmodule Server.MCP.Tool.StaffChild do
 
   # The lead's seat is on the child, and it does not wait on delivery: the switchboard spawns who a
   # message ADDRESSES (`Server.Switchboard.target_names/1`), so a brief that mentions another coworker
-  # would leave the lead unseated — running on the lobby (#1), unable to push_branch or advance_stage
+  # would leave the lead unseated — running on the lobby, unable to push_branch or advance_stage
   # on the thread they lead. Best-effort: an arbiter at the leaf cap refuses it and says so on the
   # thread; the lead is then seated by the next message on the child that addresses them.
   defp seat(thread, lead) do

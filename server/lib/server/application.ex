@@ -92,7 +92,7 @@ defmodule Server.Application do
       # Server.MCP.Tokens is stateless (signed tokens, no registry) — nothing to supervise.
       # `start: true` is explicit: without it anubis asks "is a Phoenix HTTP server running?" and,
       # since the web endpoint (piece D) exists with its own listener flag, would answer no and
-      # return :ignore — the MCP channel then 500s on every request (2026-09-18).
+      # return :ignore — the MCP channel then 500s on every request.
       {Server.MCP.Endpoint, transport: {:streamable_http, start: true}},
       # The Gateway routes POST /mint (a fresh-token mint for an adapter's per-connect auth)
       # and forwards everything else to the anubis MCP transport. Loopback only — a personal

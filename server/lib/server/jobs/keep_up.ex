@@ -48,7 +48,7 @@ defmodule Server.Jobs.KeepUp do
   Compile each mix project of `repos`' main checkouts for test, once per main tip, last in the job.
   A seat's worktree seeds its `_build` from there (`Server.Worktree`), and nothing else builds the
   main checkout for test: a stale seed made a seat's first test run compile the whole app and
-  outlast menard's tool wall (#760). A repo's warm holds a lock while it compiles, so the next
+  outlast menard's tool wall. A repo's warm holds a lock while it compiles, so the next
   pass's warm skips it rather than compile one `_build` twice.
   Each compile is bounded at 15 minutes. A tip is tried once: a failure is logged, and the next tip
   tries again, so a red main costs one compile, not one every pass. A git that won't run warms

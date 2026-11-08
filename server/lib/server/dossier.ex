@@ -130,7 +130,7 @@ defmodule Server.Dossier do
   @doc "A fact by id, or nil — the load path for `recheck_fact`, scope-checked by its tool."
   def fact(id), do: Repo.get(Fact, id)
 
-  @doc "Record an append-only event. `{:ok, event}` or `{:error, changeset}`. `opts[:session_id]` stamps the session that recorded it (#679)."
+  @doc "Record an append-only event. `{:ok, event}` or `{:error, changeset}`. `opts[:session_id]` stamps the session that recorded it."
   def record_event(attrs, opts \\ []) do
     attrs |> Event.record_changeset(opts[:session_id]) |> Repo.insert() |> Bus.announce(:event_recorded)
   end

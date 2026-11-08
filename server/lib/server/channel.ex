@@ -69,7 +69,7 @@ defmodule Server.Channel do
   Post a message to a thread — the capture path. Returns `{:ok, message}` or
   `{:error, changeset}` on a missing thread/author/body. A thread that does not
   exist is refused by SQLite's own foreign key (it raises), never by a mirrored
-  check here (§10). `opts[:session_id]` stamps the session that wrote it (#679): the
+  check here (§10). `opts[:session_id]` stamps the session that wrote it: the
   connection's, passed by an MCP tool; every other caller leaves it NULL.
   """
   def post(attrs, opts \\ []) do

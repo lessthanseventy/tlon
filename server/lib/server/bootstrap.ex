@@ -37,7 +37,7 @@ defmodule Server.Bootstrap do
       repair(workspace)
       repair_projects()
       repair_machine_roots()
-      # Base self-knowledge + baseline projects (2026-08-31) — idempotent, so a reset/fresh scratch
+      # Base self-knowledge + baseline projects — idempotent, so a reset/fresh scratch
       # DB heals to "funes already knows the basics" on the next boot. Absorbs its own failures.
       Server.Seed.ensure_safe()
       :ok = Server.Outside.ensure_citizens()
@@ -121,7 +121,7 @@ defmodule Server.Bootstrap do
     Repo.update_all(adrift, set: [workspace_id: id])
   end
 
-  # The project tier (2026-08-30): every workspace has a default project, and every thread with no
+  # The project tier: every workspace has a default project, and every thread with no
   # project moves to it. Runs AFTER repair/1, so `workspace_id` is already real. Idempotent — a thread
   # already in a project is left.
   defp repair_projects do
