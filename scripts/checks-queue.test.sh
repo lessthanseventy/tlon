@@ -71,4 +71,27 @@ wait
 expect "unwritable bookkeeping still runs the check" "$(starts)" "A "
 expect "…and says it fell back" "$(grep -c 'falling back' "$err")" "1"
 
+fresh
+CHECKS_LABEL=S "$here/checks-queue.sh" bash -c "trap 'sleep 1; echo end S >>'$log'; exit' TERM; echo start S >>'$log'; sleep 30 & wait" 2>>"$err" &
+spid=$!
+until_log "start S"
+job B 0 & until_queued 1
+kill -TERM "$spid"
+wait
+expect "a stopped holder's slow-dying child ends before the next waiter starts" "$(tr '\n' ',' <"$log")" "start S,end S,start B,end B,"
+expect "…and leaves no process of its own behind" "$(pgrep -f 'sleep 30' | wc -l | tr -d ' ')" "0"
+
+# check.sh refuses a checkout where a BEAM already runs (a stopped check's leftovers)
+repo="$tmp/repo"
+git init -q "$repo" && git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+cp "$(command -v sleep)" "$tmp/beam.smp"
+(cd "$repo" && exec "$tmp/beam.smp" 30) &
+bpid=$!
+sleep 0.3
+out="$(cd "$repo" && TLON_CHECK_STATUS=0 XDG_CACHE_HOME="$tmp/cache" "$here/check.sh" 2>&1)"
+code=$?
+kill "$bpid" 2>/dev/null
+expect "check.sh in a checkout with a running BEAM exits 2" "$code" "2"
+expect "…naming the pid" "$(grep -c "pid $bpid" <<<"$out")" "1"
+
 exit "$bad"

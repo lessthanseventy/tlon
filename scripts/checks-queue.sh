@@ -99,7 +99,19 @@ trap ': >"$holder" 2>/dev/null' EXIT
 # In its own process group, so stopping it stops its test runs too, not just the top process.
 setsid "$@" 9>&- &
 child=$!
-trap 'kill -TERM -- "-$child" 2>/dev/null; exit 143' TERM
-trap 'kill -TERM -- "-$child" 2>/dev/null; exit 130' INT
+# A stop signal ends the whole group and waits for it to be gone (KILL after CHECKS_KILL_GRACE s)
+# before the lock is released: the next check must not start beside the last one's dying suites.
+stop_group() { # exit code
+  kill -TERM -- "-$child" 2>/dev/null
+  ( sleep "${CHECKS_KILL_GRACE:-30}"; kill -KILL -- "-$child" 2>/dev/null ) &
+  local timer=$!
+  wait "$child" 2>/dev/null
+  while kill -0 -- "-$child" 2>/dev/null; do sleep 0.1; done
+  kill "$timer" 2>/dev/null
+  exit "$1"
+}
+trap 'stop_group 143' TERM
+trap 'stop_group 130' INT
+trap 'stop_group 129' HUP
 wait "$child"
 
