@@ -12,9 +12,11 @@ running the command, was wrong over and over. So the discipline is simple and ab
 
 ## What to do
 
-- **Run the actual command — through `cap`.** `mise run cap -- <cmd>` (or `scripts/cap.sh
-  <cmd>`) runs it ONCE, captures the full output, and gives you the exit code and a
-  distilled tail. Not a paraphrase, not "should pass" — the command, once, for real.
+- **Run the actual command, once.** Not a paraphrase, not "should pass" — the command, for
+  real, with its full output kept. In a checkout, `mise run cap -- <cmd>` (or `scripts/cap.sh
+  <cmd>`) captures the output and gives you the exit code and a distilled tail. A coworker
+  seat uses its tools instead: `run_verb` for a test or compile in your worktree, `run_task`
+  for a mise task on the committed head, which posts the result.
 - **`record_check(cmd, exit, tail)` with what actually happened.** Pass the exact command,
   its REAL exit code, and a short tail of output. funes lands a `check_passed` (exit 0) or
   `check_failed` event — the kind is keyed on the number, so the brief shows the true

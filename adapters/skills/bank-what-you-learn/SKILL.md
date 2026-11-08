@@ -20,8 +20,8 @@ Your job is to put each thing you learned at the rank it actually earns — no h
   `bank_fact(kind: "learned", text: "...", check_cmd: "mix test path/to_test.exs")`. The
   command is what lets a later reader (or a later you) re-verify instead of trusting.
 - **A hunch is a derived fact WITHOUT a `check_cmd`, and that is fine — say so.**
-  `bank_fact(kind: "learned", text: "the flicker is probably the double repaint")` banks an
-  opinion, and funes will render it and rank it AS an opinion. A hunch banked as a hunch is
+  `bank_fact(kind: "learned", text: "the flicker is probably the double repaint")` banks a
+  hunch, and funes will render it and rank it AS a hunch. A hunch banked as a hunch is
   useful. A hunch banked as truth is a lie that compounds.
 - **Never dress a guess in a check it doesn't have.** Don't attach a `check_cmd` that
   doesn't actually verify the claim to make a hunch look solid. The check must re-run *this*
@@ -46,8 +46,7 @@ his stated word supersedes yours.
 ## When it's not a fact
 
 - A knowledge gap in the work ("does raxol support embedding?") is a **question**, not a
-  fact — for now, post it on the thread. (A dedicated question type is coming; until then the
-  thread is its home.)
+  fact — `raise_question(text)`; it shows in every brief as an unknown until resolved.
 - A defect in the stack itself ("the termbox NIF crashes on resize") is an **issue** —
   `raise_issue(summary, evidence)`. That is the machine's own tracker, never product work.
 - Being stuck waiting on the human is a **message**, never an issue and never a fact.
