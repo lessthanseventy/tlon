@@ -92,6 +92,15 @@ else
 fi
 
 echo "$label (pid $$) in $PWD since $(date +%H:%M:%S)" >"$holder" 2>/dev/null || true
+# A previous check's process group (recorded below) that still has members is that check's suites
+# outliving it, e.g. after its queue was killed outright; a second run beside them races on
+# server/tmp. Refuse, naming the group. CHECKS_IGNORE_LEFTOVERS=1 runs anyway.
+group_file="$dir/tlon-checks.group"
+prev="$(cat "$group_file" 2>/dev/null)"
+if [ "${CHECKS_IGNORE_LEFTOVERS:-0}" != 1 ] && [ -n "$prev" ] && kill -0 -- "-$prev" 2>/dev/null; then
+  echo "checks queue: refused — group $prev, left by a previous check, still has running processes; stop it ('kill -- -$prev') or wait (CHECKS_IGNORE_LEFTOVERS=1 runs anyway)" >&2
+  exit 2
+fi
 # a killed check must not leave its line behind as if it still ran
 trap ': >"$holder" 2>/dev/null' EXIT
 # 9>&-: what the check leaves running (a watcher, a dev server) must not keep holding the lock.
@@ -99,15 +108,18 @@ trap ': >"$holder" 2>/dev/null' EXIT
 # In its own process group, so stopping it stops its test runs too, not just the top process.
 setsid "$@" 9>&- &
 child=$!
+printf '%s\n' "$child" >"$group_file" 2>/dev/null || true
 # A stop signal ends the whole group and waits for it to be gone (KILL after CHECKS_KILL_GRACE s)
 # before the lock is released: the next check must not start beside the last one's dying suites.
 stop_group() { # exit code
   kill -TERM -- "-$child" 2>/dev/null
-  ( sleep "${CHECKS_KILL_GRACE:-30}"; kill -KILL -- "-$child" 2>/dev/null ) &
-  local timer=$!
-  wait "$child" 2>/dev/null
-  while kill -0 -- "-$child" 2>/dev/null; do sleep 0.1; done
-  kill "$timer" 2>/dev/null
+  # polled in this shell, not a background timer: a timer subshell would inherit the lock (fd 9)
+  # and outlive the group
+  local deadline=$((SECONDS + ${CHECKS_KILL_GRACE:-30}))
+  while kill -0 -- "-$child" 2>/dev/null; do
+    [ "$SECONDS" -ge "$deadline" ] && kill -KILL -- "-$child" 2>/dev/null
+    sleep 0.1
+  done
   exit "$1"
 }
 trap 'stop_group 143' TERM
