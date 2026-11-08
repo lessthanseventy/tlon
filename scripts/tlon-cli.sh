@@ -92,6 +92,9 @@ export ERL_FLAGS="${ERL_FLAGS:-} +S 1:1 +SDcpu 1:1 +SDio 1 +A 1 +sbwt none +sbwt
 # A client node that dies on boot (its stderr gone, say) dumps here, not at the root, where
 # `server:doctor` would read its `erl_crash.dump` as the service's.
 dumps="${XDG_STATE_HOME:-$HOME/.local/state}/tlon/crash-dumps"
+# A caller that closed stderr leaves the VM nowhere to print a boot error, and it dies with a dump
+# (bash may hand the freed fd 2 to the script itself, hence the -ef).
+if ! : >&2 2>/dev/null || [ /dev/stderr -ef "$0" ]; then exec 2>/dev/null; fi
 mkdir -p "$dumps" && export ERL_CRASH_DUMP="${ERL_CRASH_DUMP:-$dumps/tlon-cli-$(date +%Y%m%dT%H%M%S)-$$.dump}"
 # The header's Subcommands block is the one usage text.
 usage() {

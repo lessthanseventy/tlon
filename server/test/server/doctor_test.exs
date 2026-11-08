@@ -90,45 +90,73 @@ defmodule Server.DoctorTest do
     assert File.read!(Path.join(dir, "ticket.jsonl")) == ""
   end
 
-  describe "crash_dump/2" do
+  describe "crash_dump/3" do
     setup do
       root = Path.join(System.tmp_dir!(), "doctor-crash-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(root)
       on_exit(fn -> File.rm_rf!(root) end)
-      %{root: root, dump: Path.join(root, "erl_crash.dump")}
+      dumps = Path.join(root, "crash-dumps")
+      File.mkdir_p!(dumps)
+      %{root: root, dumps: dumps, dump: Path.join(root, "erl_crash.dump")}
     end
 
-    test "none when the root holds no erl_crash.dump", %{root: root} do
-      assert Doctor.crash_dump(root, DateTime.utc_now()) == "none"
+    test "none when neither place holds a dump", %{root: root, dumps: dumps} do
+      assert Doctor.crash_dump(root, DateTime.utc_now(), dumps) == "none"
     end
 
-    test "a dump written since the service started is flagged with its path", %{root: root, dump: dump} do
+    test "a client node's dump is dated against the start and never blamed on the service", %{root: root, dumps: dumps} do
+      client = Path.join(dumps, "tlon-cli-1.dump")
+      File.write!(client, "=erl_crash_dump:0.5\n")
+      started = DateTime.utc_now()
+      File.touch!(client, DateTime.to_unix(started) - 7200)
+
+      line = Doctor.crash_dump(root, started, dumps)
+      assert line =~ client
+      assert line =~ "tlon-cli client node's, before the service started"
+      refute line =~ "the last restart followed a crash"
+
+      File.touch!(client, DateTime.to_unix(started) + 60)
+      assert Doctor.crash_dump(root, started, dumps) =~ "tlon-cli client node's, written since the service started"
+    end
+
+    test "the newest dump of the two places is the one reported", %{root: root, dumps: dumps, dump: dump} do
+      client = Path.join(dumps, "tlon-cli-2.dump")
+      File.write!(client, "=erl_crash_dump:0.5\n")
+      File.write!(dump, "=erl_crash_dump:0.5\n")
+      started = DateTime.utc_now()
+      File.touch!(dump, DateTime.to_unix(started) - 7200)
+      File.touch!(client, DateTime.to_unix(started) - 3600)
+
+      assert Doctor.crash_dump(root, started, dumps) =~ client
+    end
+
+    test "a dump written since the service started is flagged with its path", %{root: root, dumps: dumps, dump: dump} do
       File.write!(dump, "=erl_crash_dump:0.5\n")
       started = DateTime.add(DateTime.utc_now(), -3600)
       File.touch!(dump, DateTime.to_unix(started) + 60)
 
-      line = Doctor.crash_dump(root, started)
+      line = Doctor.crash_dump(root, started, dumps)
       assert line =~ dump
       assert line =~ "since the service started"
       assert line =~ "another node here crashed"
     end
 
-    test "a dump older than the service's start says so", %{root: root, dump: dump} do
+    test "a dump older than the service's start says so", %{root: root, dumps: dumps, dump: dump} do
       File.write!(dump, "=erl_crash_dump:0.5\n")
       started = DateTime.utc_now()
       File.touch!(dump, DateTime.to_unix(started) - 7200)
 
-      line = Doctor.crash_dump(root, started)
+      line = Doctor.crash_dump(root, started, dumps)
       assert line =~ dump
       assert line =~ "before the service started"
       assert line =~ "the last restart followed a crash"
     end
 
-    test "with no known start it reports the dump and its age", %{root: root, dump: dump} do
+    test "with no known start it reports the dump and its age", %{root: root, dumps: dumps, dump: dump} do
       File.write!(dump, "=erl_crash_dump:0.5\n")
       File.touch!(dump, System.os_time(:second) - 7200)
 
-      line = Doctor.crash_dump(root, nil)
+      line = Doctor.crash_dump(root, nil, dumps)
       assert line =~ dump
       assert line =~ "2h old"
       assert line =~ "service start unknown"
