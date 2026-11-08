@@ -63,6 +63,32 @@ defmodule Server.Maintain.StraysTest do
     assert File.exists?(fresh)
   end
 
+  test "a landed workline's checkout goes even after main edits its files again; its branch stays", %{
+    repo: repo,
+    ws: ws,
+    project: p
+  } do
+    {:ok, t} = Server.Channel.open_thread(%{title: "landed", scope: "machine", workspace_id: ws.id, project_id: p.id})
+    name = Worktree.name_for(t)
+    {:ok, wt} = Worktree.ensure(repo, name)
+    File.write!(Path.join(wt, "README"), "the change\n")
+    {_, 0} = System.cmd("git", ["-C", wt, "add", "README"])
+    {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "the change"])
+    # main took the change and edited the file again: no commit on the branch matches main any more
+    File.write!(Path.join(repo, "README"), "the change, edited later\n")
+    {_, 0} = System.cmd("git", ["-C", repo, "add", "README"])
+    {_, 0} = System.cmd("git", ["-C", repo, "commit", "-qm", "landed, then edited"])
+    # closed as GitHub's merge closes it (`Workline.merged/2`), the checkout left for the sweep
+    t |> Ecto.Changeset.change(stage: "landed", state: "closed") |> Server.Repo.update!()
+    assert {:kept, _} = Worktree.remove(repo, name)
+
+    results = Map.new(Server.Maintain.Sweep.reap_worktrees())
+    assert results[wt] == {:removed, wt}
+    refute File.exists?(wt)
+    {out, 0} = System.cmd("git", ["-C", repo, "branch", "--list", Worktree.branch(name)])
+    assert String.trim(out) != ""
+  end
+
   test "a stranded worktree with no thread is on the needs list — and the list doesn't fall over on it", %{repo: repo} do
     held = Worktree.path(repo, "by-hand-held")
     {_, 0} = System.cmd("git", ["-C", repo, "worktree", "add", "-q", "-b", "office/held", held])
