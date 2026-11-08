@@ -676,6 +676,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: a ticker channel (`kit/tv.ts`) reading the snapshot's release sha, the merge queue, the
   phone count and the newest landing's subject.
 - Check: `tv.test.ts`; sandbox.
+- Done: a thirteenth channel, `ticker` (in the rotation only once the TUI has handed it numbers) in `kit/tv.ts` (`tickerText`, `Tv.setTicker`, `WideRoom.setTicker`), crawling the release sha, the merge queue length, the phone count and the newest note of the cut; the TUI refreshes it with each ok snapshot (`tickerOn`). Left: "the newest landing's subject" is the last commit subject of the live cut (the snapshot carries no landing feed); the sandbox crawls "no release yet" (not watched live).
 
 **F12 · Uqbar's errands grow with the room.** `Haiku · S`
 - Change: three errands in `kit/volume.ts`: visits the hall, inspects a new hire, brings Argos a
