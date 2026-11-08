@@ -316,6 +316,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 
 **C7 · Conditional snapshot fetch** — the client half of B1(b): send `If-None-Match`, keep the held
 snapshot on 304. `Sonnet · S`, after B1.
+- Left: not built. B1(b) was dropped (the snapshot's cost was B2's per-row reads) and the server sends no `ETag` and honours no `If-None-Match` on `/api/office`, so a client half would be dead code. Reopen with B1(b): `data.status` keeps the `ETag` of the last 200, sends it as `If-None-Match` and on 304 returns `lastGood` unchanged.
 
 ---
 
