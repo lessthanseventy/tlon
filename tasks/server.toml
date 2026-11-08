@@ -7,11 +7,14 @@ dir = "server"
 run = "mix test"
 
 ["server:check"]
-description = "server: the precommit gate — format + warnings-as-errors + credo + tests + deterministic steering evals"
+description = "server: the precommit gate — format + warnings-as-errors + credo + tests (the deterministic steering evals are server:eval-det)"
 dir = "server"
-# Two invocations: precommit runs in :test (start_repo off), the eval needs the dev boot +
-# its own ephemeral db — the deterministic set is offline/fast, judged mode is server:eval.
-run = "mix precommit && mix server.eval --deterministic"
+run = "mix precommit"
+
+["server:eval-det"]
+description = "server: the deterministic steering evals — offline and fast, on the dev boot with its own ephemeral db (tlon_eval_<pid>, so it never shares one with server:check's suite); judged mode is server:eval"
+dir = "server"
+run = "mix server.eval --deterministic"
 
 ["server:eval"]
 description = "server: the FULL steering evals incl. LLM-judged scenarios (claude -p, cheap alias) — run when steering config changes"
@@ -274,11 +277,11 @@ run = "mise run check:suites"
 # change has them behind; server:deps runs before this, never beside it, where a cold compile of every
 # dep would starve the office's tmux-driven tests.
 ["check:suites"]
-description = "the names gate + the script self-tests + the tracked-junk gate + the server + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check, in parallel"
-depends = ["check:names", "check:scripts", "check:ignored", "server:check", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "manual:check"]
+description = "the names gate + the script self-tests + the tracked-junk gate + the server (suite and deterministic evals) + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check, in parallel"
+depends = ["check:names", "check:scripts", "check:ignored", "server:check", "server:eval-det","adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "manual:check"]
 
 ["server:deps"]
-description = "server: fetch the locked deps when they are behind the lock, and compile them for the test env and the dev env server:check's evals boot (a no-op when current)"
+description = "server: fetch the locked deps when they are behind the lock, and compile them for the test env and the dev env server:eval-det boots (a no-op when current)"
 dir = "server"
 run = "mix deps.get && MIX_ENV=test mix deps.compile && mix deps.compile"
 
