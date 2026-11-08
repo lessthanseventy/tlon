@@ -31,6 +31,7 @@ defmodule Server.MCP.Brief do
       "todos" => capped(scope.todos, &todo/1),
       "next" => next(scope.next),
       "lead" => scope.lead,
+      "operator" => Server.OperatorConfig.operator(),
       "opening" => scope.opening && brief_message(scope.opening),
       "done" => capped(scope.done, &done_entry/1),
       "learnings" => capped(scope.learnings, &fact/1),

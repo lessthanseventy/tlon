@@ -74,7 +74,7 @@
 #   land-pr <pr> <branch> [author] queue a reviewed PR in the merge queue (`mise run land`); refused
 #                                  unless the branch's review on tlon, by neither its author nor a
 #                                  builder of it, approves its head
-#   approve <id>                   complete a workline's parked gate (awaiting: andrew)
+#   approve <id>                   complete a workline's parked gate (awaiting the operator)
 #     approve <id> --skip-qa <why…>  …and land a review past an owed QA pass, recorded with why
 #     (TLON_AUTHOR set → approved as that seat; Uqbar's cannot approve a limit-hit gate)
 set -euo pipefail
@@ -509,9 +509,9 @@ case "$cmd" in
     body="$*"
     { int "$tid" && [ -n "$body" ]; } ||
       { echo 'usage: mise run server:post -- <thread-id> <message text…>' >&2; exit 2; }
-    # Post as the operator (default andrew) — parity with the agents' post_message. A plain post:
+    # Post as the operator — parity with the agents' post_message. A plain post:
     # a prompt is answered by its id (`answer`), so a key can't land in the wrong prompt.
-    exec "$SERVER" rpc "op = Application.get_env(:server, :operator, \"andrew\"); {:ok, m} = Server.Attention.respond($tid, op, \"$(esc "$body")\"); IO.puts(\"posted ##{m.id} to thread #$tid as #{op}\")"
+    exec "$SERVER" rpc "op = Server.OperatorConfig.operator(); {:ok, m} = Server.Attention.respond($tid, op, \"$(esc "$body")\"); IO.puts(\"posted ##{m.id} to thread #$tid as #{op}\")"
     ;;
 
   answer)
@@ -519,7 +519,7 @@ case "$cmd" in
     body="$*"
     { int "$pid" && [ -n "$body" ]; } ||
       { echo 'usage: tlon-cli.sh answer <prompt-id> <key> [text…]' >&2; exit 2; }
-    exec "$SERVER" rpc "op = Application.get_env(:server, :operator, \"andrew\"); case Server.Attention.answer_prompt($pid, op, \"$(esc "$body")\") do {:ok, m} -> IO.puts(\"answered prompt #$pid as #{op} (##{m.id})\"); {:error, why} -> IO.puts(\"refused: #{why}\"); raise(\"refused\") end"
+    exec "$SERVER" rpc "op = Server.OperatorConfig.operator(); case Server.Attention.answer_prompt($pid, op, \"$(esc "$body")\") do {:ok, m} -> IO.puts(\"answered prompt #$pid as #{op} (##{m.id})\"); {:error, why} -> IO.puts(\"refused: #{why}\"); raise(\"refused\") end"
     ;;
 
   workline)
@@ -594,7 +594,7 @@ case "$cmd" in
     unq=false; if [ "${1:-}" = "--unqueue" ]; then unq=true; shift; fi
     { int "$tid" && [[ "$to" =~ ^(spec|plan|build)$ ]] && [ -n "$*" ]; } ||
       { echo 'usage: tlon-cli.sh send-back <thread-id> spec|plan|build [--unqueue] <why…>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> raise(\"no thread #$tid\"); t -> case Server.Workline.send_back(t, \"$to\", \"$(esc "$*")\", Application.get_env(:server, :operator, \"andrew\"), unqueue: $unq) do {:ok, b} -> IO.puts(\"sent back — thread #$tid now at #{b.stage}, led by #{Server.Channel.thread_lead(b.id)}\"); {:error, why} -> IO.puts(:stderr, \"refused: #{inspect(why)}\"); raise(\"refused\") end end"
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> raise(\"no thread #$tid\"); t -> case Server.Workline.send_back(t, \"$to\", \"$(esc "$*")\", Server.OperatorConfig.operator(), unqueue: $unq) do {:ok, b} -> IO.puts(\"sent back — thread #$tid now at #{b.stage}, led by #{Server.Channel.thread_lead(b.id)}\"); {:error, why} -> IO.puts(:stderr, \"refused: #{inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
   record-verify)
@@ -639,7 +639,7 @@ case "$cmd" in
       opts="${opts%]}"; [ "$opts" = "[" ] || opts="$opts, "
       opts="${opts}as: \"$(esc "$TLON_AUTHOR")\"]"
     fi
-    # Complete a workline's parked gate (awaiting: andrew) — the operator's approval verb.
+    # Complete a workline's parked gate (awaiting the operator) — the operator's approval verb.
     # approve RE-VERIFIES the owed artifact via git in the SERVICE node — like `advance`,
     # the service needs TLON_WORKLINE_ROOT pointed at the worktree.
     exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Server.Workline.approve(t, $opts) do {:ok, a} -> IO.puts(\"approved — thread #$tid now at #{a.stage}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
