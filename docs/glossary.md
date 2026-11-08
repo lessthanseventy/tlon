@@ -3,8 +3,8 @@
 Every row is one word with one meaning. A word that needs two meanings is two words, and the second
 one is a pending rename below. `scripts/check-names.sh` (`mise run check:names`) holds this file: every
 `Server.*` module, `mise run` task and `scripts/*` file named in the **lives in** column must exist,
-and the retired words under **never say** must not appear in any `AGENTS.md`, in `office/tui/*.ts`
-user-facing strings, or in `docs/plans/` files dated 2026-10-19 or later. A **lives in** cell that
+and the retired words under **never say** must not appear in any `AGENTS.md` or in `office/tui/*.ts`
+user-facing strings (a plan is prose and is not scanned). A **lives in** cell that
 begins `pending:` records a rename not yet made; the gate skips it. The source of the decisions is
 `docs/plans/2026-10-13-cohesion-off-the-happy-path.md`, Cause 2.
 
