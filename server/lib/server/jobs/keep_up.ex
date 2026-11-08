@@ -49,29 +49,12 @@ defmodule Server.Jobs.KeepUp do
   to retry, and a git that won't run warms nothing (the repo pass reports it).
   """
   def warm_test_builds(repos, run \\ &System.cmd/3) do
-    head = fn repo ->
-      try do
-        run.("git", ["-C", repo, "rev-parse", "HEAD"], stderr_to_stdout: true)
-      rescue
-        _ -> :error
-      end
-    end
-
     for repo <- repos,
-        {sha, 0} <- [head.(repo)],
+        {sha, 0} <- [head(repo, run)],
         key = {__MODULE__, :warm, repo},
         :persistent_term.get(key, nil) != sha do
       :persistent_term.put(key, sha)
-
-      for mix <- Path.wildcard(Path.join(repo, "mix.exs")) ++ Path.wildcard(Path.join(repo, "*/mix.exs")) do
-        Task.start(fn ->
-          run.("timeout", ["900", "mise", "exec", "--", "mix", "compile"],
-            cd: Path.dirname(mix),
-            env: [{"MIX_ENV", "test"}],
-            stderr_to_stdout: true
-          )
-        end)
-      end
+      compile_for_test(repo, run)
     end
 
     :ok
@@ -327,6 +310,24 @@ defmodule Server.Jobs.KeepUp do
         Server.Sheriff.report(t, "#{why}, so GitHub will never merge it; the workline is back at build")
         Server.Workline.reland(t, why, "#{why}. Fix work/#{t.slug} until its checks pass, test")
       end
+    end
+  end
+
+  defp head(repo, run) do
+    run.("git", ["-C", repo, "rev-parse", "HEAD"], stderr_to_stdout: true)
+  rescue
+    _ -> :error
+  end
+
+  defp compile_for_test(repo, run) do
+    for mix <- Path.wildcard(Path.join(repo, "mix.exs")) ++ Path.wildcard(Path.join(repo, "*/mix.exs")) do
+      Task.start(fn ->
+        run.("timeout", ["900", "mise", "exec", "--", "mix", "compile"],
+          cd: Path.dirname(mix),
+          env: [{"MIX_ENV", "test"}],
+          stderr_to_stdout: true
+        )
+      end)
     end
   end
 end
