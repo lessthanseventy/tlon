@@ -5,13 +5,13 @@ defmodule Server.Jobs.Grade do
   `Server.Workline.graded/2` lands a gate already parked on the operator that the grade lets through.
   A thread that has left review since is not graded. A grader CLI that exits non-zero is asked once
   more after a pause (`:grader_retry_ms`, 30 s) inside the attempt, before the grade parks on the
-  operator. Three attempts: a fault that raises (the db, git) before the grade is on record is run
-  again, and a run is safe to repeat: it records a grade and lands what the grade lets through, both
-  of which a second run only restates.
+  operator. One attempt: a rerun is not free or quiet. It asks the paid grader again (minutes of
+  model time) and posts another "risk grade" message to the thread, so a fault that raises after
+  the post would repeat both. A grade that did not land is graded again by the next approval.
   """
   use Oban.Worker,
     queue: :default,
-    max_attempts: 3,
+    max_attempts: 1,
     unique: [period: 600, keys: [:thread_id], states: [:available, :scheduled, :executing]]
 
   @impl Oban.Worker

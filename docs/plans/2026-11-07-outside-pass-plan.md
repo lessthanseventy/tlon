@@ -221,7 +221,8 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   raised; `Process.send_after` or a Task for the three sleeps.
 - Check: a test that a Grade job raising once completes on the second attempt; the switchboard's
   wake latency test (exists) still passes.
-- Done: Grade `max_attempts: 3`, Maintain `2` (Land, EndReview, Verify already had 3); Staff, Triage and
+- Done: Maintain `2` (Land, EndReview, Verify already had 3); Grade stays at `1`: a rerun asks the paid
+  grader again and posts another "risk grade" message, so it is not idempotent. Staff, Triage and
   TurnPass stay at 1 (per-tick passes run again next tick; TurnPass stamps before it extracts, so a
   rerun does nothing). `Orphans.requeue` says "killed by the restart at HH:MM" for each discarded
   orphan. Open: the three sleeps are not in a GenServer callback (the switchboard's is already in a
@@ -237,8 +238,9 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Done: no new telemetry code: Oban's own `[:oban, :job, :stop]` span is the span on every `perform/1`,
   and the rows it stamps (`attempted_at`, `completed_at`) are read by `Server.Jobs.Passes` (Drain, Staff,
   Dispatch, KeepUp; not Maintain, 18-52 s by design). `server:doctor` prints `passes:`; a newest pass
-  over 30 s (finished within 15 min) is `health:job_slow` among the box's Needs, no new Need kind, so
-  the office TUI is untouched.
+  over 30 s (finished within 15 min), or a pass executing now for over 30 s, is `health:job_slow` among
+  the box's Needs, no new Need kind, so the office TUI is untouched. The Needs read takes it from a 30 s
+  `:persistent_term` cache (`Passes.slow_cached/0`), not a query per read.
 
 ---
 

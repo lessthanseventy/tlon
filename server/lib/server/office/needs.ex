@@ -1193,7 +1193,7 @@ defmodule Server.Office.Needs do
 
   # a pass over its minute skips ticks (`Server.Jobs.Passes`); one item however many are slow
   defp slow_passes do
-    case Server.Jobs.Passes.slow() do
+    case Server.Jobs.Passes.slow_cached() do
       [] ->
         []
 

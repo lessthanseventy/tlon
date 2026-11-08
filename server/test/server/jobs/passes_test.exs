@@ -41,6 +41,30 @@ defmodule Server.Jobs.PassesTest do
     assert Passes.slow() == []
   end
 
+  defp running!(worker, for_s) do
+    %{}
+    |> Oban.Job.new(worker: worker, queue: "default")
+    |> Ecto.Changeset.change(state: "executing", attempted_at: DateTime.add(DateTime.utc_now(), -for_s))
+    |> Server.Repo.insert!()
+  end
+
+  test "slow: a pass still executing past 30 s counts, by how long it has run so far" do
+    running!("Server.Jobs.Staff", 45)
+    running!("Server.Jobs.Drain", 5)
+    assert [{"Staff", ms}] = Passes.slow()
+    assert ms >= 45_000 and ms < 50_000
+  end
+
+  test "slow_cached: read once, then served for 30 s without touching the table" do
+    Passes.forget()
+    assert Passes.slow_cached() == []
+    pass!("Server.Jobs.Staff", 41, 60)
+    assert Passes.slow_cached() == []
+    Passes.forget()
+    assert [{"Staff", 41_000}] = Passes.slow_cached()
+    Passes.forget()
+  end
+
   test "Maintain runs half a minute by design and is not a pass to watch" do
     pass!("Server.Jobs.Maintain", 50)
     assert Passes.slow() == []
