@@ -16,6 +16,9 @@ defmodule Server.Jobs.KeepUp do
   following its main, and it has one keyed rollout note (`keep_up:remote:<repo>`) saying so, cleared
   once its origin is on GitHub.
 
+  Each main checkout's mix projects are compiled for test once per new tip, in the background
+  (`warm_test_builds/2`), so the `_build` a seat's worktree seeds from is current.
+
   A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
   from PATH, a git that won't run) leaves the other repos their pass, then fails the job with every
   such fault, so it reaches the operator as a failed job (`Server.Office.Needs`), not only a log line.
@@ -31,9 +34,47 @@ defmodule Server.Jobs.KeepUp do
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
-    faults = Enum.flat_map(repos(), &keep_up/1) ++ landings() ++ requeue_stranded()
+    repos = repos()
+    faults = Enum.flat_map(repos, &keep_up/1) ++ landings() ++ requeue_stranded()
+    warm_test_builds(repos)
 
     if faults == [], do: :ok, else: {:error, Enum.join(faults, "; ")}
+  end
+
+  @doc """
+  Compile each mix project of `repos`' main checkouts for test, once per main tip and in the
+  background. A seat's worktree seeds its `_build` from there (`Server.Worktree`), and nothing else
+  builds the main checkout for test: a stale seed made a seat's first test run compile the whole app
+  and outlast menard's tool wall (#760). Bounded at 15 minutes; a failed compile is the next tip's
+  to retry, and a git that won't run warms nothing (the repo pass reports it).
+  """
+  def warm_test_builds(repos, run \\ &System.cmd/3) do
+    head = fn repo ->
+      try do
+        run.("git", ["-C", repo, "rev-parse", "HEAD"], stderr_to_stdout: true)
+      rescue
+        _ -> :error
+      end
+    end
+
+    for repo <- repos,
+        {sha, 0} <- [head.(repo)],
+        key = {__MODULE__, :warm, repo},
+        :persistent_term.get(key, nil) != sha do
+      :persistent_term.put(key, sha)
+
+      for mix <- Path.wildcard(Path.join(repo, "mix.exs")) ++ Path.wildcard(Path.join(repo, "*/mix.exs")) do
+        Task.start(fn ->
+          run.("timeout", ["900", "mise", "exec", "--", "mix", "compile"],
+            cd: Path.dirname(mix),
+            env: [{"MIX_ENV", "test"}],
+            stderr_to_stdout: true
+          )
+        end)
+      end
+    end
+
+    :ok
   end
 
   # one repo's fault (gh missing from PATH, a git that won't run) doesn't skip the others; the faults

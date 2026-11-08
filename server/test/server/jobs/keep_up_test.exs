@@ -391,4 +391,36 @@ defmodule Server.Jobs.KeepUpTest do
       assert [_one] = notes("/r/half")
     end
   end
+
+  describe "the main checkout's test build (#760)" do
+    test "compiled for test once per main tip, in each mix project of the repo" do
+      repo = Path.join(System.tmp_dir!(), "warm-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(repo, "server"))
+      File.write!(Path.join([repo, "server", "mix.exs"]), "")
+      on_exit(fn -> File.rm_rf!(repo) end)
+      test = self()
+
+      head = fn sha ->
+        fn
+          "git", ["-C", ^repo, "rev-parse", "HEAD"], _ ->
+            {sha <> "\n", 0}
+
+          exe, args, opts ->
+            send(test, {:ran, exe, args, opts})
+            {"", 0}
+        end
+      end
+
+      KeepUp.warm_test_builds([repo], head.("aaa"))
+      assert_receive {:ran, "timeout", [_, "mise", "exec", "--", "mix", "compile"], opts}
+      assert opts[:cd] == Path.join(repo, "server")
+      assert {"MIX_ENV", "test"} in opts[:env]
+
+      KeepUp.warm_test_builds([repo], head.("aaa"))
+      refute_receive {:ran, _, _, _}, 100
+
+      KeepUp.warm_test_builds([repo], head.("bbb"))
+      assert_receive {:ran, "timeout", _, _}
+    end
+  end
 end
