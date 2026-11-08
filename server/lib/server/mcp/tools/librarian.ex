@@ -113,10 +113,19 @@ defmodule Server.MCP.Tool.DecideProposal do
       {:error, why} ->
         fail(frame, L.why(why))
 
-      {:ok, _} ->
-        ok(frame, %{"decided" => params[:decision], "result" => "done"})
+      decided ->
+        ok(frame, %{"decided" => params[:decision], "result" => result(decided)})
     end
   end
+
+  @doc false
+  def result({:ok, %Server.Fact{}}), do: "applied: the new fact now supersedes the old"
+
+  def result({:ok, %Server.Message{}}),
+    do: "asked the operator: the old fact is stated, so nothing was superseded; the proposal is closed"
+
+  def result({:ok, %Server.Event{}}), do: "rejected: the proposal is closed, nothing was superseded"
+  def result(other), do: inspect(other)
 end
 
 defmodule Server.MCP.Tool.LandedFacts do

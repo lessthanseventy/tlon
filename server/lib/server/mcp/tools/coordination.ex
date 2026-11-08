@@ -373,7 +373,7 @@ defmodule Server.MCP.Tool.AssignLead do
       {:ok, _thread} -> ok(frame, %{"thread_id" => params[:thread_id], "lead" => params[:lead]})
       {:error, :no_agent} -> fail(frame, "no registered agent named #{inspect(params[:lead])}")
       {:error, :no_thread} -> fail(frame, "no such thread: #{params[:thread_id]}")
-      {:error, reason} -> fail(frame, "assign_lead failed: #{Server.Staffing.explain(reason)}")
+      {:error, reason} -> fail(frame, "assign_lead failed: #{explain(reason)}")
     end
   end
 end
