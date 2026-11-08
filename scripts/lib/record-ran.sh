@@ -17,3 +17,9 @@ record_ran() { # check sha exit
   fi
   return 0
 }
+ran_passed() { # check sha → the id of the passed run the service holds for it; fails when there is none
+  local answer id
+  answer="$(curl -sf -m 5 "$ran_url/api/release/ran?check=$1&sha=$2")" || return 1
+  id="$(printf '%s' "$answer" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')"
+  [ -n "$id" ] && echo "$id"
+}

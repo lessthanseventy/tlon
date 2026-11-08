@@ -6,6 +6,15 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$root/scripts/lib/record-ran.sh"
 . "$root/scripts/lib/failures.sh"
 "$root/scripts/git-fetch-origin.sh" "$root" main || { echo "check-main: fetch failed"; exit 1; }
+# A tip whose gate a landing already recorded (Server.Release.Candidate.landed: the landing's full
+# check, on the tree that became main) is not gated again; the run says so and counts as the gate.
+tip="$(git -C "$root" rev-parse origin/main)"
+if [ "${TLON_CHECK_FORCE:-0}" != 1 ] && passed="$(ran_passed gate "$tip")"; then
+  echo "check-main: origin/main @ ${tip:0:12} — skipped: gate passed at landing, run #$passed"
+  echo "ran-on: gate $tip"
+  record_ran gate "$tip" 0
+  exit 0
+fi
 # The checkout lives in the verify cache, as workline-verify's do, never in TMPDIR: /tmp is every
 # seat's write root, and the suite's hundreds of seeded git repos there cost every seat bwrap
 # mounts while it runs, past bwrap's 9000 arguments

@@ -81,7 +81,12 @@ defmodule Server.Workline.Publish do
     case run.("gh", ["pr", "merge", to_string(pr), "--rebase", "--match-head-commit", sha], opts) do
       {_, 0} ->
         delete_remote_head(repo, branch, run)
-        Server.Release.Candidate.landed(repo, sha, run)
+
+        case Server.Release.Candidate.landed(repo, sha, run) do
+          {:recorded, tip} -> Server.Smoke.queue_candidate(tip)
+          :skipped -> :ok
+        end
+
         :merged
 
       {out, _} ->

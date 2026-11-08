@@ -564,8 +564,13 @@ notice on the sheriff's beat). `Sonnet` for each but #614 and #760 (`Opus`).
   4. **The canary bench runs on a changed steering fingerprint**, not nightly (`mix
      server.bench_contrast --fingerprint` already computes it); the script suites run when
      `scripts/` changed (G6's `check:scripts`).
-- Spec 2026-11-08: `docs/plans/2026-11-08-e7-fewer-checks-spec.md`, awaiting Andrew. Measured ~5
+- Spec 2026-11-08: `docs/plans/2026-11-08-e7-fewer-checks-spec.md`, approved. Measured ~5
   passed suites per landing over the week to 2026-11-08; the landing gate stays full throughout.
+- Done 2026-11-08, mechanisms 1 and 3: the seat is told to `run_task("check")`, whose green the
+  verify reads from the cache; `check-main.sh` skips a tip whose gate a landing recorded
+  (`GET /api/release/ran`, `Candidate.passed/2`) and says so; a landing queues the tip's smoke
+  (`Smoke.queue_candidate/1`), one at a time. Left: mechanism 2 (scoped verify, after G6's
+  `check:scripts`) and mechanism 4 (the bench on a changed fingerprint).
 - Check: the count of `check_passed` events per landed workline, read for a week before and after
   (today's shape is ~4–5 per landing); every landed PR still carries a `tlon/check` from a full run
   at exactly its head; a change to `server/` alone never skips the server suite (a test over the

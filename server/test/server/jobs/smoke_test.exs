@@ -97,6 +97,27 @@ defmodule Server.Jobs.SmokeTest do
     assert %{success: 1} = Task.await(task, 10_000)
   end
 
+  test "a candidate smoke runs unheld, about no thread: green is silent, red is the error the alarm says" do
+    script = Application.fetch_env!(:server, :smoke_script)
+
+    File.write!(
+      script,
+      ~s(#!/usr/bin/env bash\n[ -z "${TLON_SMOKE_HOLD:-}" ] || exit 9\necho "ran-on: smoke $1"\nexit ${SMOKE_EXIT:-0}\n)
+    )
+
+    sha = String.duplicate("e", 40)
+    {:ok, job} = Smoke.queue_candidate(sha)
+    job = Server.Repo.reload!(job)
+    assert %{"candidate" => true, "ref" => ^sha} = job.args
+    refute Map.has_key?(job.args, "thread_id")
+    assert :ok = Server.Jobs.Smoke.perform(job)
+
+    File.write!(script, "#!/usr/bin/env bash\necho \"smoke: the office never answered\"\nexit 3\n")
+    assert {:error, why} = Server.Jobs.Smoke.perform(job)
+    assert why =~ "smoke of #{String.slice(sha, 0, 12)} failed (exit 3); the log: "
+    assert File.read!(Server.Repo.reload!(job).meta["log"]) =~ "never answered"
+  end
+
   test "the hold line names the smoke's build dir beside its url" do
     re = Server.Jobs.Smoke.hold_line()
 

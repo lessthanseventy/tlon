@@ -2,6 +2,7 @@ defmodule Server.Release.CandidateTest do
   # A candidate is releasable when the gate and the smoke each passed on exactly that commit and
   # nothing is mid-flight (pm-and-release design §4, checks 1, 2 and 4).
   use ExUnit.Case, async: false
+  use Oban.Testing, repo: Server.Repo
 
   alias Server.Release.Candidate
   alias Server.Repo
@@ -12,6 +13,7 @@ defmodule Server.Release.CandidateTest do
 
   setup do
     Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
     {:ok, ws} = Server.Workspaces.register(%{name: "Machine"})
 
     {:ok, s} =
@@ -32,17 +34,31 @@ defmodule Server.Release.CandidateTest do
       end
     end
 
-    test "the same tree: the gate is recorded on main's new tip" do
+    test "the same tree: the gate is recorded on main's new tip, and the tip's smoke is queued" do
       run = landing(%{"#{@a}^{tree}" => "t1", "origin/main^{tree}" => "t1"})
       assert :merged = Server.Workline.Publish.merge_at(Server.Profiles.tlon_root(), 9, @a, "work/x", run)
       assert [%{check: :gate, ok: true} | _] = Candidate.check(@b, busy: fn -> [] end)
+      assert %ScheduleRun{status: "ok"} = Candidate.passed("gate", @b)
+      assert [%{args: %{"candidate" => true, "sha" => @b, "ref" => @b}}] = all_enqueued(worker: Server.Jobs.Smoke)
     end
 
-    test "another tree (main moved past it), or another repo: nothing is recorded" do
+    test "another tree (main moved past it), or another repo: nothing is recorded, no smoke queued" do
       run = landing(%{"#{@a}^{tree}" => "t1", "origin/main^{tree}" => "t2"})
       assert :merged = Server.Workline.Publish.merge_at(Server.Profiles.tlon_root(), 9, @a, "work/x", run)
       assert :merged = Server.Workline.Publish.merge_at("/elsewhere", 9, @a, "work/x", run)
       assert [%{check: :gate, ok: false} | _] = Candidate.check(@b, busy: fn -> [] end)
+      assert Candidate.passed("gate", @b) == nil
+      assert all_enqueued(worker: Server.Jobs.Smoke) == []
+    end
+
+    test "a newer tip's smoke replaces one still queued; a held QA smoke is not touched" do
+      {:ok, held} = Oban.insert(Server.Jobs.Smoke.new(%{thread_id: 1, ref: "work/x", sha: @a}))
+      {:ok, first} = Server.Smoke.queue_candidate(@a)
+      {:ok, second} = Server.Smoke.queue_candidate(@b)
+
+      assert Repo.reload!(first).state == "cancelled"
+      assert Repo.reload!(second).state == "available"
+      assert Repo.reload!(held).state == "available"
     end
   end
 

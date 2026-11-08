@@ -52,6 +52,23 @@ defmodule Server.Smoke do
     end
   end
 
+  @doc """
+  Queue the unheld smoke of main's new tip `sha` after a landing: its run records `ran-on: smoke`,
+  what `Server.Release.Candidate` reads, so a merge is smoked when it lands, not at night. One at a
+  time: a newer tip's replaces one still queued; a build already running finishes.
+  """
+  @spec queue_candidate(String.t()) :: {:ok, Oban.Job.t()} | {:error, term()}
+  def queue_candidate(sha) do
+    Oban.cancel_all_jobs(
+      from j in Oban.Job,
+        where:
+          j.worker == "Server.Jobs.Smoke" and j.state in ["available", "scheduled"] and
+            fragment("?->>'candidate' = 'true'", j.args)
+    )
+
+    Oban.insert(Job.new(%{ref: sha, sha: sha, candidate: true}))
+  end
+
   @doc "The executing smoke job of `thread_id` that is up (its url known), or nil."
   @spec held(integer()) :: Oban.Job.t() | nil
   def held(thread_id) do

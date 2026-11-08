@@ -80,8 +80,9 @@ defmodule Server.Source.Tools do
 
   def run(_thread, :check, _args, _opts) do
     {:error,
-     "a check runs for minutes, longer than one tool call: commit, then run_task(\"server:check\") " <>
-       "(or \"check\"); its result is posted to you. run_verb runs test, format and compile."}
+     "a check runs for minutes, longer than one tool call: commit, then run_task(\"check\"), the full " <>
+       "gate, which records the tree green so verify skips it; its result is posted to you. " <>
+       "run_verb runs test, format and compile."}
   end
 
   def run(thread, verb, args, opts) when verb in [:test, :format, :compile] do

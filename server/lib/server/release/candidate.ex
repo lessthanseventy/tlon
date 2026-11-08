@@ -61,8 +61,10 @@ defmodule Server.Release.Candidate do
   A landing just merged `gated`, the head its gate passed, into `repo`'s main: when `repo` is tlon's
   and main's tip now holds exactly that tree, the gate is `check:main` on the tip, recorded as a run
   passed there. GitHub's rebase writes new commits, so the tree is what is compared; a tip with any
-  other tree (main moved past it) gets nothing. `:recorded` or `:skipped`.
+  other tree (main moved past it) gets nothing. `{:recorded, tip}` or `:skipped`.
   """
+  @spec landed(String.t(), String.t(), (String.t(), [String.t()], keyword() -> {String.t(), integer()})) ::
+          {:recorded, String.t()} | :skipped
   def landed(repo, gated, run \\ &Server.Cmd.run/3) do
     git = fn args -> run.("git", ["-C", repo | args], stderr_to_stdout: true) end
 
@@ -71,10 +73,20 @@ defmodule Server.Release.Candidate do
          {tip, 0} <- git.(["rev-parse", "origin/main"]),
          {tree, 0} <- git.(["rev-parse", "origin/main^{tree}"]),
          {^tree, 0} <- git.(["rev-parse", "#{gated}^{tree}"]),
-         {:ok, _} <- record("gate", String.trim(tip), 0) do
-      :recorded
+         tip = String.trim(tip),
+         {:ok, _} <- record("gate", tip, 0) do
+      {:recorded, tip}
     else
       _ -> :skipped
+    end
+  end
+
+  @doc ~s{The newest finished run of `check` (`"gate"` or `"smoke"`) on `sha`, when it passed; else nil.}
+  @spec passed(String.t(), String.t()) :: ScheduleRun.t() | nil
+  def passed(check, sha) when is_binary(check) and is_binary(sha) do
+    case newest(where(ScheduleRun, [r], r.check_name == ^check and r.sha == ^sha)) do
+      %ScheduleRun{status: "ok"} = run -> run
+      _ -> nil
     end
   end
 
