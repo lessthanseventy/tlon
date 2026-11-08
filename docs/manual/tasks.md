@@ -128,7 +128,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `server:cli` | server: the CLI passthrough — mise run server:cli -- <subcommand> [args] (workline/approve/post/…) |
 | `server:console` | server: remote iex INTO the running service node — inspect/mint against the live channel |
 | `server:db-sweep` | server: drop the tlon_eval_<digits> and tlon_{land,verify,test}_* databases nothing is connected to (a killed or red run's) — usage: mise run server:db-sweep [-- <prefix>] |
-| `server:deps` | server: fetch the locked deps when they are behind the lock, and compile them for the test env and the dev env server:eval-det boots (a no-op when current) |
+| `server:deps` | server: fetch the locked deps when they are behind the lock (refusing a mix.exs the lock does not satisfy, rather than rewriting mix.lock), and compile them for the test env and the dev env server:eval-det boots (a no-op when current) |
 | `server:dev` | server: a scratch server NODE (funes-dev@127.0.0.1, database tlon_dev, MCP :4041) in iex — hack on the server with the live service untouched; point the office at it with `TLON_URL=http://127.0.0.1:4041 mise run office:run` |
 | `server:doctor` | server: the 2am report against the scratch db |
 | `server:dossier` | server: render a thread's brief from the shell (Board.brief → Brief) — parity with the get_dossier MCP tool |
