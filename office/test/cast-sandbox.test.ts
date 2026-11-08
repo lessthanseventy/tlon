@@ -30,8 +30,11 @@ test("⏎ on grade in the sandbox keeps it in the sandbox's cast.json, and the o
   await started(tmux, "the room", () => screen().includes("HOME"))
   tmux("send-keys", "-t", "0", "-l", "`")
   await until("the cast", () => screen().includes("THE CAST · people"))
-  for (let i = 0; i < 8 && !screen().includes("THE CAST · people · grade"); i++) { tmux("send-keys", "-t", "0", "right"); await Bun.sleep(150) }
-  await until("grade lit", () => screen().includes("THE CAST · people · grade"))
+  // One → per field, each waited on: a key sent before the last one's repaint is seen would walk past grade under load.
+  for (const f of ["archetype", "look", "soul", "voice", "grade"]) {
+    tmux("send-keys", "-t", "0", "right")
+    await until(`${f} lit`, () => screen().includes(`THE CAST · people · ${f}`))
+  }
   tmux("send-keys", "-t", "0", "enter")
   const file = join(tmp, "tlon-sandbox", "cast.json")
   await until("the sandbox's cast.json", () => existsSync(file))
