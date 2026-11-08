@@ -419,6 +419,9 @@ snapshot on 304. `Sonnet · S`, after B1.
   test that drives each job's failure path and asserts a post; then the seven tickets are the
   instances. Pairs with B5's timeouts (a timeout is an ending).
 - Check: the invariant test; the seven tickets closed by it or by their own PRs.
+- Spec 2026-11-08: `docs/plans/2026-11-08-e1-job-endings-spec.md`, awaiting Andrew. It finds only
+  #846 and #793 are a job ending unsaid; the other five are scripts, units and vanished seats,
+  each its own fix (#781 and #864 go with B5).
 
 **E2 · A landing's gate already is `check:main` on the new tip — record it.** `Opus · M`
 - Why: `release:status` today: main is two commits past the release and "no check:main on 92b914e;
@@ -509,6 +512,8 @@ notice on the sheriff's beat). `Sonnet` for each but #614 and #760 (`Opus`).
   4. **The canary bench runs on a changed steering fingerprint**, not nightly (`mix
      server.bench_contrast --fingerprint` already computes it); the script suites run when
      `scripts/` changed (G6's `check:scripts`).
+- Spec 2026-11-08: `docs/plans/2026-11-08-e7-fewer-checks-spec.md`, awaiting Andrew. Measured ~5
+  passed suites per landing over the week to 2026-11-08; the landing gate stays full throughout.
 - Check: the count of `check_passed` events per landed workline, read for a week before and after
   (today's shape is ~4–5 per landing); every landed PR still carries a `tlon/check` from a full run
   at exactly its head; a change to `server/` alone never skips the server suite (a test over the
