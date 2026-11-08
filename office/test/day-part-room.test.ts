@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { baseLook, overrideFor, today } from "../kit/looks"
-import type { DataPart } from "../kit/parts"
+import { useDataParts, type DataPart } from "../kit/parts"
 import { WideRoom } from "../rooms/wide"
 import { office, seeded } from "./golden"
 
@@ -18,6 +18,7 @@ const toys = (parts: DataPart[]) => ({ visitors: [], puns: [], reactions: {}, pa
 const wearers = (r: WideRoom) => [...inside(r).actors.values()].filter((a) => a.look.parts?.head?.id === part.id).length
 
 describe("the room dresses the day's wearer", () => {
+  afterAll(() => useDataParts([]))
   test("exactly one actor wears today's part, and it is nobody's saved look", () => seeded(7, () => {
     const { r, a } = room()
     r.setToys(toys([part])); r.step(a)
