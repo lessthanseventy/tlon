@@ -394,7 +394,7 @@ defmodule Server.Jobs.KeepUpTest do
 
   describe "the main checkout's test build (#760)" do
     test "compiled for test once per main tip, in each mix project of the repo" do
-      repo = Path.join(System.tmp_dir!(), "warm-#{System.unique_integer([:positive])}")
+      repo = Path.join(System.tmp_dir!(), "warm-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(Path.join(repo, "server"))
       File.write!(Path.join([repo, "server", "mix.exs"]), "")
       on_exit(fn -> File.rm_rf!(repo) end)
