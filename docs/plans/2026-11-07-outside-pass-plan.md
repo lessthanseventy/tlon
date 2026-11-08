@@ -104,7 +104,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   thread (t530, t501, t359 each twice in 14 days).
 - Change: dedupe on (thread, since the pane last changed) in `Server.Maintain.Sweep` or the alert.
 - Check: a test with two passes in the stale window posts once.
-- Done: the second post was a stall resolved by hand (or a poller restart) while the pane stayed frozen; the row now carries `since` and `Stall` posts once per freeze. Test: `attention_stall_test.exs`.
+- Done: the second post was a stall resolved by hand while the pane stayed frozen (inferred from the code; the live rows were not inspected); the row now carries `since` and `Stall` posts once per freeze. Test: `attention_stall_test.exs`.
 
 **A8 · A stopped `mise run check` frees the queue while its suites still run.** `Sonnet · S`
 - Why: seen 2026-11-07 while landing this plan: the shell running `check` was stopped, the
