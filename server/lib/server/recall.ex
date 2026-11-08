@@ -18,6 +18,7 @@ defmodule Server.Recall do
   alias Server.Recall.Judge
   alias Server.Recall.Strength
   alias Server.Recall.Supersede
+  alias Server.Recall.Vectors
   alias Server.Repo
   alias Server.Thread
 
@@ -135,6 +136,7 @@ defmodule Server.Recall do
       end)
 
     vectors = meaning_pool(scored, query_vec, keyword, opts[:meaning_pool] || @meaning_pool)
+    query_vec = query_vec && Vectors.pack(query_vec)
 
     scored
     |> Enum.map(&Map.put(&1, :relevance, relevance(&1.fact, query_vec, keyword, vectors)))
@@ -213,7 +215,7 @@ defmodule Server.Recall do
 
   defp semantic_rel(_vector, nil), do: 0.0
   defp semantic_rel(nil, _query_vec), do: 0.0
-  defp semantic_rel(vector, query_vec), do: max(Embedding.cosine(query_vec, vector), 0.0)
+  defp semantic_rel(packed, query_packed), do: max(Vectors.dot(query_packed, packed), 0.0)
 
   defp keyword_rel(_fact, nil), do: 0.0
   defp keyword_rel(%{id: id}, keyword), do: Map.get(keyword, id, 0.0)
@@ -228,7 +230,8 @@ defmodule Server.Recall do
   """
   @spec store_embedding(Fact.t(), [float()], String.t()) :: {:ok, Fact.t()} | {:error, term()}
   def store_embedding(%Fact{} = fact, vector, model) do
-    with {:ok, fact} <- fact |> Fact.embedding_changeset(vector, model) |> Repo.update() do
+    with {:ok, fact} <- fact |> Fact.embedding_changeset(vector, model) |> Repo.update(),
+         true <- Server.Recall.Vectors.forget(fact.id) do
       {:ok, Supersede.supersede(fact)}
     end
   end
@@ -271,6 +274,10 @@ defmodule Server.Recall do
 
     fact
   end
+
+  # a notice is the server's own line: never searched for meaning, and thousands of them would push
+  # the chat out of search's semantic window
+  def embed_on_write(%Message{kind: "notice"} = message, _opts), do: message
 
   def embed_on_write(%Message{} = message, _opts) do
     Task.Supervisor.start_child(Server.TaskSupervisor, fn -> embed_message(message) end)
@@ -402,8 +409,7 @@ defmodule Server.Recall do
       |> Enum.sort_by(&(&1.strength * relevance(&1.fact, nil, keyword, %{})), :desc)
       |> Enum.take(size)
 
-    ids = Enum.map(pinned ++ likeliest, & &1.id)
-    Map.new(Repo.all(from f in Fact, where: f.id in ^ids, select: {f.id, f.embedding}))
+    Vectors.for_ids(Enum.map(pinned ++ likeliest, & &1.id))
   end
 
   # Relevance blends the semantic (cosine) and keyword (bm25) signals as a soft-OR — a fact matching

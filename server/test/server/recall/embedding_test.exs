@@ -12,6 +12,11 @@ defmodule Server.Recall.EmbeddingTest do
     assert log =~ "recall: the query embedding failed, relevance is keyword-only:"
   end
 
+  test "a request asks ollama to keep the model loaded: a cold load outlasts recall's query timeout" do
+    assert %{"keep_alive" => "24h", "input" => "hi"} = "hi" |> Embedding.body("m", []) |> JSON.decode!()
+    assert %{"keep_alive" => "5m"} = "hi" |> Embedding.body("m", keep_alive: "5m") |> JSON.decode!()
+  end
+
   test "identical vectors have cosine 1.0" do
     assert_in_delta Embedding.cosine([1.0, 2.0, 3.0], [1.0, 2.0, 3.0]), 1.0, 0.0001
   end

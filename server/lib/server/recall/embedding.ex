@@ -10,6 +10,7 @@ defmodule Server.Recall.Embedding do
   @default_endpoint "http://127.0.0.1:11434/api/embed"
   @default_model "nomic-embed-text"
   @default_timeout_ms 10_000
+  @keep_alive "24h"
 
   @doc "Cosine similarity of two equal-length vectors. A zero vector is uncorrelated (0.0)."
   @spec cosine([number()], [number()]) :: float()
@@ -36,7 +37,7 @@ defmodule Server.Recall.Embedding do
     timeout = setting(opts, :timeout, @default_timeout_ms)
 
     _ = Application.ensure_all_started(:inets)
-    body = JSON.encode!(%{model: model, input: text})
+    body = body(text, model, opts)
     request = {String.to_charlist(endpoint), [], ~c"application/json", body}
 
     case :httpc.request(:post, request, [{:timeout, timeout}, {:connect_timeout, timeout}], body_format: :binary) do
@@ -47,6 +48,13 @@ defmodule Server.Recall.Embedding do
   rescue
     e -> {:error, e}
   end
+
+  # ollama unloads an idle model after 5 minutes and reloads it in ~6 s, longer than recall's query
+  # embedding waits, and a request that gives up aborts the load: so a quiet spell left every brief
+  # keyword-only until a message's own embed (which waits longer) happened to reload it.
+  @doc false
+  def body(text, model, opts),
+    do: JSON.encode!(%{model: model, input: text, keep_alive: setting(opts, :keep_alive, @keep_alive)})
 
   # Per-call option, else `config :server, :embedding`, else the default.
   defp setting(opts, key, default), do: opts[key] || Application.get_env(:server, :embedding, [])[key] || default

@@ -199,6 +199,15 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   notices are, stop (A1's 7,633 lines would each carry a vector).
 - Check: the brief latency number before/after in the PR; `select pg_size_pretty(sum(length(
   embedding))) from message where kind='notice'` → 0.
+- Measured 2026-11-08 on the live node: a brief took 2.5–8.6 s; with a query vector, knowledge
+  recall 2.5–2.9 s and learnings up to 3.6 s, of which decoding 500 vectors' JSON was ~680 ms and
+  the list cosine ~670 ms, each paid twice per brief. And the query embedding timed out on every
+  brief after a quiet spell: ollama unloads the model after 5 min, a reload takes ~6 s, recall waits
+  1 s and its giving up aborts the load. Done: `Server.Recall.Vectors` caches each fact's unit
+  vector packed and scores by dot product (no migration, no dependency); requests send
+  `keep_alive: 24h`; notices are no longer embedded on write. Open: the 3,142 notices already
+  embedded (28 MB) stay until the operator nulls them; pgvector stays the larger fix, a migration
+  and a dependency, Andrew's call.
 
 **B5 · Shell-outs have no timeout; nine private `git/2` helpers.** `Opus · M`
 - Why: 96 `System.cmd`/`Port` uses in `server/lib` and only `Server.ModelCli` and `Server.Smoke`
