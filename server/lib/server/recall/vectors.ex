@@ -27,10 +27,7 @@ defmodule Server.Recall.Vectors do
     loaded =
       if misses == [],
         do: [],
-        else:
-          Repo.all(
-            from f in Fact, where: f.id in ^misses and not is_nil(f.embedding), select: {f.id, f.embedding}
-          )
+        else: Repo.all(from f in Fact, where: f.id in ^misses and not is_nil(f.embedding), select: {f.id, f.embedding})
 
     packed = for {id, vector} <- loaded, do: {id, pack(vector)}
     :ets.insert(__MODULE__, packed)

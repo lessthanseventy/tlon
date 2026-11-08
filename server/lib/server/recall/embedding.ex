@@ -4,7 +4,8 @@ defmodule Server.Recall.Embedding do
   `docs/plans/2026-08-19-funes-forgetting-design.md`): embed fact text with a local ollama model
   and compare by cosine. `cosine/2` is pure; `embed/1` calls ollama over Erlang's built-in
   `:httpc` (no new dep) and degrades to `{:error, _}` if the embedder is down — the recall layer
-  then falls back to keyword relevance rather than failing. Endpoint/model are configurable
+  then falls back to keyword relevance rather than failing. Endpoint, model, timeout and
+  `keep_alive` (how long ollama holds the model loaded, default 24h) are configurable
   (`config :server, :embedding`).
   """
   @default_endpoint "http://127.0.0.1:11434/api/embed"
