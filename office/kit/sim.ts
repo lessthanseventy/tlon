@@ -3,6 +3,7 @@
 // when it goes cold, into your queue when a thread waits on you, over to whoever they
 // consult, up to the board to leave a note — and Nina's day. A room supplies its geometry as a
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
+import { random } from "./rng"
 import { asksYou } from "./crew"
 import { relation } from "./company"
 import { soreLine } from "./seat-voices"
@@ -269,11 +270,11 @@ export class Sim<L extends { people: Seat[] }> {
    * whoever it is about.
    */
   protected line(pet: string, occasion: string, canned: readonly string[], name = "", parts?: Parameters<typeof riff>[0]) {
-    if (pet === "Nina" && canned === (NINA as Record<string, unknown>)[occasion]) canned = bucketFor(occasion, this.temperament, Math.random, this.cat.species)
+    if (pet === "Nina" && canned === (NINA as Record<string, unknown>)[occasion]) canned = bucketFor(occasion, this.temperament, random, this.cat.species)
     const fresh = this.voices[pet]?.[occasion] ?? [], unsaid = fresh.filter((l) => !this.spoken.has(l))
     const l = unsaid.length ? pick(unsaid)
       : fresh.length ? pickFresh(fresh, this.recent)
-        : parts && Math.random() < 0.5 ? riff(parts) : pickFresh(canned, this.recent)
+        : parts && random() < 0.5 ? riff(parts) : pickFresh(canned, this.recent)
     this.spoken.add(l)
     this.recent = [l, ...this.recent].slice(0, 8)
     return l.replaceAll("{name}", name || "you")
@@ -289,7 +290,7 @@ export class Sim<L extends { people: Seat[] }> {
   protected noticed(actor: Actor, what: string) {
     const lines = (NINA as Record<string, unknown>)[what]
     const odds = what === "shipped" ? 0.7 : what === "queue" ? 0.4 : what === "done" ? 0.2 : 0.1
-    if (Array.isArray(lines) && this.quiet(this.cat.saidUntil) && Math.random() < odds) this.catSay(this.line("Nina", what, lines as string[], actor.seat.agent))
+    if (Array.isArray(lines) && this.quiet(this.cat.saidUntil) && random() < odds) this.catSay(this.line("Nina", what, lines as string[], actor.seat.agent))
   }
   /** someone was asked something (`text` null) or has answered; an answer shows for its `readTicks` */
   say(agent: string, text: string | null) { this.talk.set(agent, { text, until: text === null ? Infinity : this.tick + readTicks(text) }); this.changed = true }
@@ -307,7 +308,7 @@ export class Sim<L extends { people: Seat[] }> {
     this.convos = this.convos.filter((c) => c.up)
   }
   private together() {
-    if (!this.onTogether || this.tick % 40 || this.tick - this.askedTogether < 400 || Math.random() > 0.3) return
+    if (!this.onTogether || this.tick % 40 || this.tick - this.askedTogether < 400 || random() > 0.3) return
     const quiet = this.crew().filter((x) => !x.leaving && !this.talk.has(x.seat.agent))
     const settled = quiet.filter((x) => !x.moving && !x.path.length && TOGETHER.has(x.spot.kind))
     const byKind = new Map<string, Actor[]>()
@@ -346,12 +347,12 @@ export class Sim<L extends { people: Seat[] }> {
         const { name, kind } = c.errand, host = this.actors.get(name)
         if (kind === "drink") {
           c.errand = null; c.mode = "sit"; c.until = this.tick + DRINK
-          c.fell = Math.random() < FALL_ODDS
+          c.fell = random() < FALL_ODDS
           c.wet = this.tick + DRINK + (c.fell ? FALL_WET : WET)
           this.catSay(this.line("Nina", c.fell ? "splash" : "drink", c.fell ? NINA.splash : NINA.drink), 70)
           return true
         }
-        if (kind === "tub") { c.errand = null; c.mode = "sleep"; c.until = this.tick + 600 + Math.floor(Math.random() * 300); return true }
+        if (kind === "tub") { c.errand = null; c.mode = "sleep"; c.until = this.tick + 600 + Math.floor(random() * 300); return true }
         c.errand = null; c.mode = "sit"; c.until = this.tick + (kind === "keys" ? 400 : 200)
         if (host && kind === "cheer") { host.emote = "♥"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "cheer", NINA.cheer, name), 70) }
         if (host && kind === "letter") { host.emote = "✉"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "letter", NINA.letter, name), 70) }
@@ -360,10 +361,10 @@ export class Sim<L extends { people: Seat[] }> {
         return true
       }
       if (!c.path.length) {
-        const nap = at(p.nap) || (!!p.bath && at(p.bath.tub)) || (at(p.perches[0]) && Math.random() < 0.7)
+        const nap = at(p.nap) || (!!p.bath && at(p.bath.tub)) || (at(p.perches[0]) && random() < 0.7)
         c.mode = nap ? "sleep" : at(p.play) ? "play" : "sit"
         if (at(p.play)) c.face = 1
-        c.until = this.tick + (at(p.litter) ? 60 : nap ? 600 : 150) + Math.floor(Math.random() * (at(p.litter) ? 40 : 300))
+        c.until = this.tick + (at(p.litter) ? 60 : nap ? 600 : 150) + Math.floor(random() * (at(p.litter) ? 40 : 300))
       }
       return true
     }
@@ -371,10 +372,10 @@ export class Sim<L extends { people: Seat[] }> {
     // nobody leaves her lonely: you pat her when she is on your desk, and anyone idling in the
     // lounge reaches down to her when she is close
     if (this.tick >= c.purr) {
-      if (at(p.desk) && Math.random() < 0.02 * lean(this.temperament.warmth)) { c.purr = this.tick + 30; c.byYou = true; return true }
+      if (at(p.desk) && random() < 0.02 * lean(this.temperament.warmth)) { c.purr = this.tick + 30; c.byYou = true; return true }
       // a fuss is an occasion, not a fixture: one at a time, and not while she still has the last to say
       if (c.mode !== "sleep" && !c.path.length && this.quiet(c.saidUntil)) for (const a of this.actors.values()) {
-        if (a.moving || a.path.length || !LOUNGING.has(a.spot.kind) || Math.abs(a.x - c.x) > 18 || Math.abs(a.y - c.y) > 16 || Math.random() > 0.0015 * lean(this.temperament.energy)) continue
+        if (a.moving || a.path.length || !LOUNGING.has(a.spot.kind) || Math.abs(a.x - c.x) > 18 || Math.abs(a.y - c.y) > 16 || random() > 0.0015 * lean(this.temperament.energy)) continue
         // a snack from the machine goes to her, whatever else they had in mind
         const kind = a.snack > this.tick ? "treat" : pick<Fuss>(["pat", "pat", "scratch", "treat"])
         if (kind === "treat") a.snack = 0
@@ -388,13 +389,13 @@ export class Sim<L extends { people: Seat[] }> {
     // pets off: she is asleep on her rug and stays there — no wake-and-walk-back between naps
     if (!this.dials.pets && at(p.nap)) { c.mode = "sleep"; c.until = this.tick + 600; return true }
     const company = this.crew().some((a) => !a.moving && LOUNGING.has(a.spot.kind))
-    const r = Math.random()
+    const r = random()
     // now and then she goes to sit on the keyboard of someone hard at work
     const typing = this.crew().filter((a) => a.spot.kind === "desk" && !a.moving && a.seat.thinking)
     if (this.dials.pets && typing.length && r > 0.97 && c.mode !== "sleep") return this.catKeyboard(pick(typing).seat.agent)
     // the small hours give her ideas
     const leaps = this.dials.pets && r < (nightOwl(this.hour()) ? 0.15 : 0.05) * lean(this.temperament.energy) && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
-    if (leaps) { c.mode = "zoom"; c.leaps = leaps; c.zoom = this.tick + 70 + Math.floor(Math.random() * 60); return true }
+    if (leaps) { c.mode = "zoom"; c.leaps = leaps; c.zoom = this.tick + 70 + Math.floor(random() * 60); return true }
     if (this.dials.pets && p.bath && r > 0.95 && r <= 0.97 && c.mode !== "sleep" && this.catDrink()) return true
     const cold = (this.weather?.temp_c ?? 20) < 10
     const to = !this.dials.pets ? p.nap
@@ -521,11 +522,11 @@ export class Sim<L extends { people: Seat[] }> {
     if (this.running || this.alarmed || !this.eventGeo() || !this.actors.size) return false
     const on = EVENT_KINDS.filter((x) => this.dials.events[x])
     if (kind ? !this.dials.events[kind] : !on.length) return false
-    const k = kind ?? pickEvent(Math.random(), this.lastEvent, on)
+    const k = kind ?? pickEvent(random(), this.lastEvent, on)
     const crew = this.crew().filter((x) => !x.leaving && !x.seat.thinking).map((x) => x.seat.agent).sort()
     const sheriff = crew.includes(SHERIFF) ? SHERIFF : null
     // Gary's one roll is drawn here, once per visit, so a seeded run replays it
-    this.running = { kind: k, since: this.tick, idle: crew.filter((n) => n !== sheriff), sheriff, ...(k === "gary" ? { gary: { outcome: garyRoll(Math.random()), peek: this.dials.gary === "peek", victim: null } } : {}) }
+    this.running = { kind: k, since: this.tick, idle: crew.filter((n) => n !== sheriff), sheriff, ...(k === "gary" ? { gary: { outcome: garyRoll(random()), peek: this.dials.gary === "peek", victim: null } } : {}) }
     this.lastEvent = k
     this.onEvent?.(k, null)
     this.reactPets(k)
@@ -630,7 +631,7 @@ export class Sim<L extends { people: Seat[] }> {
     if (h < OPEN_FROM || h >= OPEN_TO) return
     if (this.nextEvent < 0) this.nextEvent = this.tick + gap
     if (this.tick < this.nextEvent) return
-    this.nextEvent = this.tick + Math.round(gap * (0.5 + Math.random()))
+    this.nextEvent = this.tick + Math.round(gap * (0.5 + random()))
     this.event()
   }
   private chainDepth = 0
@@ -642,7 +643,7 @@ export class Sim<L extends { people: Seat[] }> {
       this.running = null
       this.changed = true
       // rimworld: the end of one can be the start of the next, up to three deep; draws only when chain is on
-      const next = this.dials.chain && this.chainDepth < 3 && Math.random() < 0.6 ? CHAINS[r.kind].find((k) => this.dials.events[k]) : undefined
+      const next = this.dials.chain && this.chainDepth < 3 && random() < 0.6 ? CHAINS[r.kind].find((k) => this.dials.events[k]) : undefined
       if (next && this.event(next)) this.chainDepth++
       else this.chainDepth = 0
       return
@@ -708,8 +709,8 @@ export class Sim<L extends { people: Seat[] }> {
     if (!this.plan.door || !this.actors.size || this.callers.length >= QUEUE_MAX) return false
     const guests = kind ? [] : this.pooled().visitors
     // the pool's draw is made only when there is a pool, so a room without one rolls exactly what it always did
-    if (guests.length && Math.random() < 0.5) this.callers.push({ kind: "guest", guest: pick(guests) })
-    else this.callers.push({ kind: kind ?? pickVisitor(Math.random(), this.date()) })
+    if (guests.length && random() < 0.5) this.callers.push({ kind: "guest", guest: pick(guests) })
+    else this.callers.push({ kind: kind ?? pickVisitor(random(), this.date()) })
     return true
   }
   /** the server's generated toys, used only while the weirdness dial is past `curated` */
@@ -742,7 +743,7 @@ export class Sim<L extends { people: Seat[] }> {
     // the schedule draws only when it makes a ring, never per tick: a seeded run before the first is untouched
     if (this.tick >= this.nextRing) {
       const busy = this.dials.doorbell === "busy" ? 2 : 1
-      this.nextRing = this.tick + Math.round((RING_MIN + Math.floor(Math.random() * RING_SPAN)) / busy)
+      this.nextRing = this.tick + Math.round((RING_MIN + Math.floor(random() * RING_SPAN)) / busy)
       const h = this.hour()
       if (this.dials.doorbell !== "off" && h >= OPEN_FROM && h < OPEN_TO && !this.caller && !this.callers.length) this.ring()
     }
@@ -776,7 +777,7 @@ export class Sim<L extends { people: Seat[] }> {
     if (this.tick >= c.here + STAY) {
       this.caller = null
       const puns = this.pooled().puns
-      if (puns.length && Math.random() < 0.3) this.say(c.who, pick(puns))
+      if (puns.length && random() < 0.3) this.say(c.who, pick(puns))
       return true
     }
     return false
@@ -816,7 +817,7 @@ export class Sim<L extends { people: Seat[] }> {
         c.path = [{ ...g[0]! }]
       } else {
         const next = g.filter((q) => q.x !== c.x || q.y !== c.y)
-        c.path = [{ ...next[Math.floor(Math.random() * next.length)]! }]
+        c.path = [{ ...next[Math.floor(random() * next.length)]! }]
       }
     }
     for (let i = 0; i < 2 && c.path.length; i++) {
@@ -872,13 +873,13 @@ export class Sim<L extends { people: Seat[] }> {
     if (this.prints.length) { const n = this.prints.length; this.prints = prune(this.prints, this.tick); if (this.prints.length !== n) changed = true }
     // the night owls: in the small hours, someone at their desk yawns now and then
     if (nightOwl(this.hour())) for (const x of this.actors.values()) {
-      if (x.spot.kind === "desk" && !x.moving && this.tick >= x.emoteUntil && Math.random() < 1 / 900) { x.emote = "z"; x.emoteUntil = this.tick + 45; changed = true }
+      if (x.spot.kind === "desk" && !x.moving && this.tick >= x.emoteUntil && random() < 1 / 900) { x.emote = "z"; x.emoteUntil = this.tick + 45; changed = true }
     }
     if (asleep && this.cat.mode !== "sleep" && this.cat.mode !== "zoom") {
       this.cat.stretch = this.tick + 12
-      if (Math.random() < 0.5) this.catSay(this.line("Nina", "wake", NINA.wake))
+      if (random() < 0.5) this.catSay(this.line("Nina", "wake", NINA.wake))
     }
-    if (this.cat.mode !== "sleep" && this.quiet(this.cat.saidUntil) && Math.random() < 1 / 1500) this.catSay(this.line("Nina", "muse", NINA.muse, "", NINA_RIFF))
+    if (this.cat.mode !== "sleep" && this.quiet(this.cat.saidUntil) && random() < 1 / 1500) this.catSay(this.line("Nina", "muse", NINA.muse, "", NINA_RIFF))
     const plan = this.plan, l = plan.layout(a)
     if (this.threadMemo?.from !== a) this.threadMemo = { from: a, byId: new Map(a.threads.map((t) => [t.id, t])) }
     const threadOf = (id: number) => this.threadMemo!.byId.get(id)
@@ -959,7 +960,7 @@ export class Sim<L extends { people: Seat[] }> {
         if (goal.kind === "queue") this.noticed(actor, "queue")
         if (alarmed) { actor.emote = "!"; actor.emoteUntil = this.tick + 30 }
         // a pastime holds them a minute or two before the next
-        actor.until = this.tick + 400 + Math.floor(Math.random() * 800)
+        actor.until = this.tick + 400 + Math.floor(random() * 800)
       }
       // someone you are talking to stops where they are and faces you until they have answered
       if (this.talk.get(actor.seat.agent)?.text === null) { actor.moving = false; if (actor.pose === "stand") actor.face = "down" }
@@ -978,13 +979,13 @@ export class Sim<L extends { people: Seat[] }> {
       }
       if (actor.leaving && !actor.moving && actor.path.length === 0) { this.crewList = null; this.actors.delete(k); changed = true; continue }
       // at the machine: a snack drops, and it goes where they go next
-      if (!actor.moving && !actor.path.length && actor.spot.kind === "vending" && actor.snack < this.tick && Math.random() < 0.03) { actor.snack = this.tick + 900; changed = true }
+      if (!actor.moving && !actor.path.length && actor.spot.kind === "vending" && actor.snack < this.tick && random() < 0.03) { actor.snack = this.tick + 900; changed = true }
       // a coffee poured goes back to the desk with them, and steams there a while
-      if (!actor.moving && !actor.path.length && actor.spot.kind === "coffee" && actor.mug < this.tick && Math.random() < 0.03) { actor.mug = this.tick + 3000; changed = true }
+      if (!actor.moving && !actor.path.length && actor.spot.kind === "coffee" && actor.mug < this.tick && random() < 0.03) { actor.mug = this.tick + 3000; changed = true }
       if (actor.emote && this.tick > actor.emoteUntil) { actor.emote = null; changed = true }
-      if (!actor.emote && !actor.moving && Math.random() < 0.006) {
+      if (!actor.emote && !actor.moving && random() < 0.006) {
         const moods = (this.sour.get(actor.seat.agent) ?? 0) > this.tick ? SOUR : MOODS[actor.spot.kind]
-        actor.emote = moods ? moods[Math.floor(Math.random() * moods.length)]! : actor.look.emote
+        actor.emote = moods ? moods[Math.floor(random() * moods.length)]! : actor.look.emote
         actor.emoteUntil = this.tick + 25
         changed = true
       }
@@ -1007,7 +1008,7 @@ export class Sim<L extends { people: Seat[] }> {
       if (a.moving || a.path.length || (a.spot.kind !== "foosball" && a.spot.kind !== "pool") || this.grudge.has(a.seat.agent) || !a.spot.with) continue
       const b = this.crew().find((x) => x !== a && !x.moving && !x.path.length && x.spotKey === spotKey({ ...a.spot, ...a.spot.with! }))
       if (!b || relation(a.seat.agent, b.seat.agent, souls, bench) !== "rival") continue
-      const loser = Math.random() < 0.5 ? a : b
+      const loser = random() < 0.5 ? a : b
       this.grudge.set(a.seat.agent, loser.seat.agent); this.grudge.set(b.seat.agent, loser.seat.agent)
       a.until += this.bloodTicks; b.until += this.bloodTicks
     }
@@ -1077,11 +1078,11 @@ export class Sim<L extends { people: Seat[] }> {
     // someone waiting at the far end of the table, or half a chat: go and make it a pair
     const waiting = free.filter((s) => s.with && held.has(spotKey({ ...s, ...s.with })))
     const friends = waiting.filter((s) => rel(s) === "friend")
-    if (friends.length && Math.random() < 0.9) return friends[Math.floor(Math.random() * friends.length)]!
-    if (waiting.length && Math.random() < 0.7) return waiting[Math.floor(Math.random() * waiting.length)]!
+    if (friends.length && random() < 0.9) return friends[Math.floor(random() * friends.length)]!
+    if (waiting.length && random() < 0.7) return waiting[Math.floor(random() * waiting.length)]!
     // their favourite pulls three times as hard, and the hour has its say
     const hour = this.hour(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind, this.celebrating || this.pizzaOn())
-    let roll = Math.random() * free.reduce((n, s) => n + weight(s), 0)
+    let roll = random() * free.reduce((n, s) => n + weight(s), 0)
     return free.find((s) => (roll -= weight(s)) < 0) ?? this.plan.roam(l)
   }
 

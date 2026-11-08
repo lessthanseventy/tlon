@@ -702,6 +702,10 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: every call through `rng.ts`; `seatLine`/`soreLine` reuse `pick`/`pickFresh`.
 - Check: an eslint/grep rule in `office:check` that fails on a bare `Math.random` under `kit/` and
   `rooms/`. `limit` (the check).
+- Done: every `kit/` and `rooms/` call goes through `random()` in `kit/rng.ts` (it reads `Math.random` at call
+  time, so the tests' stubs still pin it); `seatLine`/`soreLine` use `pickFresh`/`pick`. `test/determinism.test.ts`
+  (run by `office:check`) fails on a `Math.random` anywhere else under `kit/` or `rooms/`. Left: `tui/main.ts` has
+  one `Math.random` (a cheer's pick) and `tui/terminal.ts` one (a tmux name); the gate covers `kit/` and `rooms/` only.
 
 **G4 · The glossary's pending renames.** `Opus · M · limit`
 - Why: all four are still undone — `Server.Crew`/`Crew.Tmux` → `Server.Spawn`; `Server.Staffing` →

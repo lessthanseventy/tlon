@@ -3,6 +3,7 @@
 // office with the lounge beside it, the floor below. Every walk goes through the corridor down the
 // right edge, so nobody needs a path finder. Its life is the kit's Sim; this file is its plan and
 // its drawing.
+import { random } from "../kit/rng"
 import type { Frame, Measure } from "../kit/canvas"
 import { drawActors, drawCat, drawParty, isPicked, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, execDesk } from "../kit/furniture"
@@ -100,9 +101,9 @@ const RAIL: Plan<Layout> = {
   // the lounge is full: a stroll down an aisle
   roam(l) {
     const rows = l.desks.filter((d) => d.kind !== "boss")
-    const row = rows[Math.floor(Math.random() * rows.length)]
+    const row = rows[Math.floor(random() * rows.length)]
     const y = row ? row.y + 3 : FLOOR + 3
-    return { x: 10 + Math.floor(Math.random() * 110), y, aisle: y, pose: "stand", face: "down", kind: "roam" }
+    return { x: 10 + Math.floor(random() * 110), y, aisle: y, pose: "stand", face: "down", kind: "roam" }
   },
   route: (x, from, goal) => [{ x, y: from }, { x: CX, y: from }, { x: CX, y: goal.aisle }, { x: goal.x, y: goal.aisle }, { x: goal.x, y: goal.y }],
   cat: {

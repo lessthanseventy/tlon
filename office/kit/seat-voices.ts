@@ -5,7 +5,7 @@
 // never changes a decision.
 
 import type { EventKind } from "./events"
-import { pickFresh } from "./voices"
+import { pick, pickFresh } from "./voices"
 
 /** the §2 seats, in design order */
 export const SEATS = ["scharlach", "tertius", "hronir", "lonnrot", "yu", "beatriz", "nolan", "emma", "ireneo", "daneri", "sonny"] as const
@@ -179,18 +179,11 @@ const GENERIC: Voice = {
 
 /** a pick that skips what was said lately, while anything else is left to say */
 export const seatLine = (name: string, recent: readonly string[]): string => {
-  const voice = SEAT_VOICE[name] ?? GENERIC
-  const all = voice.banter
-  const unsaid = all.filter((l) => !recent.includes(l))
-  const pool = unsaid.length ? unsaid : all
-  return pool[Math.floor(Math.random() * pool.length)]!
+  return pickFresh((SEAT_VOICE[name] ?? GENERIC).banter, recent)
 }
 
 /** what a seat says after losing a game to a rival */
-export const soreLine = (name: string): string => {
-  const sore = (SEAT_VOICE[name] ?? GENERIC).sore
-  return sore[Math.floor(Math.random() * sore.length)]!
-}
+export const soreLine = (name: string): string => pick((SEAT_VOICE[name] ?? GENERIC).sore)
 
 /** each seat's two lines for each scripted event (kit/events.ts), in its own voice */
 export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly string[]>>> = {

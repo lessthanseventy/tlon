@@ -4,6 +4,7 @@
 // the lead's desks, the crew board, two tables of four), a glass meeting room, the lounge with its
 // kitchen. A hallway runs along the bottom; every zone has one lane down to it, and every walk goes
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
+import { random } from "../kit/rng"
 import { caughtNth, drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
 import { drawDoor, drawVisitor } from "../kit/door"
 import type { EventKind } from "../kit/events"
@@ -219,7 +220,7 @@ export class WideRoom extends Sim<Layout> {
       if (!this.awake) { this.awake = true; this.nextErrand = this.tick + REST.min; this.bookSay("wake", true) }
       this.bookReacts(a)
       if (s.thinking && this.errand && this.errand.kind !== "lap") this.errand = null
-      if (!s.thinking && !this.errand && !this.book.flying && this.tick >= this.nextErrand) this.errand = this.errandFor(a, pickErrand(Math.random(), this.lastErrand, this.errandCan()))
+      if (!s.thinking && !this.errand && !this.book.flying && this.tick >= this.nextErrand) this.errand = this.errandFor(a, pickErrand(random(), this.lastErrand, this.errandCan()))
     }
     const e = this.errand
     if (e?.follow && e.path.length === 1 && e.arrived === null) e.path[0] = this.inRoom(e.follow())
@@ -230,7 +231,7 @@ export class WideRoom extends Sim<Layout> {
       else if (e.arrived === null) { e.arrived = this.tick; this.arrive(e) }
       else if (this.tick >= e.arrived + e.dwell) {
         this.lastErrand = e.kind; this.errand = null
-        this.nextErrand = this.tick + REST.min + Math.floor(Math.random() * REST.spread)
+        this.nextErrand = this.tick + REST.min + Math.floor(random() * REST.spread)
       }
     }
     const c = this.cat
@@ -352,7 +353,7 @@ export class WideRoom extends Sim<Layout> {
       if (this.awake && this.errand?.kind !== "lap") { this.errand = this.errandFor(EMPTY, "lap"); this.bookSay("lap", true) }
       return
     }
-    if ((what === "test" || what === "done" || what === "queue") && this.quiet(this.dog.saidUntil) && Math.random() < 0.3) this.dogSay(this.argos(what, actor.seat.agent))
+    if ((what === "test" || what === "done" || what === "queue") && this.quiet(this.dog.saidUntil) && random() < 0.3) this.dogSay(this.argos(what, actor.seat.agent))
   }
 
   /** his bed by the lounge's couch, his water bowl by the kitchen */
@@ -422,7 +423,7 @@ export class WideRoom extends Sim<Layout> {
         d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, to)]
         d.aisle = to.aisle; d.mode = "walk"; d.fuss = null; this.dogPanicRun = true
       }
-      if (this.quiet(d.saidUntil) && Math.random() < 1 / 60) this.dogSay(this.argos("smoke"))
+      if (this.quiet(d.saidUntil) && random() < 1 / 60) this.dogSay(this.argos("smoke"))
       return
     }
     // the panic over, he makes for the muster from the hallway: where he is, if he's in it, or as soon
@@ -436,7 +437,7 @@ export class WideRoom extends Sim<Layout> {
       d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, m)]
       d.aisle = m.aisle; d.mode = "walk"; d.fuss = null
     } else if (!d.path.length) d.until = this.tick + 200 // stays put: stepDog would roam him off when this runs out
-    if (this.quiet(d.saidUntil) && Math.random() < 1 / 40) this.dogSay(this.argos("smoke"))
+    if (this.quiet(d.saidUntil) && random() < 1 / 40) this.dogSay(this.argos("smoke"))
   }
 
   /**
@@ -455,27 +456,27 @@ export class WideRoom extends Sim<Layout> {
       if (d.mode === "sit" && !d.path.length && !d.fuss && !this.alarmed) this.dogDo("bed")
     }
     if (this.alarmed) this.dogSmoke()
-    else if (!this.dog.path.length && !this.antic && !this.dog.fuss && this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 2200) {
+    else if (!this.dog.path.length && !this.antic && !this.dog.fuss && this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && random() < 1 / 2200) {
       this.dogDo("office")
       this.dogSay(this.argos("paper"))
-    } else if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(this.argos("muse"))
+    } else if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && random() < 1 / 1800) this.dogSay(this.argos("muse"))
     for (const x of this.peopleAt("plant")) this.watered.set(x.spot.x, (this.watered.get(x.spot.x) ?? 0) + 1)
     this.games.step(this.tick, (kind) => this.peopleAt(kind), this.actors)
     // Nina at the aquarium paws at the glass, and has thoughts about the fish
     const c = this.cat, fw = fishWatch(this.z)
     if (c.x === fw.x && c.y === fw.y && !c.path.length) {
       if (c.mode === "sit") c.mode = "play"
-      if (this.quiet(c.saidUntil) && Math.random() < 0.006) this.catSay(this.line("Nina", "fish", NINA.fish))
+      if (this.quiet(c.saidUntil) && random() < 0.006) this.catSay(this.line("Nina", "fish", NINA.fish))
     }
     // at the ping-pong table for a rally, his head goes with the ball, and now and then he has to say so
     const { table: t } = corner(this.z), d = this.dog, rally = this.peopleAt("pingpong").length === 2
     if (rally && !d.path.length && Math.abs(d.x - (t.x + t.w / 2)) < 3 && Math.abs(d.y - (t.y + t.h + 6)) < 3) {
       d.face = this.tick % 16 < 8 ? 1 : -1
-      if (this.quiet(d.saidUntil) && Math.random() < 0.01) this.dogSay(this.argos("rally"))
+      if (this.quiet(d.saidUntil) && random() < 0.01) this.dogSay(this.argos("rally"))
     }
     if (this.tick % 2) return moved
     for (const x of this.actors.values()) {
-      if (x.spot.kind !== "couch" || x.moving || Math.random() >= 1 / 375) continue
+      if (x.spot.kind !== "couch" || x.moving || random() >= 1 / 375) continue
       this.tvSet.next(); x.emote = "*"; x.emoteUntil = this.tick + 20
       break
     }
@@ -691,10 +692,10 @@ export class WideRoom extends Sim<Layout> {
       return true
     }
     // one exchange at a time: a new antic waits until the last one's turns are all said
-    if (now % 20 || Math.random() > 0.08 || this.turns.length) return false
+    if (now % 20 || random() > 0.08 || this.turns.length) return false
     const room = this.petRoom(c), alsoHere = this.petRoom(d)
     if (!room || room !== alsoHere || c.path.length || d.path.length || this.plan.cat.via(c)) return false
-    const near = Math.abs(c.x - d.x) + Math.abs(c.y - d.y) < 60, r = Math.random()
+    const near = Math.abs(c.x - d.x) + Math.abs(c.y - d.y) < 60, r = random()
     const lap = this.lapOf(room)
     // both idle on the same floor: now and then they talk over the day instead of horsing about
     if (c.mode !== "sleep" && d.mode !== "sleep" && r < 0.3 && this.talkOut("chat")) {

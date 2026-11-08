@@ -2,9 +2,10 @@
 // (`Server.Office.Pets`, through `Sim.hear`). She is a princess and a diva — a cat of some renown, in
 // her own opinion, in a jewelled collar — and the office exists to admire her. Argos' lines are his
 // room's (rooms/wide.ts): he lives only there.
+import { random } from "./rng"
 import type { Temperament } from "./temperament"
 
-export const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)]!
+export const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(random() * xs.length)]!
 
 /** a pick that skips what was said lately, while anything else is left to say */
 export const pickFresh = (xs: readonly string[], recent: readonly string[]): string => {
