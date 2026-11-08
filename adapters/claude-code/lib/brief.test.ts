@@ -39,7 +39,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
     expect(renderBrief(dossier(), NOW)).not.toContain("You are");
   });
 
-  test("the brief nudges the agent to post its work to the thread (coordinate-via-funes)", () => {
+  test("the brief nudges the agent to post its work to the thread (coordinate-via-tlon)", () => {
     // The skill is loaded but a flash model reads it once and forgets; the brief is injected
     // every turn, so the one behavior that keeps the thread from going cold rides here too.
     const out = renderBrief(dossier(), NOW);

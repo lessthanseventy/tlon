@@ -1,13 +1,13 @@
 ---
-name: coordinate-via-funes
-description: Use throughout a session on a funes thread — talk on your thread as you work (post_message), reply to the human by name, and narrate your judgment where a successor can read it. The channel is how a disposable session hands off; silence loses the work.
+name: coordinate-via-tlon
+description: Use throughout a session on a Tlön thread — talk on your thread as you work (post_message), reply to the human by name, and narrate your judgment where a successor can read it. The channel is how a disposable session hands off; silence loses the work.
 ---
 
-# Coordinate via funes
+# Coordinate via Tlön
 
-You are running on a **funes thread**. The thread — not this session — is the durable
+You are running on a **Tlön thread**. The thread — not this session — is the durable
 truth. Your session will compact, go idle, or die, and a fresh one will be briefed from
-what funes holds. So **talking on your thread is not politeness; it is the continuity
+what the server holds. So **talking on your thread is not politeness; it is the continuity
 mechanism.** A judgment you narrate on the thread is a judgment your successor inherits. A
 judgment you keep in your own context dies with you.
 
@@ -21,12 +21,11 @@ judgment you keep in your own context dies with you.
   participant in the thread, not an audience.
 - **A half-formed doubt is worth posting.** Questions, findings, a status, a correction, a
   link to a diff — anything goes. There is no taxonomy and no required shape beyond a body.
-  The failure mode of the channel is noise, and funes ranks and caps the reading, not the
+  The failure mode of the channel is noise, and the server ranks and caps the reading, not the
   writing — so post freely and let the surface do the cutting.
 - **Want a second opinion? Call the `consult` tool.** It asks another ollama model and hands
   its answer back as the tool's result, mid-turn: `context: transcript` (the default) shows it
-  your recent session, `context: none` is a clean one-shot. The operator has the same as
-  `/consult [model]` and `/fresh [model]`.
+  your recent session, `context: none` is a clean one-shot.
 - **Ask a coworker by @mentioning them on your thread.** `post_message` with their handle
   in the body (`@name, …`) delivers it; you have no `consult_peer` (coworker profiles exclude
   it). Their answer lands on your thread.
@@ -35,8 +34,8 @@ judgment you keep in your own context dies with you.
   `post_message(body, thread_id: <that thread>)`; otherwise answer here and @mention the
   author. Use `reply_to: <the ask's message id>` so the reply targets them.
 - **Never route yourself through operator-only UI to reach a coworker.** You cannot press
-  the office's keys; reaching claude by typing into another window's terminal is a
-  raw hack, not a capability. Delegate through `/consult`, post on your thread, or ask the
+  the office's keys; reaching another seat by typing into its window's terminal is a
+  raw hack, not a capability. Delegate through the `consult` tool, post on your thread, or ask the
   human — not `tmux send-keys`.
 
 ## What NOT to do
@@ -46,8 +45,8 @@ judgment you keep in your own context dies with you.
 - **Don't confuse chatter with the record.** A message is how you coordinate; it is not how
   you bank a durable finding (that is `bank-what-you-learn`) or record shipped work
   (`record_done`, with evidence). Say it on the thread AND bank what deserves to outlive it.
-- **Don't fake a read receipt or a delivery.** funes tracks delivery and reading honestly;
+- **Don't fake a read receipt or a delivery.** the server tracks delivery and reading honestly;
   you never assert either.
 
-The test: if your session died right now, could a fresh one — briefed only from funes —
+The test: if your session died right now, could a fresh one — briefed only from the server —
 pick up where you left off? Everything it would need, it reads from the thread.

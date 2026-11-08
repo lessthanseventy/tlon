@@ -360,6 +360,7 @@ snapshot on 304. `Sonnet · S`, after B1.
 - Change: fix the five; extend `check-glossary.sh` to `adapters/skills/*/SKILL.md` and
   `server/lib/server/mcp/tools/*.ex` descriptions. `limit` (the check) for the second half.
 - Check: `mise run check:names` green with the wider scan.
+- Done: the five skill fixes and the `coordinate-via-tlon` rename (README, brief.ts, brief.test.ts updated); the brief prints `[hunch]` for `opinion`, so the skill now says "hunch" throughout. Not done: the `check-glossary.sh` extension (Andrew's limit gate); `funes` remains in `keep-todos-current`, `verify-with-evidence` and `bank-what-you-learn` prose.
 
 **D8 · `tlon-cli.sh` is a second implementation of fifteen tools.** `Opus · M`
 - Why: 661 lines, no `.test.sh`, inline Elixir strings for `ticket-start`, `ticket-set`,

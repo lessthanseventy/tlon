@@ -23,7 +23,7 @@ adapters/
   lsp/                   the LSP tools as a stdio MCP server, forwarding over a unix socket to…
   lspd/                  …the LSP sidecar daemon that owns the warm language-server pool
   skills/                harness-neutral discipline (a citizen loads them as /tlon-citizen:<name>)
-    coordinate-via-funes/  bank-what-you-learn/  keep-todos-current/  verify-with-evidence/  drive-office/
+    coordinate-via-tlon/  bank-what-you-learn/  keep-todos-current/  verify-with-evidence/  drive-office/
 ```
 
 ## Run it
