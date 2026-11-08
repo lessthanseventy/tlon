@@ -84,6 +84,6 @@ config :server, tmux_confirm_ms: []
 config :server, tmux_scope: false
 # no secret-file IO (Server.MCP.Secret reads this before touching disk).
 # inside the ficciones checkout, so a test that approves a gate committed intent.md into the real
-# repo (2026-09-18). A test that needs the artifact path makes its own throwaway git repo.
+# repo. A test that needs the artifact path makes its own throwaway git repo.
 config :server, token_secret: "test-only-token-secret-not-for-any-real-world-32b"
 config :server, workline_root: "/nonexistent/tlon-test-workline"

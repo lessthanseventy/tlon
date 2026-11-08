@@ -261,7 +261,7 @@ defmodule Server.Staff do
   end
 
   # A newcomer with no pane cannot take the seat from a live session that has one: nothing can
-  # drain wakes for a paneless session, so it would strand the windowed seat (ticket #391). A
+  # drain wakes for a paneless session, so it would strand the windowed seat. A
   # newcomer WITH a pane supersedes as ever, so a restarted pane keeps working.
   defp seat_held?(_changeset, thread_id, agent_id) when is_nil(thread_id) or is_nil(agent_id), do: false
 

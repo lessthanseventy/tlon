@@ -469,9 +469,9 @@ defmodule Server.Switchboard do
 
   # A WARM session is one worth waking (a cheap resume): live AND active within the warmth window.
   # A cold session (stale last_active_at) is treated as ABSENT so the lead gets ROTATED — a fresh
-  # brief-seeded session, never a /resume of a huge stale context (2026-09-01). The old
-  # `has_live_session?` (ended_at-only) stranded a cold lead: recipients wouldn't wake it (too cold)
-  # and this wouldn't replace it (a session existed). The fresh spawn's Staff.start_session
+  # brief-seeded session, never a /resume of a huge stale context. Treating a cold lead as present
+  # would strand it: recipients won't wake it (too cold) and nothing would replace it.
+  # The fresh spawn's Staff.start_session
   # supersedes the cold session on connect (the zombie guard), so the rotation leaves no double.
   defp has_warm_session?(%Thread{} = thread, %Agent{} = agent) do
     cutoff = Presence.loosest_cutoff()

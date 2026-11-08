@@ -1,6 +1,6 @@
 defmodule Server.Authorship do
   @moduledoc """
-  Who wrote a row, verifiably (#679): the one place the format lives. A row stamped with the
+  Who wrote a row, verifiably: the one place the format lives. A row stamped with the
   session that wrote it renders `<seat> · pane t<thread> <pane> · session <id>`, so a denial
   ("that wasn't me") is checked against a record rather than a name. A NULL session renders
   `session unknown`: a row from before the stamp, a system author's, or a call before `register`

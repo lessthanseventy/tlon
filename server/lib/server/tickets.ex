@@ -20,7 +20,7 @@ defmodule Server.Tickets do
   @doc """
   File a ticket. `{:ok, ticket}` or `{:error, changeset}`. With `epic_id` the ticket is filed as that epic's child in
   the same transaction, so a refused parent (not an epic, an epic under an epic) files nothing.
-  `opts[:session_id]` stamps the session that filed it (#679).
+  `opts[:session_id]` stamps the session that filed it.
   """
   def file(attrs, opts \\ []) do
     {epic_id, attrs} = attrs |> Map.new() |> Map.pop(:epic_id)

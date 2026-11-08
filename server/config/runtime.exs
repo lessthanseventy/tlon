@@ -19,8 +19,8 @@ pg_socket = System.get_env("PGHOST") || if(match?({:unix, :darwin}, :os.type()),
 # password); otherwise TLON_DATABASE (default `tlon`) over peer auth at /run/postgresql. Test
 # manages its own database (config/test.exs), so skip it here.
 # In :prod the default is the service's `tlon`; in :dev the default stays dev.exs's `tlon_dev`
-# (2026-09-18: a dev-env `server:check` wrote eval threads into the LIVE store when this block
-# defaulted every env to `tlon`) — TLON_DATABASE / TLON_DATABASE_URL override either.
+# (a dev-env `server:check` must never write eval threads into the LIVE store) — TLON_DATABASE /
+# TLON_DATABASE_URL override either.
 if config_env() != :test do
   case {System.get_env("TLON_DATABASE_URL"), System.get_env("TLON_DATABASE"), config_env()} do
     {url, _, _} when is_binary(url) -> config :server, Server.Repo, url: url

@@ -338,7 +338,7 @@ defmodule Server.Profiles do
   }
 
   # A reviewer reads and never edits: the source EDIT verbs are cut from its surface (the
-  # introspection ones — outline_file — stay). Repo tools design, 2026-09-08.
+  # introspection ones — outline_file — stay).
   @reviewer_mcp update_in(@tlon_mcp, ["tlon", "excludeTools"], &(&1 ++ ["rename_identifier", "edit_clause"]))
 
   # tertius's surface is the ORCHESTRATOR toolset (Slice 4D): the base machine-citizen tools PLUS the
@@ -761,7 +761,7 @@ defmodule Server.Profiles do
 
   # The coworker-driver ring the SETTINGS panel cycles (leader `m`): the ollama models, each reached
   # through Claude Code's gateway (`Server.Harness.ClaudeCode`). `kimi-k3` stays out until its billing is
-  # measured: on 2026-10-27 it answered 200 on the plan with $0 purchased and the window mostly unspent;
+  # measured: it answered 200 on the plan with $0 purchased and the window mostly unspent;
   # whether it turns 402 once the window is spent is unverified.
   @model_ring [
     %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"},
@@ -1038,7 +1038,7 @@ defmodule Server.Profiles do
   end
 
   # Meta archetypes — the vantage/synthesis side (tertius). Never a leaf lead: excluded from
-  # per-thread staffing and from the staffing default (per-thread-agents design, 2026-08-22).
+  # per-thread staffing and from the staffing default.
   @meta_archetypes [:surveyor]
 
   @doc "Is this archetype a META role (vantage, never a leaf lead), as opposed to a WORKER?"

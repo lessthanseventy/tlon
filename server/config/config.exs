@@ -42,14 +42,14 @@ config :server, Oban,
        {"*/30 * * * *", Server.Jobs.Maintain},
        {"* * * * *", Server.Jobs.Staff},
 
-       # Postgres is the store (one-brain piece C, 2026-09-18): the §4 write contract — readers never
+       # Postgres is the store: the §4 write contract — readers never
        # the calendar: fire what the operator scheduled that is due (Server.Schedules)
        # blocked by a writer, real foreign keys, a bounded wait on a lock — is the engine's own.
        # Connection details are per-env (dev/test below, runtime.exs for the release). The pool covers
        # Oban's queue concurrency plus the always-on callers (switchboard, attention, web, MCP) —
        # test/server/repo_pool_test.exs holds that line.
        # the listener is loopback, so the origin check guards nothing — but a tab at localhost or the
-       # box's tailscale name reconnecting every minute logged "Could not check origin" (2026-09-18)
+       # box's tailscale name reconnecting every minute logged "Could not check origin"
        {"* * * * *", Server.Jobs.Dispatch},
        # the backlog's intake: the next ready ticket to the manager while worklines are under the cap
        {"*/15 * * * *", Server.Jobs.Intake},

@@ -874,7 +874,7 @@ defmodule Server.Workline do
   sends it back to build with the finding, as a review requesting changes does; a pass advances it
   to the merge gate. Its `follow_ups:` are posted once it has moved, for the lead it hands to
   (`follow_ups/4`). `opts` as `advance/2`'s, plus `session_id:`, the QA seat's connection, stamped
-  on the `qa by` check (#679); the `cmd` string itself is what `Diary.verdict/1` parses, unchanged.
+  on the `qa by` check; the `cmd` string itself is what `Diary.verdict/1` parses.
   """
   def qa_verdict(thread, verdict, author, report, opts \\ [])
 
@@ -2246,8 +2246,8 @@ defmodule Server.Workline do
   end
 
   # The verdict ends the reviewer's session, so nobody is left to call advance_stage: the approval
-  # parks the gate itself (#686) — on the operator, or straight into the queue under a standing
-  # approval. A refused advance (review.md not committed, the queue down) is the stall #686 ends, so it
+  # parks the gate itself — on the operator, or straight into the queue under a standing
+  # approval. A refused advance (review.md not committed, the queue down) would stall it, so it
   # is said on the thread and returned, never reported as parked; the verdict itself stands.
   defp park_approved(thread, opts) do
     case advance(Repo.get!(Thread, thread.id), opts) do

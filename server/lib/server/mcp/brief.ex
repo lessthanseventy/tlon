@@ -180,7 +180,7 @@ defmodule Server.MCP.Brief do
 
   @doc """
   A measured check — a `check_passed`/`check_failed` event, keyed on the real exit code. `by` is
-  the session that recorded it (#679); a `qa by <seat>` check names the seat too.
+  the session that recorded it; a `qa by <seat>` check names the seat too.
   """
   def check(%Event{kind: kind, created_at: created_at, detail: detail, session_id: session_id}) do
     d = detail || %{}
@@ -197,7 +197,7 @@ defmodule Server.MCP.Brief do
 
   @doc "A message on the thread. A consult ASK (consult_id set, not a mirror) is flagged so a
   consumer can render it as a request for an answer, not ambient chatter. `by` is the author with
-  the session that posted it (#679), so a denial is checked against the row."
+  the session that posted it, so a denial is checked against the row."
   def message(%Message{} = m) do
     %{
       "id" => m.id,

@@ -186,7 +186,7 @@ defmodule Server.MCP.Spawn do
   defp lobby_export(thread), do: if(Channel.root_machine_thread?(thread), do: "\nexport TLON_LOBBY=1", else: "")
 
   # The thread's worktree, ensured now, for the boot script to cd into — a coworker never writes in
-  # the main tree (2026-09-08). An outside citizen starts in the repo itself, as the operator's own
+  # the main tree. An outside citizen starts in the repo itself, as the operator's own
   # sessions do, and makes its own scratch worktrees. No repo exports nothing; the pane starts wherever.
   # Any worktree failure on a repo thread is refused (a worktree dir that is not a checkout would
   # fall git up to the live main tree); only a thread with no repo exports nothing. It runs before

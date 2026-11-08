@@ -1,7 +1,7 @@
 defmodule Server.SandboxBudget do
   @moduledoc """
   The bwrap argument budget a seat's sandbox spends. Claude Code mounts ~`args_per_repo` args per
-  `.git` found under a write root (a read dir is one), and bwrap takes `bwrap_args` (#299, #455).
+  `.git` found under a write root (a read dir is one), and bwrap takes `bwrap_args`.
   `max_args` leaves headroom; `fixed_repos` are the checkouts every seat has (ficciones, tlon and its
   worktrees); `write_root_reserve` is what a seat's own scratch dir may hold. Read dirs share what is left.
   """

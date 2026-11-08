@@ -114,7 +114,7 @@ defmodule Server.MixProject do
       {:ical, "~> 3.2"},
       {:tz, "~> 0.28"},
       # Oban's notifier/peers encode with Jason (not the stdlib JSON) — the release must ship it
-      # (2026-09-18: the service crash-looped on Oban.Sonar without it).
+      # (Oban.Sonar crash-loops the service without it).
       {:jason, "~> 1.4"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:ecto_sqlite3, ">= 0.17.0"},

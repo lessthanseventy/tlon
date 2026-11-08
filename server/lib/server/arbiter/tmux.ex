@@ -138,7 +138,7 @@ defmodule Server.Arbiter.Tmux do
   end
 
   # The recipient's handle: a plain map carries `agent`; a `%Server.Session{}` (the drain's rows)
-  # carries `agent_id` — `session[:agent]` on the struct raised and discarded every drain (2026-09-18).
+  # carries `agent_id`; `session[:agent]` on the struct raises.
   defp agent_name(%{agent: name}) when is_binary(name), do: name
   defp agent_name(%{agent_id: id}) when is_integer(id), do: with(%Agent{name: n} <- Repo.get(Agent, id), do: n)
   defp agent_name(_session), do: nil
@@ -174,7 +174,7 @@ defmodule Server.Arbiter.Tmux do
   def sanitize(prompt),
     do: prompt |> String.replace(~r/[[:cntrl:]]/, " ") |> String.replace(~r/\s+/, " ") |> String.trim()
 
-  # Which harness: the coworker's PROFILE decides (Claude Code first, 2026-09-25) — the same
+  # Which harness: the coworker's PROFILE decides — the same
   # `Harness.driver(profile.harness).launch_command/1` the staffing pass spawns its leaves with, so a
   # spawn-on-post and a staffing spawn can never disagree about a seat. Only an author with no seat
   # on the workspace's bench and no citizen profile (`Profiles.citizen_profile/2`) falls back to
