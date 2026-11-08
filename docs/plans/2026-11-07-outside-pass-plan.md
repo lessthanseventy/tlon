@@ -380,6 +380,12 @@ snapshot on 304. `Sonnet · S`, after B1.
   stays as the backstop.
 - Check: after a landing, `mise run release:status` shows the gate ✓ on main's tip without a
   nightly; the smoke ✓ within 10 min.
+- Done 2026-11-08, the gate half: `Publish.merge_at/5`, which both the merge queue and a workline's
+  publish merge through, calls `Candidate.landed/3` on an immediate merge. When the repo is tlon's and
+  origin/main's tip holds exactly the tree the gate passed, it records `gate` ok on that tip. GitHub's
+  rebase rewrites the commits, so the tree is compared, not the sha. Open: the smoke is not queued
+  after the merge; an auto-merge armed instead of merging records nothing; unverified live until a
+  landing through `mise run land`.
 
 **E3 · Intake's cap and the held pile.** `Opus · M`
 - Why: 97 backlog + 20 doing against `max_worklines: 3`; held tickets take slots (#851, #512);

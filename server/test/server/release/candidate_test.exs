@@ -20,6 +20,32 @@ defmodule Server.Release.CandidateTest do
     {:ok, s: s}
   end
 
+  describe "a landing's gate is main's check when main's tip is the tree it gated (E2)" do
+    # gh merges at the gated head; GitHub's rebase rewrites the commits, so main's tip is a new sha
+    defp landing(trees) do
+      fn
+        "gh", ["pr", "merge" | _], _ -> {"", 0}
+        "gh", _, _ -> {"", 0}
+        "git", [_, _, "fetch" | _], _ -> {"", 0}
+        "git", [_, _, "rev-parse", "origin/main"], _ -> {@b <> "\n", 0}
+        "git", [_, _, "rev-parse", rev], _ -> {Map.fetch!(trees, rev) <> "\n", 0}
+      end
+    end
+
+    test "the same tree: the gate is recorded on main's new tip" do
+      run = landing(%{"#{@a}^{tree}" => "t1", "origin/main^{tree}" => "t1"})
+      assert :merged = Server.Workline.Publish.merge_at(Server.Profiles.tlon_root(), 9, @a, "work/x", run)
+      assert [%{check: :gate, ok: true} | _] = Candidate.check(@b, busy: fn -> [] end)
+    end
+
+    test "another tree (main moved past it), or another repo: nothing is recorded" do
+      run = landing(%{"#{@a}^{tree}" => "t1", "origin/main^{tree}" => "t2"})
+      assert :merged = Server.Workline.Publish.merge_at(Server.Profiles.tlon_root(), 9, @a, "work/x", run)
+      assert :merged = Server.Workline.Publish.merge_at("/elsewhere", 9, @a, "work/x", run)
+      assert [%{check: :gate, ok: false} | _] = Candidate.check(@b, busy: fn -> [] end)
+    end
+  end
+
   defp ran!(s, check, sha, status) do
     now = DateTime.truncate(DateTime.utc_now(), :second)
 

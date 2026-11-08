@@ -81,6 +81,7 @@ defmodule Server.Workline.Publish do
     case run.("gh", ["pr", "merge", to_string(pr), "--rebase", "--match-head-commit", sha], opts) do
       {_, 0} ->
         delete_remote_head(repo, branch, run)
+        Server.Release.Candidate.landed(repo, sha, run)
         :merged
 
       {out, _} ->
