@@ -73,7 +73,7 @@ type Mode =
   | { kind: "person"; name: string; from?: Mode } | { kind: "thread"; tid: number; from?: Mode }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number; from?: Mode } | { kind: "epic"; id: number; from?: Mode } | { kind: "calendar" } | { kind: "life" } | { kind: "pages" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "issue"; id: number; from?: Mode } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "play"; from?: Mode } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "play"; from?: Mode; page?: 1 | 2 } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number; from?: Mode }
   | { kind: "look"; name: string; from?: Mode; hall?: true } | { kind: "look-editor"; name: string; view: "front" | "side" | "back"; from?: Mode; hall?: true }
   | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" } | { kind: "cast"; tab: "people" | "office" }
@@ -115,6 +115,8 @@ const HALL = process.env.TLON_HALL ?? join(CONFIG, "hall.json")
 const CAST = process.env.TLON_CAST ?? join(CONFIG, "cast.json")
 // the pet store: species + seed + locks + edits, polled the same way
 const STORE = process.env.TLON_STORE ?? join(CONFIG, "store.json")
+// `mise run office:sandbox` (OFFICE_PLAY_INTRO=1) shows the play card once, the first time the sandbox is launched
+const PLAY_SEEN = join(CONFIG, "play-seen")
 
 // the wackiness dial (kit/whimsy.ts): preset + overrides, remembered in the config dir
 const OFFICE = process.env.TLON_OFFICE ?? join(CONFIG, "office.json")
@@ -1865,10 +1867,13 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         actions: [back1],
       }
     }
-    case "play": return {
-      title: "PLAY", rows: [{ segs: [plain("pick a toy")] }],
-      actions: [...PLAY_ROWS.filter((b) => world || !WORLD_ROWS.includes(b.id)).map((b): Action => ({ ...bind(b.id), run: () => { back(); playDo(b.id); changed(); draw() } })), back1],
-    }
+    case "play": { const page2 = mode.page === 2; return {
+      title: "PLAY", rows: [{ segs: [plain(page2 ? "pick a toy (page 2 of 2)" : "pick a toy")] }],
+      actions: [...PLAY_ROWS.filter((b) => ("mode" in b) === page2 && (world || !WORLD_ROWS.includes(b.id))).map((b): Action => ({
+        ...bind(b.id),
+        run: b.id === "play.more" || b.id === "play.first" ? () => { playDo(b.id); draw() } : () => { back(); playDo(b.id); changed(); draw() },
+      })), back1],
+    } }
     case "pet": {
       const r = room(), wideRoom = r instanceof WideRoom ? r : null
       const doIt = (f: () => unknown) => () => { f(); changed(); draw() }
@@ -2379,12 +2384,22 @@ function toyKey(k: string): boolean {
   }
 }
 
+/** the status line for a scene asked for off the play card */
+const scene = (started: boolean, r: { eventsHere(): boolean }, said: string): string =>
+  started ? said : r.eventsHere() ? "a scene is running, or that event is switched off (the wackiness dial)" : "events need the wide room (kitty graphics)"
+
 /** one toy off the play card, by its row id */
 function playDo(id: string): void {
   const r = room(), under = mode.kind === "person" ? mode.name : null
   switch (id) {
+    case "play.more": case "play.first": if (mode.kind === "play") { mode = { ...mode, page: id === "play.more" ? 2 : 1 }; sel = 0 }; break
     case "play.doorbell": r.play("doorbell"); status = "ding dong"; break
-    case "play.gary": status = r.event("gary") ? "Gary's at the dumpster" : r.eventsHere() ? "a scene is running, or Gary is switched off (the wackiness dial)" : "events need the wide room (kitty graphics)"; break
+    case "play.gary": status = scene(r.event("gary"), r, "Gary's at the dumpster"); break
+    case "play.zoo": status = scene(r.event("zoo"), r, "the zoo van is here"); break
+    case "play.meteor": status = scene(r.event("meteor"), r, "incoming"); break
+    case "play.power": status = scene(r.event("power"), r, "the lights go out"); break
+    case "play.duck": status = scene(r.event("duck"), r, "a duck"); break
+    case "play.chain": status = scene(r.chainReaction(), r, "Gary first; the rest follow"); break
     case "play.event": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
     case "play.drill": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break
     case "play.treat": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
@@ -2799,6 +2814,7 @@ async function main() {
     query(); setTimeout(() => { layoutScreen(); draw() }, 150)
   })
   await refresh()
+  if (world && process.env.OFFICE_PLAY_INTRO === "1" && !readState(PLAY_SEEN)) { writeState(PLAY_SEEN, "1"); open({ kind: "play" }) }
   every(refresh, 10_000)
   every(pollPlayer, 2000)
   let sec = 0

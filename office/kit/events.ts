@@ -40,8 +40,8 @@ export const GARY_ACT = 300
 /** how long the SLAP spins its victim */
 export const GARY_SPIN = 60
 
-/** what an event can start when it ends under `chain` (rimworld): the zoo starts the drill, which cuts the power, which panics the penguin */
-export const CHAINS: Record<EventKind, EventKind[]> = { zoo: ["drill"], drill: ["power"], power: ["duck"], meteor: ["power"], duck: [], gary: [] }
+/** what an event can start when it ends under `chain` (rimworld), or in a chain reaction: Gary's dumpster brings the zoo van, the zoo starts the drill, which cuts the power, which panics the penguin */
+export const CHAINS: Record<EventKind, EventKind[]> = { zoo: ["drill"], drill: ["power"], power: ["duck"], meteor: ["power"], duck: [], gary: ["zoo"] }
 
 /** where the scenes happen, in room pixels; a room that has no door has no geometry and no events */
 export type Geo = { doorX: number; hallY: number; ceilY: number; leftX: number; windowX: number; cork?: Pt }
