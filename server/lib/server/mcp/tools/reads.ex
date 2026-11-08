@@ -19,6 +19,17 @@ defmodule Server.MCP.Tool.GetBrief do
   end
 end
 
+defmodule Server.MCP.Tool.GetBriefAlias do
+  @moduledoc "Alias of get_dossier: this thread's brief, the same answer."
+  use Server.MCP.Tool
+
+  schema do
+  end
+
+  @impl true
+  defdelegate execute(params, frame), to: Server.MCP.Tool.GetBrief
+end
+
 defmodule Server.MCP.Tool.GetFacts do
   @moduledoc """
   Every fact on this thread, newest first — the full read past the brief's cap. Each fact read is

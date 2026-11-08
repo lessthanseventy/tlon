@@ -370,6 +370,7 @@ snapshot on 304. `Sonnet · S`, after B1.
   name and mark the other an alias in its description; bind the life tools to the caller's
   workspace.
 - Check: `brief.test.ts` with a 20 KB opening renders under the cap; tool tests.
+- Done: `MCP.Brief.brief_message/1` cuts the opening and each recent message at 4,000 chars with `[cut N chars; get_message(id)]` (the tool's answer), and `renderChatter` cuts the same in `brief.ts`; `get_brief` is `GetBriefAlias`, "Alias of get_dossier" in its description; the six life tools take no `workspace_id`, they act on the connection's workspace (`Tool.life/2`), and a routine or quest of another workspace is `not_found`. Left: `brief.ts` never rendered OPENING, so the 20 KB check is on a chatter body; the operator's session no longer reaches the home workspace's life rows from a thread in another workspace.
 
 **D6 · The band never says the server is down.** `Sonnet · S`
 - Why: `lib/citizen.ts bandParts` renders the last dossier with no age or error marker;

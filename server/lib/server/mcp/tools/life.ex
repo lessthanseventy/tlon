@@ -3,12 +3,11 @@ defmodule Server.MCP.Tool.LifeStatus do
   use Server.MCP.Tool
 
   schema do
-    field :workspace_id, :integer, required: true
   end
 
   @impl true
-  def execute(params, frame),
-    do: Server.MCP.Tool.life(frame, params.workspace_id, fn -> ok(frame, Server.Life.status(params.workspace_id)) end)
+  def execute(_params, frame),
+    do: Server.MCP.Tool.life(frame, fn workspace_id -> ok(frame, Server.Life.status(workspace_id)) end)
 end
 
 defmodule Server.MCP.Tool.RoutineCreate do
@@ -16,7 +15,6 @@ defmodule Server.MCP.Tool.RoutineCreate do
   use Server.MCP.Tool
 
   schema do
-    field :workspace_id, :integer, required: true
     field :title, :string, required: true
     field :every, :string, required: true
     field :window_minutes, :integer, default: 60
@@ -26,10 +24,8 @@ defmodule Server.MCP.Tool.RoutineCreate do
 
   @impl true
   def execute(params, frame) do
-    {workspace_id, attrs} = Map.pop!(params, :workspace_id)
-
-    Server.MCP.Tool.life(frame, workspace_id, fn ->
-      reply(frame, Server.Life.create_routine(workspace_id, attrs), fn r -> %{"routine_id" => r.id} end)
+    Server.MCP.Tool.life(frame, fn workspace_id ->
+      reply(frame, Server.Life.create_routine(workspace_id, params), fn r -> %{"routine_id" => r.id} end)
     end)
   end
 end
@@ -84,7 +80,6 @@ defmodule Server.MCP.Tool.QuestCreate do
   use Server.MCP.Tool
 
   schema do
-    field :workspace_id, :integer, required: true
     field :title, :string, required: true
     field :due_at, :string
     field :xp, :integer, default: 10
@@ -92,10 +87,8 @@ defmodule Server.MCP.Tool.QuestCreate do
 
   @impl true
   def execute(params, frame) do
-    {workspace_id, attrs} = Map.pop!(params, :workspace_id)
-
-    Server.MCP.Tool.life(frame, workspace_id, fn ->
-      reply(frame, Server.Life.create_quest(workspace_id, attrs), fn q -> %{"quest_id" => q.id} end)
+    Server.MCP.Tool.life(frame, fn workspace_id ->
+      reply(frame, Server.Life.create_quest(workspace_id, params), fn q -> %{"quest_id" => q.id} end)
     end)
   end
 end

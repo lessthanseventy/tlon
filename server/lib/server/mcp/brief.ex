@@ -21,6 +21,7 @@ defmodule Server.MCP.Brief do
   alias Server.Workspace
 
   @ticket_body 4_000
+  @message_body 4_000
 
   @doc "A Board.brief/1 map, rendered."
   def scope(scope) do
@@ -30,7 +31,7 @@ defmodule Server.MCP.Brief do
       "todos" => capped(scope.todos, &todo/1),
       "next" => next(scope.next),
       "lead" => scope.lead,
-      "opening" => scope.opening && message(scope.opening),
+      "opening" => scope.opening && brief_message(scope.opening),
       "done" => capped(scope.done, &done_entry/1),
       "learnings" => capped(scope.learnings, &fact/1),
       "knowledge" => capped(scope.knowledge, &fact/1),
@@ -41,8 +42,21 @@ defmodule Server.MCP.Brief do
       "workline" => workline(scope.workline),
       "ticket" => scope[:ticket] && brief_ticket(scope.ticket),
       "cited" => Enum.map(scope.cited, &cited/1),
-      "recent" => Enum.map(scope.recent, &message/1)
+      "recent" => Enum.map(scope.recent, &brief_message/1)
     }
+  end
+
+  @doc "A message as the brief and `get_thread` carry it: `message/1` with the body cut at #{@message_body} chars and a pointer to the whole."
+  @spec brief_message(Message.t()) :: map()
+  def brief_message(%Message{} = m) do
+    cut = String.length(m.body) - @message_body
+
+    body =
+      if cut > 0,
+        do: String.slice(m.body, 0, @message_body) <> "\n[cut #{cut} chars; get_message(#{m.id})]",
+        else: m.body
+
+    Map.put(message(m), "body", body)
   end
 
   @doc "A %{shown, more} cap, rendered with its count intact."
