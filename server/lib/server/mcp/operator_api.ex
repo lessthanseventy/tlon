@@ -49,6 +49,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/health           Office.Room.health (the service and its box: the rack)
       GET    /api/settings                every runtime knob from the settings file: {"knobs": [...]}
       PATCH  /api/settings                {key: value, ...} → OperatorConfig.put_settings (all checked, then written)
+      POST   /api/check/scope             {"paths": [path]} → CheckScope.suites: the mise tasks a verify of that diff runs {tasks}
       POST   /api/restart                 restart the service now if quiet, else schedule it for the first quiet
                                           moment: 202 + {"scheduled", "waiting_on"} ({"force": true}: now anyway)
       DELETE /api/restart                 drop a scheduled restart
@@ -410,6 +411,20 @@ defmodule Server.MCP.OperatorAPI do
     case Server.Release.Candidate.record(b["check"], b["sha"], b["exit"]) do
       {:ok, run} -> json(conn, 201, %{id: run.id, status: run.status})
       {:error, why} -> json(conn, 422, %{error: "expected {check: gate|smoke, sha: <40 hex>, exit: int}: #{why}"})
+    end
+  end
+
+  defp route(conn, "POST", "check", ["scope"]) do
+    {b, conn} = body(conn)
+
+    case b["paths"] do
+      paths when is_list(paths) ->
+        if Enum.all?(paths, &is_binary/1),
+          do: json(conn, 200, %{tasks: Server.CheckScope.suites(paths)}),
+          else: json(conn, 422, %{error: "expected {paths: [path]}"})
+
+      _ ->
+        json(conn, 422, %{error: "expected {paths: [path]}"})
     end
   end
 

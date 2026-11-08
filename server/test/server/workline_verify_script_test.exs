@@ -54,6 +54,38 @@ defmodule Server.WorklineVerifyScriptTest do
   printf '%s' "$2" | strays "$1"
   """
 
+  # the script's scope_tasks(), lifted out: changed paths on stdin, the service's answer via curl
+  @scope ~S"""
+  eval "$(sed -n '/^scope_tasks() {/,/^}/p' "$0")"
+  printf '%s\n' "$1" | scope_tasks
+  """
+
+  defp scope_tasks(paths, curl_body) do
+    dir = Path.join(System.tmp_dir!(), "verify-scope-#{System.pid()}-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+    stub = Path.join(dir, "curl")
+    File.write!(stub, "#!/usr/bin/env bash\nprintf '%s' \"$@\" >\"#{dir}/args\"\n#{curl_body}\n")
+    File.chmod!(stub, 0o755)
+    env = [{"PATH", dir <> ":" <> System.get_env("PATH")}, {"TLON_URL", "http://127.0.0.1:1"}]
+    {out, 0} = System.cmd("bash", ["-c", @scope, @script, paths], env: env)
+    {String.split(out, "\n", trim: true), File.read!(Path.join(dir, "args"))}
+  end
+
+  test "scope_tasks: the diff's paths go to the service as JSON and its tasks come back one per line" do
+    {tasks, args} =
+      scope_tasks("office/kit/sim.ts\noffice/test/a.test.ts", ~S|echo '{"tasks":["check:names","office:check"]}'|)
+
+    assert tasks == ["check:names", "office:check"]
+    assert args =~ ~S|{"paths":["office/kit/sim.ts","office/test/a.test.ts"]}|
+    assert args =~ "http://127.0.0.1:1/api/check/scope"
+  end
+
+  test "scope_tasks: a service that does not answer, or names nothing, means the full check" do
+    assert {["check"], _} = scope_tasks("server/lib/a.ex", "exit 7")
+    assert {["check"], _} = scope_tasks("server/lib/a.ex", ~S|echo '{"tasks":[]}'|)
+  end
+
   # the script's copy_deps(), lifted out: a tree's deps dir copied into a fresh checkout
   @copy ~S"""
   eval "$(sed -n '/^copy_deps() {/,/^}/p' "$0")"
