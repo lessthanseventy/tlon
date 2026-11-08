@@ -37,6 +37,11 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   posting. Keep the content.
 - Check: a test spawning the same seat twice posts the line once; after a day live, the count of
   that notice ≈ the number of seats.
+- Done: already shipped before this pass was built — e16575e made `read_dirs_export/1` (spawn.ex) post the
+  notice only when that exact body is not on the thread yet (once per thread; a changed dropped list still
+  posts), and `spawn_test.exs` "read dirs the shared budget leaves out are posted once on the thread"
+  spawns twice and asserts one post. Live db on 2026-11-08: no message starts with the notice, 17 mention
+  it (none after 2026-11-01). No code change.
 
 **A2 · Menard's filter hook refuses instead of rewriting.** `Sonnet · S · in menard, not tlon`
 - Why: ~200 of the 271 `tool_denied` events in 14 days are one rule:
