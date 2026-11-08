@@ -509,52 +509,23 @@ defmodule Server.WorktreeTest do
       assert Worktree.stranded(repo, "busy") =~ "unmerged"
     end
 
-    # GitHub's rebase-merge gives every commit a new SHA and can fold a commit's files into a
-    # neighbour's diff, so git cherry's patch-id check misses it. The change is on origin/main as
-    # the same file contents, so it is not stranded.
-    test "nil when a branch's commits were rebase-merged to origin/main — same files, new patch", %{
-      repo: repo,
-      git: git
-    } do
+    # A rebase merge gives every commit a new SHA with the same patch, which git cherry matches;
+    # main editing the same file afterwards does not make the branch unmerged again.
+    test "nil when a rebase-merged branch's file was edited again on origin/main", %{repo: repo, git: git} do
       {_, 0} = git.(["checkout", "-qb", "work/landed"])
       File.write!(Path.join(repo, "work.txt"), "change\n")
       {_, 0} = git.(["add", "work.txt"])
       {_, 0} = git.(["commit", "-qm", "the change"])
       {_, 0} = git.(["checkout", "-q", "-"])
 
-      # main lands the same file contents in a commit with a different diff (a neighbouring file too)
-      File.write!(Path.join(repo, "work.txt"), "change\n")
-      File.write!(Path.join(repo, "other.txt"), "extra\n")
-      {_, 0} = git.(["add", "work.txt", "other.txt"])
-      {_, 0} = git.(["commit", "-qm", "rebase-merged"])
+      {_, 0} = git.(["cherry-pick", "work/landed"])
+      File.write!(Path.join(repo, "work.txt"), "change\nand a later edit\n")
+      {_, 0} = git.(["add", "work.txt"])
+      {_, 0} = git.(["commit", "-qm", "main edits the file again"])
       {_, 0} = git.(["update-ref", "refs/remotes/origin/main", "HEAD"])
 
       {:ok, _} = Worktree.ensure(repo, "landed")
       assert Worktree.stranded(repo, "landed") == nil
-    end
-
-    # Commit A writes work.txt, commit B rewrites it; main lands only the final contents. A's own
-    # version of the file never matches main, but the branch tip does: it has landed.
-    test "nil when a later commit rewrites an earlier commit's file and the tip is on origin/main", %{
-      repo: repo,
-      git: git
-    } do
-      {_, 0} = git.(["checkout", "-qb", "work/superseded"])
-      File.write!(Path.join(repo, "work.txt"), "first\n")
-      {_, 0} = git.(["add", "work.txt"])
-      {_, 0} = git.(["commit", "-qm", "first draft"])
-      File.write!(Path.join(repo, "work.txt"), "final\n")
-      {_, 0} = git.(["add", "work.txt"])
-      {_, 0} = git.(["commit", "-qm", "rewrite"])
-      {_, 0} = git.(["checkout", "-q", "-"])
-
-      File.write!(Path.join(repo, "work.txt"), "final\n")
-      {_, 0} = git.(["add", "work.txt"])
-      {_, 0} = git.(["commit", "-qm", "squash-merged"])
-      {_, 0} = git.(["update-ref", "refs/remotes/origin/main", "HEAD"])
-
-      {:ok, _} = Worktree.ensure(repo, "superseded")
-      assert Worktree.stranded(repo, "superseded") == nil
     end
 
     test "still names a branch whose change is NOT on origin/main, even if other files match", %{

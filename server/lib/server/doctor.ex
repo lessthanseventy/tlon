@@ -162,6 +162,26 @@ defmodule Server.Doctor do
     ErlangError -> "ok"
   end
 
+  @doc """
+  What the seat checkouts under `root/.worktrees` cost on disk, as one report line. Checkouts copy
+  `deps` and `_build` with `cp --reflink`, so plain `du` counts every shared block once per checkout
+  and alarms; on btrfs the line gives the exclusive bytes (`btrfs filesystem du`), elsewhere `du`.
+  `cmd` runs the commands and is injectable so the parse is testable.
+  """
+  @spec worktree_size(Path.t(), (String.t(), [String.t()], keyword() -> {String.t(), integer()})) :: String.t()
+  def worktree_size(root \\ Server.Profiles.tlon_root(), cmd \\ &System.cmd/3) do
+    dir = Path.join(root, ".worktrees")
+
+    if File.dir?(dir) do
+      case exclusive_bytes(cmd, dir) do
+        {:ok, bytes} -> "#{format_bytes(bytes)} exclusive (btrfs: blocks shared between checkouts counted once)"
+        :error -> du_line(cmd, dir)
+      end
+    else
+      "none"
+    end
+  end
+
   @stale_lock_seconds 300
 
   @doc """
@@ -254,4 +274,32 @@ defmodule Server.Doctor do
         "#{age} — before the service started at #{started_at}: the last restart followed a crash"
     end
   end
+
+  defp exclusive_bytes(cmd, dir) do
+    with {out, 0} <- cmd.("btrfs", ["filesystem", "du", "-s", "--raw", dir], stderr_to_stdout: true),
+         [_header, row | _] <- String.split(out, "\n", trim: true),
+         [_total, exclusive | _] <- String.split(row),
+         {bytes, ""} <- Integer.parse(exclusive) do
+      {:ok, bytes}
+    else
+      _ -> :error
+    end
+  rescue
+    ErlangError -> :error
+  end
+
+  defp du_line(cmd, dir) do
+    with {out, 0} <- cmd.("du", ["-sk", dir], stderr_to_stdout: true),
+         [kb | _] <- String.split(out),
+         {kb, ""} <- Integer.parse(kb) do
+      "#{format_bytes(kb * 1024)} by du (checkouts' reflinked blocks counted each time, so an overstatement)"
+    else
+      _ -> "unknown"
+    end
+  rescue
+    ErlangError -> "unknown"
+  end
+
+  defp format_bytes(bytes) when bytes >= 1_073_741_824, do: "#{Float.round(bytes / 1_073_741_824, 1)} GiB"
+  defp format_bytes(bytes), do: "#{Float.round(bytes / 1_048_576, 1)} MiB"
 end

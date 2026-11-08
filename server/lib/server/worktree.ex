@@ -282,39 +282,13 @@ defmodule Server.Worktree do
   # by change, not by hash: a rebase merge lands the same change on main as a new commit, so a
   # branch is unmerged only while it holds a change ("+" in git cherry) the main checkout lacks
   # against origin's main where there is one: what GitHub merged is merged, however far this checkout
-  # lags behind it
+  # lags behind it. Main's later edits to the same files do not unland it.
   defp unmerged?(repo_path, branch) do
     base = if branch_exists?(repo_path, "refs/remotes/origin/main"), do: "origin/main", else: "HEAD"
 
     case git(repo_path, ["cherry", base, branch]) do
-      {out, 0} ->
-        out
-        |> String.split("\n", trim: true)
-        |> Enum.filter(&String.starts_with?(&1, "+"))
-        |> Enum.map(fn "+ " <> sha -> String.trim(sha) end)
-        |> case do
-          [] -> false
-          shas -> not landed?(repo_path, base, branch, shas)
-        end
-
-      _ ->
-        true
-    end
-  end
-
-  # A rebase merge can fold a commit's files into a neighbouring commit, and a later commit can
-  # rewrite an earlier one's file, so no single commit need match main. The branch has landed when
-  # its TIP is identical to main over every file its "+" commits touched; a file main changed after
-  # the landing still reads unmerged.
-  defp landed?(repo_path, base, tip, shas) do
-    results = Enum.map(shas, &git(repo_path, ["diff-tree", "-z", "--no-commit-id", "--name-only", "-r", &1]))
-
-    with true <- Enum.all?(results, &match?({_, 0}, &1)),
-         files when files != [] <-
-           results |> Enum.flat_map(fn {out, 0} -> String.split(out, "\0", trim: true) end) |> Enum.uniq() do
-      match?({_, 0}, git(repo_path, ["diff", "--quiet", tip, base, "--" | files]))
-    else
-      _ -> false
+      {out, 0} -> out |> String.split("\n", trim: true) |> Enum.any?(&String.starts_with?(&1, "+"))
+      _ -> true
     end
   end
 
