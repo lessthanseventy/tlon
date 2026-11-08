@@ -81,6 +81,20 @@ defmodule Server.OrphansTest do
     refute_received {:notice, _}
   end
 
+  test "the notice counts processes and names each one's command, so the next one says what survived", %{proc: proc} do
+    process(proc, 101, ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
+    process(proc, 105, ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
+    File.write!(Path.join([proc, "101", "comm"]), "claude\n")
+    test = self()
+
+    opts = [proc_dir: proc, kill: fn _ -> :ok end, grace: 0, force: fn _ -> :ok end, notify: &send(test, {:notice, &1})]
+
+    assert Orphans.retire(257, "emma", opts) == 2
+    assert_received {:notice, text}
+    assert text =~ "retired 2 process(es) of emma"
+    assert text =~ "pid 101 claude, 105 ?"
+  end
+
   test "never signals the caller's own process", %{proc: proc} do
     process(proc, List.to_integer(:os.getpid()), ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
 
