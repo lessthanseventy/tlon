@@ -38,7 +38,7 @@ export type Note = { id: number; author: string; body: string; workspace_id: num
 /** a consult in the last few minutes: `from` asked `to` something */
 export type Visit = { from: string; to: string; workspace_id: number; at: string }
 /** a note on the office corkboard (`Server.Office.Corkboard`): chatter, not working notes; `re` the note it answers */
-export type CorkNote = { id: number; author: string; kind: "encourage" | "tease" | "joke" | "comment" | "suggestion" | "reply"; body: string; re: number | null; at: number }
+export type CorkNote = { id: number; author: string; kind: "encourage" | "tease" | "joke" | "comment" | "suggestion" | "reply" | "side project"; body: string; re: number | null; at: number }
 /** a filed ticket nobody has started yet */
 export type Ticket = { id: number; workspace_id: number; project_id: number | null; title: string; priority: string; routed?: boolean
   /** "epic" rows group the tickets whose `epic_id` is theirs, "initiative" rows the epics whose `epic_id` is theirs; `done`/`total`/`next` are an epic's progress and its next free child */
