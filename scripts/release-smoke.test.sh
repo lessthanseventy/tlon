@@ -24,7 +24,7 @@ build() {
 build A 1 & until_log "start A"
 build B 0 & wait
 expect "two builds run one after the other" "$(tr '\n' ' ' <"$log")" "start A end A start B end B "
-expect "the second says whose build it waits for" "$(cat "$tmp/out-B")" "smoke: waiting for A's build"
+expect "the second says whose build it waits for" "$(cat "$tmp/out-B")" "smoke: waiting for A's build, up to 1200s"
 expect "the first waits for no one" "$(cat "$tmp/out-A")" ""
 
 : >"$log"
@@ -40,6 +40,13 @@ leaver() { sleep 30 >/dev/null 2>&1 & }
 ( . "$here/lib/smoke-build.sh"; smoke_build_lock "$lock" D >/dev/null; smoke_isolated leaver; smoke_build_unlock )
 timeout 5 bash -c '. "$1/lib/smoke-build.sh"; smoke_build_lock "$2" E >/dev/null && echo got' _ "$here" "$lock" >"$tmp/out-E"
 expect "a build's leftover child does not keep the lock" "$(cat "$tmp/out-E")" "got"
+
+( . "$here/lib/smoke-build.sh"; smoke_build_lock "$lock" H >/dev/null; exec sleep 30 ) & hpid=$!
+sleep 0.3
+timeout 10 bash -c '. "$1/lib/smoke-build.sh"; TLON_SMOKE_BUILD_WAIT=1 smoke_build_lock "$2" W; echo "rc $?"' _ "$here" "$lock" >"$tmp/out-W" 2>&1
+kill "$hpid" 2>/dev/null; wait "$hpid" 2>/dev/null
+expect "a build waits a bounded time for the lock, then gives up" "$(cat "$tmp/out-W")" "smoke: waiting for H's build, up to 1s
+rc 1"
 
 . "$here/lib/smoke-build.sh"
 printf 'boot\n** (DBConnection.ConnectionError) connection not available and request was dropped from queue after 5940ms\n' >"$log"
