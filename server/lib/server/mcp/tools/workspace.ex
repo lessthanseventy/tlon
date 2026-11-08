@@ -301,16 +301,19 @@ defmodule Server.MCP.Tool.ListTickets do
             do: Tickets.in_workspace(workspace_id),
             else: Tickets.open_in_workspace(workspace_id)
 
-        tickets =
-          tickets
-          |> Enum.filter(&(is_nil(params[:status]) or &1.status == params[:status]))
-          |> Enum.filter(&(is_nil(params[:assignee]) or &1.assignee == params[:assignee]))
-          |> Enum.filter(&(is_nil(params[:label]) or params[:label] in (&1.labels || [])))
-          |> then(&if(params[:limit], do: Enum.take(&1, params[:limit]), else: &1))
-
+        tickets = tickets |> Enum.filter(&wanted?(&1, params)) |> cap(params[:limit])
         ok(frame, Enum.map(tickets, &MCP.Brief.ticket/1))
     end
   end
+
+  defp wanted?(t, params) do
+    (is_nil(params[:status]) or t.status == params[:status]) and
+      (is_nil(params[:assignee]) or t.assignee == params[:assignee]) and
+      (is_nil(params[:label]) or params[:label] in (t.labels || []))
+  end
+
+  defp cap(tickets, nil), do: tickets
+  defp cap(tickets, limit), do: Enum.take(tickets, max(limit, 0))
 end
 
 defmodule Server.MCP.Tool.GetTicket do
