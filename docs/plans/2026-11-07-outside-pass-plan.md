@@ -603,6 +603,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: a small handwritten pool (20 puns, 10 visitors, 3–4 generic lines per event kind) in
   `kit/seat-voices.ts`; the generated pool extends it rather than replacing nothing.
 - Check: the sandbox never repeats a generic line twice in a row; `events.test.ts`.
+- Done: `BASE_PUNS` (20), `BASE_VISITORS` (10) and 4 generic lines per event kind in `kit/seat-voices.ts`; `Sim.pooled()` puts the server's toys ahead of them at any weirdness dial, so a curated room has its visitors and puns with no server (reactions and parts stay generated-only). Pinned in `seat-voices.test.ts` and `dials.test.ts`.
 
 **F4 · The play card pages, and every event is summonable.** `Sonnet · S`
 - Why: the sandbox's play card is capped at digits 1–9 (`play.*` in `tui/keys.ts`), so no toy can be

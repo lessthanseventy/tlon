@@ -6,7 +6,7 @@
 import { random } from "./rng"
 import { asksYou } from "./crew"
 import { relation } from "./company"
-import { soreLine } from "./seat-voices"
+import { BASE_PUNS, BASE_VISITORS, soreLine } from "./seat-voices"
 import { soulFor } from "./souls"
 import { DRINK, FALL_ODDS, FALL_WET, layPrint, prune, STRIDE, WET, type Print } from "./bathroom"
 import { homeLevel } from "./life"
@@ -722,7 +722,8 @@ export class Sim<L extends { people: Seat[] }> {
     this.dayPart = t?.parts.at(-1) ?? null
   }
   private pooled(): Toys {
-    return this.dials.weirdness !== "curated" && this.toys ? this.toys : { visitors: [], puns: [], reactions: {}, parts: [] }
+    const t = this.dials.weirdness !== "curated" ? this.toys : null
+    return { visitors: [...(t?.visitors ?? []), ...BASE_VISITORS], puns: [...(t?.puns ?? []), ...BASE_PUNS], reactions: t?.reactions ?? {}, parts: t?.parts ?? [] }
   }
   /** the visitor in the doorway, if one is there (not while they wait for someone to come) */
   visitor(): { kind: VisitorKind; seed?: string | number; x: number; y: number } | null {
