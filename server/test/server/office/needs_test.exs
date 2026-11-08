@@ -509,6 +509,33 @@ defmodule Server.Office.NeedsTest do
       Server.Repo.get!(Server.Thread, t.id)
     end
 
+    test "the list's queries do not grow with quiet, unrefused worklines (B1/B2)", %{ws: ws} do
+      me = self()
+      id = "needs-queries-#{System.unique_integer([:positive])}"
+
+      :telemetry.attach(id, [:server, :repo, :query], fn _, _, _, _ -> if self() == me, do: send(me, :query) end, nil)
+
+      on_exit(fn -> :telemetry.detach(id) end)
+
+      count = fn ->
+        Needs.list()
+
+        fn -> receive(do: (:query -> 1), after: (0 -> nil)) end
+        |> Stream.repeatedly()
+        |> Enum.take_while(& &1)
+        |> length()
+      end
+
+      # the first count after the fixtures drains the queries their writes ran
+      for _ <- 1..2, do: workline(ws, "build", 0)
+      count.()
+      few = count.()
+      for _ <- 1..10, do: workline(ws, "build", 0)
+      count.()
+
+      assert count.() == few
+    end
+
     test "a workline nothing has moved for past the quiet window is blocking, with its last word", %{ws: ws} do
       t = workline(ws, "review", 4)
       {:ok, _} = Channel.post(%{thread_id: t.id, author: "treviranus", body: "QA is blocked: release:smoke was denied"})

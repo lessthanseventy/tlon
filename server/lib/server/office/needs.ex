@@ -343,8 +343,10 @@ defmodule Server.Office.Needs do
     cap = knob.value
     target = min(cap + 2, knob.max)
 
+    parked = open |> Enum.filter(& &1.agent_id) |> Enum.map(& &1.id) |> Server.Staffing.parked_notes()
+
     for {ws, threads} <-
-          open |> Enum.filter(&(&1.agent_id && Server.Staffing.parked_note?(&1.id))) |> Enum.group_by(& &1.workspace_id),
+          open |> Enum.filter(&MapSet.member?(parked, &1.id)) |> Enum.group_by(& &1.workspace_id),
         cap < target do
       %{
         key: "seats:#{ws}",
@@ -689,10 +691,12 @@ defmodule Server.Office.Needs do
   # an open workline at a stage whose kind the bench lacks, and nobody on the bench leads it:
   # staffing keeps the lead it has, and with none (or one off the bench) nothing moves it
   defp no_seat(open, listed) do
+    benches = open |> Enum.map(& &1.workspace_id) |> Enum.uniq() |> Server.Workspaces.bench_by_workspace()
+
     for %Thread{stage: stage, workspace_id: ws} = t <- open,
         kind = Server.Workline.staff_kind(stage),
         kind && ws && is_nil(t.awaiting) && not MapSet.member?(listed, t.id),
-        bench = Server.Workspaces.bench(ws),
+        bench = Map.get(benches, ws, []),
         not Enum.any?(bench, &(&1.archetype == kind)),
         lead <- [Server.Channel.thread_lead(t.id)],
         is_nil(lead) or not Enum.any?(bench, &(&1.name == lead)) do
@@ -819,7 +823,21 @@ defmodule Server.Office.Needs do
   # nobody is working it now: it cannot get past the refusal alone (the adapter's `tool_denied`
   # report). An operator's answer is movement, so a refusal after it is a new item.
   defp tool_denied(open, listed) do
+    ids = Enum.map(open, & &1.id)
+
+    # a thread refused fewer than twice ever cannot be refused twice since it moved: one query skips it
+    refused =
+      from(e in Event,
+        where: e.thread_id in ^ids and e.kind == "tool_denied",
+        group_by: e.thread_id,
+        having: count(e.id) >= 2,
+        select: e.thread_id
+      )
+      |> Repo.all()
+      |> MapSet.new()
+
     for t <- open,
+        MapSet.member?(refused, t.id),
         not MapSet.member?(listed, t.id),
         denials = denials_since(t, refused_moved(t)),
         length(denials) >= 2,
@@ -876,7 +894,7 @@ defmodule Server.Office.Needs do
       paused = Server.Pause.paused_thread_ids()
       duties = open |> Enum.map(& &1.id) |> Server.Staffing.duty_threads()
 
-      candidates =
+      quiet =
         for %Thread{stage: stage} = t <- open,
             stage not in [nil, "landed"],
             is_nil(t.awaiting),
@@ -884,12 +902,18 @@ defmodule Server.Office.Needs do
             not MapSet.member?(blocked, t.id),
             not MapSet.member?(paused, t.id),
             not MapSet.member?(duties, t.id),
-            do: {t, Server.Workline.Artifacts.Git.root(t)}
+            do: t
+
+      # a root is its thread's repo, project and workspace: resolved once per distinct three
+      where = &{&1.repo, &1.project_id, &1.workspace_id}
+      roots = quiet |> Enum.uniq_by(where) |> Map.new(&{where.(&1), Server.Workline.Artifacts.Git.root(&1)})
+      candidates = Enum.map(quiet, &{&1, roots[where.(&1)]})
 
       tips = candidates |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Map.new(&{&1, work_tips(&1)})
+      moved_at = candidates |> Enum.map(&elem(&1, 0)) |> moved_at()
 
       for {t, root} <- candidates,
-          moved = last_moved(t, Map.get(tips[root], t.slug)),
+          moved = latest([moved_at[t.id], Map.get(tips[root], t.slug)]),
           DateTime.before?(moved, cutoff),
           not on_duty?(t) do
         # its age is when it went stalled: from `moved` it would be past uqbar_route_minutes at birth
@@ -902,29 +926,38 @@ defmodule Server.Office.Needs do
 
   # a coworker's chatter is not movement, nor a prompt the machine closed ("window closed"); an
   # operator's answer starts the clock again, so the lead gets the window to act on it
-  defp last_moved(t, commit_at) do
+  # `%{thread_id => last moved}` for `threads`, in two grouped queries whatever their number
+  defp moved_at(threads) do
     operator = Server.OperatorConfig.operator()
+    ids = Enum.map(threads, & &1.id)
 
-    event =
-      Repo.one(
-        from e in Event,
-          where: e.thread_id == ^t.id and e.kind in ["stage_advanced", "check_passed", "check_failed", "work_landed"],
-          select: max(e.created_at)
+    events =
+      from(e in Event,
+        where: e.thread_id in ^ids and e.kind in ["stage_advanced", "check_passed", "check_failed", "work_landed"],
+        group_by: e.thread_id,
+        select: {e.thread_id, max(e.created_at)}
       )
+      |> Repo.all()
+      |> Map.new()
 
-    answer =
-      Repo.one(
-        from m in Message,
-          where:
-            m.thread_id == ^t.id and
-              (m.author == ^operator or like(m.resolution, "answered%") or like(m.resolution, "dismissed by%")),
-          select: max(fragment("greatest(?, ?)", m.created_at, m.resolved_at))
+    answers =
+      from(m in Message,
+        where:
+          m.thread_id in ^ids and
+            (m.author == ^operator or like(m.resolution, "answered%") or like(m.resolution, "dismissed by%")),
+        group_by: m.thread_id,
+        select: {m.thread_id, max(fragment("greatest(?, ?)", m.created_at, m.resolved_at))}
       )
+      |> Repo.all()
+      |> Map.new()
 
-    [t.created_at, event, answer && DateTime.from_naive!(answer, "Etc/UTC"), commit_at]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.max(DateTime)
+    Map.new(threads, fn t ->
+      answer = answers[t.id] && DateTime.from_naive!(answers[t.id], "Etc/UTC")
+      {t.id, latest([t.created_at, events[t.id], answer])}
+    end)
   end
+
+  defp latest(stamps), do: stamps |> Enum.reject(&is_nil/1) |> Enum.max(DateTime)
 
   # every work/<slug> tip's commit time in `root`, by slug: one git call per refresh, not one per workline
   defp work_tips(root) do
@@ -1180,7 +1213,7 @@ defmodule Server.Office.Needs do
   # a refused seat that posts afterwards worked around the refusal: its own progress is movement
   # here (chatter is not, for `stalled`)
   defp refused_moved(t) do
-    moved = last_moved(t, nil)
+    moved = moved_at([t])[t.id]
 
     agents =
       from(e in Event,

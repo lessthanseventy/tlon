@@ -380,6 +380,44 @@ defmodule Server.OfficeTest do
     assert %{opened: 2, closed: 1} = Office.status().ticket_week[ws.id]
   end
 
+  # queries the calling process runs inside `fun`
+  defp queries(fun) do
+    me = self()
+    id = "office-queries-#{System.unique_integer([:positive])}"
+    :telemetry.attach(id, [:server, :repo, :query], fn _, _, _, _ -> if self() == me, do: send(me, :query) end, nil)
+
+    try do
+      fun.()
+
+      fn -> receive(do: (:query -> 1), after: (0 -> nil)) end
+      |> Stream.repeatedly()
+      |> Enum.take_while(& &1)
+      |> length()
+    after
+      :telemetry.detach(id)
+    end
+  end
+
+  test "the snapshot's queries do not grow with its tickets: no per-ticket epic or thread lookup (B1/B2)" do
+    {:ok, ws} = Workspaces.register(%{name: "Many"})
+    {:ok, epic} = Tickets.file(%{workspace_id: ws.id, title: "E", kind: "epic"})
+
+    add = fn n ->
+      for i <- 1..n do
+        {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "t#{i}", epic_id: epic.id})
+        {:ok, th} = Channel.open_thread(%{title: "t#{i}", workspace_id: ws.id})
+        {:ok, _} = Tickets.promote(t, th.id)
+      end
+    end
+
+    add.(2)
+    few = queries(&Office.status/0)
+    add.(10)
+    many = queries(&Office.status/0)
+
+    assert many == few
+  end
+
   test "the snapshot carries the server's open-ticket counts: per group row, per workspace and for the orphans" do
     {:ok, ws} = Workspaces.register(%{name: "Counts"})
     {:ok, ini} = Tickets.file(%{workspace_id: ws.id, title: "I", kind: "initiative"})

@@ -148,6 +148,15 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   event or when the Needs fingerprint changed, not every minute.
 - Check: a telemetry test asserting `Office.status/0` ≤ N queries and `Needs.all/0` ≤ M (pin N and
   M to today's counts first, then lower them); the TUI's refresh latency in `tui/flight.ts` logs.
+- Measured 2026-11-08 on the live node: `Office.status/0` 425–500 ms and 231 queries (271 ms of
+  them in the db; 114 were `Tickets.epic_of/1` per ticket), `Needs.list/0` 510 ms and 182 queries
+  (110 were five per open thread for `tool_denied`, none of which had a refusal), `NeedsPage.run/0`
+  430 ms. So the cost is B2's per-row reads, not the absence of a cache; and a cache invalidated on
+  every write (the snapshot reads nearly every table) would rarely hit. Done with B2: the counts no
+  longer grow with tickets or worklines (two tests pin it), by bulk reads for a ticket's epic and
+  thread, the latest message per thread (`Staffing.parked_notes/1`), the threads refused twice,
+  when each workline last moved, the benches and each repo root. (a) and (b) are dropped until a
+  measurement after release says the snapshot still costs too much; (c)–(e) stay open.
 
 **B2 · N+1 queries on the hot passes.** `Sonnet · M`
 - Why (read, not profiled): `Office.tickets/2` calls `Tickets.epic_of/1` and `thread_of/1` per open
@@ -160,6 +169,9 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   bench-by-workspace and leads once at the top of `Needs.all/0`; one `DISTINCT ON (thread_id)` query
   for the latest message per thread; `where workspace_id in ^ids` for the per-workspace reads.
 - Check: the query-count tests from B1 drop; `mix test` unchanged.
+- Done 2026-11-08 for `Office.tickets/2`, `Needs` (`no_seat`, `tool_denied`, `stalled`, `seats`)
+  and `Office.threads`' parked seat, with B1. Open: `Staffing.pass/1`, `Maintain.Sweep`'s per-ticket
+  `exists?`, `Office.status`' per-workspace reads, and the 39 `Thread` gets in `Needs.list/0`.
 
 **B3 · Indexes the hot filters lack.** `Sonnet · S · limit (migration)`
 - Why: `pg_indexes` today — `thread` has only `agent_id` and a partial `slug`; `ticket` has only its

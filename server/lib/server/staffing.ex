@@ -600,9 +600,21 @@ defmodule Server.Staffing do
   defp live_turn?(since), do: DateTime.diff(DateTime.utc_now(), since) < Thinking.stale_turn_seconds()
 
   @doc "Whether the thread's latest message is the leaf cap's parked note: it waits for a seat."
-  def parked_note?(thread_id) do
-    last = Repo.one(from m in Message, where: m.thread_id == ^thread_id, order_by: [desc: m.id], limit: 1)
-    last != nil and last.author == "tlon" and String.starts_with?(last.body, "⏸ parked")
+  def parked_note?(thread_id), do: MapSet.member?(parked_notes([thread_id]), thread_id)
+
+  @doc "`parked_note?/1` for many threads in one query: the ids whose latest message is the parked note."
+  def parked_notes(thread_ids) do
+    from(m in Message,
+      where: m.thread_id in ^thread_ids,
+      distinct: m.thread_id,
+      order_by: [m.thread_id, desc: m.id],
+      select: {m.thread_id, m.author, m.body}
+    )
+    |> Repo.all()
+    |> Enum.flat_map(fn {id, author, body} ->
+      if author == "tlon" and String.starts_with?(body, "⏸ parked"), do: [id], else: []
+    end)
+    |> MapSet.new()
   end
 
   # At the cap with someone parked: the leaf idle the longest gives its seat up, so finished work
