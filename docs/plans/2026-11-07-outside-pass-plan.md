@@ -534,6 +534,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 **F13 · Six quiet keys nobody can find.** `Haiku · S`
 - Why: `tab`, `R`, `p` (pat Nina), `U` (Uqbar), `.`, `,` are handled and hinted nowhere.
 - Change: list them in the help card's "everywhere" section. Check: `keys.test.ts`.
+- Done: `everywhere()` in `tui/keys.ts` lists every global, quiet included; the help card uses it, the foot still skips them.
 
 ---
 

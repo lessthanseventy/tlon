@@ -47,7 +47,7 @@ import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wi
 import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk"
 import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
-import { adder, bind, hints, LEGEND_CHARS, type KeyId } from "./keys"
+import { adder, bind, everywhere, hints, LEGEND_CHARS, type KeyId } from "./keys"
 import { PLAY, PLAY_ROWS, ROOM_PLAY, WORLD_ROWS, roomKey, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
@@ -2064,7 +2064,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `HELP · ${m.title}`,
         actions: [{ ...bind("help.esc", `back to ${m.title.toLowerCase()}`), run: () => { mode = m.from; sel = 0; scroll = 0; snapSel = true; draw() } }],
-        rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", GLOBALS), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play key (it wins over a card's)", PLAY) : TOY_KEYS ? sect("the room's play keys (a card's own key wins)", ROOM_PLAY) : []), ...boardLegend()],
+        rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", everywhere()), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play key (it wins over a card's)", PLAY) : TOY_KEYS ? sect("the room's play keys (a card's own key wins)", ROOM_PLAY) : []), ...boardLegend()],
       }
     }
     case "look-editor": {
