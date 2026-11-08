@@ -16,7 +16,7 @@ defmodule Server.Jobs.KeepUp do
   following its main, and it has one keyed rollout note (`keep_up:remote:<repo>`) saying so, cleared
   once its origin is on GitHub.
 
-  Each main checkout's mix projects are compiled for test once per new tip, last in the job
+  Each main checkout's mix projects are compiled for test once per new tip, in a task the job starts
   (`warm_test_builds/2`), so the `_build` a seat's worktree seeds from is current.
 
   A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
@@ -38,7 +38,8 @@ defmodule Server.Jobs.KeepUp do
   def perform(%Oban.Job{}) do
     repos = repos()
     faults = Enum.flat_map(repos, &keep_up/1) ++ landings() ++ requeue_stranded()
-    warm_test_builds(repos)
+    # minutes of compile, kept out of the pass's own time (`Server.Jobs.Passes` alarms past 30 s)
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn -> warm_test_builds(repos) end)
 
     if faults == [], do: :ok, else: {:error, Enum.join(faults, "; ")}
   end
@@ -47,8 +48,8 @@ defmodule Server.Jobs.KeepUp do
   Compile each mix project of `repos`' main checkouts for test, once per main tip, last in the job.
   A seat's worktree seeds its `_build` from there (`Server.Worktree`), and nothing else builds the
   main checkout for test: a stale seed made a seat's first test run compile the whole app and
-  outlast menard's tool wall (#760). A repo's warm holds a lock while it compiles, so a later job
-  (the job's uniqueness lapses after two minutes) skips it rather than compile one `_build` twice.
+  outlast menard's tool wall (#760). A repo's warm holds a lock while it compiles, so the next
+  pass's warm skips it rather than compile one `_build` twice.
   Each compile is bounded at 15 minutes. A tip is tried once: a failure is logged, and the next tip
   tries again, so a red main costs one compile, not one every pass. A git that won't run warms
   nothing (the repo pass reports it).
