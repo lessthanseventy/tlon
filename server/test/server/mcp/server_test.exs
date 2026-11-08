@@ -2438,6 +2438,18 @@ defmodule Server.MCP.ServerTest do
     assert %Thread{stage: nil} = Repo.get!(Thread, lobby.id)
   end
 
+  test "a refusal reads as the explained sentence, not an inspected term" do
+    {:ok, thread} = Channel.open_thread(%{title: "plain thread"})
+    {:ok, agent} = Staff.register_agent(%{name: "Refused", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+
+    r = call(token, handshake(token), 2, "advance_stage", %{})
+    assert r["isError"]
+    text = hd(r["content"])["text"]
+    assert text =~ "this thread is not a workline"
+    refute text =~ ":not_a_workline"
+  end
+
   test "a lead woken on the lobby acts on the workline it leads by thread_id; a non-lead is refused" do
     roster = [%{"archetype" => "builder", "name" => "emma"}, %{"archetype" => "qa", "name" => "nolan"}]
     {:ok, ws} = Server.Workspaces.register(%{name: "Lobby-bound", roster: roster})

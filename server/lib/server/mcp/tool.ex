@@ -104,7 +104,10 @@ defmodule Server.MCP.Tool do
 
   @doc """
   A context's refusal reason as a sentence naming the next action. A string is verbatim; a reason
-  not listed here is `inspect/1`ed, so a new one reads as a term until it earns a sentence.
+  not listed here is `inspect/1`ed, so a new one reads as a term until it earns a sentence. An atom
+  is raised by more than one context (`:closed` is a thread's and an issue's), so its sentence is
+  worded to be true wherever it comes from. The hand-off reasons keep their sentences in
+  `Server.Staffing.explain/1`, which the operator's 409 shares.
   """
   @spec explain(term()) :: String.t()
   def explain(reason) when is_binary(reason), do: reason
@@ -115,7 +118,7 @@ defmodule Server.MCP.Tool do
   def explain(:root_machine_thread),
     do: "the standing root thread is a home, not a work item — open a thread for the work"
 
-  def explain(:closed), do: "the thread is closed — reopen it or open a new one"
+  def explain(:closed), do: "it is closed — reopen it or open a new one"
 
   def explain(:limit_hit),
     do: "its risk grade hit a limit, so only the operator approves it — pass it up with your recommendation"
@@ -125,7 +128,7 @@ defmodule Server.MCP.Tool do
   def explain(:not_landing), do: "no PR is waiting to land for this thread — check the thread's stage"
   def explain(:epic), do: "an epic is never work itself — start one of its tickets"
   def explain(:initiative), do: "an initiative is never work itself — start one of its tickets"
-  def explain(:no_repo), do: "no repo is set for this thread's project or workspace — set one before asking again"
+  def explain(:no_repo), do: "no repo is set for the project or workspace — set one before asking again"
   def explain(:unknown_peer), do: "no agent by that name is registered — check the roster for the handle"
   def explain(:no_threads), do: "that peer has no thread to reach — name one with thread_id"
   def explain({:no_thread, id}), do: "no thread #{id} exists — check the id"
@@ -136,6 +139,7 @@ defmodule Server.MCP.Tool do
 
   def explain({:model_cli_missing, _}), do: "the model's command is not installed on this server — ask the operator"
   def explain({:model_cli_exit, code, msg}), do: "the model's command exited #{code}: #{msg}"
+  def explain(reason) when reason in [:lead_mid_turn, :clocked_out, :off_shift], do: Server.Staffing.explain(reason)
   def explain(other), do: inspect(other)
 
   @doc "A tool-error reply with `message`."

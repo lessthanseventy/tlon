@@ -60,9 +60,31 @@ defmodule Server.MCP.ToolTest do
       assert Tool.explain({:model_cli_timeout, 120, ""}) =~ "120"
     end
 
+    test "a hand-off refusal reads as Staffing's sentence, one source for both doors" do
+      for r <- [:lead_mid_turn, :clocked_out, :off_shift] do
+        assert Tool.explain(r) == Server.Staffing.explain(r)
+        refute Tool.explain(r) == inspect(r)
+      end
+    end
+
     test "an unmapped reason falls back to inspect; a string is verbatim" do
       assert Tool.explain({:something, :odd}) == "{:something, :odd}"
       assert Tool.explain("already a sentence") == "already a sentence"
+    end
+  end
+
+  describe "DecideProposal.result/1" do
+    alias Server.MCP.Tool.DecideProposal
+
+    test "each shape the judge returns says what happened" do
+      assert DecideProposal.result({:ok, %Server.Fact{}}) =~ "now supersedes"
+
+      asked = DecideProposal.result({:ok, %Server.Message{id: 9}})
+      assert asked =~ "asked the operator"
+      assert asked =~ "nothing was superseded"
+
+      assert DecideProposal.result({:ok, %Server.Event{}}) =~ "rejected"
+      assert DecideProposal.result({:ok, :odd}) == "{:ok, :odd}"
     end
   end
 
