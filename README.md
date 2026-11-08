@@ -119,6 +119,10 @@ All environment, read at start:
 | `TLON_WORKLINE_ROOT` | the cwd | the checkout workline checks run git in |
 | `TLON_URL` | `http://127.0.0.1:4040` | (office) the server to talk to |
 | `TLON_PALETTE` | `~/.config/tlon/palette.json` | (office) your desktop's colours, `{ "role": { … } }`, followed live |
+| `TLON_LOOKS`, `TLON_SOULS`, `TLON_HALL`, `TLON_CAST`, `TLON_STORE`, `TLON_OFFICE`, `TLON_HOME`, `TLON_PETS` | `~/.config/tlon/…` | (office) its other files, each pointed elsewhere |
+| `TLON_OFFICE_TMUX` | `tlon-office` | (office) the tmux server the office's own panes live in |
+| `TLON_BANTER`, `TLON_WEATHER`, `TLON_CALENDAR` | on | the office's small talk, weather and calendar, served by the server, each off with `0` |
+| `TLON_WEB_SECRET` | derived from the MCP secret | the web UI's session secret |
 
 ## From a checkout
 
