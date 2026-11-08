@@ -92,6 +92,8 @@ export interface Dossier {
   thread_id: number;
   goal: string | null;
   lead: string | null;
+  // The operator's handle as the server is configured. Optional: a server from before it still renders.
+  operator?: string;
   todos: Capped<Todo>;
   next: Todo | null;
   learnings: Capped<Fact>;
@@ -139,7 +141,7 @@ function capBody(m: ChatterMessage): string {
 }
 
 /** `operator` is the handle a `stated` fact is credited to: the server trusts only that author for `stated` provenance. */
-export function renderBrief(d: Dossier, now: Date = new Date(), model?: string, harness = "Claude Code", operator = "andrew"): string {
+export function renderBrief(d: Dossier, now: Date = new Date(), model?: string, harness = "Claude Code", operator = d.operator ?? "the operator"): string {
   const lines: string[] = [];
 
   const goal = d.goal ?? "(untitled thread)";

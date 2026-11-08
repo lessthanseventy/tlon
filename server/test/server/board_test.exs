@@ -157,6 +157,13 @@ defmodule Server.BoardTest do
       {:ok, plain} = Channel.open_thread(%{title: "no ticket", workspace_id: ws.id})
       assert %{"ticket" => nil} = plain |> Board.brief() |> Server.MCP.Brief.scope()
     end
+
+    test "the rendered brief names the operator the server is configured with" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Operated"})
+      {:ok, thread} = Channel.open_thread(%{title: "who is the operator", workspace_id: ws.id})
+      assert %{"operator" => op} = thread |> Board.brief() |> Server.MCP.Brief.scope()
+      assert op == Server.OperatorConfig.operator()
+    end
   end
 
   describe "Board.brief/1 — BRIEF" do

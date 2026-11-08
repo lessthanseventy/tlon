@@ -431,6 +431,12 @@ snapshot on 304. `Sonnet · S`, after B1.
   existing `TLON_CLI_CURL` stub; `Server.OperatorConfig.operator/0` for the name everywhere.
 - Check: `scripts/tlon-cli.test.sh` in `check:names`; `grep -n andrew scripts adapters` → the
   README's example only.
+- Done 2026-11-08, the name: the rendered dossier carries `operator` (`Brief.scope/1`,
+  `OperatorConfig.operator/0`), `renderBrief` reads it when no `TLON_OPERATOR` is given, and the
+  CLI's four inline-Elixir sites call `OperatorConfig.operator()`; `grep -n andrew scripts adapters`
+  is the test files only. Left: the fifteen verbs' MCP/mix-task split and the `token`/usage test
+  (the `.test.sh` itself arrives with A6 in #816 — build on it once merged); `office/tui/main.ts`
+  still defaults the name from the env.
 
 ---
 

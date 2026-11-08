@@ -84,6 +84,12 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
     expect(out).not.toContain("andrew");
   });
 
+  test("with no operator given, the dossier's own names the stated fact's author", () => {
+    const stated = { id: 1, kind: "constraint", text: "tabs, not splits", provenance: "stated", check_cmd: null, certainty: "stated", at: minsAgo(10) };
+    const out = renderBrief(dossier({ operator: "ops", learnings: { shown: [stated], more: 0 } } as never), NOW);
+    expect(out).toContain('[stated] ops: "tabs, not splits"');
+  });
+
   test("a checked fact carries the command that re-runs it", () => {
     const out = renderBrief(
       dossier({
