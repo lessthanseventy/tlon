@@ -22,11 +22,15 @@ if [ "${TLON_CHECK_FORCE:-0}" != 1 ] && [ "${TLON_CHECK_STATUS:-1}" != 0 ] && [ 
 fi
 # A clean tree that already passed is not run again, whatever commit holds it now: a rebase onto a
 # main that hasn't moved (a verify, then its landing's gate) makes a new commit with the same tree.
-# Recorded green only, under the verify cache, which a seat's sandbox can read but never write.
-tree="$(git rev-parse 'HEAD^{tree}' 2>/dev/null)"
+# The key is the tree the gate reads: `work/` and `docs/` are left out, except the two files a check
+# opens (`check-glossary.sh`, `manual --check`), so a plan or a `pr.md` commit on a passed tree is a
+# hit too. Recorded green only, under the verify cache, which a seat's sandbox can read but never write.
+tree="$(git ls-tree -r 'HEAD^{tree}' 2>/dev/null |
+  awk -F'\t' '!($2 ~ /^work\// || ($2 ~ /^docs\// && $2 != "docs/glossary.md" && $2 != "docs/manual/tasks.md"))' |
+  git hash-object --stdin 2>/dev/null)"
 green="${XDG_CACHE_HOME:-$HOME/.cache}/tlon-verify/green"
 if [ "${TLON_CHECK_FORCE:-0}" != 1 ] && [ -n "$tree" ] && [ -z "$(git status --porcelain 2>/dev/null)" ] && [ -f "$green/$tree" ]; then
-  echo "check: tree ${tree:0:12} already passed ($(cat "$green/$tree")) — not run again (TLON_CHECK_FORCE=1 runs it)"
+  echo "check: the gate's tree ${tree:0:12} already passed ($(cat "$green/$tree")) — not run again (TLON_CHECK_FORCE=1 runs it)"
   code=0
 else
   mise run check:all
