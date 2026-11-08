@@ -207,7 +207,8 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   brief after a quiet spell: ollama unloads the model after 5 min, a reload takes ~6 s, recall waits
   1 s and its giving up aborts the load. Done: `Server.Recall.Vectors` caches each fact's unit
   vector packed and scores by dot product (no migration, no dependency); requests send
-  `keep_alive: 24h`; notices are no longer embedded on write. Open: the 3,142 notices already
+  `keep_alive: 24h`; notices are no longer embedded on write. Measured live after the hot-load:
+  brief median 1.0 s warm, 1.2 s cold. Open: the 3,142 notices already
   embedded (28 MB) stay until the operator nulls them; pgvector stays the larger fix, a migration
   and a dependency, Andrew's call.
 

@@ -84,12 +84,15 @@ matches. Left:
 3. G6's `check:scripts`, then mechanism 2, its scoping function tested first.
 4. Mechanism 4's bench trigger.
 
-## Questions for Andrew
+## Questions for Andrew — answered 2026-11-08
 
-1. Mechanism 2 moves a cross-module break from verify to landing. Acceptable?
+1. Mechanism 2 moves a cross-module break from verify to landing. Acceptable? **Answer: yes;
+   the landing stays full.**
 2. Mechanism 1 makes a seat's pre-advance check the full suite. The alternative is to drop the
    seat's own run and let verify be the first; that saves more and gives the builder its red
-   later. Which?
+   later. Which? **Answer: the seat's pre-advance check is the full `check`, recorded green.**
+
+The spec is approved; each mechanism is its own PR, merged by Andrew (the check is his limit).
 
 ## Check
 

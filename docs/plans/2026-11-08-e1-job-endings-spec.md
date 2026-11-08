@@ -93,13 +93,15 @@ Each ships as its own small PR after the invariant, and closes its ticket.
   `discarded` with no event). B6 covers the wording for that.
 - It does not change any job's retry policy (B6).
 
-## Questions for Andrew
+## Questions for Andrew — answered 2026-11-08
 
 1. A thread-bound `:ok` posting `✓ <worker> done` by default: right, or should silence be the
    default with `{:ok, line}` the opt-in? The default here is loud, so a forgotten case is noise,
-   not silence.
+   not silence. **Answer: loud by default; `{:ok, :quiet}` opts out.**
 2. The fallback for a nil thread is the standing (root) thread. The plan also names the sheriff's
-   beat; one target is simpler. Which?
+   beat; one target is simpler. Which? **Answer: the root thread, only.**
+
+The spec is approved as written; the PRs follow.
 
 ## Check
 
