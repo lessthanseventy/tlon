@@ -270,6 +270,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   before upscaling and re-place on pan rather than re-send.
 - Check: a bench test (`test/paint-bench.test.ts`) counting `png()` calls over 50 identical frames
   → 1; the golden frames unchanged.
+- Done: `kittyImage` keys the encode on a hash of `rgba`, ink and cover plus scale (and the viewport only when a balloon is placed against it); 50 identical frames call `png()` once, 12 ms to 2 ms per frame on a 320×200 floor at 3× (`test/paint-bench.test.ts`). Left: cropping to the viewport before upscaling — the placement already crops the one transmitted image, so a pan never re-sends; a crop would re-encode on every pan.
 
 **C2 · `png.ts` does a byte loop CRC and no filter.** `Sonnet · S`
 - Why: `for (const x of b)` CRC over the whole IDAT per frame, unfiltered scanlines at deflate level

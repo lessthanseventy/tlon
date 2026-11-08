@@ -131,7 +131,13 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
   }
 }
 
-let lastImageData: string | null = null
+let lastImageKey: string | null = null
+
+/** what the encoded image depends on: the art, its ink and cover, the scale, and the viewport where a balloon is placed against it */
+function imageKey(fr: Frame, g: Geometry, viewport: Viewport): string {
+  const view = fr.ink.some((i) => i.t === "balloon") ? viewport : null
+  return [Bun.hash(fr.rgba), Bun.hash(JSON.stringify(fr.ink)), fr.cover ? Bun.hash(fr.cover) : 0, fr.width, fr.height, g.k, textScale(g), JSON.stringify(view)].join(":")
+}
 
 /**
  * The floor, k× by nearest neighbour with its ink drawn in, transmitted once per frame change
@@ -139,18 +145,19 @@ let lastImageData: string | null = null
  * repositions the crop without ever re-encoding or re-sending the bitmap.
  */
 export function kittyImage(fr: Frame, g: Geometry, viewport: Viewport): string {
-  const w = fr.width * g.k, h = fr.height * g.k
-  const big = new Uint8Array(w * h * 4)
-  const src = new Uint32Array(fr.rgba.buffer, fr.rgba.byteOffset, fr.width * fr.height), dst = new Uint32Array(big.buffer)
-  for (let y = 0; y < h; y++) {
-    const sy = Math.floor(y / g.k) * fr.width, row = y * w
-    for (let x = 0; x < w; x++) dst[row + x] = src[sy + Math.floor(x / g.k)]!
-  }
-  inkInto(big, w, h, fr.ink, g.k, textScale(g), undefined, { x: viewport.x * g.k, y: viewport.y * g.k, w: viewport.w * g.k, h: viewport.h * g.k }, fr.cover)
-  const data = png(w, h, big).toString("base64")
+  const key = imageKey(fr, g, viewport)
   let o = ""
-  if (data !== lastImageData) {
-    lastImageData = data
+  if (key !== lastImageKey) {
+    const w = fr.width * g.k, h = fr.height * g.k
+    const big = new Uint8Array(w * h * 4)
+    const src = new Uint32Array(fr.rgba.buffer, fr.rgba.byteOffset, fr.width * fr.height), dst = new Uint32Array(big.buffer)
+    for (let y = 0; y < h; y++) {
+      const sy = Math.floor(y / g.k) * fr.width, row = y * w
+      for (let x = 0; x < w; x++) dst[row + x] = src[sy + Math.floor(x / g.k)]!
+    }
+    inkInto(big, w, h, fr.ink, g.k, textScale(g), undefined, { x: viewport.x * g.k, y: viewport.y * g.k, w: viewport.w * g.k, h: viewport.h * g.k }, fr.cover)
+    const data = png(w, h, big).toString("base64")
+    lastImageKey = key
     for (let i = 0; i < data.length; i += 4096) {
       const more = i + 4096 < data.length ? 1 : 0
       o += i === 0
