@@ -34,10 +34,11 @@ run = "bun --watch run src/server.ts"
 # would load as mod tests: the mod's tests run on a copy without them. Needs Claude Code itself, so it
 # is the machine's gate, not CI's.
 ["adapters:claude-code:mod"]
-description = "adapters/claude-code: the mod's gate — validate it (strict), then its tests in Claude Code's own kit"
+description = "adapters/claude-code: the mod's gate — validate it (strict), then its tests in Claude Code's own kit; skipped, with a line saying so, where claude is not installed"
 dir = "adapters"
 run = """
 set -e
+command -v claude >/dev/null || { echo "adapters:claude-code:mod: skipped — claude is not on PATH"; exit 0; }
 claude plugin validate --strict .
 claude plugin validate --strict claude-code/plan
 stage="$(mktemp -d)"
