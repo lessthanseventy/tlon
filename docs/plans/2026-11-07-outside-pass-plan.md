@@ -486,6 +486,9 @@ notice on the sheriff's beat). `Sonnet` for each but #614 and #760 (`Opus`).
   thread (its inbox-sweep duty, t190, tagged `@funes_agent tertius`) as its lobby seat, so the lobby
   wake was `:already_running` until the duty closed. Fixed: on the standing thread only a non-leaf
   window counts.
+- Routed 2026-11-08: #851, #813, #727, #541, #622, #806, #749 and #760 sent to tertius in that
+  order (`tlon-cli ticket-route`); #861 was already doing; #793, #812 and #750 are built on
+  `e1-instances`, #614 fixed above, #820 is E2, #864 waits on Staffing.
 
 **E7 · Fewer check runs, the same safety.** `Opus · M (spec first) · limit (the check)`
 - Why: one change runs the full suite up to five times: the builder's own `run_task("server:check")`
