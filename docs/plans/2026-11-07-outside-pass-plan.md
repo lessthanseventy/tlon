@@ -59,6 +59,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: one line in the role prompt (`adapters/claude-code/launch.sh`'s system prompt, or the
   `TLON_ROLE_PROMPT_FILE`): no python, node, perl or ruby in a seat; text edits go through menard.
 - Check: `lib/launch.test.ts` asserts the line is in the rendered prompt.
+- Done: the line ends `launch.sh`'s citizen prompt; the test reads it from the dry-run exec line.
 
 **A4 · Sessions pile up behind a seat and are reaped loudly.** `Opus · M`
 - Why: "retired N earlier session(s) of tzinacan still holding this seat (pid …)" appears 60+ times
