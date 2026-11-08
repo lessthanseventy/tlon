@@ -133,6 +133,8 @@ defmodule Server.MCP.ServerTest do
                "get_facts",
                "get_message",
                "get_messages",
+               "get_thread",
+               "roster",
                "search_history",
                "search_facts",
                "machine_overview",
@@ -356,6 +358,64 @@ defmodule Server.MCP.ServerTest do
     description = &Enum.find_value(tools, fn t -> t["name"] == &1 && t["description"] end)
     assert description.("get_brief") =~ "Alias of get_dossier"
     refute description.("get_dossier") =~ "Alias"
+  end
+
+  describe "get_thread and roster" do
+    setup do
+      {:ok, ws} = Server.Workspaces.create(%{name: "ReadWS"})
+      {:ok, mine} = Channel.open_thread(%{title: "my desk", workspace_id: ws.id})
+      {:ok, cited} = Channel.open_thread(%{title: "cited work", workspace_id: ws.id})
+      {:ok, _} = Channel.post(%{thread_id: cited.id, author: "andrew", body: "the cited ask"})
+      {token, session} = seated("daneri", mine)
+      %{mine: mine, cited: cited, token: token, session: session}
+    end
+
+    test "a thread the caller may not post on is refused; its own is read", %{
+      mine: mine,
+      cited: cited,
+      token: token,
+      session: session
+    } do
+      {:ok, _} = Channel.post(%{thread_id: mine.id, author: "andrew", body: "own words"})
+
+      own = call(token, session, 2, "get_thread", %{"id" => mine.id})
+      refute own["isError"]
+      assert [%{"body" => "own words"}] = decode_tool_json(own)["messages"]
+
+      refused = call(token, session, 3, "get_thread", %{"id" => cited.id})
+      assert refused["isError"]
+      assert hd(refused["content"])["text"] =~ "may not read thread ##{cited.id}"
+    end
+
+    test "an @mention opens the thread, a long body is cut with a pointer, an unknown id is an error", %{
+      cited: cited,
+      token: token,
+      session: session
+    } do
+      {:ok, long} =
+        Channel.post(%{thread_id: cited.id, author: "andrew", body: "@daneri " <> String.duplicate("x", 9_000)})
+
+      read = call(token, session, 2, "get_thread", %{"id" => cited.id, "limit" => 5})
+      refute read["isError"]
+      thread = decode_tool_json(read)
+      assert thread["title"] == "cited work"
+      assert [%{"body" => "the cited ask"}, %{"body" => body}] = thread["messages"]
+      assert body =~ "[cut #{9_008 - 4_000} chars; get_message(#{long.id})]"
+
+      assert call(token, session, 3, "get_thread", %{"id" => 999_999})["isError"]
+    end
+
+    test "roster lists the workspace's live seats with their status", %{token: token, session: session} do
+      refute call(token, session, 2, "register", %{})["isError"]
+
+      result = call(token, session, 3, "roster", %{})
+      refute result["isError"]
+
+      assert %{"agent" => "daneri", "title" => "my desk", "status" => status} =
+               Enum.find(decode_tool_json(result), &(&1["agent"] == "daneri"))
+
+      assert status in ~w(working waiting idle cold off)
+    end
   end
 
   test "an unchecked derived fact reads back as an opinion — the §4a query", %{token: token} do

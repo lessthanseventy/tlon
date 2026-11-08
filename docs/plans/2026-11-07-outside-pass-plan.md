@@ -339,6 +339,7 @@ snapshot on 304. `Sonnet · S`, after B1.
   (`Server.MCP.Tool.may_post?/2`'s rules decide who may read); a `roster` tool (agent, thread,
   status, doing) that is `Server.Coworker.status/1` over the live sessions.
 - Check: tool tests; the coordinate skill (D7) points at them.
+- Done: `get_thread(id, limit)` (the caller's own thread, or one it `may_post?` on; bodies cut as the brief's) and `roster` (the caller's workspace, `Office.roster/1` rows: agent, thread, title, status, doing) in `reads.ex`; no profile change, since every profile gets a tool unless it excludes it; the coordinate skill points at them. Tested in `server_test`.
 
 **D3 · Refusals that say nothing.** `Sonnet · S`
 - Why: `catch_up_branch.ex:22`, `coordination.ex` (`staff_child`, `switch_thread`, `spawn_crew`,

@@ -65,6 +65,8 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.GetFacts, name: "get_facts")
   component(Server.MCP.Tool.GetMessages, name: "get_messages")
   component(Server.MCP.Tool.GetMessage, name: "get_message")
+  component(Server.MCP.Tool.GetThread, name: "get_thread")
+  component(Server.MCP.Tool.Roster, name: "roster")
   component(Server.MCP.Tool.SearchHistory, name: "search_history")
   component(Server.MCP.Tool.SearchFacts, name: "search_facts")
   component(Server.MCP.Tool.MachineOverview, name: "machine_overview")
