@@ -91,6 +91,17 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: dedupe on (thread, since the pane last changed) in `Server.Maintain.Sweep` or the alert.
 - Check: a test with two passes in the stale window posts once.
 
+**A8 · A stopped `mise run check` frees the queue while its suites still run.** `Sonnet · S`
+- Why: seen 2026-11-07 while landing this plan: the shell running `check` was stopped, the
+  checks-queue lock was released at once, but `mix precommit`'s BEAM and the office suite's tmux
+  sessions kept running in the checkout; the next `check` in the same checkout raced them on
+  `server/tmp` (`test_helper.exs:28`, `File.rm_rf!` "file already exists") and went red.
+- Change: `scripts/checks-queue.sh` runs its command in its own process group and, on any exit
+  signal, kills the group and waits for it before releasing the lock; `check.sh` refuses to start
+  when a BEAM or `bun test` already has its cwd under the checkout, naming the pid.
+- Check: `checks-queue.test.sh` gains a case: a stopped holder leaves no child alive and the lock is
+  taken by the next waiter only after; a second `check` in a busy checkout exits 2 with the pid.
+
 ---
 
 ## B · Performance — the server
