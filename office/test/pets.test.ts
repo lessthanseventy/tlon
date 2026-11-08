@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing, furOf } from "../kit/draw"
-import { ARGOS, cycleAxis, DEFAULT_PETS, dots, drawDog, paperHeadline, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
+import { ARGOS, cycleAxis, DEFAULT_PETS, dots, drawDog, paperHeadline, PRESETS, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
 import { bucketFor, NINA, SWEET } from "../kit/voices"
 import { CAT, DOG, fillArt, SPECIES_ART } from "../kit/sprites"
 import { ROLE } from "../kit/palette"
@@ -494,5 +494,16 @@ describe("Argos fetches the morning paper", () => {
     expect(paperHeadline({ cut_at: at(3).toISOString() }, today)).toBe("nothing yet")
     expect(paperHeadline(null, today)).toBe("nothing yet")
     expect(paperHeadline({ cut_at: at(3).toISOString(), notes: ["y".repeat(80)] }, today)).toHaveLength(56)
+  })
+})
+
+describe("pet presets", () => {
+  test("each named preset resolves to itself and is a legal pair for its slots", () => {
+    for (const [name, p] of Object.entries(PRESETS)) {
+      expect(resolvePets({ preset: name })).toEqual(p)
+      expect(SLOT_SPECIES.cat as readonly string[]).toContain(p.cat.species)
+      expect(p.dog.species).toBe("dog")
+    }
+    expect(Object.keys(PRESETS)).toEqual(["nina-and-argos", "cat-only", "menagerie", "pond-life", "none"])
   })
 })

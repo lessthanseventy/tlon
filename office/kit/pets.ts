@@ -259,7 +259,16 @@ export const DEFAULT_PETS: Pets = {
   cat: { name: CAT_NAME, species: "cat", temperament: TEMPERAMENTS.classic!, shade: 0 },
   dog: { name: DOG_NAME, species: "dog", temperament: { warmth: 2, wits: -1, energy: 1 }, shade: 0 },
 }
-export const PRESETS: Record<string, Pets> = { "nina-and-argos": DEFAULT_PETS }
+const dogOf = (name: string, temperament: Temperament, shade = 0): PetSetting => ({ name, species: "dog", temperament, shade })
+const catOf = (name: string, species: CatSpecies, temperament: Temperament, shade = 0): PetSetting => ({ name, species, temperament, shade })
+/** both slots always hold someone, so the pet-free presets are the quietest pair the species allow */
+export const PRESETS: Record<string, Pets> = {
+  "nina-and-argos": DEFAULT_PETS,
+  "cat-only": { cat: DEFAULT_PETS.cat, dog: dogOf(DOG_NAME, TEMPERAMENTS["old cat"]!) },
+  menagerie: { cat: catOf("Pip", "bird", TEMPERAMENTS.gremlin!, 1), dog: dogOf("Biscuit", TEMPERAMENTS["golden retriever"]!, 2) },
+  "pond-life": { cat: catOf("Lily", "rabbit", TEMPERAMENTS.zen!, 2), dog: dogOf("Moss", TEMPERAMENTS.zen!, 1) },
+  none: { cat: catOf("Pebble", "rock", TEMPERAMENTS.zen!), dog: dogOf("Sleepy", TEMPERAMENTS["old cat"]!, 3) },
+}
 
 function resolveSlot(slot: keyof typeof SLOT_SPECIES, base: PetSetting, f: SlotFile | undefined): PetSetting {
   if (!f || typeof f !== "object") f = {}

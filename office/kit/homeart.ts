@@ -32,6 +32,12 @@ export const SPRITES: Record<string, string[]> = {
            "eeeeeeeeeeee", "eeeeeeeeeeee", "eeeeeeeeeeee", "kkkkkkkkkkkk", "kkkkkkkkkkkk", "kkkkkkkkkkkk"],
   garden: ["f.f.f.f.f.f.", "ffffffffffff", "............", ".gg.gg.gg.gg", ".gg.gg.gg.gg", "............",
            ".dd.dd.dd.dd", ".dd.dd.dd.dd", "............", "..ll.....ll.", "............", "............"],
+  gym: ["............", ".bbbbbbbb...", ".bbbbbbbb...", "............", "............", ".mmmmmmmm...",
+        ".mmmmmmmm...", "............", ".rrrrrrrrrr.", ".rrrrrrrrrr.", "............", "............"],
+  "trophy-shelf": ["............", "............", "............", "............", "............", ".cc..cc..cc.",
+                   ".cc..cc..cc.", ".cc..cc..cc.", ".cc..cc..cc.", ".cc..cc..cc.", ".pppppppppp.", ".pppppppppp."],
+  pond: ["............", "............", "..ssssssss..", ".swwwwwwwws.", ".swwlwwwwws.", ".swwwwwwlws.",
+         ".swwwwwwwws.", ".swlwwwwwws.", ".swwwwwwwws.", "..ssssssss..", "............", "............"],
 }
 
 const floor = () => tint(ROLE.structure, ROLE.ground, 0.3)
@@ -42,6 +48,9 @@ const PALETTES = (): Record<string, Record<string, string>> => ({
   bedroom: { p: ROLE.prose, q: ROLE.planner, n: ROLE.structure },
   street: { k: ROLE.borderInactive, e: ROLE.edge, d: ROLE.prose },
   garden: { f: ROLE.structure, g: ROLE.live, d: ROLE.borderInactive, l: ROLE.attention },
+  gym: { b: ROLE.structure, m: ROLE.planner, r: ROLE.borderInactive },
+  "trophy-shelf": { c: ROLE.attention, p: ROLE.prose },
+  pond: { s: ROLE.borderInactive, w: tint(ROLE.key, ROLE.ground, 0.5), l: ROLE.live },
 })
 
 /** kind → how to paint it. A kind absent here falls back to `plainTile`; later work adds its key. */
@@ -81,6 +90,14 @@ function paintFrames(c: Canvas, x: number, y: number, frames: StreakFrame[]) {
   })
 }
 
+/** the gym's dumbbell: its plates are as thick as the best streak's tier, 1 px bare to 4 px at the top */
+function paintDumbbell(c: Canvas, x: number, y: number, tier: number) {
+  const plate = 1 + tier, top = y + 10 - Math.floor(plate / 2)
+  c.px(x + 2, y + 10, TILE - 4, 1, ROLE.body)
+  c.px(x + 2, top, 1, plate, ROLE.body)
+  c.px(x + TILE - 3, top, 1, plate, ROLE.body)
+}
+
 /** what lies on the bed: you, long from the pillow down under the quilt, or a short curled cat with ears — two silhouettes, so it reads without colour */
 const BED_ART: Record<BedScene, string[]> = {
   asleep: ["............", "..hh........", "..hh........", "..bb........", "..bb........", "..bb........", "..bb........", "............", "............", "............", "............", "............"],
@@ -93,7 +110,8 @@ export function paintTile(c: Canvas, x: number, y: number, t: HomeTile, weather?
   if (t.kind === "bedroom" && bed) c.blit(rotated(BED_ART[bed], t.rot ?? 0), x, y, BED_COLOURS)
   if (t.kind === "street" && mail) paintMailboxTile(c, x, y, mail)
   if (t.kind === "garden" && weather) weatherOnGarden(c, x, y, weather)
-  if (t.kind === "living" && frames?.length) paintFrames(c, x, y, frames)
+  if ((t.kind === "living" || t.kind === "trophy-shelf") && frames?.length) paintFrames(c, x, y, frames)
+  if (t.kind === "gym") paintDumbbell(c, x, y, Math.max(0, ...(frames ?? []).map((f) => f.tier)))
 }
 
 /** paints the home's tiles on the floor canvas at their absolute cells (the office rows above are the room's own). Canvas clips what overruns the width. */
@@ -103,18 +121,19 @@ export function paintFloor(c: Canvas, h: Home) {
 
 export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number; weather?: string | null; mail?: Mailbox | null; frames?: StreakFrame[]; bed?: BedScene | null; top?: number }
 
-/** the build grid as a Frame of w×h logical px: every cell of `gridWindow`, centred; no text, no hits. The frames hang on the first living tile. */
+/** the build grid as a Frame of w×h logical px: every cell of `gridWindow`, centred; no text, no hits. The streak frames hang on the first living tile and the first trophy shelf; the first gym's dumbbell takes the best tier. */
 export function renderHome({ home, cursor, carrying, refused, w, h, weather, mail, frames, bed, top = 0 }: HomeView): Frame {
   const c = new Canvas(w, h)
   c.px(0, 0, w, h, ROLE.ground)
   const win = gridWindow(home, cursor)
   const ox = Math.floor((w - (win.x1 - win.x0 + 1) * CELL) / 2), oy = Math.floor((h - (win.y1 - win.y0 + 1) * CELL) / 2)
   const pos = ([x, y]: Pt): Pt => [ox + (x - win.x0) * CELL + 1, oy + (y - win.y0) * CELL + 1]
-  const wall = home.tiles.find((q) => q.kind === "living")
+  const firstOf = (k: string) => home.tiles.find((q) => q.kind === k)
+  const hung = new Set([firstOf("living"), firstOf("trophy-shelf"), firstOf("gym")])
   for (let y = win.y0; y <= win.y1; y++) for (let x = win.x0; x <= win.x1; x++) {
     const [px, py] = pos([x, y])
     const t = home.tiles.find((q) => q.at[0] === x && q.at[1] === y)
-    if (t) paintTile(c, px, py, t, weather, mail, t === wall ? frames : null, bed)
+    if (t) paintTile(c, px, py, t, weather, mail, hung.has(t) ? frames : null, bed)
     else if (y >= top) c.px(px, py, TILE, TILE, ROLE.raised)
   }
   const [cx, cy] = pos(cursor)

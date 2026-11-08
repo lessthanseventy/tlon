@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
-import { CELL, HOME_BLOCKS, OFFICE_H, OFFICE_ROWS, cellPath, cellPx } from "../kit/home"
-import { floorPlan } from "../kit/floor"
+import { CATALOGUE, CELL, HOME_BLOCKS, OFFICE_H, OFFICE_ROWS, cellPath, cellPx, connected } from "../kit/home"
+import { FLOORS, floorPlan } from "../kit/floor"
 import { DEFAULT_OFFICE } from "../kit/tiles"
 import { office } from "./golden"
 
@@ -64,5 +64,21 @@ describe("the street", () => {
         expect(blocks.find((r) => x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h)).toBeUndefined()
       }
     }
+  })
+})
+
+describe("FLOORS", () => {
+  for (const [name, make] of Object.entries(FLOORS)) {
+    test(`${name}: one piece, a street row the office's width, no tile above the office`, () => {
+      const h = make(50)
+      expect(connected(h.tiles)).toBe(true)
+      expect(h.tiles.filter((t) => t.kind === "street").length).toBe(50)
+      expect(Math.min(...h.tiles.map((t) => t.at[1]))).toBe(OFFICE_ROWS)
+      expect(new Set(h.tiles.map((t) => t.at.join(","))).size).toBe(h.tiles.length)
+    })
+  }
+  test("the house places every tile kind that is not a street", () => {
+    const kinds = new Set(FLOORS.house!(10).tiles.map((t) => t.kind))
+    for (const k of CATALOGUE) expect(kinds.has(k)).toBe(true)
   })
 })

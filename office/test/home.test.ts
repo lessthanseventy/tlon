@@ -268,13 +268,12 @@ describe("gridWindow bounds the build grid", () => {
 })
 
 describe("garden tile", () => {
-  test("the catalogue offers a garden, and place cycles onto it from street and wraps to living", () => {
+  test("the catalogue offers a garden, and place cycles through the rest from street and wraps to living", () => {
     expect(CATALOGUE).toContain("garden")
     let b = startBuild({ tiles: [{ kind: "street", at: [0, 0] }] })
     b = place(b)
     expect(b.home.tiles[0]!.kind).toBe("garden")
-    b = place(b)
-    expect(b.home.tiles[0]!.kind).toBe("living")
+    for (const k of ["gym", "trophy-shelf", "pond", "living"] as const) { b = place(b); expect(b.home.tiles[0]!.kind).toBe(k) }
   })
   test("a garden placed next to a living tile saves and loads back", () => {
     const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))

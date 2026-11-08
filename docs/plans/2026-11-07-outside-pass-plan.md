@@ -645,6 +645,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: gym (the streak sets the dumbbell size) and trophy-shelf (the streak photos) first, then
   pond; the four pet presets; a `FLOORS` catalogue in `kit/floor.ts` with `studio` and `house`.
 - Check: `homeart.test.ts` per tile; the build mode drive walk places each.
+- Done: `gym` (dumbbell plates take the best streak tier), `trophy-shelf` (the streak photos hang on it as on the living wall) and `pond` in `CATALOGUE`/`TILE_ART`/`HOME_BLOCKS`; `PRESETS` gains `cat-only`, `menagerie`, `pond-life`, `none`; `FLOORS` (`studio`, `house`) in `kit/floor.ts`. Left: no picker for a floor (first build still opens `defaultHome`); both pet slots always hold someone and there is no pond species, so `none` is a rock and a sleepy dog; the placed floor (`paintFloor`) has no streaks, so its gym shows the bare dumbbell.
 
 **F8 · Argos fetches the newspaper** (home whimsy; a brief exists in `work/`). `Sonnet · S`
 - Change: a morning errand on the existing `dogDo`/fetch machinery: out the front door at the first
