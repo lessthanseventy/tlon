@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing, furOf } from "../kit/draw"
-import { ARGOS, cycleAxis, DEFAULT_PETS, dots, drawDog, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
+import { ARGOS, cycleAxis, DEFAULT_PETS, dots, drawDog, paperHeadline, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
 import { bucketFor, NINA, SWEET } from "../kit/voices"
 import { CAT, DOG, fillArt, SPECIES_ART } from "../kit/sprites"
 import { ROLE } from "../kit/palette"
@@ -447,5 +447,52 @@ describe("the dog's shade", () => {
     expect(dist(coatAt(3))).toBeLessThan(dist(coatAt(2)))
     expect(dist(coatAt(2))).toBeLessThan(dist(coatAt(1)))
     expect(dist(coatAt(1))).toBeLessThan(dist(ROLE.body))
+  })
+})
+
+describe("Argos fetches the morning paper", () => {
+  const at = (h: number) => { const d = new Date(); d.setHours(h, 30, 0, 0); return d }
+  const paperRoom = (h: number, release: Agents["release"]) => {
+    const room = new WideRoom(560), a = { ...viewOf(office({ thinking: false }), 1), release }, inside = room as unknown as Pets & { paper: { leg: string } | null }
+    room.setClock(() => at(h))
+    return { room, a, inside }
+  }
+  /** the legs he goes through, and what he said on stepping back in */
+  let said: string | null = null
+  const trip = (room: WideRoom, a: Agents, inside: Pets & { paper: { leg: string } | null }) => {
+    const legs: string[] = []
+    said = null
+    for (let i = 0; i < 1_500; i++) {
+      room.step(a)
+      const leg = inside.paper?.leg ?? "home"
+      if (legs.at(-1) !== leg) { legs.push(leg); if (leg === "home" && legs.length > 1) said = inside.dog.said }
+    }
+    return legs
+  }
+
+  test("the first snapshot after seven sends him out the door and back, with the day's first note for a headline", () => {
+    const release = { sha: "abc", cut_at: at(2).toISOString(), notes: ["fix the foosball score", "later note"] }
+    const { room, a, inside } = paperRoom(8, release)
+    const legs = trip(room, a, inside)
+    expect(legs).toEqual(["out", "gone", "back", "home"])
+    expect(said).toBe("The paper: fix the foosball score")
+    expect(legs.filter((l) => l === "out")).toHaveLength(1)
+  })
+
+  test("he goes once a day, and not before seven", () => {
+    const { room, a, inside } = paperRoom(6, null)
+    expect(trip(room, a, inside)).toEqual(["home"])
+    room.setClock(() => at(9))
+    expect(trip(room, a, inside)).toContain("out")
+    expect(trip(room, a, inside)).toEqual(["home"])
+  })
+
+  test("the headline is today's first note, else nothing yet", () => {
+    const today = at(9)
+    expect(paperHeadline({ cut_at: at(3).toISOString(), notes: ["x"] }, today)).toBe("x")
+    expect(paperHeadline({ cut_at: new Date(today.getTime() - 86_400_000).toISOString(), notes: ["x"] }, today)).toBe("nothing yet")
+    expect(paperHeadline({ cut_at: at(3).toISOString() }, today)).toBe("nothing yet")
+    expect(paperHeadline(null, today)).toBe("nothing yet")
+    expect(paperHeadline({ cut_at: at(3).toISOString(), notes: ["y".repeat(80)] }, today)).toHaveLength(56)
   })
 })

@@ -19,7 +19,7 @@ import { ARRIVE, LEAVE, drawAleph, gone, STEP as ALEPH_STEP, type Visit } from "
 import { boardColumns, COLS, isManager, peopleOf, seating, STATE_GLYPH, stickyItems, weekTrend, type BoardCtx, type BoardItem, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawCloset, drawFire, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
-import { type Pets, ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
+import { type Pets, ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, paperHeadline, patDog, stepDog, type Dog } from "../kit/pets"
 import { Sim, type Actor, type Pt, type Spot } from "../kit/sim"
 import type { Live, Rect } from "../kit/tiles"
 import { gamesTile } from "../kit/tiles/games"
@@ -44,6 +44,8 @@ export const WIDE_H = 200
 /** below this the zones don't fit; a surface narrower than this draws the rail room */
 export const WIDE_MIN_W = 540
 export const BAND = 44 // the back wall ends here
+/** ticks Argos stays out of the room on his morning errand */
+const PAPER_OUT = 80
 /** ticks a hire stays new enough for the book to go and look: five minutes */
 const NEW_HIRE = 3000
 export const HALL = 191 // the hallway's walking row
@@ -175,6 +177,9 @@ export class WideRoom extends Sim<Layout> {
   private alephSaid: { text: string; until: number } | null = null
   /** Argos' path is a panic run: cut at the hallway when the panic ends, so he heads for the muster */
   private dogPanicRun = false
+  /** the morning paper: out the front door (`out`), outside a while (`gone`), back to your desk with it (`back`); `paperDay` the day he last brought it */
+  private paper: { leg: "out" | "gone" | "back"; until: number } | null = null
+  private paperDay = ""
   private home: Home = { tiles: [] }
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -480,8 +485,9 @@ export class WideRoom extends Sim<Layout> {
       if (c.mode === "sit" && !c.path.length && !c.errand && !c.fuss) this.catDo("nap")
       if (d.mode === "sit" && !d.path.length && !d.fuss && !this.alarmed) this.dogDo("bed")
     }
+    this.stepPaper(a)
     if (this.alarmed) this.dogSmoke()
-    else if (!this.dog.path.length && !this.antic && !this.dog.fuss && this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 2200) {
+    else if (!this.dog.path.length && !this.paper && !this.antic && !this.dog.fuss && this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 2200) {
       this.dogDo("office")
       this.dogSay(this.argos("paper"))
     } else if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(this.argos("muse"))
@@ -764,9 +770,45 @@ export class WideRoom extends Sim<Layout> {
     return lap.reduce((far, p) => (Math.abs(p.x - c.x) + Math.abs(p.y - c.y) > Math.abs(far.x - c.x) + Math.abs(far.y - c.y) ? p : far))
   }
 
-  /** Argos, his bed and his bowl */
+  /**
+   * The first snapshot after seven each morning, Argos trots out the front door and comes back to
+   * your desk with the paper: the headline is the first note of today's release cut, else "nothing yet".
+   */
+  private stepPaper(a: Agents) {
+    const d = this.dog, door = this.plan.door, p = this.paper
+    if (this.alarmed || !this.petsOn) { this.paper = null; return }
+    if (!p) {
+      const day = this.date().toDateString()
+      if (!door || !a.ok || this.hour() < 7 || this.hour() >= 12 || this.paperDay === day || d.path.length || d.fuss || this.antic) return
+      this.paperDay = day
+      this.paper = { leg: "out", until: 0 }
+      d.host = null; d.creep = false
+      d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, door)]
+      d.aisle = door.aisle; d.mode = "walk"
+      return
+    }
+    if (d.path.length) return
+    if (p.leg === "out") {
+      this.paper = { leg: "gone", until: this.tick + PAPER_OUT }
+      d.mode = "sit"; d.until = this.tick + PAPER_OUT + 40
+    } else if (p.leg === "gone") {
+      if (this.tick < p.until) return
+      this.paper = { leg: "back", until: 0 }
+      this.dogDo("office")
+    } else {
+      this.paper = null
+      this.dogSay(`The paper: ${paperHeadline(a.release, this.date())}`)
+    }
+  }
+
+  /** Argos, his bed and his bowl; outside the front door he is not in the room, and the paper is in his mouth on the way back */
   private drawDog(sc: Scene) {
+    if (this.paper?.leg === "gone") return
     drawDog(sc, this.dog, this.dogBed(), this.dogBowl(), this.bpm())
+    if (this.paper?.leg === "back") {
+      const d = this.dog
+      sc.item(d.y + 0.5, () => sc.blit(["pppp", "pkkp", "pppp"], d.x + (d.face < 0 ? -9 : 5), d.y - 9, { p: ROLE.prose, k: ROLE.fieldInk }))
+    }
   }
 
   /** the cabinets' best scores, and who holds them */

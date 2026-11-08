@@ -594,6 +594,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   snapshot after 07:00, back with the paper to the operator's desk; the headline is the day's first
   landing or "nothing yet".
 - Check: `pets.test.ts` under the seed; seen once live.
+- Done: `WideRoom.stepPaper`: between 07:00 and noon, once a day, on a live snapshot, Argos walks to the front door, is out of the room a few seconds, and returns to the desk with the page in his mouth saying `The paper: <headline>` (`paperHeadline` in `kit/pets.ts`: the first note of a release cut today, else "nothing yet"; `pets.test.ts`). Left: not seen live; the snapshot carries no landing feed, so a release cut stands for the day's first landing; the old random office run (`ARGOS.paper`) stays.
 
 **F9 · The office's own trophies.** `Sonnet · S`
 - Why: no achievements anywhere; the kids initiative asked for exactly this kind of thing.
