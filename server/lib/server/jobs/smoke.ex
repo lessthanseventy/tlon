@@ -46,7 +46,7 @@ defmodule Server.Jobs.Smoke do
     job = stamp(job, %{"os_pid" => os_pid, "log" => log})
     code = pump(port, job, tid, os_pid, log, [])
     if code != 0, do: post(job, "smoke of #{ref} ended (exit #{code}); the log: #{log}")
-    :ok
+    {:ok, :posted}
   end
 
   # the service runs under systemd, whose PATH has no mise shims: the script's bare `mix`/`bun` are

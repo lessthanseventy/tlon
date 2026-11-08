@@ -49,7 +49,7 @@ defmodule Server.Jobs.RunTask do
         else: "@#{agent} ✗ #{run} failed (exit #{code}) on #{on}:\n```\n#{tail(out)}\n```"
 
     {:ok, _} = Server.Channel.post(%{thread_id: tid, author: "tlon", body: body})
-    :ok
+    {:ok, :posted}
   end
 
   defp tail(out), do: String.slice(out, max(String.length(out) - 1500, 0), 1500)

@@ -213,7 +213,7 @@ defmodule Server.ReviewFreshSessionTest do
       assert Repo.get!(Session, session.id).ended_at == nil
       assert_enqueued(worker: Server.Jobs.EndReview, args: %{thread_id: thread.id})
 
-      assert :ok = perform_job(Server.Jobs.EndReview, %{thread_id: thread.id})
+      assert {:ok, :quiet} = perform_job(Server.Jobs.EndReview, %{thread_id: thread.id})
       assert %DateTime{} = Repo.get!(Session, session.id).ended_at
       assert Server.Staffing.leaf_window(thread, "test") == nil
     end

@@ -477,7 +477,7 @@ defmodule Server.Workline.ContinuationTest do
     Application.put_env(:server, :continue_opts, artifacts: Present)
     on_exit(fn -> Application.delete_env(:server, :continue_opts) end)
 
-    assert :ok = perform_job(Server.Jobs.Continue, %{thread_id: t.id, quiet: true})
+    assert {:ok, :posted} = perform_job(Server.Jobs.Continue, %{thread_id: t.id, quiet: true})
 
     assert [m] = continuations(t.id)
     assert m.body =~ "but it has not moved"

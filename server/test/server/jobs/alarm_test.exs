@@ -18,7 +18,7 @@ defmodule Server.Jobs.AlarmTest do
     %{general: general}
   end
 
-  defp discarded(worker, error), do: %{state: :discarded, worker: worker, error: error, kind: :error}
+  defp discarded(worker, error), do: %{state: :discard, worker: worker, error: error, kind: :error}
 
   test "a discard posts once, delivered; the same discard again is skipped; a retry posts nothing", %{general: g} do
     meta = discarded("Server.Jobs.Staff", %RuntimeError{message: "tmux: enoent\n    (elixir) lib/system.ex"})
@@ -30,5 +30,13 @@ defmodule Server.Jobs.AlarmTest do
              Repo.all(from m in Message, where: m.thread_id == ^g.id)
 
     assert body == "⚠ job Server.Jobs.Staff discarded: tmux: enoent"
+  end
+
+  test "a cancelled unbound job posts its reason", %{general: g} do
+    meta = %{state: :cancelled, worker: "Server.Jobs.KeepUp", result: {:cancel, "no checkout"}}
+    :ok = Alarm.handle([:oban, :job, :stop], %{}, meta, nil)
+
+    assert [%Message{body: "⚠ job Server.Jobs.KeepUp cancelled: no checkout"}] =
+             Repo.all(from m in Message, where: m.thread_id == ^g.id)
   end
 end

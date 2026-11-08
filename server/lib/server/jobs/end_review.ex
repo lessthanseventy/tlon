@@ -15,8 +15,12 @@ defmodule Server.Jobs.EndReview do
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"thread_id" => tid}}) do
     case Server.Repo.get(Server.Thread, tid) do
-      %Server.Thread{} = thread -> Server.Staffing.end_review(thread)
-      nil -> :ok
+      %Server.Thread{} = thread ->
+        :ok = Server.Staffing.end_review(thread)
+        {:ok, :quiet}
+
+      nil ->
+        {:ok, :quiet}
     end
   end
 end

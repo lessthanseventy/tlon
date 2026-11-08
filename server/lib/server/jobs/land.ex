@@ -23,7 +23,7 @@ defmodule Server.Jobs.Land do
   def perform(%Oban.Job{args: %{"pr" => _} = args, attempt: attempt, max_attempts: max}) do
     case Server.PRLanding.land(args, last: attempt >= max) do
       {:error, {:interrupted, why}} when attempt < max -> {:error, why}
-      _ -> :ok
+      _ -> {:ok, :posted}
     end
   end
 
@@ -40,7 +40,7 @@ defmodule Server.Jobs.Land do
         do: &Server.Workline.reland_queued/2,
         else: &Server.Workline.land_train(&1, companions(&1, job_id), [{:on_cars, record_cars(job_id)} | &2])
 
-    if thread, do: land(thread, queued, args, attempt, max), else: :ok
+    if thread, do: land(thread, queued, args, attempt, max), else: {:cancel, "thread ##{tid} is gone"}
   end
 
   @doc """
@@ -156,7 +156,7 @@ defmodule Server.Jobs.Land do
   defp land(thread, queued, args, attempt, max) do
     case reported(thread, attempt, max, fn -> queued.(thread, last: attempt >= max, auto: args["auto"] == true) end) do
       {:error, {:interrupted, why}} -> {:error, why}
-      _ -> :ok
+      _ -> {:ok, :posted}
     end
   end
 

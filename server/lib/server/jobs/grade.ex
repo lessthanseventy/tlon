@@ -20,10 +20,10 @@ defmodule Server.Jobs.Grade do
       %Server.Thread{stage: "review", state: "open"} = thread ->
         Server.Workline.Grade.grade(thread)
         {:ok, _} = Server.Workline.graded(thread)
-        :ok
+        {:ok, :posted}
 
       _ ->
-        :ok
+        {:ok, :quiet}
     end
   end
 end
