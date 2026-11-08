@@ -6,7 +6,8 @@
 
 import type { EventKind } from "./events"
 import type { Guest } from "./door"
-import { pickFresh } from "./voices"
+import { diaryEntries, soulFor, spoken } from "./souls"
+import { pick, pickFresh } from "./voices"
 
 /** the §2 seats, in design order */
 export const SEATS = ["scharlach", "tertius", "hronir", "lonnrot", "yu", "beatriz", "nolan", "emma", "ireneo", "daneri", "sonny"] as const
@@ -178,8 +179,13 @@ const GENERIC: Voice = {
   sore: ["Lost. Again, then.", "That table is rigged."],
 }
 
-/** a pick that skips what was said lately, while anything else is left to say */
+const ONE_IN_TEN = [true, ...Array<boolean>(9).fill(false)]
+
+/** a pick that skips what was said lately, while anything else is left to say; now and then a line of the seat's own diary */
 export const seatLine = (name: string, recent: readonly string[]): string => {
+  const soul = soulFor(name)
+  const diary = (soul ? diaryEntries(soul) : []).map(spoken).filter((l) => !recent.includes(l))
+  if (diary.length && pick(ONE_IN_TEN)) return pick(diary)
   const voice = SEAT_VOICE[name] ?? GENERIC
   const all = voice.banter
   const unsaid = all.filter((l) => !recent.includes(l))

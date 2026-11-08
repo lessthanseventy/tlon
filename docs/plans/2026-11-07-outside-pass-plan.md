@@ -543,6 +543,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: the last diary line on the person card; `Sim.onTogether` quotes a diary line one time in
   ten instead of the banter table.
 - Check: `souls.test.ts`; seen in the sandbox with a seeded soul.
+- Done: `seatLine` (the fallback `Sim.onTogether` says) quotes a seat's latest-unsaid diary entry one time in ten (`diaryEntries`, `spoken` in `kit/souls.ts`); the open person card leads with `lately: <last entry>`. Left: not watched in the sandbox, which seeds no souls (`souls.test.ts`, `person-card.test.ts` pin it); the server's own banter is unchanged.
 
 **F3 · A compiled-in pool so the room has lines with no server.** `Sonnet · S`
 - Why: generated puns and visitor lines reach the room through `Sim.pooled()` but `weirdness`

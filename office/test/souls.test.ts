@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { SOUL_SECTIONS, parseSoul, soulLines, soulFor, soulNote, soulsGen, useSouls } from "../kit/souls"
+import { seatLine, SEAT_VOICE } from "../kit/seat-voices"
+import { SOUL_SECTIONS, diaryEntries, parseSoul, soulLines, spoken, soulFor, soulNote, soulsGen, useSouls } from "../kit/souls"
 import { loadSouls, soulsSignature } from "../tui/souls"
 
 const FIXTURE = await Bun.file(join(import.meta.dir, "fixtures/daneri.md")).text()
@@ -95,5 +96,27 @@ describe("soulNote", () => {
   test("People says it is read by verb; no other section has a note", () => {
     expect(soulNote("People")).toMatch(/read by verb.*admires.*needles.*would cover for/)
     for (const h of SOUL_SECTIONS.filter(h => h !== "People")) expect(soulNote(h)).toBeUndefined()
+  })
+})
+
+describe("the diary speaks", () => {
+  afterEach(() => useSouls({}))
+  const soul = parseSoul("## Diary\n- Oct 2: wrote a stanza on Uruguay.\n- Oct 9: fixed the foosball table.\n")
+  test("entries are bare bullets, said without the date", () => {
+    expect(diaryEntries(soul)).toEqual(["Oct 2: wrote a stanza on Uruguay.", "Oct 9: fixed the foosball table."])
+    expect(diaryEntries(parseSoul(""))).toEqual([])
+    expect(spoken("Oct 2: wrote a stanza on Uruguay.")).toBe("Wrote a stanza on Uruguay.")
+  })
+  test("a seat with a diary quotes it now and then, the rest of the time its own banter", () => {
+    useSouls({ hronir: soul })
+    const said = Array.from({ length: 600 }, () => seatLine("hronir", []))
+    const quotes = said.filter((l) => ["Wrote a stanza on Uruguay.", "Fixed the foosball table."].includes(l))
+    expect(quotes.length).toBeGreaterThan(20)
+    expect(quotes.length).toBeLessThan(120)
+    expect(said.filter((l) => !quotes.includes(l)).every((l) => SEAT_VOICE.hronir!.banter.includes(l))).toBe(true)
+  })
+  test("a seat without a diary never quotes", () => {
+    useSouls({ hronir: parseSoul("## Wants\nw") })
+    expect(Array.from({ length: 200 }, () => seatLine("hronir", [])).every((l) => SEAT_VOICE.hronir!.banter.includes(l))).toBe(true)
   })
 })
