@@ -432,6 +432,11 @@ quota), #727 (a builder seat without `push_branch`/`catch_up_branch`), #864 (oth
 launches; E1), #861, #820 (E2), #541 (bwrap source path for t1), #622 (fact_relevance bound),
 #760 (menard `run test` times out at 620 s with no verdict), #806 (smoke test flake), #749 (intake
 notice on the sheriff's beat). `Sonnet` for each but #614 and #760 (`Opus`).
+- #614, found 2026-11-08: the manager does answer an intake in seconds once seated; what waited out
+  the 30 minutes (#857 on 2026-11-05) was the arbiter reading the manager's leaf window on another
+  thread (its inbox-sweep duty, t190, tagged `@funes_agent tertius`) as its lobby seat, so the lobby
+  wake was `:already_running` until the duty closed. Fixed: on the standing thread only a non-leaf
+  window counts.
 
 **E7 · Fewer check runs, the same safety.** `Opus · M (spec first) · limit (the check)`
 - Why: one change runs the full suite up to five times: the builder's own `run_task("server:check")`

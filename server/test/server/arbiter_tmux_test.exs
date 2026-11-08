@@ -275,6 +275,21 @@ defmodule Server.Arbiter.TmuxTest do
     assert {:error, :already_running} = Arbiter.Tmux.spawn(lobby_exports)
   end
 
+  test "spawn: a coworker leading another thread's leaf still gets its lobby window (#614)", %{ws: ws} do
+    {:ok, _} = Staff.register_agent(%{name: "tertius", mandate: "m", engine: "claude"})
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+    lobby_exports = ~s(export TLON_THREAD="#{lobby.id}"\nexport TLON_AUTHOR="tertius")
+
+    # tertius's inbox-sweep duty runs in leaf t190, tagged with tertius: not its lobby seat
+    Application.put_env(
+      :server,
+      :tmux_cmd,
+      record(%{"has-session" => {"", 0}, "list-windows" => {"3\tt190\t190\t\t1\ttertius\t1\n", 0}})
+    )
+
+    assert {:ok, %{window: "tertius"}} = Arbiter.Tmux.spawn(lobby_exports)
+  end
+
   test "spawn: a leaf past the cap is refused, and the thread is told once", %{thread: t, exports: exports} do
     leaves = Enum.map_join(1..6, fn i -> "#{i}\tleaf#{i}\t#{900_000 + i}\tdone\t#{i}\tx\t1\n" end)
     Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {leaves, 0}}))

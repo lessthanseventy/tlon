@@ -82,11 +82,18 @@ defmodule Server.Arbiter.Tmux do
 
   defp standing?(ws, %Thread{id: id}), do: match?(%Thread{id: ^id}, Server.Channel.machine_thread(ws))
 
-  # `nil || {:error, _}` would read as the error — so an explicit atom for "not running yet"
+  # `nil || {:error, _}` would read as the error — so an explicit atom for "not running yet".
+  # On the standing thread only the coworker's own lobby window counts: a leaf it holds elsewhere
+  # (a duty, a workline) carries its agent tag too, and reading that as the lobby seat leaves a wake
+  # there unseated until the leaf closes.
   defp running(tabs, %Thread{id: id}, author, standing?) do
     mine =
       if standing?,
-        do: Enum.find(tabs, &(&1.agent == author or (is_nil(&1.agent) and &1.name == author))),
+        do:
+          Enum.find(
+            tabs,
+            &(not Tmux.leaf_window?(&1) and (&1.agent == author or (is_nil(&1.agent) and &1.name == author)))
+          ),
         else: Tmux.leaf_tab(tabs, id)
 
     if mine, do: {:error, :already_running}, else: :absent
