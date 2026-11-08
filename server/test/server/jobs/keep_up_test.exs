@@ -412,7 +412,7 @@ defmodule Server.Jobs.KeepUpTest do
       end
 
       KeepUp.warm_test_builds([repo], head.("aaa"))
-      assert_received {:ran, "timeout", [_, "mise", "exec", "--", "mix", "compile"], opts}
+      assert_received {:ran, "mise", ["exec", "--", "timeout", _, "mix", "compile"], opts}
       assert opts[:cd] == Path.join(repo, "server")
       assert {"MIX_ENV", "test"} in opts[:env]
 
@@ -420,10 +420,35 @@ defmodule Server.Jobs.KeepUpTest do
       refute_received {:ran, _, _, _}
 
       KeepUp.warm_test_builds([repo], head.("bbb"))
-      assert_received {:ran, "timeout", _, _}
+      assert_received {:ran, "mise", _, _}
     end
 
-    test "a failed compile leaves the tip unwarmed: the next pass tries again" do
+    test "a warm already running on the repo is not joined by a second" do
+      repo = Path.join(System.tmp_dir!(), "warm-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(repo)
+      File.write!(Path.join(repo, "mix.exs"), "")
+      on_exit(fn -> File.rm_rf!(repo) end)
+      test = self()
+
+      run = fn
+        "git", _, _ ->
+          {"ddd\n", 0}
+
+        exe, _, _ ->
+          send(test, {:ran, exe})
+          {"", 0}
+      end
+
+      true = :global.set_lock({{KeepUp, :warm, repo}, self()}, [node()], 0)
+      fn -> KeepUp.warm_test_builds([repo], run) end |> Task.async() |> Task.await()
+      refute_received {:ran, _}
+      :global.del_lock({{KeepUp, :warm, repo}, self()}, [node()])
+
+      fn -> KeepUp.warm_test_builds([repo], run) end |> Task.async() |> Task.await()
+      assert_received {:ran, "mise"}
+    end
+
+    test "a failed compile is logged and not repeated on the same tip" do
       repo = Path.join(System.tmp_dir!(), "warm-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(repo)
       File.write!(Path.join(repo, "mix.exs"), "")
@@ -442,9 +467,7 @@ defmodule Server.Jobs.KeepUpTest do
       end
 
       assert ExUnit.CaptureLog.capture_log(fn -> KeepUp.warm_test_builds([repo], run.(1)) end) =~ "boom"
-      assert_received {:ran, "timeout"}
-      KeepUp.warm_test_builds([repo], run.(0))
-      assert_received {:ran, "timeout"}
+      assert_received {:ran, "mise"}
       KeepUp.warm_test_builds([repo], run.(0))
       refute_received {:ran, _}
     end
