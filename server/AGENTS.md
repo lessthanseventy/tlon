@@ -296,7 +296,8 @@ the same commands, which is the one control loop §3 asks for:
   in any git worktree wherever it lives (`Server.TestDatabaseName`); `Server.Worktree.retire/2` drops a retired checkout's db.
   `TLON_TEST_DATABASE` overrides it — set it for a second suite in the same checkout.
 - `mise run server:check` — the **precommit gate**: `mix precommit` = format-check + warnings-as-errors +
-  `credo --strict` + the suite (runs in `:test`), then the deterministic evals.
+  `credo --strict` + the suite (runs in `:test`). `mise run server:eval-det` — the deterministic evals
+  (their own `tlon_eval_<pid>` db, in the full check beside it).
 - `mise run server:setup` — deps + create/migrate the repo-local scratch db (run once).
 - `mise run server:doctor` — `mix server.doctor` against the scratch db, never the real one.
 - `mise run server:serve` — the dev iex with the MCP channel up, against the scratch db.

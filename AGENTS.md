@@ -72,7 +72,7 @@ burns tokens, re-streams noise into context, and risks a slightly-different invo
 server [FILE[:LINE]]` and `~/projects/menard/bin/menard run check --in server`. One run answers with one JSON line: `ok` and the counts when green; when red, every
 failure with its kind, `file:line` and message, a failing test's name, source and the assertion's
 left and right. It is this section's rule with the failures already parsed out, so there is nothing
-to grep for. `cap` stays the door for everything else: builds, scripts, `mise run server:check`'s
+to grep for. `cap` stays the door for everything else: builds, scripts, `mise run server:eval-det`'s
 evals.
 
 Knobs: `CAP_TAIL=all|<n>`, `CAP_SIGNAL=<n>`.
