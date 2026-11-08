@@ -72,6 +72,25 @@ defmodule Server.RolloutTest do
     end
   end
 
+  describe "restart_refused/2 — a refused restart is heard and stays pending" do
+    setup do
+      Server.TestDB.clean!()
+      {:ok, root} = Server.Channel.open_thread(%{title: "root", scope: "machine"})
+      on_exit(fn -> Rollout.cancel_restart() end)
+      %{root: root}
+    end
+
+    test "the root thread hears it and the restart is scheduled again", %{root: root} do
+      busy = fn -> ["a coworker is mid-turn on #5"] end
+
+      assert {:scheduled, _} = Rollout.restart_refused("release abc1234", busy: busy, run: fn _ -> :ok end, poll_ms: 20)
+
+      assert Rollout.restart_pending?()
+      assert [%{kind: "notice", body: body}] = Server.Channel.thread_messages(root)
+      assert body =~ "the restart (release abc1234) was refused"
+    end
+  end
+
   describe "announce_restart/1 — the workers hear a restart" do
     setup do
       Server.TestDB.clean!()

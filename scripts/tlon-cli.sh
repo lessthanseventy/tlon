@@ -65,6 +65,7 @@
 #   quiet                          "quiet", or "busy" and what a restart would cut off (server:restart asks)
 #   releasable <sha>               the release checks on a commit (gate, smoke, quiet) and the verdict
 #   announce-restart <why…>        a notice on every thread with a live session: the server is restarting
+#   restart-refused <why…>         a restart's unit was refused at its second quiet check: say so, schedule it again
 #   worktree <id>                  the thread's own checkout, as the server resolves it (its project's repo)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
 #   red-verify <id> <finding…>     a red verify back to build on the same branch, with its finding
@@ -530,6 +531,11 @@ case "$cmd" in
   announce-restart)
     why="$*"; [ -n "$why" ] || why="the operator ran server:restart"
     exec "$SERVER" rpc "Server.Rollout.announce_restart(\"$(esc "$why")\")"
+    ;;
+
+  restart-refused)
+    why="$*"; [ -n "$why" ] || why="the operator ran server:restart"
+    exec "$SERVER" rpc "Server.Rollout.restart_refused(\"$(esc "$why")\") |> then(fn _ -> :ok end)"
     ;;
 
   flag)
