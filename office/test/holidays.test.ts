@@ -74,3 +74,34 @@ describe("the room's seasonal decor keeps its windows", () => {
     for (const [m, d] of [[9, 1], [9, 31], [11, 1], [11, 31]] as const) expect(corner(at(m, d)), `${m + 1}/${d}`).not.toBe(bare)
   }))
 })
+
+describe("a year's table: spring, summer and New Year's Eve", () => {
+  const same = (a: Date, b: Date) => Buffer.from(frame(a).rgba).equals(Buffer.from(frame(b).rgba))
+  test("a spring day and a summer day each differ from an autumn one at the same hour", () => seeded(3, () => {
+    expect(same(at(3, 10), at(8, 10))).toBe(false)
+    expect(same(at(6, 10), at(8, 10))).toBe(false)
+    expect(same(at(3, 10), at(6, 10))).toBe(false)
+  }))
+  test("New Year's Eve at night is not Dec 30's frame", () => {
+    const render = (when: Date) => seeded(3, () => {
+      const room = new WideRoom(696), a = viewOf(office(2), 1)
+      room.setClock(() => when)
+      for (let i = 0; i < 30; i++) room.step(a)
+      return Buffer.from(room.render(a, focus, measureFor(geometry(696, WIDE_H, 220, 70, 8, { w: 8, h: 16 }, true)), when).rgba)
+    })
+    expect(render(at(11, 31, 22)).equals(render(at(11, 30, 22)))).toBe(false)
+  })
+})
+
+describe("a day has a shape: the leaving wave", () => {
+  const spots = (when: Date) => {
+    const idle = office(2), room = new WideRoom(560), a = viewOf({ ...idle, roster: idle.roster.map((r) => ({ ...r, warm: false, thinking: false })) }, 1)
+    room.setClock(() => when)
+    for (let i = 0; i < 200; i++) room.step(a)
+    return [...(room as unknown as { actors: Map<string, { spot: { kind: string }; seat: { thinking: boolean } }> }).actors.values()].map((x) => x.spot.kind)
+  }
+  test("at 17:40 the idle gather at the door; at 15:00 nobody does", () => seeded(3, () => {
+    expect(spots(at(5, 3, 17, 40))).toContain("exit")
+    expect(spots(at(5, 3, 15, 0))).not.toContain("exit")
+  }))
+})

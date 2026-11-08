@@ -1,12 +1,14 @@
 // The office's easter eggs that are pure functions: what the clock shows, the Konami code, a page of
 // the Library of Babel, a cat's keyboard, the night owl's hours. The room and the TUI do the rest.
 import { random } from "./rng"
+import { seasonOf } from "./daypart"
 
 /** the wall clock's face: 404 at four minutes past four (the time cannot be found), π at 3:14 */
 export function clockFace(now: Date): string {
   const h = now.getHours() % 12, m = now.getMinutes()
   if (h === 4 && m === 4) return "404"
   if (h === 3 && m === 14) return "π"
+  if (seasonOf(now) === "pi" && now.getSeconds() < 30) return "3.14"
   return `${String(now.getHours()).padStart(2, "0")}:${String(m).padStart(2, "0")}`
 }
 

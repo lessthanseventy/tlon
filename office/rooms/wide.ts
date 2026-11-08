@@ -13,6 +13,7 @@ import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, STRAIGHTEN, ste
 import { DWELL, doing, lapOf, pickErrand, REST, UQBAR, type Errand, type ErrandKind, type Occasion } from "../kit/volume"
 import { BATH, SINK } from "../kit/bathroom"
 import { dark, darkness, lampsLit } from "../kit/daylight"
+import { seasonOf } from "../kit/daypart"
 import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
 import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
@@ -976,6 +977,29 @@ export class WideRoom extends Sim<Layout> {
         px(L0 + 46, 139, 1, 1, ROLE.body)
       })
     }
+    this.yearly(sc, now)
+  }
+
+  /** the rest of the year's table (`seasonOf`): blossom past the windows in spring, a fan in summer, fireworks over the windows from 21:00 on New Year's Eve */
+  private yearly(sc: Scene, now: Date) {
+    const { L0, M0 } = this.z, f = sc.f, season = seasonOf(now), span = L0 + 20 - M0
+    if (season === "spring") sc.overhead.push(() => {
+      for (let k = 0; k < 6; k++) {
+        const t = sc.tick / 4 + k * 23, x = M0 + 6 + ((k * 37 + t * 0.6) % span), y = 8 + ((t * 0.8 + k * 9) % 26)
+        sc.px(Math.round(x), Math.round(y), 1, 1, tint(ROLE.attention, ROLE.prose, 0.5))
+      }
+    })
+    else if (season === "summer") sc.item(150, () => {
+      sc.blit(f % 2 ? ["k...k", ".kkk.", "..k..", "..k..", ".ooo."] : ["..k..", "k.k.k", "..k..", "..k..", ".ooo."], L0 + 42, 145, { k: ROLE.key, o: ROLE.structure })
+    })
+    else if (season === "nye" && now.getHours() >= 21) sc.overhead.push(() => {
+      for (let k = 0; k < 3; k++) {
+        const age = (sc.tick + k * 25) % 75, cx = M0 + 20 + k * 36, cy = 16 + (k % 2) * 6
+        if (age > 20) continue
+        const r = age / 3
+        for (let a = 0; a < 8; a++) sc.px(Math.round(cx + Math.cos((a * Math.PI) / 4) * r), Math.round(cy + Math.sin((a * Math.PI) / 4) * r), 1, 1, [ROLE.alarm, ROLE.body, ROLE.key][k]!)
+      }
+    })
   }
 
   /**
