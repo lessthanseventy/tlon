@@ -91,5 +91,5 @@ defmodule Server.Workline.Scribe do
     end
   end
 
-  defp git(root, args), do: System.cmd("git", ["-C", root | args], stderr_to_stdout: true)
+  defp git(root, args), do: Server.Git.cmd(root, args)
 end

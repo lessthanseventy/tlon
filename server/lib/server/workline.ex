@@ -359,7 +359,7 @@ defmodule Server.Workline do
     with {:ok, landed} <- land(thread, checker, opts),
          {:ok, cleared} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
          {:ok, flipped} <- flip(cleared) do
-      if landed, do: finish(flipped, landed, Keyword.get(opts, :run, &System.cmd/3))
+      if landed, do: finish(flipped, landed, Keyword.get(opts, :run, &Server.Cmd.run/3))
       {:ok, flipped}
     end
   end
@@ -445,9 +445,7 @@ defmodule Server.Workline do
 
   @doc "The commit `work/<slug>` is at in the thread's repo, or nil without one."
   def branch_head(thread) do
-    case System.cmd("git", ["-C", Git.root(thread), "rev-parse", "--verify", "--quiet", "work/#{thread.slug}^{commit}"],
-           stderr_to_stdout: true
-         ) do
+    case Server.Git.cmd(Git.root(thread), ["rev-parse", "--verify", "--quiet", "work/#{thread.slug}^{commit}"]) do
       {sha, 0} -> String.trim(sha)
       _ -> nil
     end
@@ -590,7 +588,7 @@ defmodule Server.Workline do
     with :ok <- reviewed_current(thread) do
       case merger.merge(repo, thread.slug, gate: gate) do
         {:ok, moved} ->
-          landed(thread, Map.merge(moved, %{repo: repo, gated: moved.to}), Keyword.get(opts, :run, &System.cmd/3))
+          landed(thread, Map.merge(moved, %{repo: repo, gated: moved.to}), Keyword.get(opts, :run, &Server.Cmd.run/3))
 
         {:error, {:interrupted, why}} when not last? ->
           {:error, {:interrupted, why}}
@@ -743,7 +741,7 @@ defmodule Server.Workline do
   (`reland/3`), to come back through verify, review and the merge queue. `reland/3`'s result,
   `{:error, :not_landing}`, or `{:error, why}` when the PR won't close.
   """
-  def reland_landing(thread, run \\ &System.cmd/3) do
+  def reland_landing(thread, run \\ &Server.Cmd.run/3) do
     with %{url: url} <- pending_landing(thread) || {:error, :not_landing},
          why = "the operator closed its PR #{url} to reland it",
          :ok <- Server.Workline.Publish.close(Git.root(thread), url, "#{why}; the workline is back at build", run) do
@@ -1595,7 +1593,7 @@ defmodule Server.Workline do
   origin) | `{:error, why}` — a
   failure is recorded again; a workline whose last publish did not fail is refused.
   """
-  def republish(thread, run \\ &System.cmd/3)
+  def republish(thread, run \\ &Server.Cmd.run/3)
 
   def republish(%Thread{stage: "landed"} = thread, run) do
     if publish_failed?(thread),
@@ -2057,24 +2055,18 @@ defmodule Server.Workline do
 
   # no commits of its own on either side (its code is on main already): the trees decide
   defp same_tree?(root, sha, head, slug),
-    do:
-      match?(
-        {_, 0},
-        System.cmd("git", ["-C", root, "diff", "--quiet", sha, head, "--", ".", ":!work/#{slug}"],
-          stderr_to_stdout: true
-        )
-      )
+    do: match?({_, 0}, Server.Git.cmd(root, ["diff", "--quiet", sha, head, "--", ".", ":!work/#{slug}"]))
 
   defp main_ref(root) do
     Enum.find(
       ["origin/main", "main"],
-      &match?({_, 0}, System.cmd("git", ["-C", root, "rev-parse", "--verify", "--quiet", &1], stderr_to_stdout: true))
+      &match?({_, 0}, Server.Git.cmd(root, ["rev-parse", "--verify", "--quiet", &1]))
     )
   end
 
   # `{subject, patch-id}` of each of `ref`'s commits main doesn't have that touches code, oldest first
   defp own_patches(root, base, ref, slug) do
-    case System.cmd("git", ["-C", root, "cherry", base, ref], stderr_to_stdout: true) do
+    case Server.Git.cmd(root, ["cherry", base, ref]) do
       {out, 0} ->
         commits = for "+ " <> c <- String.split(out, "\n", trim: true), do: c
         patches_of(root, slug, commits)
@@ -2093,7 +2085,7 @@ defmodule Server.Workline do
     with {ids, 0} <-
            System.cmd("bash", ["-o", "pipefail", "-c", script, "bash", root, slug | commits], stderr_to_stdout: true),
          {subjects, 0} <-
-           System.cmd("git", ["-C", root, "show", "-s", "--format=%H%x09%s" | commits], stderr_to_stdout: true) do
+           Server.Git.cmd(root, ["show", "-s", "--format=%H%x09%s" | commits]) do
       id_of =
         Map.new(String.split(ids, "\n", trim: true), &(&1 |> String.split(" ") |> Enum.reverse() |> List.to_tuple()))
 
@@ -2296,7 +2288,7 @@ defmodule Server.Workline do
   defp land_again(thread, url, opts) do
     merger = Keyword.get(opts, :merge, Server.Workline.Merge)
     gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate(thread, &1, &2) end)
-    run = Keyword.get(opts, :run, &System.cmd/3)
+    run = Keyword.get(opts, :run, &Server.Cmd.run/3)
     auto? = opts[:auto] == true
     repo = Git.root(thread)
 
@@ -2389,7 +2381,7 @@ defmodule Server.Workline do
   defp rideable?(_thread), do: false
 
   defp ride([{lead, _} = first | rest], repo, merger, opts) do
-    run = Keyword.get(opts, :run, &System.cmd/3)
+    run = Keyword.get(opts, :run, &Server.Cmd.run/3)
 
     case ride_on(first, repo, merger, run) do
       {:cont, :ok} ->

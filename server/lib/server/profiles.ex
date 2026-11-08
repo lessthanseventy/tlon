@@ -1215,9 +1215,7 @@ defmodule Server.Profiles do
   """
   @spec main_root(String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def main_root(from \\ tlon_root()) do
-    case System.cmd("git", ["-C", from, "rev-parse", "--path-format=absolute", "--git-common-dir"],
-           stderr_to_stdout: true
-         ) do
+    case Server.Git.cmd(from, ["rev-parse", "--path-format=absolute", "--git-common-dir"]) do
       {out, 0} -> {:ok, out |> String.trim() |> Path.dirname()}
       {out, _} -> {:error, String.slice(out, 0, 200)}
     end

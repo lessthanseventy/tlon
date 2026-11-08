@@ -187,7 +187,7 @@ defmodule Server.Smoke do
   defp resolve_in_main_root(ref) do
     with {:ok, root} <- Server.Profiles.main_root(),
          {out, 0} <-
-           System.cmd("git", ["-C", root, "rev-parse", "-q", "--verify", "#{ref}^{commit}"], stderr_to_stdout: true) do
+           Server.Git.cmd(root, ["rev-parse", "-q", "--verify", "#{ref}^{commit}"]) do
       {:ok, String.trim(out)}
     else
       _ -> :error

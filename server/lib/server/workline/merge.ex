@@ -231,5 +231,5 @@ defmodule Server.Workline.Merge do
   defp without_hints(out),
     do: out |> String.split("\n") |> Enum.reject(&String.starts_with?(&1, "hint:")) |> Enum.join("\n") |> String.trim()
 
-  defp git(repo, args, env \\ []), do: System.cmd("git", ["-C", repo | args], stderr_to_stdout: true, env: env)
+  defp git(repo, args, env \\ []), do: Server.Git.cmd(repo, args, env: env)
 end

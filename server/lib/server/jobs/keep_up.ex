@@ -54,7 +54,7 @@ defmodule Server.Jobs.KeepUp do
   tries again, so a red main costs one compile, not one every pass. A git that won't run warms
   nothing (the repo pass reports it).
   """
-  def warm_test_builds(repos, run \\ &System.cmd/3) do
+  def warm_test_builds(repos, run \\ &Server.Cmd.run/3) do
     for repo <- repos,
         {sha, 0} <- [head(repo, run)],
         key = {__MODULE__, :warm, repo},
@@ -75,7 +75,7 @@ defmodule Server.Jobs.KeepUp do
   # one repo's fault (gh missing from PATH, a git that won't run) doesn't skip the others; the faults
   # fail the job after every repo had its pass, so they reach the operator as a failed job
   @doc false
-  def keep_up(repo, run \\ &System.cmd/3) do
+  def keep_up(repo, run \\ &Server.Cmd.run/3) do
     drifted(repo, Server.Workline.Publish.follow_main(repo, run))
 
     case remote(repo, run) do
@@ -153,7 +153,7 @@ defmodule Server.Jobs.KeepUp do
 
   @doc false
   # a landing is done when GitHub says its PR is MERGED, never at the local gate
-  def landings(run \\ &System.cmd/3) do
+  def landings(run \\ &Server.Cmd.run/3) do
     for %{thread: t, url: url} <- Server.Workline.waiting_on_github() do
       case Server.Workline.Publish.view(Server.Workline.Artifacts.Git.root(t), url, run) do
         {:ok, %{"state" => "MERGED"}} ->
@@ -202,7 +202,7 @@ defmodule Server.Jobs.KeepUp do
   end
 
   @doc false
-  def red_checks(repo, run \\ &System.cmd/3) do
+  def red_checks(repo, run \\ &Server.Cmd.run/3) do
     failing = read(repo, "red PRs", Server.Workline.Publish.failing(repo, run))
     if failing != :error, do: Server.Rollout.clear("keep_up:#{repo}")
     red_checks(repo, unread(failing), run)
@@ -347,7 +347,8 @@ defmodule Server.Jobs.KeepUp do
     run.("mise", ["exec", "--", "timeout", "900", "mix", "compile"],
       cd: dir,
       env: [{"MIX_ENV", "test"}],
-      stderr_to_stdout: true
+      stderr_to_stdout: true,
+      timeout: :infinity
     )
   rescue
     e -> {Exception.message(e), 1}

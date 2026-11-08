@@ -63,7 +63,7 @@ defmodule Server.Release.Candidate do
   passed there. GitHub's rebase writes new commits, so the tree is what is compared; a tip with any
   other tree (main moved past it) gets nothing. `:recorded` or `:skipped`.
   """
-  def landed(repo, gated, run \\ &System.cmd/3) do
+  def landed(repo, gated, run \\ &Server.Cmd.run/3) do
     git = fn args -> run.("git", ["-C", repo | args], stderr_to_stdout: true) end
 
     with true <- Path.expand(repo) == Path.expand(Server.Profiles.tlon_root()),

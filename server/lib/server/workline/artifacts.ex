@@ -189,7 +189,7 @@ defmodule Server.Workline.Artifacts.Git do
     end
   end
 
-  defp git(thread, args), do: System.cmd("git", ["-C", root(thread) | args], stderr_to_stdout: true)
+  defp git(thread, args), do: Server.Git.cmd(root(thread), args)
 
   # A failed check on a broken root would otherwise read as "not committed" — an actionable-
   # sounding but FALSE diagnosis that wedges every workline. Distinguish the environment fault.

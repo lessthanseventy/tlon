@@ -122,7 +122,7 @@ defmodule Server.Doctor do
   @spec git_fetch_urls(Path.t()) :: String.t()
   def git_fetch_urls(root \\ Server.Profiles.tlon_root()) do
     {config, _} =
-      System.cmd("git", ["-C", root, "config", "--local", "--get-regexp", "^url\\."], stderr_to_stdout: true)
+      Server.Git.cmd(root, ["config", "--local", "--get-regexp", "^url\\."])
 
     set = config |> String.split("\n", trim: true) |> MapSet.new()
 

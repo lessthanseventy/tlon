@@ -20,7 +20,7 @@ defmodule Server.Workline.Publish do
   `{:auto_refused, pr_url, why}` (the PR is open but GitHub refused to merge it, or to arm auto-merge)
   | `:none` | `{:error, why}`.
   """
-  def publish(repo, slug, title, run \\ &System.cmd/3, landing \\ []) do
+  def publish(repo, slug, title, run \\ &Server.Cmd.run/3, landing \\ []) do
     branch = "work/#{slug}"
     opts = [cd: repo, stderr_to_stdout: true]
     pr_title = pr_title(title, slug)
@@ -75,7 +75,7 @@ defmodule Server.Workline.Publish do
   one too, which a worktree may hold, and fail after GitHub merged). GitHub not having evaluated the
   fresh `tlon/check` yet arms auto-merge at that head instead. `:merged` | `:auto` | `{:error, why}`.
   """
-  def merge_at(repo, pr, sha, branch, run \\ &System.cmd/3) do
+  def merge_at(repo, pr, sha, branch, run \\ &Server.Cmd.run/3) do
     opts = [cd: repo, stderr_to_stdout: true]
 
     case run.("gh", ["pr", "merge", to_string(pr), "--rebase", "--match-head-commit", sha], opts) do
@@ -95,7 +95,7 @@ defmodule Server.Workline.Publish do
   PR `url` as GitHub has it now: `{:ok, %{"state" => "OPEN" | "MERGED" | "CLOSED", "mergeStateStatus",
   "statusCheckRollup", "headRefOid"}}`, or `{:error, why}` when gh can't be read.
   """
-  def view(repo, url, run \\ &System.cmd/3) do
+  def view(repo, url, run \\ &Server.Cmd.run/3) do
     case run.("gh", ["pr", "view", url, "--json", "state,mergeStateStatus,statusCheckRollup,headRefOid"],
            cd: repo,
            stderr_to_stdout: true
@@ -166,7 +166,7 @@ defmodule Server.Workline.Publish do
   `work/<slug>` branch (a thread's, or a seat's named `work/<handle>-<name>`, see `own_branch/2`):
   never main, never anything else. `:ok` | `{:error, why}`.
   """
-  def push_branch(repo, branch, run \\ &System.cmd/3) do
+  def push_branch(repo, branch, run \\ &Server.Cmd.run/3) do
     with :ok <- thread_branch(branch),
          {:ok, remote} <- remote_sha(repo, branch, run),
          {:ok, expect} <- expected(repo, branch, remote, run),
@@ -178,7 +178,7 @@ defmodule Server.Workline.Publish do
   head may be one GitHub's update-branch moved. Leased on the sha read a moment before, so only a push
   racing it is refused. `:ok` | `{:error, why}`.
   """
-  def replace_branch(repo, branch, run \\ &System.cmd/3) do
+  def replace_branch(repo, branch, run \\ &Server.Cmd.run/3) do
     with :ok <- thread_branch(branch),
          {:ok, remote} <- remote_sha(repo, branch, run),
          do: lease_push(repo, branch, remote, run)
@@ -189,7 +189,7 @@ defmodule Server.Workline.Publish do
   (`DIRTY`), which no `update-branch` fixes. Each open PR on a `work/*` branch so marked, as
   `%{number, slug}`; a repo `gh` can't read is `{:error, why}`, never `[]`.
   """
-  def conflicting(repo, run \\ &System.cmd/3) do
+  def conflicting(repo, run \\ &Server.Cmd.run/3) do
     with {:ok, prs} <- open_prs(repo, "number,headRefName,mergeStateStatus", run) do
       for %{"number" => n, "headRefName" => "work/" <> slug, "mergeStateStatus" => "DIRTY"} <- prs,
           do: %{number: n, slug: slug}
@@ -201,7 +201,7 @@ defmodule Server.Workline.Publish do
   (`BEHIND`/`DIRTY` it is not). Each open PR on a `work/*` branch with a failed check, as
   `%{number, slug}`; one still pending is not failing. A repo `gh` can't read is `{:error, why}`, never `[]`.
   """
-  def failing(repo, run \\ &System.cmd/3) do
+  def failing(repo, run \\ &Server.Cmd.run/3) do
     with {:ok, prs} <- open_prs(repo, "number,headRefName,statusCheckRollup", run) do
       for %{"number" => n, "headRefName" => "work/" <> slug} = pr <- prs,
           Enum.any?(pr["statusCheckRollup"] || [], &red?/1),
@@ -222,7 +222,7 @@ defmodule Server.Workline.Publish do
   defp red?(_), do: false
 
   @doc "Close PR `number`, saying why; its branch stays for the next landing to push and open anew."
-  def close(repo, number, why, run \\ &System.cmd/3) do
+  def close(repo, number, why, run \\ &Server.Cmd.run/3) do
     case run.("gh", ["pr", "close", to_string(number), "--comment", why], cd: repo, stderr_to_stdout: true) do
       {_, 0} -> :ok
       {out, _} -> {:error, String.slice(out, 0, 200)}
@@ -235,7 +235,7 @@ defmodule Server.Workline.Publish do
   operator to sort out; a checkout on another branch is `{:off_main, branch}`, left alone. `:forwarded` (or already level),
   or `{:error, why}` when git refuses.
   """
-  def follow_main(repo, run \\ &System.cmd/3) do
+  def follow_main(repo, run \\ &Server.Cmd.run/3) do
     git = fn args -> run.("git", ["-C", repo | args], stderr_to_stdout: true) end
 
     case git.(["symbolic-ref", "--short", "HEAD"]) do
@@ -323,7 +323,7 @@ defmodule Server.Workline.Publish do
   on main, posted only for a commit a landing's gate passed on. A status gh can't post leaves the PR
   waiting on its check. gh's `{out, exit}`.
   """
-  def post_check(repo, sha, run \\ &System.cmd/3) do
+  def post_check(repo, sha, run \\ &Server.Cmd.run/3) do
     run.(
       "gh",
       [
