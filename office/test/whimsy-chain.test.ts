@@ -66,6 +66,22 @@ describe("rimworld chains", () => {
   }, 60_000)
 })
 
+describe("the chain reaction", () => {
+  test("Gary first, then each scene's chain, with the chain dial off; a scene already on refuses it", () => {
+    const { r, a } = run(setDial(DEFAULT, "chain", false), 1)
+    ;(r as any).hour = () => 12
+    expect(r.chainReaction()).toBe(true)
+    const seen: string[] = []
+    for (let i = 0; i < 4000; i++) {
+      r.step(a)
+      const e = r.eventNow()
+      if (e && seen.at(-1) !== e.kind) seen.push(e.kind)
+    }
+    expect(seen.slice(0, 4)).toEqual(["gary", "zoo", "drill", "power"])
+    expect(r.chainReaction() && r.chainReaction()).toBe(false)
+  }, 60_000)
+})
+
 describe("sour moods", () => {
   // the idle pool is the only thing sourMood touches; pets and high-fives also make hearts, so compare traces, not absolutes
   const trace = (moods: boolean, sour: boolean) => seeded(3, () => {

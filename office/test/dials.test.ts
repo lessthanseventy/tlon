@@ -62,13 +62,13 @@ describe("the weirdness dial", () => {
   test("curated: only the compiled-in visitors, whatever the server generated", () => {
     const c = rung("curated", pool)
     expect(c.guest?.name).not.toBe("Mr. Heron")
-    expect(BASE_VISITORS.map((g) => g.name)).toContain(c.guest?.name)
+    expect(BASE_VISITORS.map((g) => g.name)).toContain(c.guest!.name)
   })
   test("procedural and invented: a pooled visitor can come, with the server's name and line", () => {
     for (const w of ["procedural", "invented"] as const) expect(rung(w, pool)).toMatchObject({ kind: "guest", guest: { name: "Mr. Heron" } })
   })
   test("an empty pool, or none at all (an older server), leaves the compiled-in visitors", () => {
-    for (const t of [{ visitors: [], puns: [], reactions: {}, parts: [] }, null]) expect(BASE_VISITORS.map((g) => g.name)).toContain(rung("invented", t).guest?.name)
+    for (const t of [{ visitors: [], puns: [], reactions: {}, parts: [] }, null]) expect(BASE_VISITORS.map((g) => g.name)).toContain(rung("invented", t).guest!.name)
   })
   test("a pooled seat's reaction replaces the scripted line at an event; curated keeps the script", () => {
     const said = (w: "curated" | "invented") => seeded(3, () => {

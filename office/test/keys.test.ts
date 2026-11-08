@@ -130,6 +130,8 @@ test("the seven retired play letters are unbound in sandbox-play", () => {
   expect(all.filter((b) => b.scope === "sandbox-play").map((b) => b.key)).toEqual(["E"])
 })
 
-test("the play card numbers its rows 1..9 in order", () => {
-  expect(all.filter((b) => b.scope === "card:play").map((b) => b.key)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9"])
+test("the play card numbers its rows 1..9 in order, 0 turns the page, and page 2 numbers from 1 again", () => {
+  const keys = (page2: boolean) => all.filter((b) => b.scope === "card:play" && (b.mode === "page 2") === page2).map((b) => b.key)
+  expect(keys(false)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"])
+  expect(keys(true)).toEqual(["1", "2", "3", "4", "5", "0"])
 })
