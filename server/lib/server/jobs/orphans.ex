@@ -75,9 +75,12 @@ defmodule Server.Jobs.Orphans do
       0
   end
 
-  # the server's local clock, as the crons read it
-  defp hhmm(_now) do
-    {_date, {h, m, _s}} = :calendar.local_time()
+  # `now` on the server's local clock, as the crons read it
+  @doc false
+  def hhmm(now) do
+    {_date, {h, m, _s}} =
+      now |> DateTime.to_naive() |> NaiveDateTime.to_erl() |> :calendar.universal_time_to_local_time()
+
     "~2..0B:~2..0B" |> :io_lib.format([h, m]) |> IO.iodata_to_binary()
   end
 

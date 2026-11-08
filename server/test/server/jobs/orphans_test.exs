@@ -61,8 +61,14 @@ defmodule Server.Jobs.OrphansTest do
     assert body =~ ~r/^⚠ job Server\.Jobs\.Land discarded: killed by the restart at \d\d:\d\d$/
   end
 
-  test "Grade and Maintain are retried; the per-minute passes are not" do
-    assert Server.Jobs.Grade.new(%{thread_id: 1}).changes.max_attempts == 3
+  test "the restart time is the given instant on the server's clock" do
+    at = ~U[2026-11-08 12:34:56Z]
+    {_, {h, m, _}} = :calendar.universal_time_to_local_time({{2026, 11, 8}, {12, 34, 56}})
+    assert Orphans.hhmm(at) == "~2..0B:~2..0B" |> :io_lib.format([h, m]) |> IO.iodata_to_binary()
+  end
+
+  test "Maintain is retried, Grade is not (a rerun asks the paid grader and posts again); the per-minute passes are not" do
+    assert Server.Jobs.Grade.new(%{thread_id: 1}).changes.max_attempts == 1
     assert Server.Jobs.Maintain.new(%{}).changes.max_attempts == 2
   end
 

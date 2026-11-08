@@ -1493,6 +1493,8 @@ defmodule Server.Office.NeedsTest do
         |> Server.Repo.insert!()
       end
 
+      on_exit(&Server.Jobs.Passes.forget/0)
+      Server.Jobs.Passes.forget()
       slow.(41)
       assert [%{key: "health:job_slow", kind: "health", text: text}] = Needs.list()
       assert text =~ "Staff"
@@ -1500,7 +1502,23 @@ defmodule Server.Office.NeedsTest do
 
       Server.Repo.delete_all(Oban.Job)
       slow.(2)
+      assert [%{key: "health:job_slow"}] = Needs.list(), "the slow-pass read is served from its 30 s cache"
+      Server.Jobs.Passes.forget()
       assert Needs.list() == []
+    end
+
+    test "a pass still running past 30 s is a health:job_slow item before it finishes" do
+      health_reading(%{tmux: true, disk_pct: 10, mem_pct: 10})
+      on_exit(&Server.Jobs.Passes.forget/0)
+      Server.Jobs.Passes.forget()
+
+      %{}
+      |> Oban.Job.new(worker: "Server.Jobs.Staff", queue: "staff")
+      |> Ecto.Changeset.change(state: "executing", attempted_at: DateTime.add(DateTime.utc_now(), -50))
+      |> Server.Repo.insert!()
+
+      assert [%{key: "health:job_slow", text: text}] = Needs.list()
+      assert text =~ "Staff"
     end
 
     test "a disk or memory at 90% is health:disk or health:mem, and each clears below it" do
