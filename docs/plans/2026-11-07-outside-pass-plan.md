@@ -130,6 +130,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   when a BEAM or `bun test` already has its cwd under the checkout, naming the pid.
 - Check: `checks-queue.test.sh` gains a case: a stopped holder leaves no child alive and the lock is
   taken by the next waiter only after; a second `check` in a busy checkout exits 2 with the pid.
+- Done: `checks-queue.sh` stops the group on TERM/INT/HUP and waits for it to be gone (KILL after `CHECKS_KILL_GRACE`, 30 s) before releasing the lock; `check.sh` exits 2 naming the pid when a `beam.smp` or `bun test` has its cwd in the checkout (not `.release`/`.worktrees`). Tests: `checks-queue.test.sh`.
 
 ---
 
