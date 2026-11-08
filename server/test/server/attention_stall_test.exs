@@ -137,6 +137,27 @@ defmodule Server.Attention.StallTest do
     assert [%Message{resolved_at: nil}] = stalls(t.id)
   end
 
+  test "a stall resolved while the pane is still frozen is not posted again", %{thread: t} do
+    tmux(leaf(t.id))
+    :ok = Thinking.thinking(t.id, "builder")
+    Process.put(:screen, "x")
+    panes = Stall.tick(%{}, now: at(0))
+    panes = Stall.tick(panes, now: at(5))
+    assert [%Message{} = s] = stalls(t.id)
+
+    s |> Message.resolve_changeset("dismissed") |> Repo.update!()
+    panes = Stall.tick(panes, now: at(6))
+    _ = Stall.tick(panes, now: at(12))
+    assert [_] = stalls(t.id)
+
+    Process.put(:screen, "y")
+    panes = Stall.tick(panes, now: at(13))
+    Process.put(:screen, "z")
+    panes = Stall.tick(panes, now: at(14))
+    _ = Stall.tick(panes, now: at(20))
+    assert [_, _] = stalls(t.id), "a pane that moved and froze again is a new stall"
+  end
+
   test "a window that is gone closes its stall", %{thread: t} do
     tmux(leaf(t.id))
     :ok = Thinking.thinking(t.id, "builder")
