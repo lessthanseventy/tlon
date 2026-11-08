@@ -881,7 +881,7 @@ defmodule Server.Profiles do
   # The seed roster — the name-keyed coworker instances, expressed as
   # `{archetype, name, model?}` roster ENTRIES (Slice 1's `workspace.roster[]` stores this exact shape).
   # `fetch/1`/`all/0`/`names/0` resolve these through `instantiate/1`, so the archetype registry is the
-  # ONE content source — no more full `%Profile{}` structs duplicating the templates. Order is
+  # ONE content source, never full `%Profile{}` structs duplicating the templates. Order is
   # significant (`names/0`): tertius first, then reviewer.
   #
   #   * tertius — the Tlön CENTER (Orbis Tertius meta agent `tertius`; its tmux socket is

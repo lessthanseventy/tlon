@@ -1,5 +1,5 @@
 defmodule Server.AttentionTest do
-  # Waiting is a first-class state (master plan 2026-09-25, piece A): a coworker's permission
+  # Waiting is a first-class state: a coworker's permission
   # dialog becomes a `prompt` message the operator answers from the thread. tmux rides the
   # `:tmux_cmd` seam; the pane text is a captured fixture.
   use ExUnit.Case, async: false

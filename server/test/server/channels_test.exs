@@ -1,5 +1,5 @@
 defmodule Server.ChannelsTest do
-  # Channels (UX slice 1b, 2026-09-08): the layer between a workspace and its threads, Slack's
+  # Channels: the layer between a workspace and its threads, Slack's
   # exactly. Every workspace has `#general`; topic channels are created by name; a thread lives
   # in exactly one channel and can be moved. The old "root machine thread" is what #general
   # stood in for.

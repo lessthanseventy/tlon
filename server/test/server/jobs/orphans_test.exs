@@ -1,7 +1,7 @@
 defmodule Server.Jobs.OrphansTest do
   # At boot, what this node left executing goes back in its queue; another node's is left alone.
   # Oban's Lifeline rule: a job below max_attempts is requeued, one at it is discarded — an
-  # exhausted job put back as available is never run and, picked first, blocks its queue (#417).
+  # exhausted job put back as available is never run and, picked first, blocks its queue.
   use ExUnit.Case, async: false
   use Oban.Testing, repo: Server.Repo
 

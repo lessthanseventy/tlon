@@ -69,9 +69,8 @@ defmodule Server.MCP.Tool.EditWorkspace do
         fail(frame, "no such workspace: #{params[:name]}")
 
       workspace ->
-        # Neither `repos` nor `roster` is a workspace column any more (UX slice 5) — both are rows.
-        # Passing a list still REPLACES that list, exactly as the old JSON overwrite did, so an agent
-        # that could say what a workspace works on and who works there has not quietly lost either.
+        # Neither `repos` nor `roster` is a workspace column — both are rows.
+        # Passing a list REPLACES that list.
         if repos = params[:repos], do: Workspaces.replace_repos(workspace.id, repos)
         if roster = params[:roster], do: Workspaces.replace_bench(workspace.id, roster)
 

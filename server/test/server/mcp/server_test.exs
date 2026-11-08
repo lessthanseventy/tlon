@@ -187,7 +187,7 @@ defmodule Server.MCP.ServerTest do
                "routine_done",
                "quest_create",
                "quest_done",
-               # the source verbs (repo tools design, 2026-09-08)
+               # the source verbs
                "rename_identifier",
                "outline_file",
                "edit_clause",
@@ -1061,7 +1061,7 @@ defmodule Server.MCP.ServerTest do
   end
 
   test "the lead staffed onto a child is bound to the CHILD: a brief that names someone else must not take their seat" do
-    # The ticket (#152): leads staffed via staff_child came up bound to the parent (#1) and could not
+    # A lead staffed via staff_child must not come up bound to the parent and unable to
     # push_branch / advance_stage / record_check / submit_review for the thread they lead. The seat a
     # lead gets comes from delivery: `Server.Switchboard` spawns whoever a message ADDRESSES, and a
     # brief that @mentions anyone else addresses only them — the lead is never seated on the child.
@@ -1536,8 +1536,8 @@ defmodule Server.MCP.ServerTest do
   end
 
   test "assign_lead hands the thread over: the old lead's leaf window closes and the new lead is woken" do
-    # The ticket (#154): the verb reassigned the lead but left the old lead's pane holding the
-    # thread's one window, so the new lead could never be spawned onto it (:already_running).
+    # The old lead's pane must not keep the thread's one window, or the new lead can never be
+    # spawned onto it (:already_running).
     {:ok, ws} =
       Server.Workspaces.register(%{
         name: "Handover",

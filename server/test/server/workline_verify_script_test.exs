@@ -368,14 +368,14 @@ defmodule Server.WorklineVerifyScriptTest do
       assert File.read!(Path.join(ctx.tmp, "gate.log.args")) == "run office:test\n"
     end
 
-    # the job's branch-mode variables stay in the script; the suite it runs gets none of them (#620)
+    # the job's branch-mode variables stay in the script; the suite it runs gets none of them
     test "the suite inherits none of branch mode's variables", ctx do
       assert {_, 0} = gate(ctx, [{"RUN_TASK", "office:test"}])
       assert File.read!(Path.join(ctx.tmp, "gate.log.vars")) == ""
     end
 
     # a seat's sandbox bind-mounts /dev/null over every *.env it finds at launch, and a mount under
-    # tmp/ makes the suite's tmp cleanup fail "file busy" (#766): no fixture may leave one
+    # tmp/ makes the suite's tmp cleanup fail "file busy": no fixture may leave one
     test "the gate leaves no *.env file behind", ctx do
       assert {_, 0} = gate(ctx)
       assert Path.wildcard(Path.join(ctx.tmp, "**/*.env"), match_dot: true) == []

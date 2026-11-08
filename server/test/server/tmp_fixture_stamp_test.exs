@@ -2,7 +2,7 @@ defmodule Server.TmpFixtureStampTest do
   use ExUnit.Case, async: true
 
   # Two gates at once are two BEAMs whose unique_integer sequences restart, so a /tmp fixture named
-  # only by unique_integer can collide and one run's rm_rf wipes the other's repo (ticket #329).
+  # only by unique_integer can collide and one run's rm_rf wipes the other's repo.
   # The tmp_dir! may sit a few lines below the unique_integer that names it (arbiter_tmux_test), so
   # a window after the line counts; a one-line match alone missed that site.
   test "no test names a tmp fixture by unique_integer alone — stamp it with System.pid()" do

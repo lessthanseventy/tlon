@@ -47,8 +47,8 @@ defmodule Server do
       # Structs read by consumers (pattern-matched, never changeset-built from outside).
       Thread,
       Message,
-      # The BENCH boundary type (UX slice 5): a workspace's coworkers, handed out by
-      # `Workspaces.bench/1` in place of the raw maps eight modules each used to interpret.
+      # The BENCH boundary type: a workspace's coworkers, handed out by
+      # `Workspaces.bench/1` rather than raw maps.
       Coworker,
       # What a coworker may do in a workspace — read by the profile materialiser.
       Policy,

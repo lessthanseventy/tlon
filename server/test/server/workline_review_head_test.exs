@@ -84,7 +84,7 @@ defmodule Server.WorklineReviewHeadTest do
     git(root, ["checkout", "-q", "main"])
   end
 
-  # the approving verdict parked it itself (#686): the gate, awaiting the operator
+  # the approving verdict parked it itself: the gate, awaiting the operator
   defp parked(thread) do
     %Thread{stage: "review", awaiting: awaiting} = parked = Repo.get!(Thread, thread.id)
     assert awaiting
@@ -133,8 +133,8 @@ defmodule Server.WorklineReviewHeadTest do
     assert sha == String.trim(head)
   end
 
-  # #686: submit_review used to answer "call advance_stage" to a session the verdict had just ended,
-  # leaving the workline at review with awaiting nil. The tool parks it and says so.
+  # submit_review must not answer "call advance_stage" to a session the verdict has just ended, which
+  # would leave the workline at review with awaiting nil. The tool parks it and says so.
   test "submit_review's approve parks the gate itself and does not tell the dead session to advance",
        %{root: root} do
     thread = at_review(root, "door")
@@ -172,7 +172,7 @@ defmodule Server.WorklineReviewHeadTest do
     assert SubmitReview.next({:error, {:not_parked, "owed artifact missing: review.md"}}, "lonnrot") =~ "review.md"
   end
 
-  # park/3's approval-still-stands branch, now reached from the verdict itself (#686): an approval
+  # park/3's approval-still-stands branch, reached from the verdict itself: an approval
   # recorded on this code queues a fresh approving verdict after a docs-only commit without the operator
   test "an approval that still stands queues a fresh approving verdict itself, without the operator",
        %{root: root} do

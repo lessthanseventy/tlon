@@ -1,5 +1,5 @@
 defmodule Server.ThreadPauseTest do
-  # Pause one thread, not the whole office (#404): its lead is told to finish the turn, nothing but
+  # Pause one thread, not the whole office: its lead is told to finish the turn, nothing but
   # the operator's own posts wakes it, it owes no nudge or stalled Need, and resume delivers what was
   # held and wakes the lead. Every other thread goes on as normal.
   use ExUnit.Case, async: false

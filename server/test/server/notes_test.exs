@@ -1,5 +1,5 @@
 defmodule Server.NotesTest do
-  # The `Server.Notes` context (2026-08-30): funes-native scratch, write pipe + scoped reads.
+  # The `Server.Notes` context: funes-native scratch, write pipe + scoped reads.
   use ExUnit.Case, async: false
 
   alias Server.Bus

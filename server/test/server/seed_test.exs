@@ -19,7 +19,7 @@ defmodule Server.SeedTest do
   test "load/0 reads the seed file into facts + projects lists" do
     data = Seed.load()
     assert is_list(data.facts) and data.facts != []
-    # Projects are no longer seeded (client efforts are separate workspaces, 2026-08-31) — just a list.
+    # Projects are not seeded (client efforts are separate workspaces) — just a list.
     assert is_list(data.projects)
     # Every fact carries the required shape + a stable intent key.
     assert Enum.all?(data.facts, &match?(%{intent: _, kind: _, text: _, provenance: _}, &1))
