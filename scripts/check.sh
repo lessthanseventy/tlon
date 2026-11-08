@@ -33,6 +33,24 @@ if [ "${TLON_CHECK_FORCE:-0}" != 1 ] && [ -n "$tree" ] && [ -z "$(git status --p
   echo "check: the gate's tree ${tree:0:12} already passed ($(cat "$green/$tree")) — not run again (TLON_CHECK_FORCE=1 runs it)"
   code=0
 else
+  # A stopped check's suites can outlive it; a second run beside them races on server/tmp. Refuse,
+  # naming the pid (the release and nested checkouts are other checkouts, not this one's suites).
+  root="$(git rev-parse --show-toplevel 2>/dev/null)"
+  for p in /proc/[0-9]*; do
+    case "$(cat "$p/comm" 2>/dev/null)" in
+      beam.smp) ;;
+      bun) tr '\0' ' ' <"$p/cmdline" 2>/dev/null | grep -q ' test' || continue ;;
+      *) continue ;;
+    esac
+    cwd="$(readlink "$p/cwd" 2>/dev/null)"
+    case "$cwd" in
+      "$root"/.release | "$root"/.release/* | "$root"/.worktrees/*) continue ;;
+      "$root" | "$root"/*)
+        echo "check: refused — a $(cat "$p/comm") (pid ${p#/proc/}) is already running in $cwd, left by a stopped check or a suite in this checkout; stop it or wait" >&2
+        exit 2
+        ;;
+    esac
+  done
   mise run check:all
   code=$?
   if [ "$code" -eq 0 ] && [ -n "$tree" ] && [ "$(state)" = "$before" ] && [ -z "$(git status --porcelain 2>/dev/null)" ]; then
