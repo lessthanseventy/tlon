@@ -266,6 +266,17 @@ defmodule Server.Release.PMTest do
       assert Enum.join(bodies(ctx.ws), "\n") =~ "needs a restart: a process module changed: X"
     end
 
+    test "a restart the server refuses is said on the root thread", ctx do
+      checks_pass!(ctx, ctx.main)
+      grader!(ctx, @low)
+      opts = Keyword.put(ctx.opts, :restart, fn _why -> {:error, "not under systemd: run mise run server:restart"} end)
+
+      assert {:ok, _} = PM.decide(ctx.ws.id, ctx.main, "Lamp talk.", opts)
+
+      assert List.last(bodies(ctx.ws)) ==
+               "release #{String.slice(ctx.main, 0, 7)} is cut, but its restart was refused: not under systemd: run mise run server:restart"
+    end
+
     test "a change over the standing approval: one gate for the operator, nothing cut", ctx do
       checks_pass!(ctx, ctx.main)
       grader!(ctx, %{@low | "blast" => 4})

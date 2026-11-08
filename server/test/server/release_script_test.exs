@@ -225,6 +225,18 @@ defmodule Server.ReleaseScriptTest do
       assert File.read!(ctx.calls) =~ "/api/restart"
     end
 
+    test "a restart the server refuses fails the cut", ctx do
+      push!(ctx, "server/lib/a.ex")
+
+      File.write!(Path.join(ctx.bin, "curl"), ~s"""
+      #!/bin/sh
+      case "$*" in *hotload*) echo '{"restart":"a process module changed"}' ;; *) echo '{"error":"not under systemd"}' ;; esac
+      """)
+
+      assert {out, 1} = release(ctx, ["cut"])
+      assert out =~ "not under systemd"
+    end
+
     test "a release that was never built is built", ctx do
       push!(ctx, "scripts/a-script.sh")
       File.rm_rf!(Path.join(ctx.repo, ".release/server/_build"))

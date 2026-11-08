@@ -447,7 +447,8 @@ snapshot on 304. `Sonnet · S`, after B1.
   #846 and #793 are a job ending unsaid; the other five are scripts, units and vanished seats,
   each its own fix (#781 and #864 go with B5).
   Done: #793 (`BranchReview.record/1` posts the verdict on the review's thread and the branch's workline thread).
-  Left: #841, #750, #812.
+  #841 (`PM.cut` posts a refused restart on the root thread; `release.sh` exits 1 on the restart's 409).
+  Left: #750, #812.
 
 **E2 · A landing's gate already is `check:main` on the new tip — record it.** `Opus · M`
 - Why: `release:status` today: main is two commits past the release and "no check:main on 92b914e;
