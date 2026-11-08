@@ -29,3 +29,9 @@ test("open, the card holds the whole soul and persona", () => {
 test("the toggle is a person bind", () => {
   expect(KEYS.find((b) => b.id === "person.space")?.scope).toBe("card:person")
 })
+
+test("open, the latest diary entry leads the soul", () => {
+  const lines = personCard(parseSoul("## Diary\n- Oct 2: first\n- Oct 9: latest"), undefined, 60, true).map((l) => l.text)
+  expect(lines).toContain("lately: Oct 9: latest")
+  expect(personCard(parseSoul("## Wants\nw"), undefined, 60, true).some((l) => l.text.startsWith("lately"))).toBe(false)
+})

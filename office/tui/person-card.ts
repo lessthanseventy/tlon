@@ -1,12 +1,13 @@
 // A person card's own lines (soul + persona), as data: closed, one dim line; open, the lot. Pure.
 import { personaLines, type Persona } from "../kit/persona"
-import { soulLines, soulNote, type Soul } from "../kit/souls"
+import { diaryEntries, soulLines, soulNote, type Soul } from "../kit/souls"
 
 export type CardLine = { tone: "dim" | "key" | "plain"; text: string }
 
 export function personCard(soul: Soul | undefined, persona: Persona | null | undefined, width: number, open: boolean): CardLine[] {
   const parts = personaLines(persona, width)
   const sl = soul ? soulLines(soul) : []
+  const lately = soul ? diaryEntries(soul).at(-1) : undefined
   if (!open) {
     const first = persona?.backstory ?? sl[0]?.text.split("\n")[0]
     if (!first) return []
@@ -16,6 +17,7 @@ export function personCard(soul: Soul | undefined, persona: Persona | null | und
   }
   return [
     ...(soul ? [{ tone: "dim" as const, text: "soul" }] : []),
+    ...(lately ? [{ tone: "key" as const, text: `lately: ${lately}` }] : []),
     ...sl.flatMap(({ head, text }): CardLine[] => [
       ...(head ? [{ tone: "key" as const, text: head }] : []),
       ...(soulNote(head) ? [{ tone: "dim" as const, text: soulNote(head)! }] : []),

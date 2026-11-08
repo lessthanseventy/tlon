@@ -40,3 +40,13 @@ export function soulLines(s: Soul): { head: string; text: string }[] {
   const raw = s.raw.trim()
   return lines.length || !raw ? lines : [{ head: "", text: raw }]
 }
+
+/** the diary's entries, oldest first: its `- ` bullets, bare */
+export const diaryEntries = (s: Soul): string[] =>
+  (s.sections["Diary"] ?? "").split("\n").map(l => l.replace(/^\s*[-*]\s*/, "").trim()).filter(Boolean)
+
+/** a diary entry said aloud: the date lead-in (`Oct 2:`) dropped, the first letter capital */
+export function spoken(entry: string): string {
+  const t = entry.replace(/^[A-Za-z]{3,9}\.? \d{1,2}:\s*/, "")
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
