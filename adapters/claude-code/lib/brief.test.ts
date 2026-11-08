@@ -25,6 +25,13 @@ function dossier(over: Partial<Dossier> = {}): Dossier {
 }
 
 describe("renderBrief — the honest brief (pi doc §2b)", () => {
+  test("a thread started from a ticket shows the ticket's ask, and none is no section (D1)", () => {
+    const out = renderBrief(dossier({ ticket: { id: 42, title: "the ask", status: "doing", body: "why it matters" } }), NOW);
+    expect(out).toContain("## Ticket #42  (doing): the ask");
+    expect(out).toContain("why it matters");
+    expect(renderBrief(dossier({ ticket: null }), NOW)).not.toContain("## Ticket");
+  });
+
   test("the goal, the lead and the thread head the brief", () => {
     const out = renderBrief(dossier(), NOW);
     expect(out).toContain("review PR 329");

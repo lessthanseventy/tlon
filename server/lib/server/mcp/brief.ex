@@ -20,6 +20,8 @@ defmodule Server.MCP.Brief do
   alias Server.Todo
   alias Server.Workspace
 
+  @ticket_body 4_000
+
   @doc "A Board.brief/1 map, rendered."
   def scope(scope) do
     %{
@@ -37,6 +39,7 @@ defmodule Server.MCP.Brief do
       "checks" => capped(scope.checks, &check/1),
       "commits" => capped(scope.commits, &commit/1),
       "workline" => workline(scope.workline),
+      "ticket" => scope[:ticket] && brief_ticket(scope.ticket),
       "cited" => Enum.map(scope.cited, &cited/1),
       "recent" => Enum.map(scope.recent, &message/1)
     }
@@ -50,6 +53,19 @@ defmodule Server.MCP.Brief do
   @doc "A commit the thread made — `Server.Commits` row; the sha is cut to 12 like the artifact checker's."
   def commit(%{sha: sha, subject: subject, author: author, at: at}) do
     %{"sha" => String.slice(sha, 0, 12), "subject" => subject, "author" => author, "at" => at}
+  end
+
+  @doc "The thread's ticket as the brief carries it: `ticket/1` plus its body, cut at #{@ticket_body} chars with a pointer to the whole."
+  def brief_ticket(%Ticket{} = t) do
+    body = t.body || ""
+    cut = String.length(body) - @ticket_body
+
+    body =
+      if cut > 0,
+        do: String.slice(body, 0, @ticket_body) <> "\n[cut #{cut} chars; get_ticket(#{t.id})]",
+        else: body
+
+    Map.put(ticket(t), "body", body)
   end
 
   @doc "The workline gate as the brief carries it — nil for a plain thread."

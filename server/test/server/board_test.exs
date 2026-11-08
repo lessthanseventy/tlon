@@ -140,6 +140,25 @@ defmodule Server.BoardTest do
     end
   end
 
+  describe "Board.brief/1 — TICKET (D1)" do
+    test "a thread started from a ticket carries it, its body cut with a pointer to the whole" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Briefed"})
+      long = String.duplicate("x", 4_100)
+      {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "the ask", body: "why: " <> long})
+      {:ok, thread} = Channel.open_thread(%{title: "work on it", workspace_id: ws.id})
+      {:ok, _} = Server.Tickets.promote(ticket, thread.id)
+
+      assert %{"ticket" => rendered} = thread |> Board.brief() |> Server.MCP.Brief.scope()
+      assert %{"id" => id, "title" => "the ask", "status" => "doing"} = rendered
+      assert id == ticket.id
+      assert String.starts_with?(rendered["body"], "why: xxx")
+      assert rendered["body"] =~ "[cut 105 chars; get_ticket(#{ticket.id})]"
+
+      {:ok, plain} = Channel.open_thread(%{title: "no ticket", workspace_id: ws.id})
+      assert %{"ticket" => nil} = plain |> Board.brief() |> Server.MCP.Brief.scope()
+    end
+  end
+
   describe "Board.brief/1 — BRIEF" do
     test "assembles GOAL, lead, TODOS/NEXT/DONE, LEARNINGS, BLOCKERS, RECENT" do
       {:ok, thread} = Channel.open_thread(%{title: "review PR 329"})

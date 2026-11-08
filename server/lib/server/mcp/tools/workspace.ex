@@ -283,6 +283,10 @@ defmodule Server.MCP.Tool.ListTickets do
 
   schema do
     field :include_done, :boolean, default: false, description: "Include done tickets (default: only open)"
+    field :status, :enum, values: ["backlog", "todo", "doing", "done"], description: "Only tickets at this status"
+    field :assignee, :string, description: "Only tickets assigned to this handle"
+    field :label, :string, description: "Only tickets carrying this label"
+    field :limit, :integer, description: "At most this many"
   end
 
   @impl true
@@ -293,11 +297,44 @@ defmodule Server.MCP.Tool.ListTickets do
 
       workspace_id ->
         tickets =
-          if params[:include_done],
+          if params[:include_done] or params[:status] == "done",
             do: Tickets.in_workspace(workspace_id),
             else: Tickets.open_in_workspace(workspace_id)
 
+        tickets =
+          tickets
+          |> Enum.filter(&(is_nil(params[:status]) or &1.status == params[:status]))
+          |> Enum.filter(&(is_nil(params[:assignee]) or &1.assignee == params[:assignee]))
+          |> Enum.filter(&(is_nil(params[:label]) or params[:label] in (&1.labels || [])))
+          |> then(&if(params[:limit], do: Enum.take(&1, params[:limit]), else: &1))
+
         ok(frame, Enum.map(tickets, &MCP.Brief.ticket/1))
+    end
+  end
+end
+
+defmodule Server.MCP.Tool.GetTicket do
+  @moduledoc "One ticket of this workspace whole: what `list_tickets` shows of it, plus its body (its filing and every sighting appended since)."
+  use Server.MCP.Tool
+
+  alias Server.MCP
+  alias Server.MCP.Tool
+  alias Server.Tickets
+
+  schema do
+    field :id, :integer, required: true, description: "The ticket id"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    workspace_id = Tool.workspace_of(Identity.from_frame(frame))
+
+    case Tickets.get(params[:id]) do
+      %{workspace_id: ^workspace_id} = t when not is_nil(workspace_id) ->
+        ok(frame, Map.put(MCP.Brief.ticket(t), "body", t.body))
+
+      _ ->
+        fail(frame, "no ticket ##{params[:id]} on this workspace (list_tickets shows what is)")
     end
   end
 end

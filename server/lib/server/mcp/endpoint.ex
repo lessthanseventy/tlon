@@ -94,6 +94,7 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.FileTicket, name: "file_ticket")
   component(Server.MCP.Tool.Suggest, name: "suggest")
   component(Server.MCP.Tool.ListTickets, name: "list_tickets")
+  component(Server.MCP.Tool.GetTicket, name: "get_ticket")
   component(Server.MCP.Tool.UpdateTicket, name: "update_ticket")
   component(Server.MCP.Tool.StartTicket, name: "start_ticket")
   component(Server.MCP.Tool.BlockedOn, name: "blocked_on")
