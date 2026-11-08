@@ -412,15 +412,41 @@ defmodule Server.Jobs.KeepUpTest do
       end
 
       KeepUp.warm_test_builds([repo], head.("aaa"))
-      assert_receive {:ran, "timeout", [_, "mise", "exec", "--", "mix", "compile"], opts}
+      assert_received {:ran, "timeout", [_, "mise", "exec", "--", "mix", "compile"], opts}
       assert opts[:cd] == Path.join(repo, "server")
       assert {"MIX_ENV", "test"} in opts[:env]
 
       KeepUp.warm_test_builds([repo], head.("aaa"))
-      refute_receive {:ran, _, _, _}, 100
+      refute_received {:ran, _, _, _}
 
       KeepUp.warm_test_builds([repo], head.("bbb"))
-      assert_receive {:ran, "timeout", _, _}
+      assert_received {:ran, "timeout", _, _}
+    end
+
+    test "a failed compile leaves the tip unwarmed: the next pass tries again" do
+      repo = Path.join(System.tmp_dir!(), "warm-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(repo)
+      File.write!(Path.join(repo, "mix.exs"), "")
+      on_exit(fn -> File.rm_rf!(repo) end)
+      test = self()
+
+      run = fn code ->
+        fn
+          "git", _, _ ->
+            {"ccc\n", 0}
+
+          exe, _, _ ->
+            send(test, {:ran, exe})
+            {"boom", code}
+        end
+      end
+
+      assert ExUnit.CaptureLog.capture_log(fn -> KeepUp.warm_test_builds([repo], run.(1)) end) =~ "boom"
+      assert_received {:ran, "timeout"}
+      KeepUp.warm_test_builds([repo], run.(0))
+      assert_received {:ran, "timeout"}
+      KeepUp.warm_test_builds([repo], run.(0))
+      refute_received {:ran, _}
     end
   end
 end

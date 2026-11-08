@@ -16,7 +16,7 @@ defmodule Server.Jobs.KeepUp do
   following its main, and it has one keyed rollout note (`keep_up:remote:<repo>`) saying so, cleared
   once its origin is on GitHub.
 
-  Each main checkout's mix projects are compiled for test once per new tip, in the background
+  Each main checkout's mix projects are compiled for test once per new tip, last in the job
   (`warm_test_builds/2`), so the `_build` a seat's worktree seeds from is current.
 
   A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
@@ -32,6 +32,8 @@ defmodule Server.Jobs.KeepUp do
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 120]
 
+  require Logger
+
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
     repos = repos()
@@ -42,20 +44,21 @@ defmodule Server.Jobs.KeepUp do
   end
 
   @doc """
-  Compile each mix project of `repos`' main checkouts for test, once per main tip and in the
-  background. A seat's worktree seeds its `_build` from there (`Server.Worktree`), and nothing else
-  builds the main checkout for test: a stale seed made a seat's first test run compile the whole app
-  and outlast menard's tool wall (#760). Bounded at 15 minutes; a failed compile is the next tip's
-  to retry, and a git that won't run warms nothing (the repo pass reports it).
+  Compile each mix project of `repos`' main checkouts for test, once per main tip, last in the job.
+  A seat's worktree seeds its `_build` from there (`Server.Worktree`), and nothing else builds the
+  main checkout for test: a stale seed made a seat's first test run compile the whole app and
+  outlast menard's tool wall (#760). In the job, not beside it, so two never compile one `_build` at
+  once (the job is unique while it runs). Bounded at 15 minutes each; a tip is marked warm only once
+  every compile passed, so a failed one is logged and tried again on the next pass; a git that won't
+  run warms nothing (the repo pass reports it).
   """
   def warm_test_builds(repos, run \\ &System.cmd/3) do
     for repo <- repos,
         {sha, 0} <- [head(repo, run)],
         key = {__MODULE__, :warm, repo},
-        :persistent_term.get(key, nil) != sha do
-      :persistent_term.put(key, sha)
-      compile_for_test(repo, run)
-    end
+        :persistent_term.get(key, nil) != sha,
+        compile_for_test(repo, run) == [],
+        do: :persistent_term.put(key, sha)
 
     :ok
   end
@@ -319,15 +322,24 @@ defmodule Server.Jobs.KeepUp do
     _ -> :error
   end
 
+  # the projects whose compile failed, each logged
   defp compile_for_test(repo, run) do
-    for mix <- Path.wildcard(Path.join(repo, "mix.exs")) ++ Path.wildcard(Path.join(repo, "*/mix.exs")) do
-      Task.start(fn ->
-        run.("timeout", ["900", "mise", "exec", "--", "mix", "compile"],
-          cd: Path.dirname(mix),
-          env: [{"MIX_ENV", "test"}],
-          stderr_to_stdout: true
-        )
-      end)
+    for mix <- Path.wildcard(Path.join(repo, "mix.exs")) ++ Path.wildcard(Path.join(repo, "*/mix.exs")),
+        dir = Path.dirname(mix),
+        {out, code} = compile(dir, run),
+        code != 0 do
+      Logger.warning("keep_up: the test build of #{dir} failed (exit #{code}): #{String.slice(out, -300, 300)}")
+      dir
     end
+  end
+
+  defp compile(dir, run) do
+    run.("timeout", ["900", "mise", "exec", "--", "mix", "compile"],
+      cd: dir,
+      env: [{"MIX_ENV", "test"}],
+      stderr_to_stdout: true
+    )
+  rescue
+    e -> {Exception.message(e), 1}
   end
 end
