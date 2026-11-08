@@ -18,7 +18,7 @@ import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temperament"
 import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type Guest, type Toys, type VisitorKind } from "./door"
-import { CHAINS, EVENTS, EVENT_KINDS, GARY_ACT, GARY_SPIN, blackoutAt, flickerAt, garyLeads, garyRoll, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type GaryRoll, type Geo, type Prop } from "./events"
+import { CHAINS, EVENTS, EVENT_KINDS, GARY_ACT, GARY_SPIN, blackoutAt, dimAt, flickerAt, garyLeads, garyRoll, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type GaryRoll, type Geo, type Prop } from "./events"
 import { SHERIFF } from "./scharlach"
 import { DEFAULT, meanGap, resolve, type Dials } from "./whimsy"
 import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
@@ -140,7 +140,7 @@ export type Party = { agent: string; until: number }
 export const readTicks = (text: string) => Math.min(400, Math.max(100, 40 + text.length * 2))
 
 /** the server's names for the scenes, as its reaction pool keys them */
-const SERVER_EVENT: Record<EventKind, string> = { drill: "fire_drill", zoo: "zoo", meteor: "meteor", power: "power_cut", duck: "duck", gary: "gary" }
+const SERVER_EVENT: Record<EventKind, string> = { drill: "fire_drill", zoo: "zoo", meteor: "meteor", power: "power_cut", duck: "duck", gary: "gary", planes: "planes", pizza: "pizza", nap: "nap" }
 
 export class Sim<L extends { people: Seat[] }> {
   protected cat: Cat
@@ -533,6 +533,8 @@ export class Sim<L extends { people: Seat[] }> {
     this.beats(0)
     this.react(k)
     if (k === "drill") this.drillUntil = this.tick + DRILL
+    if (k === "pizza") this.pizzaUntil = this.tick + EVENTS.pizza.ticks
+    if (k === "nap" && this.running.idle[0]) this.catKeyboard(this.running.idle[0])
     this.changed = true
     return true
   }
@@ -558,9 +560,15 @@ export class Sim<L extends { people: Seat[] }> {
     if (host && this.blackout()) props.push({ kind: "candle", x: host.x + 4, y: host.y, step: Math.floor(this.tick / 4) % 2 })
     const sheriff = r.sheriff ? this.actors.get(r.sheriff) : undefined
     if (sheriff && this.chasing(r, this.tick - r.since)) props.push({ kind: "net", x: sheriff.x - 8, y: sheriff.y })
+    if (this.dimmed()) for (const n of r.idle) {
+      const a = this.actors.get(n)
+      if (a && !a.leaving) props.push({ kind: "zzz", x: a.x, y: a.y - heightOf(a.look), step: Math.floor(this.tick / 12) % 2 })
+    }
     return props
   }
   blackout(): boolean { const r = this.running; return !!r && blackoutAt(r.kind, this.tick - r.since) }
+  /** the power nap's half-light: the floor dims, the lamps stay on */
+  dimmed(): boolean { const r = this.running; return !!r && dimAt(r.kind, this.tick - r.since) }
   lampFlicker(): boolean | null { const r = this.running; return r ? flickerAt(r.kind, this.tick - r.since) : null }
 
   /** where the running scene wants this idle coworker, or null to let them idle as usual */
@@ -579,6 +587,12 @@ export class Sim<L extends { people: Seat[] }> {
       const s = w[i % w.length]
       return s ? { ...s, x: s.x + 12 * Math.floor(i / w.length) } : null
     }
+    if (r.kind === "pizza" && t >= 60 && t < EVENTS.pizza.ticks - 100) {
+      const k = this.plan.lounge.filter((s) => s.kind === "cooler" || s.kind === "coffee")
+      const s = k[i % k.length]
+      return s ? { ...s, x: s.x - 12 * Math.floor(i / k.length) } : null
+    }
+    if (r.kind === "nap" && t >= 60 && t < EVENTS.nap.ticks - 100) return this.plan.lounge.filter((s) => s.kind === "couch")[i] ?? null
     return null
   }
 
