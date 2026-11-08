@@ -1482,6 +1482,27 @@ defmodule Server.Office.NeedsTest do
       assert Needs.grouped().uqbar == []
     end
 
+    test "a pass over 30 s is one health:job_slow item naming it, gone when a faster pass follows" do
+      health_reading(%{tmux: true, disk_pct: 10, mem_pct: 10})
+      done = DateTime.utc_now()
+
+      slow = fn took ->
+        %{}
+        |> Oban.Job.new(worker: "Server.Jobs.Staff", queue: "staff")
+        |> Ecto.Changeset.change(state: "completed", attempted_at: DateTime.add(done, -took), completed_at: done)
+        |> Server.Repo.insert!()
+      end
+
+      slow.(41)
+      assert [%{key: "health:job_slow", kind: "health", text: text}] = Needs.list()
+      assert text =~ "Staff"
+      assert text =~ "41"
+
+      Server.Repo.delete_all(Oban.Job)
+      slow.(2)
+      assert Needs.list() == []
+    end
+
     test "a disk or memory at 90% is health:disk or health:mem, and each clears below it" do
       health_reading(%{tmux: true, disk_pct: 90, mem_pct: 95})
       assert ~w(health:disk health:mem) == Needs.grouped().uqbar |> Enum.map(& &1.key) |> Enum.sort()
