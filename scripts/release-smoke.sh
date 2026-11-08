@@ -159,7 +159,8 @@ if [ -z "$url" ]; then
 
   # the heavy step, one at a time machine-wide: concurrent builds starve Postgres of connections.
   # Only this step: a built smoke (or a hold, for hours) runs on beside others.
-  smoke_build_lock "$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)/tlon-smoke-build.lock" "pid $$ (${sha:0:7})"
+  smoke_build_lock "$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)/tlon-smoke-build.lock" "pid $$ (${sha:0:7})" ||
+    fail "${sha:0:7}: timed out waiting for another build's lock after ${TLON_SMOKE_BUILD_WAIT:-1200}s"
   # chained with &&, not set -e: a subshell tested by `||` ignores set -e, and a failed build
   # would go on to the steps after it
   build_steps() {

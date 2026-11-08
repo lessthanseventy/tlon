@@ -2,13 +2,16 @@
 # connections and fail at a migration's pool timeout, so the heavy step — mix release, the database's
 # drop/create, the migration — runs under one machine-wide lock; a built smoke runs on beside others.
 
-# smoke_build_lock <lockfile> <who>: blocks until no other build holds the lock (fd 5), saying whose
-# build it waits for. The kernel frees the lock with the holder, so a killed build blocks no one.
+# smoke_build_lock <lockfile> <who>: waits until no other build holds the lock (fd 5), saying whose
+# build it waits for, for at most TLON_SMOKE_BUILD_WAIT seconds (default 1200, inside a schedule's
+# 30-minute silence kill); returns 1 when that runs out. The kernel frees the lock with the holder,
+# so a killed build blocks no one.
 smoke_build_lock() {
+  local wait="${TLON_SMOKE_BUILD_WAIT:-1200}"
   exec 5>>"$1"
   if ! flock -n 5; then
-    echo "smoke: waiting for $(head -n 1 "$1" 2>/dev/null | grep . || echo someone)'s build"
-    flock 5
+    echo "smoke: waiting for $(head -n 1 "$1" 2>/dev/null | grep . || echo someone)'s build, up to ${wait}s"
+    flock -w "$wait" 5 || return 1
   fi
   printf '%s\n' "$2" >"$1"
 }

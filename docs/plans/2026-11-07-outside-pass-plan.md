@@ -448,7 +448,8 @@ snapshot on 304. `Sonnet · S`, after B1.
   each its own fix (#781 and #864 go with B5).
   Done: #793 (`BranchReview.record/1` posts the verdict on the review's thread and the branch's workline thread).
   #841 (`PM.cut` posts a refused restart on the root thread; `release.sh` exits 1 on the restart's 409).
-  Left: #750, #812.
+  #750 (the smoke's build-lock wait is bounded by `TLON_SMOKE_BUILD_WAIT`, 1200s, and says so).
+  Left: #812.
 
 **E2 · A landing's gate already is `check:main` on the new tip — record it.** `Opus · M`
 - Why: `release:status` today: main is two commits past the release and "no check:main on 92b914e;
