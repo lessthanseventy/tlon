@@ -691,6 +691,10 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: `kit/board.ts` (`whiteboardItems(a, ctx)`, `hitFor(person)`) and a shared `seatPlan(a)`;
   the rooms keep geometry only.
 - Check: `rail-portable.test.ts` (no `node:` import) and the golden frames unchanged.
+- Done: `kit/board.ts` holds `whiteboardItems` (the TICKETS stickies folded in), `hitFor`/`idOf` (a line's tip and
+  target) and `seatPlan`; both rooms use them. `boardColumns` already lived in `kit/crew.ts`; the rooms' desk
+  `layout`s differ in geometry only. Suite (972) and golden frames green. Left: the cork notes stay per room (ink
+  and slots differ); a rail sticky's tip now carries `#id` like the wide room's.
 
 **G3 · Determinism is claimed and not enforced.** `Sonnet · S`
 - Why: 85 `Math.random` calls in `kit/` and `rooms/` (33 in `sim.ts`); `kit/rng.ts` exists; the
