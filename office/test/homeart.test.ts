@@ -198,3 +198,16 @@ describe("the office in the build grid", () => {
     expect(Buffer.from(dimmed.rgba).equals(Buffer.from(plain.rgba))).toBe(false)
   })
 })
+
+describe("the gym and the trophy shelf", () => {
+  const view = (kind: string, frames?: { routine: number; tier: number }[]) =>
+    Buffer.from(renderHome({ ...base, home: { tiles: [{ kind, at: [0, 0] }] } as never, frames }).rgba).toString("hex")
+  test("the dumbbell's plates grow with the best streak tier", () => {
+    const sizes = [0, 1, 2, 3].map((tier) => view("gym", tier ? [{ routine: 1, tier }] : []))
+    expect(new Set(sizes).size).toBe(4)
+  })
+  test("the best tier counts, not the first routine's", () =>
+    expect(view("gym", [{ routine: 1, tier: 1 }, { routine: 2, tier: 3 }])).toBe(view("gym", [{ routine: 2, tier: 3 }])))
+  test("streak photos hang on the trophy shelf", () => expect(view("trophy-shelf", [{ routine: 1, tier: 1 }])).not.toBe(view("trophy-shelf")))
+  test("the pond has no streak and draws the same with frames", () => expect(view("pond", [{ routine: 1, tier: 3 }])).toBe(view("pond")))
+})
