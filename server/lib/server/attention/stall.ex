@@ -5,7 +5,8 @@ defmodule Server.Attention.Stall do
   a `stall` message from `tlon` on the thread, opened when a window whose agent declared thinking
   (`Server.Presence.Thinking`) shows the same pane text for the band (`:attention_stall_ms`,
   default 5 minutes) and resolved when the pane moves or the window closes. Nothing is typed or
-  killed: deciding whether to nudge, restart or wait is the operator's.
+  killed: deciding whether to nudge, restart or wait is the operator's. A freeze is flagged once
+  (the row carries when the pane last moved): resolving the row by hand does not raise it again.
 
   A pane waiting on a dialog is `Server.Attention`'s prompt, not a stall; nor is one whose thread's
   landing or verify is queued or running (`Server.Jobs.Land`, `Server.Jobs.Verify`): the checks
@@ -75,8 +76,9 @@ defmodule Server.Attention.Stall do
     since = since(panes[key], hash, open, now)
 
     if is_nil(open) and DateTime.diff(now, since, :millisecond) >= band and
-         thinking?(tid, tab) and is_nil(Attention.open_prompt(tid, tab.name)) and not machine_has_it?(tid) do
-      open(workspace_id, tid, tab.name, DateTime.diff(now, since, :minute))
+         thinking?(tid, tab) and is_nil(Attention.open_prompt(tid, tab.name)) and not machine_has_it?(tid) and
+         not flagged?(tid, tab.name, since) do
+      open(workspace_id, tid, tab.name, since, DateTime.diff(now, since, :minute))
     end
 
     {key, {hash, since}}
@@ -117,13 +119,13 @@ defmodule Server.Attention.Stall do
 
   # Delivered at birth: the row is the operator's to read; the switchboard must not type it into
   # the frozen pane.
-  defp open(workspace_id, thread_id, window, minutes) do
+  defp open(workspace_id, thread_id, window, since, minutes) do
     %{
       thread_id: thread_id,
       author: "tlon",
       kind: "stall",
       body: "⚠ stalled — #{window} is mid-turn and its pane has not changed for #{minutes}m",
-      payload: %{"window" => window, "workspace_id" => workspace_id}
+      payload: %{"window" => window, "workspace_id" => workspace_id, "since" => DateTime.to_iso8601(since)}
     }
     |> Message.post_changeset()
     |> Ecto.Changeset.put_change(:delivered_at, DateTime.truncate(DateTime.utc_now(), :second))
@@ -136,6 +138,18 @@ defmodule Server.Attention.Stall do
     |> Message.resolve_changeset(resolution)
     |> Repo.update!()
     |> tap(&Bus.broadcast({:prompt_resolved, &1}))
+  end
+
+  # One flag per freeze: a stall someone resolved while the pane stayed frozen is not posted again.
+  defp flagged?(thread_id, window, since) do
+    since = DateTime.to_iso8601(since)
+
+    Repo.exists?(
+      from m in Message,
+        where:
+          m.thread_id == ^thread_id and m.kind == "stall" and
+            fragment("? ->> 'window'", m.payload) == ^window and fragment("? ->> 'since'", m.payload) == ^since
+    )
   end
 
   defp open_stall(thread_id, window) do
