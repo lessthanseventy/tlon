@@ -90,3 +90,14 @@ export function floorPlan(home: Home, w: number, floor: FloorHome = { tiles: [] 
     },
   }
 }
+
+const street = (cols: number): FloorHome["tiles"] => Array.from({ length: cols }, (_, i) => ({ kind: "street", at: [i, OFFICE_ROWS] }))
+const row = (kinds: FloorHome["tiles"][number]["kind"][], y: number): FloorHome["tiles"] => kinds.map((kind, i) => ({ kind, at: [i, OFFICE_ROWS + y] }))
+
+/** the starting floors a new home can begin from, each a function of the street's width in cells */
+export const FLOORS: Record<string, (cols: number) => FloorHome> = {
+  studio: (cols) => ({ tiles: [...street(cols), ...row(["living", "kitchen"], 1), ...row(["bedroom", "bathroom"], 2)] }),
+  house: (cols) => ({
+    tiles: [...street(cols), ...row(["living", "bedroom", "kitchen", "bathroom"], 1), ...row(["garden", "gym", "trophy-shelf", "pond"], 2)],
+  }),
+}

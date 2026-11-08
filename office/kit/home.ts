@@ -4,8 +4,8 @@
 // connectivity is just grid adjacency — the rule a drop must keep: the floor stays one piece, or
 // the drop is refused.
 
-export type HomeTileKind = "living" | "kitchen" | "bathroom" | "bedroom" | "street" | "garden"
-export const CATALOGUE: HomeTileKind[] = ["living", "kitchen", "bathroom", "bedroom", "street", "garden"]
+export type HomeTileKind = "living" | "kitchen" | "bathroom" | "bedroom" | "street" | "garden" | "gym" | "trophy-shelf" | "pond"
+export const CATALOGUE: HomeTileKind[] = ["living", "kitchen", "bathroom", "bedroom", "street", "garden", "gym", "trophy-shelf", "pond"]
 
 import type { Rect } from "./tiles"
 
@@ -162,6 +162,9 @@ export const HOME_BLOCKS: Record<HomeTileKind, Rect[]> = {
   bedroom: [{ x: 1, y: 1, w: 6, h: 8 }],
   street: [],
   garden: [{ x: 1, y: 3, w: 11, h: 2 }, { x: 1, y: 6, w: 11, h: 2 }],
+  gym: [{ x: 1, y: 1, w: 8, h: 2 }, { x: 1, y: 8, w: 10, h: 2 }],
+  "trophy-shelf": [{ x: 1, y: 5, w: 10, h: 6 }],
+  pond: [{ x: 2, y: 2, w: 8, h: 8 }],
 }
 
 /** a footprint turned clockwise with its tile (the sprite is 12×12) */
