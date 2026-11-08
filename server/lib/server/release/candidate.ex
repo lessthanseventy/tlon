@@ -57,6 +57,27 @@ defmodule Server.Release.Candidate do
     end
   end
 
+  @doc """
+  A landing just merged `gated`, the head its gate passed, into `repo`'s main: when `repo` is tlon's
+  and main's tip now holds exactly that tree, the gate is `check:main` on the tip, recorded as a run
+  passed there. GitHub's rebase writes new commits, so the tree is what is compared; a tip with any
+  other tree (main moved past it) gets nothing. `:recorded` or `:skipped`.
+  """
+  def landed(repo, gated, run \\ &System.cmd/3) do
+    git = fn args -> run.("git", ["-C", repo | args], stderr_to_stdout: true) end
+
+    with true <- Path.expand(repo) == Path.expand(Server.Profiles.tlon_root()),
+         {_, 0} <- git.(["fetch", "-q", "origin", "main"]),
+         {tip, 0} <- git.(["rev-parse", "origin/main"]),
+         {tree, 0} <- git.(["rev-parse", "origin/main^{tree}"]),
+         {^tree, 0} <- git.(["rev-parse", "#{gated}^{tree}"]),
+         {:ok, _} <- record("gate", String.trim(tip), 0) do
+      :recorded
+    else
+      _ -> :skipped
+    end
+  end
+
   @doc "Whether every check on `sha` passes."
   @spec releasable?(String.t(), keyword()) :: boolean()
   def releasable?(sha, opts \\ []), do: Enum.all?(check(sha, opts), & &1.ok)
