@@ -39,15 +39,15 @@ defmodule Server.MCP.Tool.ReviewBranch do
 
   defp record(params, identity, frame) do
     case Server.BranchReview.record(%{
-           branch: params[:branch],
-           sha: params[:sha],
-           verdict: params[:verdict],
+           branch: params.branch,
+           sha: params.sha,
+           verdict: params.verdict,
            by: identity.agent,
-           body: params[:body],
+           body: params.body,
            thread_id: identity.thread_id,
            repo: Server.Profiles.tlon_root()
          }) do
-      {:ok, _} -> ok(frame, %{"recorded" => params[:verdict], "branch" => params[:branch], "sha" => params[:sha]})
+      {:ok, _} -> ok(frame, %{"recorded" => params.verdict, "branch" => params.branch, "sha" => params.sha})
       {:error, why} when is_binary(why) -> fail(frame, why)
       {:error, why} -> fail(frame, "not recorded: #{explain(why)}")
     end
@@ -71,9 +71,9 @@ defmodule Server.MCP.Tool.LandPR do
   def execute(params, frame) do
     by = Identity.from_frame(frame).agent
 
-    case Server.PRLanding.request(Server.Profiles.tlon_root(), params[:pr], by: by) do
+    case Server.PRLanding.request(Server.Profiles.tlon_root(), params.pr, by: by) do
       {:ok, _job} ->
-        ok(frame, %{"queued" => params[:pr], "next" => "its outcome is posted on its review's thread"})
+        ok(frame, %{"queued" => params.pr, "next" => "its outcome is posted on its review's thread"})
 
       {:error, why} when is_binary(why) ->
         fail(frame, "refused: #{why}")

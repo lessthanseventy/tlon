@@ -21,7 +21,7 @@ defmodule Server.MCP.Tool.RunTask do
     with %Server.Thread{} = thread <-
            Server.Channel.thread(identity.thread_id) || {:error, "no thread for this session"},
          {:ok, tree} <- checkout(thread),
-         {:ok, job} <- RunTask.enqueue(thread.id, identity.agent, params[:task], tree) do
+         {:ok, job} <- RunTask.enqueue(thread.id, identity.agent, params.task, tree) do
       ok(frame, %{
         "queued" => job.id,
         "ref" => String.slice(job.args.ref, 0, 7),

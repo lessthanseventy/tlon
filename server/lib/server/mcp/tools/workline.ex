@@ -72,13 +72,13 @@ defmodule Server.MCP.Tool.SubmitReview do
     identity = Identity.from_frame(frame)
 
     with %Server.Thread{} = thread <- acting_thread(params, frame),
-         :ok <- known_verdict(params[:verdict]),
+         :ok <- known_verdict(params.verdict),
          nil <- Server.Workline.self_review(thread, identity.agent),
-         {:ok, rel} <- Review.submit(thread, params[:body], identity.agent) do
+         {:ok, rel} <- Review.submit(thread, params.body, identity.agent) do
       follow_ups = Server.Workline.follow_up_items(params[:follow_ups] || [])
       lead = Channel.thread_lead(thread.id)
 
-      case Server.Workline.review_verdict(thread, params[:verdict], identity.agent, follow_ups: follow_ups) do
+      case Server.Workline.review_verdict(thread, params.verdict, identity.agent, follow_ups: follow_ups) do
         {:ok, _} = outcome ->
           approved(frame, rel, follow_ups, outcome, lead)
 
@@ -192,7 +192,7 @@ defmodule Server.MCP.Tool.SubmitQA do
     follow_ups = Workline.follow_up_items(params[:follow_ups] || [])
     n = length(follow_ups)
 
-    case Workline.qa_verdict(thread, params[:verdict], identity.agent, params[:report],
+    case Workline.qa_verdict(thread, params.verdict, identity.agent, params.report,
            follow_ups: follow_ups,
            session_id: identity.session_id
          ) do
@@ -247,7 +247,7 @@ defmodule Server.MCP.Tool.SendBack do
     with %Server.Thread{stage: stage} = thread when not is_nil(stage) <-
            Channel.thread(params[:thread_id] || identity.thread_id) || {:error, "no such thread"},
          {:ok, back} <-
-           Workline.send_back(thread, params[:stage], params[:why], identity.agent, unqueue: params[:unqueue] == true) do
+           Workline.send_back(thread, params.stage, params.why, identity.agent, unqueue: params[:unqueue] == true) do
       ok(frame, %{"thread_id" => back.id, "stage" => back.stage, "lead" => Channel.thread_lead(back.id)})
     else
       %Server.Thread{} ->

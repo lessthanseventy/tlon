@@ -38,7 +38,7 @@ defmodule Server.MCP.Tool.SupersedeFact do
     identity = Identity.from_frame(frame)
     opts = [by: identity.agent, thread_id: identity.thread_id, workspace_id: Server.MCP.Tool.workspace_of(identity)]
 
-    case Server.Librarian.supersede(params[:old_id], params[:new_id], params[:reason], opts) do
+    case Server.Librarian.supersede(params.old_id, params.new_id, params.reason, opts) do
       {:ok, new} -> ok(frame, %{"fact" => new.id, "supersedes" => new.supersedes})
       {:error, why} -> fail(frame, L.why(why))
     end
@@ -64,7 +64,7 @@ defmodule Server.MCP.Tool.ForgetFact do
     identity = Identity.from_frame(frame)
     opts = [by: identity.agent, thread_id: identity.thread_id, workspace_id: Server.MCP.Tool.workspace_of(identity)]
 
-    case Server.Librarian.forget(params[:fact_id], params[:reason], opts) do
+    case Server.Librarian.forget(params.fact_id, params.reason, opts) do
       {:ok, fact} -> ok(frame, %{"forgot" => fact.id})
       {:error, why} -> fail(frame, L.why(why))
     end
@@ -109,12 +109,12 @@ defmodule Server.MCP.Tool.DecideProposal do
     identity = Identity.from_frame(frame)
     opts = [by: identity.agent, workspace_id: Server.MCP.Tool.workspace_of(identity)]
 
-    case Server.Librarian.decide(params[:event_id], params[:decision], params[:reason], opts) do
+    case Server.Librarian.decide(params.event_id, params.decision, params[:reason], opts) do
       {:error, why} ->
         fail(frame, L.why(why))
 
       decided ->
-        ok(frame, %{"decided" => params[:decision], "result" => result(decided)})
+        ok(frame, %{"decided" => params.decision, "result" => result(decided)})
     end
   end
 
@@ -167,7 +167,7 @@ defmodule Server.MCP.Tool.KnowledgeReport do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    case Server.Librarian.report(Server.MCP.Tool.workspace_of(identity), params[:notes], by: identity.agent) do
+    case Server.Librarian.report(Server.MCP.Tool.workspace_of(identity), params.notes, by: identity.agent) do
       {:ok, message} -> ok(frame, %{"message_id" => message.id, "thread_id" => message.thread_id})
       {:error, why} -> fail(frame, L.why(why))
     end

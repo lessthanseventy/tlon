@@ -245,7 +245,7 @@ defmodule Server.Arbiter.Tmux do
          _ = Server.Orphans.retire(thread_id, author, Application.get_env(:server, :orphans, [])),
          parked? = Server.Staffing.parked_note?(thread_id),
          :ok <- under_cap(tabs, thread, standing?) do
-      leaf_thread = if(!standing?, do: thread_id)
+      leaf_thread = if(not standing?, do: thread_id)
       script = Tmux.boot_script(exports, launcher(ws, author))
       cmd = "/bin/sh -c " <> Tmux.sh_single_quote(script)
 

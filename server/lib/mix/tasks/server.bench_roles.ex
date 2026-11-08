@@ -57,7 +57,8 @@ defmodule Mix.Tasks.Server.BenchRoles do
         grade.passed
       end
 
-    if graded == [] or !Enum.all?(graded), do: Mix.raise("oracle: reference solution not green on every sourced task")
+    if graded == [] or not Enum.all?(graded),
+      do: Mix.raise("oracle: reference solution not green on every sourced task")
   end
 
   defp run(suite, roles, model, out, named?) do

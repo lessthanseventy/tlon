@@ -64,9 +64,9 @@ defmodule Server.MCP.Tool.EditWorkspace do
 
   @impl true
   def execute(params, frame) do
-    case Workspaces.by_name(params[:name]) do
+    case Workspaces.by_name(params.name) do
       nil ->
-        fail(frame, "no such workspace: #{params[:name]}")
+        fail(frame, "no such workspace: #{params.name}")
 
       workspace ->
         # Neither `repos` nor `roster` is a workspace column — both are rows.
@@ -94,9 +94,9 @@ defmodule Server.MCP.Tool.RemoveWorkspace do
 
   @impl true
   def execute(params, frame) do
-    case Workspaces.by_name(params[:name]) do
+    case Workspaces.by_name(params.name) do
       nil ->
-        fail(frame, "no such workspace: #{params[:name]}")
+        fail(frame, "no such workspace: #{params.name}")
 
       workspace ->
         case Workspaces.remove(workspace) do
@@ -192,7 +192,7 @@ defmodule Server.MCP.Tool.FileTicket do
   @impl true
   def execute(%{seen_again: id} = params, frame) when is_integer(id) do
     identity = Identity.from_frame(frame)
-    detail = Enum.join(Enum.reject([params[:title], params[:body]], &(&1 in [nil, ""])), "\n\n")
+    detail = Enum.join(Enum.reject([params.title, params[:body]], &(&1 in [nil, ""])), "\n\n")
     reply(frame, Server.Recurrence.ticket_seen(id, detail, identity.agent), &MCP.Brief.ticket/1)
   end
 
@@ -203,7 +203,7 @@ defmodule Server.MCP.Tool.FileTicket do
     {distinct, params} = Map.pop(params, :distinct, false)
 
     with workspace_id when not is_nil(workspace_id) <- Tool.workspace_of(identity),
-         [] <- if(distinct, do: [], else: Server.Recurrence.similar_tickets(workspace_id, params[:title])),
+         [] <- if(distinct, do: [], else: Server.Recurrence.similar_tickets(workspace_id, params.title)),
          {:ok, issue} <- ownable(issue_id, workspace_id),
          [] <- Tickets.bad_blockers(blocked_by),
          {:ok, ticket} <- Tickets.file(Map.put(params, :workspace_id, workspace_id), session_id: identity.session_id) do
@@ -331,12 +331,12 @@ defmodule Server.MCP.Tool.GetTicket do
   def execute(params, frame) do
     workspace_id = Tool.workspace_of(Identity.from_frame(frame))
 
-    case Tickets.get(params[:id]) do
+    case Tickets.get(params.id) do
       %{workspace_id: ^workspace_id} = t when not is_nil(workspace_id) ->
         ok(frame, Map.put(MCP.Brief.ticket(t), "body", t.body))
 
       _ ->
-        fail(frame, "no ticket ##{params[:id]} on this workspace (list_tickets shows what is)")
+        fail(frame, "no ticket ##{params.id} on this workspace (list_tickets shows what is)")
     end
   end
 end
@@ -380,9 +380,9 @@ defmodule Server.MCP.Tool.UpdateTicket do
 
   @impl true
   def execute(params, frame) do
-    case Tickets.get(params[:id]) do
+    case Tickets.get(params.id) do
       nil ->
-        fail(frame, "no ticket ##{params[:id]}")
+        fail(frame, "no ticket ##{params.id}")
 
       ticket ->
         closing = ticket.status != "done" and params[:status] == "done"
@@ -478,9 +478,9 @@ defmodule Server.MCP.Tool.StartTicket do
 
   @impl true
   def execute(params, frame) do
-    case Tickets.get(params[:id]) do
+    case Tickets.get(params.id) do
       nil ->
-        fail(frame, "no ticket ##{params[:id]}")
+        fail(frame, "no ticket ##{params.id}")
 
       ticket ->
         result =
@@ -521,7 +521,7 @@ defmodule Server.MCP.Tool.BlockedOn do
 
     reply(
       frame,
-      Server.Blocked.declare(params[:ticket_id], identity.thread_id, identity.agent, params[:why]),
+      Server.Blocked.declare(params.ticket_id, identity.thread_id, identity.agent, params.why),
       &MCP.Brief.ticket/1
     )
   end
@@ -600,7 +600,7 @@ defmodule Server.MCP.Tool.WriteNote do
     scope = params[:scope]
     scope_id = resolve_scope_id(scope, params[:scope_id], identity)
 
-    %{body: params[:body], scope: scope, scope_id: scope_id, author: identity.agent}
+    %{body: params.body, scope: scope, scope_id: scope_id, author: identity.agent}
     |> Notes.write()
     |> then(&reply(frame, &1, fn note -> MCP.Brief.note(note) end))
   end

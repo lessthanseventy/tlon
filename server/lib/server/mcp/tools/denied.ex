@@ -28,7 +28,7 @@ defmodule Server.MCP.Tool.ToolDenied do
         correlation: "tool_denied:#{identity.thread_id}",
         detail: %{
           "agent" => identity.agent,
-          "tool" => params[:tool],
+          "tool" => params.tool,
           "summary" => params[:summary],
           "command" => params[:command],
           "reason" => params[:reason]

@@ -26,7 +26,7 @@ defmodule Server.PartCheck do
   def validate(_), do: {:error, :shape}
 
   defp view(rows) when is_map(rows) and map_size(rows) > 0 do
-    Enum.find_value(rows, :ok, fn {k, row} -> if !row_ok?(k, row), do: {:error, {:row, k}} end)
+    Enum.find_value(rows, :ok, fn {k, row} -> if not row_ok?(k, row), do: {:error, {:row, k}} end)
   end
 
   defp view(_), do: {:error, :missing}

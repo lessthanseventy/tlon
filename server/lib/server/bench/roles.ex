@@ -152,7 +152,7 @@ defmodule Server.Bench.Roles do
         %{passed: false, score: nil, detail: "no JSON object with #{Enum.join(Map.keys(expect), ", ")}"}
 
       obj ->
-        misses = for {k, m} <- Enum.sort(expect), !hit?(m, obj[k]), do: "#{k}=#{inspect(obj[k])}"
+        misses = for {k, m} <- Enum.sort(expect), not hit?(m, obj[k]), do: "#{k}=#{inspect(obj[k])}"
         %{passed: misses == [], score: nil, detail: if(misses == [], do: "ok", else: Enum.join(misses, "; "))}
     end
   end
