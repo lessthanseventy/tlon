@@ -89,6 +89,10 @@ SERVER="${TLON_CLI_SERVER:-$root/.release/server/_build/prod/rel/server/bin/serv
 # cost ~2 s CPU for a 0.3 s call (the shell's 30 s agents poll: 7% of a core). One scheduler,
 # no spin: ~0.25 s CPU. Only these client nodes see it; the service node is started elsewhere.
 export ERL_FLAGS="${ERL_FLAGS:-} +S 1:1 +SDcpu 1:1 +SDio 1 +A 1 +sbwt none +sbwtdcpu none +sbwtdio none"
+# A client node that dies on boot (its stderr gone, say) dumps here, not at the root, where
+# `server:doctor` would read its `erl_crash.dump` as the service's.
+dumps="${XDG_STATE_HOME:-$HOME/.local/state}/tlon/crash-dumps"
+mkdir -p "$dumps" && export ERL_CRASH_DUMP="${ERL_CRASH_DUMP:-$dumps/tlon-cli-$(date +%Y%m%dT%H%M%S)-$$.dump}"
 # The header's Subcommands block is the one usage text.
 usage() {
   echo "usage: tlon-cli.sh <subcommand> [args]"
