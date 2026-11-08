@@ -756,6 +756,16 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   `mix deps.get --check-locked`; `check.sh` calls `check:suites` once; the mod check skips with a
   clear line when `claude` is absent.
 - Check: `mise run check` wall time before/after in the PR (read from `.logs/`); green.
+- Done: `check:scripts` runs the nine `scripts/*.test.sh` in this tree as `check:scripts:<name>` tasks
+  in parallel (31 s alone; `office-monitor.test.sh` was unwired and joins); `check:names` keeps the
+  grep gates; `server:eval-det` is its own task (the eval already has its own `tlon_eval_<pid>` db);
+  `server:deps` uses `--check-locked`; `check:all` is `server:deps` then `check:suites` in one mise
+  run (`depends` + `depends_post`), with `check.sh` unchanged; the mod check skips with one line
+  without `claude`. `mise run check` on a dirty tree, forced past the green cache: 1205 s before,
+  746 s after, both exit 0; one run each, on a shared box. #817's four `.test.sh` files join
+  `check:scripts` as four more `check:scripts:<name>` tasks when it merges (G9 is not on origin/main).
+  Left: `--check-locked` is no faster than `deps.get` (4.6 s either way, mix boot); it stops a check
+  rewriting `mix.lock`.
 
 **G7 · The suite is mostly serial; the TUI tests boot tmux twenty times.** `Sonnet · M`
 - Why: `async: true` in 50 server test files, `async: false` in 153; `Process.sleep` clusters in
