@@ -30,6 +30,7 @@ defmodule Mix.Tasks.Server.Doctor do
     Mix.shell().info("git lock:   #{Server.Doctor.config_lock()}")
     Mix.shell().info("passes:     #{Server.Jobs.Passes.line()}")
     Mix.shell().info("mise trust: #{Server.Doctor.untrusted_checkouts()}")
+    Mix.shell().info("worktrees:  #{Server.Doctor.worktree_size()}")
 
     if dir = opts[:export] do
       paths = Server.Doctor.export(dir)

@@ -12,7 +12,8 @@ and every layer the spine design's re-laid §9 asked for
 (`../../docs/plans/2026-08-14-console-cockpit-and-elixir-spine.md`) is built and gated:
 
 - **db + doctor** — the schema (`priv/repo/migrations/`), `Server.Doctor` (integrity_check, tables, the
-  newest crash dump (the tlon root's `erl_crash.dump`, `tlon-cli.sh`'s state dir) read against the service's start, pending migrations, JSONL export),
+  newest crash dump (the tlon root's `erl_crash.dump`, `tlon-cli.sh`'s state dir) read against the service's start, the
+  `.worktrees` size as exclusive bytes, pending migrations, JSONL export),
   `mix server.doctor`. The store is Postgres (`Server.Repo`): foreign keys live in the schema, and
   `integrity_check` proves the store reachable by counting its relations. `exqlite` is left only for
   `mix server.import_sqlite`, the one-time import from the old SQLite file.

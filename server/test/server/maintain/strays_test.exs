@@ -89,6 +89,25 @@ defmodule Server.Maintain.StraysTest do
     assert String.trim(out) != ""
   end
 
+  test "GitHub's merge closes a landed thread whose checkout still reads unmerged, never tracking it", %{
+    repo: repo,
+    ws: ws,
+    project: p
+  } do
+    {:ok, t} = Server.Channel.open_thread(%{title: "landed", scope: "machine", workspace_id: ws.id, project_id: p.id})
+    {:ok, wt} = Worktree.ensure(repo, Worktree.name_for(t))
+    File.write!(Path.join(wt, "README"), "not on main\n")
+    {_, 0} = System.cmd("git", ["-C", wt, "add", "README"])
+    {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "the change"])
+    landed = t |> Ecto.Changeset.change(stage: "landed") |> Server.Repo.update!()
+    assert Worktree.stranded(repo, Worktree.name_for(t)) =~ "unmerged"
+
+    assert {:ok, %{state: "closed", stage: "landed"}} = Server.Workline.merged(landed, "PR #1")
+
+    Server.Maintain.Sweep.run()
+    refute File.exists?(wt)
+  end
+
   test "a stranded worktree with no thread is on the needs list — and the list doesn't fall over on it", %{repo: repo} do
     held = Worktree.path(repo, "by-hand-held")
     {_, 0} = System.cmd("git", ["-C", repo, "worktree", "add", "-q", "-b", "office/held", held])

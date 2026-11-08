@@ -715,6 +715,13 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   promoting it back to build — which `Workline.merged/2` match-crashes on: a landed thread closes
   as landed, its checkout retired, never tracked.
 - Check: the strays test; `btrfs filesystem du -s .worktrees` exclusive under 1 GB.
+- Done 2026-11-08: `Worktree.unmerged?/2` trusts `git cherry` alone (the file match, `landed?/4`, is
+  gone; a squash-merged branch now reads unmerged, which tlon's rebase-only main never makes);
+  `worktree_size/2` puts `.worktrees` as exclusive bytes on `mix server.doctor`'s `worktrees:` line.
+  The `close_thread` bullet needed no code: a thread at stage `landed` already closes through the
+  non-tracking clause, and a strays test now holds it (`Workline.merged/2` on a landed thread whose
+  checkout reads unmerged closes it and the sweep retires the checkout). Tests: `worktree_test.exs`,
+  `doctor_test.exs`, `strays_test.exs`.
 
 **G8b · A new checkout trusts its own `mise.toml`.** `Sonnet · S`
 - Why: mise loads a project config only once it is trusted, and an untrusted one fails silently

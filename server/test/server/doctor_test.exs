@@ -90,6 +90,38 @@ defmodule Server.DoctorTest do
     assert File.read!(Path.join(dir, "ticket.jsonl")) == ""
   end
 
+  describe "worktree_size/2" do
+    setup do
+      root = Path.join(System.tmp_dir!(), "doctor-wt-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(root, ".worktrees"))
+      on_exit(fn -> File.rm_rf!(root) end)
+      %{root: root}
+    end
+
+    test "none without a .worktrees dir" do
+      assert Doctor.worktree_size("/nonexistent-root") == "none"
+    end
+
+    test "on btrfs it reports the exclusive column, not the total", %{root: root} do
+      cmd = fn "btrfs", _args, _opts ->
+        {"     Total   Exclusive  Set shared  Filename\n 32105000000   370000000   2330000000  .worktrees\n", 0}
+      end
+
+      assert Doctor.worktree_size(root, cmd) =~ "352.9 MiB exclusive"
+    end
+
+    test "without btrfs it falls back to du and says it overstates", %{root: root} do
+      cmd = fn
+        "btrfs", _args, _opts -> {"not a btrfs filesystem", 1}
+        "du", _args, _opts -> {"31250000\t.worktrees\n", 0}
+      end
+
+      line = Doctor.worktree_size(root, cmd)
+      assert line =~ "GiB by du"
+      assert line =~ "overstatement"
+    end
+  end
+
   describe "crash_dump/3" do
     setup do
       root = Path.join(System.tmp_dir!(), "doctor-crash-#{System.pid()}-#{System.unique_integer([:positive])}")
