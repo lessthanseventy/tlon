@@ -362,6 +362,7 @@ snapshot on 304. `Sonnet · S`, after B1.
   cites is the case #573 names) or keep the cut and close #573 with the relay rule written into the
   skill. Recommend giving leads the tool.
 - Check: `profiles_test` pins which archetypes have it; the skill names it.
+- Done: the truth-sync half only: the coordinate skill says the tool exists, is cut from coworker profiles, the sheriff keeps it, and that `@tertius` relays; `profiles_test` pins the sheriff as the one archetype that has it. Left: the decision (give leads `consult_peer`, or keep the cut and close #573) is Andrew's and stays open; no profile changed.
 
 **D5 · Brief size and two names for one tool.** `Sonnet · S`
 - Why: OPENING is the operator's first message uncut and each of the 5 recent messages is rendered

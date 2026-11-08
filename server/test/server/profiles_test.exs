@@ -221,6 +221,15 @@ defmodule Server.ProfilesTest do
       for staffing <- ["staff_child", "assign_lead"], do: assert(staffing in tlon["excludeTools"])
     end
 
+    test "the sheriff is the only archetype that keeps consult_peer; every other seat relays by an @mention" do
+      keeps =
+        for {kind, archetype} <- Profiles.archetypes(),
+            "consult_peer" not in archetype.mcp["tlon"]["excludeTools"],
+            do: kind
+
+      assert keeps == [:sheriff]
+    end
+
     test "the PM holds the release and backlog tools, writes no code, and no other archetype has them" do
       pm = Profiles.archetype(:pm)
       tools = ~w(release_status check_candidate propose_release set_urgency)

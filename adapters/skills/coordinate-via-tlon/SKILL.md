@@ -27,8 +27,10 @@ judgment you keep in your own context dies with you.
   its answer back as the tool's result, mid-turn: `context: transcript` (the default) shows it
   your recent session, `context: none` is a clean one-shot.
 - **Ask a coworker by @mentioning them on your thread.** `post_message` with their handle
-  in the body (`@name, …`) delivers it; you have no `consult_peer` (coworker profiles exclude
-  it). Their answer lands on your thread.
+  in the body (`@name, …`) delivers it. `consult_peer` exists but coworker profiles exclude
+  it (only the sheriff keeps it), so you do not have it. Their answer lands on your thread.
+  To reach a seat on a thread you do not lead and were not @mentioned on, post on your own
+  thread asking `@tertius` to relay.
 - **When someone asks YOU, answer where the notice says.** A wake from another thread names
   it: if you lead it or were @mentioned on it, answer there with
   `post_message(body, thread_id: <that thread>)`; otherwise answer here and @mention the
