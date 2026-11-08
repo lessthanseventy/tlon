@@ -130,6 +130,13 @@ export interface Commit {
 
 
 const CHATTER_TAIL = 5;
+const BODY_CAP = 4_000;
+
+// One long paste must not dominate the brief; the whole message stays one get_message away.
+function capBody(m: ChatterMessage): string {
+  const cut = m.body.length - BODY_CAP;
+  return cut > 0 ? `${m.body.slice(0, BODY_CAP)}\n[cut ${cut} chars; get_message(${m.id})]` : m.body;
+}
 
 /** `operator` is the handle a `stated` fact is credited to: the server trusts only that author for `stated` provenance. */
 export function renderBrief(d: Dossier, now: Date = new Date(), model?: string, harness = "Claude Code", operator = "andrew"): string {
@@ -234,8 +241,9 @@ export function renderBrief(d: Dossier, now: Date = new Date(), model?: string, 
 // A consult ask is a request for an answer, not ambient chatter — make the reply affordance
 // explicit so the round-trip the bridge exists for actually fires.
 function renderChatter(m: ChatterMessage): string {
-  if (m.consult) return `- 📨 ${m.author} is consulting you — reply to answer: ${m.body}`;
-  return `- ${m.author}: ${m.body}`;
+  const body = capBody(m);
+  if (m.consult) return `- 📨 ${m.author} is consulting you — reply to answer: ${body}`;
+  return `- ${m.author}: ${body}`;
 }
 
 // The default case FAILS CLOSED: `opinion`, or any certainty the server emits that we don't

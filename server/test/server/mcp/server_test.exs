@@ -339,6 +339,25 @@ defmodule Server.MCP.ServerTest do
     assert result["isError"]
   end
 
+  test "the brief cuts a long opening and recent message with a pointer to the whole", %{thread: thread, token: token} do
+    session = handshake(token)
+    {:ok, long} = Channel.post(%{thread_id: thread.id, author: "andrew", body: String.duplicate("y", 20_000)})
+    brief = decode_tool_json(call(token, session, 2, "get_dossier", %{}))
+
+    for body <- [brief["opening"]["body"], List.last(brief["recent"])["body"]] do
+      assert String.length(body) < 4_100
+      assert body =~ "[cut 16000 chars; get_message(#{long.id})]"
+    end
+  end
+
+  test "get_brief is listed as an alias of get_dossier", %{token: token} do
+    session = handshake(token)
+    {200, _, %{"result" => %{"tools" => tools}}} = post(token, session, request(2, "tools/list"))
+    description = &Enum.find_value(tools, fn t -> t["name"] == &1 && t["description"] end)
+    assert description.("get_brief") =~ "Alias of get_dossier"
+    refute description.("get_dossier") =~ "Alias"
+  end
+
   test "an unchecked derived fact reads back as an opinion — the §4a query", %{token: token} do
     session = handshake(token)
     call(token, session, 3, "register", %{})

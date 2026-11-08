@@ -239,27 +239,32 @@ defmodule Server.MCP.Tool do
   end
 
   @doc """
-  Run `fun` only if the connection's agent may touch `workspace_id`'s life rows
-  (`Server.Life.authorize/2`); otherwise the tool fails with `not_yours`.
+  Run `fun` with the connection's own workspace (`workspace_of/1`), only if the connection's agent
+  may touch its life rows (`Server.Life.authorize/2`); otherwise the tool fails with `not_yours`.
   """
-  @spec life(Frame.t(), integer() | nil, (-> tool_reply())) :: tool_reply()
-  def life(frame, workspace_id, fun) do
-    case Server.Life.authorize(Server.MCP.Identity.from_frame(frame).agent, workspace_id) do
+  @spec life(Frame.t(), (integer() | nil -> tool_reply())) :: tool_reply()
+  def life(frame, fun) do
+    identity = Server.MCP.Identity.from_frame(frame)
+    workspace_id = workspace_of(identity)
+
+    case Server.Life.authorize(identity.agent, workspace_id) do
       :ok ->
-        fun.()
+        fun.(workspace_id)
 
       {:error, :not_yours} ->
         fail(frame, "not_yours: life rows answer to the operator and the home workspace's assistant")
     end
   end
 
-  @doc "`life/3` for a routine or quest by id: no such row is `not_found`, otherwise `fun` gets the row."
+  @doc "`life/2` for a routine or quest by id: a row of another workspace, or none, is `not_found`; otherwise `fun` gets the row."
   @spec life_row(Frame.t(), module(), integer(), (struct() -> tool_reply())) :: tool_reply()
   def life_row(frame, schema, id, fun) do
-    case Server.Repo.get(schema, id) do
-      nil -> fail(frame, "not_found")
-      row -> life(frame, row.workspace_id, fn -> fun.(row) end)
-    end
+    life(frame, fn workspace_id ->
+      case Server.Repo.get(schema, id) do
+        %{workspace_id: ^workspace_id} = row -> fun.(row)
+        _ -> fail(frame, "not_found")
+      end
+    end)
   end
 
   defp tool_name(module) do

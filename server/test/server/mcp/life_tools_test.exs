@@ -40,13 +40,13 @@ defmodule Server.MCP.LifeToolsTest do
     MCP.Tokens.mint(thread, Staff.agent_by_name(name))
   end
 
-  defp tools(%{home: home, routine: routine, quest: quest}) do
+  defp tools(%{routine: routine, quest: quest}) do
     [
-      {"life_status", %{workspace_id: home.id}},
-      {"routine_create", %{workspace_id: home.id, title: "walk", every: "@daily"}},
+      {"life_status", %{}},
+      {"routine_create", %{title: "walk", every: "@daily"}},
       {"routine_update", %{routine_id: routine.id, title: "stretch more"}},
       {"routine_done", %{routine_id: routine.id}},
-      {"quest_create", %{workspace_id: home.id, title: "call mum"}},
+      {"quest_create", %{title: "call mum"}},
       {"quest_done", %{quest_id: quest.id}}
     ]
   end
@@ -77,12 +77,22 @@ defmodule Server.MCP.LifeToolsTest do
     end
   end
 
-  test "the operator's own session runs a life tool, anywhere", ctx do
+  test "the operator's own session runs a life tool on its own workspace", ctx do
+    {:ok, _} = Staff.register_agent(%{name: "andrew", mandate: "the human", engine: "claude-code"})
+    token = token_for(ctx.home, "andrew")
+    session = handshake(token)
+
+    refute call(token, session, 10, "life_status", %{})["isError"]
+  end
+
+  test "a routine of another workspace is not found, even for the operator", ctx do
     {:ok, _} = Staff.register_agent(%{name: "andrew", mandate: "the human", engine: "claude-code"})
     token = token_for(ctx.code, "andrew")
     session = handshake(token)
 
-    refute call(token, session, 10, "life_status", %{workspace_id: ctx.home.id})["isError"]
+    result = call(token, session, 10, "routine_done", %{routine_id: ctx.routine.id})
+    assert result["isError"]
+    assert hd(result["content"])["text"] =~ "not_found"
   end
 
   defp handshake(token) do

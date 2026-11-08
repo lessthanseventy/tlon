@@ -340,6 +340,15 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
     expect(out).toContain("start with the drain race");
   });
 
+  test("a 20 KB message is cut to a few KB with a pointer to the whole", () => {
+    const out = renderBrief(
+      dossier({ recent: [{ id: 77, author: "andrew", body: "x".repeat(20_000), reply_to: null, at: minsAgo(1) }] }),
+      NOW,
+    );
+    expect(out.length).toBeLessThan(6_000);
+    expect(out).toContain("[cut 16000 chars; get_message(77)]");
+  });
+
   test("a consult ask renders as a request for an answer, not ambient chatter", () => {
     const out = renderBrief(
       dossier({
