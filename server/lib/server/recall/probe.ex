@@ -16,8 +16,5 @@ defmodule Server.Recall.Probe do
 
   defp esc(name), do: String.replace(name, ~r/[.?+*\[\]()|^$\\]/, "\\\\\\0")
 
-  defp git(repo, args) do
-    {_, status} = System.cmd("git", ["-C", repo | args], stderr_to_stdout: true)
-    status == 0
-  end
+  defp git(repo, args), do: match?({_, 0}, Server.Git.cmd(repo, args))
 end

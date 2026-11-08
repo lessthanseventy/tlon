@@ -33,7 +33,7 @@ defmodule Server.Commits do
   def list(repo, thread_id) do
     args = ["log", "--all", "--grep=^#{@trailer}: #{thread_id}$", "--format=%H%x1f%s%x1f%an%x1f%aI"]
 
-    case System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) do
+    case Server.Git.cmd(repo, args) do
       {out, 0} -> {:ok, out |> String.split("\n", trim: true) |> Enum.map(&row/1)}
       {out, _} -> {:error, out |> String.trim() |> String.slice(0, 200)}
     end

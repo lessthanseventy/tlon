@@ -105,7 +105,7 @@ defmodule Server.Canvas.Paint do
     tmp = Path.join(System.tmp_dir!(), "canvas-prev-#{System.unique_integer([:positive])}")
 
     try do
-      with {_, 0} <- System.cmd("git", ["clone", "-q", "--depth", "1", remote, tmp], stderr_to_stdout: true),
+      with {_, 0} <- Server.Cmd.run("git", ["clone", "-q", "--depth", "1", remote, tmp], stderr_to_stdout: true),
            {:ok, text} <- File.read(Path.join(tmp, "canvas.txt")),
            {:ok, grid} <- Canvas.parse(text) do
         grid
@@ -131,7 +131,7 @@ defmodule Server.Canvas.Paint do
     query =
       "query($login:String!){user(login:$login){contributionsCollection{contributionCalendar{weeks{contributionDays{date contributionCount}}}}}}"
 
-    with {out, 0} <- System.cmd("gh", ["api", "graphql", "-f", "query=#{query}", "-F", "login=#{login}"]),
+    with {out, 0} <- Server.Cmd.run("gh", ["api", "graphql", "-f", "query=#{query}", "-F", "login=#{login}"]),
          {:ok, %{"data" => %{"user" => %{"contributionsCollection" => %{"contributionCalendar" => cal}}}}} <-
            Jason.decode(out) do
       {:ok,
@@ -153,7 +153,7 @@ defmodule Server.Canvas.Paint do
     tmp = Path.join(System.tmp_dir!(), "canvas-painted-#{System.unique_integer([:positive])}")
 
     try do
-      with {_, 0} <- System.cmd("git", ["clone", "-q", "--bare", remote, tmp], stderr_to_stdout: true),
+      with {_, 0} <- Server.Cmd.run("git", ["clone", "-q", "--bare", remote, tmp], stderr_to_stdout: true),
            {out, 0} <- git(tmp, ["log", "--format=%ad", "--date=short", "--grep=^pixel$"]) do
         out |> String.split("\n", trim: true) |> Enum.frequencies_by(&Date.from_iso8601!/1)
       else
@@ -212,7 +212,7 @@ defmodule Server.Canvas.Paint do
     end
   end
 
-  defp git(dir, args), do: System.cmd("git", ["-C", dir | args], stderr_to_stdout: true)
+  defp git(dir, args), do: Server.Git.cmd(dir, args)
 
   # the commits must carry an email GitHub ties to Andrew's account, or the graph never sees them
   defp author do

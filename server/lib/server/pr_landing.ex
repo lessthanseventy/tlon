@@ -170,7 +170,7 @@ defmodule Server.PRLanding do
   end
 
   defp git(repo, args, opts \\ []) do
-    run = fn -> System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) end
+    run = fn -> Server.Git.cmd(repo, args) end
 
     case if(opts[:retry], do: GitFetch.retry(run), else: run.()) do
       {out, 0} -> {:ok, String.trim(out)}

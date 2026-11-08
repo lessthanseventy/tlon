@@ -122,13 +122,12 @@ defmodule Server.BranchReview do
     end
   end
 
-  defp commit?(repo, sha),
-    do: match?({_, 0}, System.cmd("git", ["-C", repo, "cat-file", "-e", "#{sha}^{commit}"], stderr_to_stdout: true))
+  defp commit?(repo, sha), do: match?({_, 0}, Server.Git.cmd(repo, ["cat-file", "-e", "#{sha}^{commit}"]))
 
   defp base(repo) do
     if match?(
          {_, 0},
-         System.cmd("git", ["-C", repo, "rev-parse", "-q", "--verify", "origin/main"], stderr_to_stdout: true)
+         Server.Git.cmd(repo, ["rev-parse", "-q", "--verify", "origin/main"])
        ),
        do: "origin/main",
        else: "main"

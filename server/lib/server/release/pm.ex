@@ -621,7 +621,7 @@ defmodule Server.Release.PM do
     end
   end
 
-  defp git(root, args), do: System.cmd("git", ["-C", root | args], stderr_to_stdout: true)
+  defp git(root, args), do: Server.Git.cmd(root, args)
 
   defp short(sha), do: String.slice(sha, 0, 7)
 

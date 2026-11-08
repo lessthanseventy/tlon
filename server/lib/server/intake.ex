@@ -199,9 +199,7 @@ defmodule Server.Intake do
   reads. A repo with no `origin/main` has none.
   """
   def landed_on_main do
-    case System.cmd("git", ["-C", Server.Profiles.tlon_root(), "log", "origin/main", "-n", "300", "--format=%h %s"],
-           stderr_to_stdout: true
-         ) do
+    case Server.Git.cmd(Server.Profiles.tlon_root(), ["log", "origin/main", "-n", "300", "--format=%h %s"]) do
       {out, 0} -> out |> String.split("\n", trim: true) |> Enum.map(&List.to_tuple(String.split(&1, " ", parts: 2)))
       _ -> []
     end

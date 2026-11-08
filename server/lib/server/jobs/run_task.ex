@@ -16,7 +16,7 @@ defmodule Server.Jobs.RunTask do
   @doc "Queue `task` for `agent` on thread `tid`, on the committed head of checkout `tree`. `{:ok, job}` | `{:error, why}`."
   def enqueue(tid, agent, task, tree) do
     with true <- task in @tasks || {:error, "#{task} is not a task run_task runs; it runs: #{Enum.join(@tasks, ", ")}"},
-         {sha, 0} <- System.cmd("git", ["-C", tree, "rev-parse", "HEAD"], stderr_to_stdout: true) do
+         {sha, 0} <- Server.Git.cmd(tree, ["rev-parse", "HEAD"]) do
       %{thread_id: tid, agent: agent, task: task, ref: String.trim(sha), tree: tree} |> new() |> Oban.insert()
     else
       {:error, _} = error -> error

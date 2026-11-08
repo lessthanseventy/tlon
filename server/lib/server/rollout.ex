@@ -49,7 +49,7 @@ defmodule Server.Rollout do
   git can't diff is said on the thread, never raised: the landing still publishes after it.
   """
   def after_merge(%{repo: repo, from: from, to: to, thread_id: tid} = merge) do
-    case System.cmd("git", ["-C", repo, "diff", "--name-only", from, to], stderr_to_stdout: true) do
+    case Server.Git.cmd(repo, ["diff", "--name-only", from, to]) do
       {out, 0} ->
         roll_out(merge, out |> String.split("\n", trim: true) |> parts())
 
@@ -87,7 +87,7 @@ defmodule Server.Rollout do
 
   defp fresh_revs do
     revs =
-      case System.cmd("git", ["-C", Server.Profiles.tlon_root(), "rev-parse", "HEAD:office"], stderr_to_stdout: true) do
+      case Server.Git.cmd(Server.Profiles.tlon_root(), ["rev-parse", "HEAD:office"]) do
         {sha, 0} -> %{office: String.trim(sha)}
         _ -> %{office: nil}
       end

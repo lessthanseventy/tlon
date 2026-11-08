@@ -508,7 +508,10 @@ defmodule Server.Worktree do
   end
 
   defp git(repo_path, args),
-    do: Application.get_env(:server, :git_cmd, &System.cmd/3).("git", ["-C", repo_path | args], stderr_to_stdout: true)
+    do:
+      Application.get_env(:server, :git_cmd, &Server.Cmd.run/3).("git", ["-C", repo_path | args],
+        stderr_to_stdout: true
+      )
 
   # nothing the checkout holds may go with it: half-done operations undone, edits committed, a
   # detached HEAD named

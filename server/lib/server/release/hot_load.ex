@@ -63,7 +63,7 @@ defmodule Server.Release.HotLoad do
   end
 
   defp paths(root, from, to) when is_binary(from) and is_binary(to) do
-    case System.cmd("git", ["-C", root, "diff", "--name-only", from, to, "--" | @needs_boot], stderr_to_stdout: true) do
+    case Server.Git.cmd(root, ["diff", "--name-only", from, to, "--" | @needs_boot]) do
       {"", 0} ->
         :ok
 

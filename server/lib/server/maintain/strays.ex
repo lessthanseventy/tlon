@@ -48,7 +48,7 @@ defmodule Server.Maintain.Strays do
   # a checkout made by hand has no thread; it is someone's work in progress until a day passes without
   # anything staged or checked out in it
   defp idle?(wt) do
-    with {index, 0} <- System.cmd("git", ["-C", wt, "rev-parse", "--path-format=absolute", "--git-path", "index"]),
+    with {index, 0} <- Server.Git.cmd(wt, ["rev-parse", "--path-format=absolute", "--git-path", "index"]),
          {:ok, %File.Stat{mtime: mtime}} <- File.stat(String.trim(index), time: :posix) do
       System.os_time(:second) - mtime > @idle_s
     else

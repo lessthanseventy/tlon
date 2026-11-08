@@ -223,6 +223,15 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   recorded failure on the thread, never a silent hang.
 - Check: a test that a stubbed command sleeping past its timeout returns `{:error, :timeout}` within
   the bound; `grep -c 'System.cmd' server/lib` falls to the two wrappers.
+- Done 2026-11-08: `Server.Cmd.run/3` is `System.cmd/3` through coreutils `timeout` (default 120 s,
+  `timeout: :infinity` for a command with its own wall), answering `{out, 124}` with the output
+  saying it timed out — the shape every caller already reads as red, so the 17 injected
+  `run \\ &System.cmd/3` defaults and the landing path moved with no call-site change;
+  `Server.Git.cmd/3` and `run/3` replace the nine `git/2` helpers and the direct `git -C` calls
+  (35 → 8). `cmd_test.exs` holds a `sleep 30` at `timeout: 1` to exit 124 in under 8 s. Left: 47
+  bare `System.cmd`s — the gate scripts (`bash` with their own walls), `kill`/`pgrep`/`cp`/`df`,
+  the bench runner and the compile-time one in `profiles.ex`; `#781`/`#864` (a vanished seat as an
+  ending) stay with Staffing.
 
 **B6 · One-shot Oban jobs retry never; `Process.sleep` in GenServers.** `Sonnet · S`
 - Why: `max_attempts: 1` on Staff, Maintain, Triage, Grade and TurnPass; fine for a per-minute job,

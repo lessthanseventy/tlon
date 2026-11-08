@@ -62,7 +62,7 @@ defmodule Server.Recall.Recheck do
   defp has_origin_main?(path) do
     match?(
       {_, 0},
-      System.cmd("git", ["-C", path, "rev-parse", "--verify", "-q", "origin/main"], stderr_to_stdout: true)
+      Server.Git.cmd(path, ["rev-parse", "--verify", "-q", "origin/main"])
     )
   end
 

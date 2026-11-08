@@ -64,5 +64,5 @@ defmodule Server.Workline.Docs do
     end
   end
 
-  defp git(thread, args), do: System.cmd("git", ["-C", Artifacts.Git.root(thread) | args], stderr_to_stdout: true)
+  defp git(thread, args), do: Server.Git.cmd(Artifacts.Git.root(thread), args)
 end
