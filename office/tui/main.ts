@@ -486,7 +486,7 @@ async function refreshOnce() {
   needs = bySurface.items
   settings = knobs ?? settings
   if (all.ok && lastOk.ok) tellNews(lastOk, lastOkNeeds)
-  if (all.ok) { lastOk = all; lastOkNeeds = needs }
+  if (all.ok) { lastOk = all; lastOkNeeds = needs; tickerOn(all) }
   const tid = openThread()
   await Promise.all([tid !== null ? loadThread(tid) : null, reader ? reader.reload() : null, loadCard(), loadFeed(), loadMargin()])
   await chatter()
@@ -522,6 +522,11 @@ function tellNews(before: Agents, beforeNeeds: data.Need[]) {
   if (before.health?.state === "ok" && all.health?.state === "warn") notify("tlon needs a look", all.health.problems.join("; "))
   for (const kind of arrivals(before, all, beforeNeeds, needs)) room().ring(kind)
   releaseOnTv(before, all)
+}
+/** the TV's ticker channel crawls the release, the merge queue, the phone and the newest landing's subject */
+function tickerOn(a: Agents) {
+  const t = { sha: a.release?.sha ?? null, queue: a.health?.merge_queue?.length ?? 0, phone: bySurface.counts.phone, last: a.release?.notes?.at(-1) ?? null }
+  for (const r of rooms.values()) if (r instanceof WideRoom) r.setTicker(t)
 }
 /** a cut puts Uqbar's entry on the TV; the next snapshot that holds the same sha ends it */
 function releaseOnTv(before: Agents, after: Agents) {

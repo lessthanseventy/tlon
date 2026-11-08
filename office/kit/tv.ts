@@ -323,6 +323,33 @@ const aquarium = (): Show => {
   }
 }
 
+/** what the ticker channel crawls: the office's own numbers */
+export type Ticker = { sha: string | null; queue: number; phone: number; last: string | null }
+export const tickerText = (t: Ticker): string =>
+  [t.sha ? `release ${t.sha.slice(0, 7)}` : "no release yet", `merge queue ${t.queue}`, `phone ${t.phone}`, t.last ? `last landing: ${t.last}` : "nothing landed yet"]
+    .join("  *  ").replace(/[^\x20-\x7e]/g, "?")
+
+const ticker = (text: () => string): Show => {
+  let at = 0
+  return {
+    name: "ticker",
+    init(s) { s.clear(); at = 0 },
+    step(s) {
+      s.clear()
+      const line = text(), len = line.length * SMALL.w + s.w
+      for (let x = 0; x < s.w; x++) { s.plot(x, 7, 4); s.plot(x, 18, 4) }
+      const x0 = s.w - (at++ % len)
+      ;[...line].forEach((ch, i) => {
+        const gx = x0 + i * SMALL.w
+        if (gx < -SMALL.w || gx >= s.w) return
+        SMALL.glyph(ch).forEach((bits, r) => {
+          for (let col = 0; col < SMALL.w; col++) if (bits & (1 << (SMALL.w - 1 - col))) s.plot(gx + col, 9 + r, 0)
+        })
+      })
+    },
+  }
+}
+
 /** seconds to midnight while the clock is in the last ten minutes of Dec 31, else null */
 export function newYearLeft(d: Date): number | null {
   if (d.getMonth() !== 11 || d.getDate() !== 31 || d.getHours() !== 23 || d.getMinutes() < 50) return null
@@ -340,11 +367,16 @@ const CRAWL = 2
 /** the TV: a screen, its channels in turn (a minute each), and the remote */
 export class Tv {
   readonly screen: Screen
-  private readonly shows = [lorenz(), life(), boids(), rule30(), pipes(), bonsai(), maze(), stars(), flow(), ant(), rain(), aquarium()]
-  private idx = Math.floor(Math.random() * this.shows.length)
+  private readonly shows = [lorenz(), life(), boids(), rule30(), pipes(), bonsai(), maze(), stars(), flow(), ant(), rain(), aquarium(), ticker(() => this.tickerLine)]
+  // the ticker is last in the rotation and never the channel the room opens on
+  private idx = Math.floor(Math.random() * (this.shows.length - 1))
   private ticks = 0
   constructor(w: number, h: number) { this.screen = new Screen(w, h); this.shows[this.idx]!.init(this.screen) }
   get channel() { return this.levelLeft > 0 ? "level" : this.countdown !== null ? "countdown" : this.cut ? "release" : this.shows[this.idx]!.name }
+  private tickerLine = tickerText({ sha: null, queue: 0, phone: 0, last: null })
+  private tickerLive = false
+  /** the ticker channel reads the office: the room hands it the latest numbers, and only then is it in the rotation */
+  setTicker(t: Ticker) { this.tickerLine = tickerText(t); this.tickerLive = true }
   /** the New Year's countdown: seconds to midnight, set by the room from its clock, null the rest of the year */
   private countdown: number | null = null
   setCountdown(seconds: number | null) { this.countdown = seconds }
@@ -405,5 +437,11 @@ export class Tv {
     if (++this.ticks % 300 === 0) return this.next()
     this.shows[this.idx]!.step(this.screen)
   }
-  next() { this.idx = (this.idx + 1) % this.shows.length; this.ticks = 0; this.shows[this.idx]!.init(this.screen) }
+  /** the next channel; the ticker is skipped until the room has handed it something to crawl */
+  next() {
+    do this.idx = (this.idx + 1) % this.shows.length
+    while (this.shows[this.idx]!.name === "ticker" && !this.tickerLive)
+    this.ticks = 0
+    this.shows[this.idx]!.init(this.screen)
+  }
 }
