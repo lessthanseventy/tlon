@@ -46,6 +46,9 @@ export const ARGOS = {
   event_power: ["Dark! Was that me?", "Who ate the lights? Not me. Probably not me."],
   event_duck: ["A DUCK. I love him.", "Duck! DUCK! New friend! DUCK!"],
   event_gary: ["GARY! The bin man! He smells AMAZING!", "A fish bone! Can I have the fish bone? Please?"],
+  event_planes: ["BIRDS! Paper birds! I will catch one! Watch me!", "Throw another! Throw another! THROW ANOTHER!"],
+  event_pizza: ["PIZZA! I am a very good boy and I would like pizza!", "The smell! The smell! Is it for me? It's for me."],
+  event_nap: ["Nap? I'm GREAT at naps. Watch this.", "Lights down, everybody down. I can do that."],
   fuss: {
     pat: ["Yes! The head! The good head!", "Thank you, {name}! Thank you thank you!"],
     scratch: ["Ohh, the ear. The leg's going. Can't stop it.", "There! THERE! O, {name}, there!"],

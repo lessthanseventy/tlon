@@ -7,7 +7,7 @@
 import { random } from "../kit/rng"
 import { caughtNth, drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
 import { drawDoor, drawVisitor } from "../kit/door"
-import type { EventKind } from "../kit/events"
+import { planeCatch, type EventKind } from "../kit/events"
 import { drawProp } from "../kit/zoo"
 import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, STRAIGHTEN, stepBook, swatted, FLINCH, type Book, type Mood, type Pt as Perch } from "../kit/uqbar"
 import { DWELL, doing, lapOf, pickErrand, REST, UQBAR, type Errand, type ErrandKind, type Occasion } from "../kit/volume"
@@ -358,6 +358,13 @@ export class WideRoom extends Sim<Layout> {
   protected override reactPets(k: EventKind) {
     super.reactPets(k)
     this.dogSay(this.argos(`event_${k}`), 40)
+    const g = k === "planes" ? this.eventGeo() : null
+    if (g && this.petsOn) {
+      // he waits under the spot where one plane will hang
+      const d = this.dog, c = planeCatch(g)
+      d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, { x: c.x, y: g.hallY, aisle: g.hallY, pose: "stand", face: "left", kind: "roam" })]
+      d.aisle = g.hallY; d.mode = "walk"
+    }
   }
   private dogSay(text: string, delay = 0) { if (!this.petsOn) return; const d = this.dog; d.said = text; d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
   /** Argos' line for an occasion: the model's, else his own */
@@ -642,12 +649,13 @@ export class WideRoom extends Sim<Layout> {
    */
   protected eventGeo() {
     const g = super.eventGeo()
-    return g && { ...g, windowX: this.z.M0 + 4, ceilY: BAND + 6, leftX: this.z.L0, cork: { x: this.z.F1 - 32, y: 40 } }
+    return g && { ...g, windowX: this.z.M0 + 4, ceilY: BAND + 6, leftX: this.z.L0, cork: { x: this.z.F1 - 32, y: 40 }, kitchen: { x: this.width - 8, y: 157 }, board: { x: Math.round((62 + this.z.F1 - 64) / 2), y: 30 } }
   }
   private nightfall(sc: Scene, now: Date) {
     const h = now.getHours() + now.getMinutes() / 60, d = darkness(h), flick = this.lampFlicker()
-    if (d === 0 && flick === null && !this.blackout()) return
+    if (d === 0 && flick === null && !this.blackout() && !this.dimmed()) return
     if (d > 0) sc.cv.glow(0, BAND, this.width, WIDE_H - BAND, ROLE.ground, 0.4 * d)
+    if (this.dimmed()) sc.cv.glow(0, BAND, this.width, WIDE_H - BAND, ROLE.ground, 0.3)
     if (this.blackout()) sc.cv.glow(0, BAND, this.width, WIDE_H - BAND, ROLE.ground, 0.5)
     const lit = this.blackout() ? 0 : flick === null ? lampsLit(h, sc.lamps.length) : flick ? sc.lamps.length : 0
     sc.lamps.slice(0, lit).forEach(([x, y]) => {

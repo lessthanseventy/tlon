@@ -2422,6 +2422,9 @@ function playDo(id: string): void {
     case "play.meteor": status = scene(r.event("meteor"), r, "incoming"); break
     case "play.power": status = scene(r.event("power"), r, "the lights go out"); break
     case "play.duck": status = scene(r.event("duck"), r, "a duck"); break
+    case "play.planes": status = scene(r.event("planes"), r, "paper planes, and Argos is ready"); break
+    case "play.pizza": status = scene(r.event("pizza"), r, "pizza in the kitchen"); break
+    case "play.nap": status = scene(r.event("nap"), r, "lights down, heads down"); break
     case "play.chain": status = scene(r.chainReaction(), r, "Gary first; the rest follow"); break
     case "play.event": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
     case "play.drill": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break

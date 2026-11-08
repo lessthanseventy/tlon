@@ -626,6 +626,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   everyone to the kitchen, grease on the whiteboard), and a power nap (lights dim, everyone's head
   down, Nina on the warmest keyboard). Each tidies itself and touches no thread or turn.
 - Check: `events.test.ts` per kind; each in the play card.
+- Done: `planes`, `pizza` and `nap` in `kit/events.ts` (props, `dimAt`, `CHAINS` pizza → nap), rows 6/7/8 on play card page 2, Nina's, Argos' and every seat's lines (`events.test.ts`). Left: the nap seats the idle on the couch (as many as it has) with zzz over every idle head rather than lowering each at its desk; Argos goes to the catch spot when the storm starts, not when the plane hangs; the server's reaction pool (`Server.ToyPool`) does not know the three keys yet.
 
 **F6 · Pastimes get a pose and a line.** `Sonnet · M`
 - Why: `draw.ts` has no branch for aquarium, chat, pet, vending, foosball, pool or bathroom (the

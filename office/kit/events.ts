@@ -2,8 +2,8 @@
 // one at a time (`Sim.event`); nothing here reads a snapshot, a thread or the db — an event is the room's own.
 import type { Pt } from "./sim"
 
-export type EventKind = "drill" | "zoo" | "meteor" | "power" | "duck" | "gary"
-export const EVENT_KINDS: EventKind[] = ["drill", "zoo", "meteor", "power", "duck", "gary"]
+export type EventKind = "drill" | "zoo" | "meteor" | "power" | "duck" | "gary" | "planes" | "pizza" | "nap"
+export const EVENT_KINDS: EventKind[] = ["drill", "zoo", "meteor", "power", "duck", "gary", "planes", "pizza", "nap"]
 
 /** a line or a glyph at tick `at` of the event, for `who`: the sheriff, the first idle coworker, or everyone idle; `react` asks each seat for its own line, staggered */
 export type Beat = { at: number; who: "sheriff" | "first" | "idle"; say?: string; emote?: string; react?: true }
@@ -30,6 +30,9 @@ export const EVENTS: Record<EventKind, Script> = {
   },
   duck: { ticks: 500, beats: [{ at: 200, who: "idle", emote: "?" }, { at: 60, who: "idle", react: true }] },
   gary: { ticks: 540, beats: [{ at: 120, who: "idle", emote: "!" }, { at: 200, who: "first", say: "…did that dumpster just growl?" }, { at: 60, who: "idle", react: true }] },
+  planes: { ticks: 600, beats: [{ at: 40, who: "idle", emote: "!" }, { at: 220, who: "first", say: "Who is folding all of these?" }, { at: 80, who: "idle", react: true }] },
+  pizza: { ticks: 700, beats: [{ at: 20, who: "idle", emote: "♥" }, { at: 320, who: "first", say: "Whose hand is that on the whiteboard?" }, { at: 60, who: "idle", react: true }] },
+  nap: { ticks: 700, beats: [{ at: 40, who: "first", say: "Ten minutes. Nobody tell the thread." }, { at: 300, who: "idle", emote: "z" }, { at: 100, who: "idle", react: true }] },
 }
 
 /** what a visit of Gary's comes to, rolled once per visit: a third each */
@@ -41,12 +44,12 @@ export const GARY_ACT = 300
 export const GARY_SPIN = 60
 
 /** what an event can start when it ends under `chain` (rimworld), or in a chain reaction: Gary's dumpster brings the zoo van, the zoo starts the drill, which cuts the power, which panics the penguin */
-export const CHAINS: Record<EventKind, EventKind[]> = { zoo: ["drill"], drill: ["power"], power: ["duck"], meteor: ["power"], duck: [], gary: ["zoo"] }
+export const CHAINS: Record<EventKind, EventKind[]> = { zoo: ["drill"], drill: ["power"], power: ["duck"], meteor: ["power"], duck: [], gary: ["zoo"], planes: [], pizza: ["nap"], nap: [] }
 
 /** where the scenes happen, in room pixels; a room that has no door has no geometry and no events */
-export type Geo = { doorX: number; hallY: number; ceilY: number; leftX: number; windowX: number; cork?: Pt }
+export type Geo = { doorX: number; hallY: number; ceilY: number; leftX: number; windowX: number; cork?: Pt; kitchen?: Pt; board?: Pt }
 
-export type PropKind = "van" | "monkey" | "penguin" | "goat" | "duck" | "streak" | "puff" | "crater" | "candle" | "net" | "dumpster" | "gary" | "bone" | "sandwich" | "sock" | "stars" | "shout" | "mutter" | "cackle"
+export type PropKind = "van" | "monkey" | "penguin" | "goat" | "duck" | "streak" | "puff" | "crater" | "candle" | "net" | "dumpster" | "gary" | "bone" | "sandwich" | "sock" | "stars" | "shout" | "mutter" | "cackle" | "paper" | "pizzabox" | "grease" | "zzz"
 export type Prop = { kind: PropKind; x: number; y: number; flip?: boolean; step?: number; text?: string }
 
 /** a roll in [0, 1) → a kind of `from` that is not `last` (the only enabled kind may repeat) */
@@ -61,8 +64,8 @@ const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * Math.
 /** what is on the stage at tick `t` of `kind` — pure; `[]` outside the event */
 export function propsAt(kind: EventKind, t: number, g: Geo, severity: 1 | 2 | 3 = 1, gary: GaryOpts = {}): Prop[] {
   if (t < 0 || t >= EVENTS[kind].ticks) return []
-  // a bigger event is more of it: later copies run 40 ticks behind and 14 px apart (the zoo adds only penguins; there is only one Gary)
-  return Array.from({ length: kind === "gary" ? 1 : severity }, (_, i) =>
+  // a bigger event is more of it: later copies run 40 ticks behind and 14 px apart (the zoo adds only penguins; there is only one Gary and one counter of pizza)
+  return Array.from({ length: kind === "gary" || kind === "pizza" ? 1 : severity }, (_, i) =>
     scene(kind, t - 40 * i, g, gary)
       .filter((p) => i === 0 || kind !== "zoo" || p.kind === "penguin")
       .map((p) => (i ? { ...p, x: p.x + 14 * i } : p)),
@@ -142,10 +145,47 @@ function scene(kind: EventKind, t: number, g: Geo, gary: GaryOpts): Prop[] {
       }
       return out
     }
+    case "planes":
+      return planesScene(t, g)
+    case "pizza":
+      return pizzaScene(t, g)
     default:
       return []
   }
 }
+
+/** the paper-plane storm: PLANE_COUNT sheets cross the hall right to left, one every PLANE_GAP ticks; the PLANE_CAUGHT-th hangs at `planeCatch` for a moment and is gone */
+export const PLANE_COUNT = 6, PLANE_GAP = 70, PLANE_FLIGHT = 220, PLANE_CAUGHT = 2
+/** where Argos jumps for his plane */
+export const planeCatch = (g: Geo): Pt => ({ x: g.doorX - 90, y: g.hallY - 26 })
+function planesScene(t: number, g: Geo): Prop[] {
+  const out: Prop[] = []
+  for (let i = 0; i < PLANE_COUNT; i++) {
+    const age = t - 30 - i * PLANE_GAP
+    if (age < 0 || age >= PLANE_FLIGHT) continue
+    const row = g.hallY - 50 - 10 * (i % 3), bob = Math.round(4 * Math.sin(age / 9)), step = Math.floor(age / 6) % 2
+    if (i === PLANE_CAUGHT) {
+      const c = planeCatch(g)
+      if (age >= 134) continue
+      out.push(age < 110 ? { kind: "paper", x: lerp(g.doorX, c.x, age / 110), y: lerp(row, c.y, age / 110) + bob, flip: true, step } : { kind: "paper", x: c.x, y: c.y, flip: true, step })
+      continue
+    }
+    out.push({ kind: "paper", x: lerp(g.doorX, g.leftX, age / PLANE_FLIGHT), y: row + bob, flip: true, step })
+  }
+  return out
+}
+
+/** the pizza party: boxes on the kitchen counter that thin out as the crew eats, and from tick 300 a greasy handprint on the whiteboard */
+function pizzaScene(t: number, g: Geo): Prop[] {
+  const out: Prop[] = []
+  const boxes = t < 60 ? 0 : t < 300 ? 3 : t < 450 ? 2 : t < 600 ? 1 : 0
+  if (g.kitchen) for (let i = 0; i < boxes; i++) out.push({ kind: "pizzabox", x: g.kitchen.x, y: g.kitchen.y - 3 * i })
+  if (g.board && t >= 300) out.push({ kind: "grease", x: g.board.x, y: g.board.y })
+  return out
+}
+
+/** the power nap: the floor dims from its 60th tick until the last 60 */
+export const dimAt = (kind: EventKind, t: number): boolean => kind === "nap" && t >= 60 && t < EVENTS.nap.ticks - 60
 
 /** the power cut: lamps out from its 100th tick until the last 60 */
 export const blackoutAt = (kind: EventKind, t: number): boolean =>
