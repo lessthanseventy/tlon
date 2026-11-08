@@ -14,6 +14,7 @@ import { DWELL, doing, lapOf, pickErrand, REST, UQBAR, type Errand, type ErrandK
 import { BATH, SINK } from "../kit/bathroom"
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { seasonOf } from "../kit/daypart"
+import { corkLabel } from "../kit/souls"
 import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
 import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
@@ -929,11 +930,12 @@ export class WideRoom extends Sim<Layout> {
       sc.hits.push({ x, y, w: 11, h: 8, tip: `${n.author}: ${n.body}`, act: { kind: "notes" } })
     })
     // the crew's chatter in the slots left: a sticky of its kind's colour, pinned, and its words in the tip
-    const tones: Record<string, string> = { encourage: ROLE.live, tease: ROLE.alarm, joke: ROLE.body, comment: ROLE.key, suggestion: ROLE.assistant, reply: ROLE.attention }
+    const tones: Record<string, string> = { encourage: ROLE.live, tease: ROLE.alarm, joke: ROLE.body, comment: ROLE.key, suggestion: ROLE.assistant, reply: ROLE.attention, "side project": ROLE.planner }
     this.cork.slice(0, Math.max(0, 8 - Math.min(8, a.notes.length))).forEach((n, k) => {
       const i = Math.min(8, a.notes.length) + k, x = x0 + 4 + (i % 4) * 12, y = 17 + Math.floor(i / 4) * 10
       sc.px(x, y, 9, 7, tones[n.kind] ?? ROLE.prose); sc.px(x + 1, y + 2, 7, 1, ROLE.fieldInk); sc.px(x + 1, y + 4, 5, 1, ROLE.fieldInk); sc.px(x + 4, y - 1, 1, 2, ROLE.alarm)
-      sc.hits.push({ x, y, w: 9, h: 7, tip: `${n.author} (${n.kind}): ${n.body}`, act: { kind: "notes" } })
+      if (n.kind === "side project") sc.px(x + 6, y + 5, 3, 2, ROLE.fieldInk)
+      sc.hits.push({ x, y, w: 9, h: 7, tip: `${n.author} (${corkLabel(this.cork, n)}): ${n.body}`, act: { kind: "notes" } })
     })
     // Feb 14: one valentine in the last slot, unsigned
     if (now.getMonth() === 1 && now.getDate() === 14) {
