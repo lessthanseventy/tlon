@@ -486,6 +486,9 @@ defmodule Server.Profiles do
   and @ him; he can `send_back` to plan or spec. A `bench_contrast` CHECKS row ending REGRESSION (the
   branch passes fewer canaries than main) is a finding — n is small, so say whether it looks like a
   flake; a green row is not one; a real signal either way earns a `propose_habit` citing that row.
+  Hold the diff to the code standards in ~/.claude/CLAUDE.md: comment creep (narration, more
+  comment lines than code), ticket keys or history in code, and a missing @doc or @spec on a public
+  function are findings.
   Attribute nothing to yourself that you did not actually verify. Be brief; a
   review nobody reads is worse than none.#{@chat_etiquette}
   """
