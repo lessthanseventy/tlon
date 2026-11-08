@@ -194,8 +194,68 @@ run = "mise exec zig@0.16.0 -- mix release tlon --overwrite"
 # The seams no compiler covers: a script calling a module that no longer exists, a mise task a
 # guide names but mise.toml lost.
 ["check:names"]
-description = "names-exist gate: every Server.* module, mix task and mise task the glue names must exist, docs/glossary.md holds, scratch.sh prune keeps exactly the unlanded work, record-ran.sh reports a hand-run gate, checks-queue.sh runs waiters first come first served, and release-smoke.sh builds one at a time machine-wide and names a Postgres pool failure, tmux-sweep.sh removes only the dead sockets, and release.sh, check.sh, server-restart.sh and land.sh keep their rules (grep, temp repos, temp runtime and tmux dirs, fake mise, gh and curl, offline, fast)"
-run = "scripts/check-names.sh && scripts/check-glossary.test.sh && scripts/scratch.test.sh && scripts/record-ran.test.sh && scripts/checks-queue.test.sh && scripts/release-smoke.test.sh && scripts/bwrap-argc.test.sh && scripts/office-drive.test.sh && scripts/tmux-sweep.test.sh && scripts/release.test.sh && scripts/check.test.sh && scripts/server-restart.test.sh && scripts/land.test.sh && scripts/tlon-cli.test.sh"
+description = "names-exist gate: every Server.* module, mix task and mise task the glue names must exist, and docs/glossary.md holds (grep, offline, fast)"
+run = "scripts/check-names.sh"
+
+["check:scripts"]
+description = "the scripts' self-tests (scripts/*.test.sh), one task each under check:scripts:*, in parallel"
+depends = ["check:scripts:*"]
+
+["check:scripts:bwrap-argc"]
+description = "script test: bwrap-argc.sh counts a bwrap argv and groups its mounts (offline, temp dirs)"
+run = "scripts/bwrap-argc.test.sh"
+
+["check:scripts:check-glossary"]
+description = "script test: check-glossary.sh passes a clean fixture and fails each violation (offline, temp dirs)"
+run = "scripts/check-glossary.test.sh"
+
+["check:scripts:checks-queue"]
+description = "script test: checks-queue.sh runs waiters first come first served, never two at once (offline, temp dirs)"
+run = "scripts/checks-queue.test.sh"
+
+["check:scripts:office-drive"]
+description = "script test: office-drive.sh sends each key step to tmux as typed (offline, temp dirs)"
+run = "scripts/office-drive.test.sh"
+
+["check:scripts:office-monitor"]
+description = "script test: office-monitor.sh says DOWN and UP once per outage (offline, temp dirs)"
+run = "scripts/office-monitor.test.sh"
+
+["check:scripts:record-ran"]
+description = "script test: record-ran.sh reports a hand-run gate, and a down service never fails the run (offline, temp dirs)"
+run = "scripts/record-ran.test.sh"
+
+["check:scripts:release-smoke"]
+description = "script test: release-smoke.sh builds one at a time machine-wide and names a Postgres pool failure (offline, temp dirs)"
+run = "scripts/release-smoke.test.sh"
+
+["check:scripts:scratch"]
+description = "script test: scratch.sh prune keeps exactly the unlanded work (offline, temp dirs)"
+run = "scripts/scratch.test.sh"
+
+["check:scripts:tmux-sweep"]
+description = "script test: tmux-sweep.sh removes only the dead sockets (offline, temp dirs)"
+run = "scripts/tmux-sweep.test.sh"
+
+["check:scripts:check"]
+description = "script test: check.sh gates a tree once, records only a green, posts tlon/check only on a clean tree (offline, temp repo, fake mise and gh)"
+run = "scripts/check.test.sh"
+
+["check:scripts:land"]
+description = "script test: land.sh refuses a PR that is closed, off main, from a fork or a protected branch before the queue (offline, fake gh)"
+run = "scripts/land.test.sh"
+
+["check:scripts:release"]
+description = "script test: release.sh cuts only a fast-forward onto origin/main, rolls back only when asked, restarts nothing for a no-op cut (offline, temp clone, fake curl)"
+run = "scripts/release.test.sh"
+
+["check:scripts:server-restart"]
+description = "script test: server-restart.sh refuses a restart that would cut work off, --force restarts anyway, the workers are told (offline, fake curl)"
+run = "scripts/server-restart.test.sh"
+
+["check:scripts:tlon-cli"]
+description = "script test: tlon-cli.sh hands the client node a writable stderr when the caller closed its own (offline)"
+run = "scripts/tlon-cli.test.sh"
 
 ["check:ignored"]
 description = "tracked-junk gate: fail on any tracked file that .gitignore ignores (scratch committed under an ignored path such as server/tmp)"
@@ -214,8 +274,8 @@ run = "mise run check:suites"
 # change has them behind; server:deps runs before this, never beside it, where a cold compile of every
 # dep would starve the office's tmux-driven tests.
 ["check:suites"]
-description = "the names gate + the tracked-junk gate + the server + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check, in parallel"
-depends = ["check:names", "check:ignored", "server:check", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "manual:check"]
+description = "the names gate + the script self-tests + the tracked-junk gate + the server + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check, in parallel"
+depends = ["check:names", "check:scripts", "check:ignored", "server:check", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "manual:check"]
 
 ["server:deps"]
 description = "server: fetch the locked deps when they are behind the lock, and compile them for the test env and the dev env server:check's evals boot (a no-op when current)"
