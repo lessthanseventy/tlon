@@ -627,6 +627,20 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   as landed, its checkout retired, never tracked.
 - Check: the strays test; `btrfs filesystem du -s .worktrees` exclusive under 1 GB.
 
+**G8b · A new checkout trusts its own `mise.toml`.** `Sonnet · S`
+- Why: mise loads a project config only once it is trusted, and an untrusted one fails silently
+  for a caller reading JSON: `mise ls -C <checkout>` then reports the machine's global pin
+  (erlang 27 on the home machine), so a host `mix` runs on the wrong OTP and `_build` recompiles
+  on every switch (A6: the OTP 27 dump in `server/`). `check-main.sh`, `release-smoke.sh` and
+  `workline-verify.sh` already `mise trust -q` the checkouts they make; `Server.Worktree.ensure/2`
+  and `scripts/scratch.sh new` do not. The home machine now also lists `~/projects` and
+  `~/.cache/tlon-scratch` in mise's `trusted_config_paths` (2026-11-07), which no other machine has.
+- Change: `ensure/2` and `scratch:new` run `mise trust -q <checkout>` after the checkout exists
+  (ignore a missing mise); `server:doctor` names a seat or scratch checkout whose `mise.toml` is
+  untrusted.
+- Check: a worktree test that `mise trust --show -C <checkout>` reads trusted after `ensure/2`;
+  `scratch.test.sh` the same for `new`.
+
 **G9 · Scripts without tests, and six copies of `expect()`.** `Sonnet · S`
 - Why: `release.sh` (the pointer cut and rollback), `check.sh` (the tree-cache rules),
   `server-restart.sh` (cuts work off), `land.sh`, `tlon-cli.sh`, `workline-verify.sh` have no
