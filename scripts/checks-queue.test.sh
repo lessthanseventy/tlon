@@ -72,6 +72,7 @@ expect "unwritable bookkeeping still runs the check" "$(starts)" "A "
 expect "…and says it fell back" "$(grep -c 'falling back' "$err")" "1"
 
 fresh
+export CHECKS_KILL_GRACE=41 # distinct from any sleep a check runs, so pgrep names only the timer's
 CHECKS_LABEL=S "$here/checks-queue.sh" bash -c "trap 'sleep 1; echo end S >>'$log'; exit' TERM; echo start S >>'$log'; sleep 30 & wait" 2>>"$err" &
 spid=$!
 until_log "start S"
@@ -80,18 +81,40 @@ kill -TERM "$spid"
 wait
 expect "a stopped holder's slow-dying child ends before the next waiter starts" "$(tr '\n' ',' <"$log")" "start S,end S,start B,end B,"
 expect "…and leaves no process of its own behind" "$(pgrep -f 'sleep 30' | wc -l | tr -d ' ')" "0"
+sleep 0.3 # the killed timer is reaped by init
+expect "…nor the kill timer's sleep" "$(pgrep -f 'sleep 41' | wc -l | tr -d ' ')" "0"
 
-# check.sh refuses a checkout where a BEAM already runs (a stopped check's leftovers)
-repo="$tmp/repo"
-git init -q "$repo" && git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
-cp "$(command -v sleep)" "$tmp/beam.smp"
-(cd "$repo" && exec "$tmp/beam.smp" 30) &
-bpid=$!
+# the lock is free as soon as the group is gone, not after the kill grace
+fresh
+CHECKS_LABEL=T "$here/checks-queue.sh" bash -c "echo start T >>'$log'; sleep 30 & wait" 2>>"$err" &
+tpid=$!
+until_log "start T"
+kill -TERM "$tpid"
+sleep 1
+if flock -n "$XDG_RUNTIME_DIR/tlon-checks.lock" true; then free=free; else free=held; fi
+expect "the lock is free within 1 s of the group dying (grace $CHECKS_KILL_GRACE s)" "$free" "free"
 sleep 0.3
-out="$(cd "$repo" && TLON_CHECK_STATUS=0 XDG_CACHE_HOME="$tmp/cache" "$here/check.sh" 2>&1)"
+expect "…and the kill timer's sleep is gone" "$(pgrep -f 'sleep 41' | wc -l | tr -d ' ')" "0"
+pkill -f 'sleep 41' 2>/dev/null
+wait
+unset CHECKS_KILL_GRACE
+
+# a queue SIGKILLed with its suites running leaves the group; the next check is refused, naming it
+fresh
+CHECKS_LABEL=U "$here/checks-queue.sh" bash -c "echo start U >>'$log'; sleep 30 & wait" 2>>"$err" &
+upid=$!
+until_log "start U"
+kill -KILL "$upid"
+wait "$upid" 2>/dev/null
+group="$(cat "$XDG_RUNTIME_DIR/tlon-checks.group" 2>/dev/null)"
+job V 0
 code=$?
-kill "$bpid" 2>/dev/null
-expect "check.sh in a checkout with a running BEAM exits 2" "$code" "2"
-expect "…naming the pid" "$(grep -c "pid $bpid" <<<"$out")" "1"
+expect "a check beside a previous check's surviving group exits 2" "$code" "2"
+expect "…naming the group" "$(grep -c "group $group" "$err")" "1"
+CHECKS_IGNORE_LEFTOVERS=1 job W 0
+expect "CHECKS_IGNORE_LEFTOVERS=1 runs it anyway" "$(grep -c "^start W" "$log")" "1"
+kill -KILL -- "-$group" 2>/dev/null
+job X 0
+expect "once the group is gone the next check runs" "$(starts | grep -c X)" "1"
 
 exit "$bad"
