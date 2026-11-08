@@ -40,7 +40,7 @@ defmodule Server.MCP.Tool.ConsultOracle do
         ok(frame, %{"side" => Atom.to_string(side), "answer" => answer})
 
       {:error, reason} ->
-        fail(frame, "oracle (#{side}) unavailable: #{inspect(reason)}")
+        fail(frame, "oracle (#{side}) unavailable: #{explain(reason)}")
     end
   end
 

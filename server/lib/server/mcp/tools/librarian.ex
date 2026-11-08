@@ -9,6 +9,7 @@ defmodule Server.MCP.Tool.Librarian do
   def why(:forgotten), do: "that fact is already forgotten"
   def why({:already_supersedes, id}), do: "the newer fact already supersedes fact #{id}"
   def why(:not_a_proposal), do: "no such proposal in this workspace"
+  def why(:resolved), do: "that proposal is already decided"
   def why(:bad_decision), do: "decision must be apply or reject"
   def why(:judge_not_installed), do: "the correction judge isn't installed on this server — nothing changed"
   def why(:mentions_operator), do: "no @mention of the operator in the report"
@@ -109,8 +110,11 @@ defmodule Server.MCP.Tool.DecideProposal do
     opts = [by: identity.agent, workspace_id: Server.MCP.Tool.workspace_of(identity)]
 
     case Server.Librarian.decide(params[:event_id], params[:decision], params[:reason], opts) do
-      {:error, why} -> fail(frame, L.why(why))
-      result -> ok(frame, %{"decided" => params[:decision], "result" => inspect(result)})
+      {:error, why} ->
+        fail(frame, L.why(why))
+
+      {:ok, _} ->
+        ok(frame, %{"decided" => params[:decision], "result" => "done"})
     end
   end
 end

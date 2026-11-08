@@ -902,6 +902,7 @@ defmodule Server.MCP.ServerTest do
     r = call(token, session, 4, "propose_release", %{})
     assert r["isError"]
     assert hd(r["content"])["text"] =~ "hronir's seat does not have propose_release"
+    assert hd(r["content"])["text"] =~ "post_message"
     refute call(token, session, 5, "get_dossier", %{})["isError"]
   end
 

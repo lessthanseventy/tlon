@@ -24,6 +24,48 @@ defmodule Server.MCP.ToolTest do
     refute "submit_qa" in Tool.cut_tools(ws.id, "hladik", t0 + 60_000)
   end
 
+  describe "explain/1" do
+    test "every mapped reason is a sentence with a next action, never an inspected term" do
+      reasons = [
+        :awaiting_operator,
+        :terminal,
+        :not_a_workline,
+        :root_machine_thread,
+        :closed,
+        :limit_hit,
+        :nothing_awaiting,
+        :approving,
+        :not_landing,
+        :epic,
+        :initiative,
+        :no_repo,
+        :unknown_peer,
+        :no_threads,
+        {:no_thread, 7},
+        {:no_agent, "ghost"},
+        {:model_cli_timeout, 120, ""},
+        {:model_cli_missing, "claude"},
+        {:model_cli_exit, 1, "boom"}
+      ]
+
+      for reason <- reasons do
+        text = Tool.explain(reason)
+        assert is_binary(text)
+        refute text == inspect(reason), "#{inspect(reason)} was only inspected"
+      end
+
+      assert Tool.explain(:awaiting_operator) =~ "operator"
+      assert Tool.explain({:no_thread, 7}) =~ "7"
+      assert Tool.explain({:no_agent, "ghost"}) =~ "ghost"
+      assert Tool.explain({:model_cli_timeout, 120, ""}) =~ "120"
+    end
+
+    test "an unmapped reason falls back to inspect; a string is verbatim" do
+      assert Tool.explain({:something, :odd}) == "{:something, :odd}"
+      assert Tool.explain("already a sentence") == "already a sentence"
+    end
+  end
+
   test "a name with no seat on the workspace has no cut list" do
     {:ok, ws} = Workspaces.register(%{name: "Fence none"})
     assert Tool.cut_tools(ws.id, "nobody") == []

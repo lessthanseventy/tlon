@@ -35,7 +35,7 @@ defmodule Server.MCP.Tool.RunTask do
   defp checkout(thread) do
     case Server.worktree_for_thread(thread) do
       {:ok, tree} -> {:ok, tree}
-      {:error, why} -> {:error, "thread ##{thread.id} has no checkout to run in (#{inspect(why)})"}
+      {:error, why} -> {:error, "thread ##{thread.id} has no checkout to run in (#{Server.MCP.Tool.explain(why)})"}
     end
   end
 end
