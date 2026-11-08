@@ -30,6 +30,17 @@ defmodule Server.Office.RandomTest do
     %{ws: ws}
   end
 
+  defp settle do
+    _ = :sys.get_state(Random)
+
+    idle =
+      Enum.find_value(1..100, fn _ ->
+        Task.Supervisor.children(Server.TaskSupervisor) == [] || (Process.sleep(10) && nil)
+      end)
+
+    idle || flunk("random writers still running 1s after the nudge")
+  end
+
   defp posts(thread_id), do: Repo.all(from m in Message, where: m.thread_id == ^thread_id)
 
   defp model(reply) do
@@ -107,7 +118,7 @@ defmodule Server.Office.RandomTest do
              end)
 
     Random.nudge(ws.id)
-    Process.sleep(200)
+    settle()
     assert length(posts(tid)) == 1
   end
 
@@ -117,12 +128,12 @@ defmodule Server.Office.RandomTest do
 
     :ok = Server.OperatorConfig.put("pause", "pencils_down")
     Random.nudge(ws.id)
-    Process.sleep(200)
+    settle()
 
     :ok = Server.OperatorConfig.put("pause", nil)
     :ok = Server.OperatorConfig.put("banter", false)
     Random.nudge(ws.id)
-    Process.sleep(200)
+    settle()
 
     assert posts(Random.thread(ws.id).id) == []
   end

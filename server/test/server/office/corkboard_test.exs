@@ -30,6 +30,12 @@ defmodule Server.Office.CorkboardTest do
     sup
   end
 
+  defp settle(sup) do
+    idle = Enum.find_value(1..100, fn _ -> Task.Supervisor.children(sup) == [] || (Process.sleep(10) && nil) end)
+    _ = :sys.get_state(Corkboard)
+    idle || flunk(@stuck)
+  end
+
   defp join_writers(sup, dir) do
     idle = Enum.find_value(1..100, fn _ -> Task.Supervisor.children(sup) == [] || (Process.sleep(50) && nil) end)
     Supervisor.stop(sup)
@@ -139,7 +145,7 @@ defmodule Server.Office.CorkboardTest do
       end)
 
       start_supervised!({Corkboard, task_supervisor: sup})
-      %{ws: ws, prompts: prompts}
+      %{ws: ws, prompts: prompts, sup: sup}
     end
 
     defp side_messages(ws),
@@ -166,7 +172,7 @@ defmodule Server.Office.CorkboardTest do
       assert File.read!(prompts) =~ ~r/counts syllables.{0,300}This is number 1/s
     end
 
-    test "a poll pins one side-project note for the seat that has the section, once a day", %{ws: ws} do
+    test "a poll pins one side-project note for the seat that has the section, once a day", %{ws: ws, sup: sup} do
       assert Corkboard.notes(ws.id) == []
       notes = poll_until(ws, fn n -> Enum.any?(n, &(&1.kind == "side project")) && n end)
 
@@ -177,31 +183,31 @@ defmodule Server.Office.CorkboardTest do
 
       Enum.each(1..10, fn _ ->
         Corkboard.notes(ws.id)
-        Process.sleep(30)
+        settle(sup)
       end)
 
       assert [_] = side_messages(ws)
       assert Enum.count(Corkboard.notes(ws.id), &(&1.kind == "side project")) == 1
     end
 
-    test "a seat without the section pins none", %{ws: ws} do
+    test "a seat without the section pins none", %{ws: ws, sup: sup} do
       Server.Repo.delete_all(Server.Message)
       File.rm!(Path.join(Server.Soul.dir(), "daneri.md"))
 
       Enum.each(1..10, fn _ ->
         Corkboard.notes(ws.id)
-        Process.sleep(30)
+        settle(sup)
       end)
 
       assert side_messages(ws) == []
     end
 
-    test "a capped generator or banter off: notes/1 still answers and no side note appears", %{ws: ws} do
+    test "a capped generator or banter off: notes/1 still answers and no side note appears", %{ws: ws, sup: sup} do
       Application.put_env(:server, :generator_daily_cap, 0)
 
       Enum.each(1..10, fn _ ->
         assert is_list(Corkboard.notes(ws.id))
-        Process.sleep(30)
+        settle(sup)
       end)
 
       assert side_messages(ws) == []
@@ -209,7 +215,8 @@ defmodule Server.Office.CorkboardTest do
 
     test "a failed side-project call holds the workspace off for an hour, not the next poll", %{
       ws: ws,
-      prompts: prompts
+      prompts: prompts,
+      sup: sup
     } do
       cli = Application.get_env(:server, :generator_cmd)
       File.write!(cli, ~s(#!/bin/sh\ncat >> "#{prompts}"\necho 'not json'\n))
@@ -223,7 +230,7 @@ defmodule Server.Office.CorkboardTest do
 
       rewind.()
       Corkboard.notes(ws.id)
-      Process.sleep(300)
+      settle(sup)
       assert calls.() == 1
       assert side_messages(ws) == []
     end

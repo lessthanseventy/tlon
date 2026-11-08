@@ -735,6 +735,16 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   a `--no-animate` flag so first paint excludes the sim; a `waitFor(screenContains)` helper.
 - Check: `mise run server:test` and `office:test` wall time before/after; no new flake in a week of
   nightlies (a flake is fixed, never retried).
+- Done (step 1, sleeps): `needs_test` waits no more: its eight `Process.sleep(1100)` (8.8 s of the file's
+  run) are `put_away_earlier/0` and `time_passes/1`, which age the put-away and the thread's rows by two
+  seconds in SQL so the next row is newer at the clock's whole-second grain; `corkboard_test` and
+  `random_test` wait for the writer tasks to finish (`settle`: the task supervisor idle, the GenServer's
+  mailbox flushed) instead of 30-300 ms sleeps. The poll loops that return the moment the condition holds
+  stay. Whole server suite before: 2712 tests, 14:47 wall at load ~20 (`menard run test --in server`);
+  the three files' wall time reads 42 s before and about 60 s after at load 22-28, which is startup and
+  load, not the tests: by `--slowest`, `needs_test`'s three slowest went 3.5 s, 2.4 s, 1.3 s to 1.2 s,
+  0.8 s, 0.7 s. The knobs `:attention_settle_ms` and `:grader_retry_ms` were already set to 0 where the
+  tests need them (`config/test.exs`, `attention_test`, `gateway_test`).
 
 **G8 · 59 GB of worktrees — mostly `du` double-counting; the sweep's one real gap.** `Sonnet · S`
 - Why: `du` counts every checkout's `server/deps` (1.9 GB) and `_build` in full, but
