@@ -613,6 +613,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: page the card (`[`/`]` or a second digit row), one row per `EVENT_KINDS`, a "chain
   reaction" row; show the card once on first sandbox launch.
 - Check: `keys.test.ts` (one meaning per key) green; each row plays in a drive walk.
+- Done: `0` pages the card (page 2: zoo, meteor, power, duck, a chain reaction; Gary and the drill were page 1); `Sim.chainReaction()` runs Gary and each scene's chain three deep whatever the chain dial says, with `CHAINS.gary = ["zoo"]`; `mise run office:sandbox` opens the card once (`play-seen` in its config dir). Walked in `office:drive` (page 2, the chain). Left: none.
 
 **F5 · Three new events from existing props.** `Sonnet · M`
 - Why: six event kinds, two with empty `CHAINS`.

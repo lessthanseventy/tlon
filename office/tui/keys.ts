@@ -314,6 +314,13 @@ export const KEYS = [
   { id: "play.weather", scope: "card:play", key: "7", label: "the next weather" },
   { id: "play.pet", scope: "card:play", key: "8", label: "pat the pet" },
   { id: "play.call", scope: "card:play", key: "9", label: "call someone over" },
+  { id: "play.more", scope: "card:play", key: "0", label: "more toys ▸" },
+  { id: "play.zoo", scope: "card:play", key: "1", label: "the zoo van", mode: "page 2" },
+  { id: "play.meteor", scope: "card:play", key: "2", label: "a meteor", mode: "page 2" },
+  { id: "play.power", scope: "card:play", key: "3", label: "a power cut", mode: "page 2" },
+  { id: "play.duck", scope: "card:play", key: "4", label: "a duck", mode: "page 2" },
+  { id: "play.chain", scope: "card:play", key: "5", label: "a chain reaction (Gary → zoo → drill → power)", mode: "page 2" },
+  { id: "play.first", scope: "card:play", key: "0", label: "◂ the first toys", mode: "page 2" },
 ] as const satisfies readonly Binding[]
 
 export type KeyId = (typeof KEYS)[number]["id"]

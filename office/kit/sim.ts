@@ -635,6 +635,14 @@ export class Sim<L extends { people: Seat[] }> {
     this.event()
   }
   private chainDepth = 0
+  private forcedChain = false
+  /** Gary, then each scene's chain to the end of it (three deep), whatever the chain dial says; false when a scene is on or events are off */
+  chainReaction(): boolean {
+    this.forcedChain = true
+    if (this.event("gary")) return true
+    this.forcedChain = false
+    return false
+  }
   private stepEvent() {
     const r = this.running
     if (!r) return
@@ -643,9 +651,9 @@ export class Sim<L extends { people: Seat[] }> {
       this.running = null
       this.changed = true
       // rimworld: the end of one can be the start of the next, up to three deep; draws only when chain is on
-      const next = this.dials.chain && this.chainDepth < 3 && random() < 0.6 ? CHAINS[r.kind].find((k) => this.dials.events[k]) : undefined
+      const next = this.chainDepth < 3 && (this.forcedChain || (this.dials.chain && random() < 0.6)) ? CHAINS[r.kind].find((k) => this.dials.events[k]) : undefined
       if (next && this.event(next)) this.chainDepth++
-      else this.chainDepth = 0
+      else { this.chainDepth = 0; this.forcedChain = false }
       return
     }
     this.beats(t)
