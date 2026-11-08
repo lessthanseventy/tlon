@@ -3,7 +3,7 @@
 // to rest. An encyclopedia's voice: dry, cross-referencing, a little grand, never about the work.
 import type { Pt } from "./uqbar"
 
-export type ErrandKind = "shoulder" | "cork" | "shelf" | "mirror" | "nap" | "nina" | "argos" | "window" | "tv" | "clock" | "lap" | "erratum"
+export type ErrandKind = "shoulder" | "cork" | "shelf" | "mirror" | "nap" | "nina" | "argos" | "window" | "tv" | "clock" | "lap" | "erratum" | "hall" | "hire" | "hat"
 /** `path` the waypoints still to fly; `dwell` ticks to linger once there; `arrived` the tick it got there; `follow` keeps the last one on someone who moves */
 export type Errand = { kind: ErrandKind; path: Pt[]; dwell: number; arrived: number | null; name?: string; follow?: () => Pt }
 
@@ -22,25 +22,28 @@ export const UQBAR = {
   clock: ["The hour, in Uqbar too.", "Time, the Tlönists say, is a series of mental states. This one is {name}.", "{name}. Noted in the margin."],
   lap: ["Revised edition!", "Corrigenda absorbed.", "Now in print."],
   erratum: ["Erratum.", "A correction will follow.", "That was not in the first printing."],
+  hall: ["The hallway is the longest sentence in the building.", "A corridor: a library with the books removed.", "Nobody reads the hall. I shall."],
+  hire: ["{name} is not yet in the index.", "A new entry: {name}. Pending review.", "Welcome, {name}. Mind the footnotes."],
+  hat: ["A hat for Argos. He has earned a laurel.", "Argos, crowned. The Odyssey would approve.", "He wears it better than the heresiarchs."],
   lonely: ["This office does not appear in the atlas.", "Of Uqbar, only this article remains."],
 } as const satisfies Record<string, readonly string[]>
 export type Occasion = keyof typeof UQBAR
 
-/** the idle errands it picks among (the rest are reactions); a nap only after dark, the cat and dog only when they are about */
-export const PASTIMES: ErrandKind[] = ["shoulder", "cork", "shelf", "mirror", "nina", "argos", "window", "tv"]
+/** the idle errands it picks among (the rest are reactions); a nap only after dark, the cat and dog only when they are about, a new hire only while one is new */
+export const PASTIMES: ErrandKind[] = ["shoulder", "cork", "shelf", "mirror", "nina", "argos", "window", "tv", "hall", "hire", "hat"]
 /** ticks between idle errands (100 ms each): a minute to two and a half */
 export const REST = { min: 600, spread: 900 }
 
 /** the next idle errand for a `roll` in [0, 1): never the last one, a nap at night, nothing that needs someone who isn't there */
-export function pickErrand(roll: number, last: ErrandKind | null, can: { dark: boolean; working: boolean; cat: boolean; dog: boolean }): ErrandKind {
+export function pickErrand(roll: number, last: ErrandKind | null, can: { dark: boolean; working: boolean; cat: boolean; dog: boolean; hire: boolean }): ErrandKind {
   const ok = [...PASTIMES, ...(can.dark ? (["nap", "nap"] as ErrandKind[]) : [])].filter(
-    (k) => k !== last && (k !== "shoulder" || can.working) && (k !== "nina" || can.cat) && (k !== "argos" || can.dog),
+    (k) => k !== last && (k !== "shoulder" || can.working) && (k !== "nina" || can.cat) && (k !== "argos" || can.dog) && (k !== "hat" || can.dog) && (k !== "hire" || can.hire),
   )
   return ok[Math.floor(roll * ok.length) % ok.length] ?? "cork"
 }
 
 /** how long it lingers at each errand's end, in ticks */
-export const DWELL: Record<ErrandKind, number> = { shoulder: 140, cork: 90, shelf: 60, mirror: 12, nap: 500, nina: 70, argos: 160, window: 110, tv: 100, clock: 50, lap: 0, erratum: 40 }
+export const DWELL: Record<ErrandKind, number> = { shoulder: 140, cork: 90, shelf: 60, mirror: 12, nap: 500, nina: 70, argos: 160, window: 110, tv: 100, clock: 50, lap: 0, erratum: 40, hall: 60, hire: 110, hat: 120 }
 
 /** the lap of honour on a landing: the room's four corners under the back wall and over the hallway, and back */
 export const lapOf = (w: number, top: number, bottom: number): Pt[] => [
@@ -55,5 +58,6 @@ export function doing(e: Errand | null): string | null {
     shoulder: `reading over ${n}'s shoulder`, cork: "annotating the corkboard", shelf: "tidying the shelf", mirror: "avoiding the mirror",
     nap: "napping on your desk", nina: "baiting Nina", argos: "reading the Odyssey to Argos", window: "looking out at the weather",
     tv: "reviewing the television", clock: "noting the hour", lap: "a lap of honour", erratum: "issuing an erratum",
+    hall: "inspecting the hallway", hire: `inspecting ${n}, the new hire`, hat: "bringing Argos a hat",
   }[e.kind]
 }

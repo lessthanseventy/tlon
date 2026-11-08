@@ -44,6 +44,8 @@ export const WIDE_H = 200
 /** below this the zones don't fit; a surface narrower than this draws the rail room */
 export const WIDE_MIN_W = 540
 export const BAND = 44 // the back wall ends here
+/** ticks a hire stays new enough for the book to go and look: five minutes */
+const NEW_HIRE = 3000
 export const HALL = 191 // the hallway's walking row
 export const OFF_W = 100, OFF_LANE = 94, OFF_DOOR = 150 // your office; its glass wall stops at the door
 const MEET_MIN = 86, LOUNGE_MIN = 124
@@ -163,6 +165,8 @@ export class WideRoom extends Sim<Layout> {
   /** the hour and the stuck count last seen: a new hour is noted at the clock, a rise is an erratum */
   private hourSeen = -1
   private stuckSeen = -1
+  private benchSeen: Set<string> | null = null
+  private newHire: { name: string; until: number } | null = null
   /** its ribbon goes the alarm's colour until this tick */
   private erratumUntil = 0
   private bookSaid: { text: string; from: number; until: number } | null = null
@@ -257,7 +261,12 @@ export class WideRoom extends Sim<Layout> {
   /** what an idle book may take up now: a nap only after dark, a shoulder only with someone mid-turn, the pets only when they're about */
   private errandCan() {
     const c = this.cat, d = this.dog
-    return { dark: dark(this.hour()), working: this.typists().length > 0, cat: c.mode !== "sleep" && c.mode !== "zoom" && !c.errand, dog: d.mode === "sleep" || d.mode === "sit" }
+    return { dark: dark(this.hour()), working: this.typists().length > 0, cat: c.mode !== "sleep" && c.mode !== "zoom" && !c.errand, dog: d.mode === "sleep" || d.mode === "sit", hire: this.freshHire() !== null }
+  }
+  /** the hire the book has not yet inspected, while they are new and in the room */
+  private freshHire(): string | null {
+    const h = this.newHire
+    return h && this.tick < h.until && this.actors.has(h.name) ? h.name : null
   }
   private typists() { return [...this.actors.values()].filter((x) => x.seat.thinking && x.spot.kind === "desk" && !x.moving) }
   /** where each errand goes */
@@ -276,6 +285,13 @@ export class WideRoom extends Sim<Layout> {
       case "nap": return at(desk ? { x: desk.x + desk.w / 2 - 6, y: desk.y + 10 } : { x: 40, y: 66 })
       case "nina": { const c = this.cat, near = () => ({ x: c.x - 6, y: c.y - 12 }); return at(near(), { follow: near }) }
       case "argos": { const d = this.dog, near = () => ({ x: d.x - 6, y: d.y - 18 }); return at(near(), { follow: near }) }
+      case "hat": { const d = this.dog, near = () => ({ x: d.x - 6, y: d.y - 18 }); return at(near(), { follow: near }) }
+      case "hall": return at({ x: this.width * 0.4, y: HALL - 40 })
+      case "hire": {
+        const who = this.actors.get(this.freshHire() ?? "") ?? pick([...this.actors.values()])
+        const over = () => ({ x: who.x - 6, y: who.y - 34 })
+        return at(over(), { follow: over, name: who.seat.agent })
+      }
       case "window": return at({ x: this.z.M0 + 26, y: 12 })
       case "tv": return at({ x: this.z.L0 + 56, y: 12 })
       case "clock": return at({ x: this.width - 30, y: 10 }, { name: `${this.hour() % 12 || 12} o'clock` })
@@ -291,6 +307,8 @@ export class WideRoom extends Sim<Layout> {
       case "tv": if (e.name !== "cut") this.tvSet.next(); this.bookSay("tv", true); return
       case "argos": this.bookSay("argos", true); this.dogSay("*thump thump thump*", 45); return
       case "nap": this.bookSay("nap", true); return
+      case "hat": this.bookSay("hat", true); this.dogSay("*proud huff*", 45); return
+      case "hire": this.newHire = null; this.bookSay("hire", true, e.name ?? ""); return
       case "lap": return
       default: this.bookSay(e.kind as Occasion, true, e.name ?? "")
     }
@@ -300,6 +318,9 @@ export class WideRoom extends Sim<Layout> {
     const stuck = Object.values(a.triage).reduce((n, x) => n + x, 0)
     if (this.stuckSeen >= 0 && stuck > this.stuckSeen) { this.erratumUntil = this.tick + 300; this.flinch = this.tick + FLINCH * 3; this.bookSay("erratum", true) }
     this.stuckSeen = stuck
+    const names = new Set(a.bench.map((b) => b.name))
+    if (this.benchSeen) for (const n of names) if (!this.benchSeen.has(n)) this.newHire = { name: n, until: this.tick + NEW_HIRE }
+    this.benchSeen = names
     const h = Math.floor(this.hour())
     if (this.hourSeen >= 0 && h !== this.hourSeen && !a.uqbar?.thinking && !this.errand) this.errand = this.errandFor(a, "clock")
     this.hourSeen = h

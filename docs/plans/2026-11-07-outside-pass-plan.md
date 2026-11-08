@@ -617,6 +617,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 **F12 · Uqbar's errands grow with the room.** `Haiku · S`
 - Change: three errands in `kit/volume.ts`: visits the hall, inspects a new hire, brings Argos a
   hat. Check: `volume.test.ts` under the seed.
+- Done: `hall`, `hire` and `hat` errands in `kit/volume.ts` and `rooms/wide.ts`; a hire is "new" for five minutes after its name first appears on the bench (the room diffs the bench), and the book inspects them once. Left: no hat is drawn on Argos, only the line and his huff.
 
 **F13 · Six quiet keys nobody can find.** `Haiku · S`
 - Why: `tab`, `R`, `p` (pat Nina), `U` (Uqbar), `.`, `,` are handled and hinted nowhere.
