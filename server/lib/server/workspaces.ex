@@ -217,7 +217,7 @@ defmodule Server.Workspaces do
   end
 
   # `repos:` in the register attrs is the workspace's scope at birth — a list of `%{path, …}` maps,
-  # or bare path strings (what `paths` used to be, so a seed reads the same). It is NOT a workspace
+  # or bare path strings. It is NOT a workspace
   # column, so it comes out before the changeset ever sees it.
   defp pop_repos(attrs) do
     attrs = Map.new(attrs)

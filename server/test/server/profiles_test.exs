@@ -66,7 +66,7 @@ defmodule Server.ProfilesTest do
       caches = Profiles.dev_caches() -- ~w(mix menard-scratch tlon-scratch)
       for cache <- caches, do: seed_repos(home, ".cache/#{cache}", 1)
 
-      # read dirs are write roots too (#505): 3 dirs of 30 repos each pass the old per-dir cap, sum 90 > 61
+      # read dirs are write roots too: 3 dirs of 30 repos each pass the old per-dir cap, sum 90 > 61
       Server.TestDB.clean!()
       {:ok, ws} = Workspaces.register(%{name: "budget-read"})
       read = for n <- ~w(ra rb rc), do: Path.join(home, "projects/#{n}")

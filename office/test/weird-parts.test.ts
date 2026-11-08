@@ -1,4 +1,4 @@
-// The weird end of the catalogue: ticket #98's parts exist, in the slot a figure wears them in.
+// The weird end of the catalogue: its parts exist, in the slot a figure wears them in.
 import { expect, test } from "bun:test"
 import { gearOf, PARTS } from "../kit/parts"
 

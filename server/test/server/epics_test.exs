@@ -1,5 +1,5 @@
 defmodule Server.EpicsTest do
-  # Epics (design 2026-10-08): a ticket of kind "epic" holds other tickets via `parent` links and is never work.
+  # Epics: a ticket of kind "epic" holds other tickets via `parent` links and is never work.
   use ExUnit.Case, async: false
 
   alias Server.Intake

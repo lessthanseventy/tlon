@@ -354,7 +354,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
   });
 });
 
-// The shape a live server returned (thread 15, 2026-09-25), bodies trimmed. The hand-built
+// The shape a live server returned, bodies trimmed. The hand-built
 // fixture above drifted from the server (north_star/chatter vs goal/recent) and every pi
 // coworker lost its brief to a TypeError; this one is the server's own output.
 import live from "./fixtures/dossier.live.json";

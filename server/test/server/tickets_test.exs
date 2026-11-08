@@ -1,5 +1,5 @@
 defmodule Server.TicketsTest do
-  # The `Server.Tickets` context (2026-08-30): the lightweight terminal tracker, write pipe +
+  # The `Server.Tickets` context: the lightweight terminal tracker, write pipe +
   # reads over the `local` backend.
   use ExUnit.Case, async: false
 

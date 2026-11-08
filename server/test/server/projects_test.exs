@@ -1,5 +1,5 @@
 defmodule Server.ProjectsTest do
-  # The `Server.Projects` context (Workspace ▸ Project ▸ Thread, 2026-08-30): the write
+  # The `Server.Projects` context (Workspace ▸ Project ▸ Thread): the write
   # pipe (changeset |> insert |> Bus.announce) and reads. The DB is the bus (§10):
   # assertions read back through it.
   use ExUnit.Case, async: false

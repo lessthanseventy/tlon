@@ -2,8 +2,8 @@ defmodule Server.Repo.Migrations.WorkspaceDefaultProject do
   @moduledoc false
   use Ecto.Migration
 
-  # The project a thread lands on when nothing picked one, named on the workspace. It used to be
-  # found BY NAME ("general"), so renaming that project minted a new "general" on the next boot.
+  # The project a thread lands on when nothing picked one, named on the workspace, not found by name:
+  # renaming a project must not mint a new "general" on the next boot.
   def up do
     alter table(:workspace) do
       add :default_project_id, references(:project, on_delete: :nilify_all)

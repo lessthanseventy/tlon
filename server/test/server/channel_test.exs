@@ -225,9 +225,8 @@ defmodule Server.ChannelTest do
       {:ok, root} = Channel.open_thread(%{title: "Tlön", scope: "machine"})
       assert Channel.machine_thread().id == root.id
 
-      # A newer machine thread is a staffed LEAF (B1.4), not the root: the root is the oldest and
-      # stays the root. (A [desc: id] "latest" query would wrongly return the leaf here — the
-      # 2026-08-19 regression this guards.)
+      # A newer machine thread is a staffed LEAF, not the root: the root is the oldest and
+      # stays the root. (A [desc: id] "latest" query would wrongly return the leaf here.)
       {:ok, _leaf} = Channel.open_thread(%{title: "Tlön · leaf", scope: "machine"})
       assert Channel.machine_thread().id == root.id
 
@@ -710,7 +709,7 @@ defmodule Server.ChannelTest do
     end
 
     # The operator's delete (the facade) cleans the thread's worktree up when it is safe to, and
-    # says what it did — a worktree with unmerged work is kept and named (Andrew, 2026-09-08).
+    # says what it did — a worktree with unmerged work is kept and named.
     test "Server.delete_thread/1 removes a clean worktree and reports it" do
       %{repo: repo, ws: ws, project: p} = Server.TestRepoDir.with_project()
       {:ok, thread} = Channel.open_thread(%{title: "tidy", workspace_id: ws.id, project_id: p.id})

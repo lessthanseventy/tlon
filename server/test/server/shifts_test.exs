@@ -45,7 +45,7 @@ defmodule Server.ShiftsTest do
     "API Error: Request rejected (429) · you (andrew) have reached your session usage limit, upgrade for higher limits: https://ollama.com/upgrade or add usage credits: https://ollama.com/settings (ref: 0000)"
   ]
 
-  # a one-shot's stderr notice (measured 2026-10-27), not a refusal
+  # a one-shot's stderr notice, not a refusal
   @catalog_notice ~s("kimi-k3" isn't described by this version's model catalog)
 
   defp names(ws), do: ws.id |> Workspaces.bench() |> Enum.map(& &1.name)

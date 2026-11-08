@@ -1,5 +1,5 @@
 defmodule Server.Source.ToolsTest do
-  # The coworkers' source verbs (Andrew, 2026-09-08: "baked into the coworkers"): rename/outline
+  # The coworkers' source verbs: rename/outline
   # over FILES, scoped to the calling thread's worktree — a path outside it is refused, so an
   # agent edits its own tree and nothing else. The MCP components are thin callers of this.
   use ExUnit.Case, async: false

@@ -1,5 +1,5 @@
 defmodule Server.TmuxBootCwdTest do
-  # A seat boots in its worktree or not at all (#336, #522): a pane whose cd failed ran its harness in
+  # A seat boots in its worktree or not at all: a pane whose cd failed ran its harness in
   # $HOME, and Claude Code then mounted every repo under home into its sandbox, past bwrap's 9000
   # arguments, so every Bash call in that seat died.
   use ExUnit.Case, async: true

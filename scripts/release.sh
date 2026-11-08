@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The release pointer (pm-and-release design §3): `refs/heads/live` is what the always-up service
-# runs, built in the `.release` checkout beside the main one. Merging to main no longer deploys;
+# runs, built in the `.release` checkout beside the main one. Merging to main does not deploy;
 # moving this pointer does.
 #
 #   release.sh cut [<commit>] [--rollback] [--no-restart]

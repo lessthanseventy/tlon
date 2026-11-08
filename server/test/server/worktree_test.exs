@@ -288,7 +288,7 @@ defmodule Server.WorktreeTest do
       assert File.read!(Path.join(String.trim(git_dir), "tlon-thread")) == "1\n"
     end
 
-    # Andrew, 2026-09-08: "the minute it starts writing code it needs to be in a worktree" — a
+    # The minute a thread starts writing code it needs to be in a worktree — a
     # thread with no slug (chat-born, or the machine thread) gets one named by its id, never the
     # main tree.
     test "a thread with NO slug gets a t<id> worktree — never the main tree", %{repo: repo, ws: ws, project: p} do

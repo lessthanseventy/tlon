@@ -22,7 +22,7 @@ export function socketPath(): string {
   return path.join(dir, "adapters-lspd.sock");
 }
 
-// The warm pool — exactly the old in-process `clients` Map, hoisted behind the socket.
+// The warm pool of language-server clients, behind the socket.
 // Each entry also carries the initialize promise, so a request can await it before sending
 // didOpen — otherwise the first request races the handshake and Expert errors on a didOpen
 // that lands before `initialized`, wedging its engine init.
@@ -59,8 +59,8 @@ function evict(key: string): void {
 }
 
 // line/col are 1-based (editor convention); converted to 0-based for the LSP protocol.
-// Number(undefined) is NaN, and NaN ?? 1 is still NaN (?? only catches null/undefined) — the
-// old fallback was dead and a missing coordinate produced {line: NaN}. Finite-check instead.
+// Number(undefined) is NaN, and NaN ?? 1 is still NaN (?? only catches null/undefined),
+// so the fallback must be a finite-check.
 const coord = (v: unknown): number => (Number.isFinite(Number(v)) ? Number(v) : 1);
 
 const pos = (p: Record<string, unknown>): LspPosition => ({
