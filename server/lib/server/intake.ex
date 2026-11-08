@@ -14,7 +14,9 @@ defmodule Server.Intake do
   consult naming it, after the route, defers the 30 minutes (they run from the newest such message);
   the manager's open operator ask naming it blocks until answered, then defers the same way.
   A ticket the manager labelled `held` (it waits on something; the why in its body) is
-  neither routed nor started until the label comes off. Before routing, a backlog or routed ticket that a
+  neither routed nor started until the label comes off, and holds no slot while routed. A `review`
+  ticket opens a plain thread, not a workline: it holds no slot either, and one goes each pass ahead
+  of the rank and at any cap, as the merge queue's input. Before routing, a backlog or routed ticket that a
   commit on origin's main names as a closing "(#N)" is closed, fixed by that sha: another workline did it.
   Run by `Server.Jobs.Intake` on the cron.
   """
@@ -42,7 +44,8 @@ defmodule Server.Intake do
     all = Repo.aggregate(open, :count)
     waiting = Repo.aggregate(from(t in open, where: not is_nil(t.awaiting)), :count)
 
-    # a `todo` ticket whose promoted thread closed holds no slot — nothing else would ever move it on
+    # a `todo` ticket whose promoted thread closed holds no slot — nothing else would ever move it on;
+    # nor does a held one (it waits on something outside the office) or a review (it opens no workline)
     routed =
       from(t in Ticket,
         where: t.workspace_id == ^ws and t.status == "todo",
@@ -55,7 +58,8 @@ defmodule Server.Intake do
           )
       )
       |> from(as: :t)
-      |> Repo.aggregate(:count)
+      |> Repo.all()
+      |> Enum.count(&(not held?(&1) and not Server.Tickets.review?(&1)))
 
     {all - waiting + routed, all + routed}
   end
@@ -186,9 +190,7 @@ defmodule Server.Intake do
     start_stalled(opts)
 
     for ws <- Repo.all(from t in Ticket, where: t.status == "backlog", distinct: true, select: t.workspace_id),
-        {working, open} = in_flight(ws),
-        working < cap and open < max_open,
-        ticket = next(ws),
+        ticket = next_review(ws) || under_cap(ws, cap, max_open),
         do: route.(ticket)
 
     :ok
@@ -276,5 +278,19 @@ defmodule Server.Intake do
     )
     |> Repo.all()
     |> Enum.filter(&Regex.match?(ref, &1.body))
+  end
+
+  defp under_cap(ws, cap, max_open) do
+    {working, open} = in_flight(ws)
+    if working < cap and open < max_open, do: next(ws)
+  end
+
+  # a review is the merge queue's input and opens a plain thread, not a workline: it goes first, at any cap
+  defp next_review(ws) do
+    blocked = Server.Tickets.blocked_in_workspace(ws)
+
+    from(t in Ticket, where: t.workspace_id == ^ws and t.status == "backlog" and t.kind == "ticket", order_by: t.id)
+    |> Repo.all()
+    |> Enum.find(&(Server.Tickets.review?(&1) and not held?(&1) and not MapSet.member?(blocked, &1.id)))
   end
 end

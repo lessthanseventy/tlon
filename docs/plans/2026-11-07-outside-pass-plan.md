@@ -432,6 +432,9 @@ snapshot on 304. `Sonnet · S`, after B1.
   the pile is a decision, not a sweep.
 - Check: `intake_test` for (a) and (b); the PM's schedule posts the list; the backlog count a month
   on.
+- Done 2026-11-08, (a) and (b): a held or review `todo` ticket holds no slot, and a backlog review
+  ticket is routed each pass ahead of the rank and at any cap (`Intake.next_review/1`). Open: (c),
+  the PM's weekly held review.
 
 **E4 · The operator's own words are not banked.** `Opus · M`
 - Why: `fact` holds 6,602 derived facts and **24 stated** (one tombstoned); `server/docs/issues.md`
