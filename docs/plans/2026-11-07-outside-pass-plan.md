@@ -376,6 +376,35 @@ launches; E1), #861, #820 (E2), #541 (bwrap source path for t1), #622 (fact_rele
 #760 (menard `run test` times out at 620 s with no verdict), #806 (smoke test flake), #749 (intake
 notice on the sheriff's beat). `Sonnet` for each but #614 and #760 (`Opus`).
 
+**E7 · Fewer check runs, the same safety.** `Opus · M (spec first) · limit (the check)`
+- Why: one change runs the full suite up to five times: the builder's own `run_task("server:check")`
+  before advancing, the verify gate on the rebased branch, the landing gate rebased onto main, the
+  nightly `check:main` on a tip that is often that same tree, and a review send-back repeats the
+  middle two. `check_passed` events: 2,676 in 14 days. Each run is minutes of the one machine, the
+  checks queue serialises them, and the script test suites (`check:names`'s nine) run every time
+  whatever changed. Andrew (2026-11-07): "we are running a looooot of checks; keep the safety, run
+  less of them".
+- Change, four mechanisms, each keeping the rule that nothing merges that nobody checked:
+  1. **One green per tree, everywhere.** `check.sh` already skips a clean tree it has passed
+     (`~/.cache/tlon-verify/green`). Widen it: the key is the tree hash *minus* `work/` and `docs/`
+     (a `pr.md` or a plan commit does not make a new tree to test); `run_task("server:check")` runs
+     `mise run check` so a seat's green is recorded and verify becomes a cache hit; the record is a
+     `check_passed` row in the db, not a per-checkout file, so every checkout and the nightly see it.
+  2. **Scope verify by what changed, keep landing full.** Verify runs the suites of the modules the
+     diff touches (`server/` → `server:check`, `office/` → `office:check`, `adapters/` → its two,
+     `scripts/`/`tasks/` → `check:scripts`, docs only → `check:names`); two or more modules, or a
+     touch on `mise.toml`, `scripts/check*.sh` or `AGENTS.md`, runs the full set. The landing gate
+     stays full and is the one GitHub's `tlon/check` is posted from.
+  3. **The landing's gate is the nightly** (E2): recorded as `ran-on: check:main <sha>`, so the
+     03:00 run skips when main's tip already has a green; the smoke queues after the merge.
+  4. **The canary bench runs on a changed steering fingerprint**, not nightly (`mix
+     server.bench_contrast --fingerprint` already computes it); the script suites run when
+     `scripts/` changed (G6's `check:scripts`).
+- Check: the count of `check_passed` events per landed workline, read for a week before and after
+  (today's shape is ~4–5 per landing); every landed PR still carries a `tlon/check` from a full run
+  at exactly its head; a change to `server/` alone never skips the server suite (a test over the
+  scoping function with fixture diffs).
+
 ---
 
 ## F · Fun (the office)
@@ -585,17 +614,17 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 | 1 | A1 A2 A3 A5 A6 A7, E5, F13 | hours each; the noise stops the same day, Uqbar's send-back unblocks gates |
 | 2 | E6 (the high tickets), A4, D3, D6, D7, B6, B7 | the pipeline's own bugs and the cheap ergonomics; no design needed |
 | 3 | B1 B2 B3, C1–C7 | the two performance passes; B3 is one migration, gated by Andrew |
-| 4 | D1 D2 D4 D5, E1 (spec), E2 | the throughput lever and the "no silent end" invariant |
+| 4 | D1 D2 D4 D5, E1 (spec), E2, E7 (spec) | the throughput lever, the "no silent end" invariant, and fewer check runs |
 | 5 | F1–F12 in any order, each its own ticket under the Toy / Home and whimsy epics | the fun, sized small on purpose; a Sonnet seat each |
 | 6 | B4 B5, E3 E4, D8, G1–G10 | the long ones; each a workline with a spec |
 
 ## Who
 
-- **Opus:** A4, B1, B4, B5, D1, D8, E1, E2, E3, E4, G1, G4, G10, #614, #760.
+- **Opus:** A4, B1, B4, B5, D1, D8, E1, E2, E3, E4, E7, G1, G4, G10, #614, #760.
 - **Sonnet:** everything else that is `Sonnet`; each item above is specified to the file and the
   check on purpose, so the brief is the item itself plus the files it names.
 - **Haiku:** A3, A7, D7, F12, F13, G5.
-- **Andrew:** the gates that list a limit — B3, D7's check extension, G3, G4, G5, G6 — and the two
+- **Andrew:** the gates that list a limit — B3, D7's check extension, E7, G3, G4, G5, G6 — and the two
   decisions: D4 (does a lead get `consult_peer`) and G10 (`work/` archive or not).
 
 ## Not in this plan, on purpose
