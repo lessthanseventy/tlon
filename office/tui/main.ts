@@ -2131,33 +2131,41 @@ function layoutScreen() {
   out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[2J`)
 }
 
-function draw() {
+/** the cursor the last full draw left (an input's caret), re-set by a room-only draw so it does not hide it */
+let paneCursor: string | null = null
+/** `roomOnly`: the room's clock moved and nothing else did — repaint the room and its tip, leave the header and the pane as the last full draw made them */
+function draw() { paint(false) }
+function paint(roomOnly: boolean) {
   if (!g || zoom) return
   const colsN = cols(), termRows = process.stdout.rows ?? 40
   if (reader) {
+    paneCursor = null
     if (picker || confirm) { out(`${ESC}[?25l` + drawOverlay(colsN, termRows)); return }
     out(reader.draw(colsN, termRows, threadOf(reader.tid), [...threadActions(reader.tid, true).map((x) => `${x.key} ${x.label}`), "pgup/pgdn scroll", "esc back", "ctrl+] room"].join(" · ")))
     return
   }
   const a = view()
+  const partial = roomOnly && paneCursor !== null
   let o = `${ESC}[?2026h${ESC}[?25l`
   // header: the workspace, and what waits elsewhere
-  const phone = phoneBar(bySurface.counts), usage = usageHeader(all, Date.now())
-  const head: (Seg & { go?: () => void })[] = [{ s: " OFFICE ", fg: ROLE.ground, bg: ROLE.attention }, key(" ‹ "), { s: wsName(), fg: ROLE.body, bold: true }, key(" › "),
-    ...(all.ok ? [] : [{ s: `  ${downHeader(all, Date.now())}`, fg: ROLE.alarm }]),
-    ...(phone ? badge({ s: `  ${ringFrame(Math.floor(Date.now() / 1000), phone.ringing)} ${phone.text} `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }) : []),
-    ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: toggleShift }] : []),
-    ...(all.pause === "pencils_down" || all.pause === "lights_out" ? badge({ s: all.pause === "lights_out" ? "  ◼ lights out " : "  ✎ pencils down ", fg: ROLE.ground, bg: ROLE.attention, bold: true, go: () => ask2("back to work", () => void did(data.pause("back_to_work"))) }) : []),
-    ...(queuesHeader() ? [{ s: `  ${queuesHeader()}`, fg: ROLE.live, go: () => open({ kind: "health" }) }] : []),
-    ...(lifeHeader(all, ws) ? [{ s: `  ${lifeHeader(all, ws)}`, fg: ROLE.body }, dim("  (L)")] : []),
-    ...(usage ? [{ s: `  ${usage.text}`, fg: usage.hot ? ROLE.attention : ROLE.body, bold: usage.hot }] : []),
-    ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
-    ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm, go: () => open({ kind: "health" }) }] : []),
-    ...(process.env.OFFICE_DEBUG ? [dim(`  viewport ${Math.round(viewport.x)},${Math.round(viewport.y)}`)] : [])]
-  headHits = []
-  let hx = 1
-  for (const s of head) { const w = cells(s.s); if (s.go) headHits.push({ from: hx, to: hx + w - 1, go: s.go }); hx += w }
-  o += `${ESC}[1;1H` + line(head, colsN)
+  if (!partial) {
+    const phone = phoneBar(bySurface.counts), usage = usageHeader(all, Date.now())
+    const head: (Seg & { go?: () => void })[] = [{ s: " OFFICE ", fg: ROLE.ground, bg: ROLE.attention }, key(" ‹ "), { s: wsName(), fg: ROLE.body, bold: true }, key(" › "),
+      ...(all.ok ? [] : [{ s: `  ${downHeader(all, Date.now())}`, fg: ROLE.alarm }]),
+      ...(phone ? badge({ s: `  ${ringFrame(Math.floor(Date.now() / 1000), phone.ringing)} ${phone.text} `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }) : []),
+      ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: toggleShift }] : []),
+      ...(all.pause === "pencils_down" || all.pause === "lights_out" ? badge({ s: all.pause === "lights_out" ? "  ◼ lights out " : "  ✎ pencils down ", fg: ROLE.ground, bg: ROLE.attention, bold: true, go: () => ask2("back to work", () => void did(data.pause("back_to_work"))) }) : []),
+      ...(queuesHeader() ? [{ s: `  ${queuesHeader()}`, fg: ROLE.live, go: () => open({ kind: "health" }) }] : []),
+      ...(lifeHeader(all, ws) ? [{ s: `  ${lifeHeader(all, ws)}`, fg: ROLE.body }, dim("  (L)")] : []),
+      ...(usage ? [{ s: `  ${usage.text}`, fg: usage.hot ? ROLE.attention : ROLE.body, bold: usage.hot }] : []),
+      ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
+      ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm, go: () => open({ kind: "health" }) }] : []),
+      ...(process.env.OFFICE_DEBUG ? [dim(`  viewport ${Math.round(viewport.x)},${Math.round(viewport.y)}`)] : [])]
+    headHits = []
+    let hx = 1
+    for (const s of head) { const w = cells(s.s); if (s.go) headHits.push({ from: hx, to: hx + w - 1, go: s.go }); hx += w }
+    o += `${ESC}[1;1H` + line(head, colsN)
+  }
   // the room
   const room0 = room()
   const building = mode.kind === "build" && build !== null
@@ -2184,7 +2192,10 @@ function draw() {
   // the tip line: what the pointer is over, or what just happened
   const tipRow = g.row + g.rows + 1
   o += `${ESC}[${tipRow};1H` + line([tip ? dim(` ${tip.split("\n").join(" · ")}`) : status ? key(` ${status}`) : dim("")], colsN)
-  out(o + drawPane(tipRow + 1, colsN, termRows) + `${ESC}[?2026l`)
+  if (partial) return out(o + paneCursor + `${ESC}[?2026l`)
+  const pane = drawPane(tipRow + 1, colsN, termRows)
+  paneCursor = /\x1b\[\d+;\d+H\x1b\[\?25h$/.exec(pane)?.[0] ?? ""
+  out(o + pane + `${ESC}[?2026l`)
 }
 
 // what the pane last drew, for a click on it: where it starts, how wide its left side is, which
@@ -2838,11 +2849,12 @@ async function main() {
   // it always steps; it is the repaint (a whole frame each) that costs a room nobody watches a core:
   // none while the terminal is unfocused (the return to focus draws), 2 Hz while the office is calm
   // (paused, or no coworker live)
-  let beat = 0, stale = false
+  let beat = 0, frames = 0, stale = false
   const calm = () => all.pause === "pencils_down" || all.pause === "lights_out" || !all.threads.some((t) => t.live)
   every(() => {
     if (!reader && room().step(view())) { changed(); stale = true }
-    if (stale && focused && (++beat % 5 === 0 || !calm())) { stale = false; draw() }
+    // the header and the pane catch up once a second; the frames between repaint the room alone
+    if (stale && focused && (++beat % 5 === 0 || !calm())) { stale = false; paint(++frames % 10 !== 0) }
   }, 100)
 }
 main()

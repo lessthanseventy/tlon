@@ -317,6 +317,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: split the pane draw from the room draw; redo the pane only when state or the snapshot
   changed (the `fresh`/`imageDirty` flags already half-exist).
 - Check: the paint bench; the drive walks (`office/test/drive/run.sh`) read the same screens.
+- Done: the room clock's frames repaint the room and its tip alone (`paint(true)`, re-setting the pane's input caret); the header and `drawPane` run on the tick's other draws and once a second. The `wide` drive walk reads the same screens before and after (one typed-in-finder timing difference); its two `click:#201`/`#202` steps fail the same on the unchanged base in this environment — open, not caused here. Left: the frame time is not measured (no harness drives `draw()` headless); the pane is at most a second behind a state change that calls no `draw()`.
 
 **C7 · Conditional snapshot fetch** — the client half of B1(b): send `If-None-Match`, keep the held
 snapshot on 304. `Sonnet · S`, after B1.
