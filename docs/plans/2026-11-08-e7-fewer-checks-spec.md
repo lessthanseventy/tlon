@@ -78,6 +78,9 @@ matches. Done 2026-11-08:
 
 - The canary bench runs when `mix server.bench_contrast --fingerprint` differs from the last
   run's, not nightly.
+  - Read 2026-11-08: there is no nightly bench — the schedules are `gate` and `smoke` only, and the
+    canary runs in `workline-verify.sh` only when the branch edits a steering file (its A/B against
+    origin/main). This half is already so; nothing to build.
 - The nine script suites in `check:names` move to `check:scripts` (G6) and run when `scripts/`
   or `tasks/` changed. The full `check` still runs them all.
 
