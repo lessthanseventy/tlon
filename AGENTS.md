@@ -11,7 +11,7 @@ ficciones (`~/projects/ficciones`), which is where the Nix, the desktop and the 
 The human and any agent drive this repo through the **same mise tasks** (`mise tasks` lists them) — one
 control loop, not two, and no second way to run anything:
 
-- `mise run check` — names gate + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server, adapters and office gates + the task manual; the green-before-commit gate.
+- `mise run check` — names gate + script self-tests (`check:scripts`: each `scripts/*.test.sh` is a `check:scripts:<name>` task, run in parallel) + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server, adapters and office gates + the task manual; the green-before-commit gate.
   One at a time per machine: it waits its turn in the checks queue (`scripts/checks-queue.sh`, saying who
   holds it), first come, first served, and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
   suites on the one test database at once. Don't call `check:all` to skip the line. A shell that can't open
@@ -206,7 +206,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
 
 ## Verify
 
-`mise run check` is the gate. `mise run check:names` (first in it) is the names-exist gate: every
+`mise run check` is the gate. `mise run check:names` is the names-exist gate: every
 `Server.*` module, mix task and mise task that scripts, `mise.toml`, the adapters or a
 guide name must actually exist — a rename that strands a reference fails here instead of at 2am. The same task holds
 `docs/glossary.md` — one meaning per noun; its "lives in" names must exist and its retired words stay out of

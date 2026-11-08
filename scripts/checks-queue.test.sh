@@ -71,20 +71,20 @@ expect "…and says it fell back" "$(grep -c 'falling back' "$err")" "1"
 
 fresh
 export CHECKS_KILL_GRACE=41 # distinct from any sleep a check runs, so pgrep names only the timer's
-CHECKS_LABEL=S "$here/checks-queue.sh" bash -c "trap 'sleep 1; echo end S >>'$log'; exit' TERM; echo start S >>'$log'; sleep 30 & wait" 2>>"$err" &
+CHECKS_LABEL=S "$here/checks-queue.sh" bash -c "trap 'sleep 1; echo end S >>'$log'; exit' TERM; echo start S >>'$log'; sleep 37 & wait" 2>>"$err" &
 spid=$!
 until_log "start S"
 job B 0 & until_queued 1
 kill -TERM "$spid"
 wait
 expect "a stopped holder's slow-dying child ends before the next waiter starts" "$(tr '\n' ',' <"$log")" "start S,end S,start B,end B,"
-expect "…and leaves no process of its own behind" "$(pgrep -f 'sleep 30' | wc -l | tr -d ' ')" "0"
+expect "…and leaves no process of its own behind" "$(pgrep -f 'sleep 37' | wc -l | tr -d ' ')" "0"
 sleep 0.3 # the killed timer is reaped by init
 expect "…nor the kill timer's sleep" "$(pgrep -f 'sleep 41' | wc -l | tr -d ' ')" "0"
 
 # the lock is free as soon as the group is gone, not after the kill grace
 fresh
-CHECKS_LABEL=T "$here/checks-queue.sh" bash -c "echo start T >>'$log'; sleep 30 & wait" 2>>"$err" &
+CHECKS_LABEL=T "$here/checks-queue.sh" bash -c "echo start T >>'$log'; sleep 37 & wait" 2>>"$err" &
 tpid=$!
 until_log "start T"
 kill -TERM "$tpid"
@@ -99,7 +99,7 @@ unset CHECKS_KILL_GRACE
 
 # a queue SIGKILLed with its suites running leaves the group; the next check is refused, naming it
 fresh
-CHECKS_LABEL=U "$here/checks-queue.sh" bash -c "echo start U >>'$log'; sleep 30 & wait" 2>>"$err" &
+CHECKS_LABEL=U "$here/checks-queue.sh" bash -c "echo start U >>'$log'; sleep 37 & wait" 2>>"$err" &
 upid=$!
 until_log "start U"
 kill -KILL "$upid"
