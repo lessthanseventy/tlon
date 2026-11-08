@@ -101,6 +101,13 @@ test("a seat with a permissions deny list starts with remote control off", async
   expect(settings.remoteControlAtStartup).toBe(false);
 });
 
+// A seat learns what it cannot run from the brief, not by losing a turn to a refusal.
+test("the seat's prompt says no python, node, perl or ruby runs there", async () => {
+  const { exec } = await dryRun("pierre");
+  expect(exec).toContain("no python, node, perl or ruby");
+  expect(exec).toContain("menard");
+});
+
 // Pins the one flag the launcher depends on against the real binary, not a stub. Help only: a real
 // session is never started here, and --settings is not validated by a help run.
 const hasClaude = Bun.spawnSync(["bash", "-c", "command -v claude"]).exitCode === 0;
