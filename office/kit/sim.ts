@@ -180,6 +180,8 @@ export class Sim<L extends { people: Seat[] }> {
   private nudgeUntil = 0
   protected date: () => Date = () => new Date()
   private drillUntil = -1
+  /** treats given to Nina so far, for the trophies' tally */
+  treats = 0
   private alarmSince = -1
   /** a keyed drill (the play key, never an outage): the rack burns and the crew panics, then musters */
   get alarmed() { return this.tick < this.drillUntil }
@@ -378,7 +380,7 @@ export class Sim<L extends { people: Seat[] }> {
         if (a.moving || a.path.length || !LOUNGING.has(a.spot.kind) || Math.abs(a.x - c.x) > 18 || Math.abs(a.y - c.y) > 16 || random() > 0.0015 * lean(this.temperament.energy)) continue
         // a snack from the machine goes to her, whatever else they had in mind
         const kind = a.snack > this.tick ? "treat" : pick<Fuss>(["pat", "pat", "scratch", "treat"])
-        if (kind === "treat") a.snack = 0
+        if (kind === "treat") { a.snack = 0; this.treats++ }
         c.fuss = { kind, from: { x: a.x, y: a.y }, until: this.tick + FUSS }; c.mode = "sit"; c.until = this.tick + FUSS + 60
         c.purr = this.tick + FUSS; c.byYou = false; a.emote = "♥"; a.emoteUntil = this.tick + FUSS
         this.catSay(this.line("Nina", `fuss_${kind}`, NINA.fuss[kind], a.seat.agent))

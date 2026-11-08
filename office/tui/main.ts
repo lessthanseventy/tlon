@@ -4,7 +4,8 @@
 // opens full-screen to read and answer; `/` finds anything. Runs on Linux and macOS: kitty
 // graphics where the terminal has them (ghostty, kitty, WezTerm), half blocks where it does not.
 import { arrivals } from "../kit/door"
-import { babelPage, isKonami, KONAMI } from "../kit/eggs"
+import { babelPage, clockFace, hasFound, isKonami, KONAMI } from "../kit/eggs"
+import { bump as bumpTally, findSecret, newlyWon, night, parse as parseTally, rows as trophyRows, serialize as serializeTally, won as wonTrophies, type Tally } from "../kit/trophies"
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, unlinkSync, watchFile, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -74,7 +75,7 @@ type Mode =
   | { kind: "person"; name: string; from?: Mode } | { kind: "thread"; tid: number; from?: Mode }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number; from?: Mode } | { kind: "epic"; id: number; from?: Mode } | { kind: "calendar" } | { kind: "life" } | { kind: "pages" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "issue"; id: number; from?: Mode } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "play"; from?: Mode; page?: 1 | 2 } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "play"; from?: Mode; page?: 1 | 2 } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "trophies" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number; from?: Mode }
   | { kind: "look"; name: string; from?: Mode; hall?: true } | { kind: "look-editor"; name: string; view: "front" | "side" | "back"; from?: Mode; hall?: true }
   | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" } | { kind: "cast"; tab: "people" | "office" }
@@ -330,6 +331,7 @@ function heard(turns: { who: string; line: string }[]) {
   const fresh = turns.filter((t) => !said.some((x) => x.who === t.who && x.line === t.line))
   said = [...said, ...fresh.map((t) => ({ at: Date.now(), ...t }))].slice(-50)
   writeState(SAID, JSON.stringify(said))
+  if (fresh.length) record(bumpTally(trophies, "balloons", fresh.length))
 }
 let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null, settings: data.Settings | null = null
 /** the branch under review, and the notes not yet sent, kept per thread so leaving the screen loses none */
@@ -383,7 +385,7 @@ const boardCtx = (): BoardCtx => {
   const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
   return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])), checking: checkingId(), checkWaiting: checkWaitingIds(), merging: all.health?.merge_queue ?? [] }
 }
-const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); r.setWhimsy(resolveWhim(whim)); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow); r.reactLine = reactFor; r.onSlap = () => { ledger = tickSlap(ledger) } } return r }
+const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); r.setWhimsy(resolveWhim(whim)); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) { r.setHome(homeNow); r.setTrophies(wonTrophies(trophies).length) } r.reactLine = reactFor; r.onSlap = () => { ledger = tickSlap(ledger) } } return r }
 /** the dial moved: remember it and hand every room the resolved dials */
 function setWhim(s: WhimState) {
   whim = s
@@ -506,6 +508,7 @@ async function tickLedger() {
   const sws = all.bench.find((c) => c.archetype === "sheriff")?.workspace_id
   if (sws == null) return
   const count = all.triage[String(sws)] ?? 0
+  record(night(trophies, world ? world.now() : new Date(), count > 0))
   const t = count > 0 ? await data.triage(sws) : null
   if (count > 0 && !t) return
   const before = new Map(ledger.demerits)
@@ -542,6 +545,32 @@ function notify(title: string, body: string) {
 /** the feed rows already flown as aeroplanes */
 const flown = new Set<string>()
 async function loadMargin() { notes = ws === null ? [] : await data.margin(ws) }
+/** the office's trophies (kit/trophies.ts): tallies kept across restarts, a cup on the lounge shelf for each one won */
+const TROPHY_FILE = SANDBOX ? join(CONFIG, "office-trophies") : join(STATE_DIR, "office-trophies")
+let trophies = parseTally(readState(TROPHY_FILE))
+function record(next: Tally) {
+  if (next === trophies) return
+  for (const tr of newlyWon(trophies, next)) status = `trophy won: ${tr.name}`
+  trophies = next
+  writeState(TROPHY_FILE, serializeTally(next))
+  for (const r of rooms.values()) if (r instanceof WideRoom) r.setTrophies(wonTrophies(next).length)
+}
+const seenTreats = new Map<object, number>()
+let wasAlarmed = false
+/** the tallies only the sim knows: a drill begun, treats given, a secret clock face */
+function watchTrophies() {
+  let next = trophies
+  const alarmed = [...rooms.values()].some((r) => r.alarmed)
+  if (alarmed && !wasAlarmed) next = bumpTally(next, "drills")
+  wasAlarmed = alarmed
+  for (const r of rooms.values()) {
+    const n = r.treats - (seenTreats.get(r) ?? 0)
+    seenTreats.set(r, r.treats)
+    if (n > 0) next = bumpTally(next, "treats", n)
+  }
+  if (["404", "π"].includes(clockFace(world ? world.now() : new Date()))) next = findSecret(next, "clock")
+  record(next)
+}
 /** the posts whose aeroplane Argos caught, by `earmarkOf`: the thread shows them dog-eared */
 const earmarked = earmarksIn(readState(EARS))
 async function loadFeed() {
@@ -552,6 +581,7 @@ async function loadFeed() {
   for (const x of freshPosts(feed, flown, first)) {
     if (r instanceof WideRoom && r.fly(x.thread_id!, v, handoffFrom(feed, x.thread_id!, Date.now()))) {
       earmarked.add(earmarkOf(x.thread_id!, x.at, x.who))
+      record(bumpTally(trophies, "planes"))
       writeState(EARS, earmarksOut(earmarked))
     }
   }
@@ -800,7 +830,11 @@ async function finder() {
 }
 /** everything across the workspaces that waits on you, then what's being worked on */
 /** a page of the Library of Babel, the width of the card */
-function openBabel() { open({ kind: "babel", page: babelPage(DETAIL - 2, Math.max(20, paneW() - 4)) }) }
+function openBabel() {
+  const page = babelPage(DETAIL - 2, Math.max(20, paneW() - 4))
+  if (hasFound(page)) record(findSecret(trophies, "babel"))
+  open({ kind: "babel", page })
+}
 
 /** what a triage item is: its section, and so which actions it has */
 type StuckKind = "blocker" | "check" | "unled"
@@ -948,6 +982,7 @@ const VERBS: [string, () => void][] = [
   ["Nina, the cat", () => open({ kind: "pet", who: "cat" })], ["Argos, the dog", () => open({ kind: "pet", who: "dog" })],
   ["the arcade", () => open({ kind: "arcade" })], ["the suggestion box", () => open({ kind: "ideas" })],
   ["the banter log: what the crew said lately", () => open({ kind: "banter" })],
+  ["trophies: what the office has earned", () => open({ kind: "trophies" })],
   ["Uqbar's entry — the office as a page", () => open({ kind: "entry" })],
 ]
 
@@ -1870,6 +1905,10 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         actions: [back1],
       }
     }
+    case "trophies": {
+      const rows: Row[] = trophyRows(trophies).map((t): Row => ({ segs: [t.won ? pink("★ ") : dim("☆ "), plain(t.name.padEnd(24)), dim(t.note)] }))
+      return { title: `TROPHIES · ${wonTrophies(trophies).length} won · a cup on the lounge shelf for each`, rows, actions: [back1] }
+    }
     case "arcade": {
       // the coworkers' best scores on the cabinets, where the room keeps them
       const r = room(), highs: Row[] = r instanceof WideRoom ? r.highScores().flatMap((h, i): Row[] => (h ? [{ segs: [key(`cabinet ${i + 1}  `), plain(`best ${h.score}`), dim(`  by ${h.name}`)] }] : [])) : []
@@ -2438,7 +2477,7 @@ function playDo(id: string): void {
 
 function onKey(k: string) {
   keyLog = [...keyLog, k].slice(-KONAMI.length)
-  if (isKonami(keyLog)) { keyLog = []; room().disco(); status = "↑↑↓↓←→←→BA — everybody dance"; changed(); return draw() }
+  if (isKonami(keyLog)) { keyLog = []; record(findSecret(trophies, "konami")); room().disco(); status = "↑↑↓↓←→←→BA — everybody dance"; changed(); return draw() }
   if (k === ROOM_CTRL) return toRoom()
   if (picker) return pickerKey(k)
   if (input) return inputKey(k)
@@ -2843,6 +2882,7 @@ async function main() {
   if (world && process.env.OFFICE_PLAY_INTRO === "1" && !readState(PLAY_SEEN)) { writeState(PLAY_SEEN, "1"); open({ kind: "play" }) }
   everyFocused(refresh, 10_000)
   everyFocused(pollPlayer, 2000)
+  everyFocused(watchTrophies, 1000)
   let sec = 0
   every(() => { looks.tick(1); if (focused && ++sec % 5 === 0) stampLooked(); if (focused && !reader && !zoom && notes.some((n) => { const a = looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
   every(() => { if (focused && ((mode.kind === "pet" && petDraft) || mode.kind === "store")) { previewTick += 10; draw() } }, 1000)
