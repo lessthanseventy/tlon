@@ -51,6 +51,10 @@ export function babelPage(lines: number, width: number, rng: () => number = Math
   return page
 }
 
+/** a page of the Library that holds one of the found sentences (possibly cut to the page's width) */
+export const hasFound = (page: readonly string[]): boolean =>
+  page.some((l) => l.trim().length > 8 && FOUND.some((f) => f.startsWith(l.trim())))
+
 const ROWS = ["qwertyuiop[]", "asdfghjkl;'", "zxcvbnm,./"]
 
 /** what a cat standing on a keyboard types: a run along one row, some keys held down */

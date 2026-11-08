@@ -44,6 +44,7 @@ export const WIDE_H = 200
 /** below this the zones don't fit; a surface narrower than this draws the rail room */
 export const WIDE_MIN_W = 540
 export const BAND = 44 // the back wall ends here
+const CUPS_MAX = 5
 /** ticks a hire stays new enough for the book to go and look: five minutes */
 const NEW_HIRE = 3000
 export const HALL = 191 // the hallway's walking row
@@ -516,6 +517,9 @@ export class WideRoom extends Sim<Layout> {
   /** the lounge TV flashes the new level over whatever it was showing */
   protected override levelUp(level: number) { super.levelUp(level); this.tvSet.showLevel(level) }
   /** the remote: the next channel */
+  /** the trophies won so far, each a cup on top of the bookshelf (at most `CUPS_MAX`) */
+  trophies = 0
+  setTrophies(n: number) { this.trophies = n }
   /** the placed home tiles: drawn on the floor below the office, and the sim re-plans around their blocks */
   setHome(h: Home) {
     if (JSON.stringify(h) === JSON.stringify(this.home)) return
@@ -591,6 +595,10 @@ export class WideRoom extends Sim<Layout> {
     }
     const shelf = corner(this.z).shelf, mode = modeOf(this.book, spineHome(shelf))
     drawShelf(sc, shelf, mode === "shelved", !!a.uqbar && this.fallen, this.shelfNudge())
+    for (let i = 0; i < Math.min(this.trophies, CUPS_MAX); i++) {
+      const cx = shelf.x + 2 + i * 4
+      px(cx, shelf.y - 3, 3, 2, ROLE.attention); px(cx + 1, shelf.y - 1, 1, 1, ROLE.attention)
+    }
     const e = this.errand, there = !!e && e.arrived !== null
     const mood: Mood = this.tick < this.erratumUntil ? "failing" : e?.kind === "lap" ? "shipped" : a.uqbar ? moodOf(a.uqbar) : "idle"
     drawBook(sc, this.book, mood, mode, a.uqbar?.thread_id ?? null, this.tick < this.flinch, {

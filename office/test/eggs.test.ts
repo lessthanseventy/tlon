@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { BABEL_ALPHABET, FOUND, FOUND_ODDS, foundLines, babelPage, clockFace, isKonami, keyMash, nightOwl } from "../kit/eggs"
+import { BABEL_ALPHABET, FOUND, FOUND_ODDS, foundLines, babelPage, clockFace, hasFound, isKonami, keyMash, nightOwl } from "../kit/eggs"
 
 describe("easter eggs", () => {
   test("the clock: 404 at four minutes past four, π at 3:14, the time otherwise", () => {
@@ -46,5 +46,13 @@ describe("easter eggs", () => {
   test("the small hours are the night owl's: midnight to five", () => {
     expect([0, 1, 2, 3, 4].every(nightOwl)).toBe(true)
     expect([5, 9, 12, 18, 23].some(nightOwl)).toBe(false)
+  })
+})
+
+describe("hasFound", () => {
+  test("a page with a found sentence, even cut to the page's width, is found; noise is not", () => {
+    expect(hasFound(["abc,def. xyz", "somewhere in these rooms is the book of you".padEnd(60)])).toBe(true)
+    expect(hasFound(["somewhere in these rooms"])).toBe(true)
+    expect(hasFound(babelPage(8, 40, () => 0.5))).toBe(false)
   })
 })
