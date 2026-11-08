@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attribution, bandParts, figureCells, gateOf, landedAlerts, landingsOf, mentionsOf, operatorApi, turnWord, usageReport } from "./citizen.ts";
+import { attribution, bandParts, figureCells, gateOf, landedAlerts, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport } from "./citizen.ts";
 import type { Dossier } from "./brief.ts";
 
 const NONE = { shown: [], more: 0 };
@@ -173,4 +173,17 @@ test("landedAlerts keeps the landing rows of an alerts reply, newest first", () 
   ];
   expect(landedAlerts(rows).map((a) => a.key)).toEqual(["landed:2", "landed:1"]);
   expect(landedAlerts({ error: "x" })).toEqual([]);
+});
+
+describe("offlineNote — the band says when the server has gone quiet", () => {
+  const POLL = 120_000;
+
+  test("nothing while the last good read is within three polls, or before there was one", () => {
+    expect(offlineNote(1_000_000 + 3 * POLL, 1_000_000, POLL)).toBeNull();
+    expect(offlineNote(1_000_000, 0, POLL)).toBeNull();
+  });
+
+  test("past three polls it says how many seconds", () => {
+    expect(offlineNote(1_000_000 + 3 * POLL + 1_000, 1_000_000, POLL)).toBe("offline 361s");
+  });
 });

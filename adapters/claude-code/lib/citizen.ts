@@ -30,6 +30,12 @@ export function bandParts(thread: string, d: Dossier | null, red = 0): string[] 
   return parts;
 }
 
+/** "offline Ns" once the last good dossier or glance (ms since epoch; 0 = none yet) is older than three polls. */
+export function offlineNote(now: number, lastGoodAt: number, pollMs: number): string | null {
+  if (!lastGoodAt || now - lastGoodAt <= pollMs * 3) return null;
+  return `offline ${Math.floor((now - lastGoodAt) / 1000)}s`;
+}
+
 export type Gate = { decision: "deny" | "ask"; reason: string };
 
 // Each simple command in a shell line, as words: split at ; & | ( ) ` $( and newlines, single
