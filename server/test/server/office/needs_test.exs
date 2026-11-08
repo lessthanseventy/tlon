@@ -16,6 +16,19 @@ defmodule Server.Office.NeedsTest do
     %{ws: ws}
   end
 
+  # a put-away is compared with the item's time at whole seconds: age it so the next item is newer
+  defp put_away_earlier, do: Server.Repo.query!("UPDATE need_dismissal SET at = at - interval '2 seconds'")
+
+  # the stall clock reads whole seconds: age what the thread holds so a later row is newer
+  defp time_passes(t) do
+    for table <- ~w(event message),
+        do:
+          Server.Repo.query!(
+            "UPDATE #{table} SET created_at = created_at - interval '2 seconds' WHERE thread_id = $1",
+            [t.id]
+          )
+  end
+
   defp kinds(ws), do: Needs.list() |> Enum.filter(&(&1.workspace_id in [ws.id, nil])) |> Enum.map(&{&1.kind, &1.level})
 
   test "a coworker's question is blocking, and answering it takes it off the list", %{ws: ws} do
@@ -174,7 +187,7 @@ defmodule Server.Office.NeedsTest do
       assert :ok = Needs.dismiss(key)
       assert Needs.list() == []
 
-      Process.sleep(1100)
+      put_away_earlier()
       _ = stuck(ws, "emma", ticket)
       assert [%{kind: "blocked"}] = Needs.list()
 
@@ -205,7 +218,7 @@ defmodule Server.Office.NeedsTest do
       assert :ok = Needs.dismiss(key)
       assert Needs.list() == []
 
-      Process.sleep(1100)
+      put_away_earlier()
       {:ok, _} = Channel.post(%{thread_id: t.id, author: "sonny", body: "@andrew a real question"})
       assert [%{kind: "mention", text: "sonny: @andrew a real question"}] = Needs.list()
     end
@@ -711,7 +724,7 @@ defmodule Server.Office.NeedsTest do
       deny(t, 2)
       assert [%{kind: "tool_denied"}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
 
-      Process.sleep(1100)
+      time_passes(t)
       {:ok, _} = Channel.post(%{thread_id: t.id, author: "nolan", body: "worked around it"})
       assert [] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
     end
@@ -719,9 +732,9 @@ defmodule Server.Office.NeedsTest do
     test "the refused seat's post before its denials, or another seat's after, does not clear it", %{ws: ws} do
       t = workline(ws, "review", 3)
       {:ok, _} = Channel.post(%{thread_id: t.id, author: "nolan", body: "trying the smoke"})
-      Process.sleep(1100)
+      time_passes(t)
       deny(t, 2)
-      Process.sleep(1100)
+      time_passes(t)
       {:ok, _} = Channel.post(%{thread_id: t.id, author: "someone-else", body: "chatter"})
       assert [%{kind: "tool_denied"}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
     end
@@ -729,11 +742,11 @@ defmodule Server.Office.NeedsTest do
     test "a seat refused in an earlier round posting does not clear the current round's item", %{ws: ws} do
       t = workline(ws, "build", 3)
       deny(t, 2, "emma")
-      Process.sleep(1100)
+      time_passes(t)
       {:ok, _} = Server.Dossier.record_event(%{thread_id: t.id, kind: "stage_advanced", detail: %{}})
-      Process.sleep(1100)
+      time_passes(t)
       deny(t, 2, "nolan")
-      Process.sleep(1100)
+      time_passes(t)
       {:ok, _} = Channel.post(%{thread_id: t.id, author: "emma", body: "answering an @mention"})
       assert [%{kind: "tool_denied", text: text}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
       assert text =~ "nolan"
