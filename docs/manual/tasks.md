@@ -9,7 +9,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | verb | does |
 |---|---|
 | `adapters:claude-code:check` | adapters/claude-code: the helpers' precommit gate — install (frozen), typecheck, tests (CI runs this one) |
-| `adapters:claude-code:mod` | adapters/claude-code: the mod's gate — validate it (strict), then its tests in Claude Code's own kit |
+| `adapters:claude-code:mod` | adapters/claude-code: the mod's gate — validate it (strict), then its tests in Claude Code's own kit; skipped, with a line saying so, where claude is not installed |
 | `adapters:claude-code:watch` | adapters/claude-code: re-run the mod's helper suite on every change (cap signal) |
 | `adapters:lsp:check` | adapters/lsp: the LSP MCP server's precommit gate — install (frozen), typecheck, tests |
 | `adapters:lspd:check` | adapters/lspd: the sidecar daemon's precommit gate — install (frozen), typecheck, tests |
