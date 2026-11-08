@@ -123,6 +123,16 @@ strays() { # slug
     $2 !~ /\// { if ($1 == "A") print $2; next }
     $2 ~ /^work\// && index($2, own) != 1 { print $2 }'
 }
+# The gates a diff can break, as the service reads it: changed paths on stdin, one mise task per
+# line out; `check` when the service does not answer or names nothing. Asked before the gates run
+# under the clean env, so TLON_URL is still the service's.
+scope_tasks() {
+  local url="${TLON_URL:-http://127.0.0.1:4040}" paths tasks
+  paths="$(sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/",/' | tr -d '\n' | sed 's/,$//')"
+  tasks="$(curl -sf -m 5 -X POST -H 'content-type: application/json' -d "{\"paths\":[$paths]}" "$url/api/check/scope" 2>/dev/null |
+    tr -d ' \n' | sed -n 's/.*"tasks":\[\([^]]*\)\].*/\1/p' | tr ',' '\n' | tr -d '"')"
+  if [ -n "$tasks" ]; then printf '%s\n' "$tasks"; else echo check; fi
+}
 # a workline's rule, not a PR's: a PR's branch has no work/<slug>/ of its own
 stray=""
 [ -n "${LAND_REF:-}" ] || stray="$(git -C "$fresh" diff --name-status --no-renames origin/main HEAD | strays "$slug")"
@@ -190,9 +200,19 @@ $fails
 }
 
 fail=0
-# RUN_TASK (branch mode, `run_task`): another mise task in place of the full check
-task=check; [ -n "${LAND_REF:-}" ] && task="${RUN_TASK:-check}"
-run_gate "mise run $task" mise run "$task" || fail=1
+# RUN_TASK (branch mode, `run_task`): another mise task in place of the full check. A workline's
+# verify runs the gates its diff can break (Server.CheckScope, asked over the API; no answer → the
+# full check); the landing's gate stays the full check. TLON_VERIFY_FULL=1 runs it full regardless.
+if [ -n "${LAND_REF:-}" ]; then
+  tasks="${RUN_TASK:-check}"
+elif [ "${TLON_VERIFY_FULL:-0}" = 1 ]; then
+  tasks=check
+else
+  tasks="$(git -C "$fresh" diff --name-only origin/main HEAD | scope_tasks)"
+fi
+for task in $tasks; do
+  run_gate "mise run $task" mise run "$task" || fail=1
+done
 
 # A steering edit earns a canary A/B (#632): the roles it moved benched from origin/main and the
 # branch's rebased checkout, each contrast a bench_contrast CHECKS row and one note — evidence for the

@@ -194,6 +194,13 @@ defmodule Server.MCP.GatewayTest do
     assert {422, %{"error" => _}} = request_json(:patch, "/api/flags/build_mode", %{"enabled" => "yes"})
   end
 
+  test "POST /api/check/scope names the gates a diff can break; a bad body is 422" do
+    assert {200, %{"tasks" => tasks}} = request_json(:post, "/api/check/scope", %{"paths" => ["office/kit/sim.ts"]})
+    assert tasks == ["check:names", "check:ignored", "office:check"]
+    assert {200, %{"tasks" => ["check"]}} = request_json(:post, "/api/check/scope", %{"paths" => []})
+    assert {422, _} = request_json(:post, "/api/check/scope", %{"paths" => "office"})
+  end
+
   test "POST /api/restart while busy schedules it, says what it waits on; DELETE drops it" do
     :ok = Server.Presence.Thinking.thinking(987_654, "hronir")
     Application.put_env(:server, :restart_run, fn _force -> :ok end)

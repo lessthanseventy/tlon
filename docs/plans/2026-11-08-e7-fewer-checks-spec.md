@@ -57,6 +57,12 @@ out), which the script asks for over the API:
 The landing gate keeps running the full `check`, and only it posts `tlon/check`. A scoped verify
 posts nothing to GitHub.
 
+Done 2026-11-08: `Server.CheckScope.suites/1` (the table above, with two additions: a `server/` diff
+runs `server:eval-det` beside `server:check`, and a `scripts/`|`tasks/` diff runs the server suite
+too, since it is the script tests' harness), `POST /api/check/scope`, and `workline-verify.sh`'s
+`scope_tasks` for a workline's verify only — `LAND_REF` runs (landing, `run_task`) are untouched,
+`TLON_VERIFY_FULL=1` forces the full check, and no answer from the service is the full check.
+
 Risk: a change in one module that breaks another (a server API change breaking the office's
 reads) passes verify and fails at landing, one round later than today. That is a slower red, not
 a missed one, because the landing is still full.
