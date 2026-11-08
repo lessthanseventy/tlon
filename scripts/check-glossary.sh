@@ -3,7 +3,7 @@
 #   (g1) every `Server.*` module, `mise run <task>` and `scripts/*` file in a "lives in" cell exists
 #        (a cell from `pending:` on is a rename not yet made, so it is skipped);
 #   (g2) the retired words (console, cockpit, funes as a product, lobby as the screen) are absent
-#        from every AGENTS.md and office/tui/*.ts — the surfaces a weaker model and the operator read; a plan is prose and is not scanned.
+#        from every AGENTS.md and office/tui/*.ts and office/docs/*.md — the surfaces a weaker model and the operator read; a plan is prose and is not scanned.
 # Usage: check-glossary.sh [root]; exit 1 on any miss. A root without mise.toml skips the task check.
 set -uo pipefail
 
@@ -62,7 +62,7 @@ scan() {
 }
 
 agents="$(find . -path '*/node_modules' -prune -o -path '*/deps' -prune -o -path '*/_build' -prune -o -path ./.worktrees -prune -o -path ./.git -prune -o -name AGENTS.md -print | sort)"
-tui="$(ls office/tui/*.ts 2>/dev/null)"
+tui="$(ls office/tui/*.ts office/docs/*.md 2>/dev/null)"
 all="$agents $tui"
 
 scan fail 'console'  '\bconsole\b' $all
@@ -74,4 +74,4 @@ lobby='ctrl\+\] *\(?(is |to )?(the )?lobby|"ctrl\+\]", label: "lobby"'
 scan warn 'lobby for the screen — task B3' "$lobby" $agents $tui
 
 if [ "$fail" -ne 0 ]; then echo "check-glossary: FAILED"; exit 1; fi
-echo "check-glossary: ok — $n_live \"lives in\" names exist, no retired words in AGENTS.md or office/tui"
+echo "check-glossary: ok — $n_live \"lives in\" names exist, no retired words in AGENTS.md, office/tui or office/docs"

@@ -21,6 +21,10 @@ one. adapters holds what makes a Claude Code session a citizen of its thread:
   - `mod.ts` is a Claude Code [mod](https://code.claude.com/docs/en/plugins/mods/overview): hooks
     Claude Code runs in its own process — presence, the brief, capture, wakes, the band, the
     commands and tools. `lib/` holds its pure helpers, tested with bun. See `claude-code/README.md`.
+  - `plan/` is a second, separate mod (`tlon-plan`: near the five-hour cap, every request runs at
+    low effort). `launch.sh` loads it only for a Claude-plan seat, because its `turn.step` hook
+    re-yields the model's stream, which another model's tool-call ids fail. Kept apart from
+    `mod.ts` for that reason; `adapters:claude-code:mod` validates it with the rest.
 - **`lsp/` + `lspd/`** — the LSP tools as a stdio MCP server over a long-lived daemon that owns the
   warm language servers (see `lsp/AGENTS.md`).
 - **`skills/`** — harness-neutral discipline as `SKILL.md`s. The mod's plugin root is `adapters/`

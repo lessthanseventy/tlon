@@ -14,96 +14,18 @@ off the board. The TICKETS column is an expandable tree (`Toy 2/13 → #52 sandb
 terminals the TUI zooms into (`tui/terminal.ts`: tmux control mode on the workspace's tmux, one
 linked window at a time, ctrl+] to the room).
 
-- `kit/` — what every office surface shares: the snapshot's types (`types.ts`, the shape of
-  `Server.Office.status`, served at `GET /api/office`), the data views (`crew.ts`: a workspace's view, the crew, the
-  whiteboard's columns), sprites and looks (`sprites.ts`), the parts library (`parts.ts`: slots, dials, `rollLook`), the colour roles (`palette.ts`), the
-  1x canvas and the **frame** a room hands a surface (`canvas.ts`; its speech balloons are 34×4 with long words hard-broken and an overflow ending `... (v)`, `v` being the key to the conversation, placed by `balloon.ts` so none leaves the viewport or overlaps another), tlon's own bitmap font in two cuts (`font.ts`), the
-  office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`; a channel down draws the room from the last good snapshot (`Sim.held`: furniture and people stay, the exec desks' plates go blank), dimmed — an outage is never the fire drill; the play card's fire drill row (`play("drill")`) raises a `DRILL`-long one: while `Sim.alarmed`, `closet()` in `rooms/wide.ts` burns, and for the first `PANIC` ticks the crew runs about the room arms up, one scream every few seconds, Nina on the zoomies and Argos with them; then they muster at `plan.muster` with coffee and Argos barks at the smoke), and the toy's other happenings — `kit/events.ts`: the `EVENTS` table of scripted scenes (drill, zoo, meteor, power cut, duck) and the pure `propsAt` each draws; `Sim.event(kind?)` runs one at a time, tidies itself, touches no thread or turn, and calls `Sim.onEvent` for step 7; row 1 of the sandbox's play card plays one,
-  the floor's light as a function of the clock (`daylight.ts`: darkness, lamps lit, `dark`: the pets' bedtime and your pyjamas; lamps register on the `Scene` as they are drawn),
-  a pet's temperament (`temperament.ts`: warmth/wits/energy, -2..2, as policy over the sim's chance tables; `pets.ts` resolves `pets.json` — `TLON_PETS`; the cat slot is a cat, rabbit or bird, polled live like `looks.json`, absent means today's room byte for byte),
-  a coworker's soul (`souls.ts`: `~/.config/tlon/souls/<name>.md` — `TLON_SOULS` — parsed by `## ` headings into `sections`, forgiving; polled live by dir signature like `looks.json`, read from disk by `tui/souls.ts` (the kit's half is pure); read-only on the person's card; the server writes first drafts (`Server.Soul`, `tlon-cli soul`, never over an existing file) and the People section is read by `kit/company.ts` (`affinities`, `relation`) and `kit/sim.ts` for rivalries and who covers for whom, gated by the `souls` dial; a soul never decides work),
-  what Nina says (`voices.ts`, sweet or sassy by warmth; Argos, the wide room's dog, has his lines in `kit/pets.ts`) — the fallback only: the server's model lines come first (`Sim.hear`, `Server.Office.Pets`), and the pair's exchanges (`duo`) are said turn by turn (`WideRoom.talkOut`),
-  a coworker's voice (`seat-voices.ts`: the toy design §2 table — canned banter per seat, the fallback `Sim.onTogether` uses when the server wrote nothing, in `--sandbox` always; `sore`: what the loser says when two rivals (`kit/company.ts`) break up a foosball or pool game, which `Sim` runs `bloodTicks` longer than any other), and Scharlach the sheriff (`scharlach.ts`: his nameplate, his mug, and a demerit ledger that ticks when a coworker's build goes red — presentation only, on the client, fed by the sheriff's workspace's triage),
-  two coworkers the room sees together — at a game, on the couch, at the coffee machine, passing in the hall — are handed to `Sim.onTogether`, and the TUI asks the server what they say (`POST /api/office/talk/:ws`, one model call per conversation, throttled there),
-  drawing people and Nina into a `Scene` (`draw.ts`: what each worker is doing mid-turn, a worker
-  making a fuss of a pet), the furniture every room has (`furniture.ts`),
-  the home's tiles as pixel art (`homeart.ts`: `TILE_ART`, kind → painter, a missing kind draws plain; `renderHome` the build grid as a Frame, `paintFloor` the placed tiles at their absolute cells; the snapshot's weather rains and snows on the garden tile),
-  the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen, and
-  an aquarium),
-  and Uqbar's volume (`uqbar.ts`: sprites, flight, the lounge shelf's extra spine; `viewOf` lifts agent `uqbar` out of the roster into `Agents.uqbar`, so it never gets a desk or a crew row), and its posts as paper aeroplanes (`plane.ts`: pure flight, `freshPosts` off the activity feed, `handoffFrom` off the activity feed's `handoff_opened` rows; `WideRoom.fly` sends one to the thread lead's desk, else its card, and says whether Argos caught it: the TUI earmarks that post, keeps the newest `EARMARKS_MAX` in its state dir (`office-earmarks`), and the reader draws 🐾 on its header). The small joys are the room's own, deterministic: a reader settled in the nook for `STRAIGHTEN` ticks stands the knocked spine back up until the next session wakes; Nina swats a book flying low over her (`swatted`), once per pass, and it snaps shut for `FLINCH` ticks. Its idle life is `volume.ts`: while its session is awake and not mid-turn it takes up one errand at a time (`pickErrand`: reading over a typist's shoulder, the corkboard, tidying the shelf, veering from the bathroom mirror, baiting Nina, reading to Argos, the window, the TV, a nap on your desk after dark), lingers `DWELL`, says its line (`UQBAR`, through `Sim.line`, so the model may write it some) and rests `REST`; a new hour sends it to the clock, a landing (`noticed` "shipped") flies a lap, and a rise in the triage count is an erratum (ribbon in `failing`). Its tip names the errand (`doing`). No session, no errand and no line: the golden frames hold.
-- `rooms/` — rooms built from the kit: `rail.ts`, the desktop's right rail (and the TUI's on a narrow
-  terminal); `wide.ts`, the TUI's full-width room (office, floor, meeting room, lounge, a long back
-  wall with the whiteboard, notes, calendar, windows on the real weather (`weather` on the
-  snapshot), clock, TV, and — where the wall has room — the poster of the day, `kit/poster.ts`), and the pastimes idle coworkers
-  move between (`Pastime` in `sim.ts`): a games corner (arcade cabinets, ping-pong), an aquarium,
-  the windows, the plants, a chat, the pets, a snack machine, foosball, pool, a reading nook. The bathroom is a walled room of its own in the bottom-left corner, its door on the hallway (`kit/tiles/bathroom.ts`, geometry and print fade in `kit/bathroom.ts`; the server closet and your office's plant stand just outside it): a tiled floor, a clawfoot tub, a pedestal sink under a mirror and a toilet, each with floor between. Its door stands open while anyone is at it, a coworker
-  can idle at its sink, Nina curls up in the dry tub now and then (one of her own places, or `Sim.catDo("tub")`, `6` on her card), and she hops on the tub rim for a drink (`Sim.catDo("drink")`, `5` on her card) — leaving, her wet paws lay `Sim.prints`, which fade with the tick over a minute (longer when she falls in), and Argos follows the trail. A front door stands at the hall's right end (`plan.door`, `kit/door.ts`): the TUI diffs each ok snapshot against the last ok one (`arrivals`) and rings it — a cut (`release.sha` changed) brings pizza, a fuller mailbox the carrier — and now and then a cookie kid or a lost tourist rings on their own; the nearest idle coworker answers, the visitor is sim state (no thread, no ticket). A home from `home.json` is drawn on the floor below the office at its absolute cells (`setHome` re-plans the sim: `floorPlan`'s third param adds each tile's `HOME_BLOCKS` at its cell and, with a street under the front door and a living tile, `doors`/`walk` between them; `paintFloor`, `kit/home.ts` `cellPx`/`OFFICE_ROWS`; `loadFloor` shifts a pre-floor `home.json` below the office in memory; build mode starts at `OFFICE_ROWS` and refuses rows above it; no tiles → the frame is unchanged). A
-  thread that ships throws its lead a party; a finished turn high-fives whoever it passes. The
-  notes board also carries the crew's chatter (`CorkNote`, from `Server.Office.Corkboard`), kept
-  apart from the notes they work from; their suggestions go in the suggestion box beside it, and
-  become tickets only when you file them. Each is a working coworker's idea (the `suggest` tool),
-  not a request, so it never reaches the needs queue (`i`).
-  Small talk is said with `Sim.converse`: one balloon per conversation at a time, each up for its
-  `readTicks`, in the order written. The TUI keeps the last 50 lines said in its state dir
-  (`office-banter`) for the banter log (`/` → "the banter log").
-  A birthday or anniversary on the calendar feeds (`celebrations` on the snapshot) puts bunting over the
-  lounge, a cake on the kitchen counter, and pulls the idle crowd to the cooler and coffee.
-- `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
-  office:build` compiles it to one self-contained executable per platform (`office/dist/`).
-  `mise run office:sandbox` (`--sandbox`, or `OFFICE_SANDBOX=1`) runs it on a made-up world, no server: `tui/sandbox.ts` is the
-  world, `data.useFake` the one seam in `data.ts`; one play key, `E`, opens a numbered card; digits pick the toy, so no letter shadows a card.
-  The sandbox keeps its looks, souls, hall, cast, pets and store in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire or adopt never reaches the machine's files.
-  The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, taken)` is seeded, no model, no I/O; a lock is kept by `pass` baking it into the overrides —
-  `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `l` lists it), → hire, space locks a row so a pass keeps it, `e` edits the lit row (name, pitch and soul by prompt; archetype/grade/specialty cycle the roster vocabulary; a slot row opens the look card on a draft of the candidate's look, whose `s` saves it as `overrides.look` — never `looks.json` until hired) as an edit over the seed; `W` draws the candidate's soul and pitch (`data.draftSoul` → `POST /api/workspaces/:id/hire/draft`, `Server.Soul.preview`: nothing written or seated; the render never calls it) and stores them as the `soul`/`pitch`/`drawn` edits, so `e` edits the draft and → hires what was seen (`s` is taken: sort). `hall.json`
-  (`TLON_HALL`, polled like `looks.json`) holds seed + locks + edits + pile, never the rendered card; an edited name that fails `Server.Soul`'s name check is dropped on load, so it never reaches a file name. → hires — onto the toy's bench in the
-  sandbox, through `data.hire` (`POST /api/workspaces/:id/coworkers`) on a live office — and keeps the candidate's look in `looks.json` and its soul in the souls dir (never over one already there).
-  The cast editor, the god view (`` ` `` from home; `tui/cast.ts` its rows, pure): one row per bench seat, one cell per field —
-  name, archetype, look, soul, voice, grade, specialty, model; ←/→ the lit field, `}` the Office tab (the wackiness dials).
-  ⏎ hands the lit cell to the editor that already owns it (the look card, the soul in `$EDITOR` like the dump — souls/<name>.md
-  made blank when absent, never overwritten — the persona and model pickers), `y` rerolls look, grade or specialty, `-` lets the
-  seat go; name and archetype only show (no server route renames or retypes a seat). Grade and specialty have no server field:
-  `cast.json` (`TLON_CAST`, `kit/cast.ts`, polled like `looks.json`) keeps them by seat name.
-  The pet store (`*` from home; `kit/store.ts` the pure candidate — `roll(species, seed, taken)`, seeded, no model, no I/O —
-  `tui/store.ts` its card rows): ←/→ the shelf (every species, each into the slot its family belongs to: cat, dog, rabbit, bird, hamster, pet rock, A Bao A Qu), ↑ pass,
-  ↓ back, space locks a row, `e` renames, ⏎ adopts into the species' slot — the occupant leaves by the door (one pet per slot, no
-  history). `store.json` (`TLON_STORE`) holds species + seed + locks + edits. A new species is data: frames in `SPECIES_ART`, a
-  `SPECIES_VOICE` pack, a `SPECIES_BASE` row and a `SLOT_SPECIES` entry (`fillArt` lets it ship `sit` alone).
-  `main.ts` is the room, its detail pane's cards (Nina's has her temperament rows, a live preview and `_` to save, `⏎` cycles the lit row) and the finder (`/`); `talk.ts` what `m` (to a person) and `'` (to the office) post, on the workspace's front desk (the server's lobby thread); `reader.ts` a thread
-  full-screen with its composer (a thread opens, as its card or in the reader, with its reply box focused — unfocused when it has an open prompt, so 1–9 answer at once, or when another surface pushed it (`data.focus`), which never takes your keys unasked: ⏎ sends,
-  the first esc leaves the box — drawn still, the thread's keys live, `r` or ⏎ back in (⏎ on a running coworker's card steps into their session) — the second esc goes back);
-  ctrl+] is the room from anywhere — a card, a reply box, an input, the finder, the reader, a zoomed terminal — the room with
-  nothing open over it (the screen, not the workspace's front desk, the standing thread `talk.ts` posts to); esc stays one step back, and every
-  hint that says how to get out names it `ctrl+] room` (`GLOBALS` in the foot, from `tui/keys.ts`); it never drops what you were writing: an input's text
-  comes back when the same input is asked again, and a reply's draft is the thread's (`cardReply`), its card and its reader alike; `editor.ts` the text editing every input shares; `fuzzy.ts` the
-  finder's matcher; `order.ts` how list cards sort and group (`s` steps the sort on the crew, a board column and the in-tray; `g` the crew's grouping — the cursor stays on its row); `when.ts` reads a schedule's "when" (a cron, or a local time). `V` on a workline thread reviews its branch: the diff with a line cursor, `⏎`/`e` a note on the line, `"` on the file, `>`/`<` hunks, `}`/`{` files, `m` submits the notes with a verdict (comment, request changes, approve); unsent notes are kept per thread. The crew screen has tabs (`}`): each crew the operator has named, then everyone, the crews not on dimmed; `>` moves the selected coworker to the next crew (or every crew), `n` puts them on a new one by name, and `%` puts the next crew on (also `shifts` in the finder); a click on the header's crew (shown once a workspace has crews) does the same. The finder's `pencils down`, `lights out` (confirmed) and `back to work` are the office's stop controls (`Server.Pause`); while one is on, the header carries its mark (`✎ pencils down` / `◼ lights out`), and a click on it offers back to work. The arcade's
-  cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
-  zoomed like a coworker's terminal. `⏎` on the dump row of a home workspace's LIFE card opens the dump,
-  the one page the operator pours everything into, in their own `$VISUAL`/`$EDITOR` the same way: every save
-  goes to the server (`PUT /api/life/:ws/dump`), a save the server didn't take is retried on the next write, leave, open or refresh, and `l` lists the
-  earlier pages each save kept, to read or put back. That tmux is `TLON_OFFICE_TMUX` (default `tlon-office`), its
-  files under `$XDG_RUNTIME_DIR/<it>` (the dump's under `$XDG_STATE_HOME/tlon/<it>`, so unsent words survive a reboot), so a drive's never touch the operator's. It is the
-  operator's surface. Its header carries one count, the phone (`☎ N waiting on you`, ringing while N > 0,
-  from `GET /api/office/needs?by=surface` — `kit/surfaces.ts`); the room's answering machine blinks for
-  information (played, it is heard) and the sheriff's clipboard by the door holds what the crew owns.
-  `i` (or a click on the count) opens the inbox by surface with each item's own actions: PHONE, MACHINE,
-  then SETTLED BY UQBAR (the day's digest: `u` overrules one, back to Uqbar), CLIPBOARD, then WITH UQBAR
-  (waiting on Uqbar's verdict, never counted on the phone). Those two groups fill only under the
-  server's `uqbar_routing` setting (the settings screen, `S`; default off). A
-  passed-up row shows Uqbar's `tip:`. A click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
-  office than main offers `R` to reload itself. Work that lands dark hides behind a server flag,
-  read only from the snapshot (`flagOn` in `kit/types.ts`): `B`, build mode, is there only with
-  `build_mode` on. A running coworker's card shows their activity timeline
-  (`timeline.ts`, from the thread view's `activity`, which the harnesses' tool hooks feed: one line per tool call, a glyph and colour per kind, grouped by coworker in their shirt colour, a rule per fresh turn, newest at the bottom, scrolled with the card; `=` the conversation, ⏎ step into their real screen). Under the room the pane splits: what you clicked on the left, what you can
-  do to it on the right — each card's actions (`detail()`) are its keys, its clickable list and
-  its docs at once, so they cannot drift apart. Every key is written down once, in `tui/keys.ts`
-  (scope, key, label, mode): a card's rows are `{ ...bind("thread.r"), run }`, and the foot, the help card
-  and the sandbox's play line read the same table — a new key is a row there, never a literal `key: "x"`
-  in `main.ts`. `test/keys.test.ts` reads the table and fails when a key has two `verb`s anywhere (letters,
-  symbols and esc; ⏎, space and the arrows are the lit row, digits a card's numbered menu) or a screen binds
-  one twice: **one meaning per key**, so a hint never needs a mode to read. A new key is a free letter or
-  symbol and a `verb`, never a second use of a taken one. The reader's handlers are still `case`s in `reader.ts`; only its hints come from the table. A card's rows scroll (`tui/pane.ts`: with the
-  selection, or pgup/pgdn and the wheel, `↑/↓ N more` where rows hide); the foot lists the actions
-  the column can't show — all of them on a terminal too narrow for it — then the global keys; `?` opens the help card (that card's keys, the globals, the reader's, the sandbox's play key). Popups only where a choice needs a list (the finder).
+Each area has its own page under `docs/`; read the one you are changing.
+
+- `kit/` — what every office surface shares: the snapshot's types, the data views (`crew.ts`), the
+  whiteboard's items and tips (`board.ts`), sprites, looks and parts, the canvas and frame, the sim
+  and everything that lives in it (Nina, Argos, Uqbar, souls, voices, pastimes), the tiles and floor.
+  Every roll of chance goes through `rng.ts` (`test/determinism.test.ts` holds it). `docs/kit.md`.
+- `rooms/` — `rail.ts`, the desktop's right rail (and the TUI's on a narrow terminal), and `wide.ts`,
+  the full-width room with its whiteboard, corkboard, windows, pastimes, parties and small talk.
+  `docs/rooms.md`.
+- `tui/` — the standalone terminal app (`mise run office:run`, `office:build`, `office:sandbox`):
+  cards, the hiring hall, the cast editor, the pet store, the finder, the reader, the keys table, the
+  needs inbox, the down-channel handling. `docs/tui.md`.
 
 ## Law
 

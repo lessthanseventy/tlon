@@ -21,7 +21,6 @@ config :logger, compile_time_purge_matching: [[application: :fun_with_flags, lev
 
 # Phoenix + LiveView (one-brain piece D) — the same Bandit family as the MCP channel, a second
 # loopback listener; runtime.exs sets the port and the start flag, and derives the secrets.
-# the staffing pass (one-brain B/3): centre, tail and leaves of every workspace, each minute
 config :phoenix, :json_library, JSON
 
 config :server, Oban,
@@ -40,16 +39,9 @@ config :server, Oban,
        {"* * * * *", Server.Jobs.Drain},
        {"*/5 * * * *", Server.Jobs.KeepUp},
        {"*/30 * * * *", Server.Jobs.Maintain},
+       # the staffing pass: cold, orphaned and stale coworker windows closed, each minute
        {"* * * * *", Server.Jobs.Staff},
-
-       # Postgres is the store: the §4 write contract — readers never
        # the calendar: fire what the operator scheduled that is due (Server.Schedules)
-       # blocked by a writer, real foreign keys, a bounded wait on a lock — is the engine's own.
-       # Connection details are per-env (dev/test below, runtime.exs for the release). The pool covers
-       # Oban's queue concurrency plus the always-on callers (switchboard, attention, web, MCP) —
-       # test/server/repo_pool_test.exs holds that line.
-       # the listener is loopback, so the origin check guards nothing — but a tab at localhost or the
-       # box's tailscale name reconnecting every minute logged "Could not check origin"
        {"* * * * *", Server.Jobs.Dispatch},
        # the backlog's intake: the next ready ticket to the manager while worklines are under the cap
        {"*/15 * * * *", Server.Jobs.Intake},
@@ -62,6 +54,10 @@ config :server, Oban,
      ]}
   ]
 
+# Postgres is the store: the §4 write contract — readers never blocked by a writer, real foreign
+# keys, a bounded wait on a lock — is the engine's own. Connection details are per-env (dev/test
+# below, runtime.exs for the release). The pool covers Oban's queue concurrency plus the always-on
+# callers (switchboard, attention, web, MCP) — test/server/repo_pool_test.exs holds that line.
 config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 19
 
 config :server, Server.Web.Endpoint,
@@ -70,6 +66,8 @@ config :server, Server.Web.Endpoint,
   render_errors: [formats: [html: Server.Web.ErrorHTML], layout: false],
   pubsub_server: Server.PubSub,
   live_view: [signing_salt: "tlon-live-view"],
+  # the listener is loopback, so the origin check guards nothing — but a tab at localhost or the
+  # box's tailscale name reconnecting every minute logged "Could not check origin"
   check_origin: ["//127.0.0.1", "//localhost", "//ivysaur", "//*.ts.net"],
   http: [ip: {127, 0, 0, 1}, port: 4042],
   server: false
