@@ -3,6 +3,7 @@ import type { RailRoom } from "../rooms/rail"
 import type { WideRoom } from "../rooms/wide"
 import type { State as WhimState } from "../kit/whimsy"
 import type { ReaderDeps } from "./reader"
+import type { Tally } from "../kit/trophies"
 import type { Input } from "./term"
 import type { Action, Card, Cycle, Mode, Pick, Prompt } from "./state"
 
@@ -50,8 +51,8 @@ export type Ctl = {
   followPets: () => boolean
 }
 
-/** what the boot sequence needs besides a card's operations: the screen's input, paint and refresh handlers */
-export type Boot = Ctl & {
+/** the whole of what the screen does: a card's operations, and the input, paint and refresh handlers beside them */
+export type Screen = Ctl & {
   loadThread: (tid: number) => Promise<void>
   zoomInput: (b: Uint8Array) => void
   onKey: (k: string) => void
@@ -64,4 +65,6 @@ export type Boot = Ctl & {
   leaveZoom: (toTheRoom?: boolean) => void
   openThread: () => number | null
   paint: (roomOnly: boolean) => void
+  record: (next: Tally) => void
+  toRoom: () => void
 }

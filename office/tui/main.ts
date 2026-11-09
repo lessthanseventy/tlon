@@ -4,62 +4,47 @@
 // opens full-screen to read and answer; `/` finds anything. Runs on Linux and macOS: kitty
 // graphics where the terminal has them (ghostty, kitty, WezTerm), half blocks where it does not.
 import { arrivals } from "../kit/door"
-import { babelPage, clockFace, hasFound, isKonami, KONAMI } from "../kit/eggs"
+import { babelPage, clockFace, hasFound } from "../kit/eggs"
 import { bump as bumpTally, findSecret, newlyWon, night, serialize as serializeTally, won as wonTrophies, type Tally } from "../kit/trophies"
 import { existsSync, mkdirSync, readFileSync, unlinkSync, watchFile, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import type { Frame } from "../kit/canvas"
-import { marginInk } from "../kit/margin"
 import { reactLine, seatLine } from "../kit/seat-voices"
 import type { EventKind } from "../kit/events"
 import { save as saveWhim } from "../kit/whimsy-file"
 import { resolve as resolveWhim, type State as WhimState } from "../kit/whimsy"
 import { tickFromTriage, tickSlap } from "../kit/scharlach"
-import { busiest, COLS, crewOf, needsYou, type Act } from "../kit/crew"
+import { busiest, crewOf, needsYou, type Act } from "../kit/crew"
 import { resolvePets } from "../kit/pets"
-import { renderHome } from "../kit/homeart"
-import { mailbox } from "../kit/mailbox"
-import { phoneBar, ringFrame } from "../kit/surfaces"
 import { lastLanding } from "../kit/tv"
-import { baseLook, overrideFor, trimCustom } from "../kit/looks"
+import { baseLook, overrideFor } from "../kit/looks"
 import { ROLE } from "../kit/palette"
-import { bedScene, lifeHeader, streakFrames } from "../kit/life"
-import { usageHeader } from "../kit/usage"
 import { BLANK_SOUL, candidateOf } from "../kit/hall"
-import { stepRow } from "./hall"
-import { stepStoreRow } from "./store"
 import { shirtOf } from "../kit/sprites"
-import { flagOn, operatorOf, type Agents } from "../kit/types"
-import { H, RailRoom, W } from "../rooms/rail"
-import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
+import { operatorOf, type Agents } from "../kit/types"
+import { RailRoom } from "../rooms/rail"
+import { WideRoom } from "../rooms/wide"
 import { say, lobbyOf, replies, conversation, speech } from "./talk"
 import * as data from "./data"
-import { adder, bind, hints, LEGEND_CHARS } from "./keys"
-import { PLAY, roomKey } from "./sandbox"
+import { bind } from "./keys"
 import { Editor } from "./editor"
-import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
-import { loadFloor } from "./home"
 import { loadPets } from "./pets"
-import { geometry, hitAt, kittyImage, measureFor, textLayer } from "./paint"
 import { Reader, type ReaderDeps } from "./reader"
-import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
-import { badge, cells, ESC, leave, line, out, type Input, type Seg } from "./term"
+import { ESC, leave, line, out } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
-import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
-import { downHeader } from "./down"
 import { oneInFlight } from "./flight"
 import { earmarkOf, earmarksOut, freshPosts, handoffFrom } from "../kit/plane"
-import { State, STATE_DIR, STATE, TRAY, SAID, EARS, LOOKED, TOY_KEYS, SOULS, OFFICE, writeState, TROPHY_FILE, type Mode, type Row, type Cycle, type Prompt, type Pick, type Action } from "./state"
+import { State, STATE_DIR, STATE, TRAY, SAID, EARS, LOOKED, SOULS, OFFICE, writeState, TROPHY_FILE, type Mode, type Cycle, type Prompt, type Pick, type Action } from "./state"
 import { detail } from "./cards/index"
-import { boardCtx, cardBox, changed, checkingId, crewOn, crewsOf, hallCtx, nextCrew, threadOf, view, wsName } from "./select"
-import { ACTIONS_W, DETAIL, cardKey, cols, dim, key, keyName, paneW, pink, plain, stamp, tidSeg } from "./ui"
+import { cardBox, changed, hallCtx, threadOf, view, wsName } from "./select"
+import { DETAIL, cardKey, cols, key, paneW, stamp, tidSeg } from "./ui"
 import { NEED_KIND } from "./cards/needs"
 import { newSchedule } from "./cards/schedule"
-import { threadActions } from "./cards/thread"
 import { GAMES } from "./cards/home"
-import { boot, followPets, relaunch } from "./boot"
-import type { Boot } from "./ctl"
+import { boot, followPets } from "./boot"
+import type { Screen } from "./ctl"
+import { draw, layoutScreen, paint, scene } from "./draw"
+import { onKey, onMouse, onPaste } from "./input"
 
 const app = new State()
 
@@ -71,7 +56,7 @@ function resort(step: () => void) {
   step()
   const at = was === undefined ? -1 : detail(app, ctl).rows.findIndex((r) => r.ref === was)
   if (at >= 0) app.sel = at
-  draw()
+  draw(app, ctl)
 }
 
 /** a thread with an open prompt opens with its box unfocused, so 1–9 answer at once */
@@ -93,25 +78,6 @@ function heard(turns: { who: string; line: string }[]) {
 }
 const stampLooked = () => { app.looks.lookedAt = Math.floor(Date.now() / 1000); writeState(LOOKED, String(app.looks.lookedAt)) }
 
-/** a click on the header's crew: the next crew goes on */
-const toggleShift = () => {
-  const to = nextCrew(app)
-  if (app.ws !== null && to) void did(data.shiftSwitch(app.ws, to))
-}
-/** the crew on, once the workspace has crews; nothing for one with none */
-const shiftHeader = () => (crewsOf(app, app.ws).length ? `⇄ ${crewOn(app)} crew` : null)
-/** the header's queues: what is checked and what is merged right now */
-function queuesHeader(): string | null {
-  const c = app.all.health?.checks, mq = app.all.health?.merge_queue ?? []
-  const landing = mq.find((m) => m.state === "landing"), queued = mq.filter((m) => m.state === "queued").length
-  const parts = [
-    c?.running ? (checkingId(app) ? `✓ checking #${checkingId(app)}` : "✓ a full check runs") : null,
-    c?.waiting.length ? `+${c.waiting.length} waiting` : null,
-    landing ? `⤵ landing #${landing.thread_id}` : null,
-    queued ? `${queued} queued to land` : null,
-  ].filter(Boolean)
-  return parts.length ? parts.join(" · ") : null
-}
 const room = () => { const k = app.ws ?? 0; let r = app.rooms.get(k); if (!r) { app.rooms.set(k, (r = app.wide ? new WideRoom(app.wide) : new RailRoom())); r.setWhimsy(resolveWhim(app.whim)); if (app.petsNow) r.setPets(app.petsNow); if (r instanceof WideRoom) { r.setHome(app.homeNow); r.setTrophies(wonTrophies(app.trophies).length) } r.reactLine = reactFor; r.onSlap = () => { app.ledger = tickSlap(app.ledger) } } return r }
 /** the dial moved: remember it and hand every room the resolved dials */
 function setWhim(s: WhimState) {
@@ -120,7 +86,6 @@ function setWhim(s: WhimState) {
   for (const r of app.rooms.values()) r.setWhimsy(resolveWhim(s))
   changed(app)
 }
-const unread = () => app.feed.filter((x) => x.at > app.trayRead && x.who !== operatorOf(app.all)).length
 
 function choose(id: number | null) {
   if (id !== app.ws) { app.feed = []; app.card = null }
@@ -132,12 +97,6 @@ function settleWorkspace() {
   if (!app.all.ok) return
   if (app.ws !== null && app.all.workspaces.some((w) => w.id === app.ws)) return
   app.ws = app.all.workspaces.find((w) => w.name.toLowerCase() === "machine")?.id ?? busiest(app.all)
-}
-function stepWs(d: 1 | -1) {
-  const list = app.all.workspaces
-  if (!list.length) return
-  const i = list.findIndex((w) => w.id === app.ws)
-  goWs(list[(i + d + list.length) % list.length]!.id)
 }
 function goWs(id: number) { choose(id); back(true); app.frame = null; void refresh() }
 
@@ -152,7 +111,7 @@ async function refreshOnce() {
   app.all = await data.status()
   if (app.officeRev === undefined && app.all.ok) app.officeRev = app.all.revs?.office ?? null
   settleWorkspace()
-  draw()
+  draw(app, ctl)
   let knobs: data.Settings | null
   ;[app.bySurface, knobs] = await rest
   app.needs = app.bySurface.items
@@ -163,7 +122,7 @@ async function refreshOnce() {
   await Promise.all([tid !== null ? loadThread(tid) : null, app.reader ? app.reader.reload() : null, loadCard(), loadFeed(), loadMargin()])
   await chatter()
   void tickLedger()
-  draw()
+  draw(app, ctl)
 }
 /**
  * Scharlach's demerit ledger ticks when a coworker's build goes red. The sheriff's workspace's triage
@@ -346,8 +305,8 @@ function open(m: Mode) {
   if (m.kind === "pet" && m.who === "cat") { app.petDraft = structuredClone((app.petsNow ?? resolvePets(loadPets())).cat); app.previewTick = 0 }
   if (m.kind === "look") app.lookDraft = m.hall ? structuredClone(candidateOf(app.hall, hallCtx(app)).look) : { ...baseLook(m.name), ...overrideFor(m.name) }
   const tid = openThread()
-  void Promise.all([tid !== null ? loadThread(tid) : null, loadCard()]).then(draw)
-  draw()
+  void Promise.all([tid !== null ? loadThread(tid) : null, loadCard()]).then(() => draw(app, ctl))
+  draw(app, ctl)
 }
 /** Esc: a card back to the card it was opened from, else home; home to nothing picked; `all` drops both at once */
 function back(everything = false) {
@@ -380,10 +339,10 @@ function act(x: Act) {
     case "needs": return inbox()
     case "rack": return open({ kind: "health" })
     case "dog": { const r = room(); if (r instanceof WideRoom) r.patDog(); changed(app); return open({ kind: "pet", who: "dog" }) }
-    case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); changed(app); draw() } return }
+    case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); changed(app); draw(app, ctl) } return }
     case "arcade": return open({ kind: "arcade" })
     case "ideas": return open({ kind: "ideas" })
-    case "weather": app.status = app.all.weather ? `outside: ${app.all.weather.desc.toLowerCase()}${app.all.weather.temp_c === null ? "" : `, ${app.all.weather.temp_c}°C`}` : "no word on the weather"; return draw()
+    case "weather": app.status = app.all.weather ? `outside: ${app.all.weather.desc.toLowerCase()}${app.all.weather.temp_c === null ? "" : `, ${app.all.weather.temp_c}°C`}` : "no word on the weather"; return draw(app, ctl)
   }
 }
 
@@ -392,7 +351,7 @@ function ask(label: string, submit: Prompt["submit"], opts: { multiline?: boolea
   const held = app.banked.get(label)
   app.banked.delete(label)
   app.input = { label, ed: new Editor(held ?? opts.text ?? "", !!opts.multiline), submit, cycles: opts.cycles, focus: 0 }
-  draw()
+  draw(app, ctl)
 }
 function newThread() {
   if (app.ws === null) return
@@ -430,35 +389,18 @@ function talk(to: string | null) {
 }
 function reply(tid: number) {
   const box = cardBox(app)
-  if (box?.tid === tid) { box.focused = true; return draw() }
+  if (box?.tid === tid) { box.focused = true; return draw(app, ctl) }
   openReader(tid)
-}
-/** a key while a thread card's reply box has focus: Enter sends, Esc leaves the box (the card stays) */
-function boxKey(box: NonNullable<typeof app.cardReply>, k: string) {
-  if (k === "esc") { box.focused = false; return draw() }
-  if (k === "enter") {
-    if (box.ed.empty) return
-    const body = box.ed.text
-    box.ed = new Editor(); app.scroll = Infinity
-    const sent = data.post(box.tid, body)
-    // a post that did not go puts the words back in the box, ahead of anything typed since
-    void sent.then((line) => { if (!data.landed(line)) box.ed = new Editor(box.ed.empty ? body : `${body}\n${box.ed.text}`) })
-    void did(sent)
-    return draw()
-  }
-  if (k === "pgup" || k === "pgdn") return page(k === "pgdn" ? 1 : -1)
-  box.ed.key(k)
-  draw()
 }
 function hire() {
   if (app.ws === null) return
   const w = app.ws, kinds = app.all.archetypes.map((x) => ({ label: `${x.name}${x.meta ? " (manager)" : x.read_only ? " (read-only)" : ""}`, value: x.name }))
-  if (!kinds.length) { app.status = "no archetypes to hire from"; return draw() }
+  if (!kinds.length) { app.status = "no archetypes to hire from"; return draw(app, ctl) }
   ask("hire — their name", (s, [arch]) => { if (s.trim()) did(data.hire(w, s.trim(), arch as string)) }, { cycles: [{ name: "as", values: kinds, i: Math.max(0, kinds.findIndex((k) => k.value === "builder")) }] })
 }
 
 // ── the finder ─────────────────────────────────────────────────────────────────────────────────
-function find(title: string, items: Pick[]) { app.picker = { title, q: new Editor("", false), items, sel: 0 }; draw() }
+function find(title: string, items: Pick[]) { app.picker = { title, q: new Editor("", false), items, sel: 0 }; draw(app, ctl) }
 /** open a thread wherever it lives, switching workspace first */
 function goThread(id: number, wsId: number | null | undefined) {
   if (wsId != null && wsId !== app.ws) { choose(wsId); app.frame = null }
@@ -481,7 +423,7 @@ async function finder() {
   const closed = await data.history()
   if (app.picker?.title.startsWith("FIND") && closed) {
     for (const t of closed) app.picker.items.push({ segs: [tidSeg(t.id), { s: t.title, fg: ROLE.inactive }, { s: `  closed ${t.at.slice(0, 10)}`, fg: ROLE.inactive }], text: `#${t.id} ${t.title} closed`, run: () => goThread(t.id, t.workspace_id) })
-    draw()
+    draw(app, ctl)
   }
 }
 /** everything across the workspaces that waits on you, then what's being worked on */
@@ -501,8 +443,6 @@ function hearMachine() {
   if (keys.length) void did(data.hear(keys))
 }
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
-/** main's office has moved past the revision this TUI started on */
-const updated = () => !!app.officeRev && !!app.all.revs?.office && app.all.revs.office !== app.officeRev
 
 /** the verbs the finder offers by name — the same ones the keys reach */
 const VERBS: [string, () => void][] = [
@@ -527,18 +467,18 @@ const VERBS: [string, () => void][] = [
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
 function openReader(tid: number, extra: Partial<ReaderDeps> = {}, focus = !asks(tid)) {
   app.picked = tid
-  app.reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: operatorOf(app.all), redraw: () => draw(), dogeared: (m) => app.earmarked.has(earmarkOf(tid, m.at, m.author)), ...extra }, focus, app.cardReply?.tid === tid ? app.cardReply.ed.text : "")
+  app.reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: operatorOf(app.all), redraw: () => draw(app, ctl), dogeared: (m) => app.earmarked.has(earmarkOf(tid, m.at, m.author)), ...extra }, focus, app.cardReply?.tid === tid ? app.cardReply.ed.text : "")
   if (app.cardReply?.tid === tid) app.cardReply = null
   const v = app.threads.get(tid)
   if (v) app.reader.take(v)
-  void app.reader.reload().then(draw)
+  void app.reader.reload().then(() => draw(app, ctl))
   out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[2J`)
-  draw()
+  draw(app, ctl)
 }
 /** the conversation with `name`: the lobby filtered to them and the operator's words to them; a reply goes to them */
 function openConversation(name: string) {
   const lobby = lobbyOf(view(app).threads, app.ws)
-  if (lobby === null) { app.status = "no front desk in this workspace"; return draw() }
+  if (lobby === null) { app.status = "no front desk in this workspace"; return draw(app, ctl) }
   openReader(lobby, {
     keep: (ms) => conversation(ms, name, operatorOf(app.all)),
     heading: `conversation with ${name}`,
@@ -554,301 +494,17 @@ function closeReader() {
   bankReader()
   app.reader = null
   out(`${ESC}[?25l`)
-  layoutScreen(); draw()
+  layoutScreen(app, ctl); draw(app, ctl)
 }
-const ask2 = (label: string, run: () => void) => { app.confirm = { label, run }; draw() }
+const ask2 = (label: string, run: () => void) => { app.confirm = { label, run }; draw(app, ctl) }
 
 // ── the detail pane ────────────────────────────────────────────────────────────────────────────
 
-const back1: Action = { ...bind("back.esc"), run: () => { back(); app.roomChanged = true; draw() } }
+const back1: Action = { ...bind("back.esc"), run: () => { back(); app.roomChanged = true; draw(app, ctl) } }
 
 // ── drawing ────────────────────────────────────────────────────────────────────────────────────
-function layoutScreen() {
-  const colsN = cols(), rowsN = process.stdout.rows ?? 40
-  // as wide as the terminal, at the biggest whole scale (2 at least) that both fits its height and
-  // leaves the room wide enough for its zones
-  let next: number | null = null
-  if (app.kitty && app.cell) {
-    for (let k = Math.min(5, Math.floor(((rowsN - DETAIL - 3) * app.cell.h) / WIDE_H)); k >= 2 && next === null; k--) {
-      const w = Math.floor((colsN * app.cell.w) / k)
-      if (w >= WIDE_MIN_W) next = w
-    }
-  } else if (process.env.OFFICE_WIDE) {
-    // half blocks have no cell size to ask for, so a drive opts in: the wide room at whatever scale fits the window
-    next = Math.max(WIDE_MIN_W, Math.floor(colsN / Math.max(0.25, ((rowsN - DETAIL - 3) * 2) / WIDE_H)))
-  }
-  if (next !== app.wide) { app.wide = next; app.rooms.clear() }
-  app.g = { ...(app.wide ? geometry(app.wide, (r0 => (r0 instanceof WideRoom ? r0.height : WIDE_H))(room()), colsN, rowsN, DETAIL + 3, app.cell, app.kitty, WIDE_H) : geometry(W, H, colsN, rowsN, DETAIL + 3, app.cell, app.kitty)), row: 1 }
-  const vw = Math.min(app.g.floorW, (app.g.cols * app.g.cw) / app.g.k), vh = Math.min(app.g.floorH, (app.g.rows * app.g.ch) / app.g.k)
-  app.viewport = app.follow
-    ? centerViewport({ x: 0, y: 0, w: vw, h: vh }, OFF_W / 2, (BAND + OFF_DOOR) / 2, app.g.floorW, app.g.floorH)
-    : centerViewport({ ...app.viewport, w: vw, h: vh }, app.viewport.x + app.viewport.w / 2, app.viewport.y + app.viewport.h / 2, app.g.floorW, app.g.floorH)
-  app.frame = null; app.sentImage = false
-  out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[2J`)
-}
-
-/** `roomOnly`: the room's clock moved and nothing else did — repaint the room and its tip, leave the header and the pane as the last full draw made them */
-function draw() { paint(false) }
-function paint(roomOnly: boolean) {
-  if (!app.g || app.zoom) return
-  const colsN = cols(), termRows = process.stdout.rows ?? 40
-  if (app.reader) {
-    app.paneCursor = null
-    if (app.picker || app.confirm) { out(`${ESC}[?25l` + drawOverlay(colsN, termRows)); return }
-    out(app.reader.draw(colsN, termRows, threadOf(app, app.reader.tid), [...threadActions(app, ctl, app.reader.tid, true).map((x) => `${x.key} ${x.label}`), "pgup/pgdn scroll", "esc back", "ctrl+] room"].join(" · ")))
-    return
-  }
-  const a = view(app)
-  const partial = roomOnly && app.paneCursor !== null
-  let o = `${ESC}[?2026h${ESC}[?25l`
-  // header: the workspace, and what waits elsewhere
-  if (!partial) {
-    const phone = phoneBar(app.bySurface.counts), usage = usageHeader(app.all, Date.now())
-    const head: (Seg & { go?: () => void })[] = [{ s: " OFFICE ", fg: ROLE.ground, bg: ROLE.attention }, key(" ‹ "), { s: wsName(app), fg: ROLE.body, bold: true }, key(" › "),
-      ...(app.all.ok ? [] : [{ s: `  ${downHeader(app.all, Date.now())}`, fg: ROLE.alarm }]),
-      ...(phone ? badge({ s: `  ${ringFrame(Math.floor(Date.now() / 1000), phone.ringing)} ${phone.text} `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }) : []),
-      ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: toggleShift }] : []),
-      ...(app.all.pause === "pencils_down" || app.all.pause === "lights_out" ? badge({ s: app.all.pause === "lights_out" ? "  ◼ lights out " : "  ✎ pencils down ", fg: ROLE.ground, bg: ROLE.attention, bold: true, go: () => ask2("back to work", () => void did(data.pause("back_to_work"))) }) : []),
-      ...(queuesHeader() ? [{ s: `  ${queuesHeader()}`, fg: ROLE.live, go: () => open({ kind: "health" }) }] : []),
-      ...(lifeHeader(app.all, app.ws) ? [{ s: `  ${lifeHeader(app.all, app.ws)}`, fg: ROLE.body }, dim("  (L)")] : []),
-      ...(usage ? [{ s: `  ${usage.text}`, fg: usage.hot ? ROLE.attention : ROLE.body, bold: usage.hot }] : []),
-      ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
-      ...(app.all.health?.state === "warn" ? [{ s: `  ⚠ ${app.all.health.problems[0]}`, fg: ROLE.alarm, go: () => open({ kind: "health" }) }] : []),
-      ...(process.env.OFFICE_DEBUG ? [dim(`  viewport ${Math.round(app.viewport.x)},${Math.round(app.viewport.y)}`)] : [])]
-    app.headHits = []
-    let hx = 1
-    for (const s of head) { const w = cells(s.s); if (s.go) app.headHits.push({ from: hx, to: hx + w - 1, go: s.go }); hx += w }
-    o += `${ESC}[1;1H` + line(head, colsN)
-  }
-  // the room
-  const room0 = room()
-  const building = app.mode.kind === "build" && app.build !== null
-  const fresh = !app.frame
-  // leaving build mode puts the room back, however the mode was left
-  if (!building && app.homeShown) {
-    app.roomChanged = true; app.imageDirty = true
-    app.homeNow = loadFloor()
-    for (const r of app.rooms.values()) if (r instanceof WideRoom) { r.setHome(app.homeNow); r.setStreaks(streakFrames(app.lifeCard?.streaks ?? {})) }
-    // the home below the office grows or shrinks with the home, and the room's rows with it
-    layoutScreen()
-  }
-  app.homeShown = building
-  const vp = building ? { x: 0, y: 0, w: app.viewport.w, h: app.viewport.h } : app.viewport
-  if (building) {
-    app.frame = renderHome({ top: app.build!.top, home: app.build!.home, cursor: app.build!.cursor, carrying: app.build!.carrying, refused: app.build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(app.needs), frames: streakFrames(app.lifeCard?.streaks ?? {}), bed: bedScene(app.lifeCard?.today ?? [], Date.now()) })
-    app.imageDirty = true
-  } else if (fresh || app.roomChanged) { app.frame = room0.render(a, { picked: app.lit ?? app.picked, person: app.mode.kind === "person" ? app.mode.name : null, tray: unread(), board: boardCtx(app), machine: app.bySurface.counts.machine, clipboard: app.bySurface.clipboard.filter((n) => n.workspace_id == null || n.workspace_id === app.ws) }, measureFor(app.g), app.world?.now()); app.roomChanged = false }
-  const seen = clipFrame(app.frame!, vp)
-  if (!building) addMargin(seen, vp)
-  if (app.g.kitty && (!app.sentImage || fresh || app.imageDirty || app.panned)) { o += kittyImage(seen, app.g, vp); app.sentImage = true; app.imageDirty = false }
-  if (!app.g.kitty) textLayer(seen, app.g, vp).forEach((l, i) => { o += `${ESC}[${app.g.row + 1 + i};${app.g.col + 1}H${l}` })
-  app.panned = false
-  // the tip line: what the pointer is over, or what just happened
-  const tipRow = app.g.row + app.g.rows + 1
-  o += `${ESC}[${tipRow};1H` + line([app.tip ? dim(` ${app.tip.split("\n").join(" · ")}`) : app.status ? key(` ${app.status}`) : dim("")], colsN)
-  if (partial) return out(o + app.paneCursor + `${ESC}[?2026l`)
-  const pane = drawPane(tipRow + 1, colsN, termRows)
-  app.paneCursor = /\x1b\[\d+;\d+H\x1b\[\?25h$/.exec(pane)?.[0] ?? ""
-  out(o + pane + `${ESC}[?2026l`)
-}
-
-/** the actions take j/k and enter when the card's rows have nothing to open */
-const actionsFocused = () => !app.rows.some((r) => r.open)
-/** the keys that work everywhere a card's own actions don't claim them */
-const GLOBALS: Hint[] = hints("global")
-/** a window's line `i`, as a row index, an "↑ N more" (-1) or "↓ N more" (-2), or nothing */
-function lineOf(w: Window, i: number): number | undefined {
-  if (w.above && i === 0) return -1
-  const j = i - (w.above ? 1 : 0)
-  if (j < w.count) return w.first + j
-  if (w.below && j === w.count) return -2
-  return undefined
-}
-const more = (w: Window, at: number, how: string): Seg[] => [dim(at === -1 ? `  ↑ ${w.above} more${how}` : `  ↓ ${w.below} more${how}`)]
-const fit = (s: string, w: number) => (cells(s) <= w ? s : `${[...s].slice(0, Math.max(0, w - 1)).join("")}…`)
-
-/** the pane from row `top` to the foot: the finder, a multi-line input, or the card — its rows on the left, its actions on the right */
-function drawPane(top: number, colsN: number, termRows: number): string {
-  let o = `${ESC}[?7l`
-  let title: string, keys = "", segRows: Row[], cursor: { r: number; c: number } | null = null
-  let tint = ROLE.key
-  app.acts = []
-  if (app.picker) {
-    const shown = rank(app.picker.q.text, app.picker.items, (p) => p.text)
-    app.picker.sel = Math.min(app.picker.sel, Math.max(0, shown.length - 1))
-    title = `${app.picker.title}: ${app.picker.q.text}`
-    segRows = shown.map((p) => ({ segs: p.segs, open: p.run }))
-    keys = "type to narrow · ↑↓ move · enter pick · esc close · ctrl+] room"
-    cursor = { r: -1, c: title.length + 1 }
-    app.sel = app.picker.sel
-  } else if (app.input?.ed.multiline) {
-    const v = app.input.ed.view(colsN - 6, Math.max(1, termRows - top - 3))
-    title = app.input.label
-    segRows = [{ segs: cyclesSegs(app.input) }, ...v.rows.map((r) => ({ segs: [pink(" ▌ "), plain(r)] }))]
-    keys = `enter done · alt-enter newline${app.input.cycles?.length ? ` · tab change the lit choice${app.input.cycles.length > 1 ? " · shift-tab the next choice" : ""}` : ""} · esc cancel · ctrl+] room`
-    cursor = { r: v.cursor.r + 1, c: v.cursor.c + 3 }
-  } else {
-    const d = detail(app, ctl)
-    const add = adder(`card:${app.mode.kind}`)
-    title = d.title; app.acts = d.actions; tint = d.tint ?? ROLE.key
-    segRows = d.rows.length ? d.rows : [{ segs: [dim(`nothing here yet${add ? ` — ${keyName(add.key)} ${add.label}` : ""}`)] }]
-  }
-  app.rows = segRows
-  const split = app.acts.length > 0 && colsN >= 80
-  const leftW = split ? colsN - ACTIONS_W - 1 : colsN
-  const box = app.picker || app.input ? null : cardBox(app), bv = box?.ed.view(leftW - 4, 4), boxH = bv ? bv.rows.length + 1 : 0
-  if (box?.focused) keys = "enter send · alt-enter newline · esc leave the box · pgup/pgdn scroll · ctrl+] room"
-  const selectable = app.rows.some((r) => r.open) && !app.input
-  if (app.snapSel && selectable && !app.picker) { app.snapSel = false; if (!app.rows[app.sel]?.open) app.sel = app.rows.findIndex((r) => r.open) }
-  if (app.sel >= app.rows.length) app.sel = Math.max(0, app.rows.length - 1)
-  if (app.asel >= app.acts.length) app.asel = Math.max(0, app.acts.length - 1)
-  // the foot lists what the actions column can't show (all of it, with no column), then the globals;
-  // its height and the column's room depend on each other, so settle them together
-  const claimed = new Set(app.acts.map((x) => x.key))
-  const globals = [...(app.world ? PLAY : []), ...GLOBALS.filter((h) => !h.key.split(" ").some((k) => claimed.has(k)))]
-  let footN = 1, room = 0, win: Window, awin: Window = { first: 0, count: 0, above: 0, below: 0 }, foot: Hint[][] = []
-  for (let pass = 0; pass < 3; pass++) {
-    room = Math.max(1, termRows - footN - 1 - top - boxH)
-    win = cursor && app.input ? offset(app.rows.length, room, 0) : selectable || app.picker ? followSel(app.rows.length, app.sel, room) : offset(app.rows.length, room, app.scroll)
-    if (split) awin = !selectable ? followSel(app.acts.length, app.asel, room) : offset(app.acts.length, room, 0)
-    const hidden = split ? app.acts.filter((_, i) => i < awin.first || i >= awin.first + awin.count) : app.acts
-    foot = keys ? [] : footLines([...hidden.map((x) => ({ key: keyName(x.key), label: x.label })), ...globals], colsN - 2, Math.max(1, Math.floor((termRows - top - 1) / 2)))
-    const n = Math.max(1, foot.length)
-    if (n === footN) break
-    footN = n
-  }
-  win = win!
-  if (!selectable && !app.picker && !app.input && Number.isFinite(app.scroll)) app.scroll = win.first
-  const bar = (t: string, w: number, bg: string) => line([{ s: ` ${t} `, fg: ROLE.ground, bg }, dim(" " + "─".repeat(Math.max(0, w - cells(t) - 3)))], w)
-  o += `${ESC}[${top};1H` + bar(title, leftW, app.picker || app.input ? ROLE.attention : tint) + (split ? line([dim("┬")], 1) + bar("ACTIONS", ACTIONS_W, ROLE.key) : "")
-  const how = selectable || app.picker ? "" : " · pgup/pgdn"
-  app.pane = { top, leftW, room, first: win.first, rowAt: [], actAt: [] }
-  for (let i = 0; i < room; i++) {
-    const at = lineOf(win, i), r = at !== undefined && at >= 0 ? app.rows[at] : undefined
-    app.pane.rowAt.push(r ? at : undefined)
-    const mark = r && selectable && at === app.sel && app.mode.kind !== "thread" && app.mode.kind !== "person" ? key("▸ ") : plain("  ")
-    o += `${ESC}[${top + 1 + i};1H` + line(r ? [mark, ...r.segs] : at !== undefined ? more(win, at, how) : [], leftW)
-    if (split) {
-      const ai = lineOf(awin, i), x = ai !== undefined && ai >= 0 ? app.acts[ai] : undefined
-      app.pane.actAt.push(x ? ai : undefined)
-      const lit = x && !selectable && ai === app.asel
-      o += `${ESC}[${top + 1 + i};${leftW + 1}H` + line([dim("│")], 1) + line(x ? [lit ? key("▸") : plain(" "), { s: ` ${keyName(x.key).padStart(5)} `, fg: ROLE.key, bold: true }, { s: fit(x.label, ACTIONS_W - 8), fg: x.key === "esc" ? ROLE.inactive : ROLE.prose }] : ai !== undefined ? more(awin, ai, selectable ? " · in the foot" : "") : [], ACTIONS_W)
-    }
-  }
-  const boxAt = top + 1 + room
-  if (box && bv) {
-    const on = box.focused
-    o += `${ESC}[${boxAt};1H` + line([{ s: " reply ", fg: ROLE.ground, bg: on ? ROLE.attention : ROLE.inactive }, dim(on ? "" : `  r${app.acts.some((x) => x.key === "enter") ? "" : " or ⏎"} to write`)], leftW)
-    bv.rows.forEach((r, i) => { o += `${ESC}[${boxAt + 1 + i};1H` + line([on ? pink(" ▌ ") : dim(" ▌ "), on ? plain(r) : dim(r)], leftW) })
-    if (split) for (let i = 0; i < boxH; i++) o += `${ESC}[${boxAt + i};${leftW + 1}H` + line([dim("│")], 1) + line([], ACTIONS_W)
-  }
-  // the foot: what you are typing, a confirm, or the keys — the lit one when the actions have them and no column shows it
-  o += `${ESC}[${termRows - footN};1H` + line([], colsN)
-  const one = app.input && !app.input.ed.multiline ? app.input : null
-  const litKey = !split && !selectable && app.acts[app.asel] ? keyName(app.acts[app.asel]!.key) : null
-  const hintSegs = (l: Hint[]): Seg[] => l.flatMap((h, j): Seg[] => [...(j ? [dim(" · ")] : []), h.key === litKey ? { s: `${h.key} ${h.label}`, fg: ROLE.ground, bg: ROLE.key } : { s: h.key, fg: ROLE.key, bold: true }, ...(h.key === litKey ? [] : [plain(` ${h.label}`)])])
-  const feet: Seg[][] = one ? [[pink(` ${one.label}: `), plain(one.ed.text), ...(one.cycles?.length ? [dim("   tab: "), ...cyclesSegs(one)] : [])]] : app.confirm ? [[pink(` ${app.confirm.label} (y/n) · enter is y`)]] : keys ? [[dim(` ${keys}`)]] : foot.map((l) => [plain(" "), ...hintSegs(l)])
-  for (let i = 0; i < footN; i++) o += `${ESC}[${termRows - footN + 1 + i};1H` + line(feet[i] ?? [], colsN)
-  o += `${ESC}[?7h`
-  if (one) {
-    const pre = [...` ${one.label}: `].length
-    o += `${ESC}[${termRows};${pre + one.ed.col + 1}H${ESC}[?25h`
-  } else if (box?.focused && bv && !app.confirm) o += `${ESC}[${boxAt + 1 + bv.cursor.r};${4 + bv.cursor.c}H${ESC}[?25h`
-  else if (cursor && cursor.r >= 0) o += `${ESC}[${top + 1 + cursor.r};${cursor.c + 3}H${ESC}[?25h`
-  else if (cursor) o += `${ESC}[${top};${cursor.c + 1}H${ESC}[?25h`
-  return o
-}
-
-const cyclesSegs = (i: Prompt): Seg[] => (i.cycles ?? []).flatMap((c, n) => [dim(`${c.name} `), n === i.focus && (i.cycles?.length ?? 0) > 1 ? { s: `‹${c.values[c.i]!.label}› `, fg: ROLE.ground, bg: ROLE.key } : key(`‹${c.values[c.i]!.label}› `)])
-
-/** the finder or a confirm over the reader: drawn in the bottom rows, the conversation above */
-function drawOverlay(colsN: number, termRows: number): string {
-  const top = Math.max(2, termRows - DETAIL - 1)
-  let o = `${ESC}[?2026h`
-  for (let r = top; r <= termRows; r++) o += `${ESC}[${r};1H` + line([], colsN)
-  return o + drawPane(top, colsN, termRows) + `${ESC}[?2026l`
-}
 
 // ── input ──────────────────────────────────────────────────────────────────────────────────────
-function inputKey(k: string) {
-  const i = app.input!
-  if (k === "esc") { app.input = null; return draw() }
-  if (k === "enter") { app.input = null; i.submit(i.ed.text, (i.cycles ?? []).map((c) => c.values[c.i]!.value)); return draw() }
-  if ((k === "tab" || k === "backtab") && i.cycles?.length) {
-    if (k === "backtab") i.focus = (i.focus + 1) % i.cycles.length
-    else { const c = i.cycles[i.focus]!; c.i = (c.i + 1) % c.values.length }
-    return draw()
-  }
-  i.ed.key(k)
-  draw()
-}
-function pickerKey(k: string) {
-  const p = app.picker!
-  const shown = rank(p.q.text, p.items, (x) => x.text)
-  if (k === "esc") { app.picker = null; return draw() }
-  if (k === "enter") { const it = shown[p.sel]; app.picker = null; it?.run(); return draw() }
-  if (k === "down" || k === "ctrl-n" || k === "tab") { p.sel = Math.min(p.sel + 1, shown.length - 1); return draw() }
-  if (k === "up" || k === "ctrl-p" || k === "backtab") { p.sel = Math.max(p.sel - 1, 0); return draw() }
-  if (p.q.key(k)) p.sel = 0
-  draw()
-}
-
-function paintAt(ch: string) {
-  if (app.mode.kind !== "look-editor" || !app.editBuf) return
-  const view = app.mode.view, row = app.editBuf[view]![app.editCursor.y]!.split("")
-  row[app.editCursor.x] = ch
-  if (app.editMirror) row[11 - app.editCursor.x] = ch
-  app.editBuf[view]![app.editCursor.y] = row.join("")
-  draw()
-}
-
-function editorKey(k: string) {
-  if (app.mode.kind !== "look-editor" || !app.editBuf) return
-  const { name, view } = app.mode
-  if (k === "up") { app.editCursor.y = Math.max(0, app.editCursor.y - 1); return draw() }
-  if (k === "down") { app.editCursor.y = Math.min(21, app.editCursor.y + 1); return draw() }
-  if (k === "left") { app.editCursor.x = Math.max(0, app.editCursor.x - 1); return draw() }
-  if (k === "right") { app.editCursor.x = Math.min(11, app.editCursor.x + 1); return draw() }
-  if (k === "m") { app.editMirror = !app.editMirror; return draw() }
-  if (k === "1" || k === "2" || k === "3") {
-    app.mode = { kind: "look-editor", name, view: k === "1" ? "front" : k === "2" ? "side" : "back", from: app.mode.from, hall: app.mode.hall }
-    return draw()
-  }
-  if (k === "esc") {
-    if (app.editEntry) app.editBuf[view] = [...app.editEntry[view]]
-    app.mode = { kind: "look", name, from: app.mode.from, hall: app.mode.hall }; app.sel = 0; app.snapSel = true; return draw()
-  }
-  if (k === "enter") {
-    if (app.lookDraft) {
-      const custom = trimCustom(app.editBuf)
-      if (custom) app.lookDraft.custom = custom
-      else delete app.lookDraft.custom
-    }
-    app.mode = { kind: "look", name, from: app.mode.from, hall: app.mode.hall }; app.sel = 0; app.snapSel = true; return draw()
-  }
-  if (k === ".") return paintAt(".")
-  if ((LEGEND_CHARS as readonly string[]).includes(k)) return paintAt(k)
-}
-
-/** the help card over the card you are on: its keys, the globals, the reader's and, in the sandbox, the play keys */
-function help() {
-  if (app.mode.kind === "help") return
-  const d = detail(app, ctl)
-  open({ kind: "help", from: app.mode, title: d.title, keys: d.actions.map((x) => ({ key: keyName(x.key), label: x.label })) })
-}
-
-/** one key, one thing to do with the toy; true when the key was one of them. Off the sandbox only the room's keys, with OFFICE_TOY_KEYS=1 */
-function toyKey(k: string): boolean {
-  if (!app.world && !roomKey(k, detail(app, ctl).actions.some((x) => x.key === k), TOY_KEYS)) return false
-  switch (k) {
-    case "E": open({ kind: "play" }); draw(); return true
-    default: return false
-  }
-}
-
-/** the status line for a scene asked for off the play card */
-const scene = (started: boolean, r: { eventsHere(): boolean }, said: string): string =>
-  started ? said : r.eventsHere() ? "a scene is running, or that event is switched off (the wackiness dial)" : "events need the wide room (kitty graphics)"
 
 /** one toy off the play card, by its row id */
 function playDo(id: string): void {
@@ -875,181 +531,14 @@ function playDo(id: string): void {
   }
 }
 
-function onKey(k: string) {
-  app.keyLog = [...app.keyLog, k].slice(-KONAMI.length)
-  if (isKonami(app.keyLog)) { app.keyLog = []; record(findSecret(app.trophies, "konami")); room().disco(); app.status = "↑↑↓↓←→←→BA — everybody dance"; changed(app); return draw() }
-  if (k === ROOM_CTRL) return toRoom()
-  if (app.picker) return pickerKey(k)
-  if (app.input) return inputKey(k)
-  if (app.confirm) {
-    const c = app.confirm; app.confirm = null
-    if (k === "y" || k === "enter") c.run()
-    else { app.status = "cancelled"; if (app.reader) app.reader.status = app.status }
-    return draw()
-  }
-  if (app.mode.kind === "look-editor") return editorKey(k)
-  if (app.mode.kind === "hall" && (k === "tab" || k === "backtab")) { app.snapSel = false; app.sel = stepRow(app.sel, k === "tab" ? 1 : -1); return draw() }
-  if (app.mode.kind === "store" && (k === "tab" || k === "backtab")) { app.snapSel = false; app.sel = stepStoreRow(app.sel, k === "tab" ? 1 : -1); return draw() }
-  if (app.reader) {
-    const r = app.reader.key(k, Math.max(1, (process.stdout.rows ?? 24) - 6))
-    if (r === "leave") return closeReader()
-    if (r === "pass") return threadActions(app, ctl, app.reader.tid, true).find((x) => x.key === k)?.run()
-    if (r !== "done") void r.then(draw)
-    return draw()
-  }
-  const box = cardBox(app)
-  if (box?.focused) return boxKey(box, k)
-  // a live thread's own ⏎ steps into the session; on any other thread card ⏎ is back into the box
-  if (box && k === "enter" && !detail(app, ctl).actions.some((x) => x.key === "enter")) { box.focused = true; return draw() }
-  if (toyKey(k)) return
-  // the card's own actions first: a key there means what its actions pane says
-  const name = k === " " ? "space" : k
-  const own = detail(app, ctl).actions.find((x) => x.key === name)
-  if (own) return own.run()
-  const onActions = actionsFocused()
-  switch (k) {
-    case "q": case "ctrl-c": return quit()
-    case "esc": back(); app.roomChanged = true; return draw()
-    case "[": return stepWs(-1)
-    case "]": return stepWs(1)
-    case "tab": case "backtab": {
-      const crew = crewOf(view(app))
-      if (!crew.length) return
-      const i = app.mode.kind === "person" ? crew.findIndex((c) => c.name === (app.mode as { name: string }).name) : -1
-      return open({ kind: "person", name: crew[(i + (k === "tab" ? 1 : -1) + crew.length) % crew.length]!.name })
-    }
-    case "j": case "down":
-      app.snapSel = false
-      if (onActions) app.asel = Math.min(app.asel + 1, app.acts.length - 1); else app.sel = Math.min(app.sel + 1, app.rows.length - 1)
-      return draw()
-    case "k": case "up":
-      app.snapSel = false
-      if (onActions) app.asel = Math.max(app.asel - 1, 0); else app.sel = Math.max(app.sel - 1, 0)
-      return draw()
-    case "left": if (app.mode.kind === "column") return open({ kind: "column", col: (app.mode.col + COLS.length - 1) % COLS.length }); return
-    case "shift-up": case "shift-down": case "shift-left": case "shift-right": {
-      const dx = app.g.cw / app.g.k, dy = app.g.ch / app.g.k
-      const [ddx, ddy] = k === "shift-left" ? [-dx, 0] : k === "shift-right" ? [dx, 0] : k === "shift-up" ? [0, -dy] : [0, dy]
-      app.viewport = panViewport(app.viewport, ddx, ddy, app.g.floorW, app.g.floorH); app.follow = false; app.panned = true
-      return draw()
-    }
-    case ".":
-      app.viewport = centerViewport(app.viewport, OFF_W / 2, (BAND + OFF_DOOR) / 2, app.g.floorW, app.g.floorH); app.follow = true; app.panned = true
-      return draw()
-    case ",": {
-      const need = app.needs[0]
-      const seat = need ? app.all.roster.find((r) => r.thread_id === need.thread_id) : null
-      const at = seat ? room().at(seat.agent) : null
-      if (!at) return
-      app.viewport = centerViewport(app.viewport, at.x, at.y, app.g.floorW, app.g.floorH); app.panned = true
-      return draw()
-    }
-    case "pgdn": case "pgup": return page(k === "pgdn" ? 1 : -1)
-    case "enter":
-      if (app.mode.kind === "home" && app.lit !== null && !app.reader) return act({ kind: "thread", tid: app.lit })
-      return onActions ? app.acts[app.asel]?.run() : app.rows[app.sel]?.open?.()
-    case "/": case "ctrl-k": return void finder()
-    case "?": return help()
-    case "i": return inbox()
-    case "R": if (updated()) void relaunch(); return
-    case "'": return talk(null)
-    case "n": return newThread()
-    case "I": return newTicket()
-    case "c": return open({ kind: "crew" })
-    case "t": return open({ kind: "column", col: 0 })
-    case "o": return open({ kind: "notes" })
-    case "f": return open({ kind: "archive" })
-    case "a": return open({ kind: "calendar" })
-    case "w": return open({ kind: "tray" })
-    case "!": return open({ kind: "triage" })
-    case "H": return open({ kind: "health" })
-    case "b": return open({ kind: "memory" })
-    case "L": if (app.all.life?.[String(app.ws)]) open({ kind: "life" }); return
-    case "B": if (flagOn(app.all, "build_mode")) open({ kind: "build" }); return
-    case "U": return open({ kind: "entry" })
-    case "O": return open({ kind: "boss" })
-    case "S": return open({ kind: "settings" })
-    case "p": room().pet(); changed(app); return draw()
-  }
-}
-
-/** a page of the card's rows, by the selection when they open, else by the view */
-function page(dir: 1 | -1, by = Math.max(1, app.pane.room - 2)) {
-  app.snapSel = false
-  if (actionsFocused()) app.scroll = Math.max(0, (Number.isFinite(app.scroll) ? app.scroll : app.pane.first) + dir * by)
-  else app.sel = Math.max(0, Math.min(app.sel + dir * by, app.rows.length - 1))
-  draw()
-}
-
-function onPaste(text: string) {
-  if (app.picker) { app.picker.q.insert(text); return draw() }
-  if (app.input) { app.input.ed.insert(text); return draw() }
-  if (app.reader) { app.reader.paste(text); return draw() }
-  const box = cardBox(app)
-  if (box) { box.ed.insert(text); box.focused = true; return draw() }
-}
-
-/** the margin notes over a clipped frame: text ink after the clip so a pan can't push it off-screen, hits first so they win */
-function addMargin(fr: Frame, vp: Viewport) {
-  app.looks.see(app.notes, app.focused)
-  const m = marginInk(app.notes, app.looks, app.lit, vp, app.g ? measureFor(app.g) : undefined)
-  fr.ink.push(...m.ink)
-  fr.hits.unshift(...m.hits)
-}
-
-function onMouse(m: Extract<Input, { t: "mouse" }>) {
-  if (!app.frame || !app.g || app.reader) return
-  const inRoom0 = m.row - 1 >= app.g.row && m.row - 1 < app.g.row + app.g.rows
-  if (m.motion && m.button === 0) {
-    if (inRoom0 && app.drag) {
-      const dx = (app.drag.col - m.col) * (app.g.cw / app.g.k), dy = (app.drag.row - m.row) * (app.g.ch / app.g.k)
-      app.viewport = panViewport(app.viewport, dx, dy, app.g.floorW, app.g.floorH); app.follow = false; app.panned = true
-      app.drag = { col: m.col, row: m.row }
-      return draw()
-    }
-    if (inRoom0) app.drag = { col: m.col, row: m.row }
-    return
-  }
-  app.drag = null
-  // the wheel over the pane scrolls it
-  if (m.press && (m.button === 64 || m.button === 65) && m.row > app.pane.top) return page(m.button === 65 ? 1 : -1, 3)
-  const clipped = clipFrame(app.frame, app.viewport)
-  addMargin(clipped, app.viewport)
-  const h = hitAt(clipped, app.g, m.col, m.row, app.viewport)
-  if (m.motion) {
-    const t = h?.tip ?? "", over = h?.note ?? null
-    if (over !== app.lit) { app.lit = over; app.tip = t; app.roomChanged = true; return draw() }
-    if (t !== app.tip) { app.tip = t; draw() }
-    return
-  }
-  if (!m.press || m.button !== 0) return
-  if (m.row === 1) return app.headHits.find((x) => m.col >= x.from && m.col <= x.to)?.go()
-  const inRoom = inRoom0
-  if (h) return act(h.act)
-  // a click on bare floor clears the slate, as on the desktop
-  if (inRoom) { back(true); app.roomChanged = true; return draw() }
-  // the pane: a click on an action runs it, on a row opens it
-  const i = m.row - app.pane.top - 1
-  if (i < 0) return
-  if (m.col > app.pane.leftW + 1) {
-    const ai = app.pane.actAt[i], x = ai === undefined ? undefined : app.acts[ai]
-    if (x) { app.asel = ai!; x.run() }
-    return
-  }
-  const ri = app.pane.rowAt[i], r = ri === undefined ? undefined : app.rows[ri]
-  if (r?.open) { app.sel = ri!; r.open() }
-}
-
 // ── zoomed into a terminal ─────────────────────────────────────────────────────────────────────
 // The whole screen is one coworker's terminal: a bar on top, every key to the pane but Ctrl-],
 // which goes to the room.
 const ROOM_KEY = 0x1d // Ctrl-]
-/** Ctrl-] as `tokenize` names it: a control character is ctrl- and its byte + 0x60 */
-const ROOM_CTRL = "ctrl-}"
 
 async function zoomInto(tid: number) {
   const target = await data.terminal(tid)
-  if (!target) { app.status = `#${tid} has no live terminal`; if (app.reader) app.reader.status = app.status; return draw() }
+  if (!target) { app.status = `#${tid} has no live terminal`; if (app.reader) app.reader.status = app.status; return draw(app, ctl) }
   zoomOn(target, `#${tid} ${threadOf(app, tid)?.lead ?? target.window} · terminal`)
 }
 /**
@@ -1060,9 +549,9 @@ async function zoomInto(tid: number) {
 const OWN_TMUX = process.env.TLON_OFFICE_TMUX || "tlon-office"
 const OWN_DIR = `${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/${OWN_TMUX}`
 async function zoomGit(tid: number) {
-  if (!Bun.which("lazygit")) { app.status = "lazygit is not installed"; return draw() }
+  if (!Bun.which("lazygit")) { app.status = "lazygit is not installed"; return draw(app, ctl) }
   const path = await data.worktree(tid)
-  if (!path) { app.status = `#${tid} has no repo to show`; return draw() }
+  if (!path) { app.status = `#${tid} has no repo to show`; return draw(app, ctl) }
   const session = `git-${tid}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
   if (tmux("has-session", "-t", `=${session}`).exitCode !== 0) tmux("new-session", "-d", "-s", session, "-n", "lazygit", "-c", path, "lazygit")
   zoomOn({ socket: OWN_TMUX, session, window: "lazygit" }, `#${tid} ${threadOf(app, tid)?.lead ?? ""} · git`)
@@ -1070,13 +559,13 @@ async function zoomGit(tid: number) {
 /** a workline's docs, picked from a list */
 async function pickDoc(tid: number) {
   const names = await data.docs(tid)
-  if (!names.length) { app.status = `#${tid} has no docs yet`; return draw() }
+  if (!names.length) { app.status = `#${tid} has no docs yet`; return draw(app, ctl) }
   find(`DOCS · #${tid}`, names.map((n) => ({ segs: [{ s: n, fg: ROLE.prose }], text: n, run: () => { app.picker = null; void readDoc(tid, n) } })))
 }
 /** a doc read in the office's own tmux: glow renders markdown, else bat, else less */
 async function readDoc(tid: number, name: string) {
   const text = await data.doc(tid, name)
-  if (text === null) { app.status = `#${tid}: no ${name}`; return draw() }
+  if (text === null) { app.status = `#${tid}: no ${name}`; return draw(app, ctl) }
   pageThrough(`doc-${tid}-${name.replace(/\W/g, "_")}`, text, `#${tid} · ${name}`)
 }
 function pageThrough(session: string, text: string, label: string) {
@@ -1091,25 +580,25 @@ function pageThrough(session: string, text: string, label: string) {
 async function readPage(id: number) {
   if (app.ws === null) return
   const p = await data.dumpPage(app.ws, id)
-  if (!p) { app.status = "that page can't be read: the server isn't answering"; return draw() }
+  if (!p) { app.status = "that page can't be read: the server isn't answering"; return draw(app, ctl) }
   pageThrough(`page-${app.ws}-${id}`, p.body, `the dump · ${stamp(p.at)}`)
 }
 /** an earlier page made the dump again; the page it replaces is kept, so this is undone the same way */
 async function restorePage(id: number) {
   if (app.ws === null) return
   const w = app.ws, p = await data.dumpPage(w, id)
-  if (!p) { app.status = "that page can't be read: the server isn't answering"; return draw() }
-  if (Bun.spawnSync(["tmux", "-L", OWN_TMUX, "has-session", "-t", `=dump-${w}`]).exitCode === 0) { app.status = "the dump is open in its editor: close it first, then put the page back"; return draw() }
+  if (!p) { app.status = "that page can't be read: the server isn't answering"; return draw(app, ctl) }
+  if (Bun.spawnSync(["tmux", "-L", OWN_TMUX, "has-session", "-t", `=dump-${w}`]).exitCode === 0) { app.status = "the dump is open in its editor: close it first, then put the page back"; return draw(app, ctl) }
   let file: string | null = null
   try { file = readFileSync(dumpFile(w), "utf8") } catch {}
   const now = await data.dump(w)
-  if (!now) { app.status = "the dump can't be read: the server isn't answering"; return draw() }
-  if (app.dumpSending.has(w) || (file?.trim() && file !== now.body)) { app.status = "the dump has a save still on its way: D to send it, then put the page back"; return draw() }
+  if (!now) { app.status = "the dump can't be read: the server isn't answering"; return draw(app, ctl) }
+  if (app.dumpSending.has(w) || (file?.trim() && file !== now.body)) { app.status = "the dump has a save still on its way: D to send it, then put the page back"; return draw(app, ctl) }
   await did(data.dumpPut(w, p.body).then((r) => {
     if (r.ok) { app.dumpSent.set(w, p.body); mkdirSync(dirname(dumpFile(w)), { recursive: true }); writeFileSync(dumpFile(w), p.body) }
     return r.line
   }))
-  await loadCard(); draw()
+  await loadCard(); draw(app, ctl)
 }
 // on disk, not the runtime tmpfs: words the server hasn't taken yet survive a logout or a reboot
 const dumpFile = (w: number) => join(STATE_DIR, OWN_TMUX, `dump-${w}.md`)
@@ -1118,7 +607,7 @@ function syncDump(w: number, quiet = false) {
   try { text = readFileSync(dumpFile(w), "utf8") } catch { return }
   if (text === app.dumpSent.get(w)) return
   if (app.dumpSending.has(w)) { app.dumpAgain.add(w); return }
-  if (!text.trim()) { if (quiet) return; app.status = "the dump came back blank — not saved; the last page stands"; return draw() }
+  if (!text.trim()) { if (quiet) return; app.status = "the dump came back blank — not saved; the last page stands"; return draw(app, ctl) }
   // a quiet retry waits a minute after a refusal, so a server away or refusing is not hammered
   if (quiet && Date.now() - (app.dumpFailedAt.get(w) ?? 0) < 60_000) return
   app.dumpSending.add(w)
@@ -1129,8 +618,8 @@ function syncDump(w: number, quiet = false) {
     return r
   })
   // quiet runs from inside a refresh, so it must not start another (`did` does)
-  if (quiet) void put.then((r) => { if (r.ok) { app.status = r.line; draw() } })
-  else void did(put.then((r) => r.line)).then(loadCard).then(draw)
+  if (quiet) void put.then((r) => { if (r.ok) { app.status = r.line; draw(app, ctl) } })
+  else void did(put.then((r) => r.line)).then(loadCard).then(() => draw(app, ctl))
 }
 async function openDump() {
   if (app.ws === null) return
@@ -1147,7 +636,7 @@ async function openDump() {
   }
   if (!open || !app.dumpSent.has(w)) {
     const page = await data.dump(w)
-    if (!page) { app.status = "the dump can't be read: the server isn't answering"; return draw() }
+    if (!page) { app.status = "the dump can't be read: the server isn't answering"; return draw(app, ctl) }
     if (!app.dumpSending.has(w)) app.dumpSent.set(w, page.body)
   }
   if (!app.dumpWatched.has(w)) { app.dumpWatched.add(w); watchFile(file, { interval: 1000 }, () => syncDump(w)) }
@@ -1201,8 +690,8 @@ function leaveZoom(toTheRoom = false): void {
   out(`${ESC}[0m${ESC}[?25l${ESC}[?1003h${ESC}[?1006h${ESC}[?2004h`)
   z.after?.()
   if (toTheRoom) return toRoom()
-  if (app.reader) { out(`${ESC}[2J`); return draw() }
-  layoutScreen(); draw()
+  if (app.reader) { out(`${ESC}[2J`); return draw(app, ctl) }
+  layoutScreen(app, ctl); draw(app, ctl)
 }
 /** raw keys while zoomed: Ctrl-] goes to the room, the rest goes to the pane as it came */
 function zoomInput(b: Uint8Array) {
@@ -1217,17 +706,19 @@ function toRoom(): void {
   if (app.input && !app.input.ed.empty) app.banked.set(app.input.label, app.input.ed.text)
   bankReader()
   app.reader = null; app.input = null; back(true); app.roomChanged = true
-  out(`${ESC}[?25l`); layoutScreen(); draw()
+  out(`${ESC}[?25l`); layoutScreen(app, ctl); draw(app, ctl)
 }
 
 function quit() { app.zoom?.view.close(); leave(); process.exit(0) }
 
 // ── startup ────────────────────────────────────────────────────────────────────────────────────
-const ctl: Boot = {
-  open, back, act, ask, ask2, did, draw, refresh, loadCard, find, room, back1, resort, hire, talk, reply, newThread, newTicket, newNote,
+const ctl: Screen = {
+  open, back, act, ask, ask2, did, refresh, loadCard, find, room, back1, resort, hire, talk, reply, newThread, newTicket, newNote,
   finder, inbox, quit, goThread, goWs, openReader, closeReader, openConversation, openBabel, openDump, openSoul, readPage, restorePage,
   zoomInto, zoomGit, pickDoc, play, playDo, setWhim, followPets: () => followPets(app),
-  loadThread, zoomInput, onKey, onPaste, stampLooked, onMouse, layoutScreen, drawZoom, watchTrophies, leaveZoom, openThread, paint,
+  loadThread, zoomInput, stampLooked, drawZoom, watchTrophies, leaveZoom, openThread, record, toRoom,
+  draw: () => draw(app, ctl), layoutScreen: () => layoutScreen(app, ctl), paint: (roomOnly) => paint(app, ctl, roomOnly),
+  onKey: (k) => onKey(app, ctl, k), onPaste: (text) => onPaste(app, ctl, text), onMouse: (m) => onMouse(app, ctl, m),
   detail: () => detail(app, ctl),
 }
 
