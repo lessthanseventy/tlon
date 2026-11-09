@@ -29,20 +29,12 @@ defmodule Server.Workline do
   alias Server.Workline.Grade
   alias Server.Workline.Landing
   alias Server.Workline.Review
-  alias Server.Workline.Scribe
   alias Server.Workline.SendBack
+  alias Server.Workline.Stage
 
   require Logger
 
-  @stages ~w(intent spec plan build verify review landed)
-  @owed %{
-    "intent" => {:file, "intent.md"},
-    "spec" => {:file, "spec.md"},
-    "plan" => {:file, "plan.md"},
-    "build" => :branch,
-    "verify" => :checks,
-    "review" => {:file, "review.md"}
-  }
+  @stages Stage.stages()
   # Who leads each stage, by bench archetype: the stage's kind of work picks its worker. intent and
   # merged keep whoever has the thread.
   @staff_by_stage %{
@@ -52,23 +44,10 @@ defmodule Server.Workline do
     "verify" => "builder",
     "review" => "reviewer"
   }
-  # Stages whose EXIT waits on the operator; a machine-born intent gates its exit too.
-  @gated ~w(spec review)
   # What Andrew sees: the office, and the operator API it reads (the office snapshot rides on it).
   @user_visible ~w(office/ server/lib/server/mcp/operator_api.ex server/lib/server/office)
 
-  # The ring, the owed map, and the gate list drift independently unless something ties them:
-  # every non-terminal stage MUST owe an artifact, every gated stage must be in the ring.
-  for stage <- Enum.drop(@stages, -1) do
-    Map.has_key?(@owed, stage) or raise "stage #{stage} has no owed artifact in @owed"
-  end
-
-  for stage <- @gated do
-    stage in @stages or raise "gated stage #{stage} is not in @stages"
-  end
-
-  @doc "The stage ring, first to terminal."
-  def stages, do: @stages
+  defdelegate stages, to: Stage
 
   # Any-stage entry (Slice 4D): a workline may open at any stage except the terminal one. Opening
   # LATER than intent sets the starting position — it does not retroactively owe the earlier stages'
@@ -228,139 +207,11 @@ defmodule Server.Workline do
     |> String.trim("-")
   end
 
-  @doc """
-  Advance past the current stage. `{:ok, thread}` on a flip, `{:awaiting, thread}` when the
-  transition gates on the operator, `{:error, {:artifact_missing, why}}` when the owed
-  artifact isn't committed, `{:error, :awaiting_operator | :terminal | :not_a_workline}`
-  otherwise; a hold off a gate (a worker's question, a stuck flag) does not block it.
-  `opts[:artifacts]` swaps the checker (tests stub it; default is git).
-  """
-  def advance(%Thread{} = thread, opts \\ []) do
-    checker = Keyword.get(opts, :artifacts, Git)
+  defdelegate advance(thread, opts \\ []), to: Stage
 
-    with :ok <- still_open(thread),
-         :ok <- advanceable(thread, checker),
-         :ok <- verified_artifact(thread, checker),
-         :ok <- qa_cleared(thread, opts) do
-      if gated?(thread), do: park(thread, checker, opts), else: flip(thread)
-    else
-      {:error, {:artifact_missing, why}} when thread.stage == "verify" ->
-        if Keyword.get(opts, :reverify, checker == Git),
-          do: reverify(thread, why),
-          else: {:error, {:artifact_missing, why}}
-
-      {:error, {:artifact_missing, _}} = refused when thread.stage == "review" ->
-        hand_to_qa(thread, opts) || refused
-
-      other ->
-        other
-    end
-  end
-
-  # a reviewer that approved in review.md and advanced (rather than `submit_review`) still owes
-  # QA: hand it to the qa seat as the verdict would, instead of refusing into a dead end
-  defp hand_to_qa(thread, opts) do
-    line = Keyword.get_lazy(opts, :review_line, fn -> Git.doc_line(thread, "review.md") end) || ""
-
-    # review.md stays on the branch across rounds: with no verdict yet this round, an approval in it
-    # is the last round's and owes nothing
-    with true <- line =~ ~r/approve/i and not (line =~ ~r/request.?changes/i),
-         false <- is_nil(since_review(thread, "workline:#{thread.slug}:review")) and reviewed_before?(thread),
-         {seat, paths} <- qa_owed(thread, opts),
-         false <- Server.Channel.thread_lead(thread.id) == seat.name do
-      {:ok, to_qa(thread, seat, paths)}
-    else
-      _ -> nil
-    end
-  end
-
-  # verify's evidence is the server's own run: a lead asking to advance past it (after fixing the
-  # branch) is asking for a verify, which only the server can start — so it does
-  defp reverify(thread, why) do
-    case Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: thread.id, slug: thread.slug})) do
-      {:ok, _} -> {:error, {:artifact_missing, "#{why} — verify is queued; the server posts its result here"}}
-      {:error, _} -> {:error, {:artifact_missing, why}}
-    end
-  end
-
-  @doc """
-  Complete a parked gate — the operator's verb (tlon-cli `approve`). RE-VERIFIES the owed
-  artifact before flipping: a flag-parked intent (or an artifact that vanished since the
-  park) cannot ride approval past the invariant. `{:ok, thread}`,
-  `{:error, {:artifact_missing, why}}` (still parked), `{:error, :nothing_awaiting}`, or
-  `{:error, :approving}` while another approval of it is landing.
-
-  `skip_qa: reason` lands a review past an owed QA pass (parked or not): the skip is recorded as its
-  QA verdict ("skipped by the operator: <reason>") and posted on the thread. Without it, or with a
-  blank reason, an owed QA refuses as before.
-
-  `as: handle` is the caller's seat (tlon-cli passes `TLON_AUTHOR`); nil is the operator. `as: "uqbar"`
-  on a gate whose grade hit a limit (`limit_hit?/1`) is refused `{:error, :limit_hit}` before anything
-  else, a `skip_qa` included. An approval is recorded `by` the caller, not the gate's holder.
-  """
-  def approve(thread, opts \\ [])
-
-  def approve(%Thread{} = thread, opts) do
-    reason = opts |> Keyword.get(:skip_qa) |> to_string() |> String.trim()
-
-    cond do
-      Keyword.get(opts, :as) == "uqbar" and limit_hit?(thread) ->
-        {:error, :limit_hit}
-
-      reason != "" and qa_owed(thread, opts) ->
-        landing(thread.id, fn ->
-          skip_qa(thread, reason)
-          do_approve(thread, opts)
-        end)
-
-      thread.awaiting ->
-        landing(thread.id, fn -> do_approve(thread, opts) end)
-
-      true ->
-        {:error, :nothing_awaiting}
-    end
-  end
+  defdelegate approve(thread, opts \\ []), to: Stage
 
   defdelegate landing(thread_id, fun), to: Landing
-
-  defp do_approve(thread, opts) do
-    checker = Keyword.get(opts, :artifacts, Git)
-
-    # A machine-born intent's approval IS its acceptance: server materializes intent.md from
-    # the breach evidence so the chain stays intact and approve stays one verb. Only against
-    # the REAL checker — a test stub must never make server commit into the live repo.
-    if thread.stage == "intent" and thread.born == "machine" and checker == Git do
-      Scribe.materialize_intent(thread)
-    end
-
-    with :ok <- verified_artifact(thread, checker),
-         :ok <- reviewed_current(thread),
-         :ok <- qa_cleared(thread, opts) do
-      if queue?(thread, checker, opts),
-        do: queue(thread, "approved", Keyword.get(opts, :as) || thread.awaiting || operator()),
-        else: approve_now(thread, checker, opts)
-    end
-  end
-
-  defp approve_now(thread, checker, opts) do
-    with {:ok, landed} <- land(thread, checker, opts),
-         {:ok, cleared} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
-         {:ok, flipped} <- flip(cleared) do
-      if landed, do: finish(flipped, landed, Keyword.get(opts, :run, &Server.Cmd.run/3))
-      {:ok, flipped}
-    end
-  end
-
-  # The review gate's approval joins the merge queue (`Server.Jobs.Land`, one turn at a time, the
-  # landings queued behind it riding as a merge train on one gate: `land_train/3`) — against the
-  # real repo; a test's stub merger lands
-  # inline, and `land: :queue | :now` says so outright.
-  defp queue?(%Thread{stage: "review"}, checker, opts) do
-    Keyword.get(opts, :land, if(checker == Git and not Keyword.has_key?(opts, :merge), do: :queue, else: :now)) ==
-      :queue
-  end
-
-  defp queue?(_thread, _checker, _opts), do: false
 
   def queue(thread, why, by) do
     with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
@@ -401,42 +252,9 @@ defmodule Server.Workline do
     e in [Postgrex.Error, DBConnection.ConnectionError] -> {:error, Exception.message(e)}
   end
 
-  @doc """
-  The approval that still stands on a workline: the newest one recorded (`%{"by", "sha", "at", "id"}`,
-  who approved it into the merge queue, the commit `work/<slug>` was at, when, and its event's id), while the
-  branch's code is what it was then (its own docs, `work/<slug>/`, may have moved); nil once the
-  code has changed, or when none was recorded. A requeue or reopen under it keeps it rather than
-  recording another; the same code approved by someone else records theirs, the newest, so the
-  landing names the latest approver.
-  """
-  def approval(%Thread{} = thread) do
-    correlation = "workline:#{thread.slug}:approval"
+  defdelegate approval(thread), to: Stage
 
-    newest =
-      Repo.one(
-        from e in Server.Event,
-          where: e.thread_id == ^thread.id and e.correlation == ^correlation,
-          order_by: [desc: e.id],
-          limit: 1,
-          select: {e.id, e.detail, e.created_at}
-      )
-
-    with {id, %{"sha" => sha} = detail, at} when is_binary(sha) <- newest,
-         head when is_binary(head) <- branch_head(thread),
-         true <- same_code?(thread, sha, head),
-         do: detail |> Map.take(["by", "sha"]) |> Map.merge(%{"at" => at, "id" => id}),
-         else: (_ -> nil)
-  end
-
-  defp same_code?(thread, sha, head), do: compare_code(thread, sha, head) == :same
-
-  @doc "The commit `work/<slug>` is at in the thread's repo, or nil without one."
-  def branch_head(thread) do
-    case Server.Git.cmd(Git.root(thread), ["rev-parse", "--verify", "--quiet", "work/#{thread.slug}^{commit}"]) do
-      {sha, 0} -> String.trim(sha)
-      _ -> nil
-    end
-  end
+  defdelegate branch_head(thread), to: Stage
 
   @doc """
   Reopen a closed thread. A workline that was in the merge queue (at review, waiting on no one)
@@ -518,24 +336,7 @@ defmodule Server.Workline do
     |> Enum.map(fn {subject, detail, at} -> %{subject: subject, ref: (detail || %{})["evidence"], landed_at: at} end)
   end
 
-  @doc """
-  What a workline's gate is decided on, in one line: at review, the reviewer's verdict line and the
-  change's size, and what approving does; at another gate, the stage's doc that is ready.
-  """
-  def gate_summary(%Thread{stage: "review"} = thread) do
-    verdict = Git.doc_line(thread, "review.md") || "no review.md yet"
-
-    size =
-      case Git.diffstat(thread) do
-        {:ok, stat} -> stat
-        {:error, why} -> why
-      end
-
-    risk = if grade = grade(thread), do: " · #{Grade.line(grade)}", else: ""
-    "#{verdict} · #{size}#{risk} — approve to land it through the merge queue"
-  end
-
-  def gate_summary(%Thread{stage: stage, slug: slug}), do: "work/#{slug}/#{stage}.md is ready — approve to move on"
+  defdelegate gate_summary(thread), to: Stage
 
   defdelegate review_verdict(thread, verdict, author, opts \\ []), to: Review
 
@@ -619,24 +420,7 @@ defmodule Server.Workline do
     {:error, {:bounced, why}}
   end
 
-  @doc """
-  A red verify goes back to build on the same branch, its builder told what broke: the build is
-  kept and fixed with its original context, never redone. Only from verify — a workline already
-  moved on is left where it is. `{:ok, thread}` | `{:error, {:not_at, stage}}`.
-  """
-  def red_verify(%Thread{} = thread, finding) do
-    move_back(
-      thread,
-      "build",
-      "verify is red",
-      "↩ back to build — verify is red: #{finding}\n\nFix it test-first on the same branch, then advance_stage; it comes back through verify and review.",
-      fn
-        %Thread{stage: "verify"} -> :ok
-        %Thread{stage: stage} -> {:error, {:not_at, stage}}
-      end,
-      nil
-    )
-  end
+  defdelegate red_verify(thread, finding), to: Stage
 
   @doc """
   Staff `thread`'s current stage again from the bench as it is now — after a shift change, so a
@@ -668,131 +452,9 @@ defmodule Server.Workline do
     end
   end
 
-  defp advanceable(%Thread{stage: nil}, _checker), do: {:error, :not_a_workline}
-  defp advanceable(%Thread{stage: "landed"}, _checker), do: {:error, :terminal}
+  defdelegate at_gate?(thread, opts \\ []), to: Stage
 
-  # Only a gate's hold waits for approve. Off a gate the hold is a question or a stuck flag about the
-  # missing artifact, which the artifact answers — or a green verify would sit behind it.
-  defp advanceable(%Thread{awaiting: awaiting} = thread, checker) when not is_nil(awaiting) do
-    if at_gate?(thread, artifacts: checker),
-      do: {:error, :awaiting_operator},
-      else: advanceable(%{thread | awaiting: nil}, checker)
-  end
-
-  defp advanceable(%Thread{stage: stage}, _checker) when stage in @stages, do: :ok
-  # A stage outside the ring (hand-edited row, drifted data) is a typed refusal, not a crash.
-  defp advanceable(%Thread{stage: stage}, _checker), do: {:error, {:invalid_stage, stage}}
-
-  # The owed-artifact check, recorded as a CHECK either way — the audit half of the invariant.
-  defp verified_artifact(thread, checker) do
-    requirement = Map.fetch!(@owed, thread.stage)
-
-    case owed_artifact(thread, checker) do
-      {:ok, evidence} ->
-        record_artifact_check(thread, requirement, 0, evidence)
-        :ok
-
-      {:error, why} ->
-        record_artifact_check(thread, requirement, 1, why)
-        {:error, {:artifact_missing, why}}
-    end
-  end
-
-  defp record_artifact_check(thread, requirement, exit_code, tail) do
-    Dossier.record_check(%{
-      thread_id: thread.id,
-      cmd: "workline artifact #{describe(requirement)}",
-      exit: exit_code,
-      tail: tail,
-      # Stage-suffixed so the ledger can filter per-stage history on the indexed column.
-      correlation: "workline:#{thread.slug}:artifact:#{thread.stage}"
-    })
-  end
-
-  defp describe({:file, name}), do: name
-  defp describe(other), do: to_string(other)
-
-  @doc """
-  Whether a workline stands at its gate — a gated stage whose owed artifact is there (and at review,
-  no QA owed), which is when `advance` parks it — so an `awaiting` on it is that gate, which only an
-  approval clears. Anywhere else (an ungated stage, a gated one whose artifact isn't written yet, or
-  a review still owing QA) it is a worker's question, which a reply clears. A machine-born intent parks before its artifact by design: always a gate.
-  `opts[:artifacts]` swaps the checker (tests).
-  """
-  def at_gate?(thread, opts \\ [])
-  def at_gate?(%Thread{stage: "intent", born: "machine"}, _opts), do: true
-
-  def at_gate?(%Thread{stage: stage} = thread, opts) do
-    stage in @gated and match?({:ok, _}, Keyword.get(opts, :artifacts, Git).check(thread, Map.fetch!(@owed, stage))) and
-      qa_cleared(thread, opts) == :ok
-  rescue
-    # an artifact that can't even be checked (no slug, no repo): the cautious reading, a gate
-    _ -> true
-  end
-
-  defp gated?(%Thread{stage: "intent", born: "machine"}), do: true
-  defp gated?(%Thread{stage: stage}), do: stage in @gated
-
-  # An approval stands across commits that only touched work/<slug>/ (`approval/1`): a reviewer
-  # re-committing review.md and advancing again re-queues the code, it does not ask for it twice.
-  defp park(%Thread{stage: "review"} = thread, checker, opts) do
-    case approval(thread) do
-      %{"by" => by, "sha" => sha} ->
-        queue(thread, "#{by}'s approval at #{String.slice(sha, 0, 7)} still stands", by)
-
-      nil ->
-        if auto_land?(thread, checker, opts),
-          do: queue(thread, auto_land_note(thread, opts), "auto_land_risk"),
-          else: park_on_operator(thread, checker)
-    end
-  end
-
-  defp park(thread, checker, _opts), do: park_on_operator(thread, checker)
-
-  defp park_on_operator(thread, checker) do
-    {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: operator()}) |> Repo.update()
-    Server.Bus.broadcast({:workline_gated, parked})
-    proof = if parked.stage == "review", do: proof(parked, artifacts: checker)
-    post_brief(parked, Brief.gate_message(parked, proof))
-    {:awaiting, parked}
-  end
-
-  @doc """
-  The proof a workline carries into its merge gate, read now from git and the event log: each
-  stage's owed artifact from the one it was opened at up to the current one, in the checker's
-  words (verify's is `checks`; a workline opened at build never owed an intent, spec or plan), the
-  newest verify check per command with its measured exit (five, newest first), and the branch's
-  diff against HEAD. `%{artifacts: [{stage, {:ok | :error, why}}], checks: [%{cmd, exit}], diff:
-  {:ok | :error, text}}`. `opts[:artifacts]` swaps the checker.
-  """
-  def proof(%Thread{} = thread, opts \\ []) do
-    checker = Keyword.get(opts, :artifacts, Git)
-
-    upto =
-      @stages
-      |> Enum.take(Enum.find_index(@stages, &(&1 == thread.stage)) + 1)
-      |> Enum.drop(Enum.find_index(@stages, &(&1 == entry_stage(thread))) || 0)
-
-    %{
-      artifacts:
-        for(stage <- upto, req = @owed[stage], req not in [nil, :checks], do: {stage, checker.check(thread, req)}),
-      checks: verify_checks(thread),
-      diff: Git.diffstat(thread)
-    }
-  end
-
-  defp verify_checks(thread) do
-    correlation = "workline:#{thread.slug}:verify"
-
-    from(e in Server.Event,
-      where: e.thread_id == ^thread.id and e.correlation == ^correlation and e.kind in ["check_passed", "check_failed"],
-      order_by: [desc: e.id]
-    )
-    |> Repo.all()
-    |> Enum.uniq_by(& &1.detail["cmd"])
-    |> Enum.take(5)
-    |> Enum.map(&%{cmd: &1.detail["cmd"], exit: &1.detail["exit"]})
-  end
+  defdelegate proof(thread, opts \\ []), to: Stage
 
   # One transaction: the stage flip and its ledger row commit together or not at all, on the row
   # locked FOR UPDATE and only from the stage `thread` was read at, open: a landing or an advance
@@ -839,40 +501,12 @@ defmodule Server.Workline do
 
   defp next(stage), do: Enum.at(@stages, Enum.find_index(@stages, &(&1 == stage)) + 1)
 
-  @doc """
-  Is the current stage's owed artifact there? The turn-end continuation
-  (`Server.Workline.Continuation`) and the `/api/threads/:id` brief ask this without advancing. `:none` for a plain thread or a
-  merged workline, `{:ok, why}` when committed, `{:error, why}` when missing — `why` in the
-  checker's words (`Server.Workline.Artifacts`).
-  """
-  def owed_status(thread, opts \\ [])
-  def owed_status(%Thread{stage: nil}, _opts), do: :none
-  def owed_status(%Thread{stage: "landed"}, _opts), do: :none
-
-  def owed_status(%Thread{} = thread, opts) do
-    checker = Keyword.get(opts, :artifacts, Git)
-
-    # A question, not a move: only advance and approve record the artifact check, or every brief
-    # and turn-end nudge writes one (two at the same instant when both ask).
-    with {:ok, _} <- owed_artifact(thread, checker),
-         :ok <- qa_cleared(thread, opts) do
-      {:ok, "#{thread.stage} artifact committed"}
-    else
-      {:error, {:artifact_missing, why}} -> {:error, why}
-      {:error, why} when is_binary(why) -> {:error, why}
-    end
-  end
+  defdelegate owed_status(thread, opts \\ []), to: Stage
 
   @doc "The bench archetype that leads a workline at `stage` (planner, builder, reviewer), or nil."
   def staff_kind(stage), do: @staff_by_stage[stage]
 
-  @doc "Whether `thread` owes a QA pass at review and its qa seat is the one leading it. `opts` as `advance/2`'s."
-  def qa_leads?(thread, opts \\ []) do
-    case qa_owed(thread, opts) do
-      {seat, _paths} -> Server.Channel.thread_lead(thread.id) == seat.name
-      nil -> false
-    end
-  end
+  defdelegate qa_leads?(thread, opts \\ []), to: Stage
 
   # Each stage is led by its kind of worker from the workspace's bench, so a workline hands itself
   # on as it moves; intent by the bench's lead (its first builder), who takes the ask in. Best-effort (the
@@ -1073,41 +707,6 @@ defmodule Server.Workline do
 
   defp restaff_miss(thread, _kind, _why), do: thread
 
-  # The review gate's approval is the merge: work/<slug> onto main (`Merge`), or — when it can't —
-  # the gate stays parked and the thread says why. Only against the real checker unless a test
-  # hands its own merger: a stub must never merge in the live repo.
-  defp land(%Thread{stage: "review"} = thread, checker, opts) do
-    case Keyword.get(opts, :merge, if(checker == Git, do: Server.Workline.Merge)) do
-      nil ->
-        {:ok, nil}
-
-      merger ->
-        repo = Git.root(thread)
-
-        case merger.merge(repo, thread.slug) do
-          {:ok, moved} ->
-            {:ok, Map.put(moved, :repo, repo)}
-
-          {:error, {:interrupted, why}} ->
-            could_not_merge(thread, why)
-
-          {:error, why} ->
-            could_not_merge(thread, why)
-        end
-    end
-  end
-
-  defp land(_thread, _checker, _opts), do: {:ok, nil}
-
-  defp could_not_merge(thread, why) do
-    post_brief(
-      thread,
-      "⚠ couldn't merge work/#{thread.slug}: #{why} The gate stays parked; approve again once it's fixed."
-    )
-
-    {:error, {:merge, why}}
-  end
-
   # landed: what changed rolls out and the branch goes to GitHub, where it is not merged yet — the
   # thread stays open until GitHub merges the PR (`merged/2`). With no GitHub, the landing is the merge.
   def finish(thread, %{repo: repo, from: from, to: to} = moved, run) do
@@ -1272,19 +871,6 @@ defmodule Server.Workline do
     handed
   end
 
-  defp skip_qa(thread, reason) do
-    {:ok, _} =
-      Dossier.record_check(%{
-        thread_id: thread.id,
-        cmd: "qa skipped by the operator",
-        exit: 0,
-        tail: "skipped by the operator: #{reason}",
-        correlation: "workline:#{thread.slug}:qa"
-      })
-
-    post_brief(thread, "⚠ QA skipped by the operator: #{reason}")
-  end
-
   # A thread opens with the manager as its lead; a workline is a builder's — a free one, else one
   # hired beside the bench's busy builders (restaff). A bench with no builder to give it to leaves
   # it unled for triage: the manager never keeps it.
@@ -1346,20 +932,6 @@ defmodule Server.Workline do
     end
   end
 
-  # the stage a workline was opened at, read from its earliest stage_advanced: the one from nowhere
-  # (a promotion's) names it in `to`; otherwise the first advance left it, so it is that one's
-  # `from`. Only `promote/1` writes an opening event — `open/1` at any stage writes none — so a
-  # workline that never moved was opened where it stands.
-  defp entry_stage(thread) do
-    Repo.one(
-      from e in Server.Event,
-        where: e.thread_id == ^thread.id and e.kind == "stage_advanced",
-        order_by: [asc: e.id],
-        limit: 1,
-        select: fragment("coalesce(?::jsonb ->> 'from', ?::jsonb ->> 'to')", e.detail, e.detail)
-    ) || thread.stage
-  end
-
   # the review approved the code it read (its verdict's `sha`): code committed after it goes back
   # to build like any other change, through verify and a review of what changed
   def reviewed_current(%Thread{stage: "review"} = thread) do
@@ -1393,13 +965,6 @@ defmodule Server.Workline do
         select: fragment("(?::jsonb ->> 'sha')", e.detail)
     )
   end
-
-  # any review verdict, even one from before verdicts recorded a sha
-  defp reviewed_before?(thread),
-    do:
-      Repo.exists?(
-        from e in Server.Event, where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:review"
-      )
 
   # no commits of its own on either side (its code is on main already): the trees decide
   defp same_tree?(root, sha, head, slug),
@@ -1470,16 +1035,6 @@ defmodule Server.Workline do
     end
   end
 
-  # review.md stays on the branch across rounds: back at review after a bounce, the file is the last
-  # round's, so only a verdict since the workline re-entered review is this round's review
-  defp this_round({:ok, _} = ok, %Thread{stage: "review"} = thread) do
-    if is_nil(since_review(thread, "workline:#{thread.slug}:review")) and reviewed_before?(thread),
-      do: {:error, "work/#{thread.slug}/review.md is the last round's — submit_review this round's verdict"},
-      else: ok
-  end
-
-  defp this_round(result, _thread), do: result
-
   # `{subject, patch-id}` lists: the same patches are the same change; the same commits with other
   # patches, a rebase whose conflicts were resolved. No commits of its own on either side (its code
   # is on main already): `same_tree?` decides.
@@ -1492,9 +1047,6 @@ defmodule Server.Workline do
       true -> {:changed, :code}
     end
   end
-
-  defp still_open(%Thread{state: "closed"}), do: {:error, :closed}
-  defp still_open(_thread), do: :ok
 
   defp flipped_after(flipped) do
     # Restaff BEFORE broadcasting: subscribers acting on the advance must never observe the
@@ -1514,9 +1066,6 @@ defmodule Server.Workline do
   end
 
   def operator, do: Server.OperatorConfig.operator()
-
-  defp owed_artifact(thread, checker),
-    do: thread |> checker.check(Map.fetch!(@owed, thread.stage)) |> this_round(thread)
 
   # A manager's named lead is the one pick when it fits (`unfit/2`); else the stage's own pick leads
   # and the thread says why — one seat either way.
