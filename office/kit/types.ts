@@ -70,6 +70,8 @@ export type Agents = {
   shifts?: { workspace_id: number; seat_id: number; name: string; archetype: string | null; crew: string }[]
   /** the office's stop controls (`Server.Pause`); absent from an older server */
   pause?: "working" | "pencils_down" | "lights_out"
+  /** the handle the operator posts under (`Server.OperatorConfig.operator/0`); absent from an older server */
+  operator?: string
   archetypes: Archetype[]
   models: ModelChoice[]
   notes: Note[]
@@ -112,6 +114,8 @@ export type Agents = {
 }
 /** a flag from the snapshot, never from anywhere else; one it doesn't name is off */
 export const flagOn = (a: Agents, name: string): boolean => a.flags?.[name] === true
+/** the operator's handle: the environment's when set, else the snapshot's, else no one's */
+export const operatorOf = (a: Agents, env: string | undefined = process.env.TLON_OPERATOR): string => env ?? a.operator ?? ""
 /** one thing a coworker did on a thread (`Server.Presence.Thinking`'s feed): a tool call ("Bash · mise run check"), a post, or `thinking` as a turn starts */
 export type Activity = { thread_id: number; agent: string; at: string; kind: string; summary: string }
 /** a thread for a close look: a page of its messages (`more`: older ones remain), what its worker's pane shows now, and its activity feed, oldest first */

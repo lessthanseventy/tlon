@@ -46,7 +46,7 @@ import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pas
 import { adoptAsk, stepStoreRow, storeRows } from "./store"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { NOW_PLAYING_FORMAT, parseNowPlaying, type NowPlaying } from "../kit/stereo"
-import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
+import { EMPTY, flagOn, operatorOf, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk"
@@ -98,7 +98,6 @@ const TRAY = join(STATE_DIR, "office-tray") // when you last read the in-tray
 const SAID = join(STATE_DIR, "office-banter") // the room's last lines said, for the banter log
 const EARS = join(STATE_DIR, "office-earmarks") // the posts Argos caught, so a restart keeps their dog-ears
 const LOOKED = join(STATE_DIR, "margin-looked") // the last focused moment, epoch seconds: older margin notes start already seen
-const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 // the machine's palette, when it hands one in: `{ "role": { "<role>": "#rrggbb", … } }` (or the bare
 // map). A link here that the machine repoints on a theme switch is followed within a second.
 const PALETTE = process.env.TLON_PALETTE ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/palette.json")
@@ -400,7 +399,7 @@ const threadOf = (id: number | null) => (id === null ? undefined : all.threads.f
 /** the model a seat gets when it sets none of its own: its archetype's, else the server's default */
 const inheritedModel = (archetype: string | null) => all.archetypes.find((x) => x.name === archetype)?.model || "the server's default"
 const wsName = (id = ws) => all.workspaces.find((w) => w.id === id)?.name ?? "—"
-const unread = () => feed.filter((x) => x.at > trayRead && x.who !== OPERATOR).length
+const unread = () => feed.filter((x) => x.at > trayRead && x.who !== operatorOf(all)).length
 const changed = () => { roomChanged = true; imageDirty = true }
 
 let paletteSeen = ""
@@ -638,7 +637,7 @@ async function answers(w: number) {
   const lobby = lobbyOf(view().threads, w)
   const v = lobby === null ? null : await data.thread(lobby)
   if (!v) return
-  const fresh = replies(v.messages, OPERATOR).filter((r) => !answered?.has(r.id))
+  const fresh = replies(v.messages, operatorOf(all)).filter((r) => !answered?.has(r.id))
   const first = answered === null
   answered ??= new Set()
   for (const r of fresh) {
@@ -999,7 +998,7 @@ const VERBS: [string, () => void][] = [
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
 function openReader(tid: number, extra: Partial<ReaderDeps> = {}, focus = !asks(tid)) {
   picked = tid
-  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: OPERATOR, redraw: () => draw(), dogeared: (m) => earmarked.has(earmarkOf(tid, m.at, m.author)), ...extra }, focus, cardReply?.tid === tid ? cardReply.ed.text : "")
+  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: operatorOf(all), redraw: () => draw(), dogeared: (m) => earmarked.has(earmarkOf(tid, m.at, m.author)), ...extra }, focus, cardReply?.tid === tid ? cardReply.ed.text : "")
   if (cardReply?.tid === tid) cardReply = null
   const v = threads.get(tid)
   if (v) reader.take(v)
@@ -1012,7 +1011,7 @@ function openConversation(name: string) {
   const lobby = lobbyOf(view().threads, ws)
   if (lobby === null) { status = "no front desk in this workspace"; return draw() }
   openReader(lobby, {
-    keep: (ms) => conversation(ms, name, OPERATOR),
+    keep: (ms) => conversation(ms, name, operatorOf(all)),
     heading: `conversation with ${name}`,
     send: (body) => data.post(lobby, speech(name, body) ?? body),
   })
@@ -1163,7 +1162,7 @@ function liveActions(tid: number): Action[] {
 }
 /** an author's colour: you in pink, the server dim, a coworker in their archetype's */
 const authorColor = (author: string) =>
-  author === OPERATOR ? ROLE.attention : author === "tlon" ? ROLE.inactive : shirtOf(all.bench.find((b) => b.name === author)?.archetype)
+  author === operatorOf(all) ? ROLE.attention : author === "tlon" ? ROLE.inactive : shirtOf(all.bench.find((b) => b.name === author)?.archetype)
 const STAGE_RING = ["intent", "spec", "plan", "build", "verify", "review", "landed"]
 
 /** the detail pane's lines under its title, with a one-line foot */
