@@ -61,6 +61,19 @@ defmodule Server.Import.ClaudeSessionsTest do
     assert {:ok, %{imported: 1}} = ClaudeSessions.import_dir(ctx.dir, ctx.ws.id)
   end
 
+  test "a pi transcript (a session header, message entries) is not imported", ctx do
+    transcript(ctx.dir, "pi1", [
+      %{"type" => "session", "id" => "pi1", "cwd" => "/p/exc", "timestamp" => "2026-09-01T10:00:00Z"},
+      %{
+        "type" => "message",
+        "timestamp" => "2026-09-01T10:00:01Z",
+        "message" => %{"role" => "user", "content" => "fix the board"}
+      }
+    ])
+
+    assert {:ok, %{imported: 0}} = ClaudeSessions.import_dir(ctx.dir, ctx.ws.id)
+  end
+
   test "the thread records which of its project's repos the session ran in", ctx do
     repos = [%{"name" => "ficciones", "path" => "/p/ficciones"}, %{"name" => "mix_master", "path" => "/p/mix_master"}]
     {:ok, tlon} = Projects.register(%{workspace_id: ctx.ws.id, name: "tlon", repos: repos})

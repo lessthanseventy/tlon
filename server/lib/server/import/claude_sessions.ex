@@ -3,14 +3,13 @@ defmodule Server.Import.ClaudeSessions do
   Claude Code's own transcripts (`~/.claude/projects/*/*.jsonl`) as CLOSED threads: each human
   prompt an operator message, each turn's last text reply a `claude-code` message, backdated to
   when it was said. The conversations that built Tlön become its searchable history
-  (`search_history`) and, through the memory pass, its facts. The parser also reads pi's format
-  (a `session` header, `message` entries).
+  (`search_history`) and, through the memory pass, its facts.
 
   History never wakes anyone: rows go in directly (no `Channel.post`, no Bus), delivered, on a
   closed and unstaffed thread. Idempotent per session: the thread's first message is a `tlon`
   receipt naming the session id, and a session with a receipt is skipped. A thread lands on the
   project and repo whose checkout holds the session's cwd — in whichever workspace holds that project —
-  else the given workspace's default project. A session with no title of its own (pi records none) is
+  else the given workspace's default project. A session with no title of its own is
   named by a cheap model from its opening, else by its cleaned first line.
   """
 
@@ -39,7 +38,7 @@ defmodule Server.Import.ClaudeSessions do
   @body_cap 6_000
 
   @doc """
-  One transcript → `%{source, id, cwd, title, started_at, turns}`, or nil when it holds no human
+  One transcript → `%{id, cwd, title, started_at, turns}`, or nil when it holds no human
   prompt or a program drove it.
   """
   def parse(path) do
@@ -66,12 +65,8 @@ defmodule Server.Import.ClaudeSessions do
   end
 
   defp session(path, entries, turns) do
-    # pi opens its transcript with a `session` entry; Claude Code has none
-    header = Enum.find(entries, &(&1["type"] == "session"))
-
     %{
-      source: if(header, do: :pi, else: :claude_code),
-      id: (header && header["id"]) || Path.basename(path, ".jsonl"),
+      id: Path.basename(path, ".jsonl"),
       cwd: Enum.find_value(entries, & &1["cwd"]),
       title: Enum.find_value(Enum.reverse(entries), &title/1),
       started_at: at(hd(entries)["timestamp"] || Enum.find_value(entries, & &1["timestamp"])),
@@ -79,10 +74,7 @@ defmodule Server.Import.ClaudeSessions do
     }
   end
 
-  # pi-research drives pi with a prompt that is a path into its own install
-  defp machine?(first),
-    do:
-      Enum.any?(@machine_openers, &String.starts_with?(first, &1)) or String.starts_with?(first, Path.expand("~/.pi/"))
+  defp machine?(first), do: Enum.any?(@machine_openers, &String.starts_with?(first, &1))
 
   # "test", "q", "config": a session whose every prompt is one bare word was checking the harness
   defp smoke_test?(turns),
@@ -113,13 +105,6 @@ defmodule Server.Import.ClaudeSessions do
 
     if !(e["isMeta"] || e["isSidechain"] || text == "" || String.starts_with?(text, ["<", "[Request interrupted"])),
       do: text
-  end
-
-  defp prompt(%{"type" => "message", "message" => %{"role" => "user", "content" => content}}) do
-    case text_of(content) do
-      "" -> nil
-      text -> text
-    end
   end
 
   defp prompt(_), do: nil
@@ -202,7 +187,6 @@ defmodule Server.Import.ClaudeSessions do
     |> Enum.sort_by(& &1.started_at, DateTime)
   end
 
-  defp receipt(%{source: :pi, id: id}), do: "↳ imported from pi session #{id}"
   defp receipt(%{id: id}), do: "↳ imported from Claude Code session #{id}"
 
   defp imported?(session) do
@@ -244,7 +228,7 @@ defmodule Server.Import.ClaudeSessions do
         Enum.map([{:tlon, receipt(session), session.started_at} | session.turns], fn {who, body, at} ->
           %{
             thread_id: thread.id,
-            author: author(who, operator, session.source),
+            author: author(who, operator),
             body: cap(body),
             created_at: at,
             delivered_at: at,
@@ -257,10 +241,9 @@ defmodule Server.Import.ClaudeSessions do
     end)
   end
 
-  defp author(:tlon, _operator, _source), do: "tlon"
-  defp author(:operator, operator, _source), do: operator
-  defp author(:claude, _operator, :pi), do: "pi"
-  defp author(:claude, _operator, _source), do: "claude-code"
+  defp author(:tlon, _operator), do: "tlon"
+  defp author(:operator, operator), do: operator
+  defp author(:claude, _operator), do: "claude-code"
 
   defp cap(body) when byte_size(body) <= @body_cap, do: body
   defp cap(body), do: String.slice(body, 0, @body_cap) <> "\n… (cut at import)"
