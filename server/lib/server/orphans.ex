@@ -102,6 +102,6 @@ defmodule Server.Orphans do
       do: Server.Channel.post(%{thread_id: thread_id, author: "tlon", kind: "notice", body: body})
   end
 
-  defp term(pid), do: System.cmd("kill", ["-TERM", Integer.to_string(pid)], stderr_to_stdout: true)
-  defp sigkill(pid), do: System.cmd("kill", ["-KILL", Integer.to_string(pid)], stderr_to_stdout: true)
+  defp term(pid), do: Server.Cmd.run("kill", ["-TERM", Integer.to_string(pid)], stderr_to_stdout: true)
+  defp sigkill(pid), do: Server.Cmd.run("kill", ["-KILL", Integer.to_string(pid)], stderr_to_stdout: true)
 end

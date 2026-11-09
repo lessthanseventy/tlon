@@ -2083,7 +2083,9 @@ defmodule Server.Workline do
     script = ~s(git -C "$1" show --format='commit %H' "${@:3}" -- . ":!work/$2" | git patch-id --stable)
 
     with {ids, 0} <-
-           System.cmd("bash", ["-o", "pipefail", "-c", script, "bash", root, slug | commits], stderr_to_stdout: true),
+           Server.Cmd.run("bash", ["-o", "pipefail", "-c", script, "bash", root, slug | commits],
+             stderr_to_stdout: true
+           ),
          {subjects, 0} <-
            Server.Git.cmd(root, ["show", "-s", "--format=%H%x09%s" | commits]) do
       id_of =

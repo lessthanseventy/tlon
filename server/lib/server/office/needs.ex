@@ -984,7 +984,7 @@ defmodule Server.Office.Needs do
   end
 
   defp read_work_tips(root) do
-    git = Application.get_env(:server, :git_cmd, &System.cmd/3)
+    git = Application.get_env(:server, :git_cmd, &Server.Cmd.run/3)
     args = ["-C", root, "for-each-ref", "--format=%(refname:lstrip=3) %(committerdate:iso-strict)", "refs/heads/work/"]
 
     case git.("git", args, stderr_to_stdout: true) do

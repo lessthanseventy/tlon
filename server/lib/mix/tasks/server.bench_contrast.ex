@@ -23,7 +23,7 @@ defmodule Mix.Tasks.Server.BenchContrast do
 
   @doc false
   def paths(branch) do
-    {out, 0} = System.cmd("git", ["-C", branch, "diff", "--name-only", "origin/main", "HEAD"])
+    {out, 0} = Server.Cmd.run("git", ["-C", branch, "diff", "--name-only", "origin/main", "HEAD"])
     String.split(out, "\n", trim: true)
   end
 end

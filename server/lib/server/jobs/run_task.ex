@@ -32,7 +32,8 @@ defmodule Server.Jobs.RunTask do
         args: %{"thread_id" => tid, "agent" => agent, "task" => task, "ref" => ref, "tree" => tree}
       }) do
     {out, code} =
-      System.cmd("bash", [script(), "-", "task-#{id}", tree],
+      Server.Cmd.run("bash", [script(), "-", "task-#{id}", tree],
+        timeout: :infinity,
         env: [
           {"WORKLINE_GATE", "1"},
           {"LAND_REF", ref},

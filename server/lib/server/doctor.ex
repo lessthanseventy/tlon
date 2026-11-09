@@ -98,7 +98,7 @@ defmodule Server.Doctor do
   def service_started_at do
     args = ["--user", "show", "tlon", "-p", "ActiveEnterTimestamp", "--value", "--timestamp=unix"]
 
-    with {"@" <> secs, 0} <- System.cmd("systemctl", args, stderr_to_stdout: true),
+    with {"@" <> secs, 0} <- Server.Cmd.run("systemctl", args, stderr_to_stdout: true),
          {n, _} when n > 0 <- Integer.parse(secs) do
       DateTime.from_unix!(n)
     else
@@ -150,7 +150,7 @@ defmodule Server.Doctor do
       for dir <- dirs,
           File.exists?(Path.join(dir, ".git")),
           File.exists?(Path.join(dir, "mise.toml")),
-          {out, _} = System.cmd("mise", ["trust", "--show", "-C", dir], stderr_to_stdout: true),
+          {out, _} = Server.Cmd.run("mise", ["trust", "--show", "-C", dir], stderr_to_stdout: true),
           out =~ "#{dir}: untrusted",
           do: dir
 
@@ -169,7 +169,7 @@ defmodule Server.Doctor do
   `cmd` runs the commands and is injectable so the parse is testable.
   """
   @spec worktree_size(Path.t(), (String.t(), [String.t()], keyword() -> {String.t(), integer()})) :: String.t()
-  def worktree_size(root \\ Server.Profiles.tlon_root(), cmd \\ &System.cmd/3) do
+  def worktree_size(root \\ Server.Profiles.tlon_root(), cmd \\ &Server.Cmd.run/3) do
     dir = Path.join(root, ".worktrees")
 
     if File.dir?(dir) do
@@ -208,7 +208,7 @@ defmodule Server.Doctor do
   end
 
   defp bwrap_running? do
-    match?({_, 0}, System.cmd("pgrep", ["-x", "bwrap"], stderr_to_stdout: true))
+    match?({_, code} when code in [0, 127], Server.Cmd.run("pgrep", ["-x", "bwrap"], stderr_to_stdout: true))
   rescue
     ErlangError -> true
   end

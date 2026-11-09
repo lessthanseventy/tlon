@@ -366,11 +366,11 @@ defmodule Server.Schedules do
   # every descendant is found before any is killed — a killed parent's children are re-parented away
   defp kill_tree(pid) do
     pids = Enum.map([pid | descendants(pid)], &Integer.to_string/1)
-    System.cmd("kill", ["-KILL" | pids], stderr_to_stdout: true)
+    Server.Cmd.run("kill", ["-KILL" | pids], stderr_to_stdout: true)
   end
 
   defp descendants(pid) do
-    {out, _} = System.cmd("pgrep", ["-P", Integer.to_string(pid)], stderr_to_stdout: true)
+    {out, _} = Server.Cmd.run("pgrep", ["-P", Integer.to_string(pid)], stderr_to_stdout: true)
     kids = for l <- String.split(out, "\n", trim: true), {n, ""} <- [Integer.parse(l)], do: n
     kids ++ Enum.flat_map(kids, &descendants/1)
   end

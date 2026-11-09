@@ -176,7 +176,7 @@ defmodule Server.Bench.Roles.Runner do
         :skipped
 
       dropdb ->
-        System.cmd(dropdb, ["--if-exists", "--force", db], stderr_to_stdout: true)
+        Server.Cmd.run(dropdb, ["--if-exists", "--force", db], stderr_to_stdout: true)
     end
   end
 
@@ -192,10 +192,10 @@ defmodule Server.Bench.Roles.Runner do
   """
   def seed_source(root, sha, work) do
     {_, 0} =
-      System.cmd("sh", ["-c", ~s(git -C "$0" archive "$1^" server | tar -x -C "$2"), root, sha, work])
+      Server.Cmd.run("sh", ["-c", ~s(git -C "$0" archive "$1^" server | tar -x -C "$2"), root, sha, work])
 
     for dir <- ~w(_build deps), File.dir?(Path.join([root, "server", dir])) do
-      System.cmd("cp", ["-r", "--reflink=auto", Path.join([root, "server", dir]), Path.join([work, "server", dir])])
+      Server.Cmd.run("cp", ["-r", "--reflink=auto", Path.join([root, "server", dir]), Path.join([work, "server", dir])])
     end
 
     # the copy's mtimes are fresh, so the live app's beams would look newer than the snapshot's sources
@@ -207,7 +207,7 @@ defmodule Server.Bench.Roles.Runner do
   @doc "What the real workline changed under `server/` except its tests (which stay hidden), as a patch."
   def reference_patch(root, sha) do
     {patch, 0} =
-      System.cmd("git", ["-C", root, "diff", "#{sha}^", sha, "--", "server", ":(exclude)server/test"])
+      Server.Cmd.run("git", ["-C", root, "diff", "#{sha}^", sha, "--", "server", ":(exclude)server/test"])
 
     patch
   end
@@ -216,7 +216,7 @@ defmodule Server.Bench.Roles.Runner do
   def apply_reference(root, sha, work) do
     patch = Path.join(work, ".reference.patch")
     File.write!(patch, reference_patch(root, sha))
-    {_, 0} = System.cmd("git", ["apply", ".reference.patch"], cd: work, stderr_to_stdout: true)
+    {_, 0} = Server.Cmd.run("git", ["apply", ".reference.patch"], cd: work, stderr_to_stdout: true)
     File.rm!(patch)
     :ok
   end
@@ -243,7 +243,7 @@ defmodule Server.Bench.Roles.Runner do
   end
 
   defp commit_fixture(work) do
-    git = &System.cmd("git", ["-c", "user.name=bench", "-c", "user.email=bench@localhost" | &1], cd: work)
+    git = &Server.Cmd.run("git", ["-c", "user.name=bench", "-c", "user.email=bench@localhost" | &1], cd: work)
     git.(["init", "-q"])
     git.(["add", "-A"])
     git.(["commit", "-qm", "fixture"])
@@ -252,7 +252,8 @@ defmodule Server.Bench.Roles.Runner do
   # nothing on stdin (`pi -p` would wait on it), bounded by `timeout`; a harness launched from inside
   # a Claude Code session must not believe it is nested in one
   defp sh(argv, dir, timeout, merge?, env) do
-    System.cmd("sh", ["-c", ~s(exec timeout "$0" "$@" </dev/null), to_string(timeout) | argv],
+    Server.Cmd.run("sh", ["-c", ~s(exec timeout "$0" "$@" </dev/null), to_string(timeout) | argv],
+      timeout: :infinity,
       cd: dir,
       stderr_to_stdout: merge?,
       env: [{"CLAUDECODE", nil}, {"CLAUDE_CODE_ENTRYPOINT", nil} | env]
@@ -260,7 +261,7 @@ defmodule Server.Bench.Roles.Runner do
   end
 
   defp commit do
-    case System.cmd("git", ["-C", Profiles.tlon_root(), "rev-parse", "--short", "HEAD"], stderr_to_stdout: true) do
+    case Server.Cmd.run("git", ["-C", Profiles.tlon_root(), "rev-parse", "--short", "HEAD"], stderr_to_stdout: true) do
       {sha, 0} -> String.trim(sha)
       _ -> "unknown"
     end

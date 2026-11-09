@@ -126,7 +126,8 @@ defmodule Server.Jobs.Land do
     slug = "pr-#{pr}-" <> String.replace(branch, ~r/[^A-Za-z0-9-]/, "-")
 
     "bash"
-    |> System.cmd([script, "-", slug, repo],
+    |> Server.Cmd.run([script, "-", slug, repo],
+      timeout: :infinity,
       env: [{"WORKLINE_GATE", "1"}, {"LAND_REF", ref}, {"CHECKS_LABEL", "PR ##{pr} landing #{branch}"}],
       stderr_to_stdout: true
     )
@@ -166,7 +167,8 @@ defmodule Server.Jobs.Land do
     case Server.worktree_for_thread(thread) do
       {:ok, tree} ->
         "bash"
-        |> System.cmd([script, to_string(thread.id), thread.slug, tree],
+        |> Server.Cmd.run([script, to_string(thread.id), thread.slug, tree],
+          timeout: :infinity,
           env: [{"WORKLINE_GATE", "1"} | env],
           stderr_to_stdout: true
         )

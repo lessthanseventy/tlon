@@ -70,7 +70,7 @@ defmodule Server.Jobs.Verify do
 
   defp run(script, tid, slug, tree, job) do
     since = last_verify_id(slug)
-    result = System.cmd("bash", [script, to_string(tid), slug, tree], stderr_to_stdout: true)
+    result = Server.Cmd.run("bash", [script, to_string(tid), slug, tree], stderr_to_stdout: true, timeout: :infinity)
     finish(tid, slug, since, result, job)
   end
 

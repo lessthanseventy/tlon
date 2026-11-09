@@ -191,7 +191,7 @@ defmodule Server.Workline.Merge do
         {:error, "re-hashing the golden frames needs bun, which is not on the PATH"}
 
       bun ->
-        case System.cmd(bun, ["test/golden.ts"], cd: Path.join(tree, "office"), stderr_to_stdout: true) do
+        case Server.Cmd.run(bun, ["test/golden.ts"], cd: Path.join(tree, "office"), stderr_to_stdout: true) do
           {_, 0} -> {:ok, :rehashed}
           {out, _} -> {:error, "re-hashing the golden frames failed: #{String.slice(out, -300, 300)}"}
         end

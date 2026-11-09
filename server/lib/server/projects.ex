@@ -201,7 +201,7 @@ defmodule Server.Projects do
   # exit code is ignored: a partial walk is a lower bound, so a checkout is never dropped on it alone.
   @doc false
   def nested_repos(dir) do
-    {out, _} = System.cmd("find", [dir, "-name", ".git", "-prune", "-print"], stderr_to_stdout: true)
+    {out, _} = Server.Cmd.run("find", [dir, "-name", ".git", "-prune", "-print"], stderr_to_stdout: true)
     out |> String.split("\n", trim: true) |> Enum.count(&String.ends_with?(&1, "/.git"))
   end
 end

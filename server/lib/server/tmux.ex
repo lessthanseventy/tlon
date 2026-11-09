@@ -9,7 +9,7 @@ defmodule Server.Tmux do
   (`@funes_born`), and crew roles are `r<id>`. The names are defined here so a client (asterion) and
   the server can never disagree about where a coworker runs.
 
-  Every call routes through `run/3`: `System.cmd/3` by default, `config :server, :tmux_cmd` is
+  Every call routes through `run/3`: `Server.Cmd.run/3` by default, `config :server, :tmux_cmd` is
   the test seam. Like `Server.Workline.Artifacts.Git`, a tmux fault is a value, never a raise.
   """
 
@@ -35,14 +35,14 @@ defmodule Server.Tmux do
   def run(nil, _args, _opts), do: {"no workspace", 1}
 
   def run(id, args, opts) do
-    runner = Keyword.get_lazy(opts, :runner, fn -> Application.get_env(:server, :tmux_cmd, &System.cmd/3) end)
+    runner = Keyword.get_lazy(opts, :runner, fn -> Application.get_env(:server, :tmux_cmd, &Server.Cmd.run/3) end)
 
     if "new-session" in args and scoped?(),
       do: call(runner, "systemd-run", scope_args(id) ++ ["tmux" | argv(id, args)]),
       else: call(runner, "tmux", argv(id, args))
   end
 
-  # a binary missing from the service's PATH (System.cmd raises :enoent) is a fault like any other:
+  # a binary missing from the service's PATH (a runner may raise :enoent) is a fault like any other:
   # a value, so the office snapshot and the switchboard that read tmux never fall over on it
   defp call(runner, cmd, args) do
     runner.(cmd, args, stderr_to_stdout: true)

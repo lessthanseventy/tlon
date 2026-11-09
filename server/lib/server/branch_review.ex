@@ -94,7 +94,7 @@ defmodule Server.BranchReview do
       ["-C", repo, "log", "--format=%an%x00%(trailers:key=Tlon-Author,valueonly,separator=%x00)%x00", range, "--", "."] ++
         Enum.map(exclude, &":!#{&1}")
 
-    case System.cmd("git", args, stderr_to_stdout: true) do
+    case Server.Cmd.run("git", args, stderr_to_stdout: true) do
       {out, 0} ->
         out
         |> String.split(["\0", "\n"])
@@ -143,7 +143,7 @@ defmodule Server.BranchReview do
     script =
       ~S(git -C "$1" log --reverse -p --format="commit %H" "$2..$3" | git -C "$1" patch-id --stable | cut -d" " -f1)
 
-    case System.cmd("sh", ["-c", script, "patches", repo, base, sha], stderr_to_stdout: true) do
+    case Server.Cmd.run("sh", ["-c", script, "patches", repo, base, sha], stderr_to_stdout: true) do
       {out, 0} -> out
       _ -> nil
     end
