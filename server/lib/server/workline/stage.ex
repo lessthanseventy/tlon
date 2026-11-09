@@ -10,12 +10,14 @@ defmodule Server.Workline.Stage do
   alias Server.Dossier
   alias Server.Repo
   alias Server.Thread
-  alias Server.Workline
   alias Server.Workline.Artifacts.Git
   alias Server.Workline.Brief
   alias Server.Workline.Grade
+  alias Server.Workline.Landing
   alias Server.Workline.Review
   alias Server.Workline.Scribe
+  alias Server.Workline.Shared
+  alias Server.Workline.Staffing
 
   # Stages whose EXIT waits on the operator; a machine-born intent gates its exit too.
   @gated ~w(spec review)
@@ -94,17 +96,17 @@ defmodule Server.Workline.Stage do
     reason = opts |> Keyword.get(:skip_qa) |> to_string() |> String.trim()
 
     cond do
-      Keyword.get(opts, :as) == "uqbar" and Workline.limit_hit?(thread) ->
+      Keyword.get(opts, :as) == "uqbar" and Review.limit_hit?(thread) ->
         {:error, :limit_hit}
 
       reason != "" and Review.qa_owed(thread, opts) ->
-        Workline.landing(thread.id, fn ->
+        Landing.landing(thread.id, fn ->
           skip_qa(thread, reason)
           do_approve(thread, opts)
         end)
 
       thread.awaiting ->
-        Workline.landing(thread.id, fn -> do_approve(thread, opts) end)
+        Landing.landing(thread.id, fn -> do_approve(thread, opts) end)
 
       true ->
         {:error, :nothing_awaiting}
@@ -171,7 +173,7 @@ defmodule Server.Workline.Stage do
   moved on is left where it is. `{:ok, thread}` | `{:error, {:not_at, stage}}`.
   """
   def red_verify(%Thread{} = thread, finding) do
-    Workline.move_back(
+    Shared.move_back(
       thread,
       "build",
       "verify is red",
@@ -285,7 +287,7 @@ defmodule Server.Workline.Stage do
   defp land(_thread, _checker, _opts), do: {:ok, nil}
 
   defp could_not_merge(thread, why) do
-    Workline.post_brief(
+    Shared.post_brief(
       thread,
       "⚠ couldn't merge work/#{thread.slug}: #{why} The gate stays parked; approve again once it's fixed."
     )
@@ -303,7 +305,7 @@ defmodule Server.Workline.Stage do
         correlation: "workline:#{thread.slug}:qa"
       })
 
-    Workline.post_brief(thread, "⚠ QA skipped by the operator: #{reason}")
+    Shared.post_brief(thread, "⚠ QA skipped by the operator: #{reason}")
   end
 
   # the stage a workline was opened at, read from its earliest stage_advanced: the one from nowhere
@@ -383,7 +385,7 @@ defmodule Server.Workline.Stage do
          :ok <- Review.reviewed_current(thread),
          :ok <- Review.qa_cleared(thread, opts) do
       if queue?(thread, checker, opts),
-        do: queue(thread, "approved", Keyword.get(opts, :as) || thread.awaiting || Workline.operator()),
+        do: queue(thread, "approved", Keyword.get(opts, :as) || thread.awaiting || Shared.operator()),
         else: approve_now(thread, checker, opts)
     end
   end
@@ -392,7 +394,7 @@ defmodule Server.Workline.Stage do
     with {:ok, landed} <- land(thread, checker, opts),
          {:ok, cleared} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
          {:ok, flipped} <- flip(cleared) do
-      if landed, do: Workline.finish(flipped, landed, Keyword.get(opts, :run, &Server.Cmd.run/3))
+      if landed, do: Landing.finish(flipped, landed, Keyword.get(opts, :run, &Server.Cmd.run/3))
       {:ok, flipped}
     end
   end
@@ -474,10 +476,10 @@ defmodule Server.Workline.Stage do
   defp park(thread, checker, _opts), do: park_on_operator(thread, checker)
 
   defp park_on_operator(thread, checker) do
-    {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: Workline.operator()}) |> Repo.update()
+    {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: Shared.operator()}) |> Repo.update()
     Server.Bus.broadcast({:workline_gated, parked})
     proof = if parked.stage == "review", do: proof(parked, artifacts: checker)
-    Workline.post_brief(parked, Brief.gate_message(parked, proof))
+    Shared.post_brief(parked, Brief.gate_message(parked, proof))
     {:awaiting, parked}
   end
 
@@ -494,11 +496,12 @@ defmodule Server.Workline.Stage do
     |> Enum.map(&%{cmd: &1.detail["cmd"], exit: &1.detail["exit"]})
   end
 
+  @doc false
   def queue(thread, why, by) do
     with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
-         :ok <- if(match?(%{"by" => ^by}, Workline.approval(queued)), do: :ok, else: record_approval(queued, by)),
+         :ok <- if(match?(%{"by" => ^by}, approval(queued)), do: :ok, else: record_approval(queued, by)),
          {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
-      Workline.post_brief(
+      Shared.post_brief(
         queued,
         "⧗ #{why} — in the merge queue: it lands once rebased onto main and green there, with any landings queued beside it on one gate"
       )
@@ -521,6 +524,7 @@ defmodule Server.Workline.Stage do
   # locked FOR UPDATE and only from the stage `thread` was read at, open: a landing or an advance
   # working from a stale read (a bounce, a second advance, a close since) flips nothing,
   # `{:error, {:moved, stage}}`.
+  @doc false
   def flip(thread) do
     to = next(thread.stage)
 
@@ -565,10 +569,10 @@ defmodule Server.Workline.Stage do
   defp flipped_after(flipped) do
     # Restaff BEFORE broadcasting: subscribers acting on the advance must never observe the
     # last stage's worker still leading this one.
-    flipped = Workline.restaff(flipped)
+    flipped = Staffing.restaff(flipped)
     Server.Bus.broadcast({:workline_advanced, flipped})
 
-    Workline.post_brief(
+    Shared.post_brief(
       flipped,
       Brief.stage_message(flipped, last_reviewed: flipped.stage == "review" && last_reviewed(flipped))
     )
@@ -588,7 +592,7 @@ defmodule Server.Workline.Stage do
              thread_id: thread.id,
              kind: "check_passed",
              correlation: "workline:#{thread.slug}:approval",
-             detail: %{"cmd" => "approved by #{by}", "exit" => 0, "by" => by, "sha" => Workline.branch_head(thread)}
+             detail: %{"cmd" => "approved by #{by}", "exit" => 0, "by" => by, "sha" => branch_head(thread)}
            }),
          do: :ok
   rescue
