@@ -477,6 +477,39 @@ defmodule Server.SwitchboardTest do
       assert Server.Sweep.parked_note?(thread.id)
     end
 
+    test "a lead on a thread in a second git repo is spawned in that repo's worktree" do
+      %{repo: repo, ws: ws, project: p} = Server.TestRepoDir.with_project()
+      {:ok, thread} = Channel.open_thread(%{title: "other repo", workspace_id: ws.id, project_id: p.id})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "please review"})
+      Switchboard.deliver(m)
+
+      assert_received {:spawned, exports}
+      assert exports =~ ~s(TLON_CWD="#{Server.Worktree.path(repo, Server.Worktree.name_for(thread))}")
+      assert_receive {:woke, nil, "New message on thread " <> _}, 1_000
+    end
+
+    test "a lead whose checkout is refused is said on the thread with why, not dropped" do
+      %{ws: ws, project: p} = Server.TestRepoDir.with_project()
+      dir = Path.join(System.tmp_dir!(), "not-a-repo-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf!(dir) end)
+      {:ok, thread} = Channel.open_thread(%{title: "broken repo", workspace_id: ws.id, project_id: p.id})
+      {:ok, thread} = thread |> Ecto.Changeset.change(repo: dir) |> Repo.update()
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "please review"})
+      Switchboard.deliver(m)
+
+      refute_received {:spawned, _}
+      [notice] = Enum.filter(Channel.thread_messages(thread), &(&1.body =~ "could not be seated"))
+      assert notice.kind == "notice"
+      assert notice.body =~ "not_a_repo"
+    end
+
     test "a plain post on a leadless thread stays pending until a lead is assigned" do
       {:ok, thread} = Channel.open_thread(%{title: "leadless"})
       {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "anyone?"})

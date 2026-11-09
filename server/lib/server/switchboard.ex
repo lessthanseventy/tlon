@@ -372,7 +372,7 @@ defmodule Server.Switchboard do
             not has_warm_session?(home, agent),
             not Presence.clocked_out?(agent),
             # a window of their own there: never the thread's lead because they were named on it
-            {:ok, %{exports: exports}} <- [Spawn.join(home.id, agent.name, assign: false)],
+            {:ok, exports} <- [join_exports(home, agent, thread)],
             {:ok, handle} <- [spawn_pane(exports, agent, thread, home)],
             do: {agent.name, handle, home.id}
 
@@ -380,6 +380,21 @@ defmodule Server.Switchboard do
     end
 
     :ok
+  end
+
+  # A refused join (the thread's checkout, a minted identity) leaves nothing to spawn; for the lead it is
+  # said on the thread like any other seat that never comes up.
+  defp join_exports(home, agent, thread) do
+    case Spawn.join(home.id, agent.name, assign: false) do
+      {:ok, %{exports: exports}} ->
+        {:ok, exports}
+
+      {:error, reason} = refused ->
+        if agent.id == thread.agent_id,
+          do: note_unseated(home, "#{agent.name} could not be seated on this thread", inspect(reason))
+
+        refused
+    end
   end
 
   # A pane already running (`:already_running`) is its coworker still booting, and no arbiter is a
