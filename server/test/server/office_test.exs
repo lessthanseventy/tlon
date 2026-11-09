@@ -198,6 +198,10 @@ defmodule Server.OfficeTest do
       assert %{warm: true} = Enum.find(status.roster, &(&1.agent == "hronir"))
     end
 
+    test "the snapshot names the operator" do
+      assert Server.Office.status().operator == Server.OperatorConfig.operator()
+    end
+
     test "a paused thread carries its paused_at and reads as parked, whoever is at its desk", %{ws: ws} do
       {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
       {:ok, t} = Channel.open_thread(%{title: "held", workspace_id: ws.id})
