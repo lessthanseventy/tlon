@@ -300,7 +300,7 @@ defmodule Server.Office.Room do
   end
 
   defp disk_pct do
-    case System.cmd("df", ["-P", System.user_home!()], stderr_to_stdout: true) do
+    case Server.Cmd.run("df", ["-P", System.user_home!()], stderr_to_stdout: true) do
       {out, 0} ->
         out |> String.split("\n", trim: true) |> List.last() |> String.split() |> Enum.at(4, "") |> pct()
 

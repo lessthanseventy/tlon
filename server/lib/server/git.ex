@@ -4,7 +4,7 @@ defmodule Server.Git do
   private `git/2` helpers were each re-implementing.
   """
 
-  @doc "`{out, code}`, as `System.cmd/3` answers."
+  @doc "`{out, code}`, as `Server.Cmd.run/3` answers."
   @spec cmd(binary(), [binary()], keyword()) :: {binary(), non_neg_integer()}
   def cmd(repo, args, opts \\ []),
     do: Server.Cmd.run("git", ["-C", repo | args], Keyword.merge([stderr_to_stdout: true], opts))

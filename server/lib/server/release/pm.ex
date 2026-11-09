@@ -527,7 +527,11 @@ defmodule Server.Release.PM do
   end
 
   defp run(script, root, sha) do
-    case System.cmd("bash", [script, "cut", sha, "--no-restart"], cd: root, stderr_to_stdout: true) do
+    case Server.Cmd.run("bash", [script, "cut", sha, "--no-restart"],
+           cd: root,
+           stderr_to_stdout: true,
+           timeout: :infinity
+         ) do
       {out, 0} ->
         {:ok, out}
 

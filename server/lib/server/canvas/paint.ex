@@ -202,7 +202,7 @@ defmodule Server.Canvas.Paint do
 
   defp fast_import(dir, stream) do
     File.write!(Path.join(dir, ".git/canvas-import"), stream)
-    System.cmd("sh", ["-c", "git fast-import --quiet < .git/canvas-import"], cd: dir, stderr_to_stdout: true)
+    Server.Cmd.run("sh", ["-c", "git fast-import --quiet < .git/canvas-import"], cd: dir, stderr_to_stdout: true)
   end
 
   defp push(dir, remote) do

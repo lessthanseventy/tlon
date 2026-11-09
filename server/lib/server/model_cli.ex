@@ -61,7 +61,7 @@ defmodule Server.ModelCli do
     {provider, model, flags} = parse_model(model)
 
     # The prompt is the CLI's stdin, read from a file: as an argument, one past 128 KB (a grade's
-    # diff) can't be passed to exec at all. A file, never System.cmd's own stdin, which stays an open
+    # diff) can't be passed to exec at all. A file, never the command's own stdin, which stays an open
     # pipe a CLI would wait on forever; `timeout` bounds a call that hangs regardless. stderr goes to
     # its own file: a CLI warns there (an unknown model's catalog notice) even when it answers, and
     # the answer is stdout alone; a failure is told by what it wrote there.
@@ -69,7 +69,7 @@ defmodule Server.ModelCli do
       ["-c", ~s(exec timeout "$0" "$@" <"$MODEL_CLI_IN" 2>"$MODEL_CLI_ERR"), to_string(timeout)] ++
         [Server.Harness.ClaudeCode.gateway(), provider, cmd, "-p", "--model", model] ++ flags
 
-    case System.cmd("sh", args, env: [{"MODEL_CLI_ERR", err}, {"MODEL_CLI_IN", input} | keys()]) do
+    case Server.Cmd.run("sh", args, env: [{"MODEL_CLI_ERR", err}, {"MODEL_CLI_IN", input} | keys()], timeout: :infinity) do
       {out, 0} -> {:ok, out}
       # `timeout` kills the CLI before `why` could be read elsewhere, so a hang keeps its stderr here
       {out, 124} -> {:error, {:model_cli_timeout, timeout, why(err, out)}}

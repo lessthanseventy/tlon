@@ -334,7 +334,7 @@ defmodule Server.Worktree do
   # mise loads a project config only once it is trusted, and an untrusted one fails silently for a
   # caller reading JSON (the machine's global pin answers instead); no mise on the box is fine
   defp trust_mise(wt) do
-    if mise = System.find_executable("mise"), do: System.cmd(mise, ["trust", "-q", wt], stderr_to_stdout: true)
+    if mise = System.find_executable("mise"), do: Server.Cmd.run(mise, ["trust", "-q", wt], stderr_to_stdout: true)
     :ok
   end
 
@@ -394,10 +394,10 @@ defmodule Server.Worktree do
   end
 
   defp copy_tree(src, dst) do
-    case System.cmd("cp", ["-a", "--reflink=auto", src, dst], stderr_to_stdout: true) do
+    case Server.Cmd.run("cp", ["-a", "--reflink=auto", src, dst], stderr_to_stdout: true) do
       {_, 0} -> :ok
       # BSD cp (macOS) has no --reflink
-      _ -> System.cmd("cp", ["-Rp", src, dst], stderr_to_stdout: true)
+      _ -> Server.Cmd.run("cp", ["-Rp", src, dst], stderr_to_stdout: true)
     end
   end
 

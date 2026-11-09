@@ -26,7 +26,7 @@ defmodule Server.Package.Office do
   end
 
   defp run!(cmd, args, opts) do
-    case System.cmd(cmd, args, [stderr_to_stdout: true] ++ opts) do
+    case Server.Cmd.run(cmd, args, [stderr_to_stdout: true] ++ opts) do
       {_, 0} -> :ok
       {out, code} -> Mix.raise("office TUI for the tlon release: #{cmd} exited #{code}\n#{out}")
     end

@@ -132,7 +132,9 @@ defmodule Server.Smoke do
         dir = meta["dir"] || Server.Profiles.tlon_root()
         {exe, args} = Job.launch([Path.join(dir, "scripts/office-drive.sh") | keys])
         env = [{"TLON_URL", url}, {"MISE_YES", "1"} | drive_env(opts)]
-        task = Task.async(fn -> System.cmd(exe, args, cd: dir, env: env, stderr_to_stdout: true) end)
+
+        task =
+          Task.async(fn -> Server.Cmd.run(exe, args, cd: dir, env: env, stderr_to_stdout: true, timeout: :infinity) end)
 
         case Task.yield(task, 180_000) || Task.shutdown(task, :brutal_kill) do
           {:ok, {out, _code}} -> {:ok, if(meta["dir"], do: out, else: @old_hold_note <> out)}
@@ -219,7 +221,7 @@ defmodule Server.Smoke do
   end
 
   defp stop_job(%{meta: %{"os_pid" => pid}}) when is_integer(pid) do
-    _ = System.cmd("kill", ["-TERM", to_string(pid)], stderr_to_stdout: true)
+    _ = Server.Cmd.run("kill", ["-TERM", to_string(pid)], stderr_to_stdout: true)
     :ok
   end
 

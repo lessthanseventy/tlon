@@ -49,7 +49,7 @@ defmodule Server.PRLanding do
   it, named in the thread's post). gh's stderr is left out of stdout: a warning on exit 0 would not parse.
   """
   def request(repo, pr, opts \\ []) do
-    run = Keyword.get(opts, :run, &System.cmd/3)
+    run = Keyword.get(opts, :run, &Server.Cmd.run/3)
 
     with {:ok, info} <- view(repo, pr, run),
          :ok <- landable(info),
@@ -94,7 +94,7 @@ defmodule Server.PRLanding do
   """
   def land(%{"pr" => pr, "branch" => branch} = args, opts \\ []) do
     repo = Keyword.get_lazy(opts, :repo, &Server.Profiles.tlon_root/0)
-    run = Keyword.get(opts, :run, &System.cmd/3)
+    run = Keyword.get(opts, :run, &Server.Cmd.run/3)
     gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate_pr(pr, branch, &1, &2) end)
     ref = "land/#{branch}"
     say = &post(args["on_thread"], "PR ##{pr} (#{branch}): #{&1}")

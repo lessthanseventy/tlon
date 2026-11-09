@@ -74,7 +74,8 @@ defmodule Server.VerifyTrain do
 
     with {:ok, tree} <- Server.worktree_for_thread(car),
          {_, 0} <-
-           System.cmd("bash", [script, to_string(car.id), car.slug, tree],
+           Server.Cmd.run("bash", [script, to_string(car.id), car.slug, tree],
+             timeout: :infinity,
              env: [{"RULES_ONLY", "1"}],
              stderr_to_stdout: true
            ) do

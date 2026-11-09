@@ -243,7 +243,7 @@ defmodule Server.Rollout do
       ] ++
         List.flatten(env) ++ ["mise", "run", "server:restart"] ++ extra
 
-    case System.cmd("systemd-run", args, stderr_to_stdout: true) do
+    case Server.Cmd.run("systemd-run", args, stderr_to_stdout: true) do
       {_, 0} ->
         :ok
 
