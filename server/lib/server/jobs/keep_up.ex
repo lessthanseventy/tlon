@@ -76,9 +76,10 @@ defmodule Server.Jobs.KeepUp do
   # fail the job after every repo had its pass, so they reach the operator as a failed job
   @doc false
   def keep_up(repo, run \\ &Server.Cmd.run/3) do
-    drifted(repo, Server.Workline.Publish.follow_main(repo, run))
+    remote = remote(repo, run)
+    if remote == :none, do: unfollowed(repo), else: drifted(repo, Server.Workline.Publish.follow_main(repo, run))
 
-    case remote(repo, run) do
+    case remote do
       :github ->
         Server.Rollout.clear(remote_key(repo))
         conflicting = read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo, run))
@@ -104,7 +105,7 @@ defmodule Server.Jobs.KeepUp do
   end
 
   # Exit 2 is git's "No such remote": the repo has no origin, so it is skipped. Any other failure of
-  # `git remote get-url` is a fault, not a skip. Its main is still followed, whichever it is.
+  # `git remote get-url` is a fault, not a skip.
   defp remote(repo, run) do
     case run.("git", ["-C", repo, "remote", "get-url", "origin"], stderr_to_stdout: true) do
       {url, 0} -> if github?(url), do: :github, else: {:elsewhere, String.trim(url)}
@@ -347,5 +348,11 @@ defmodule Server.Jobs.KeepUp do
     )
   rescue
     e -> {Exception.message(e), 1}
+  end
+
+  # a repo with no origin has no main to follow, so nothing about its branch is said
+  defp unfollowed(repo) do
+    Server.Rollout.clear({:off_main, repo})
+    Server.Rollout.clear({:drift, repo})
   end
 end

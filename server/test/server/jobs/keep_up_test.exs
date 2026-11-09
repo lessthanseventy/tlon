@@ -289,7 +289,8 @@ defmodule Server.Jobs.KeepUpTest do
   end
 
   describe "a repo with no GitHub to read" do
-    test "a repo with no remote is skipped, and said in one keyed note" do
+    test "a repo with no remote is skipped, and said in one keyed note; nothing about its branch" do
+      KeepUp.drifted("/r/no-remote", {:off_main, "master"})
       KeepUp.keep_up("/r/no-remote", pass(nil, "no git remotes found"))
 
       assert [%{key: "keep_up:remote:/r/no-remote", text: text}] = notes("/r/no-remote")
