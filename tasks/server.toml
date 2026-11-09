@@ -257,7 +257,7 @@ description = "script test: server-restart.sh refuses a restart that would cut w
 run = "scripts/server-restart.test.sh"
 
 ["check:scripts:tlon-cli"]
-description = "script test: tlon-cli.sh hands the client node a writable stderr when the caller closed its own (offline)"
+description = "script test: tlon-cli.sh hands the client node a writable stderr when the caller closed its own, mints a token through a stubbed curl, and prints usage with exit 2 on no arguments (offline)"
 run = "scripts/tlon-cli.test.sh"
 
 ["check:ignored"]
