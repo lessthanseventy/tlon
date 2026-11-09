@@ -202,6 +202,8 @@ export class Sim<L extends { people: Seat[] }> {
   /** the weather outside, from the snapshot: it pulls at what people do, and Nina wants warm when it's cold */
   protected weather: Agents["weather"] = null
   protected celebrating = false
+  /** the office's stop control from the snapshot: lights out sends the idle crew to the door as the 17:30 wave does */
+  protected pause: Agents["pause"] = undefined
   /** the office corkboard's notes (`pinboard`), and notes on their way up: an author walks to the board and reads theirs out */
   protected cork: CorkNote[] = []
   private pins = new Map<string, { text: string; until: number; box: boolean }>()
@@ -887,6 +889,7 @@ export class Sim<L extends { people: Seat[] }> {
     if (level !== null && this.levelSeen !== null && level > this.levelSeen) this.levelUp(level)
     this.levelSeen = level
     this.weather = a.weather ?? this.weather
+    this.pause = a.pause
     this.celebrating = (a.celebrations ?? []).length > 0
     let changed = this.changed || this.tick % 4 === 0
     this.changed = false
@@ -975,7 +978,7 @@ export class Sim<L extends { people: Seat[] }> {
       else if ((actor.seat.thinking || this.tick < actor.stretch) && home) goal = home
       else if (actor.seat.warm && home) goal = home
       else if ((ev = this.eventGoal(k))) goal = ev
-      else if (rushOf(this.date()) === "leaving" && plan.muster) goal = plan.muster[[...this.actors.keys()].indexOf(k) % plan.muster.length]!
+      else if ((rushOf(this.date()) === "leaving" || this.pause === "lights_out") && plan.muster) goal = plan.muster[[...this.actors.keys()].indexOf(k) % plan.muster.length]!
       else goal = this.idleGoal(actor, held, l)
       const gk = spotKey(goal)
       if (gk !== actor.spotKey) {

@@ -12,7 +12,7 @@ defmodule Server.ToyPool do
 
   alias Server.{Generator, Persona, Repo}
 
-  @events ~w(zoo meteor fire_drill power_cut duck)
+  @events ~w(zoo meteor fire_drill power_cut duck planes pizza nap)
   # under a day, so a daily run whose last one finished a little later still refills
   @fresh_hours 20
   @timeout_streak 3

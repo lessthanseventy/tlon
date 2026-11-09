@@ -69,6 +69,18 @@ defmodule Server.ToyPoolTest do
     assert [<<"I'd tell a UDP", _::binary>>] = ToyPool.puns(ws.id)
   end
 
+  test "reactions keep the planes, pizza and nap lines", %{ws: ws, cli: cli} do
+    File.write!(
+      cli,
+      ~s(#!/bin/sh\necho '{"reactions": {"planes": ["Mind the wings."], "pizza": ["Mine."], "nap": ["Wake me at three."]}}'\n)
+    )
+
+    assert {:ok, _} = ToyPool.refresh(ws.id, {:reactions, "lonnrot"}, seed: 1)
+    assert ToyPool.reactions(ws.id, "lonnrot", "planes") == ["Mind the wings."]
+    assert ToyPool.reactions(ws.id, "lonnrot", "pizza") == ["Mine."]
+    assert ToyPool.reactions(ws.id, "lonnrot", "nap") == ["Wake me at three."]
+  end
+
   test "a reactions reply with no valid event stores nothing, so it is not fresh", %{ws: ws, cli: cli, calls: calls} do
     File.write!(
       cli,

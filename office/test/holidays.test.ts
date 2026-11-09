@@ -105,3 +105,16 @@ describe("a day has a shape: the leaving wave", () => {
     expect(spots(at(5, 3, 15, 0))).not.toContain("exit")
   }))
 })
+
+describe("a day has a shape: lights out", () => {
+  const exits = (pause: "working" | "lights_out") => seeded(3, () => {
+    const idle = office(2), room = new WideRoom(560), a = viewOf({ ...idle, pause, roster: idle.roster.map((r) => ({ ...r, warm: false, thinking: false })) }, 1)
+    room.setClock(() => at(5, 3, 15, 0))
+    for (let i = 0; i < 200; i++) room.step(a)
+    return [...(room as unknown as { actors: Map<string, { spot: { kind: string } }> }).actors.values()].map((x) => x.spot.kind)
+  })
+  test("lights out sends the idle to the door at any hour; working does not", () => {
+    expect(exits("lights_out")).toContain("exit")
+    expect(exits("working")).not.toContain("exit")
+  })
+})
