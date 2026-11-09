@@ -33,7 +33,7 @@ const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
 test("one motion onto a note shows its tip", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "200", "-y", "60",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_WIDE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 OFFICE_WIDE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the note in the margin", () => screen().includes("#42"))
   const lines = screen().split("\n"), row = lines.findIndex((l) => l.includes("#42")), col = lines[row]!.indexOf("#42")
   tmux("send-keys", "-t", "0", "-l", `\x1b[<35;${col + 2};${row + 1}M`)

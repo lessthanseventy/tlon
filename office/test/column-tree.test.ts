@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // the TICKETS column is a tree: enter on a group opens it in place (its children indent under it,
 // an in-flight child names its thread), enter again folds it, enter on a ticket opens the ticket,
@@ -33,50 +34,45 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const deadline = performance.now() + 25_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
-}
 const keys = (...k: string[]) => tmux("send-keys", "-t", "0", ...k)
 
 test("enter folds a group open in place; a ticket opens; o opens the group's card", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   keys("t")
-  await until("the tickets column", () => screen().includes("TICKETS ·"))
+  await waitFor(screen, "TICKETS ·", "the tickets column")
   expect(screen()).not.toContain("the child ticket")
 
   keys("Enter")
-  await until("the epic's children under it", () => screen().includes("the child ticket"))
+  await waitFor(screen, "the child ticket", "the epic's children under it")
   expect(screen()).toContain("the started child")
   expect(screen()).toContain("⚙ on #40")
   expect(screen()).not.toContain("EPIC #10")
 
   keys("Enter")
-  await until("the children folded away", () => !screen().includes("the child ticket"))
+  await waitFor(screen, () => !screen().includes("the child ticket"), "the children folded away")
 
   keys("Enter")
-  await until("the children again", () => screen().includes("the child ticket"))
+  await waitFor(screen, "the child ticket", "the children again")
   keys("Down", "Enter")
-  await until("the child ticket", () => screen().includes("TICKET #11"))
+  await waitFor(screen, "TICKET #11", "the child ticket")
   keys("Escape")
-  await until("back on the column", () => screen().includes("TICKETS ·"))
+  await waitFor(screen, "TICKETS ·", "back on the column")
 
   keys("Up", "Space")
-  await until("the epic's card", () => screen().includes("EPIC #10"))
+  await waitFor(screen, "EPIC #10", "the epic's card")
 }, TUI_TEST)
 
 test("the tree's card does not claim a who sort: tickets carry no owner", async () => {
   keys("C-]")
-  await until("the room", () => !screen().includes("EPIC #10") && !screen().includes("TICKETS ·"))
+  await waitFor(screen, () => !screen().includes("EPIC #10") && !screen().includes("TICKETS ·"), "the room")
   keys("t")
-  await until("the tickets column", () => screen().includes("TICKETS ·"))
+  await waitFor(screen, "TICKETS ·", "the tickets column")
   keys("s")
-  await until("the title sort", () => screen().includes("by title"))
+  await waitFor(screen, "by title", "the title sort")
   keys("s")
-  await until("the sort moved on", () => !screen().includes("by title"))
+  await waitFor(screen, () => !screen().includes("by title"), "the sort moved on")
   expect(screen()).not.toContain("by who")
 }, TUI_TEST)

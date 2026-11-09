@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // An ask lives on the needs inbox: its one-tap keys are the options' keys, and `"` opens the note box,
 // whose first word is the option's number, key or label. Drives the real TUI against a stub server.
@@ -33,31 +34,26 @@ afterAll(() => {
 })
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const deadline = performance.now() + 25_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
-}
 const note = async (text: string, n: number) => {
   tmux("send-keys", "-t", "0", "\"")
-  await until("the note box", () => screen().includes("answer with a note"))
+  await waitFor(screen, "answer with a note", "the note box")
   tmux("send-keys", "-t", "0", "-l", text)
   tmux("send-keys", "-t", "0", "Enter")
-  await until("the answer", () => answers.length === n)
+  await waitFor(screen, () => answers.length === n, "the answer")
 }
 
 test("an inbox ask: the box takes a number, key or label and keeps the note as typed; a plain key sends the bare key", async () => {
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${join(import.meta.dir, "..")}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${join(import.meta.dir, "..")}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "i")
-  await until("the ask's card", () => screen().includes("replace the pipe?") && screen().includes("answer with a note"))
+  await waitFor(screen, () => screen().includes("replace the pipe?") && screen().includes("answer with a note"), "the ask's card")
   await note("2 the old one leaks", 1)
   await note("y  two  spaces", 2)
   await note("no because", 3)
   expect(answers.map((a) => a.body)).toEqual([{ key: "n the old one leaks" }, { key: "y two  spaces" }, { key: "n because" }])
   expect(answers.every((a) => a.path === "/api/office/prompts/77")).toBe(true)
   tmux("send-keys", "-t", "0", "y")
-  await until("the plain answer", () => answers.length === 4)
+  await waitFor(screen, () => answers.length === 4, "the plain answer")
   expect(answers[3]!.body).toEqual({ key: "y" })
 }, TUI_TEST)

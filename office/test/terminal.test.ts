@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from "bun:test"
 import { keyArgs, rows, TerminalView, unescape } from "../tui/terminal"
 import { killServer } from "./kill-server"
+import { waitFor } from "./wait-for"
 
 const enc = new TextEncoder(), dec = new TextDecoder()
 
@@ -17,32 +18,30 @@ test("a window's screen arrives, keys typed into it come back", async () => {
   tmux("new-session", "-d", "-s", "w9", "-n", "lead", "-x", "60", "-y", "10", "sh -c 'printf \"hello from the pane\\n\"; exec cat'")
   // conditions waited on, never fixed sleeps: under load (a gate beside coworkers' suites) the fixed
   // waits outran bun's 5 s budget
-  const until = async (ok: () => boolean) => { for (let i = 0; i < 300 && !ok(); i++) await Bun.sleep(50) }
   const sessions = () => dec.decode(tmux("ls", "-F", "#{session_name}").stdout).trim()
-  await until(() => sessions() === "w9")
+  await waitFor(sessions, (s) => s === "w9", "our session")
   let changes = 0
   const view = new TerminalView({ socket, session: "w9", window: "lead" }, 40, 8, () => changes++, () => {})
   const text = () => rows(view.vt).map((r) => r.replace(/\x1b\[[0-9;]*m/g, "")).join("\n")
-  await until(() => text().includes("hello from the pane"))
+  await waitFor(text, "hello from the pane")
   expect(text()).toContain("hello from the pane")
   view.send(enc.encode("typed back\r"))
-  await until(() => (text().match(/typed back/g) ?? []).length >= 2)
+  await waitFor(text, (s) => (s.match(/typed back/g) ?? []).length >= 2, "the echo and cat's copy")
   expect((text().match(/typed back/g) ?? []).length).toBe(2) // the tty's echo and cat's copy
   expect(changes).toBeGreaterThan(0)
   expect(rows(view.vt).every((r) => r.replace(/\x1b\[[0-9;]*m/g, "").length === 40)).toBe(true)
   // only our throwaway session went away; the coworker's stays
   view.close()
-  await until(() => sessions() === "w9")
+  await waitFor(sessions, (s) => s === "w9", "our session")
   expect(sessions()).toBe("w9")
 }, 30_000)
 
 test("a box drawn before the view came reads as lines, not the letters tmux snapshots it as", async () => {
   tmux("new-session", "-d", "-s", "box", "-n", "game", "-x", "40", "-y", "6", "sh -c 'printf \"\\033(0lqqk\\033(B drawn\\n\"; exec cat'")
-  const until = async (ok: () => boolean) => { for (let i = 0; i < 300 && !ok(); i++) await Bun.sleep(50) }
-  await until(() => dec.decode(tmux("capture-pane", "-p", "-t", "box").stdout).includes("drawn"))
+  await waitFor(() => dec.decode(tmux("capture-pane", "-p", "-t", "box").stdout), "drawn")
   const view = new TerminalView({ socket, session: "box", window: "game" }, 40, 6, () => {}, () => {})
   const text = () => rows(view.vt).map((r) => r.replace(/\x1b\[[0-9;]*m/g, "")).join("\n")
-  await until(() => text().includes("drawn"))
+  await waitFor(text, "drawn")
   expect(text()).toContain("┌──┐ drawn")
   view.close()
 }, 30_000)
@@ -54,11 +53,10 @@ test("the placeholder window's own output never reaches the view — only the co
     t("new-session", "-d", "-s", "w8", "-n", "lead", "-x", "60", "-y", "10", "sh -c 'printf \"the coworker\\n\"; exec cat'")
     // the shell a control-mode client's placeholder window runs: a login shell's banner (a fortune) in life
     t("set-option", "-g", "default-command", "printf 'from the placeholder\\n'; exec cat")
-    const until = async (ok: () => boolean) => { for (let i = 0; i < 300 && !ok(); i++) await Bun.sleep(50) }
     const view = new TerminalView({ socket: sock, session: "w8", window: "lead" }, 40, 8, () => {}, () => {})
     const text = () => rows(view.vt).map((r) => r.replace(/\x1b\[[0-9;]*m/g, "")).join("\n")
-    await until(() => text().includes("the coworker"))
-    await Bun.sleep(200)
+    await waitFor(text, "the coworker")
+    await Bun.sleep(200) // the placeholder must NOT appear: nothing to wait for but a window for it to
     expect(text()).toContain("the coworker")
     expect(text()).not.toContain("from the placeholder")
     view.close()

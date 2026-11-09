@@ -36,7 +36,7 @@ test("banter off: chatter() makes no banter, pets, corkboard or talk call", asyn
   const dial = join(state, "office.json")
   writeFileSync(dial, JSON.stringify({ mode: "office", preset: "casual", overrides: { banter: false } }))
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${join(import.meta.dir, "..")}' && TLON_URL='http://127.0.0.1:${server.port}' TLON_OFFICE='${dial}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${join(import.meta.dir, "..")}' && TLON_URL='http://127.0.0.1:${server.port}' TLON_OFFICE='${dial}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the suggestions read", () => hits.some((p) => p.includes("/office/suggestions/")))
   expect(hits.some((p) => p.includes("/office/suggestions/"))).toBe(true) // chatter() ran to the end
   expect(hits.filter((p) => /\/office\/(banter|pets|corkboard|talk)\b/.test(p))).toEqual([])

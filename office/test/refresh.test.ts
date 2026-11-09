@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // The office's snapshot lands as soon as /office answers, whatever its other reads are doing: the
 // inbox's (/office/needs) takes seconds on a real repo, and a finder opened before it returned
@@ -39,28 +40,19 @@ const capture = () => tmux("capture-pane", "-p", "-t", "0")
 const screen = () => dec.decode(capture().stdout)
 // a budget per step, under bun's own timeout, so a step that never lands throws its own message
 // (which step, how long, the pane and tmux's complaint) instead of a bare timeout
-const until = async (what: string, ok: () => boolean) => {
-  const t0 = performance.now(), deadline = t0 + 25_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) {
-    const r = capture()
-    throw new Error(`never saw ${what} after ${performance.now() - t0}ms (first inbox read given up: ${firstInboxGivenUp}); capture-pane exit ${r.exitCode}, stderr: ${dec.decode(r.stderr).trim() || "(none)"}; pane:
-${dec.decode(r.stdout)}`)
-  }
-}
 
 test("the finder lists the snapshot's threads while the inbox read is still out", async () => {
   const office = join(import.meta.dir, "..")
   // the running bun by path: a `bun` on PATH is a mise shim, which stops at its trust prompt in a checkout the service's env hasn't trusted
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   // the snapshot is in: its workspace names the header
   await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   expect(screen()).toContain("Toy")
   tmux("send-keys", "-t", "0", "/")
-  await until("FIND after /", () => screen().includes("FIND"))
+  await waitFor(screen, "FIND", "FIND after /")
   tmux("send-keys", "-t", "0", "-l", "slow inbox")
-  await until("#42 in the finder", () => screen().includes("#42 the slow inbox"))
+  await waitFor(screen, "#42 the slow inbox", "#42 in the finder")
   expect(screen()).toContain("#42 the slow inbox")
   // listed while that read was still out, not after the TUI gave up on it
   expect(firstInboxGivenUp).toBe(false)

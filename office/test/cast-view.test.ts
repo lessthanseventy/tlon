@@ -49,92 +49,85 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const t0 = performance.now(), deadline = t0 + 15_000
-  // one read decides: a second could see a screen that has moved on since
-  let seen = ok()
-  while (!seen && performance.now() < deadline) { await Bun.sleep(50); seen = ok() }
-  if (!seen) throw new Error(`never saw ${what} after ${performance.now() - t0}ms; pane:\n${screen()}`)
-}
 
 test("` opens the cast: a row per seat, } the office tab, esc home", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' XDG_CONFIG_HOME='${config}' TLON_OFFICE_TMUX='${ownTmux}' EDITOR='tail -f' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' XDG_CONFIG_HOME='${config}' TLON_OFFICE_TMUX='${ownTmux}' EDITOR='tail -f' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "-l", "`")
-  await until("the cast", () => screen().includes("THE CAST"))
+  await waitFor(screen, "THE CAST", "the cast")
   expect(screen()).toContain("ada")
   expect(screen()).toContain("bo")
   expect(screen()).toContain("unset")
   tmux("send-keys", "-t", "0", "-l", "}")
-  await until("the office tab", () => screen().includes("WACKINESS"))
+  await waitFor(screen, "WACKINESS", "the office tab")
   tmux("send-keys", "-t", "0", "escape")
-  await until("home again", () => !screen().includes("WACKINESS") && !screen().includes("THE CAST"))
+  await waitFor(screen, () => !screen().includes("WACKINESS") && !screen().includes("THE CAST"), "home again")
 }, TUI_TEST)
 
 const keys = (...k: string[]) => tmux("send-keys", "-t", "0", ...k)
 const field = async (name: string) => {
   for (let i = 0; i < 8 && !screen().includes(`THE CAST · people · ${name}`); i++) { keys("right"); await Bun.sleep(150) }
-  await until(`the ${name} field lit`, () => screen().includes(`THE CAST · people · ${name}`))
+  await waitFor(screen, `THE CAST · people · ${name}`, `the ${name} field lit`)
 }
 
 test("the cast opened again after ctrl+] still lists the bench", async () => {
   keys("-l", "`")
-  await until("the cast", () => screen().includes("THE CAST · people"))
+  await waitFor(screen, "THE CAST · people", "the cast")
   keys("C-]")
-  await until("home", () => !screen().includes("THE CAST"))
+  await waitFor(screen, () => !screen().includes("THE CAST"), "home")
   keys("-l", "`")
-  await until("the cast again", () => screen().includes("THE CAST · people"))
+  await waitFor(screen, "THE CAST · people", "the cast again")
   expect(screen()).toContain("ada")
   expect(screen()).toContain("bo")
   expect(screen()).not.toContain("nobody on the bench")
   keys("C-]")
-  await until("home", () => !screen().includes("THE CAST"))
+  await waitFor(screen, () => !screen().includes("THE CAST"), "home")
 }, 40_000)
 
 test("⏎ on voice is the persona picker: its reroll asks, y posts it", async () => {
   keys("-l", "`")
-  await until("the cast", () => screen().includes("THE CAST · people"))
+  await waitFor(screen, "THE CAST · people", "the cast")
   await field("voice")
   keys("enter")
-  await until("the persona picker", () => screen().includes("ADA'S PERSONA"))
+  await waitFor(screen, "ADA'S PERSONA", "the persona picker")
   keys("enter")
-  await until("the reroll ask", () => screen().includes("(y/n)"))
+  await waitFor(screen, "(y/n)", "the reroll ask")
   keys("y")
-  await until("the reroll posted", () => writes.includes("POST /api/workspaces/1/coworkers/5/persona"))
+  await waitFor(screen, () => writes.includes("POST /api/workspaces/1/coworkers/5/persona"), "the reroll posted")
 }, 40_000)
 
 test("⏎ on model is the model picker", async () => {
   await field("model")
   keys("enter")
-  await until("the model picker", () => screen().includes("ADA'S MODEL"))
+  await waitFor(screen, "ADA'S MODEL", "the model picker")
   keys("escape")
 }, 40_000)
 
 test("- lets the lit seat go, after asking: n sends nothing, y the DELETE", async () => {
-  await until("the cast", () => screen().includes("THE CAST · people"))
+  await waitFor(screen, "THE CAST · people", "the cast")
   writes.length = 0
   keys("-")
-  await until("the unseat ask", () => screen().includes("let ada go") && screen().includes("(y/n)"))
+  await waitFor(screen, () => screen().includes("let ada go") && screen().includes("(y/n)"), "the unseat ask")
   keys("n")
   await waitFor(screen, (s) => !s.includes("(y/n)"), "the ask answered")
   expect(writes).toEqual([])
   keys("-")
-  await until("the unseat ask again", () => screen().includes("(y/n)"))
+  await waitFor(screen, "(y/n)", "the unseat ask again")
   keys("y")
-  await until("the DELETE", () => writes.includes("DELETE /api/seats/1"))
+  await waitFor(screen, () => writes.includes("DELETE /api/seats/1"), "the DELETE")
 }, 40_000)
 
 test("⏎ on grade steps it and keeps it in cast.json; y rerolls specialty from the hall's vocabulary", async () => {
   await field("grade")
   keys("enter")
-  await until("ada's grade written", () => castNow()?.ada?.grade === "junior")
+  await waitFor(screen, () => castNow()?.ada?.grade === "junior", "ada's grade written")
   keys("enter")
-  await until("the next grade", () => castNow()?.ada?.grade === "senior")
+  await waitFor(screen, () => castNow()?.ada?.grade === "senior", "the next grade")
   await field("specialty")
   keys("y")
-  await until("ada's specialty rerolled", () => ["office", "server"].includes(castNow()?.ada?.specialty))
+  await waitFor(screen, () => ["office", "server"].includes(castNow()?.ada?.specialty), "ada's specialty rerolled")
   expect(castNow().ada.grade).toBe("senior")
   expect(castNow().bo).toBeUndefined()
 }, 40_000)
@@ -142,35 +135,36 @@ test("⏎ on grade steps it and keeps it in cast.json; y rerolls specialty from 
 test("y on look rolls ada a new one and saves it at once, bo's untouched", async () => {
   await field("look")
   keys("y")
-  await until("ada's look saved", () => !!looksNow()?.ada)
+  await waitFor(screen, () => !!looksNow()?.ada, "ada's look saved")
   expect(looksNow().bo).toEqual({ hat: "beanie" })
-  await until("the cell says so", () => screen().includes("custom look"))
+  await waitFor(screen, "custom look", "the cell says so")
 }, 40_000)
 
 test("⏎ on soul makes souls/ada.md once from the blank skeleton, and never over what is there", async () => {
   await field("soul")
   keys("enter")
-  await until("ada's soul file", () => { try { return readFileSync(soulFile, "utf8").includes("## Wants") } catch { return false } })
+  await waitFor(screen, () => { try { return readFileSync(soulFile, "utf8").includes("## Wants") } catch { return false } }, "ada's soul file")
   writeFileSync(soulFile, "## Wants\nthe hand's own words\n")
   keys("C-]")
-  await until("the cast again", () => screen().includes("THE CAST · people"))
+  await waitFor(screen, "THE CAST · people", "the cast again")
   keys("enter")
+  // nothing appears when the file must stay unchanged, so give a write time to land
   await Bun.sleep(600)
   expect(readFileSync(soulFile, "utf8")).toBe("## Wants\nthe hand's own words\n")
   keys("C-]")
-  await until("home", () => !screen().includes("THE CAST"))
+  await waitFor(screen, () => !screen().includes("THE CAST"), "home")
 }, 40_000)
 
 test("⏎ on name or archetype changes nothing and says how", async () => {
-  await until("home", () => screen().includes("HOME"))
+  await waitFor(screen, "HOME", "home")
   keys("-l", "`")
-  await until("the cast", () => screen().includes("THE CAST · people"))
+  await waitFor(screen, "THE CAST · people", "the cast")
   const before = { cast: readFileSync(castFile, "utf8"), looks: readFileSync(looksFile, "utf8") }
   writes.length = 0
   for (const f of ["name", "archetype"]) {
     await field(f)
     keys("enter")
-    await until(`the hint on ${f}`, () => screen().includes(`a seat's ${f} doesn't change — hire a new one from the hall`))
+    await waitFor(screen, `a seat's ${f} doesn't change — hire a new one from the hall`, `the hint on ${f}`)
   }
   expect(writes).toEqual([])
   expect({ cast: readFileSync(castFile, "utf8"), looks: readFileSync(looksFile, "utf8") }).toEqual(before)

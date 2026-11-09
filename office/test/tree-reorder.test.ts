@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // K moves a ticket among its siblings, and the cursor goes with it: here the mover swaps past an
 // open epic, and the cursor must land on the mover, not on the row the epic's child used to sit on.
@@ -47,45 +48,40 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const deadline = performance.now() + 25_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
-}
 const keys = (...k: string[]) => tmux("send-keys", "-t", "0", ...k)
 
 test("K moves a ticket among its siblings and the cursor stays on it, past an open epic", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   keys("t")
-  await until("the tickets column", () => screen().includes("TICKETS ·"))
+  await waitFor(screen, "TICKETS ·", "the tickets column")
 
   // open the epic: its child shows under it, and the mover sits below the child
   keys("Enter")
-  await until("the epic's child", () => screen().includes("the epic's child"))
+  await waitFor(screen, "the epic's child", "the epic's child")
 
   // the epic's child is its epic's only child: K has no sibling to swap with, and says so instead of "moved"
   keys("Down", "K")
-  await until("the nothing-to-swap report", () => screen().includes("#11 has no sibling to swap with"))
+  await waitFor(screen, "#11 has no sibling to swap with", "the nothing-to-swap report")
   // the cursor marker is ▸: walk down until it sits on the mover's row
   const onMover = () => screen().split("\n").some((l) => l.includes("▸") && l.includes("#21 the mover"))
   for (let i = 0; i < 6 && !onMover(); i++) {
     keys("Down")
-    await Bun.sleep(150)
+    await Bun.sleep(150) // a keystroke has no screen change of its own to wait on
   }
-  await until("the cursor on the mover", onMover)
+  await waitFor(screen, onMover, "the cursor on the mover")
 
   // the mover swaps with the epic (a top-level sibling), which sits open above it: the cursor
   // stays on the mover's row, not on the row above where the mover used to sit
   keys("K")
-  await until("the move reported", () => screen().includes("#21 moved up"))
-  await until("the cursor still on the mover after the move", () => {
+  await waitFor(screen, "#21 moved up", "the move reported")
+  await waitFor(screen, () => {
     const s = screen()
     return s.includes("the mover") && s.split("\n").some((l) => l.includes("▸") && l.includes("#21 the mover"))
-  })
+  }, "the cursor still on the mover after the move")
 
   keys("Enter")
-  await until("the mover's ticket card", () => screen().includes("TICKET #21"))
+  await waitFor(screen, "TICKET #21", "the mover's ticket card")
 }, TUI_TEST)

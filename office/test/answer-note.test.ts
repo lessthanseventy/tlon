@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // An ask is answered by one tap (1–9), or with a note: `"` opens a one-line box, "<number> <note>"
 // and Enter send "<key> <note>" through the same POST /api/office/prompts/:id. Drives the real TUI
@@ -35,29 +36,24 @@ afterAll(() => {
 })
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const deadline = performance.now() + 25_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
-}
 
 test("\" answers an ask with a note: the body is \"<key> <note>\"; a plain 1 still sends the bare key", async () => {
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${join(import.meta.dir, "..")}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${join(import.meta.dir, "..")}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "t")
-  await until("the tickets column", () => screen().includes("TICKETS · "))
+  await waitFor(screen, "TICKETS · ", "the tickets column")
   tmux("send-keys", "-t", "0", "Right", "Right", "Right")
-  await until("the build column", () => screen().includes("BUILD · "))
+  await waitFor(screen, "BUILD · ", "the build column")
   tmux("send-keys", "-t", "0", "Enter")
-  await until("the prompt's card", () => screen().includes("THREAD #10"))
+  await waitFor(screen, "THREAD #10", "the prompt's card")
   tmux("send-keys", "-t", "0", "\"")
-  await until("the note box", () => screen().includes("answer with a note"))
+  await waitFor(screen, "answer with a note", "the note box")
   tmux("send-keys", "-t", "0", "-l", "2 the old one leaks")
   tmux("send-keys", "-t", "0", "Enter")
-  await until("the answer with its note", () => answers.length === 1)
+  await waitFor(screen, () => answers.length === 1, "the answer with its note")
   expect(answers).toEqual([{ path: "/api/office/prompts/77", body: { key: "no the old one leaks" } }])
   tmux("send-keys", "-t", "0", "1")
-  await until("the plain answer", () => answers.length === 2)
+  await waitFor(screen, () => answers.length === 2, "the plain answer")
   expect(answers[1]).toEqual({ path: "/api/office/prompts/77", body: { key: "yes" } })
 }, TUI_TEST)

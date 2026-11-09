@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // A confirm takes y or enter as yes; any other key cancels, and says so. Driven in the sandbox,
 // where the confirmed write is the toy's refusal, so nothing real is paused.
@@ -16,31 +17,26 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const deadline = performance.now() + 25_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
-}
 const keys = (...k: string[]) => tmux("send-keys", "-t", "0", ...k)
 const askLightsOut = async () => {
   keys("/")
-  await until("FIND", () => screen().includes("FIND"))
+  await waitFor(screen, "FIND", "FIND")
   tmux("send-keys", "-t", "0", "-l", "lights out: stop")
-  await until("the pick", () => screen().includes("lights out: stop everyone now"))
+  await waitFor(screen, "lights out: stop everyone now", "the pick")
   keys("Enter")
-  await until("the confirm", () => screen().includes("interrupt every pane ("))
+  await waitFor(screen, "interrupt every pane (", "the confirm")
 }
 
 test("a confirm: another key cancels and says so; enter is yes", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && OFFICE_SANDBOX=1 TMPDIR='${dir}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${dir}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && OFFICE_SANDBOX=1 TMPDIR='${dir}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${dir}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the toy's workspace", () => screen().includes("Toy"))
   await askLightsOut()
   keys("x")
-  await until("cancelled", () => screen().includes("cancelled") && !screen().includes("interrupt every pane ("))
+  await waitFor(screen, () => screen().includes("cancelled") && !screen().includes("interrupt every pane ("), "cancelled")
   await askLightsOut()
   keys("Enter")
-  await until("the write ran", () => screen().includes("it's a toy"))
+  await waitFor(screen, "it's a toy", "the write ran")
   expect(screen()).not.toContain("interrupt every pane (")
 }, TUI_TEST)
