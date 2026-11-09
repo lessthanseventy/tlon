@@ -99,7 +99,10 @@ defmodule Server.Office.Needs do
   from an item's text), applying while it is no older than the item; the operator's `overrule/1`
   sends a settled item back to Uqbar, not to themselves. Fail-open: an item Uqbar has not routed
   within the `uqbar_route_minutes` knob passes up as "Uqbar did not route it in time", measured from
-  the item's own time, so an overruled item past it reaches the operator at once. With the setting off,
+  the item's own time, so an overruled item past it reaches the operator at once. A review gate under
+  an `auto_land_risk` standing approval is `held` (in no group, so nobody is paged) while its thread's
+  `Server.Jobs.Grade` job is live; the grade may land it. When the job ends and the gate still waits,
+  its clock starts at the job's end. With the setting off,
   rows are not read and every conditional item passes up. Uqbar is paged on its study when a key
   enters the group (`Server.Office.NeedsPage`).
 
@@ -143,7 +146,7 @@ defmodule Server.Office.Needs do
   and is under a day old at `now`; `settled` only what was settled in the day before it.
   """
   def grouped(now \\ DateTime.utc_now()) do
-    {routes, items} = Enum.split_with(routed(), &(&1.route in ~w(uqbar settled)))
+    {routes, items} = Enum.split_with(Enum.reject(routed(), &(&1.route == "held")), &(&1.route in ~w(uqbar settled)))
     heard = Map.new(Repo.all(from h in "need_heard", select: {h.key, type(h.at, :utc_datetime)}))
     prune("need_heard", heard, items)
     since = DateTime.add(now, -@machine_hours * 3600, :second)
@@ -1108,8 +1111,43 @@ defmodule Server.Office.Needs do
     on? = Server.OperatorConfig.setting("uqbar_routing")
     expired = DateTime.add(DateTime.utc_now(), -Server.OperatorConfig.setting("uqbar_route_minutes") * 60, :second)
 
-    for item <- items, do: route_item(item, rows[item.key], on?, expired)
+    graded = if on?, do: grade_jobs(items), else: %{}
+
+    for item <- items do
+      case hold(item, graded[item.thread_id]) do
+        :held -> Map.merge(item, %{route: "held", recommendation: nil, why: nil, settled_at: nil})
+        item -> route_item(item, rows[item.key], on?, expired)
+      end
+    end
   end
+
+  # the newest Grade job's {state, end} of each review gate's thread, while a standing approval is set
+  defp grade_jobs(items) do
+    ids = for %{kind: "gate", stage: "review", thread_id: id} <- items, do: id
+
+    if ids == [] or is_nil(Server.OperatorConfig.setting("auto_land_risk")) do
+      %{}
+    else
+      jobs =
+        Repo.all(
+          from j in Oban.Job,
+            where: j.worker == "Server.Jobs.Grade" and fragment("(?->>'thread_id')::bigint", j.args) in ^ids,
+            order_by: j.id,
+            select:
+              {fragment("(?->>'thread_id')::bigint", j.args), j.state,
+               coalesce(j.completed_at, coalesce(j.discarded_at, coalesce(j.cancelled_at, j.attempted_at)))}
+        )
+
+      Map.new(jobs, fn {id, state, ended} -> {id, {state, ended}} end)
+    end
+  end
+
+  defp hold(_item, {state, _}) when state in ~w(available scheduled executing retryable), do: :held
+
+  defp hold(%{at: at} = item, {_, %DateTime{} = ended}),
+    do: %{item | at: Enum.max([at, DateTime.truncate(ended, :second)], DateTime)}
+
+  defp hold(item, _), do: item
 
   # a row older than the item is for an earlier item under its key; fail-open: Uqbar's silence never
   # hides a decision past `expired`

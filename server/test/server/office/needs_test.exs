@@ -1408,6 +1408,47 @@ defmodule Server.Office.NeedsTest do
       assert {:error, :always} = Needs.settle(own_key, "fine", "uqbar")
     end
 
+    defp grade_job(key, state, finished \\ nil) do
+      "gate:" <> id = key
+      id = String.to_integer(id)
+      {:ok, job} = %{thread_id: id} |> Server.Jobs.Grade.new() |> Server.Repo.insert()
+      job |> Ecto.Changeset.change(state: state, completed_at: finished) |> Server.Repo.update!()
+    end
+
+    test "a parked gate with a live grade job routes nowhere under a standing approval", %{ws: ws, config: config} do
+      :ok = Server.OperatorConfig.put("auto_land_risk", 2, config)
+      key = review_gate(ws, %{"limits" => []})
+      grade_job(key, "executing")
+
+      g = Needs.grouped()
+      assert g.uqbar == []
+      assert g.phone == []
+      assert Enum.any?(Needs.list(), &(&1.key == key))
+    end
+
+    test "once the grade job is done and the gate still waits, it routes to Uqbar, its clock from the grade",
+         %{ws: ws, config: config} do
+      :ok = Server.OperatorConfig.put("auto_land_risk", 2, config)
+      key = review_gate(ws, %{"limits" => []})
+      done = DateTime.add(DateTime.utc_now(), 5, :second)
+      grade_job(key, "completed", done)
+
+      assert [%{key: ^key, route: "uqbar", at: at}] = Needs.grouped().uqbar
+      assert DateTime.compare(at, DateTime.truncate(done, :second)) != :lt
+    end
+
+    test "with no grade job at all a parked gate routes to Uqbar at once", %{ws: ws, config: config} do
+      :ok = Server.OperatorConfig.put("auto_land_risk", 2, config)
+      key = review_gate(ws, %{"limits" => []})
+      assert [%{key: ^key, route: "uqbar"}] = Needs.grouped().uqbar
+    end
+
+    test "without a standing approval a live grade job holds nothing", %{ws: ws} do
+      key = review_gate(ws, %{"limits" => []})
+      grade_job(key, "executing")
+      assert [%{key: ^key, route: "uqbar"}] = Needs.grouped().uqbar
+    end
+
     test "a gate with a clean grade still waits with Uqbar and takes a verdict", %{ws: ws} do
       key = review_gate(ws, %{"limits" => [], "decisions" => [], "scores" => %{}, "reasons" => %{}})
       assert [%{key: ^key, route: "uqbar"}] = Needs.grouped().uqbar
