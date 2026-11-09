@@ -108,8 +108,9 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   the service start; a client node's dump is said to be no service's, before the start or after.
   `tlon-cli.sh` points a closed stderr at `/dev/null` (bash hands the freed fd 2 to the script
   itself), so its VM never dies printing a boot error; test `tlon-cli.test.sh`.
-  Left: which caller closes stderr is unidentified (`server-restart.sh` and `release.sh` send it to
-  `/dev/null`, which works, and no dump has landed since) — read the next dump in the state dir;
+  Closed 2026-11-08: which caller closed stderr stays unidentified (`server-restart.sh` and `release.sh`
+  send it to `/dev/null`, which works) and no dump has landed since (repo root and state dir clean); a
+  next dump reopens it;
   menard's half (its VM dumping into the caller's cwd) goes to the menard session with A2.
 - Reproduced 2026-11-07, OTP 27 and 29: `printf 'raise "boom"\n' > boom.exs; elixir boom.exs 2>&-`
   (or `… 2>&1 >/dev/null | true`, stderr a pipe whose reader has gone) leaves `erl_crash.dump` in
@@ -169,9 +170,11 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   measurement after release says the snapshot still costs too much; (c)–(e) stay open.
 - Done 2026-11-08, (c) and (d): `Room.health/0` reads tmux, disk and memory through the minute-old
   `vitals/0` (it forked `df` on every snapshot beside a cache the needs list already used), and
-  `Needs`' `work_tips/1` holds each root's `for-each-ref` for 60 s (a stall is hours old). Left:
-  (e) — `NeedsPage.run/0` still derives every need each minute to find the new ones; a fingerprint
-  would need the same pass, so it waits for a cheaper `Needs.list/0` or a bus event per kind.
+  `Needs`' `work_tips/1` holds each root's `for-each-ref` for 60 s (a stall is hours old). Done
+  2026-11-08, (e): `Server.Office.NeedsDirty` is marked by any bus event on the activity, thread and
+  session topics, and `Jobs.Drain` runs `NeedsPage.run/0` only when it is dirty, once at boot, and once
+  per five minutes at most (the inputs the bus never carries: a quiet workline's clock, failed jobs, box
+  health, stranded checkouts, git refs); `needs_dirty_test`.
 
 **B2 · N+1 queries on the hot passes.** `Sonnet · M`
 - Why (read, not profiled): `Office.tickets/2` calls `Tickets.epic_of/1` and `thread_of/1` per open
@@ -238,10 +241,11 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   saying it timed out — the shape every caller already reads as red, so the 17 injected
   `run \\ &System.cmd/3` defaults and the landing path moved with no call-site change;
   `Server.Git.cmd/3` and `run/3` replace the nine `git/2` helpers and the direct `git -C` calls
-  (35 → 8). `cmd_test.exs` holds a `sleep 30` at `timeout: 1` to exit 124 in under 8 s. Left: 47
-  bare `System.cmd`s — the gate scripts (`bash` with their own walls), `kill`/`pgrep`/`cp`/`df`,
-  the bench runner and the compile-time one in `profiles.ex`; `#781`/`#864` (a vanished seat as an
-  ending) stay with Staffing.
+  (35 → 8). `cmd_test.exs` holds a `sleep 30` at `timeout: 1` to exit 124 in under 8 s. Done
+  2026-11-08: every `System.cmd` in `server/lib` goes through `Server.Cmd.run/3` (the gate scripts, the
+  release cut and the runners with their own `timeout` at `timeout: :infinity`, the rest at the 120 s
+  default); the one bare call left is `profiles.ex`'s compile-time `@checkout`. `#781`/`#864` (a
+  vanished seat as an ending) stay with Staffing.
 
 **B6 · One-shot Oban jobs retry never; `Process.sleep` in GenServers.** `Sonnet · S`
 - Why: `max_attempts: 1` on Staff, Maintain, Triage, Grade and TurnPass; fine for a per-minute job,
@@ -314,7 +318,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: cache the decision by (text, colour, position, underlying-region hash) until the region's
   art changes.
 - Check: `wcag.test.ts` unchanged; the paint bench's ms per frame drops.
-- Left: not built. `test/paint-bench.test.ts` times `inkInto` over 300 labels at 3×: about 4 ms a frame, all of it the backing scans plus the glyph writes. A label box is a fixed ~1.5k px whatever `k` is (text size follows `textScale`, not `k`), so hashing the region under each costs as much as scanning it; a region-hash cache measured no faster. Reopen if a room ever carries labels in the thousands.
+- Decided 2026-11-08, not built (measured no faster). `test/paint-bench.test.ts` times `inkInto` over 300 labels at 3×: about 4 ms a frame, all of it the backing scans plus the glyph writes. A label box is a fixed ~1.5k px whatever `k` is (text size follows `textScale`, not `k`), so hashing the region under each costs as much as scanning it; a region-hash cache measured no faster. Reopen if a room ever carries labels in the thousands.
 
 **C5 · Timers ignore focus.** `Sonnet · S`
 - Why: `tui/main.ts` polls `data.focus()` every 1 s, stat-checks seven followed files every 1 s,
@@ -324,7 +328,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 - Change: gate each `every(...)` on `focused` with a 30–60 s unfocused cadence; `fs.watch` or one
   merged stat for the files; async `Bun.spawn` with a 30 s backoff after a non-zero exit.
 - Check: a test that drives focus off and counts timer firings over 5 s.
-- Done: `tui/pace.ts paced` runs a timer body every tick focused and once per 30 s unfocused (the focus request: 5 s, since another surface asks the TUI to show a thread); on it the refresh, the followed-file stats, the focus poll, the activity poll and `pollPlayer`, which is now async `Bun.spawn` and waits 30 s after a failed run; the phone shake, note fade and pet/store preview draw only when focused. Test: `test/pace.test.ts` counts firings over a fake clock. Left: `fs.watch` for the seven followed files (the stats are one per second focused, one per 30 s not).
+- Done: `tui/pace.ts paced` runs a timer body every tick focused and once per 30 s unfocused (the focus request: 5 s, since another surface asks the TUI to show a thread); on it the refresh, the followed-file stats, the focus poll, the activity poll and `pollPlayer`, which is now async `Bun.spawn` and waits 30 s after a failed run; the phone shake, note fade and pet/store preview draw only when focused. Test: `test/pace.test.ts` counts firings over a fake clock. Done 2026-11-08, `fs.watch`: `tui/watch.ts` (`watchDirs`, debounced 100 ms) watches the followed files' directories, their link targets and the souls dir; an event runs all seven `follow*()` and redraws; where a directory cannot be watched the focused stat poll stays; watchers close on relaunch (`watch.test.ts`; not watched against a live TUI).
 
 **C6 · `draw()` rebuilds header, card rows and pane at room-frame rate.** `Sonnet · M`
 - Why: each 10 Hz frame re-renders the whole room *and* `detail()` and `drawPane`.
@@ -335,7 +339,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
 
 **C7 · Conditional snapshot fetch** — the client half of B1(b): send `If-None-Match`, keep the held
 snapshot on 304. `Sonnet · S`, after B1.
-- Left: not built. B1(b) was dropped (the snapshot's cost was B2's per-row reads) and the server sends no `ETag` and honours no `If-None-Match` on `/api/office`, so a client half would be dead code. Reopen with B1(b): `data.status` keeps the `ETag` of the last 200, sends it as `If-None-Match` and on 304 returns `lastGood` unchanged.
+- Done 2026-11-08, with B1(b): `GET /api/office` carries a sha256 `ETag` of the encoded snapshot and answers `304` with no body to a matching `If-None-Match`; `data.status` keeps the last ETag, sends it, and on 304 returns the held snapshot unchanged (`data-etag.test.ts`, a gateway test). The server still builds the snapshot each time; the saving is the body, the parse and the client's work. Unverified: the ETag's stability against the live snapshot (a volatile field would make every poll a 200).
 
 ---
 
@@ -387,7 +391,7 @@ snapshot on 304. `Sonnet · S`, after B1.
   cites is the case #573 names) or keep the cut and close #573 with the relay rule written into the
   skill. Recommend giving leads the tool.
 - Check: `profiles_test` pins which archetypes have it; the skill names it.
-- Done: the truth-sync half only: the coordinate skill says the tool exists, is cut from coworker profiles, the sheriff keeps it, and that `@tertius` relays; `profiles_test` pins the sheriff as the one archetype that has it. Left: the decision (give leads `consult_peer`, or keep the cut and close #573) is Andrew's and stays open; no profile changed.
+- Done: the truth-sync half only: the coordinate skill says the tool exists, is cut from coworker profiles, the sheriff keeps it, and that `@tertius` relays; `profiles_test` pins the sheriff as the one archetype that has it. Done 2026-11-08: leads keep it — the planner, builder and reviewer archetypes carry `consult_peer` beside the sheriff (`@lead_mcp`), QA and the rest cut it, the coordinate skill says so and `profiles_test` pins it; #573 done.
 
 **D5 · Brief size and two names for one tool.** `Sonnet · S`
 - Why: OPENING is the operator's first message uncut and each of the 5 recent messages is rendered
@@ -434,9 +438,13 @@ snapshot on 304. `Sonnet · S`, after B1.
 - Done 2026-11-08, the name: the rendered dossier carries `operator` (`Brief.scope/1`,
   `OperatorConfig.operator/0`), `renderBrief` reads it when no `TLON_OPERATOR` is given, and the
   CLI's four inline-Elixir sites call `OperatorConfig.operator()`; `grep -n andrew scripts adapters`
-  is the test files only. Left: the fifteen verbs' MCP/mix-task split and the `token`/usage test
-  (the `.test.sh` itself arrives with A6 in #816 — build on it once merged); `office/tui/main.ts`
-  still defaults the name from the env.
+  is the test files only. Done 2026-11-08: the verbs with inline Elixir are functions of `Server.CLI`
+  answering `{:ok, text} | {:error, text}` (`cli_test`, 29), each shell line one
+  `rpc "Server.CLI.<verb>(...) |> Server.CLI.out()"`; `tlon-cli.test.sh` covers `token` and the usage
+  exit; the snapshot carries `operator` and `office/tui/main.ts` reads it (`operatorOf`). Still inline:
+  job, hire, persona, soul, coworker-set, fire, workspace-new/delete, canvas, reap, worktree, aside,
+  shell-*, roster. Unverified: the rpc path against the live node (the main checkout's script is ahead of
+  the running release until the next cut; `.release/scripts/tlon-cli.sh` matches the node meanwhile).
 
 ---
 
@@ -482,8 +490,8 @@ snapshot on 304. `Sonnet · S`, after B1.
 - Done 2026-11-08, the gate half: `Publish.merge_at/5`, which both the merge queue and a workline's
   publish merge through, calls `Candidate.landed/3` on an immediate merge. When the repo is tlon's and
   origin/main's tip holds exactly the tree the gate passed, it records `gate` ok on that tip. GitHub's
-  rebase rewrites the commits, so the tree is compared, not the sha. Open: the smoke is not queued
-  after the merge; an auto-merge armed instead of merging records nothing; unverified live until a
+  rebase rewrites the commits, so the tree is compared, not the sha. The smoke queues after the merge
+  (E7's mechanism 3, `Smoke.queue_candidate/1`); an auto-merge armed instead of merging records nothing; unverified live until a
   landing through `mise run land`.
 
 **E3 · Intake's cap and the held pile.** `Opus · M`
@@ -497,8 +505,11 @@ snapshot on 304. `Sonnet · S`, after B1.
 - Check: `intake_test` for (a) and (b); the PM's schedule posts the list; the backlog count a month
   on.
 - Done 2026-11-08, (a) and (b): a held or review `todo` ticket holds no slot, and a backlog review
-  ticket is routed each pass ahead of the rank and at any cap (`Intake.next_review/1`). Open: (c),
-  the PM's weekly held review.
+  ticket is routed each pass ahead of the rank and at any cap (`Intake.next_review/1`). Done (c)
+  2026-11-08: `Server.HeldReview` (`Jobs.HeldReview`, Monday 07:00) posts one notice per workspace with a
+  PM seat on its standing thread listing `held` tickets untouched 30+ days (days since `updated_at`; no
+  held-at is stored) with keep / close (`ticket-set <id> status done`) / unhold (`update_ticket` labels):
+  a post, not a gate (`held_review_test`). Not yet seen on a Monday live.
 
 **E4 · The operator's own words are not banked.** `Opus · M`
 - Why: `fact` holds 6,602 derived facts and **24 stated** (one tombstoned); `server/docs/issues.md`
@@ -513,8 +524,13 @@ snapshot on 304. `Sonnet · S`, after B1.
 - Check: `provenance='stated'` grows on days Andrew talks (the issue's own check).
 - Done 2026-11-08, the measure: the mod's `prompt.submit` writes `correction detected: <text>` and
   its capture writes `banked N facts, M questions` to `citizen-<author>.log`, so a week's ratio is
-  `grep -c` over the log. Left: the banking itself (office posts and the operator session through
-  the detector, banked `stated` with the message id), after the count says how often it fires.
+  `grep -c` over the log. Done 2026-11-08, the banking: `Server.Dossier.Corrections` (the mod's six
+  signals, 8–240 chars) hears every door the operator speaks through — `Attention.said/3` (`tlon-cli post`,
+  `POST /api/threads/:id/messages`), his `post_message`, and his own session from no thread
+  (`POST /api/said`, onto the standing thread) — and banks the correction as a stated `constraint` pointing
+  at its message (`fact.message_id`), the thread hearing a notice with the `forget-fact` that undoes it;
+  the mod posts the correction as his message on his thread, or to `/api/said` in operator mode, beside the
+  habit it proposes (`corrections_test`, a gateway test, three mod tests).
 
 **E5 · The Uqbar sends-back change (PR #746 / ticket #819).** `land it`
 - Why: five gates in one day waited on Andrew for a fix the reviewer had already named; the call is
@@ -538,6 +554,12 @@ notice on the sheriff's beat). `Sonnet` for each but #614 and #760 (`Opus`).
 - Routed 2026-11-08: #851, #813, #727, #541, #622, #806, #749 and #760 sent to tertius in that
   order (`tlon-cli ticket-route`); #861 was already doing; #793, #812 and #750 are built on
   `e1-instances`, #614 fixed above, #820 is E2, #864 waits on Staffing.
+- Done 2026-11-08: #851, #806 and #749 were already fixed on main and are closed; #813 (`out of usage
+  credits` read as quota) and #622 (`fact_relevance` bounded, the brief degrades) landed in #837; #541 (the
+  seat's write root is `<checkout>/.git`, so a vanished sibling worktree no longer kills bwrap; unproven
+  against a live launch) and #760 (`Worktree.ensure` warms `MIX_ENV=test mix compile`) in #840; #614,
+  #793 and #812 closed on the fixes above, #820 on E2 and E7, #727 was done. #861 is a workline in
+  flight; #864 stays with Staffing.
 
 **E7 · Fewer check runs, the same safety.** `Opus · M (spec first) · limit (the check)`
 - Why: one change runs the full suite up to five times: the builder's own `run_task("server:check")`
@@ -569,8 +591,11 @@ notice on the sheriff's beat). `Sonnet` for each but #614 and #760 (`Opus`).
 - Done 2026-11-08, mechanisms 1 and 3: the seat is told to `run_task("check")`, whose green the
   verify reads from the cache; `check-main.sh` skips a tip whose gate a landing recorded
   (`GET /api/release/ran`, `Candidate.passed/2`) and says so; a landing queues the tip's smoke
-  (`Smoke.queue_candidate/1`), one at a time. Left: mechanism 2 (scoped verify, after G6's
-  `check:scripts`) and mechanism 4 (the bench on a changed fingerprint).
+  (`Smoke.queue_candidate/1`), one at a time. Mechanisms 2 and 4 hold too (confirmed 2026-11-08):
+  `Server.CheckScope` maps a diff to the suites verify runs (`server/`, `office/`, `adapters/`, `scripts/`
+  and `tasks/` → `check:scripts`, docs → `check:names`; a cross-cutting touch runs the full set), and
+  `workline-verify.sh` benches only a steering edit's moved roles (the canary A/B against origin/main);
+  no nightly bench is scheduled.
 - Check: the count of `check_passed` events per landed workline, read for a week before and after
   (today's shape is ~4–5 per landing); every landed PR still carries a `tlon/check` from a full run
   at exactly its head; a change to `server/` alone never skips the server suite (a test over the
@@ -627,7 +652,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   everyone to the kitchen, grease on the whiteboard), and a power nap (lights dim, everyone's head
   down, Nina on the warmest keyboard). Each tidies itself and touches no thread or turn.
 - Check: `events.test.ts` per kind; each in the play card.
-- Done: `planes`, `pizza` and `nap` in `kit/events.ts` (props, `dimAt`, `CHAINS` pizza → nap), rows 6/7/8 on play card page 2, Nina's, Argos' and every seat's lines (`events.test.ts`). Left: the nap seats the idle on the couch (as many as it has) with zzz over every idle head rather than lowering each at its desk; Argos goes to the catch spot when the storm starts, not when the plane hangs; the server's reaction pool (`Server.ToyPool`) does not know the three keys yet.
+- Done: `planes`, `pizza` and `nap` in `kit/events.ts` (props, `dimAt`, `CHAINS` pizza → nap), rows 6/7/8 on play card page 2, Nina's, Argos' and every seat's lines (`events.test.ts`). Pinned 2026-11-08 in `events.test.ts` (and `Server.ToyPool`'s event keys gain `planes pizza nap`, `toy_pool_test`); as the code already stood: the nap seats the idle on the couch (as many as it has) with zzz over every idle head rather than lowering each at its desk; Argos goes to the catch spot when the storm starts, not when the plane hangs; the server's reaction pool (`Server.ToyPool`) does not know the three keys yet.
 
 **F6 · Pastimes get a pose and a line.** `Sonnet · M`
 - Why: `draw.ts` has no branch for aquarium, chat, pet, vending, foosball, pool or bathroom (the
@@ -636,7 +661,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   on the sink, a cue lined up); `Voice.at: Partial<Record<Pastime, string[]>>` so a line matches the
   place.
 - Check: `draw.test.ts` renders each pose; the golden frames re-hashed on purpose.
-- Done: seven poses in `drawActors` and `Voice.at` (the plain builder's seven places, Scharlach's own pool and vending); `seatLine` takes the place `Sim.onTogether` was asked about and uses it half the time (`draw.test.ts`). Left: the golden frames did not move (no actor stands at a pastime in them), so none were re-hashed; aquarium, pet and bathroom are not places `Sim.together` pairs people at, so their `at` lines wait for a solo mutter.
+- Done: seven poses in `drawActors` and `Voice.at` (the plain builder's seven places, Scharlach's own pool and vending); `seatLine` takes the place `Sim.onTogether` was asked about and uses it half the time (`draw.test.ts`). Decided 2026-11-08: a solo line at a pastime is not built (no solo-mutter path exists; a seat alone emotes, and making it speak is a new, chattier feature). The golden frames did not move (no actor stands at a pastime in them), so none were re-hashed; aquarium, pet and bathroom are not places `Sim.together` pairs people at, so their `at` lines wait for a solo mutter.
 
 **F7 · The home's missing tiles and presets.** `Sonnet · M`
 - Why: `CATALOGUE` in `kit/home.ts` has six kinds; the design lists gym, hall, pond, balcony,
@@ -646,14 +671,14 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: gym (the streak sets the dumbbell size) and trophy-shelf (the streak photos) first, then
   pond; the four pet presets; a `FLOORS` catalogue in `kit/floor.ts` with `studio` and `house`.
 - Check: `homeart.test.ts` per tile; the build mode drive walk places each.
-- Done: `gym` (dumbbell plates take the best streak tier), `trophy-shelf` (the streak photos hang on it as on the living wall) and `pond` in `CATALOGUE`/`TILE_ART`/`HOME_BLOCKS`; `PRESETS` gains `cat-only`, `menagerie`, `pond-life`, `none`; `FLOORS` (`studio`, `house`) in `kit/floor.ts`. Left: no picker for a floor (first build still opens `defaultHome`); both pet slots always hold someone and there is no pond species, so `none` is a rock and a sleepy dog; the placed floor (`paintFloor`) has no streaks, so its gym shows the bare dumbbell.
+- Done: `gym` (dumbbell plates take the best streak tier), `trophy-shelf` (the streak photos hang on it as on the living wall) and `pond` in `CATALOGUE`/`TILE_ART`/`HOME_BLOCKS`; `PRESETS` gains `cat-only`, `menagerie`, `pond-life`, `none`; `FLOORS` (`studio`, `house`) in `kit/floor.ts`. Done 2026-11-08: a `frog` species in the cat slot (`pond-life` uses it); `none` marks both slots absent, so neither room draws a pet, offers a pet errand, antics or the paper trip; `paintFloor` hangs the streak frames and `WideRoom.setStreaks` feeds it from the life card, so a placed gym's dumbbell takes the best tier. Decided: no floor picker (first build still opens `defaultHome`; not a one-card change). Not looked at live: the frog sprite and the hat pixels are tested, not seen.
 
 **F8 · Argos fetches the newspaper** (home whimsy; a brief exists in `work/`). `Sonnet · S`
 - Change: a morning errand on the existing `dogDo`/fetch machinery: out the front door at the first
   snapshot after 07:00, back with the paper to the operator's desk; the headline is the day's first
   landing or "nothing yet".
 - Check: `pets.test.ts` under the seed; seen once live.
-- Done: `WideRoom.stepPaper`: between 07:00 and noon, once a day, on a live snapshot, Argos walks to the front door, is out of the room a few seconds, and returns to the desk with the page in his mouth saying `The paper: <headline>` (`paperHeadline` in `kit/pets.ts`: the first note of a release cut today, else "nothing yet"; `pets.test.ts`). Left: not seen live; the snapshot carries no landing feed, so a release cut stands for the day's first landing; the old random office run (`ARGOS.paper`) stays.
+- Done: `WideRoom.stepPaper`: between 07:00 and noon, once a day, on a live snapshot, Argos walks to the front door, is out of the room a few seconds, and returns to the desk with the page in his mouth saying `The paper: <headline>` (`paperHeadline` in `kit/pets.ts`: the first note of a release cut today, else "nothing yet"; `pets.test.ts`). Done 2026-11-08: the snapshot carries `landings` (the last five `work_landed` worklines, `Workline.recent_landings/1`, one query: subject, PR ref, time) and `paperHeadline` reads today's first landing, else the cut's first note. Not seen live; landings outside a workline (`PRLanding` with no thread) are not in the feed; the old random office run (`ARGOS.paper`) stays.
 
 **F9 · The office's own trophies.** `Sonnet · S`
 - Why: no achievements anywhere; the kids initiative asked for exactly this kind of thing.
@@ -677,12 +702,12 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change: a ticker channel (`kit/tv.ts`) reading the snapshot's release sha, the merge queue, the
   phone count and the newest landing's subject.
 - Check: `tv.test.ts`; sandbox.
-- Done: a thirteenth channel, `ticker` (in the rotation only once the TUI has handed it numbers) in `kit/tv.ts` (`tickerText`, `Tv.setTicker`, `WideRoom.setTicker`), crawling the release sha, the merge queue length, the phone count and the newest note of the cut; the TUI refreshes it with each ok snapshot (`tickerOn`). Left: "the newest landing's subject" is the last commit subject of the live cut (the snapshot carries no landing feed); the sandbox crawls "no release yet" (not watched live).
+- Done: a thirteenth channel, `ticker` (in the rotation only once the TUI has handed it numbers) in `kit/tv.ts` (`tickerText`, `Tv.setTicker`, `WideRoom.setTicker`), crawling the release sha, the merge queue length, the phone count and the newest note of the cut; the TUI refreshes it with each ok snapshot (`tickerOn`). Done 2026-11-08: the crawl's last item is `lastLanding` (the newest landing's subject from the snapshot's `landings`, else the cut's newest note; `tv.test.ts`); the sandbox crawls "no release yet" (not watched live).
 
 **F12 · Uqbar's errands grow with the room.** `Haiku · S`
 - Change: three errands in `kit/volume.ts`: visits the hall, inspects a new hire, brings Argos a
   hat. Check: `volume.test.ts` under the seed.
-- Done: `hall`, `hire` and `hat` errands in `kit/volume.ts` and `rooms/wide.ts`; a hire is "new" for five minutes after its name first appears on the bench (the room diffs the bench), and the book inspects them once. Left: no hat is drawn on Argos, only the line and his huff.
+- Done: `hall`, `hire` and `hat` errands in `kit/volume.ts` and `rooms/wide.ts`; a hire is "new" for five minutes after its name first appears on the bench (the room diffs the bench), and the book inspects them once. Done 2026-11-08: Argos wears a small laurel for 400 ticks after the hat arrives (`WideRoom.drawDog`, `volume.test.ts`).
 
 **F13 · Six quiet keys nobody can find.** `Haiku · S`
 - Why: `tab`, `R`, `p` (pat Nina), `U` (Uqbar), `.`, `,` are handled and hinted nowhere.
@@ -726,8 +751,8 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   `rooms/`. `limit` (the check).
 - Done: every `kit/` and `rooms/` call goes through `random()` in `kit/rng.ts` (it reads `Math.random` at call
   time, so the tests' stubs still pin it); `seatLine`/`soreLine` use `pickFresh`/`pick`. `test/determinism.test.ts`
-  (run by `office:check`) fails on a `Math.random` anywhere else under `kit/` or `rooms/`. Left: `tui/main.ts` has
-  one `Math.random` (a cheer's pick) and `tui/terminal.ts` one (a tmux name); the gate covers `kit/` and `rooms/` only.
+  (run by `office:check`) fails on a `Math.random` anywhere else under `kit/` or `rooms/`. Done 2026-11-08: the
+  cheer's pick in `tui/main.ts` and the tmux name in `tui/terminal.ts` go through `random()` too, and the gate scans `tui/`.
 
 **G4 · The glossary's pending renames.** `Opus · M · limit`
 - Why: all four are still undone — `Server.Crew`/`Crew.Tmux` → `Server.Spawn`; `Server.Staffing` →
@@ -756,7 +781,9 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   comments sit above what they describe. The design's status row was the wrong one (home tiles are placed at
   their cells, with a street and doors): fixed there. `office/AGENTS.md` is an index; the three long area
   bullets moved verbatim to `office/docs/{kit,rooms,tui}.md` (the glossary gate scans them).
-  Left: `ClaudeSessions` still parses pi's transcript format; the live checkout's untracked adapter dirs.
+  Done 2026-11-08: `ClaudeSessions` drops pi's format (header, prompt entries, opener, receipt, author and
+  the `source` field; a pi-shaped transcript is not imported, `claude_sessions_test`); the live checkout's
+  untracked adapter dirs are removed.
 
 **G6 · The check's shape.** `Sonnet · M · limit (the check)`
 - Why: `check:names` runs nine scripts serially with `&&` (the release-smoke and checks-queue tests
@@ -822,8 +849,11 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   focus-poll baseline, `terminal`'s 200 ms for a placeholder that must not appear, `tree-reorder`'s 150
   ms per cursor step); the ~25 file-local `until` copies still poll on their own (moving them to
   `waitFor` is a mechanical follow-up); `rack-card`, `reply-box` and `terminal` boot per test because
-  each test changes what the server answers or needs a clean first paint; the `--no-animate` flag is
-  not done, `office/tui/main.ts` being PR #818's.
+  each test changes what the server answers or needs a clean first paint.
+- Done 2026-11-08, the follow-ups: the file-local `until` helpers in 19 TUI test files and `terminal.test.ts`
+  are `waitFor`; `OFFICE_NO_ANIMATE=1` holds the room clock's `step` and every TUI test boots with it (a
+  still room was enough: the suite passed unchanged). The five sleeps with nothing on screen stay, each with
+  its why. No speedup shown: the box was shared, both runs exit 0.
 
 **G8 · 59 GB of worktrees — mostly `du` double-counting; the sweep's one real gap.** `Sonnet · S`
 - Why: `du` counts every checkout's `server/deps` (1.9 GB) and `_build` in full, but
@@ -834,12 +864,10 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   read clean) and for `landed?/4`'s file match, which reads a landed workline's branch as unmerged
   once main edits the same files again (`toy-step-4`, `uqbar-step-4`, both landed in October).
 - Change: done 2026-11-07 — `Sweep.reap_worktrees/0` retires a closed *landed* thread's checkout
-  whatever `git cherry` says (its change is on main; the branch stays), with a test. Left:
-  `server:doctor` reports `.worktrees` as exclusive bytes (`btrfs filesystem du` where it exists,
-  `du` elsewhere) so the number stops alarming; and `Channel.close_thread/1` on a *landed* thread
-  whose checkout reads unmerged (the main checkout behind origin, say) answers `{:tracked, _}` —
-  promoting it back to build — which `Workline.merged/2` match-crashes on: a landed thread closes
-  as landed, its checkout retired, never tracked.
+  whatever `git cherry` says (its change is on main; the branch stays), with a test. Done (confirmed
+  2026-11-08): `server:doctor` reports `.worktrees` as exclusive bytes (`btrfs filesystem du` where it
+  exists, `du` elsewhere), and `Channel.close_thread/1` tracks only a thread with no stage, so a landed
+  thread closes as landed, never promoted back to build.
 - Check: the strays test; `btrfs filesystem du -s .worktrees` exclusive under 1 GB.
 - Done 2026-11-08: `Worktree.unmerged?/2` trusts `git cherry` alone (the file match, `landed?/4`, is
   gone; a squash-merged branch now reads unmerged, which tlon's rebase-only main never makes);
@@ -876,7 +904,8 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   `release-smoke.test.sh`, the two whose helpers were identical; new `release.test.sh`, `check.test.sh`,
   `server-restart.test.sh` and `land.test.sh` run in `check:names` until G6's `check:scripts` exists. Left: the
   other four tests' `expect` take other arguments and stay; `say`, `fail`, `pg` and `cleanup` are not in the
-  tree; `tlon-cli.sh` and `workline-verify.sh` have no test yet.
+  tree; `tlon-cli.test.sh` covers the header, `token` against a stubbed curl, the usage exit and the pause
+  fixture; `workline-verify.sh`'s test is G9's last piece.
 
 **G10 · `work/` holds 304 directories of finished worklines.** `Opus · S (decision)`
 - Why: 620 tracked files, 3.4 MB — the artifact chain of every workline ever, at the repo root.
