@@ -904,6 +904,37 @@ defmodule Server.WorklineTest do
       assert Enum.any?(Channel.thread_messages(w2), &(&1.body =~ "not hronir" and &1.body =~ "planner"))
     end
 
+    test "at intent, a busy bench lead named as lead gives way to a free one, and says why" do
+      {:ok, ws} =
+        bench_ws("IntentBusyNamed", [
+          %{"archetype" => "builder", "name" => "tertius"},
+          %{"archetype" => "builder", "name" => "hronir"}
+        ])
+
+      _busy = open!(%{slug: "tertius-busy", stage: "build", workspace_id: ws.id, lead: "tertius"})
+      w = open!(%{slug: "intent-named", workspace_id: ws.id, lead: "tertius"})
+      assert Channel.thread_lead(w.id) == "hronir"
+
+      bodies = w |> Channel.thread_messages() |> Enum.map(& &1.body)
+      assert Enum.any?(bodies, &(&1 =~ "→ hronir leads, not tertius"))
+      refute Enum.any?(bodies, &String.starts_with?(&1, "→ tertius leads"))
+    end
+
+    test "at intent with no lead named, a busy bench lead is passed over for a free one" do
+      {:ok, ws} =
+        bench_ws("IntentBusyDefault", [
+          %{"archetype" => "builder", "name" => "tertius"},
+          %{"archetype" => "builder", "name" => "hronir"}
+        ])
+
+      _busy = open!(%{slug: "tertius-busy-default", stage: "build", workspace_id: ws.id, lead: "tertius"})
+      w = open!(%{slug: "intent-default", workspace_id: ws.id})
+      assert Channel.thread_lead(w.id) == "hronir"
+
+      bodies = w |> Channel.thread_messages() |> Enum.map(& &1.body)
+      refute Enum.any?(bodies, &(&1 =~ "leads, not"))
+    end
+
     test "a lead already of the stage's kind keeps the workline, busy elsewhere or not" do
       {:ok, ws} = bench_ws("Continuity", [%{"archetype" => "planner", "name" => "yu"}])
       a = open!(%{slug: "keeps", stage: "spec", workspace_id: ws.id})
