@@ -92,8 +92,10 @@ defmodule Server.MCP.Tool.PostMessage do
             session_id: identity.session_id
           )
 
-        with {:ok, _} <- result,
-             do: Server.Presence.Thinking.record(thread_id, identity.agent, "post", "Post · " <> params.body)
+        with {:ok, message} <- result do
+          Server.Presence.Thinking.record(thread_id, identity.agent, "post", "Post · " <> params.body)
+          _ = Server.Dossier.Corrections.heard(message)
+        end
 
         reply(frame, result, fn message -> %{"message_id" => message.id} end)
 

@@ -254,6 +254,20 @@ defmodule Server.Attention do
   end
 
   @doc """
+  The operator's own words on a thread: `respond/3`, then a correction among them is banked as a
+  stated fact (`Server.Dossier.Corrections.heard/1`). The doors a person speaks through (the
+  office, `tlon-cli post`, the API) take this one; a post the server makes in his name (intake's
+  briefs) takes `respond/3`, so nothing of its own wording is banked as his.
+  """
+  @spec said(integer(), String.t(), String.t()) :: {:ok, Message.t()} | {:error, term()}
+  def said(thread_id, author, body) when is_binary(body) do
+    with {:ok, message} <- respond(thread_id, author, body) do
+      _ = Server.Dossier.Corrections.heard(message)
+      {:ok, message}
+    end
+  end
+
+  @doc """
   A worker's question for the operator — the `ask_operator` tool's door. The question is posted as
   the worker and the thread parks on the operator (`awaiting`), the field every waiting-on-you
   surface already reads (the office's inbox, the shell's inbox, its toasts); the operator's reply

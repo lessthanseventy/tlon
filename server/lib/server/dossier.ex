@@ -55,7 +55,8 @@ defmodule Server.Dossier do
   operator (`Channel.operator?/1`) — an agent's paraphrase, or an agent quoted by
   another agent, laundered into the owner's instruction is the one abuse the
   provenance ordering makes possible, refused here rather than by rule.
-  `attrs` carries the judgement half (`kind`, optionally `check_cmd`/`incident`).
+  `attrs` carries the judgement half (`kind`, optionally `check_cmd`/`incident`); the fact
+  points at the message it quotes (`message_id`).
   Returns `{:ok, fact}`, `{:error, :not_the_operator}`, or `{:error, changeset}`.
   """
   def bank_stated_fact(%Message{} = message, attrs) do
@@ -64,7 +65,8 @@ defmodule Server.Dossier do
       |> Map.merge(%{
         text: message.body,
         provenance: "stated",
-        thread_id: message.thread_id
+        thread_id: message.thread_id,
+        message_id: message.id
       })
       |> bank_fact()
     else

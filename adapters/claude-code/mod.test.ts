@@ -913,3 +913,45 @@ test("a detected correction is counted in the seat's log beside the habit it pro
   const log = world.writes!.filter((w) => w.path === "/state/tlon/citizen-claude-code.log");
   expect(log.some((w) => w.text.includes("correction detected: don't rerun a flaky test to green"))).toBe(true);
 });
+
+test("the operator's correction on his own thread is posted there, so the server banks it stated", async ($, on) => {
+  const sent = engine(on, { env: { ...IDENTITY, TLON_AUTHOR: "andrew" }, dossier: { ...DOSSIER, operator: "Andrew" } });
+  await $.session.start(START);
+  await settle();
+  sent.length = 0;
+  await $.prompt.submit({ text: "never force-push main", wait: false });
+  await settle();
+
+  expect(sent.find((c) => c.tool === "post_message")?.args).toEqual({ body: "never force-push main" });
+  expect(sent.some((c) => c.tool === "propose_habit")).toBe(true);
+});
+
+test("a seat's correction is proposed as a habit and not posted as the operator's words", async ($, on) => {
+  const sent = engine(on, { env: IDENTITY, dossier: { ...DOSSIER, operator: "andrew" } });
+  await $.session.start(START);
+  await settle();
+  sent.length = 0;
+  await $.prompt.submit({ text: "never force-push main", wait: false });
+  await settle();
+
+  expect(sent.some((c) => c.tool === "post_message")).toBe(false);
+  expect(sent.some((c) => c.tool === "propose_habit")).toBe(true);
+});
+
+test("the operator's session speaks a correction onto the standing thread; a task is not spoken", async ($, on) => {
+  const posts: { url: string; body?: string }[] = [];
+  engine(on, {
+    env: { TLON_OPERATOR_MODE: "1" },
+    http: (e) => {
+      if (e.init?.method === "POST") posts.push({ url: e.url, body: e.init.body });
+      return { status: 200, ok: true, headers: {}, text: "[]" };
+    },
+  });
+  await $.session.start(START);
+  await $.prompt.submit({ text: "ship the release", wait: false });
+  await $.prompt.submit({ text: "don't cut a release during a schedule", wait: false });
+  await settle();
+
+  const said = posts.filter((p) => p.url.endsWith("/api/said"));
+  expect(said.map((p) => p.body)).toEqual([JSON.stringify({ body: "don't cut a release during a schedule" })]);
+});
