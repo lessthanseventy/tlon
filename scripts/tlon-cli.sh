@@ -511,7 +511,7 @@ case "$cmd" in
       { echo 'usage: mise run server:post -- <thread-id> <message text…>' >&2; exit 2; }
     # Post as the operator — parity with the agents' post_message. A plain post:
     # a prompt is answered by its id (`answer`), so a key can't land in the wrong prompt.
-    exec "$SERVER" rpc "op = Server.OperatorConfig.operator(); {:ok, m} = Server.Attention.respond($tid, op, \"$(esc "$body")\"); IO.puts(\"posted ##{m.id} to thread #$tid as #{op}\")"
+    exec "$SERVER" rpc "op = Server.OperatorConfig.operator(); {:ok, m} = Server.Attention.said($tid, op, \"$(esc "$body")\"); IO.puts(\"posted ##{m.id} to thread #$tid as #{op}\")"
     ;;
 
   answer)

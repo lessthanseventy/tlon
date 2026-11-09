@@ -30,6 +30,7 @@ defmodule Server.Fact do
     field :forgotten_at, :utc_datetime
     belongs_to :thread, Server.Thread
     belongs_to :source_session, Server.Session
+    belongs_to :message, Server.Message
   end
 
   # A model sometimes answers with a placeholder ("...") in place of a claim.
@@ -76,6 +77,7 @@ defmodule Server.Fact do
       :taught,
       :supersedes,
       :source_session_id,
+      :message_id,
       :observed_at
     ])
     |> validate_required([:kind, :text, :provenance])

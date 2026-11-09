@@ -63,8 +63,11 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/threads/:id/messages    Channel.recent_messages (?limit=, default 50)
       GET    /api/threads/:id/terminal    where its coworker runs: {socket, session, window}, 404 if none
       GET    /api/threads/:id/worktree    its coworker's working dir: {path} (the per-thread git worktree, ensured), 404 if no repo
-      POST   /api/threads/:id/messages    {"body"} → Attention.respond as the operator: a plain post (never an
-                                          answer to a prompt), reopens a closed thread; 201 + the message
+      POST   /api/threads/:id/messages    {"body"} → Attention.said as the operator: a plain post (never an
+                                          answer to a prompt), reopens a closed thread, banks a correction
+                                          among his words as a stated fact; 201 + the message
+      POST   /api/said                    {"body"} → the same, on the standing thread (the operator's own
+                                          session speaking from no thread); 201 + the message
       POST   /api/threads/:id/close       Channel.close_thread: its sessions end, its ticket is done
                                           (a plain thread with unmerged work is tracked at build instead, left open)
       POST   /api/threads/:id/hand-off    {"agent"} → Staffing.hand_off (staffed now where Oban runs)
@@ -181,6 +184,13 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "GET", "sidebar", []), do: json(conn, 200, Board.sidebar())
   defp route(conn, "GET", "roster", []), do: json(conn, 200, Enum.map(Staff.roster(), &roster_row/1))
   defp route(conn, "GET", "office", []), do: json(conn, 200, Office.status())
+
+  defp route(conn, "POST", "said", []) do
+    case Channel.machine_thread() do
+      %Server.Thread{} = thread -> post(conn, thread)
+      nil -> json(conn, 409, %{error: "no standing thread to speak on"})
+    end
+  end
 
   defp route(conn, "POST", "usage", ["claude"]) do
     {b, conn} = body(conn)
@@ -752,14 +762,14 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
-  # Post as the operator (`Server.Attention.respond/3`, the same call `server:post` makes): a plain
+  # Post as the operator (`Server.Attention.said/3`, the same call `server:post` makes): a plain
   # post, never an answer — a prompt is answered by its id (`/api/office/prompts/:id`). A closed
   # thread reopens and the Bus wakes the thread's lead. `author` is not a parameter: this door IS
   # the operator.
   defp post(conn, thread) do
     case body(conn) do
       {%{"body" => body}, conn} when is_binary(body) and body != "" ->
-        case Server.Attention.respond(thread.id, operator(), body) do
+        case Server.Attention.said(thread.id, operator(), body) do
           {:ok, message} -> json(conn, 201, Brief.message(message))
           {:error, why} -> json(conn, 409, %{error: inspect(why)})
         end

@@ -117,6 +117,17 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
+  test "POST /api/said posts the operator's words on the standing thread and banks a correction" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Said"})
+    {:ok, root} = Channel.open_thread(%{title: "standing", scope: "machine", workspace_id: ws.id})
+
+    {201, posted} = post_json("/api/said", %{body: "prefer one PR per fix"})
+    assert Server.Repo.get!(Server.Message, posted["id"]).thread_id == root.id
+
+    assert %Server.Fact{provenance: "stated", text: "prefer one PR per fix"} =
+             Server.Repo.get_by!(Server.Fact, message_id: posted["id"])
+  end
+
   defp post_json(path, map) do
     {:ok, {{_http, status, _reason}, _headers, body}} =
       :httpc.request(

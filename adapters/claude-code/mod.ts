@@ -602,11 +602,19 @@ export function register(on) {
   });
 
   on("prompt.submit", async ($, e, next) => {
-    if (!thread) return next(e);
     const habit = detectCorrection(e.text);
+    // the operator's own session speaks from no thread: a correction goes on the standing thread,
+    // where the server banks it as a stated fact and says so
+    if (!thread && operator && habit && habit !== lastCorrection) {
+      lastCorrection = habit;
+      void $.http.fetch(`${api}/said`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: habit }) }).catch(() => {});
+    }
+    if (!thread) return next(e);
     if (habit && habit !== lastCorrection) {
       lastCorrection = habit;
       declare($, "propose_habit", { text: habit, rationale: "auto-detected from a correction you made" });
+      // the operator's words on his own thread are posted there, so the server banks them stated
+      if (dossier?.operator && dossier.operator.toLowerCase() === author.toLowerCase()) declare($, "post_message", { body: habit });
       await note($, `correction detected: ${habit}`);
     }
     // a server that never answers holds the prompt DOSSIER_WAIT_MS at most; a sleep the host
