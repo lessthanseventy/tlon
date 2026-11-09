@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { RELEASE_MIN, releaseText, tickerText, Tv } from "../kit/tv"
+import { lastLanding, RELEASE_MIN, releaseText, tickerText, Tv } from "../kit/tv"
+
+test("the ticker's last landing is the newest landing's subject, else the cut's newest note", () => {
+  expect(lastLanding({ landings: [{ subject: "newest" }, { subject: "older" }], release: { notes: ["cut"] } })).toBe("newest")
+  expect(lastLanding({ landings: [], release: { notes: ["a", "cut"] } })).toBe("cut")
+  expect(lastLanding({})).toBeNull()
+})
 
 test("every channel runs, lights the screen, and stays on it", () => {
   const tv = new Tv(48, 28), seen = new Set<string>()

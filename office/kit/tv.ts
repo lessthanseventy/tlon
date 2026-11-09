@@ -326,6 +326,10 @@ const aquarium = (): Show => {
 
 /** what the ticker channel crawls: the office's own numbers */
 export type Ticker = { sha: string | null; queue: number; phone: number; last: string | null }
+
+/** the newest landing's subject: the snapshot's landing feed, else the release cut's newest commit subject */
+export const lastLanding = (a: { landings?: readonly { subject: string }[]; release?: { notes?: string[] } | null }): string | null =>
+  a.landings?.[0]?.subject ?? a.release?.notes?.at(-1) ?? null
 export const tickerText = (t: Ticker): string =>
   [t.sha ? `release ${t.sha.slice(0, 7)}` : "no release yet", `merge queue ${t.queue}`, `phone ${t.phone}`, t.last ? `last landing: ${t.last}` : "nothing landed yet"]
     .join("  *  ").replace(/[^\x20-\x7e]/g, "?")

@@ -29,6 +29,7 @@ import { mailbox } from "../kit/mailbox"
 import { clipLabel, inboxSections, phoneBar, ringFrame } from "../kit/surfaces"
 import { corkLabel, soulFor, useSouls } from "../kit/souls"
 import { personCard } from "./person-card"
+import { lastLanding } from "../kit/tv"
 import { paced } from "./pace"
 import { loadSouls, soulsSignature } from "./souls"
 import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
@@ -531,7 +532,7 @@ function tellNews(before: Agents, beforeNeeds: data.Need[]) {
 }
 /** the TV's ticker channel crawls the release, the merge queue, the phone and the newest landing's subject */
 function tickerOn(a: Agents) {
-  const t = { sha: a.release?.sha ?? null, queue: a.health?.merge_queue?.length ?? 0, phone: bySurface.counts.phone, last: a.release?.notes?.at(-1) ?? null }
+  const t = { sha: a.release?.sha ?? null, queue: a.health?.merge_queue?.length ?? 0, phone: bySurface.counts.phone, last: lastLanding(a) }
   for (const r of rooms.values()) if (r instanceof WideRoom) r.setTicker(t)
 }
 /** a cut puts Uqbar's entry on the TV; the next snapshot that holds the same sha ends it */

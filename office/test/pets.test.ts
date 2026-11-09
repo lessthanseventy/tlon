@@ -500,6 +500,16 @@ describe("Argos fetches the morning paper", () => {
     expect(paperHeadline(null, today)).toBe("nothing yet")
     expect(paperHeadline({ cut_at: at(3).toISOString(), notes: ["y".repeat(80)] }, today)).toHaveLength(56)
   })
+
+  test("today's first landing is the headline when there is one, even with no cut today", () => {
+    const today = at(9)
+    const old = { cut_at: new Date(today.getTime() - 86_400_000).toISOString(), notes: ["x"] }
+    const landings = [{ subject: "late fix", landed_at: at(8).toISOString() }, { subject: "early fix", landed_at: at(2).toISOString() }, { subject: "yesterday", landed_at: new Date(today.getTime() - 86_400_000).toISOString() }]
+    expect(paperHeadline(old, today, landings)).toBe("early fix")
+    expect(paperHeadline({ cut_at: at(3).toISOString(), notes: ["x"] }, today, landings)).toBe("early fix")
+    expect(paperHeadline({ cut_at: at(3).toISOString(), notes: ["x"] }, today, landings.slice(2))).toBe("x")
+    expect(paperHeadline(null, today, [])).toBe("nothing yet")
+  })
 })
 
 describe("pet presets", () => {

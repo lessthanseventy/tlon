@@ -822,7 +822,7 @@ export class WideRoom extends Sim<Layout> {
       this.dogDo("office")
     } else {
       this.paper = null
-      this.dogSay(`The paper: ${paperHeadline(a.release, this.date())}`)
+      this.dogSay(`The paper: ${paperHeadline(a.release, this.date(), a.landings)}`)
     }
   }
 

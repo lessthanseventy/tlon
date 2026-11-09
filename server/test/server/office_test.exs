@@ -52,6 +52,25 @@ defmodule Server.OfficeTest do
       assert %{sha: "abc1234def", cut_at: %DateTime{}} = Office.status().release
     end
 
+    test "the last five landings ride the snapshot, newest first", %{ws: ws} do
+      assert Office.status().landings == []
+
+      for n <- 1..6 do
+        {:ok, t} = Channel.open_thread(%{title: "change #{n}", workspace_id: ws.id, slug: "c#{n}", stage: "landed"})
+
+        {:ok, _} =
+          Server.Dossier.record_event(%{
+            thread_id: t.id,
+            kind: "work_landed",
+            correlation: "workline:c#{n}:landing",
+            detail: %{"summary" => "merged: pr/#{n}", "evidence" => "pr/#{n}"}
+          })
+      end
+
+      assert [%{subject: "change 6", ref: "pr/6", landed_at: %DateTime{}} | rest] = Office.status().landings
+      assert Enum.map(rest, & &1.subject) == ["change 5", "change 4", "change 3", "change 2"]
+    end
+
     test "the newest live notice wins, and a rollback is just a newer sha", %{ws: ws} do
       assert Office.status().release == nil
       {:ok, %{id: tid}} = Channel.open_thread(%{title: "root", workspace_id: ws.id, scope: "machine"})

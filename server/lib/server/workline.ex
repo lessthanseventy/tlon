@@ -799,6 +799,24 @@ defmodule Server.Workline do
   end
 
   @doc """
+  The last `limit` worklines GitHub merged, newest first, in one query:
+  `[%{subject, ref, landed_at}]` — the thread's title, the PR it merged as (`merged/2`'s `ref`) and when.
+  """
+  @spec recent_landings(pos_integer()) :: [%{subject: String.t(), ref: String.t() | nil, landed_at: DateTime.t()}]
+  def recent_landings(limit) do
+    from(e in Server.Event,
+      join: t in Thread,
+      on: t.id == e.thread_id,
+      where: e.kind == "work_landed" and like(e.correlation, "workline:%:landing"),
+      order_by: [desc: e.id],
+      limit: ^limit,
+      select: {t.title, e.detail, e.created_at}
+    )
+    |> Repo.all()
+    |> Enum.map(fn {subject, detail, at} -> %{subject: subject, ref: (detail || %{})["evidence"], landed_at: at} end)
+  end
+
+  @doc """
   What a workline's gate is decided on, in one line: at review, the reviewer's verdict line and the
   change's size, and what approving does; at another gate, the stage's doc that is ready.
   """
