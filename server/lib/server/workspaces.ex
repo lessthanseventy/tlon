@@ -263,7 +263,7 @@ defmodule Server.Workspaces do
 
   @doc """
   Every seat on the bench, both crews, each with its `crew` — the roster as hired, for the screens
-  that show who is off shift. Staffing reads `bench/1`, the crew on shift.
+  that show who is off shift. The sweep reads `bench/1`, the crew on shift.
   """
   @spec bench_all(integer()) :: [Coworker.t()]
   def bench_all(workspace_id), do: workspace_id |> bench_query() |> Repo.all() |> to_bench()

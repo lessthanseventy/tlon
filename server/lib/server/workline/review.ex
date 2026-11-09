@@ -307,7 +307,7 @@ defmodule Server.Workline.Review do
   defp end_review(thread) do
     case Server.Jobs.enqueue(Server.Jobs.EndReview.new(%{thread_id: thread.id})) do
       {:ok, _} -> :ok
-      {:error, _} -> Server.Staffing.end_review(thread)
+      {:error, _} -> Server.Sweep.end_review(thread)
     end
   end
 

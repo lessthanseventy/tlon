@@ -1,4 +1,4 @@
-defmodule Server.Staffing do
+defmodule Server.Sweep do
   @moduledoc """
   Keeping the workspace's tmux in step with who is actually working. Nobody is spawned ahead of
   need: a coworker's window is opened when a message is addressed to them (`Server.Switchboard`
@@ -77,59 +77,6 @@ defmodule Server.Staffing do
     end
   end
 
-  defp pass(workspace_id, bench, tabs) do
-    standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
-
-    tabs =
-      workspace_id
-      |> reap_stale(bench, tabs)
-      |> sweep_orphans(workspace_id, standing)
-      |> sweep_cold(workspace_id, standing, bench)
-      |> sweep_long(workspace_id, standing, bench)
-      |> yield_seat(workspace_id, standing, bench)
-      |> retire_stale_launch(workspace_id, standing)
-      |> dismiss_aleph(workspace_id)
-
-    resume_interrupted(workspace_id, tabs, standing)
-    end_predating_tmux(workspace_id)
-    end_windowless(workspace_id, tabs, standing, bench)
-    :ok
-  end
-
-  # A session whose window is gone (swept cold, a stop or restart killed it) is over, but only its
-  # successor would ever end it, so the room and roster went on counting it. Mid-turn ones are
-  # resume_interrupted's; a session idle under the boot grace may still be booting.
-  defp end_windowless(workspace_id, tabs, standing, bench) do
-    names = MapSet.new(bench, & &1.name)
-    idle_since = DateTime.add(DateTime.utc_now(), -@boot_grace_s, :second)
-
-    from(s in Session,
-      join: a in Agent,
-      on: a.id == s.agent_id,
-      join: t in Thread,
-      on: t.id == s.thread_id,
-      where:
-        is_nil(s.ended_at) and is_nil(s.thinking_since) and t.workspace_id == ^workspace_id and
-          s.last_active_at < ^idle_since,
-      select: {s, a.name}
-    )
-    |> Repo.all()
-    |> Enum.filter(fn {s, name} -> MapSet.member?(names, name) and not windowed?(tabs, s.thread_id, name, standing) end)
-    |> Enum.each(fn {s, _} -> Staff.end_session(s) end)
-  end
-
-  # An untagged leaf (no @funes_agent: hand-made or older) can only be the thread's lead's, so it
-  # vouches for the lead alone — not for a former lead's session still on the thread.
-  defp windowed?(tabs, thread_id, name, standing) do
-    lead = Channel.thread_lead(thread_id)
-
-    Enum.any?(tabs, fn tab ->
-      leaf? = Server.Office.leaf_for?(tab, thread_id, name, lead)
-      own? = thread_id == standing and tab.thread_id == nil and (tab.agent || tab.name) == name
-      leaf? or own?
-    end)
-  end
-
   @doc """
   How near a thread is to done, for a seat under the leaf cap: 0 for review and verify (next to
   shipping) and a plain thread (someone asked something), 1 for spec, plan and build, 2 for intent.
@@ -183,15 +130,6 @@ defmodule Server.Staffing do
     MapSet.new(Repo.all(standing) ++ Repo.all(runs) ++ Repo.all(beats) ++ Repo.all(studies))
   end
 
-  defp leaf_thread(%{thread_id: tid}) when is_integer(tid), do: tid
-
-  defp leaf_thread(%{name: name}) do
-    case Regex.run(~r/\At(\d+)\z/, name) do
-      [_, id] -> String.to_integer(id)
-      nil -> nil
-    end
-  end
-
   @doc """
   The threads in `workspace_id` waiting for a seat: open, staffed, with no window in `tabs`, and
   the leaf cap's parked note their latest message.
@@ -209,120 +147,6 @@ defmodule Server.Staffing do
   def seat_for?(%Thread{workspace_id: ws} = thread, tabs) do
     mine = priority(thread)
     not Enum.any?(parked(ws, tabs), &(&1.id != thread.id and priority(&1) < mine))
-  end
-
-  # Tear down a coworker whose identity no longer matches the bench (an outside citizen's window is
-  # its own: `Server.Outside`); the next message to whoever holds that seat now spawns them.
-  defp reap_stale(workspace_id, bench, tabs) do
-    stale = stale_coworkers(tabs, Enum.map(bench, & &1.name) ++ Server.Outside.names())
-    for tab <- stale, do: Tmux.kill_window(workspace_id, tab.index)
-    tabs -- stale
-  end
-
-  # A leaf is live while its thread is open and staffed, of any scope: a delegated child (staff_child)
-  # is a project-scope thread, and a machine-scope-only test reaped every one within the minute.
-  defp sweep_orphans(tabs, workspace_id, standing) do
-    live =
-      from(t in Thread,
-        where: t.workspace_id == ^workspace_id and t.state == "open" and not is_nil(t.agent_id),
-        select: t.id
-      )
-      |> Repo.all()
-      |> MapSet.new()
-
-    live = if standing, do: MapSet.put(live, standing), else: live
-    {orphans, kept} = Enum.split_with(tabs, &orphan_leaf?(&1, live))
-    for tab <- orphans, do: Tmux.kill_window(workspace_id, tab.index)
-    kept
-  end
-
-  # A coworker's window past its boot grace whose coworker has no warm or mid-turn session on its
-  # thread: closed. Only windows this server can attribute to a coworker are touched (a spawn's
-  # tags, else the identity its process holds) — a crew role's or a hand-made window never is.
-  defp sweep_cold(tabs, workspace_id, standing, bench) do
-    seats = MapSet.new(bench, & &1.name)
-    now = System.os_time(:second)
-
-    {cold, kept} =
-      Enum.split_with(tabs, fn tab ->
-        with {thread, agent} when is_integer(thread) and is_binary(agent) <- owner(tab, standing, seats),
-             true <- now - (tab.born || 0) > @boot_grace_s do
-          not on_the_clock?(thread, agent, workspace_id)
-        else
-          _ -> false
-        end
-      end)
-
-    for tab <- cold, do: Tmux.kill_window(workspace_id, tab.index)
-    kept
-  end
-
-  # whose window a tab is: the spawn's tags; else (a window from before the tags) the identity its
-  # process holds, on its tagged thread or the standing one
-  defp owner(%{agent: agent, thread_id: thread}, standing, _seats) when is_binary(agent),
-    do: {thread || called_to(agent) || standing, agent}
-
-  defp owner(tab, standing, seats) do
-    case pane_author(tab) do
-      nil -> nil
-      author -> if MapSet.member?(seats, author), do: {tab.thread_id || standing, author}
-    end
-  end
-
-  defp on_the_clock?(thread_id, agent, workspace_id) do
-    cutoff = Presence.loosest_cutoff()
-
-    from(s in Session,
-      join: a in Agent,
-      on: a.id == s.agent_id,
-      where:
-        s.thread_id == ^thread_id and a.name == ^agent and is_nil(s.ended_at) and
-          (s.last_active_at > ^cutoff or not is_nil(s.thinking_since)),
-      select: {s.last_active_at, s.thinking_since}
-    )
-    |> Repo.all()
-    |> Enum.any?(fn {at, thinking} -> live_turn?(thinking) or Presence.warm_for?(at, agent, workspace_id) end)
-  end
-
-  # A session still mid-turn with no window to run it, either begun before this node booted (the
-  # machine went down under it; one begun since cannot have been cut off by that restart) or begun
-  # since and quiet past the boot grace (its pane died: a turn behind a live pane calls the server,
-  # so a mistagged window never reads as a dead one — the loop that made the boot line necessary).
-  # End it (so the switchboard does not try to wake a pane that is gone) and tell its coworker on
-  # the thread to carry on — the message spawns them fresh, brief-seeded, like any other. Not told
-  # when the thread has moved on to another lead (a stage handover; a leadless thread has not): a
-  # session that no longer leads cannot answer there, and the turn it had was landed by the one
-  # that does. The standing thread has no single lead and a crew role is never one, so those are
-  # always told.
-  defp resume_interrupted(workspace_id, tabs, standing) do
-    boot = Staff.booted_at()
-    quiet = DateTime.add(DateTime.utc_now(), -@boot_grace_s, :second)
-
-    cut_off =
-      for s <- Staff.interrupted(workspace_id, boot), do: {s, "the machine restarted while you were mid-turn here"}
-
-    lost =
-      for s <- Staff.stranded(workspace_id, boot, quiet), do: {s, "your pane went away while you were mid-turn here"}
-
-    for {%{session_id: sid, thread_id: tid, agent: agent}, why} <- cut_off ++ lost,
-        not has_window?(tabs, tid, agent, standing) do
-      # one row gone or one post refused doesn't stop the rest of the pass
-      with %Session{} = session <- Repo.get(Session, sid), do: Staff.end_session(session)
-
-      if still_theirs?(tid, agent, standing) do
-        _ = Channel.post(%{thread_id: tid, author: "tlon", body: "@#{agent} #{why} — pick it up from the brief."})
-      end
-    end
-
-    :ok
-  end
-
-  defp has_window?(tabs, thread_id, agent, standing) do
-    Enum.any?(tabs, fn tab ->
-      (tab.agent == agent and (tab.thread_id || standing) == thread_id) or
-        (is_nil(tab.agent) and thread_id == standing and tab.name == agent) or
-        (is_nil(tab.agent) and thread_id != standing and Tmux.leaf_tab([tab], thread_id) != nil)
-    end)
   end
 
   @doc """
@@ -595,9 +419,6 @@ defmodule Server.Staffing do
   end
 
   def pane_author(_tab), do: nil
-
-  defp live_turn?(nil), do: false
-  defp live_turn?(since), do: DateTime.diff(DateTime.utc_now(), since) < Thinking.stale_turn_seconds()
 
   @doc "Whether the thread's latest message is the leaf cap's parked note: it waits for a seat."
   def parked_note?(thread_id), do: MapSet.member?(parked_notes([thread_id]), thread_id)
@@ -917,4 +738,183 @@ defmodule Server.Staffing do
     seated = MapSet.new(Workspaces.bench_all(ws), & &1.agent_id)
     MapSet.member?(seated, agent.id) and not MapSet.member?(on, agent.id)
   end
+
+  defp pass(workspace_id, bench, tabs) do
+    standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
+
+    tabs =
+      workspace_id
+      |> reap_stale(bench, tabs)
+      |> sweep_orphans(workspace_id, standing)
+      |> sweep_cold(workspace_id, standing, bench)
+      |> sweep_long(workspace_id, standing, bench)
+      |> yield_seat(workspace_id, standing, bench)
+      |> retire_stale_launch(workspace_id, standing)
+      |> dismiss_aleph(workspace_id)
+
+    resume_interrupted(workspace_id, tabs, standing)
+    end_predating_tmux(workspace_id)
+    end_windowless(workspace_id, tabs, standing, bench)
+    :ok
+  end
+
+  # A session whose window is gone (swept cold, a stop or restart killed it) is over, but only its
+  # successor would ever end it, so the room and roster went on counting it. Mid-turn ones are
+  # resume_interrupted's; a session idle under the boot grace may still be booting.
+  defp end_windowless(workspace_id, tabs, standing, bench) do
+    names = MapSet.new(bench, & &1.name)
+    idle_since = DateTime.add(DateTime.utc_now(), -@boot_grace_s, :second)
+
+    from(s in Session,
+      join: a in Agent,
+      on: a.id == s.agent_id,
+      join: t in Thread,
+      on: t.id == s.thread_id,
+      where:
+        is_nil(s.ended_at) and is_nil(s.thinking_since) and t.workspace_id == ^workspace_id and
+          s.last_active_at < ^idle_since,
+      select: {s, a.name}
+    )
+    |> Repo.all()
+    |> Enum.filter(fn {s, name} -> MapSet.member?(names, name) and not windowed?(tabs, s.thread_id, name, standing) end)
+    |> Enum.each(fn {s, _} -> Staff.end_session(s) end)
+  end
+
+  # An untagged leaf (no @funes_agent: hand-made or older) can only be the thread's lead's, so it
+  # vouches for the lead alone — not for a former lead's session still on the thread.
+  defp windowed?(tabs, thread_id, name, standing) do
+    lead = Channel.thread_lead(thread_id)
+
+    Enum.any?(tabs, fn tab ->
+      leaf? = Server.Office.leaf_for?(tab, thread_id, name, lead)
+      own? = thread_id == standing and tab.thread_id == nil and (tab.agent || tab.name) == name
+      leaf? or own?
+    end)
+  end
+
+  defp leaf_thread(%{thread_id: tid}) when is_integer(tid), do: tid
+
+  defp leaf_thread(%{name: name}) do
+    case Regex.run(~r/\At(\d+)\z/, name) do
+      [_, id] -> String.to_integer(id)
+      nil -> nil
+    end
+  end
+
+  # Tear down a coworker whose identity no longer matches the bench (an outside citizen's window is
+  # its own: `Server.Outside`); the next message to whoever holds that seat now spawns them.
+  defp reap_stale(workspace_id, bench, tabs) do
+    stale = stale_coworkers(tabs, Enum.map(bench, & &1.name) ++ Server.Outside.names())
+    for tab <- stale, do: Tmux.kill_window(workspace_id, tab.index)
+    tabs -- stale
+  end
+
+  # A leaf is live while its thread is open and staffed, of any scope: a delegated child (staff_child)
+  # is a project-scope thread, and a machine-scope-only test reaped every one within the minute.
+  defp sweep_orphans(tabs, workspace_id, standing) do
+    live =
+      from(t in Thread,
+        where: t.workspace_id == ^workspace_id and t.state == "open" and not is_nil(t.agent_id),
+        select: t.id
+      )
+      |> Repo.all()
+      |> MapSet.new()
+
+    live = if standing, do: MapSet.put(live, standing), else: live
+    {orphans, kept} = Enum.split_with(tabs, &orphan_leaf?(&1, live))
+    for tab <- orphans, do: Tmux.kill_window(workspace_id, tab.index)
+    kept
+  end
+
+  # A coworker's window past its boot grace whose coworker has no warm or mid-turn session on its
+  # thread: closed. Only windows this server can attribute to a coworker are touched (a spawn's
+  # tags, else the identity its process holds) — a crew role's or a hand-made window never is.
+  defp sweep_cold(tabs, workspace_id, standing, bench) do
+    seats = MapSet.new(bench, & &1.name)
+    now = System.os_time(:second)
+
+    {cold, kept} =
+      Enum.split_with(tabs, fn tab ->
+        with {thread, agent} when is_integer(thread) and is_binary(agent) <- owner(tab, standing, seats),
+             true <- now - (tab.born || 0) > @boot_grace_s do
+          not on_the_clock?(thread, agent, workspace_id)
+        else
+          _ -> false
+        end
+      end)
+
+    for tab <- cold, do: Tmux.kill_window(workspace_id, tab.index)
+    kept
+  end
+
+  # whose window a tab is: the spawn's tags; else (a window from before the tags) the identity its
+  # process holds, on its tagged thread or the standing one
+  defp owner(%{agent: agent, thread_id: thread}, standing, _seats) when is_binary(agent),
+    do: {thread || called_to(agent) || standing, agent}
+
+  defp owner(tab, standing, seats) do
+    case pane_author(tab) do
+      nil -> nil
+      author -> if MapSet.member?(seats, author), do: {tab.thread_id || standing, author}
+    end
+  end
+
+  defp on_the_clock?(thread_id, agent, workspace_id) do
+    cutoff = Presence.loosest_cutoff()
+
+    from(s in Session,
+      join: a in Agent,
+      on: a.id == s.agent_id,
+      where:
+        s.thread_id == ^thread_id and a.name == ^agent and is_nil(s.ended_at) and
+          (s.last_active_at > ^cutoff or not is_nil(s.thinking_since)),
+      select: {s.last_active_at, s.thinking_since}
+    )
+    |> Repo.all()
+    |> Enum.any?(fn {at, thinking} -> live_turn?(thinking) or Presence.warm_for?(at, agent, workspace_id) end)
+  end
+
+  # A session still mid-turn with no window to run it, either begun before this node booted (the
+  # machine went down under it; one begun since cannot have been cut off by that restart) or begun
+  # since and quiet past the boot grace (its pane died: a turn behind a live pane calls the server,
+  # so a mistagged window never reads as a dead one — the loop that made the boot line necessary).
+  # End it (so the switchboard does not try to wake a pane that is gone) and tell its coworker on
+  # the thread to carry on — the message spawns them fresh, brief-seeded, like any other. Not told
+  # when the thread has moved on to another lead (a stage handover; a leadless thread has not): a
+  # session that no longer leads cannot answer there, and the turn it had was landed by the one
+  # that does. The standing thread has no single lead and a crew role is never one, so those are
+  # always told.
+  defp resume_interrupted(workspace_id, tabs, standing) do
+    boot = Staff.booted_at()
+    quiet = DateTime.add(DateTime.utc_now(), -@boot_grace_s, :second)
+
+    cut_off =
+      for s <- Staff.interrupted(workspace_id, boot), do: {s, "the machine restarted while you were mid-turn here"}
+
+    lost =
+      for s <- Staff.stranded(workspace_id, boot, quiet), do: {s, "your pane went away while you were mid-turn here"}
+
+    for {%{session_id: sid, thread_id: tid, agent: agent}, why} <- cut_off ++ lost,
+        not has_window?(tabs, tid, agent, standing) do
+      # one row gone or one post refused doesn't stop the rest of the pass
+      with %Session{} = session <- Repo.get(Session, sid), do: Staff.end_session(session)
+
+      if still_theirs?(tid, agent, standing) do
+        _ = Channel.post(%{thread_id: tid, author: "tlon", body: "@#{agent} #{why} — pick it up from the brief."})
+      end
+    end
+
+    :ok
+  end
+
+  defp has_window?(tabs, thread_id, agent, standing) do
+    Enum.any?(tabs, fn tab ->
+      (tab.agent == agent and (tab.thread_id || standing) == thread_id) or
+        (is_nil(tab.agent) and thread_id == standing and tab.name == agent) or
+        (is_nil(tab.agent) and thread_id != standing and Tmux.leaf_tab([tab], thread_id) != nil)
+    end)
+  end
+
+  defp live_turn?(nil), do: false
+  defp live_turn?(since), do: DateTime.diff(DateTime.utc_now(), since) < Thinking.stale_turn_seconds()
 end

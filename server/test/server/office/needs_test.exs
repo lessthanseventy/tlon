@@ -306,7 +306,7 @@ defmodule Server.Office.NeedsTest do
       for who <- ["hronir", "borges"] do
         {:ok, t} = Channel.open_thread(%{title: "for #{who}", scope: "machine", workspace_id: ws.id})
         {:ok, _} = Channel.assign_lead(t.id, who)
-        :ok = Server.Staffing.note_parked(t.id)
+        :ok = Server.Sweep.note_parked(t.id)
       end
 
       cap = Server.OperatorConfig.max_leaves()

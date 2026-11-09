@@ -38,7 +38,7 @@ defmodule Server.Maintain.StraysTest do
     assert Worktree.name_for(done) in names
     assert Worktree.name_for(lobby) in names
 
-    Server.Maintain.Sweep.run()
+    Server.Maintain.Bands.run()
     refute File.exists?(done_wt)
     assert File.exists?(lobby_wt)
   end
@@ -55,7 +55,7 @@ defmodule Server.Maintain.StraysTest do
     {index, 0} = System.cmd("git", ["-C", gone, "rev-parse", "--path-format=absolute", "--git-path", "index"])
     File.touch!(String.trim(index), System.os_time(:second) - 2 * 86_400)
 
-    results = Map.new(Server.Maintain.Sweep.reap_worktrees())
+    results = Map.new(Server.Maintain.Bands.reap_worktrees())
     assert results[gone] == {:removed, gone}
     assert {:kept, why} = results[kept]
     assert why =~ "uncommitted changes"
@@ -82,7 +82,7 @@ defmodule Server.Maintain.StraysTest do
     t |> Ecto.Changeset.change(stage: "landed", state: "closed") |> Server.Repo.update!()
     assert {:kept, _} = Worktree.remove(repo, name)
 
-    results = Map.new(Server.Maintain.Sweep.reap_worktrees())
+    results = Map.new(Server.Maintain.Bands.reap_worktrees())
     assert results[wt] == {:removed, wt}
     refute File.exists?(wt)
     {out, 0} = System.cmd("git", ["-C", repo, "branch", "--list", Worktree.branch(name)])
@@ -104,7 +104,7 @@ defmodule Server.Maintain.StraysTest do
 
     assert {:ok, %{state: "closed", stage: "landed"}} = Server.Workline.merged(landed, "PR #1")
 
-    Server.Maintain.Sweep.run()
+    Server.Maintain.Bands.run()
     refute File.exists?(wt)
   end
 

@@ -299,7 +299,7 @@ defmodule Server.Channel do
   end
 
   @doc """
-  STAFFED, OPEN machine-scope threads — the staffing pass's candidate list (`Server.Staffing`):
+  STAFFED, OPEN machine-scope threads — the staffing pass's candidate list (`Server.Sweep`):
   every open machine-scope thread with a lead, `%{id, lead, title}` per thread (`lead` is the
   staffed agent's name; the join makes it never nil). Open-only: a child's window is torn down
   when its thread closes, so a closed thread in this list would be killed and respawned every

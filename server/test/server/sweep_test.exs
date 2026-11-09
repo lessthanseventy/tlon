@@ -1,4 +1,4 @@
-defmodule Server.StaffingTest do
+defmodule Server.SweepTest do
   # The staffing pass on the server: nothing spawned ahead of need, the cold swept, the orphan
   # sweep, the stale reap and a cut-off turn picked up — driven through the `:tmux_cmd` seam, so no
   # live tmux or harness is ever forked.
@@ -7,7 +7,7 @@ defmodule Server.StaffingTest do
   import ExUnit.CaptureLog
 
   alias Server.Channel
-  alias Server.Staffing
+  alias Server.Sweep
   alias Server.Workspaces
 
   @bench [
@@ -72,7 +72,7 @@ defmodule Server.StaffingTest do
 
   test "nobody is spawned ahead of need: a pass over an empty workspace opens nothing", %{ws: ws} do
     tmux("")
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     refute_received {:tmux, [_, _, "new-session" | _]}
     refute_received {:tmux, [_, _, "new-window" | _]}
   end
@@ -91,7 +91,7 @@ defmodule Server.StaffingTest do
         "2\tt#{thread.id}\t#{thread.id}\tdone\t999999993\tborges\t#{old()}\n3\tborges\t\t\t999999994\tborges\t#{fresh()}\n"
     )
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     # rufus: no session at all, long past booting — cold
     cold = "#{session}:0"
@@ -115,7 +115,7 @@ defmodule Server.StaffingTest do
         "1\tt#{thread.id}\t#{thread.id}\tdone\t999999992\tborges\t#{four_hours}\n2\trufus\t\t\t999999993\trufus\t#{old()}\n"
     )
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     refreshed = "#{session}:0"
     assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^refreshed]}
@@ -133,11 +133,11 @@ defmodule Server.StaffingTest do
     leaf = "#{session}:0"
 
     Application.put_env(:server, :stale_turn_seconds, 3 * 3600)
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     refute_received {:tmux, ["-L", _, "kill-window", "-t", ^leaf]}
 
     Application.put_env(:server, :stale_turn_seconds, 600)
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^leaf]}
   end
 
@@ -157,11 +157,11 @@ defmodule Server.StaffingTest do
     leaf = "#{session}:1"
 
     Application.put_env(:server, :stale_turn_seconds, 3600)
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     refute_received {:tmux, ["-L", _, "kill-window", "-t", ^leaf]}
 
     Application.put_env(:server, :stale_turn_seconds, 600)
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^leaf]}
   end
 
@@ -172,7 +172,7 @@ defmodule Server.StaffingTest do
     kept = session!("borges", here.id, 1_200)
 
     tmux("0\tt#{here.id}\t#{here.id}\tdone\t999999991\tborges\t#{old()}\n")
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     assert Server.Repo.get!(Server.Session, lost.id).ended_at
     refute Server.Repo.get!(Server.Session, kept.id).ended_at
@@ -186,7 +186,7 @@ defmodule Server.StaffingTest do
       new_lead = session!("borges", thread.id, 1_200)
 
       tmux("0\tt#{thread.id}\t#{thread.id}\tdone\t999999991\t#{unquote(agent_col)}\t#{old()}\n")
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
 
       assert Server.Repo.get!(Server.Session, old_lead.id).ended_at
       refute Server.Repo.get!(Server.Session, new_lead.id).ended_at
@@ -219,7 +219,7 @@ defmodule Server.StaffingTest do
       end
     end)
 
-    log = capture_log(fn -> assert :ok = Staffing.pass(ws.id) end)
+    log = capture_log(fn -> assert :ok = Sweep.pass(ws.id) end)
 
     assert Server.Repo.get!(Server.Session, dead.id).ended_at
     refute Server.Repo.get!(Server.Session, live.id).ended_at
@@ -234,7 +234,7 @@ defmodule Server.StaffingTest do
     cut |> Ecto.Changeset.change(pane_ref: "%3", started_at: before_tmux) |> Server.Repo.update!()
     tmux("")
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     assert Server.Repo.get!(Server.Session, cut.id).ended_at
     assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "@borges the machine restarted"))
@@ -253,11 +253,11 @@ defmodule Server.StaffingTest do
     Server.Staff.mark_boot(boot)
     tmux("")
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     assert Server.Repo.get!(Server.Session, cut.id).ended_at
 
     woken = session!("borges", thread.id, 30, true)
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     refute Server.Repo.get!(Server.Session, woken.id).ended_at
     assert 1 == Enum.count(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
@@ -269,7 +269,7 @@ defmodule Server.StaffingTest do
     Server.Staff.mark_boot(DateTime.add(DateTime.utc_now(), -3_600))
     tmux("")
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     refute Server.Repo.get!(Server.Session, mid.id).ended_at
     refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
@@ -284,19 +284,19 @@ defmodule Server.StaffingTest do
 
     # its leaf still up: a quiet turn behind a live pane is the stale-turn clock's, not ours
     tmux("1\tt#{thread.id}\t#{thread.id}\tdone\t999999991\tborges\t#{fresh()}\n")
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     refute Server.Repo.get!(Server.Session, lost.id).ended_at
     refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "pick it up from the brief"))
 
     # the pane died under it
     tmux("")
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     assert Server.Repo.get!(Server.Session, lost.id).ended_at
     assert 1 == Enum.count(Channel.thread_messages(thread), &(&1.body =~ "@borges your pane went away"))
 
     # the session that wake begins — mid-turn, no window the fake tmux shows — is inside the grace: left alone
     begun = session!("borges", thread.id, 30, true)
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     refute Server.Repo.get!(Server.Session, begun.id).ended_at
     assert 1 == Enum.count(Channel.thread_messages(thread), &(&1.body =~ "pick it up from the brief"))
   end
@@ -311,7 +311,7 @@ defmodule Server.StaffingTest do
       if "list-windows" in args, do: {"server exited unexpectedly", 1}, else: {"", 0}
     end)
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     refute Server.Repo.get!(Server.Session, idle.id).ended_at
     refute Server.Repo.get!(Server.Session, mid.id).ended_at
@@ -325,7 +325,7 @@ defmodule Server.StaffingTest do
     session!("borges", thread.id, 86_400, true)
 
     tmux("0\tt#{thread.id}\t#{thread.id}\tdone\t999999991\tborges\t#{old()}\n")
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     stale = "#{session}:0"
     assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^stale]}
@@ -334,7 +334,7 @@ defmodule Server.StaffingTest do
   test "a window nobody can be attributed to (a crew role, a hand-made one) is never swept as cold",
        %{ws: ws, session: session} do
     tmux("0\tr12\t\t\t999999991\t\t\n1\tscratch\t\t\t999999992\t\t\n")
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     for i <- 0..1, t = "#{session}:#{i}", do: refute_received({:tmux, ["-L", _, "kill-window", "-t", ^t]})
   end
 
@@ -345,7 +345,7 @@ defmodule Server.StaffingTest do
     alive = session!("hronir", standing.id, 30, true)
     tmux("0\thronir\t\t\t999999991\thronir\t#{fresh()}\n")
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     assert Server.Repo.get!(Server.Session, cut.id).ended_at
     assert %{author: "tlon", body: "@borges the machine restarted" <> _} = List.last(Channel.thread_messages(thread))
@@ -361,7 +361,7 @@ defmodule Server.StaffingTest do
     {:ok, _} = Channel.assign_lead(thread.id, "hronir")
     tmux("")
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     assert Server.Repo.get!(Server.Session, cut.id).ended_at
     refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
@@ -373,7 +373,7 @@ defmodule Server.StaffingTest do
     thread |> Ecto.Changeset.change(agent_id: nil) |> Server.Repo.update!()
     tmux("")
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "@borges the machine restarted"))
   end
@@ -388,7 +388,7 @@ defmodule Server.StaffingTest do
       "0\thronir\t\t\t999999991\thronir\t#{old()}\n1\tt#{thread.id}\t#{thread.id}\tdone\t999999992\tborges\t#{old()}\n"
     )
 
-    assert :ok = Staffing.clear_context(ws.id, "borges")
+    assert :ok = Sweep.clear_context(ws.id, "borges")
 
     assert Server.Repo.get!(Server.Session, s1.id).ended_at
     refute Server.Repo.get!(Server.Session, s2.id).ended_at
@@ -406,7 +406,7 @@ defmodule Server.StaffingTest do
       "0\trufus\t\t\t999999991\n1\thronir\t\t\t999999992\n2\tborges\t\t\t999999993\n3\tplanner-live\t#{thread.id}\tdone\t999999994\n4\treviewer-stale\t999888\tdone\t999999995\n5\tt777666\t\t\t999999996\n"
     )
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
 
     [t0, t3, t4, t5] = Enum.map([0, 3, 4, 5], &"#{session}:#{&1}")
     assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^t4]}
@@ -421,7 +421,7 @@ defmodule Server.StaffingTest do
     {:ok, _} = Channel.assign_lead(child.id, "borges")
     tmux("0\tborges\t\t\t999999991\n1\tt#{child.id}\t#{child.id}\t\t999999992\n")
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     t1 = "#{session}:1"
     refute_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^t1]}, 20
   end
@@ -429,9 +429,9 @@ defmodule Server.StaffingTest do
   test "a workspace with no bench is a no-op; pass/0 walks every workspace", %{ws: _ws} do
     {:ok, empty} = Workspaces.register(%{name: "Sylvania", type: "code", scope: "project", repos: [], roster: []})
     tmux("")
-    assert :ok = Staffing.pass(empty.id)
+    assert :ok = Sweep.pass(empty.id)
     refute_received {:tmux, _}
-    assert :ok = Staffing.pass()
+    assert :ok = Sweep.pass()
     assert_receive {:tmux, ["-L", "tlon-workspace-" <> _ | _]}
   end
 
@@ -455,7 +455,7 @@ defmodule Server.StaffingTest do
     end
 
     defp parked!(thread) do
-      :ok = Staffing.note_parked(thread.id)
+      :ok = Sweep.note_parked(thread.id)
       thread
     end
 
@@ -465,7 +465,7 @@ defmodule Server.StaffingTest do
       ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
 
       tmux("0\tt#{build.id}\t#{build.id}\tdone\t999999991\tborges\t#{old()}\n")
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
 
       yielded = "#{session}:0"
       assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^yielded]}
@@ -477,7 +477,7 @@ defmodule Server.StaffingTest do
       ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
 
       tmux("0\tt#{build.id}\t#{build.id}\tdone\t999999991\tborges\t#{old()}\n")
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
 
       busy = "#{session}:0"
       refute_received {:tmux, ["-L", _, "kill-window", "-t", ^busy]}
@@ -489,7 +489,7 @@ defmodule Server.StaffingTest do
       ws |> staffed_thread("hronir") |> at_stage("build") |> parked!()
 
       tmux("0\tt#{review.id}\t#{review.id}\tdone\t999999991\tborges\t#{old()}\n")
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
 
       kept = "#{session}:0"
       refute_received {:tmux, ["-L", _, "kill-window", "-t", ^kept]}
@@ -501,7 +501,7 @@ defmodule Server.StaffingTest do
       ws |> staffed_thread("borges") |> at_stage("review") |> parked!()
 
       tmux("0\tt#{beat.id}\t#{beat.id}\tdone\t999999991\thronir\t#{old()}\n")
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
 
       duty = "#{session}:0"
       refute_received {:tmux, ["-L", _, "kill-window", "-t", ^duty]}
@@ -511,8 +511,8 @@ defmodule Server.StaffingTest do
       review = ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
       build = ws |> staffed_thread("borges") |> at_stage("build") |> parked!()
 
-      refute Staffing.seat_for?(build, [])
-      assert Staffing.seat_for?(review, [])
+      refute Sweep.seat_for?(build, [])
+      assert Sweep.seat_for?(review, [])
     end
   end
 
@@ -525,7 +525,7 @@ defmodule Server.StaffingTest do
         "0\trufus\t\t\t999999991\n1\thronir\t\t\t999999992\n2\tborges\t\t\t999999993\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n"
       )
 
-      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert {:ok, _} = Sweep.hand_off(thread.id, "hronir")
 
       assert Channel.thread_lead(thread.id) == "hronir"
       assert %{author: "andrew", body: body} = List.last(Channel.thread_messages(thread))
@@ -539,7 +539,7 @@ defmodule Server.StaffingTest do
       busy = session!("borges", thread.id, 5, true)
       tmux("0\trufus\t\t\t999999991\n1\thronir\t\t\t999999992\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
 
-      assert {:error, :lead_mid_turn} = Staffing.hand_off(thread.id, "hronir")
+      assert {:error, :lead_mid_turn} = Sweep.hand_off(thread.id, "hronir")
       assert Channel.thread_lead(thread.id) == "borges"
       assert Channel.thread_messages(thread) == []
       assert is_nil(Server.Repo.reload!(busy).ended_at)
@@ -547,9 +547,9 @@ defmodule Server.StaffingTest do
     end
 
     test "a refusal reads in words, and an unknown one falls back to its inspect" do
-      assert Staffing.explain(:lead_mid_turn) =~ "mid-turn"
-      assert Staffing.explain(:lead_mid_turn) =~ "retry"
-      assert Staffing.explain(:something_else) == ":something_else"
+      assert Sweep.explain(:lead_mid_turn) =~ "mid-turn"
+      assert Sweep.explain(:lead_mid_turn) =~ "retry"
+      assert Sweep.explain(:something_else) == ":something_else"
     end
 
     test "a turn stuck past the stale limit reads as idle: it hands off and ends the thread's sessions", %{ws: ws} do
@@ -557,7 +557,7 @@ defmodule Server.StaffingTest do
       stuck = session!("borges", thread.id, Server.Presence.Thinking.stale_turn_seconds() + 60, true)
       tmux("0\trufus\t\t\t999999991\n1\thronir\t\t\t999999992\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
 
-      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert {:ok, _} = Sweep.hand_off(thread.id, "hronir")
       assert Channel.thread_lead(thread.id) == "hronir"
       assert Server.Repo.reload!(stuck).ended_at
       assert_receive {:tmux, ["-L", _, "kill-window", "-t", _]}
@@ -567,7 +567,7 @@ defmodule Server.StaffingTest do
       thread = staffed_thread(ws, "borges")
       tmux("0\trufus\t\t\t999999991\n")
 
-      assert {:error, :no_agent} = Staffing.hand_off(thread.id, "nobody")
+      assert {:error, :no_agent} = Sweep.hand_off(thread.id, "nobody")
       assert Channel.thread_lead(thread.id) == "borges"
       refute_received {:tmux, [_, _, "kill-window" | _]}
     end
@@ -576,13 +576,13 @@ defmodule Server.StaffingTest do
       build = ws |> staffed_thread("borges") |> Ecto.Changeset.change(stage: "build") |> Server.Repo.update!()
       tmux("0\trufus\t\t\t999999991\n")
 
-      assert {:error, :manager_leads_no_workline} = Staffing.hand_off(build.id, "rufus")
+      assert {:error, :manager_leads_no_workline} = Sweep.hand_off(build.id, "rufus")
       assert Channel.thread_lead(build.id) == "borges"
       assert Channel.thread_messages(build) == []
       refute_received {:tmux, [_, _, "kill-window" | _]}
 
       plain = staffed_thread(ws, "borges")
-      assert {:ok, _} = Staffing.hand_off(plain.id, "rufus")
+      assert {:ok, _} = Sweep.hand_off(plain.id, "rufus")
     end
 
     test "the new lead's seat comes up in the same call, not on the drain's next pass", %{ws: ws} do
@@ -593,7 +593,7 @@ defmodule Server.StaffingTest do
       thread = staffed_thread(ws, "borges")
       tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
 
-      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert {:ok, _} = Sweep.hand_off(thread.id, "hronir")
       assert_receive {:spawned, exports}
       assert exports =~ ~s(TLON_AUTHOR="hronir")
       assert exports =~ ~s(TLON_THREAD="#{thread.id}")
@@ -611,8 +611,8 @@ defmodule Server.StaffingTest do
         Application.delete_env(:server, :clocked_out_engines)
       end)
 
-      assert {:error, :clocked_out} = Staffing.hand_off(thread.id, "hronir")
-      assert Staffing.explain(:clocked_out) =~ "clocked out"
+      assert {:error, :clocked_out} = Sweep.hand_off(thread.id, "hronir")
+      assert Sweep.explain(:clocked_out) =~ "clocked out"
       assert Channel.thread_lead(thread.id) == "borges"
       assert Channel.thread_messages(thread) == []
       refute_received {:tmux, [_, _, "kill-window" | _]}
@@ -630,7 +630,7 @@ defmodule Server.StaffingTest do
         Application.delete_env(:server, :clocked_out_engines)
       end)
 
-      assert {:error, :clocked_out} = Staffing.hand_off(thread.id, "hronir")
+      assert {:error, :clocked_out} = Sweep.hand_off(thread.id, "hronir")
       assert Channel.thread_lead(thread.id) == "borges"
     end
 
@@ -640,20 +640,20 @@ defmodule Server.StaffingTest do
       thread = staffed_thread(ws, "borges")
       tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
 
-      assert {:error, :off_shift} = Staffing.hand_off(thread.id, "dahlmann")
-      assert Staffing.explain(:off_shift) =~ "off shift"
+      assert {:error, :off_shift} = Sweep.hand_off(thread.id, "dahlmann")
+      assert Sweep.explain(:off_shift) =~ "off shift"
       assert Channel.thread_lead(thread.id) == "borges"
       assert Channel.thread_messages(thread) == []
       refute_received {:tmux, [_, _, "kill-window" | _]}
     end
 
     test "the arbiter's refusal is said once, however often the post is delivered", %{ws: ws} do
-      Application.put_env(:server, :arbiter, Server.StaffingTest.RefusingArbiter)
+      Application.put_env(:server, :arbiter, Server.SweepTest.RefusingArbiter)
       on_exit(fn -> Application.delete_env(:server, :arbiter) end)
 
       thread = staffed_thread(ws, "borges")
       tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
-      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert {:ok, _} = Sweep.hand_off(thread.id, "hronir")
 
       handoff = Enum.find(Channel.thread_messages(thread), &(&1.body =~ "Handing this to"))
       Server.Switchboard.deliver(handoff)
@@ -663,46 +663,46 @@ defmodule Server.StaffingTest do
     end
 
     test "an at-cap refusal is not said (the parked note already is)", %{ws: ws} do
-      Application.put_env(:server, :arbiter, Server.StaffingTest.AtCapArbiter)
+      Application.put_env(:server, :arbiter, Server.SweepTest.AtCapArbiter)
       on_exit(fn -> Application.delete_env(:server, :arbiter) end)
 
       thread = staffed_thread(ws, "borges")
       tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
-      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert {:ok, _} = Sweep.hand_off(thread.id, "hronir")
 
       refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "could not be seated"))
     end
 
     test "a delivery that raises after the reassignment still answers {:ok, thread}", %{ws: ws} do
-      Application.put_env(:server, :arbiter, Server.StaffingTest.RaisingArbiter)
+      Application.put_env(:server, :arbiter, Server.SweepTest.RaisingArbiter)
       on_exit(fn -> Application.delete_env(:server, :arbiter) end)
 
       thread = staffed_thread(ws, "borges")
       tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
 
-      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert {:ok, _} = Sweep.hand_off(thread.id, "hronir")
       assert Channel.thread_lead(thread.id) == "hronir"
     end
 
     test "a delivery that exits after the reassignment still answers {:ok, thread}", %{ws: ws} do
-      Application.put_env(:server, :arbiter, Server.StaffingTest.ExitingArbiter)
+      Application.put_env(:server, :arbiter, Server.SweepTest.ExitingArbiter)
       on_exit(fn -> Application.delete_env(:server, :arbiter) end)
 
       thread = staffed_thread(ws, "borges")
       tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
 
-      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert {:ok, _} = Sweep.hand_off(thread.id, "hronir")
       assert Channel.thread_lead(thread.id) == "hronir"
     end
 
     test "an arbiter that refuses the new lead's seat says so on the thread", %{ws: ws} do
-      Application.put_env(:server, :arbiter, Server.StaffingTest.RefusingArbiter)
+      Application.put_env(:server, :arbiter, Server.SweepTest.RefusingArbiter)
       on_exit(fn -> Application.delete_env(:server, :arbiter) end)
 
       thread = staffed_thread(ws, "borges")
       tmux("0\trufus\t\t\t999999991\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n")
 
-      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+      assert {:ok, _} = Sweep.hand_off(thread.id, "hronir")
 
       assert Enum.any?(Channel.thread_messages(thread), fn m ->
                m.author == "tlon" and m.body =~ "hronir" and m.body =~ "could not be seated"
@@ -715,8 +715,8 @@ defmodule Server.StaffingTest do
     {:ok, study} = Server.Outside.study(ws.id)
     {:ok, work} = Channel.open_thread(%{title: "plain work", workspace_id: ws.id})
 
-    assert Staffing.duty_thread?(study.id)
-    refute Staffing.duty_thread?(work.id)
+    assert Sweep.duty_thread?(study.id)
+    refute Sweep.duty_thread?(work.id)
   end
 
   test "the Aleph leaves once it has answered: its pane stays until it posts, then retires at idle",
@@ -726,11 +726,11 @@ defmodule Server.StaffingTest do
     _ = session!("aleph", thread.id, 5)
     tmux("0\taleph\t\t\t999999991\taleph\t#{old()}\n")
 
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     refute_receive {:tmux, ["-L", _, "kill-window" | _]}, 20
 
     {:ok, _} = Server.Channel.post(%{thread_id: thread.id, author: "aleph", body: "it bends at Workline.advance/2"})
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Sweep.pass(ws.id)
     aleph = "#{session}:0"
     assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^aleph]}
 
@@ -755,7 +755,7 @@ defmodule Server.StaffingTest do
       busy = session!("borges", leaf.id, 5, true)
       tmux(win(0, "hronir", "", "hronir", "stale") <> win(1, "t#{leaf.id}", leaf.id, "borges", "stale"))
 
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
       hronir = "#{session}:0"
       assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^hronir]}
       refute_receive {:tmux, ["-L", _, "kill-window", "-t", _]}, 20
@@ -765,7 +765,7 @@ defmodule Server.StaffingTest do
 
       busy |> Ecto.Changeset.change(thinking_since: nil) |> Server.Repo.update!()
       tmux(win(1, "t#{leaf.id}", leaf.id, "borges", "stale"))
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
       borges = "#{session}:1"
       assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^borges]}
     end
@@ -775,7 +775,7 @@ defmodule Server.StaffingTest do
       tmux(win(0, "hronir", "", "hronir", Server.Arbiter.Tmux.launch_stamp(ws.id, "hronir")))
       assert Server.Arbiter.Tmux.launch_stamp(ws.id, "hronir") == Server.Arbiter.Tmux.launch_stamp(ws.id, "hronir")
 
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
       refute_receive {:tmux, ["-L", _, "kill-window", "-t", _]}, 20
     end
 
@@ -784,14 +784,14 @@ defmodule Server.StaffingTest do
       {:ok, post} = Server.Channel.post(%{thread_id: leaf.id, author: "borges", body: "plan drafted, committing next"})
       _ = session!("borges", leaf.id, 30)
       tmux(win(1, "t#{leaf.id}", leaf.id, "borges", "stale"))
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
 
-      note = Staffing.left_off(leaf.id, "borges")
+      note = Sweep.left_off(leaf.id, "borges")
       assert note =~ "Where you left off" and note =~ "its launch changed"
       assert note =~ "##{post.id}" and note =~ "plan drafted, committing next"
 
       _ = session!("borges", leaf.id, 0)
-      assert Staffing.left_off(leaf.id, "borges") == ""
+      assert Sweep.left_off(leaf.id, "borges") == ""
     end
   end
 
@@ -802,7 +802,7 @@ defmodule Server.StaffingTest do
     defp check(pairs, bench) do
       tabs = Enum.map(pairs, &elem(&1, 0))
       authors = Map.new(pairs, fn {t, a} -> {t.name, a} end)
-      Staffing.stale_coworkers(tabs, bench, fn t -> authors[t.name] end)
+      Sweep.stale_coworkers(tabs, bench, fn t -> authors[t.name] end)
     end
 
     test "a process holding a handle the bench no longer has is stale; one on the bench is not" do
@@ -819,9 +819,9 @@ defmodule Server.StaffingTest do
     end
 
     test "pane_author is nil for a pid that cannot be read, never a crash" do
-      assert Staffing.pane_author(%{pane_pid: 999_999_999}) == nil
-      assert Staffing.pane_author(%{pane_pid: nil}) == nil
-      assert Staffing.pane_author(%{}) == nil
+      assert Sweep.pane_author(%{pane_pid: 999_999_999}) == nil
+      assert Sweep.pane_author(%{pane_pid: nil}) == nil
+      assert Sweep.pane_author(%{}) == nil
     end
   end
 
@@ -844,7 +844,7 @@ defmodule Server.StaffingTest do
           "can't find session: w#{ws.id}"
         ] do
       Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {out, 1} end)
-      assert :ok = Staffing.pass(ws.id)
+      assert :ok = Sweep.pass(ws.id)
     end
 
     refute Server.Repo.get!(Server.Session, cut.id).ended_at
@@ -862,7 +862,7 @@ defmodule Server.StaffingTest do
       if "list-windows" in args, do: {"protocol version mismatch", 1}, else: {"", 0}
     end)
 
-    log = capture_log(fn -> assert :ok = Staffing.roll_leaf(thread) end)
+    log = capture_log(fn -> assert :ok = Sweep.roll_leaf(thread) end)
 
     assert log =~ "thread #{thread.id}" and log =~ "skipped: tmux protocol version mismatch"
     refute Server.Repo.get!(Server.Session, live.id).ended_at
@@ -879,7 +879,7 @@ defmodule Server.StaffingTest do
     end)
 
     capture_log(fn ->
-      assert {:error, "protocol version mismatch"} = Staffing.clear_context(ws.id, "borges")
+      assert {:error, "protocol version mismatch"} = Sweep.clear_context(ws.id, "borges")
     end)
 
     refute Server.Repo.get!(Server.Session, live.id).ended_at
@@ -897,8 +897,8 @@ defmodule Server.StaffingTest do
 
     log =
       capture_log(fn ->
-        assert :ok = Staffing.roll_leaf(thread)
-        assert :ok = Staffing.clear_context(ws.id, "borges")
+        assert :ok = Sweep.roll_leaf(thread)
+        assert :ok = Sweep.clear_context(ws.id, "borges")
       end)
 
     refute log =~ "skipped"
@@ -906,7 +906,7 @@ defmodule Server.StaffingTest do
   end
 end
 
-defmodule Server.StaffingTest.RaisingArbiter do
+defmodule Server.SweepTest.RaisingArbiter do
   @moduledoc false
   @behaviour Server.Arbiter
 
@@ -920,7 +920,7 @@ defmodule Server.StaffingTest.RaisingArbiter do
   def ready?(_handle), do: true
 end
 
-defmodule Server.StaffingTest.ExitingArbiter do
+defmodule Server.SweepTest.ExitingArbiter do
   @moduledoc false
   @behaviour Server.Arbiter
 
@@ -934,7 +934,7 @@ defmodule Server.StaffingTest.ExitingArbiter do
   def ready?(_handle), do: true
 end
 
-defmodule Server.StaffingTest.RefusingArbiter do
+defmodule Server.SweepTest.RefusingArbiter do
   @moduledoc false
   @behaviour Server.Arbiter
 
@@ -948,7 +948,7 @@ defmodule Server.StaffingTest.RefusingArbiter do
   def ready?(_handle), do: true
 end
 
-defmodule Server.StaffingTest.AtCapArbiter do
+defmodule Server.SweepTest.AtCapArbiter do
   @moduledoc false
   @behaviour Server.Arbiter
 

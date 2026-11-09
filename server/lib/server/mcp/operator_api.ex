@@ -70,7 +70,7 @@ defmodule Server.MCP.OperatorAPI do
                                           session speaking from no thread); 201 + the message
       POST   /api/threads/:id/close       Channel.close_thread: its sessions end, its ticket is done
                                           (a plain thread with unmerged work is tracked at build instead, left open)
-      POST   /api/threads/:id/hand-off    {"agent"} → Staffing.hand_off (staffed now where Oban runs)
+      POST   /api/threads/:id/hand-off    {"agent"} → Sweep.hand_off (staffed now where Oban runs)
       POST   /api/threads/:id/advance     Workline.advance (409 when it can't: not a workline, gated, …)
       POST   /api/threads/:id/approve     {"skip_qa"?} → Workline.approve: complete its parked gate; skip_qa
                                           (a reason) lands a review past an owed QA pass, recorded
@@ -123,7 +123,7 @@ defmodule Server.MCP.OperatorAPI do
                                           ("inherit" puts a knob back to the archetype's; absent leaves it)
       POST   /api/workspaces/:id/coworkers/:agent_id/aside  {"question"} → Office.aside_spec: the
                                           command to run and where — the CALLER runs it
-      POST   /api/workspaces/:id/coworkers/:agent_id/clear  Staffing.clear_context: its sessions end and
+      POST   /api/workspaces/:id/coworkers/:agent_id/clear  Sweep.clear_context: its sessions end and
                                           its windows close; the next message spawns it fresh
       DELETE /api/seats/:id               Workspaces.unseat (the agent itself survives)
       PATCH  /api/seats/:id               {"crew": <crew> | "all"} → Shifts.assign: the seat's crew, a new one too (422 otherwise)
@@ -783,7 +783,7 @@ defmodule Server.MCP.OperatorAPI do
   # standalone binary); a node without it (a test, a dev shell) leaves it to the next pass there.
   defp hand_off(conn, thread) do
     with {%{"agent" => handle}, conn} when is_binary(handle) and handle != "" <- body(conn),
-         {:ok, t} <- Server.Staffing.hand_off(thread.id, handle) do
+         {:ok, t} <- Server.Sweep.hand_off(thread.id, handle) do
       staff_now(t.workspace_id)
       json(conn, 200, %{id: t.id, lead: handle})
     else
@@ -792,8 +792,7 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
-  defp staff_now(ws),
-    do: if(Application.get_env(:server, :start_oban), do: Task.start(fn -> Server.Staffing.pass(ws) end))
+  defp staff_now(ws), do: if(Application.get_env(:server, :start_oban), do: Task.start(fn -> Server.Sweep.pass(ws) end))
 
   defp record_check(conn, thread) do
     case body(conn) do
@@ -1172,7 +1171,7 @@ defmodule Server.MCP.OperatorAPI do
 
       c ->
         result =
-          case Server.Staffing.clear_context(ws.id, c.name) do
+          case Server.Sweep.clear_context(ws.id, c.name) do
             :ok -> {:ok, c.name}
             {:error, _} = error -> error
           end
@@ -1241,7 +1240,7 @@ defmodule Server.MCP.OperatorAPI do
 
   defp refused(conn, :not_stranded), do: json(conn, 409, %{error: "that checkout is no longer stranded"})
   defp refused(conn, why) when is_binary(why), do: json(conn, 409, %{error: why})
-  defp refused(conn, why), do: json(conn, 409, %{error: Server.Staffing.explain(why)})
+  defp refused(conn, why), do: json(conn, 409, %{error: Server.Sweep.explain(why)})
 
   defp settings, do: %{knobs: Server.OperatorConfig.knobs(), restart_pending: Server.Rollout.restart_pending?()}
 

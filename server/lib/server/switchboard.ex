@@ -158,7 +158,7 @@ defmodule Server.Switchboard do
   end
 
   # A tlon-authored post that names nobody (a stage wake) has no addressee but whoever leads the
-  # thread NOW: after a handoff that is a lead it was never meant for. Staffing re-wakes a lead that
+  # thread NOW: after a handoff that is a lead it was never meant for. The sweep re-wakes a lead that
   # moved on, so it is never handed back. One that @mentions or replies to a seat keeps its retry.
   defp unheard?(%Message{author: "tlon"} = message) do
     reply_author(message) ++ mentioned_agents(message) != [] and unheard_by_addressees?(message)
@@ -408,7 +408,7 @@ defmodule Server.Switchboard do
     last = Repo.one(from m in Message, where: m.thread_id == ^home.id, order_by: [desc: m.id], limit: 1)
 
     if !(last && last.author == "tlon" && String.starts_with?(last.body, said)) and
-         !Server.Staffing.parked_note?(home.id) do
+         !Server.Sweep.parked_note?(home.id) do
       Server.Channel.post(%{thread_id: home.id, author: "tlon", kind: "notice", body: "#{said}: #{reason}"})
     end
   end
@@ -447,7 +447,7 @@ defmodule Server.Switchboard do
         do:
           poke(
             %{thread_id: home, agent: agent, pane_ref: nil},
-            Server.Staffing.left_off(home, agent) <> prompt_for(message, home)
+            Server.Sweep.left_off(home, agent) <> prompt_for(message, home)
           )
   end
 

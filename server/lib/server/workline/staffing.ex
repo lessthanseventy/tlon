@@ -159,10 +159,10 @@ defmodule Server.Workline.Staffing do
 
   # A thread has one window, its lead's: the old lead's must close or the new lead can never be
   # spawned (the builder kept the leaf and did verify's job; the reviewer's brief went nowhere).
-  # The brief that follows spawns the new lead, as `Server.Staffing.hand_off/2` does.
+  # The brief that follows spawns the new lead, as `Server.Sweep.hand_off/2` does.
   @doc false
   def close_leaf(%Thread{workspace_id: ws} = thread) when not is_nil(ws) do
-    with %{index: index} <- Server.Staffing.leaf_window(thread, "close_leaf"),
+    with %{index: index} <- Server.Sweep.leaf_window(thread, "close_leaf"),
          do: Server.Tmux.kill_window(ws, index)
   end
 

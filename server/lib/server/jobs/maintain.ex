@@ -2,19 +2,19 @@ defmodule Server.Jobs.Maintain do
   @moduledoc """
   The Maintain sweeps on Oban's cron (one-brain piece E, slice 2): every half hour, stale
   gates get their reminder, quiet worklines their continuation, and the board is kept true
-  (tickets' status against their threads, worktrees nothing is working in — `Server.Maintain.Sweep`). `args` may name a
+  (tickets' status against their threads, worktrees nothing is working in — `Server.Maintain.Bands`). `args` may name a
   band in ms (`gate_stale_ms`, `renag_ms`, `quiet_ms`) — tests do; the cron entry passes none.
   Two attempts: every sweep is idempotent, so a run cut off by a restart or a db fault is run again.
   """
   use Oban.Worker, queue: :maintain, max_attempts: 2, unique: [period: 60]
 
-  alias Server.Maintain.Sweep
+  alias Server.Maintain.Bands
 
   @bands ~w(gate_stale_ms renag_ms quiet_ms)
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: args}) do
     opts = for {k, v} <- args, k in @bands, is_integer(v), do: {String.to_existing_atom(k), v}
-    Sweep.run(opts)
+    Bands.run(opts)
   end
 end

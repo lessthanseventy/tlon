@@ -1,7 +1,7 @@
 # Glossary — one meaning per noun
 
 Every row is one word with one meaning. A word that needs two meanings is two words, and the second
-one is a pending rename below. `scripts/check-names.sh` (`mise run check:names`) holds this file: every
+one is a rename (marked `pending:` while it is open). `scripts/check-names.sh` (`mise run check:names`) holds this file: every
 `Server.*` module, `mise run` task and `scripts/*` file named in the **lives in** column must exist,
 and the retired words under **never say** must not appear in any `AGENTS.md` or in `office/tui/*.ts`
 user-facing strings (a plan is prose and is not scanned). A **lives in** cell that
@@ -18,7 +18,7 @@ begins `pending:` records a rename not yet made; the gate skips it. The source o
 | crew | A named shift only (day, night, ...): a set of coworkers a taken offer swaps in. | `Server.Shifts` (`crews/1`) | "crew" for the whole cast or for the tmux backend; "team" |
 | spawn backend | The seam that opens a terminal for a coworker (a config-selected behaviour; the tmux one is `Server.Spawn.Tmux`). Not `Server.MCP.Spawn`, which mints a pane's identity. | `Server.Spawn`, `Server.Spawn.Tmux` | "crew" |
 | staffing | Assigning a thread to a coworker. | `Server.Staff` (`assign/2`) | "the sweep" |
-| the sweep | The per-minute tmux pass that closes windows nobody needs. Pending rename: the module and job are named `Staffing`, which collides with staffing a thread. | pending: `Server.Staffing` → `Server.Sweep` | "staffing" |
+| the sweep | The per-minute tmux pass that closes windows nobody needs, run by `Server.Jobs.Staff`. Not `Server.Maintain.Bands`, the control-band sweeps over gates and quiet worklines. | `Server.Sweep`, `Server.Jobs.Staff`, `Server.Maintain.Bands` | "staffing" |
 | triage | The server's one meaning: what needs a hand in a workspace, namely blockers, failed checks and unled threads. | `Server.Office.Room` (`triage/1`) | "what awaits the operator" (that is Needs) |
 | gate | A workline stage parked on the operator; a Need of kind `gate`. | `Server.Workline`, `Server.Office.Needs` | "gate" for `mise run check`, for hard limits, or for the release gate |
 | landed | A workline's terminal stage: the local gate passed and its PR was published; the PR still waits on GitHub, and the thread closes only when GitHub reports it MERGED (`Workline.merged/2`). Not "landing", the flag on a landed workline whose PR GitHub is not merging. | `Server.Workline` (stage `landed`), `Server.Jobs.KeepUp` | the `merged` stage (that word is GitHub's, and comes after) |

@@ -11,7 +11,7 @@ defmodule Server.Presence.Thinking do
   (`stale_turn_seconds/0`) and announces it idle: the stuck-harness guard. A crashed harness that
   never sent `idle` must not read as thinking forever; a long turn still reporting tool calls stays. Every transition broadcasts on `server:presence` and the
   thread topic (`Server.Bus`), and marks the agent's session (`Staff.mark_thinking/3`): the
-  durable half, so a turn a machine restart cut off can be picked up (`Server.Staffing`).
+  durable half, so a turn a machine restart cut off can be picked up (`Server.Sweep`).
 
   Beside it, each thread's ACTIVITY feed: the last 100 things its coworkers did
   (`%{thread_id, agent, at, kind, summary}`, oldest first) — a tool call as the harness's hook
@@ -86,7 +86,7 @@ defmodule Server.Presence.Thinking do
   `thinking_since`) older than this is a turn nothing will end — its harness crashed, or a restart
   cut it off before its idle arrived. Measured from the last thing heard from the turn: its
   declare or its latest `doing/4` report. `config :server, :stale_turn_seconds`, default #{@default_stale_turn_seconds}; read on
-  every use. This sweep, `Server.Staffing` and `Server.Office.Needs` all read it here.
+  every use. This sweep, `Server.Sweep` and `Server.Office.Needs` all read it here.
   """
   def stale_turn_seconds, do: Application.get_env(:server, :stale_turn_seconds, @default_stale_turn_seconds)
 

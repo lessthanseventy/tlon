@@ -4,7 +4,7 @@ defmodule Server.Aleph do
   profile Fable in `Server.Profiles`), spawned on a thread when someone allowed to call it there
   @mentions it (`called?/2`): the operator, the workspace's manager or its tech lead. It reads the
   thread, does the one job asked, posts it, and the staffing pass dismisses it once it has answered
-  and gone idle (`Server.Staffing`). One at a time: its window is named for it, not for a thread
+  and gone idle (`Server.Sweep`). One at a time: its window is named for it, not for a thread
   (`Server.Arbiter.Tmux`), so a second call waits for the first to finish.
   """
   alias Server.Thread

@@ -3,7 +3,7 @@ defmodule Server.Repo.Migrations.PaneRetiredEventKind do
   use Ecto.Migration
 
   # A coworker's pane closed between turns by the server (a stale launch, a stuck seat's roll): what
-  # the next session there is told when it opens (`Server.Staffing.left_off/2`).
+  # the next session there is told when it opens (`Server.Sweep.left_off/2`).
   def change do
     drop constraint(:event, "event_kind_check")
 

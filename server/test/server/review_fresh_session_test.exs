@@ -56,7 +56,7 @@ defmodule Server.ReviewFreshSessionTest do
     verdict!(t1, "lamp", rita.name)
 
     assert %DateTime{} = Repo.get!(Session, s1.id).ended_at
-    assert Server.Staffing.leaf_window(t1, "test") == nil
+    assert Server.Sweep.leaf_window(t1, "test") == nil
 
     {t2, s2} = review_thread(rita, "sconce")
     verdict!(t2, "sconce", rita.name)
@@ -215,7 +215,7 @@ defmodule Server.ReviewFreshSessionTest do
 
       assert {:ok, :quiet} = perform_job(Server.Jobs.EndReview, %{thread_id: thread.id})
       assert %DateTime{} = Repo.get!(Session, session.id).ended_at
-      assert Server.Staffing.leaf_window(thread, "test") == nil
+      assert Server.Sweep.leaf_window(thread, "test") == nil
     end
 
     test "changes requested bounce it to build before the job ends the session", %{rita: rita} do

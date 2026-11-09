@@ -107,7 +107,7 @@ defmodule Server.MCP.Tool do
   not listed here is `inspect/1`ed, so a new one reads as a term until it earns a sentence. An atom
   is raised by more than one context (`:closed` is a thread's and an issue's), so its sentence is
   worded to be true wherever it comes from. The hand-off reasons keep their sentences in
-  `Server.Staffing.explain/1`, which the operator's 409 shares.
+  `Server.Sweep.explain/1`, which the operator's 409 shares.
   """
   @spec explain(term()) :: String.t()
   def explain(reason) when is_binary(reason), do: reason
@@ -139,7 +139,7 @@ defmodule Server.MCP.Tool do
 
   def explain({:model_cli_missing, _}), do: "the model's command is not installed on this server — ask the operator"
   def explain({:model_cli_exit, code, msg}), do: "the model's command exited #{code}: #{msg}"
-  def explain(reason) when reason in [:lead_mid_turn, :clocked_out, :off_shift], do: Server.Staffing.explain(reason)
+  def explain(reason) when reason in [:lead_mid_turn, :clocked_out, :off_shift], do: Server.Sweep.explain(reason)
   def explain(other), do: inspect(other)
 
   @doc "A tool-error reply with `message`."
