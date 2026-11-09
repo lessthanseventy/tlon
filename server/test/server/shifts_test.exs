@@ -48,6 +48,8 @@ defmodule Server.ShiftsTest do
   # a one-shot's stderr notice, not a refusal
   @catalog_notice ~s("kimi-k3" isn't described by this version's model catalog)
 
+  @credits_out "  ⎿  You're out of usage credits. Run /usage-credits to keep using Fable 5.1 or /model to switch models."
+
   defp names(ws), do: ws.id |> Workspaces.bench() |> Enum.map(& &1.name)
   defp lobby(ws), do: Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
   defp labels(ask), do: Enum.map(ask.payload["options"], & &1["label"])
@@ -124,6 +126,40 @@ defmodule Server.ShiftsTest do
     assert Shifts.out_of_quota?("You've hit your limit · resets 9am (America/Denver)")
     refute Shifts.out_of_quota?("  the rate limiter caps requests; when the limit is reached it waits")
     refute Shifts.out_of_quota?("")
+  end
+
+  test ~s("You're out of usage credits" reads as out of quota, and "You've hit your usage limit" still does) do
+    assert Shifts.out_of_quota?(@credits_out)
+    assert Shifts.out_of_quota?("You've hit your usage limit")
+    refute Shifts.out_of_quota?("if you're out of usage credits, ask the operator")
+  end
+
+  test "out of credits names no reset: the Need names the model and invents no clock, and clears with the pane" do
+    {:ok, plain} = Workspaces.register(%{name: "Credits out"})
+    {:ok, _} = Workspaces.seat(plain.id, %{name: "solo", archetype: "builder"})
+    {:ok, _} = lobby(plain)
+
+    assert :ok = Shifts.quota_check(plain.id, "solo", "1/w1", @credits_out)
+
+    assert [%{model: "Fable 5.1", reset: nil, until: nil}] =
+             Enum.filter(Shifts.out_of_quota(), &(&1.workspace_id == plain.id))
+
+    assert [need] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "quota" and &1.workspace_id == plain.id))
+    assert need.text =~ "Fable 5.1" and need.text =~ "usage credits"
+    refute need.text =~ "resets"
+
+    assert :ok = Shifts.quota_check(plain.id, "solo", "1/w1", "back at work")
+    assert Enum.filter(Shifts.out_of_quota(), &(&1.workspace_id == plain.id)) == []
+  end
+
+  test "out of credits with another crew to put on: the offer names the model and schedules no return", %{ws: ws} do
+    {:ok, _} = lobby(ws)
+
+    assert {:offered, ["night"]} = Shifts.quota_check(ws.id, "hronir", "1/w1", @credits_out)
+    assert [ask] = Server.Attention.open_asks()
+    assert ask.payload["summary"] =~ "Fable 5.1"
+    refute ask.payload["summary"] =~ "resets"
+    refute Map.has_key?(ask.payload["switch"], "back")
   end
 
   test ~s("You've hit your session limit" and "monthly spend limit", as this box prints them, read as out of quota) do

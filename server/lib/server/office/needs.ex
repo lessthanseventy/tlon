@@ -717,8 +717,13 @@ defmodule Server.Office.Needs do
     claude =
       for {ws, [q | _]} <- Enum.group_by(claude, & &1.workspace_id) do
         text =
-          "Claude's usage limit is reached on the #{q.crew} crew and no other crew can take over: " <>
-            "it resets #{q.reset}, and every wake to it waits until then"
+          if q.reset do
+            "Claude's usage limit is reached on the #{q.crew} crew and no other crew can take over: " <>
+              "it resets #{q.reset}, and every wake to it waits until then"
+          else
+            "#{q.model} is out of usage credits on the #{q.crew} crew and no other crew can take over: " <>
+              "its seats wait for credits (/usage-credits) or a model switch (/model)"
+          end
 
         quota_item(ws, "anthropic", "Claude's usage limit", text, q.at)
       end
