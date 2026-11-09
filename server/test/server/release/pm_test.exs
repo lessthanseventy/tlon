@@ -290,7 +290,7 @@ defmodule Server.Release.PMTest do
       assert Enum.map(gate.payload["options"], & &1["label"]) == ["approve", "not yet"]
       assert gate.body =~ "Lamp talk." and gate.body =~ "blast 4" and gate.body =~ "releasable: yes"
 
-      assert [%{kind: "dialog", text: summary}] =
+      assert [%{kind: "gate", scope: "release", text: summary}] =
                Enum.filter(Server.Office.Needs.list(), &(&1.thread_id == root(ctx.ws).id))
 
       assert summary =~ "release #{String.slice(ctx.main, 0, 7)}: 2 changes"

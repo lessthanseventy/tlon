@@ -12,7 +12,7 @@ defmodule Server.Release.PM do
   dependency, the gate, the law, a deleted test, a commit too big to grade) always holds it.
 
   Fits: the PM cuts it and says so. Doesn't: ONE gate on the workspace's root thread — a `prompt`
-  no pane holds (`payload["release"]`), on the operator's list as a dialog and answered like one, by
+  no pane holds (`payload["release"]`), on the operator's list as a gate of scope `release` and answered by its prompt id, by
   its id (`Server.Attention.answer_prompt/3`): approve queues the cut, not yet leaves it. Nothing is cut unless
   `Server.Release.Candidate.releasable?/2` holds at that moment.
 
