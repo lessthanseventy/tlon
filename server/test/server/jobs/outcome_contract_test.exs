@@ -34,6 +34,7 @@ defmodule Server.Jobs.OutcomeContractTest do
     Server.Jobs.Diary => "the week's diary for a workspace",
     Server.Jobs.Dispatch => "the schedules' minute",
     Server.Jobs.Drain => "the switchboard's redelivery",
+    Server.Jobs.HeldReview => "the held tickets as a whole",
     Server.Jobs.Intake => "the backlog as a whole",
     Server.Jobs.KeepUp => "the checkouts, not a thread",
     Server.Jobs.Maintain => "every workline's sweep",
