@@ -65,6 +65,7 @@ export type Screen = Ctl & {
   leaveZoom: (toTheRoom?: boolean) => void
   openThread: () => number | null
   paint: (roomOnly: boolean) => void
+  bankReader: () => void
   record: (next: Tally) => void
   toRoom: () => void
 }
