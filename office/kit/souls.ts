@@ -51,9 +51,9 @@ export function spoken(entry: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
-/** a corkboard note's label: a side-project note says which step of its author's project it is, counted over the notes on the board (the server keeps the newest few) */
-export function corkLabel(cork: readonly { id: number; author: string; kind: string }[], n: { id: number; author: string; kind: string }): string {
+/** a corkboard note's label: a side-project note says which step of its author's project it is, the server's `n` when the note carries it, else counted over the notes on the board (the server keeps the newest few) */
+export function corkLabel(cork: readonly { id: number; author: string; kind: string }[], n: { id: number; author: string; kind: string; n?: number }): string {
   if (n.kind !== "side project") return n.kind
-  const step = cork.filter((c) => c.kind === n.kind && c.author === n.author && c.id <= n.id).length
+  const step = n.n ?? cork.filter((c) => c.kind === n.kind && c.author === n.author && c.id <= n.id).length
   return `side project ${step}`
 }

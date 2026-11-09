@@ -132,7 +132,10 @@ describe("side projects on the corkboard", () => {
     expect(corkLabel(board, board[0]!)).toBe("side project 2")
     expect(corkLabel(board, board[1]!)).toBe("side project 1")
   })
-  test("any other note is just its kind", () => expect(corkLabel(board, board[2]!)).toBe("joke"))
+  test("a note that carries its step says it, however few notes are on the board", () => {
+    expect(corkLabel([board[0]!], { ...board[0]!, n: 14 })).toBe("side project 14")
+  })
+  test("any other note is just its kind",() => expect(corkLabel(board, board[2]!)).toBe("joke"))
   test("after two days the board's tips for Daneri's poem name stanzas 1 and 2", () => {
     const r = new WideRoom(696)
     r.pinboard(board.map((n) => ({ ...n, kind: n.kind as never })))
