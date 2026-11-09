@@ -84,6 +84,8 @@ export type Prompt = { label: string; ed: Editor; submit: (s: string, picks: unk
 export type Pick = { segs: Seg[]; text: string; run: () => void }
 /** something you can do from a card: its key, what it says in the actions pane, what it does */
 export type Action = { key: string; label: string; run: () => void }
+/** what the detail pane shows for a card: its title, its rows (the left, j/k + enter when any open), its actions (the right, by key) */
+export type Card = { title: string; rows: Row[]; actions: Action[]; tint?: string }
 /** the banter log: the last lines said in the room, oldest first, kept across restarts */
 export type Said = { at: number; who: string; line: string }
 

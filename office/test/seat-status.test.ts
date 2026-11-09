@@ -41,14 +41,14 @@ describe("one seat status, one renderer", () => {
   })
 
   // art that is not a seat's state: the pet-temperament slider (kit/pets.ts), a schedule's enabled
-  // mark, a health check's tick and the rack's neutral row for a node with no job queue (tui/main.ts)
+  // mark, a health check's tick and the rack's neutral row for a node with no job queue (tui/cards)
   test("● ○ ◌ are a seat's state in kit/crew.ts only, bar the four non-seat uses", async () => {
     const hits: string[] = []
     for (const dir of ["kit", "tui", "rooms"]) for await (const f of new Glob(`${dir}/**/*.ts`).scan({ cwd: `${import.meta.dir}/..` })) {
       const lines = (await Bun.file(`${import.meta.dir}/../${f}`).text()).split("\n")
       lines.forEach((l, i) => { if (/[●○◌]/.test(l) && f !== "kit/crew.ts") hits.push(`${f}:${i + 1}`) })
     }
-    expect(hits.map((h) => h.split(":")[0]!).sort()).toEqual(["kit/pets.ts", "tui/main.ts", "tui/main.ts", "tui/main.ts"])
+    expect(hits.map((h) => h.split(":")[0]!).sort()).toEqual(["kit/pets.ts", "tui/cards/release.ts", "tui/cards/release.ts", "tui/cards/schedule.ts"])
   })
 })
 
