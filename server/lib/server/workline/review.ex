@@ -17,7 +17,14 @@ defmodule Server.Workline.Review do
   alias Server.Thread
   alias Server.Workline
   alias Server.Workline.Artifacts.Git
+  alias Server.Workline.Grade
   alias Server.Workline.Scribe
+  alias Server.Workline.Stage
+
+  require Logger
+
+  # What Andrew sees: the office, and the operator API it reads (the office snapshot rides on it).
+  @user_visible ~w(office/ server/lib/server/mcp/operator_api.ex server/lib/server/office)
 
   @doc """
   Write + commit the review verdict. `{:ok, rel_path}`, `{:error, {:not_in_review, stage}}`
@@ -86,7 +93,7 @@ defmodule Server.Workline.Review do
     root = Git.root(thread)
 
     builders =
-      Server.BranchReview.builders(root, "#{Workline.main_ref(root) || "main"}..work/#{slug}", [
+      Server.BranchReview.builders(root, "#{main_ref(root) || "main"}..work/#{slug}", [
         "work/#{slug}/review.md"
       ])
 
@@ -149,8 +156,8 @@ defmodule Server.Workline.Review do
     checker = Keyword.get(opts, :artifacts, Git)
 
     if thread.stage == "review" and thread.awaiting == Workline.operator() and
-         Workline.auto_land?(thread, checker, opts),
-       do: Workline.queue(thread, Workline.auto_land_note(thread, opts), "auto_land_risk"),
+         auto_land?(thread, checker, opts),
+       do: Stage.queue(thread, auto_land_note(thread, opts), "auto_land_risk"),
        else: {:ok, thread}
   end
 
@@ -159,7 +166,7 @@ defmodule Server.Workline.Review do
   when none, ungraded, or the grader failed.
   """
   def grade_limits(%Thread{} = thread) do
-    case Workline.grade(thread) do
+    case grade(thread) do
       %{"limits" => [_ | _] = limits} -> limits
       _ -> []
     end
@@ -248,7 +255,7 @@ defmodule Server.Workline.Review do
   end
 
   defp approved_at?(thread, sha) do
-    case Workline.since_review(thread, "workline:#{thread.slug}:review") do
+    case since_review(thread, "workline:#{thread.slug}:review") do
       %{kind: "check_passed", detail: detail} -> detail["sha"] == sha
       _ -> false
     end
@@ -282,9 +289,9 @@ defmodule Server.Workline.Review do
       else
         Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
 
-        case Workline.qa_owed(thread, opts) do
+        case qa_owed(thread, opts) do
           nil -> park_approved(thread, opts)
-          {seat, paths} -> {:ok, Workline.to_qa(thread, seat, paths)}
+          {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
         end
       end
 
@@ -333,7 +340,7 @@ defmodule Server.Workline.Review do
   defp finish_approval(thread, opts) do
     case Repo.get!(Thread, thread.id) do
       %Thread{stage: "review", awaiting: nil} = fresh ->
-        if Workline.qa_owed(fresh, opts) == nil, do: park_approved(fresh, opts), else: {:ok, fresh}
+        if qa_owed(fresh, opts) == nil, do: park_approved(fresh, opts), else: {:ok, fresh}
 
       fresh ->
         {:ok, fresh}
@@ -345,4 +352,232 @@ defmodule Server.Workline.Review do
   defp park_refusal(why), do: inspect(why)
 
   defp follow_up_title(text), do: text |> String.split("\n", parts: 2) |> hd() |> String.trim()
+
+  # A standing approval: the operator's `auto_land_risk` — a reviewed-and-approved workline whose
+  # risk grade has no axis over it (and no limit hit, no decision left open) lands without them,
+  # through the same gated queue. Off unless set; a test hands the threshold outright.
+  # A builder with a good enough record has earned a step more of it (`Server.Trust`).
+  def auto_land?(thread, checker, opts) do
+    max = Keyword.get_lazy(opts, :auto_land_risk, fn -> if checker == Git, do: auto_land_risk() end)
+
+    is_integer(max) and review_approved?(thread) and
+      Grade.allows?(grade(thread), elem(Server.Trust.allowance(thread, max), 0)) and
+      qa_cleared(thread, opts) == :ok
+  end
+
+  def auto_land_note(thread, opts) do
+    {max, earned} = Server.Trust.allowance(thread, Keyword.get_lazy(opts, :auto_land_risk, &auto_land_risk/0))
+
+    by =
+      if earned,
+        do:
+          ": one over your setting, earned by #{earned.name}#{if earned.model, do: " on #{earned.model}"}, who landed #{earned.first_time} of their last #{earned.led} builds first time",
+        else: ""
+
+    "auto-approved by your standing approval (reviewed; #{Grade.line(grade(thread))}, none over #{max}#{by})"
+  end
+
+  # the newest grade since the workline last entered review: nil if none, or the grader failed
+  def grade(thread) do
+    case since_review(thread, "workline:#{thread.slug}:grade") do
+      %{kind: "check_passed", detail: grade} -> grade
+      _ -> nil
+    end
+  end
+
+  # the newest event of `correlation` since the workline last entered review
+  def since_review(thread, correlation) do
+    entered =
+      Repo.one(
+        from e in Server.Event,
+          where:
+            e.thread_id == ^thread.id and e.kind == "stage_advanced" and
+              fragment("(?::jsonb ->> 'to') = 'review'", e.detail),
+          select: max(e.id)
+      ) || 0
+
+    Repo.one(
+      from e in Server.Event,
+        where: e.thread_id == ^thread.id and e.correlation == ^correlation and e.id > ^entered,
+        order_by: [desc: e.id],
+        limit: 1
+    )
+  end
+
+  # at review, a change Andrew would see waits on a QA pass since it last entered review — where the
+  # bench seats a qa; a bench without one lands it as before
+  def qa_cleared(thread, opts) do
+    case qa_owed(thread, opts) do
+      nil ->
+        :ok
+
+      {seat, _paths} ->
+        if Server.Channel.thread_lead(thread.id) == seat.name,
+          do: {:error, {:artifact_missing, "QA is yours: " <> qa_playbook(thread)}},
+          else:
+            {:error,
+             {:artifact_missing,
+              "QA hasn't passed this user-visible change: #{seat.name} drives it against a scratch release and files what it saw with submit_qa"}}
+    end
+  end
+
+  def qa_owed(%Thread{stage: "review", workspace_id: ws} = thread, opts) when not is_nil(ws) do
+    with %Server.Coworker{} = seat <- qa_seat(thread),
+         [_ | _] = paths <- Enum.filter(changed_paths(thread, opts), &String.starts_with?(&1, @user_visible)),
+         false <- match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:qa")) do
+      {seat, paths}
+    else
+      _ -> nil
+    end
+  end
+
+  def qa_owed(_thread, _opts), do: nil
+
+  def to_qa(thread, seat, paths) do
+    handed = Workline.hand_to(thread, "qa", seat.name)
+
+    Workline.post_brief(
+      handed,
+      "🎭 QA: the review approved a change Andrew will see (#{Enum.join(Enum.take(paths, 5), ", ")}). " <>
+        String.capitalize(qa_playbook(thread))
+    )
+
+    handed
+  end
+
+  # the review approved the code it read (its verdict's `sha`): code committed after it goes back
+  # to build like any other change, through verify and a review of what changed
+  def reviewed_current(%Thread{stage: "review"} = thread) do
+    with %{detail: %{"sha" => seen}} when is_binary(seen) <- since_review(thread, "workline:#{thread.slug}:review"),
+         now when is_binary(now) <- Workline.branch_head(thread),
+         {:changed, how} <- compare_code(thread, seen, now) do
+      why =
+        if how == :conflicts,
+          do: "work/#{thread.slug} was rebased onto main with conflicts resolved after its review",
+          else: "work/#{thread.slug} has code committed after its review"
+
+      Workline.bounce(
+        thread,
+        why,
+        "#{why} (reviewed at #{String.slice(seen, 0, 7)}, now #{String.slice(now, 0, 7)}): it comes back through verify and a review of what changed"
+      )
+    else
+      _ -> :ok
+    end
+  end
+
+  def reviewed_current(_thread), do: :ok
+
+  def main_ref(root) do
+    Enum.find(
+      ["origin/main", "main"],
+      &match?({_, 0}, Server.Git.cmd(root, ["rev-parse", "--verify", "--quiet", &1]))
+    )
+  end
+
+  # The branch's own change at `head` against what was judged at `sha`, not their trees: its commits
+  # main doesn't already have (`git cherry`, so a commit main took on its own drops out), each by the
+  # patch-id of its code (work/<slug>/ left out: the server commits review.md after a verdict). A
+  # rebase onto a newer main (the merge queue keeps its rebase across a cut-off gate) is `:same`; the
+  # same commits with other patches are `{:changed, :conflicts}`, a resolved rebase; anything else
+  # `{:changed, :code}`. A git error is `{:changed, :unreadable}`, and logged.
+  def compare_code(_thread, sha, sha), do: :same
+
+  def compare_code(thread, sha, head) do
+    root = Git.root(thread)
+
+    with base when is_binary(base) <- main_ref(root),
+         {:ok, seen} <- own_patches(root, base, sha, thread.slug),
+         {:ok, now} <- own_patches(root, base, head, thread.slug) do
+      patches_compared(seen, now, fn -> same_tree?(root, sha, head, thread.slug) end)
+    else
+      why ->
+        require(Logger) && Logger.warning("workline #{thread.slug}: can't compare #{sha} with #{head}: #{inspect(why)}")
+        {:changed, :unreadable}
+    end
+  end
+
+  # `{subject, patch-id}` lists: the same patches are the same change; the same commits with other
+  # patches, a rebase whose conflicts were resolved. No commits of its own on either side (its code
+  # is on main already): `same_tree?` decides.
+  defp patches_compared([], [], same_tree?), do: if(same_tree?.(), do: :same, else: {:changed, :code})
+
+  defp patches_compared(seen, now, _same_tree?) do
+    cond do
+      Enum.map(seen, &elem(&1, 1)) == Enum.map(now, &elem(&1, 1)) -> :same
+      Enum.map(seen, &elem(&1, 0)) == Enum.map(now, &elem(&1, 0)) -> {:changed, :conflicts}
+      true -> {:changed, :code}
+    end
+  end
+
+  defp auto_land_risk, do: Server.OperatorConfig.setting("auto_land_risk")
+
+  defp review_approved?(thread),
+    do: match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:review"))
+
+  defp qa_playbook(thread) do
+    """
+    drive the changed path as Andrew would, against a scratch release of work/#{thread.slug}: \
+    `start_smoke(thread_id: #{thread.id})` has the service build it on its own port and db, smoke it and keep it up \
+    (it posts the url here); drive it with `drive_smoke(keys, thread_id: #{thread.id})`, the steps of `office:drive`; \
+    `stop_smoke` when done. Your own Bash can run neither: it has no Postgres socket and a network of its own. \
+    Never :4040, the live service. Then submit_qa with thread_id: #{thread.id}: pass, or fail with the \
+    finding — what you pressed and the screen text you saw.\
+    """
+  end
+
+  defp changed_paths(thread, opts) do
+    Keyword.get_lazy(opts, :paths, fn ->
+      if Keyword.get(opts, :artifacts, Git) == Git, do: Git.changed_paths(thread), else: []
+    end)
+  end
+
+  # the thread's lead when it is the qa already, else a free one, else any
+  defp qa_seat(thread) do
+    seats = thread.workspace_id |> Server.Workspaces.bench() |> Enum.filter(&(&1.archetype == "qa"))
+    current = Server.Channel.thread_lead(thread.id)
+
+    Enum.find(seats, &(&1.name == current)) || Enum.find(seats, &(not Workline.leading_another?(&1, thread))) ||
+      List.first(seats)
+  end
+
+  # no commits of its own on either side (its code is on main already): the trees decide
+  defp same_tree?(root, sha, head, slug),
+    do: match?({_, 0}, Server.Git.cmd(root, ["diff", "--quiet", sha, head, "--", ".", ":!work/#{slug}"]))
+
+  # `{subject, patch-id}` of each of `ref`'s commits main doesn't have that touches code, oldest first
+  defp own_patches(root, base, ref, slug) do
+    case Server.Git.cmd(root, ["cherry", base, ref]) do
+      {out, 0} ->
+        commits = for "+ " <> c <- String.split(out, "\n", trim: true), do: c
+        patches_of(root, slug, commits)
+
+      {out, code} ->
+        {:error, {code, String.slice(out, 0, 200)}}
+    end
+  end
+
+  defp patches_of(_root, _slug, []), do: {:ok, []}
+
+  defp patches_of(root, slug, commits) do
+    # pipefail: a git failure is the pipeline's, not hidden behind patch-id's exit
+    script = ~s(git -C "$1" show --format='commit %H' "${@:3}" -- . ":!work/$2" | git patch-id --stable)
+
+    with {ids, 0} <-
+           Server.Cmd.run("bash", ["-o", "pipefail", "-c", script, "bash", root, slug | commits],
+             stderr_to_stdout: true
+           ),
+         {subjects, 0} <-
+           Server.Git.cmd(root, ["show", "-s", "--format=%H%x09%s" | commits]) do
+      id_of =
+        Map.new(String.split(ids, "\n", trim: true), &(&1 |> String.split(" ") |> Enum.reverse() |> List.to_tuple()))
+
+      subject_of =
+        Map.new(String.split(subjects, "\n", trim: true), &(&1 |> String.split("\t", parts: 2) |> List.to_tuple()))
+
+      {:ok, for(c <- commits, id = id_of[c], do: {subject_of[c], id})}
+    else
+      {out, code} -> {:error, {code, String.slice(out, 0, 200)}}
+    end
+  end
 end

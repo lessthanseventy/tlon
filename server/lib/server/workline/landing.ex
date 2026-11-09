@@ -7,10 +7,15 @@ defmodule Server.Workline.Landing do
 
   import Ecto.Query
 
+  alias Server.Dossier
   alias Server.Repo
   alias Server.Thread
   alias Server.Workline
   alias Server.Workline.Artifacts.Git
+  alias Server.Workline.Review
+  alias Server.Workline.Stage
+
+  require Logger
 
   @discarded_cap 3
 
@@ -93,7 +98,7 @@ defmodule Server.Workline.Landing do
     repo = Git.root(thread)
     last? = Keyword.get(opts, :last, false)
 
-    with :ok <- Workline.reviewed_current(thread) do
+    with :ok <- Review.reviewed_current(thread) do
       case merger.merge(repo, thread.slug, gate: gate) do
         {:ok, moved} ->
           landed(thread, Map.merge(moved, %{repo: repo, gated: moved.to}), Keyword.get(opts, :run, &Server.Cmd.run/3))
@@ -313,6 +318,110 @@ defmodule Server.Workline.Landing do
   @doc "The correlation a workline's publish is recorded under, as `check_passed` or `check_failed`."
   def publish_correlation(%Thread{slug: slug}), do: "workline:#{slug}:publish"
 
+  @doc """
+  Reopen a closed thread. A workline that was in the merge queue (at review, waiting on no one)
+  goes back into it while its approval stands (`approval/1`); one whose branch moved since is left
+  at review for its reviewer, saying so. `{:ok, thread}`.
+  """
+  def reopen(%Thread{} = thread) do
+    Server.Channel.reopen_if_closed(thread.id)
+    reopened = Repo.get!(Thread, thread.id)
+
+    case reopened do
+      %Thread{stage: "review", awaiting: nil} ->
+        case Workline.approval(reopened) do
+          %{"by" => by, "sha" => sha} ->
+            Stage.queue(reopened, "reopened — #{by}'s approval at #{String.slice(sha, 0, 7)} still stands", by)
+
+          nil ->
+            Workline.post_brief(
+              reopened,
+              "reopened at review — no approval stands for work/#{reopened.slug} as it is now"
+            )
+
+            {:ok, reopened}
+        end
+
+      _ ->
+        {:ok, reopened}
+    end
+  end
+
+  def landing_check(url, exit, tail),
+    do: %{"cmd" => "GitHub merge of #{url}", "exit" => exit, "url" => url, "tail" => tail}
+
+  def record_landing(thread, kind, detail) do
+    {:ok, _} =
+      Dossier.record_event(%{
+        thread_id: thread.id,
+        kind: kind,
+        correlation: "workline:#{thread.slug}:landing",
+        detail: detail
+      })
+  end
+
+  # landed: what changed rolls out and the branch goes to GitHub, where it is not merged yet — the
+  # thread stays open until GitHub merges the PR (`merged/2`). With no GitHub, the landing is the merge.
+  def finish(thread, %{repo: repo, from: from, to: to} = moved, run) do
+    Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
+    publish(thread, repo, "⤵ landed as #{String.slice(to, 0, 7)}", String.slice(to, 0, 7), run, moved[:gated])
+  rescue
+    e ->
+      why = "merged, but its close-out failed (not published to GitHub): #{Exception.message(e)}"
+      require(Logger) && Logger.warning("workline #{thread.slug}: #{why}")
+      unpublished(thread, "⚠ #{why}")
+  end
+
+  # `gated`: the sha the merge queue's gate passed on, posted as tlon/check; a republish has none
+  def publish(thread, repo, landed, ref, run, gated \\ nil) do
+    case Server.Workline.Publish.publish(repo, thread.slug, thread.title, run, gated: gated) do
+      {:ok, url} = ok ->
+        record_publish(thread, 0, url)
+        record_landing(thread, "check_passed", landing_check(url, 0, "published"))
+
+        Workline.post_brief(
+          thread,
+          "#{landed}; published as #{url} — the thread closes once GitHub reports it merged"
+        )
+
+        ok
+
+      {:auto_refused, url, why} = refused ->
+        record_publish(thread, 0, url)
+        record_landing(thread, "check_failed", landing_check(url, 1, "merge refused: #{why}"))
+        Workline.post_brief(thread, "#{landed}; published as #{url}, but GitHub refused to merge it: #{why}")
+        refused
+
+      :none ->
+        record_publish(thread, 0, "no origin to publish to")
+        Workline.post_brief(thread, landed)
+        Workline.merged(thread, ref)
+        :none
+
+      {:error, why} = error ->
+        unpublished(thread, "#{landed}, but not published to GitHub: #{why}")
+        error
+    end
+  end
+
+  # the failure is recorded for the operator's list (`Server.Office.Needs`' `publish_failed`), and the
+  # sheriff is told too, so the work reaches main
+  def unpublished(thread, why) do
+    record_publish(thread, 1, why)
+    Workline.post_brief(thread, why)
+    Server.Sheriff.report(thread, "work/#{thread.slug} — #{why}")
+  end
+
+  def record_publish(thread, exit, tail) do
+    {:ok, _} =
+      Server.Dossier.record_event(%{
+        thread_id: thread.id,
+        kind: if(exit == 0, do: "check_passed", else: "check_failed"),
+        correlation: Workline.publish_correlation(thread),
+        detail: %{"cmd" => "publish work/#{thread.slug}", "exit" => exit, "tail" => tail}
+      })
+  end
+
   defp publish_failed?(thread) do
     Repo.one(
       from e in Server.Event,
@@ -327,7 +436,7 @@ defmodule Server.Workline.Landing do
 
   # the gate passed: flip it to merged unless it moved off review while the gate ran
   defp landed(thread, moved, run) do
-    case Workline.flip(thread) do
+    case Stage.flip(thread) do
       {:ok, flipped} ->
         Workline.finish(flipped, moved, run)
         Server.Jobs.enqueue(Server.Jobs.Retro.new(%{thread_id: flipped.id}))
@@ -451,7 +560,7 @@ defmodule Server.Workline.Landing do
     )
   end
 
-  defp rideable?(%Thread{stage: "review", awaiting: nil, state: "open"} = t), do: Workline.reviewed_current(t) == :ok
+  defp rideable?(%Thread{stage: "review", awaiting: nil, state: "open"} = t), do: Review.reviewed_current(t) == :ok
   defp rideable?(_thread), do: false
 
   defp ride([{lead, _} = first | rest], repo, merger, opts) do
@@ -506,7 +615,7 @@ defmodule Server.Workline.Landing do
 
   defp requeue_or_drop(thread, %{"by" => by, "sha" => sha, "at" => at} = approval) do
     if discarded_landings(thread, at) < @discarded_cap do
-      Workline.queue(
+      Stage.queue(
         thread,
         "its landing was lost — #{by}'s approval at #{String.slice(sha, 0, 7)} still stands, queued again",
         by
