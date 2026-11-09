@@ -6,10 +6,10 @@
 import { arrivals } from "../kit/door"
 import { babelPage, clockFace, hasFound, isKonami, KONAMI } from "../kit/eggs"
 import { bump as bumpTally, findSecret, newlyWon, night, serialize as serializeTally, won as wonTrophies, type Tally } from "../kit/trophies"
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, unlinkSync, watchFile, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, unlinkSync, watchFile, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
-import { FLOOR, marginInk } from "../kit/margin"
+import { marginInk } from "../kit/margin"
 import { reactLine, seatLine } from "../kit/seat-voices"
 import type { EventKind } from "../kit/events"
 import { save as saveWhim } from "../kit/whimsy-file"
@@ -20,22 +20,15 @@ import { resolvePets } from "../kit/pets"
 import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
 import { phoneBar, ringFrame } from "../kit/surfaces"
-import { useSouls } from "../kit/souls"
 import { lastLanding } from "../kit/tv"
-import { paced } from "./pace"
-import { watchDirs } from "./watch"
-import { loadSouls, soulsSignature } from "./souls"
-import { baseLook, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
-import { ROLE, useRoles, type Role } from "../kit/palette"
+import { baseLook, overrideFor, trimCustom } from "../kit/looks"
+import { ROLE } from "../kit/palette"
 import { bedScene, lifeHeader, streakFrames } from "../kit/life"
 import { usageHeader } from "../kit/usage"
-import { BLANK_SOUL, candidateOf, hallSignature, loadHall } from "../kit/hall"
+import { BLANK_SOUL, candidateOf } from "../kit/hall"
 import { stepRow } from "./hall"
-import { castSignature, loadCast } from "../kit/cast"
-import { loadStore } from "../kit/store"
 import { stepStoreRow } from "./store"
 import { shirtOf } from "../kit/sprites"
-import { NOW_PLAYING_FORMAT, parseNowPlaying, type NowPlaying } from "../kit/stereo"
 import { flagOn, operatorOf, type Agents } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
@@ -47,19 +40,17 @@ import { Editor } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
 import { loadFloor } from "./home"
-import { loadPets, PETS_PATH } from "./pets"
+import { loadPets } from "./pets"
 import { geometry, hitAt, kittyImage, measureFor, textLayer } from "./paint"
 import { Reader, type ReaderDeps } from "./reader"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
-import { badge, cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input, type Seg } from "./term"
-import { execSelf, selfArgv } from "./exec"
+import { badge, cells, ESC, leave, line, out, type Input, type Seg } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { downHeader } from "./down"
 import { oneInFlight } from "./flight"
 import { earmarkOf, earmarksOut, freshPosts, handoffFrom } from "../kit/plane"
-import { State, STATE_DIR, STATE, TRAY, SAID, EARS, LOOKED, PALETTE, TOY_KEYS, LOOKS, SOULS, HALL, CAST, STORE, PLAY_SEEN, OFFICE, readState, writeState, TROPHY_FILE, type Mode, type Row, type Cycle, type Prompt, type Pick, type Action } from "./state"
-import type { Ctl } from "./ctl"
+import { State, STATE_DIR, STATE, TRAY, SAID, EARS, LOOKED, TOY_KEYS, SOULS, OFFICE, writeState, TROPHY_FILE, type Mode, type Row, type Cycle, type Prompt, type Pick, type Action } from "./state"
 import { detail } from "./cards/index"
 import { boardCtx, cardBox, changed, checkingId, crewOn, crewsOf, hallCtx, nextCrew, threadOf, view, wsName } from "./select"
 import { ACTIONS_W, DETAIL, cardKey, cols, dim, key, keyName, paneW, pink, plain, stamp, tidSeg } from "./ui"
@@ -67,6 +58,8 @@ import { NEED_KIND } from "./cards/needs"
 import { newSchedule } from "./cards/schedule"
 import { threadActions } from "./cards/thread"
 import { GAMES } from "./cards/home"
+import { boot, followPets, relaunch } from "./boot"
+import type { Boot } from "./ctl"
 
 const app = new State()
 
@@ -80,27 +73,7 @@ function resort(step: () => void) {
   if (at >= 0) app.sel = at
   draw()
 }
-/** a hand edit of hall.json shows up on the next poll; true when it did */
-function followHall(): boolean {
-  const seen = hallSignature(HALL)
-  if (seen === app.hallSeen) return false
-  app.hallSeen = seen; app.hall = loadHall(HALL)
-  return true
-}
 
-function followCast(): boolean {
-  const seen = castSignature(CAST)
-  if (seen === app.castSeen) return false
-  app.castSeen = seen; app.cast = loadCast(CAST)
-  return true
-}
-/** a hand edit of store.json shows up on the next poll; true when it did */
-function followStore(): boolean {
-  const seen = hallSignature(STORE)
-  if (seen === app.storeSeen) return false
-  app.storeSeen = seen; app.store = loadStore(STORE)
-  return true
-}
 /** a thread with an open prompt opens with its box unfocused, so 1–9 answer at once */
 const asks = (tid: number) => !!threadOf(app, tid)?.prompt
 
@@ -148,55 +121,6 @@ function setWhim(s: WhimState) {
   changed(app)
 }
 const unread = () => app.feed.filter((x) => x.at > app.trayRead && x.who !== operatorOf(app.all)).length
-
-/** take the machine's palette if it changed since last look; true when it did */
-function followPalette(): boolean {
-  try {
-    const real = realpathSync(PALETTE), seen = `${real}@${statSync(real).mtimeMs}`
-    if (seen === app.paletteSeen) return false
-    app.paletteSeen = seen
-    const j = JSON.parse(readFileSync(real, "utf8")), roles = j.role ?? j
-    useRoles(Object.fromEntries(Object.entries(roles).filter(([k, v]) => k in ROLE && typeof v === "string")) as Partial<Record<Role, string>>)
-    return true
-  } catch { return false }
-}
-
-/** take the machine's looks.json if it changed since last look; true when it did */
-function followLooks(): boolean {
-  try {
-    const real = realpathSync(LOOKS), seen = `${real}@${statSync(real).mtimeMs}`
-    if (seen === app.looksSeen) return false
-    app.looksSeen = seen
-    useLookOverrides(JSON.parse(readFileSync(real, "utf8")) as Record<string, LookOverride>)
-    return true
-  } catch { return false }
-}
-
-/** take the machine's souls dir if a file came, went or changed; true when it did */
-function followSouls(): boolean {
-  const seen = soulsSignature(SOULS)
-  if (seen === app.soulsSeen) return false
-  app.soulsSeen = seen
-  useSouls(loadSouls(SOULS))
-  return true
-}
-
-/**
- * take pets.json if it changed since last look; true when it did. With no file the Sim keeps its
- * unset temperament, so today's room is unchanged byte for byte (the `classic` preset is not neutral).
- */
-function followPets(): boolean {
-  try {
-    const real = realpathSync(PETS_PATH), seen = `${real}@${statSync(real).mtimeMs}`
-    if (seen === app.petsSeen) return false
-    app.petsSeen = seen
-    const file = loadPets(real)
-    if (!file) return false
-    app.petsNow = resolvePets(file)
-    for (const r of app.rooms.values()) r.setPets(app.petsNow)
-    return true
-  } catch { return false }
-}
 
 function choose(id: number | null) {
   if (id !== app.ws) { app.feed = []; app.card = null }
@@ -579,27 +503,6 @@ function hearMachine() {
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!app.officeRev && !!app.all.revs?.office && app.all.revs.office !== app.officeRev
-/** start this TUI over on the new code: hand the terminal back and exec the same command in place */
-// every interval this process runs, so a relaunch can stop them all
-const timers: ReturnType<typeof setInterval>[] = []
-const closers: (() => void)[] = []
-const every = (fn: () => unknown, ms: number) => { timers.push(setInterval(fn, ms)) }
-/** a timer that, with the terminal unfocused, runs once per `idleMs` instead of every `ms` */
-const everyFocused = (fn: () => unknown, ms: number, idleMs = 30_000) => every(paced(() => app.focused, idleMs, fn), ms)
-
-async function relaunch() {
-  leave()
-  execSelf(selfArgv())
-  // exec failed: run the new code as a child, the terminal handed over whole — a parent still
-  // ticking draws its own room on alternate frames with the child's (a strobe) and takes its keys
-  mute()
-  for (const t of timers) clearInterval(t)
-  for (const c of closers) c()
-  process.stdin.removeAllListeners("data")
-  process.stdin.pause()
-  const child = Bun.spawn(selfArgv(), { stdio: ["inherit", "inherit", "inherit"], env: process.env })
-  process.exit(await child.exited)
-}
 
 /** the verbs the finder offers by name — the same ones the keys reach */
 const VERBS: [string, () => void][] = [
@@ -656,28 +559,6 @@ function closeReader() {
 const ask2 = (label: string, run: () => void) => { app.confirm = { label, run }; draw() }
 
 // ── the detail pane ────────────────────────────────────────────────────────────────────────────
-
-async function pollPlayer() {
-  if (app.playerBusy || Date.now() < app.playerRetry || !(room() instanceof WideRoom)) return
-  app.playerBusy = true
-  let now: NowPlaying | null = null
-  try {
-    const p = Bun.spawn(["playerctl", "metadata", "--format", NOW_PLAYING_FORMAT], { stdout: "pipe", stderr: "ignore" })
-    const out = await new Response(p.stdout).text()
-    if ((await p.exited) === 0) now = parseNowPlaying(out)
-  } catch { /* no playerctl */ }
-  app.playerBusy = false
-  if (!now) app.playerRetry = Date.now() + 30_000
-  const rm = room()
-  if (rm instanceof WideRoom) rm.setPlayer(now)
-}
-/** refresh a thread's close look; true when its activity feed moved */
-async function pollActivity(tid: number) {
-  const was = app.threads.get(tid)?.activity?.at(-1)
-  await loadThread(tid)
-  const now = app.threads.get(tid)?.activity?.at(-1)
-  return was?.at !== now?.at || was?.summary !== now?.summary
-}
 
 const back1: Action = { ...bind("back.esc"), run: () => { back(); app.roomChanged = true; draw() } }
 
@@ -1342,91 +1223,12 @@ function toRoom(): void {
 function quit() { app.zoom?.view.close(); leave(); process.exit(0) }
 
 // ── startup ────────────────────────────────────────────────────────────────────────────────────
-async function main() {
-  if (!process.stdin.isTTY) { console.error("office: needs a terminal"); process.exit(1) }
-  followPalette()
-  followLooks()
-  followSouls()
-  followPets()
-  enter()
-  process.on("uncaughtException", (e) => { leave(); console.error(e); process.exit(1) })
-  let pending = "", detected = false
-  const ready = new Promise<void>((res) => {
-    process.stdin.on("data", (b: Buffer) => {
-      if (app.zoom) return zoomInput(b)
-      const { inputs, rest } = tokenize(pending + b.toString("utf8"))
-      pending = rest
-      for (const i of inputs) {
-        if (i.t === "cell") app.cell = { w: i.w, h: i.h }
-        else if (i.t === "graphics") app.kitty = process.env.OFFICE_GRAPHICS !== "blocks" && i.ok
-        else if (i.t === "da") { if (!detected) { detected = true; res() } }
-        else if (!detected) continue
-        else if (i.t === "key") onKey(i.key)
-        else if (i.t === "paste") onPaste(i.text)
-        else if (i.t === "focus") { app.focused = i.on; app.looks.focus(i.on); if (!i.on) stampLooked(); draw() }
-        else if (i.t === "mouse") onMouse(i)
-      }
-    })
-    setTimeout(() => { if (!detected) { detected = true; res() } }, 500)
-  })
-  query()
-  await ready
-  // tmux eats the graphics protocol unless told to pass it through; blocks there by default
-  if (process.env.TMUX && process.env.OFFICE_GRAPHICS !== "kitty") app.kitty = false
-  layoutScreen()
-  process.stdout.on("resize", () => {
-    if (app.zoom) { app.zoom.view.resize(cols(), Math.max(2, (process.stdout.rows ?? 24) - 1)); return drawZoom() }
-    query(); setTimeout(() => { layoutScreen(); draw() }, 150)
-  })
-  await refresh()
-  if (app.world && process.env.OFFICE_PLAY_INTRO === "1" && !readState(PLAY_SEEN)) { writeState(PLAY_SEEN, "1"); open({ kind: "play" }) }
-  everyFocused(refresh, 10_000)
-  everyFocused(pollPlayer, 2000)
-  everyFocused(watchTrophies, 1000)
-  let sec = 0
-  every(() => { app.looks.tick(1); if (app.focused && ++sec % 5 === 0) stampLooked(); if (app.focused && !app.reader && !app.zoom && app.notes.some((n) => { const a = app.looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
-  every(() => { if (app.focused && ((app.mode.kind === "pet" && app.petDraft) || app.mode.kind === "store")) { app.previewTick += 10; draw() } }, 1000)
-  every(() => { if (app.focused && app.bySurface.counts.phone > 0) draw() }, 1000) // the phone rings: its glyph shakes once a second
-  const followFiles = () => { if ([followPalette(), followLooks(), followSouls(), followPets(), followHall(), followStore(), followCast()].some(Boolean)) { app.frame = null; draw() } }
-  const real = (p: string) => { try { return realpathSync(p) } catch { return p } }
-  const files = [PALETTE, LOOKS, PETS_PATH, HALL, STORE, CAST]
-  const watched = watchDirs([...files, ...files.map(real)].map((f) => dirname(f)).concat(SOULS), followFiles)
-  closers.push(watched.close)
-  if (!watched.ok) everyFocused(followFiles, 1000)
-  // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
-  // what was asked before this TUI started
-  let seenFocus = (await data.focus())?.at ?? 0
-  everyFocused(async () => {
-    const f = await data.focus()
-    if (!f || f.at <= seenFocus) return
-    seenFocus = f.at
-    if (app.zoom) leaveZoom()
-    goThread(f.thread_id, threadOf(app, f.thread_id)?.workspace_id)
-    openReader(f.thread_id, {}, false)
-  }, 1000, 5000)
-  // a card showing a running coworker keeps their activity current
-  everyFocused(() => {
-    const tid = openThread()
-    if (tid !== null && !app.zoom && !app.reader && threadOf(app, tid)?.live && !app.talkView.has(tid)) void pollActivity(tid).then((moved) => { if (moved) draw() })
-  }, 1000)
-  // the room's clock: 10 Hz, drawn only when it changed. The room's time is counted in these ticks, so
-  // it always steps; it is the repaint (a whole frame each) that costs a room nobody watches a core:
-  // none while the terminal is unfocused (the return to focus draws), 2 Hz while the office is calm
-  // (paused, or no coworker live)
-  const animate = process.env.OFFICE_NO_ANIMATE !== "1" // tests boot the TUI with it off: no frame to wait on
-  let beat = 0, frames = 0, stale = false
-  const calm = () => app.all.pause === "pencils_down" || app.all.pause === "lights_out" || !app.all.threads.some((t) => t.live)
-  every(() => {
-    if (animate && !app.reader && room().step(view(app))) { changed(app); stale = true }
-    // the header and the pane catch up once a second; the frames between repaint the room alone
-    if (stale && app.focused && (++beat % 5 === 0 || !calm())) { stale = false; paint(++frames % 10 !== 0) }
-  }, 100)
-}
-const ctl: Ctl = {
+const ctl: Boot = {
   open, back, act, ask, ask2, did, draw, refresh, loadCard, find, room, back1, resort, hire, talk, reply, newThread, newTicket, newNote,
   finder, inbox, quit, goThread, goWs, openReader, closeReader, openConversation, openBabel, openDump, openSoul, readPage, restorePage,
-  zoomInto, zoomGit, pickDoc, play, playDo, setWhim, followPets,
+  zoomInto, zoomGit, pickDoc, play, playDo, setWhim, followPets: () => followPets(app),
+  loadThread, zoomInput, onKey, onPaste, stampLooked, onMouse, layoutScreen, drawZoom, watchTrophies, leaveZoom, openThread, paint,
   detail: () => detail(app, ctl),
 }
 
-main()
+void boot(app, ctl)
