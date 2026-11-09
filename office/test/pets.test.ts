@@ -511,4 +511,21 @@ describe("pet presets", () => {
     }
     expect(Object.keys(PRESETS)).toEqual(["nina-and-argos", "cat-only", "menagerie", "pond-life", "none"])
   })
+  test("pond-life keeps a frog in the cat slot", () => {
+    expect(PRESETS["pond-life"]!.cat.species).toBe("frog")
+    expect(slotOf("frog")).toBe("cat")
+    expect(SPECIES).toContain("frog")
+    expect(SPECIES_VOICE.frog.sassy.pet.length).toBeGreaterThan(0)
+    expect(SPECIES_ART.frog.sit.length).toBeGreaterThan(0)
+  })
+  test("none empties both slots, and the room draws and offers neither", () => {
+    expect(resolvePets({ preset: "none" }).cat.absent).toBe(true)
+    expect(resolvePets({ preset: "none" }).dog.absent).toBe(true)
+    expect(resolvePets({ preset: "cat-only" }).cat.absent).toBeUndefined()
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1)
+    const pets = (r: WideRoom) => r.render(a, focus, measure).hits.filter((h) => h.act?.kind === "cat" || h.act?.kind === "dog").length
+    expect(pets(room)).toBeGreaterThan(0)
+    room.setPets(resolvePets({ preset: "none" }))
+    expect(pets(room)).toBe(0)
+  })
 })

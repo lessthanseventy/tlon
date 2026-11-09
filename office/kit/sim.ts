@@ -146,10 +146,12 @@ const SERVER_EVENT: Record<EventKind, string> = { drill: "fire_drill", zoo: "zoo
 
 export class Sim<L extends { people: Seat[] }> {
   protected cat: Cat
+  /** the cat slot holds no one: nothing is drawn or offered for her */
+  protected catAbsent = false
   protected temperament: Temperament = { warmth: 0, wits: 0, energy: 0 }
   setTemperament(t: Temperament) { this.temperament = t }
   /** pets.json, resolved: the cat slot's name and temperament */
-  setPets(p: Pets) { this.cat.name = p.cat.name; this.cat.species = p.cat.species as Cat["species"]; this.cat.shade = p.cat.shade ?? 0; this.setTemperament(p.cat.temperament) }
+  setPets(p: Pets) { this.catAbsent = !!p.cat.absent; this.cat.name = p.cat.name; this.cat.species = p.cat.species as Cat["species"]; this.cat.shade = p.cat.shade ?? 0; this.setTemperament(p.cat.temperament) }
   /** the cat slot as configured, for the server to write her lines in her temperament */
   petProfile() { return { name: this.cat.name, species: this.cat.species, ...this.temperament } }
   /**

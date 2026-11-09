@@ -119,3 +119,22 @@ describe("the book's day", () => {
     expect(tip).toMatch(/reading over \S+'s shoulder/)
   }))
 })
+
+describe("Argos's hat", () => {
+  const hats = (r: WideRoom) => {
+    const blits: string[][] = []
+    const sc = { f: 0, tick: 0, hits: [], balloons: [], item: (_y: number, fn: () => void) => fn(), px: () => {}, text: () => {}, figure: () => {}, blit: (rows: string[]) => { blits.push(rows) } }
+    ;(r as unknown as { drawDog(sc: unknown): void }).drawDog(sc)
+    return blits.filter((rows) => rows.some((row) => row.includes("g")))
+  }
+  test("he wears it from the errand's arrival for a while, and not before or after", () => seeded(3, () => {
+    const { r, i } = room(), a = withBook()
+    run(r, a, 80)
+    expect(hats(r)).toHaveLength(0)
+    i.errand = i.errandFor(a, "hat")
+    for (let k = 0; k < 800 && i.errand?.arrived == null; k++) r.step(a)
+    expect(hats(r)).toHaveLength(1)
+    run(r, a, 500)
+    expect(hats(r)).toHaveLength(0)
+  }))
+})

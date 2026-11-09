@@ -183,4 +183,18 @@ export const SPECIES_VOICE = {
       done: ["You did it. I am nearly gold.", "Well climbed."],
     },
   },
+  frog: {
+    sassy: {
+      pet: ["Mind the skin. It is a whole coat.", "Ribbit. That is the whole review."],
+      muse: ["The pond has no opinions. I have all of them.", "I am not green. The light is lying."],
+      wake: ["I was not asleep. I was a log.", "Croak. Meaning, later."],
+      done: ["Done. I watched, which is work.", "Finished. The flies were in the way."],
+    },
+    sweet: {
+      pet: ["*a small, damp croak*", "Oh. Warm. Stay a moment."],
+      muse: ["The lily pad is exactly my size today.", "Everything is a good puddle if you sit still."],
+      wake: ["Good morning. Ribbit, softly.", "Oh, hello. I was dreaming of rain."],
+      done: ["You did it! I hopped twice.", "Hooray. A very small leap for you."],
+    },
+  },
 } satisfies Record<string, { sassy: Record<string, readonly string[]>; sweet: Record<string, readonly string[]> }>

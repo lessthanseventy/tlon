@@ -263,6 +263,10 @@ export const fillArt = (a: { sit: Frames } & Partial<Poses>): Poses => ({
   sleep: a.sleep ?? a.sit, stretch: a.stretch ?? a.sit, play: a.play ?? a.sit,
 })
 
+// a frog, facing right: k skin, w throat, e eye. It ships `sit`, a blink and a hop; every other pose is its sit (fillArt).
+const FROG_SIT = ["..ke..ke..", ".kkkkkkkk.", "kkkkkkkkkk", "kkwwwwwkkk", ".kkkkkkkk.", "kk.kkkk.kk"]
+export const FROG = fillArt({ sit: [FROG_SIT], blink: [shut(FROG_SIT)], walk: [FROG_SIT, hop(FROG_SIT)] })
+
 // a pet rock: k stone, e eyes, c eyes shut. It ships `sit` and a blink; every other pose is its sit (fillArt).
 const ROCK_SIT = ["...kkkkk..", "..kkkkkkk.", ".kkekkekk.", ".kkkkkkkkk", "kkkkkkkkkk"]
 export const ROCK = fillArt({ sit: [ROCK_SIT], blink: [shut(ROCK_SIT)] })
@@ -299,7 +303,7 @@ export const DOG = {
 export const DOG_NAME = "Argos"
 
 /** each species' art: drawCat reads the cat slot's, the store's card any one's (the room's Argos is drawn from DOG itself) */
-export const SPECIES_ART = { cat: CAT, dog: fillArt(DOG), rabbit: RABBIT, bird: BIRD, hamster: HAMSTER, rock: ROCK, baoaqu: BAOAQU }
+export const SPECIES_ART = { cat: CAT, dog: fillArt(DOG), rabbit: RABBIT, bird: BIRD, hamster: HAMSTER, rock: ROCK, baoaqu: BAOAQU, frog: FROG }
 
 /** `over` onto `rows`: a letter paints, `.` leaves the pixel, `_` clears it; `behind` paints only the clear pixels */
 function overlay(rows: string[], over: View | undefined, behind = false) {

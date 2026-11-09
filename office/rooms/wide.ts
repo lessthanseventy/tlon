@@ -37,6 +37,7 @@ import { officeTile } from "../kit/tiles/office"
 import { floorPlan } from "../kit/floor"
 import { floorHeight, type Home } from "../kit/home"
 import { paintFloor } from "../kit/homeart"
+import type { StreakFrame } from "../kit/life"
 import { DEFAULT_OFFICE } from "../kit/tiles"
 import { NINA, pick } from "../kit/voices"
 import { hueRole, newYearLeft, RELEASE_MIN, Tv, type Ticker } from "../kit/tv"
@@ -50,6 +51,9 @@ export const WIDE_MIN_W = 540
 export const BAND = 44 // the back wall ends here
 /** ticks Argos stays out of the room on his morning errand */
 const PAPER_OUT = 80
+/** how long the laurel stays on Argos after Uqbar brings it, in ticks */
+const HAT_WORN = 400
+const ARGOS_HAT = [".ggg.", "g.g.g"]
 const CUPS_MAX = 5
 /** ticks a hire stays new enough for the book to go and look: five minutes */
 const NEW_HIRE = 3000
@@ -167,6 +171,10 @@ export class WideRoom extends Sim<Layout> {
   private swatQuiet = 0
   /** what the book is up to while its session idles (kit/volume.ts); the next it may take up after `nextErrand` */
   private errand: Errand | null = null
+  /** Argos wears the laurel Uqbar brought him until this tick */
+  private hatUntil = 0
+  private dogAbsent = false
+  private streaks: StreakFrame[] = []
   private lastErrand: ErrandKind | null = null
   private nextErrand = 0
   private awake = false
@@ -272,7 +280,7 @@ export class WideRoom extends Sim<Layout> {
   /** what an idle book may take up now: a nap only after dark, a shoulder only with someone mid-turn, the pets only when they're about */
   private errandCan() {
     const c = this.cat, d = this.dog
-    return { dark: dark(this.hour()), working: this.typists().length > 0, cat: c.mode !== "sleep" && c.mode !== "zoom" && !c.errand, dog: d.mode === "sleep" || d.mode === "sit", hire: this.freshHire() !== null }
+    return { dark: dark(this.hour()), working: this.typists().length > 0, cat: !this.catAbsent && c.mode !== "sleep" && c.mode !== "zoom" && !c.errand, dog: !this.dogAbsent && (d.mode === "sleep" || d.mode === "sit"), hire: this.freshHire() !== null }
   }
   /** the hire the book has not yet inspected, while they are new and in the room */
   private freshHire(): string | null {
@@ -318,7 +326,7 @@ export class WideRoom extends Sim<Layout> {
       case "tv": if (e.name !== "cut") this.tvSet.next(); this.bookSay("tv", true); return
       case "argos": this.bookSay("argos", true); this.dogSay("*thump thump thump*", 45); return
       case "nap": this.bookSay("nap", true); return
-      case "hat": this.bookSay("hat", true); this.dogSay("*proud huff*", 45); return
+      case "hat": this.hatUntil = this.tick + HAT_WORN; this.bookSay("hat", true); this.dogSay("*proud huff*", 45); return
       case "hire": this.newHire = null; this.bookSay("hire", true, e.name ?? ""); return
       case "lap": return
       default: this.bookSay(e.kind as Occasion, true, e.name ?? "")
@@ -360,7 +368,7 @@ export class WideRoom extends Sim<Layout> {
   }
   /** Argos says something (after `delay`, when he is answering) */
   /** pets.json, resolved: the cat slot (`Sim.setPets`), then the dog's name and shade */
-  override setPets(p: Pets) { super.setPets(p); this.dog.name = p.dog.name; this.dog.shade = p.dog.shade ?? 0 }
+  override setPets(p: Pets) { super.setPets(p); this.dogAbsent = !!p.dog.absent; this.dog.name = p.dog.name; this.dog.shade = p.dog.shade ?? 0 }
   /** the dog slot as configured */
   dogProfile() { return { name: this.dog.name, shade: this.dog.shade } }
   protected override reactPets(k: EventKind) {
@@ -482,7 +490,7 @@ export class WideRoom extends Sim<Layout> {
    */
   override step(a: Agents): boolean {
     // pets off: Argos goes to his bed and stays; no antics start between the pair (Nina's own half is Sim.stepCat)
-    const calm = !this.petsOn, d0 = this.dog
+    const calm = !this.petsOn || this.catAbsent || this.dogAbsent, d0 = this.dog
     if (calm && d0.mode !== "sleep" && !d0.path.length && !d0.fuss && !this.alarmed) this.dogDo("bed")
     const moved = [calm && d0.mode === "sleep" && !d0.path.length ? false : this.stepDog(), this.stepTalk(), calm ? false : this.stepAntics(), this.stepVolume(a), this.stepAleph(a), this.stepPlanes(), super.step(a)].some(Boolean)
     // after dark the pets turn in, once whatever they were up to is done
@@ -544,6 +552,8 @@ export class WideRoom extends Sim<Layout> {
     this.home = h
     this.plan = floorPlan(DEFAULT_OFFICE, this.width, h)
   }
+  /** the streak photos the floor hangs (kit/life.ts `streakFrames`) */
+  setStreaks(f: StreakFrame[]) { this.streaks = f }
   get height() { return floorHeight(this.home) }
   channel() { this.tvSet.next() }
   /** what the TV's ticker channel crawls */
@@ -642,8 +652,8 @@ export class WideRoom extends Sim<Layout> {
     if (queued.length > this.plan.queue.length) sc.overhead.push(() => text(`+${queued.length - this.plan.queue.length + 1}`, 94, 176, ROLE.attention))
     const c = this.cat
     const chair = corner(this.z).shelf.x + 8
-    drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : c.x === CAT_WARM.x && c.y === CAT_WARM.y ? RADIATOR.y + RADIATOR.h + 1 : null, this.bpm())
-    this.drawDog(sc)
+    if (!this.catAbsent) drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : c.x === CAT_WARM.x && c.y === CAT_WARM.y ? RADIATOR.y + RADIATOR.h + 1 : null, this.bpm())
+    if (!this.dogAbsent) this.drawDog(sc)
     this.drawAntics(sc)
     const shipper = this.party && [...this.actors.values()].find((x) => x.seat.agent === this.party!.agent)
     if (shipper) drawParty(sc, shipper.x, shipper.y, this.party!.until - this.tick)
@@ -656,7 +666,7 @@ export class WideRoom extends Sim<Layout> {
     if (this.alarmed) text("FIRE DRILL", (F0 + F1) / 2, 132, ROLE.alarm)
     this.nightfall(sc, now)
     if (this.home.tiles.length) sc.cv.px(0, WIDE_H, this.width, this.height - WIDE_H, ROLE.ground)
-    paintFloor(sc.cv, this.home)
+    paintFloor(sc.cv, this.home, this.streaks)
     return sc.finish()
   }
 
@@ -791,7 +801,7 @@ export class WideRoom extends Sim<Layout> {
    */
   private stepPaper(a: Agents) {
     const d = this.dog, door = this.plan.door, p = this.paper
-    if (this.alarmed || !this.petsOn) { this.paper = null; return }
+    if (this.alarmed || !this.petsOn || this.dogAbsent) { this.paper = null; return }
     if (!p) {
       const day = this.date().toDateString()
       if (!door || !a.ok || this.hour() < 7 || this.hour() >= 12 || this.paperDay === day || d.path.length || d.fuss || this.antic) return
@@ -820,6 +830,10 @@ export class WideRoom extends Sim<Layout> {
   private drawDog(sc: Scene) {
     if (this.paper?.leg === "gone") return
     drawDog(sc, this.dog, this.dogBed(), this.dogBowl(), this.bpm())
+    if (this.tick < this.hatUntil) {
+      const d = this.dog, top = d.y - (d.mode === "sit" ? 10 : d.mode === "walk" ? 9 : 6)
+      sc.item(d.y + 0.5, () => sc.blit(ARGOS_HAT, d.x + (d.face < 0 ? -7 : 2), top - 2, { g: ROLE.attention }))
+    }
     if (this.paper?.leg === "back") {
       const d = this.dog
       sc.item(d.y + 0.5, () => sc.blit(["pppp", "pkkp", "pppp"], d.x + (d.face < 0 ? -9 : 5), d.y - 9, { p: ROLE.prose, k: ROLE.fieldInk }))

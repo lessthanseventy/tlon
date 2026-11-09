@@ -3,6 +3,7 @@
 // a ticket, the notes, the in-tray, the beacon, the rack, the bookshelf, the workspaces. A thread
 // opens full-screen to read and answer; `/` finds anything. Runs on Linux and macOS: kitty
 // graphics where the terminal has them (ghostty, kitty, WezTerm), half blocks where it does not.
+import { random } from "../kit/rng"
 import { arrivals } from "../kit/door"
 import { babelPage, clockFace, hasFound, isKonami, KONAMI } from "../kit/eggs"
 import { bump as bumpTally, findSecret, newlyWon, night, parse as parseTally, rows as trophyRows, serialize as serializeTally, won as wonTrophies, type Tally } from "../kit/trophies"
@@ -1935,7 +1936,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const doIt = (f: () => unknown) => () => { f(); changed(); draw() }
       // someone mid-turn in this workspace, for a pet to go and cheer on
       const busy = () => all.roster.filter((x) => x.workspace_id === ws && x.thinking).map((x) => x.agent)
-      const cheer = (send: (name: string) => boolean) => doIt(() => { const who = busy(); if (who.length) send(who[Math.floor(Math.random() * who.length)]!) })
+      const cheer = (send: (name: string) => boolean) => doIt(() => { const who = busy(); if (who.length) send(who[Math.floor(random() * who.length)]!) })
       if (mode.who === "cat") {
         const draft = (petDraft ??= structuredClone((petsNow ?? resolvePets(loadPets())).cat))
         const named = Object.entries(TEMPERAMENTS).find(([, t]) => AXES.every((a) => t[a] === draft.temperament[a]))?.[0]
@@ -2223,7 +2224,7 @@ function paint(roomOnly: boolean) {
   if (!building && homeShown) {
     roomChanged = true; imageDirty = true
     homeNow = loadFloor()
-    for (const r of rooms.values()) if (r instanceof WideRoom) r.setHome(homeNow)
+    for (const r of rooms.values()) if (r instanceof WideRoom) { r.setHome(homeNow); r.setStreaks(streakFrames(lifeCard?.streaks ?? {})) }
     // the home below the office grows or shrinks with the home, and the room's rows with it
     layoutScreen()
   }
