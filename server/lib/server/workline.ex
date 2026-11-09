@@ -27,6 +27,7 @@ defmodule Server.Workline do
   alias Server.Workline.Artifacts.Git
   alias Server.Workline.Brief
   alias Server.Workline.Grade
+  alias Server.Workline.Review
   alias Server.Workline.Scribe
   alias Server.Workline.SendBack
 
@@ -376,7 +377,7 @@ defmodule Server.Workline do
 
   defp queue?(_thread, _checker, _opts), do: false
 
-  defp queue(thread, why, by) do
+  def queue(thread, why, by) do
     with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
          :ok <- if(match?(%{"by" => ^by}, approval(queued)), do: :ok, else: record_approval(queued, by)),
          {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
@@ -836,119 +837,19 @@ defmodule Server.Workline do
 
   def gate_summary(%Thread{stage: stage, slug: slug}), do: "work/#{slug}/#{stage}.md is ready — approve to move on"
 
-  @doc """
-  The reviewer's verdict on its submitted review — `"approve"` or `"request_changes"` — recorded as
-  evidence (`workline:<slug>:review`). Changes requested send it straight back to build, its builder
-  told to read review.md: a review asking for changes never reaches the operator's gate. An approval
-  is what a standing approval (`auto_land_risk` in the settings file) needs to land without them,
-  and asks for the risk grade it is decided on (`Server.Jobs.Grade`); a change that owes QA is
-  handed to the qa seat. An approval of a commit already approved this round is that same
-  approval, nothing recorded: a client retries a call whose connection dropped. A thread parked or
-  handed to QA is `{:ok, thread}`; one the first approval left at review unparked (its park refused)
-  is parked now, the same `advance/2` and the same refusal if it still fails (`park_approved/2`),
-  never `{:ok, thread}` for a thread nothing queued. The verdict ends the reviewer's session (a
-  review is a throwaway session, briefed fresh each round) last, from `Server.Jobs.EndReview`, once
-  the thread has moved and its `follow_ups:` (non-blocking findings) are posted for the lead it hands
-  to (`follow_ups/4`): the window closing cancels the request on the server. A verdict by the
-  agent that built the branch is refused, `{:error, {:self_review, why}}` (`self_review/2`).
-  `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
-  """
-  def review_verdict(thread, verdict, author, opts \\ [])
+  defdelegate review_verdict(thread, verdict, author, opts \\ []), to: Review
 
-  def review_verdict(%Thread{stage: "review"} = thread, verdict, author, opts)
-      when verdict in ~w(approve request_changes) do
-    sha = Keyword.get_lazy(opts, :branch_head, fn -> branch_head(thread) end)
+  defdelegate self_review(thread, author), to: Review
 
-    cond do
-      why = self_review(thread, author) -> {:error, {:self_review, why}}
-      verdict == "approve" and approved_at?(thread, sha) -> finish_approval(thread, opts)
-      true -> record_verdict(thread, verdict, author, sha, opts)
-    end
-  end
+  defdelegate qa_verdict(thread, verdict, author, report, opts \\ []), to: Review
 
-  def review_verdict(%Thread{stage: "review"}, verdict, _author, _opts), do: {:error, {:bad_verdict, verdict}}
-
-  def review_verdict(%Thread{stage: stage}, _verdict, _author, _opts), do: {:error, {:not_in_review, stage}}
-
-  @doc """
-  Why `author` may not review `thread`'s branch — it built it: the git author or `Tlon-Author:` of a
-  commit on `work/<slug>` past main, its own review.md aside (`Server.BranchReview.builders/3`) — or
-  nil when it may.
-  """
-  def self_review(%Thread{slug: slug} = thread, author) do
-    root = Git.root(thread)
-
-    builders =
-      Server.BranchReview.builders(root, "#{main_ref(root) || "main"}..work/#{slug}", ["work/#{slug}/review.md"])
-
-    if Server.BranchReview.built?(author, builders),
-      do: "#{author} authored a commit on work/#{slug}: its review is someone else's, never the builder's"
-  end
-
-  @doc """
-  The qa seat's verdict on a reviewed change it drove (`submit_qa`): `"pass"` or `"fail"`, its report
-  (what it pressed and the screen text it saw) recorded as evidence (`workline:<slug>:qa`). A fail
-  sends it back to build with the finding, as a review requesting changes does; a pass advances it
-  to the merge gate. Its `follow_ups:` are posted once it has moved, for the lead it hands to
-  (`follow_ups/4`). `opts` as `advance/2`'s, plus `session_id:`, the QA seat's connection, stamped
-  on the `qa by` check; the `cmd` string itself is what `Diary.verdict/1` parses.
-  """
-  def qa_verdict(thread, verdict, author, report, opts \\ [])
-
-  def qa_verdict(%Thread{stage: "review"} = thread, verdict, author, report, opts) when verdict in ~w(pass fail) do
-    {:ok, _} =
-      Dossier.record_check(
-        %{
-          thread_id: thread.id,
-          cmd: "qa by #{author}",
-          exit: if(verdict == "pass", do: 0, else: 1),
-          tail: report,
-          correlation: "workline:#{thread.slug}:qa"
-        },
-        session_id: opts[:session_id]
-      )
-
-    by = Server.Authorship.label(author, opts[:session_id])
-
-    outcome =
-      if verdict == "fail" do
-        bounce(
-          thread,
-          "QA found a problem",
-          "QA (#{by}) drove it and found:\n\n#{report}\n\nFix it test-first",
-          author
-        )
-      else
-        post_brief(thread, "✓ QA passed (#{by}):\n\n#{report}")
-        advance(Repo.get!(Thread, thread.id), opts)
-      end
-
-    {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []), :qa)
-    outcome
-  end
-
-  def qa_verdict(%Thread{stage: "review"}, verdict, _author, _report, _opts), do: {:error, {:bad_verdict, verdict}}
-  def qa_verdict(%Thread{stage: stage}, _verdict, _author, _report, _opts), do: {:error, {:not_in_review, stage}}
-
-  @doc """
-  A risk grade just recorded for `thread` (`Server.Jobs.Grade`): a gate parked on the operator
-  that the grade now lets land under the standing approval joins the merge queue; anything else
-  is left as it is. `{:ok, thread}`. `opts` as `advance/2`'s.
-  """
-  def graded(%Thread{} = thread, opts \\ []) do
-    thread = Repo.get!(Thread, thread.id)
-    checker = Keyword.get(opts, :artifacts, Git)
-
-    if thread.stage == "review" and thread.awaiting == operator() and auto_land?(thread, checker, opts),
-      do: queue(thread, auto_land_note(thread, opts), "auto_land_risk"),
-      else: {:ok, thread}
-  end
+  defdelegate graded(thread, opts \\ []), to: Review
 
   # A standing approval: the operator's `auto_land_risk` — a reviewed-and-approved workline whose
   # risk grade has no axis over it (and no limit hit, no decision left open) lands without them,
   # through the same gated queue. Off unless set; a test hands the threshold outright.
   # A builder with a good enough record has earned a step more of it (`Server.Trust`).
-  defp auto_land?(thread, checker, opts) do
+  def auto_land?(thread, checker, opts) do
     max = Keyword.get_lazy(opts, :auto_land_risk, fn -> if checker == Git, do: auto_land_risk() end)
 
     is_integer(max) and review_approved?(thread) and
@@ -956,7 +857,7 @@ defmodule Server.Workline do
       qa_cleared(thread, opts) == :ok
   end
 
-  defp auto_land_note(thread, opts) do
+  def auto_land_note(thread, opts) do
     {max, earned} = Server.Trust.allowance(thread, Keyword.get_lazy(opts, :auto_land_risk, &auto_land_risk/0))
 
     by =
@@ -970,25 +871,12 @@ defmodule Server.Workline do
 
   defp auto_land_risk, do: Server.OperatorConfig.setting("auto_land_risk")
 
-  @doc """
-  The limits the newest risk grade since the workline entered review hit (`Grade.limits/1`): `[]`
-  when none, ungraded, or the grader failed.
-  """
-  def grade_limits(%Thread{} = thread) do
-    case grade(thread) do
-      %{"limits" => [_ | _] = limits} -> limits
-      _ -> []
-    end
-  end
+  defdelegate grade_limits(thread), to: Review
 
-  @doc """
-  Whether the newest risk grade hit a limit: such a gate is the operator's alone. An ungraded
-  workline, or a failed grade, is not limit-hit.
-  """
-  def limit_hit?(%Thread{} = thread), do: grade_limits(thread) != []
+  defdelegate limit_hit?(thread), to: Review
 
   # the newest grade since the workline last entered review: nil if none, or the grader failed
-  defp grade(thread) do
+  def grade(thread) do
     case since_review(thread, "workline:#{thread.slug}:grade") do
       %{kind: "check_passed", detail: grade} -> grade
       _ -> nil
@@ -999,7 +887,7 @@ defmodule Server.Workline do
     do: match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:review"))
 
   # the newest event of `correlation` since the workline last entered review
-  defp since_review(thread, correlation) do
+  def since_review(thread, correlation) do
     entered =
       Repo.one(
         from e in Server.Event,
@@ -1017,7 +905,7 @@ defmodule Server.Workline do
     )
   end
 
-  defp bounce(thread, why, headline, by \\ nil) do
+  def bounce(thread, why, headline, by \\ nil) do
     {:ok, _} =
       move_back(
         thread,
@@ -1059,60 +947,11 @@ defmodule Server.Workline do
 
   defdelegate send_back(thread, to, why, by, opts \\ []), to: SendBack
 
-  @doc """
-  A reviewer's or QA's non-blocking findings, posted on the workline for the lead its verdict hands
-  to, so they are posted after the verdict moves it (`review_verdict/4`, `qa_verdict/5`): the builder
-  on a bounce, the qa seat when QA is owed, and the operator when the thread is handed to their gate
-  and its lead is still the author, whose session the verdict ended. One message, each text numbered
-  (its first line the title, the rest the detail), blanks and repeated titles dropped
-  (`follow_up_items/1`). None becomes a ticket here: the lead fixes what sits in the change's own
-  lines before it lands, drops the rest, or defers one with `file_ticket`, which matches it against
-  open tickets. Filing every finding grew the backlog faster than the office closed it. `{:ok,
-  items}`, the items posted.
-  """
-  def follow_ups(%Thread{} = thread, author, items, door \\ :review) do
-    items = follow_up_items(items)
+  defdelegate follow_ups(thread, author, items, door \\ :review), to: Review
 
-    if items != [] do
-      lead = Server.Channel.thread_lead(thread.id)
-      to = if lead && lead != author, do: "@#{lead} ", else: "@#{operator()} "
-      list = items |> Enum.with_index(1) |> Enum.map_join("\n", fn {text, i} -> "#{i}. #{text}" end)
+  defdelegate follow_up_items(items), to: Review
 
-      post_brief(
-        thread,
-        "#{to}follow-ups from #{author}'s #{door}:\n#{list}\n\n" <>
-          "Fix any that sits in lines this change already touches before it lands. Drop the rest, or " <>
-          "defer one someone would act on within a week with file_ticket (it is checked against open tickets)."
-      )
-    end
-
-    {:ok, items}
-  end
-
-  @doc "The follow-ups `follow_ups/4` would post from `items`: trimmed, blanks and repeated titles dropped."
-  def follow_up_items(items),
-    do: items |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) |> Enum.uniq_by(&follow_up_title/1)
-
-  @doc """
-  Lift the hold on a closing workline's follow-ups so intake routes them. One that closed without
-  merging says so in each ticket's body, for the manager to check it still applies.
-  """
-  def release_follow_ups(%Thread{} = thread) do
-    held = thread.id |> tied_follow_ups() |> Enum.filter(&("held" in &1.labels))
-
-    note =
-      if thread.stage == "landed",
-        do: "",
-        else: "\n\nIts workline (##{thread.id}) closed without merging: check this still applies."
-
-    for t <- held,
-        do: {:ok, _} = Server.Tickets.update(t, %{labels: t.labels -- ["held"], body: (t.body || "") <> note})
-
-    if held != [],
-      do: post_brief(thread, "↗ follow-ups to intake: " <> Enum.map_join(held, ", ", &"##{&1.id} #{&1.title}"))
-
-    :ok
-  end
+  defdelegate release_follow_ups(thread), to: Review
 
   @doc """
   The Maintain back-edge's verb: open a MACHINE-BORN workline already parked at the intent
@@ -1709,20 +1548,9 @@ defmodule Server.Workline do
     " — " <> Enum.join(why, "; ") <> ". Say so in review.md's first line."
   end
 
-  # how many times this workline's review has asked for changes (each verdict is recorded evidence)
-  defp changes_requested(thread) do
-    Repo.aggregate(
-      from(e in Server.Event,
-        where:
-          e.thread_id == ^thread.id and e.kind == "check_failed" and e.correlation == ^"workline:#{thread.slug}:review"
-      ),
-      :count
-    )
-  end
-
   # at review, a change Andrew would see waits on a QA pass since it last entered review — where the
   # bench seats a qa; a bench without one lands it as before
-  defp qa_cleared(thread, opts) do
+  def qa_cleared(thread, opts) do
     case qa_owed(thread, opts) do
       nil ->
         :ok
@@ -1748,7 +1576,7 @@ defmodule Server.Workline do
     """
   end
 
-  defp qa_owed(%Thread{stage: "review", workspace_id: ws} = thread, opts) when not is_nil(ws) do
+  def qa_owed(%Thread{stage: "review", workspace_id: ws} = thread, opts) when not is_nil(ws) do
     with %Server.Coworker{} = seat <- qa_seat(thread),
          [_ | _] = paths <- Enum.filter(changed_paths(thread, opts), &String.starts_with?(&1, @user_visible)),
          false <- match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:qa")) do
@@ -1758,7 +1586,7 @@ defmodule Server.Workline do
     end
   end
 
-  defp qa_owed(_thread, _opts), do: nil
+  def qa_owed(_thread, _opts), do: nil
 
   defp changed_paths(thread, opts) do
     Keyword.get_lazy(opts, :paths, fn ->
@@ -1775,7 +1603,7 @@ defmodule Server.Workline do
       List.first(seats)
   end
 
-  defp to_qa(thread, seat, paths) do
+  def to_qa(thread, seat, paths) do
     handed = hand_to(thread, "qa", seat.name)
 
     post_brief(
@@ -1875,16 +1703,6 @@ defmodule Server.Workline do
     ) || thread.stage
   end
 
-  defp tied_follow_ups(thread_id) do
-    from(t in Server.Ticket,
-      join: tt in Server.TicketThread,
-      on: tt.ticket_id == t.id,
-      where: tt.thread_id == ^thread_id and tt.kind == "relates"
-    )
-    |> Repo.all()
-    |> Enum.filter(&(is_list(&1.labels) and "follow-up" in &1.labels))
-  end
-
   # the review approved the code it read (its verdict's `sha`): code committed after it goes back
   # to build like any other change, through verify and a review of what changed
   defp reviewed_current(%Thread{stage: "review"} = thread) do
@@ -1930,7 +1748,7 @@ defmodule Server.Workline do
   defp same_tree?(root, sha, head, slug),
     do: match?({_, 0}, Server.Git.cmd(root, ["diff", "--quiet", sha, head, "--", ".", ":!work/#{slug}"]))
 
-  defp main_ref(root) do
+  def main_ref(root) do
     Enum.find(
       ["origin/main", "main"],
       &match?({_, 0}, Server.Git.cmd(root, ["rev-parse", "--verify", "--quiet", &1]))
@@ -2056,103 +1874,6 @@ defmodule Server.Workline do
     {:ok, flipped}
   end
 
-  defp approved_at?(thread, sha) do
-    case since_review(thread, "workline:#{thread.slug}:review") do
-      %{kind: "check_passed", detail: detail} -> detail["sha"] == sha
-      _ -> false
-    end
-  end
-
-  defp record_verdict(thread, verdict, author, sha, opts) do
-    {:ok, _} =
-      Dossier.record_check(%{
-        thread_id: thread.id,
-        cmd: "review verdict by #{author}",
-        exit: if(verdict == "approve", do: 0, else: 1),
-        tail: verdict,
-        correlation: "workline:#{thread.slug}:review",
-        sha: sha
-      })
-
-    outcome =
-      if verdict == "request_changes" do
-        bounced =
-          bounce(
-            thread,
-            "the review requested changes",
-            "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first",
-            author
-          )
-
-        if changes_requested(thread) >= 2,
-          do: escalate(Repo.get!(Thread, thread.id), "the review asked for changes twice")
-
-        bounced
-      else
-        Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
-
-        case qa_owed(thread, opts) do
-          nil -> park_approved(thread, opts)
-          {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
-        end
-      end
-
-    {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []), :review)
-    end_review(thread)
-    outcome
-  end
-
-  # The reviewer's session ends last and off the request (`Server.Jobs.EndReview`): its window going
-  # down cancels the request on the server, so a park or bounce still running in it dies mid-way.
-  # A node without Oban ends it here, after the thread has moved.
-  defp end_review(thread) do
-    case Server.Jobs.enqueue(Server.Jobs.EndReview.new(%{thread_id: thread.id})) do
-      {:ok, _} -> :ok
-      {:error, _} -> Server.Staffing.end_review(thread)
-    end
-  end
-
-  # The verdict ends the reviewer's session, so nobody is left to call advance_stage: the approval
-  # parks the gate itself — on the operator, or straight into the queue under a standing
-  # approval. A refused advance (review.md not committed, the queue down) would stall it, so it
-  # is said on the thread and returned, never reported as parked; the verdict itself stands.
-  defp park_approved(thread, opts) do
-    case advance(Repo.get!(Thread, thread.id), opts) do
-      {:awaiting, parked} ->
-        {:ok, parked}
-
-      {:ok, moved} ->
-        {:ok, moved}
-
-      {:error, why} ->
-        why = park_refusal(why)
-
-        post_brief(
-          thread,
-          "⚠ the approving verdict is recorded, but the workline is not parked at the gate: #{why}. " <>
-            "It sits at review until its lead advances it (advance_stage)."
-        )
-
-        {:error, {:not_parked, why}}
-    end
-  end
-
-  # The retry of an approval whose park was refused: the thread sits at review, awaiting nobody and
-  # owing QA nothing, so the park is tried again. Parked or handed to QA, it is left as it is.
-  defp finish_approval(thread, opts) do
-    case Repo.get!(Thread, thread.id) do
-      %Thread{stage: "review", awaiting: nil} = fresh ->
-        if qa_owed(fresh, opts) == nil, do: park_approved(fresh, opts), else: {:ok, fresh}
-
-      fresh ->
-        {:ok, fresh}
-    end
-  end
-
-  defp park_refusal({:artifact_missing, why}), do: "owed artifact missing: #{why}"
-  defp park_refusal({:queue, why}), do: "the merge queue refused it: #{inspect(why)}"
-  defp park_refusal(why), do: inspect(why)
-
   defp by_hand(thread, url) do
     record_publish(thread, 0, url)
     record_landing(thread, "check_passed", landing_check(url, 0, "opened by hand"))
@@ -2249,8 +1970,6 @@ defmodule Server.Workline do
 
   defp owed_artifact(thread, checker),
     do: thread |> checker.check(Map.fetch!(@owed, thread.stage)) |> this_round(thread)
-
-  defp follow_up_title(text), do: text |> String.split("\n", parts: 2) |> hd() |> String.trim()
 
   defp rideable?(%Thread{stage: "review", awaiting: nil, state: "open"} = t), do: reviewed_current(t) == :ok
   defp rideable?(_thread), do: false
