@@ -11,7 +11,7 @@ defmodule Server.Intake do
   started within `@stalled_after` is started by intake itself, with the workspace's lead
   (`Server.Tickets.start_thread/1`), and says so on its thread and the root: a handed-over ticket never holds a slot
   in silence — unless triage is in progress: the manager naming the ticket on the root thread, or a
-  consult naming it, after the route, defers the 30 minutes (they run from the newest such message);
+  consult naming it, after the route, defers the stalled window (they run from the newest such message);
   the manager's open operator ask naming it blocks until answered, then defers the same way. Each deferral
   is noted once on the root thread, with a ⏱ line.
   A ticket the manager labelled `held` (it waits on something; the why in its body) is
@@ -271,11 +271,15 @@ defmodule Server.Intake do
       Server.Channel.post(%{
         thread_id: root.id,
         author: "tlon",
-        body:
-          "⏱ ticket ##{ticket.id} is held in triage by #{deferrer.author}: intake waits until it has been quiet 30 minutes."
+        body: "⏱ ticket ##{ticket.id} is held in triage by #{deferrer.author}: #{wait(deferrer)}."
       })
     end
   end
+
+  defp wait(%{kind: "prompt", resolved_at: nil}), do: "intake waits for the answer"
+
+  defp wait(_deferrer),
+    do: "intake waits until it has been quiet #{Server.OperatorConfig.setting("stalled_ticket_minutes")} minutes"
 
   defp noted_since?(ticket, root, deferrer) do
     from(m in Server.Message,
@@ -300,7 +304,7 @@ defmodule Server.Intake do
   # Messages of the ticket's workspace, after the route, whose body names `#id`: not `#id0`, and not a
   # `thread #id` or `PR #id`, which name a thread or a PR that happens to share the number.
   defp naming(ticket, filter) do
-    ref = ~r/(?<!thread |pr )##{ticket.id}(?!\d)/i
+    ref = ~r/(?<!thread )(?<!\bpr )##{ticket.id}(?!\d)/i
 
     from(m in Server.Message,
       join: th in Server.Thread,

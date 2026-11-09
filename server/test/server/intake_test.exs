@@ -377,6 +377,20 @@ defmodule Server.IntakeTest do
       assert %{status: "doing"} = Tickets.get(stalled.id)
     end
 
+    test "a manager's expr number still defers it: the word before the # is not a PR reference", %{
+      ws: ws,
+      route: route
+    } do
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-x", archetype: "builder"})
+      stalled = routed(ws, "expr number", 31)
+      age(triage(ws, "tertius", stalled, %{body: "expr ##{stalled.id} is the one"}), 10)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "todo"} = Tickets.get(stalled.id)
+    end
+
     test "a manager's arrow from it to another ticket still defers it", %{ws: ws, route: route} do
       manager(ws)
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-t", archetype: "builder"})
@@ -430,6 +444,51 @@ defmodule Server.IntakeTest do
         |> Enum.filter(&(&1.body =~ "⏱" and &1.body =~ "ticket ##{busy.id} "))
 
       assert [%{author: "tlon"}] = notes
+    end
+
+    @tag :tmp_dir
+    test "the deferral note names the configured stalled window", %{ws: ws, route: route, tmp_dir: dir} do
+      path = Path.join(dir, "config.json")
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+      on_exit(fn -> Application.put_env(:server, :operator_config_path, prior) end)
+      :ok = Server.OperatorConfig.put("stalled_ticket_minutes", 45, path)
+
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-w", archetype: "builder"})
+      busy = routed(ws, "window", 50)
+      age(triage(ws, "tertius", busy), 10)
+
+      Intake.run(cap: 4, route: route)
+
+      root = Server.Channel.machine_thread(ws.id)
+
+      assert [%{body: body}] =
+               root
+               |> Server.Channel.thread_messages()
+               |> Enum.filter(&(&1.body =~ "⏱" and &1.body =~ "ticket ##{busy.id} "))
+
+      assert body =~ "45 minutes"
+      refute body =~ "30 minutes"
+    end
+
+    test "an open operator ask's deferral note says intake waits for the answer", %{ws: ws, route: route} do
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-y", archetype: "builder"})
+      parked = routed(ws, "asked open", 31)
+      root = Server.Channel.machine_thread(ws.id)
+      {:ok, _ask} = Server.Attention.ask(root.id, "tertius", "park ##{parked.id}?", ["yes", "no"])
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "todo"} = Tickets.get(parked.id)
+
+      assert [%{body: body}] =
+               root
+               |> Server.Channel.thread_messages()
+               |> Enum.filter(&(&1.body =~ "⏱" and &1.body =~ "ticket ##{parked.id} "))
+
+      assert body =~ "intake waits for the answer"
     end
 
     test "when the fallback fires it says so on the root thread, naming the new thread", %{ws: ws, route: route} do
