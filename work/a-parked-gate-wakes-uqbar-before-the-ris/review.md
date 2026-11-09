@@ -1,34 +1,17 @@
-VERDICT: request_changes
+VERDICT: approve
 
-Commit read: 2eebeec (needs: hold a parked review gate's Uqbar route while its grade job is live), one commit on work/a-parked-gate-wakes-uqbar-before-the-ris against origin/main 92deeca. Diff: server/lib/server/office/needs.ex, server/test/server/office/needs_test.exs, work/.../pr.md. CHECKS: `mise run check` green on 2eebeec (2812 passed); no bench_contrast row.
+Second round. Commits read: 2eebeec (hold a parked review gate's Uqbar route while its grade job is live) and 7a14866 (a live grade job holds only the review gate, not other needs on its thread), on work/a-parked-gate-wakes-uqbar-before-the-ris against origin/main 92deeca. Diff since my first verdict (d730e3b): server/lib/server/office/needs.ex (+3/-2), server/test/server/office/needs_test.exs (+12). CHECKS: `mise run check` exit 0 on the branch at 7a14866 (16:52:44); the `tlon/check: not posted — gh 422` tail is the verify checkout's sha being absent from GitHub, reported and not red. No bench_contrast row.
 
-## Findings
+## First-round finding
 
-1. **The hold is keyed by thread, not by the gate item.** In `routed/0`, `graded` maps `thread_id => {state, ended}` for the review gates under a standing approval, but the loop calls `hold(item, graded[item.thread_id])` for every item, and neither `hold/2` clause looks at the item's kind:
-
-   ```
-   defp hold(_item, {state, _}) when state in ~w(available scheduled executing retryable), do: :held
-   defp hold(%{at: at} = item, {_, %DateTime{} = ended}), do: %{item | at: ...}
-   ```
-
-   A `question`, `ask`, `blocked` or `issue` raised on the workline's thread while its Grade job is live (a reviewer's `ask_operator`, say) is therefore also `held`: dropped from every group of `grouped/1`, so the operator's inbox and phone do not show it for the grade's duration; and once the job ends, its `at` is moved to the grade's end as well. The ticket and the tech lead's design hold the gate alone ("a review gate ... is held"). Fix, both clauses guarded on the gate:
-
-   ```
-   -  defp hold(_item, {state, _}) when state in ~w(available scheduled executing retryable), do: :held
-   +  defp hold(%{kind: "gate", stage: "review"}, {state, _}) when state in ~w(available scheduled executing retryable),
-   +    do: :held
-
-   -  defp hold(%{at: at} = item, {_, %DateTime{} = ended}),
-   +  defp hold(%{kind: "gate", stage: "review", at: at} = item, {_, %DateTime{} = ended}),
-        do: %{item | at: Enum.max([at, DateTime.truncate(ended, :second)], DateTime)}
-   ```
-
-   Red first: under `auto_land_risk`, a review gate with a live Grade job and `Server.Attention.ask(thread_id, "daneri", "A or B?")` on the same thread; assert the question is in `Needs.grouped().phone` (today it is in no group) while the gate is still in none.
+1. **The hold was keyed by thread, not by the gate item** — fixed. Both `hold/2` clauses are now guarded on `%{kind: "gate", stage: "review"}`; any other item on the thread falls through `hold(item, _) -> item` to `route_item/4` as before. Red-first test added: under `auto_land_risk`, a review gate with a live Grade job and an ask on the same thread; the ask is in `Needs.grouped().phone` as `pass_up`, and the gate (first test) is in no group.
 
 ## Read and not a finding
 
-- The `stage: "review"` filter keeps a thread that went to QA with a live grade (Grade is enqueued before `to_qa` in `Review`) out of the hold.
-- `Map.new` over `order_by: j.id` keeps the newest Grade job per thread; a discarded grader (max_attempts 1) ends the hold through `discarded_at`, so a failed grade never holds a gate forever.
-- The `at` bump cannot shadow a Uqbar verdict on the same park: a verdict row is written only after the hold ends, so it is newer than the bumped `at`; a verdict on an earlier park is meant to be ignored.
-- With routing off, `grade_jobs` is not called and no Oban rows are read; with no review gate, no query.
-- Two comment lines against ~40 of code; moduledoc's Routing paragraph updated; no ticket keys in code. pr.md names the ticket and the check.
+- Hold while the stage is review, `auto_land_risk` is set and the newest Grade job on the thread is available/scheduled/executing/retryable; ends on its own through `completed_at`/`discarded_at`/`cancelled_at`/`attempted_at`, so a failed grader (max_attempts 1) never holds a gate forever.
+- `at` for the `uqbar_route_minutes` clock is the later of the park and the job's end, truncated to the second; a Uqbar verdict row is written only after the hold ends, so the bump cannot shadow it.
+- With `uqbar_routing` off, `grade_jobs/1` is not called; with no review gate in the items, no Oban query.
+- `grouped/1` drops `held` items before splitting, so `NeedsPage` sees no key enter the uqbar group while held; `Needs.list/0` still shows the gate.
+- Two comment lines against ~45 of code, moduledoc's Routing paragraph updated, no ticket keys or history in code; pr.md names the ticket and the check.
+
+No follow-ups.
