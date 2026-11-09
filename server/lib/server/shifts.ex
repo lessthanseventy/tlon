@@ -28,7 +28,10 @@ defmodule Server.Shifts do
 
   # Claude Code's own usage-limit line, anchored to how it prints it, so a pane that only talks
   # about limits never reads as out of quota
-  @quota_out ~r/^\s*(⎿\s*)?(Claude usage limit reached|(5-hour|weekly|session) limit reached\b|You've hit your (usage |session |weekly |monthly spend )?limit\b)/miu
+  @quota_out ~r/^\s*(⎿\s*)?(Claude usage limit reached|(5-hour|weekly|session) limit reached\b|You've hit your (usage |session |weekly |monthly spend )?limit\b|You're out of usage credits\b)/miu
+
+  # out of credits is per model and names no reset: Claude Code says which model to keep using
+  @credits_model ~r/keep using (.+?) or \/model/
 
   # Claude Code's wrapper for a provider's HTTP refusal ("API Error: Request rejected (429) · …"
   # through ollama.com); the status is read off the number
@@ -224,7 +227,8 @@ defmodule Server.Shifts do
   The panes whose Claude usage limit no other crew could take, per workspace, with the reset still
   ahead, and the providers that refused a call with a spent plan's 429 (a pane's, which stays until
   the pane stops showing it, or a one-shot's, `refused/2`):
-  `[%{workspace_id, provider, crew, reset, hint, until, at}]` (`reset` the local label, `hint` the
+  `[%{workspace_id, provider, crew, reset, model, hint, until, at}]` (`reset` the local label, nil with
+  `model` set when Claude Code is out of usage credits, which names no reset; `hint` the
   provider's words, account name and ref id cut, `until` and `at` UTC, `until` nil for a pane's). A pane that no longer shows
   its limit, or is gone, has left it.
   """
@@ -240,6 +244,7 @@ defmodule Server.Shifts do
         provider: q["provider"] || "anthropic",
         crew: q["crew"],
         reset: q["reset"],
+        model: q["model"],
         hint: q["hint"],
         until: until,
         at: at
@@ -248,8 +253,7 @@ defmodule Server.Shifts do
   end
 
   defp offer(workspace_id, on, others, text) do
-    {local, how} = reset_at(text, NaiveDateTime.from_erl!(:calendar.local_time()))
-    label = Calendar.strftime(local, "%a %-I:%M%P") <> if(how == :estimated, do: ", estimated", else: "")
+    {summary, timing} = offer_terms(on, text)
     withdraw_offers(workspace_id, "withdrawn: a newer limit's offer replaces it")
 
     with %Thread{id: lobby} <- Channel.machine_thread(workspace_id) do
@@ -257,19 +261,10 @@ defmodule Server.Shifts do
         Server.Attention.ask(
           lobby,
           "tlon",
-          "Claude's usage limit is reached on the #{on} crew (it resets #{label}). Put another crew on?",
+          summary <> " Put another crew on?",
           Enum.map(others, &"#{&1} crew on") ++ ["stay on #{on}"],
           nil,
-          %{
-            "switch" => %{
-              "workspace" => workspace_id,
-              "crews" => others,
-              "back" => on,
-              "reset" => label,
-              "estimated" => how == :estimated,
-              "at" => DateTime.to_iso8601(to_utc(local))
-            }
-          }
+          %{"switch" => Map.merge(%{"workspace" => workspace_id, "crews" => others}, timing)}
         )
     end
 
@@ -412,15 +407,17 @@ defmodule Server.Shifts do
 
   # no other crew to offer: the operator's list carries it (`out_of_quota/1`) until the reset
   defp note_quota(workspace_id, key, on, text) do
-    {label, at} = reset_label(text)
     now = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
 
-    remember(
-      workspace_id,
-      key,
-      %{"crew" => on, "reset" => label, "until" => DateTime.to_iso8601(at), "at" => now},
-      "quota_out"
-    )
+    entry =
+      if credits_out?(text) do
+        %{"crew" => on, "model" => model_of(text), "at" => now}
+      else
+        {label, at} = reset_label(text)
+        %{"crew" => on, "reset" => label, "until" => DateTime.to_iso8601(at), "at" => now}
+      end
+
+    remember(workspace_id, key, entry, "quota_out")
   end
 
   # the reset as a local label and the UTC moment
@@ -525,4 +522,31 @@ defmodule Server.Shifts do
   end
 
   defp parse_until(_), do: nil
+
+  # a limit with a reset schedules the crew's return; out of credits has none to schedule
+  defp offer_terms(on, text) do
+    if credits_out?(text) do
+      {"#{model_of(text)} is out of usage credits on the #{on} crew.", %{}}
+    else
+      {local, how} = reset_at(text, NaiveDateTime.from_erl!(:calendar.local_time()))
+      label = Calendar.strftime(local, "%a %-I:%M%P") <> if(how == :estimated, do: ", estimated", else: "")
+
+      {"Claude's usage limit is reached on the #{on} crew (it resets #{label}).",
+       %{
+         "back" => on,
+         "reset" => label,
+         "estimated" => how == :estimated,
+         "at" => DateTime.to_iso8601(to_utc(local))
+       }}
+    end
+  end
+
+  defp credits_out?(text), do: text =~ ~r/out of usage credits/i
+
+  defp model_of(text) do
+    case Regex.run(@credits_model, text) do
+      [_, model] -> model
+      nil -> "the seat's model"
+    end
+  end
 end
