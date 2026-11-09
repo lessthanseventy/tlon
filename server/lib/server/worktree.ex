@@ -350,6 +350,7 @@ defmodule Server.Worktree do
       with {:ok, wt} <- add(repo_path, wt, slug),
            {:ok, wt} <- resolve(repo_path, wt) do
         seed_deps(repo_path, wt)
+        warm_test_build(wt)
         {:ok, wt}
       end
     end
@@ -388,6 +389,23 @@ defmodule Server.Worktree do
         dst = Path.join([wt, rel, dir]),
         File.dir?(src) and not File.exists?(dst) do
       copy_tree(src, dst)
+    end
+
+    :ok
+  end
+
+  # A seat's first `menard run test` would otherwise compile the whole test env, which outlasts the
+  # tool's wall and loses the verdict. Best effort: a failed compile surfaces in the seat's own run.
+  defp warm_test_build(wt) do
+    server = Path.join(wt, "server")
+
+    if File.exists?(Path.join(server, "mix.exs")) and System.find_executable("mix") do
+      Application.get_env(:server, :git_cmd, &Server.Cmd.run/3).("mix", ["compile"],
+        cd: server,
+        env: [{"MIX_ENV", "test"}],
+        stderr_to_stdout: true,
+        timeout: :infinity
+      )
     end
 
     :ok

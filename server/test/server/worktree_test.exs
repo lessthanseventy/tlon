@@ -120,6 +120,35 @@ defmodule Server.WorktreeTest do
       refute File.exists?(Path.join(wt, "office/node_modules"))
     end
 
+    test "a new worktree with a server project warms its test build; one without does not", %{repo: repo, git: git} do
+      test_pid = self()
+
+      Application.put_env(:server, :git_cmd, fn cmd, args, opts ->
+        if cmd == "mix" do
+          send(test_pid, {:mix, args, opts})
+          {"", 0}
+        else
+          System.cmd(cmd, args, Keyword.take(opts, [:stderr_to_stdout]))
+        end
+      end)
+
+      on_exit(fn -> Application.delete_env(:server, :git_cmd) end)
+
+      assert {:ok, _} = Worktree.ensure(repo, "no-server")
+      refute_received {:mix, _, _}
+
+      File.mkdir_p!(Path.join(repo, "server"))
+      File.write!(Path.join(repo, "server/mix.exs"), "")
+      {_, 0} = git.(["add", "server/mix.exs"])
+      {_, 0} = git.(["commit", "-qm", "server"])
+
+      assert {:ok, wt} = Worktree.ensure(repo, "with-server")
+      assert_received {:mix, ["compile"], opts}
+      assert opts[:cd] == Path.join(wt, "server")
+      assert opts[:env] == [{"MIX_ENV", "test"}]
+      assert opts[:timeout] == :infinity
+    end
+
     test "a new work/<slug> starts from main, whatever branch the checkout is on", %{repo: repo, git: git} do
       {_, 0} = git.(["branch", "-M", "main"])
       {_, 0} = git.(["checkout", "-qb", "side"])
