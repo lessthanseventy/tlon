@@ -310,10 +310,11 @@ export function previewOf(s: PetSetting, tick: number): { mode: "sleep" | "sit" 
 export { speciesBase } from "./temperament"
 export { SPECIES_VOICE } from "./voices"
 
-/** the line Argos brings back with the morning paper: the first note of a release cut today, else "nothing yet" */
-export function paperHeadline(release: { cut_at: string; notes?: string[] } | null | undefined, today: Date): string {
-  const first = release?.notes?.[0]
+/** the line Argos brings back with the morning paper: today's first landing, else the first note of a release cut today, else "nothing yet" */
+export function paperHeadline(release: { cut_at: string; notes?: string[] } | null | undefined, today: Date, landings: readonly { subject: string; landed_at: string }[] = []): string {
+  const landed = landings.filter((l) => new Date(l.landed_at).toDateString() === today.toDateString()).at(-1)?.subject
+  const first = landed ?? release?.notes?.[0]
   const cut = release ? new Date(release.cut_at) : null
-  if (!first || !cut || cut.toDateString() !== today.toDateString()) return "nothing yet"
+  if (!first || (!landed && (!cut || cut.toDateString() !== today.toDateString()))) return "nothing yet"
   return first.length > 56 ? `${first.slice(0, 55)}…` : first
 }

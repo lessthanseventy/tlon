@@ -37,6 +37,9 @@ export type ModelChoice = ModelSpec & { key: string; harness: string }
 export type Note = { id: number; author: string; body: string; workspace_id: number | null; at: string }
 /** a consult in the last few minutes: `from` asked `to` something */
 export type Visit = { from: string; to: string; workspace_id: number; at: string }
+/** a change that landed: its subject, the PR it merged as (null when not recorded) and when (ISO) */
+export type Landing = { subject: string; ref: string | null; landed_at: string }
+
 /** a note on the office corkboard (`Server.Office.Corkboard`): chatter, not working notes; `re` the note it answers */
 export type CorkNote = { id: number; author: string; kind: "encourage" | "tease" | "joke" | "comment" | "suggestion" | "reply" | "side project"; body: string; re: number | null; at: number; n?: number }
 /** a filed ticket nobody has started yet */
@@ -97,6 +100,8 @@ export type Agents = {
   flags?: Record<string, boolean>
   /** the release the service runs (`Server.Release.PM.live_release`): a change of `sha` between refreshes is a cut; null before the first, absent from an older server */
   release?: { sha: string; cut_at: string; /** the cut's commit subjects, oldest to newest, at most 12 (`Server.Release`); absent from an older server */ notes?: string[] } | null
+  /** the last five worklines merged, newest first (`Server.Workline.recent_landings`); absent from an older server */
+  landings?: Landing[]
   /** the Claude plan's windows as the last session on it reported them (`Server.Usage`); claude is null before any */
   usage?: { claude: { five_hour?: UsageWindow; seven_day?: UsageWindow; at: string } | null }
   /** the life side per `home` workspace id (`Server.Office.status`); absent for every other workspace */
