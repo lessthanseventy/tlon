@@ -1,8 +1,8 @@
 defmodule Server.Office.NeedsPage do
   @moduledoc """
   Wakes Uqbar on its study when a need newly enters its group (`Needs.grouped/1`'s `uqbar`). Needs
-  are derived when read, so there is no insert to hook: a per-minute pass (`Server.Jobs.Drain`)
-  posts ONE `tlon` message per workspace naming the keys not yet paged. "Paged" is that message's
+  are derived when read, so there is no insert to hook: a pass (`Server.Jobs.Drain`, each minute
+  something changed) posts ONE `tlon` message per workspace naming the keys not yet paged. "Paged" is that message's
   `payload["need_page"]`, no older than the item, so it survives a restart. Waits while Uqbar is
   mid-turn and `@gap_s` after its last page; the keys stay unpaged, so the next page carries them.
   A need with no workspace (a failed job, a box health problem) is machine-wide: it pages the oldest
