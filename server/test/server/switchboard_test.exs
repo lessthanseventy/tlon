@@ -815,6 +815,20 @@ defmodule Server.SwitchboardTest do
       refute_received {:spawned, _}
     end
 
+    test "a message undelivered a day after its posting is let go: settled, nobody spawned" do
+      {:ok, thread} = Channel.open_thread(%{title: "long gone"})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+      {:ok, old} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "still there?"})
+      day_ago = DateTime.utc_now() |> DateTime.add(-25 * 3600) |> DateTime.truncate(:second)
+      {:ok, _} = old |> Ecto.Changeset.change(created_at: day_ago) |> Repo.update()
+
+      Switchboard.drain()
+
+      assert Repo.get!(Message, old.id).delivered_at
+      refute_received {:spawned, _}
+    end
+
     test "the drain retries the spawn for a pending message nobody warm is addressed by" do
       {:ok, thread} = Channel.open_thread(%{title: "left waiting"})
       {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})
