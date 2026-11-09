@@ -66,6 +66,7 @@ export type Screen = Ctl & {
   openThread: () => number | null
   paint: (roomOnly: boolean) => void
   bankReader: () => void
+  settleWorkspace: () => void
   record: (next: Tally) => void
   toRoom: () => void
 }

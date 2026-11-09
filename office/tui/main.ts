@@ -3,25 +3,21 @@
 // a ticket, the notes, the in-tray, the beacon, the rack, the bookshelf, the workspaces. A thread
 // opens full-screen to read and answer; `/` finds anything. Runs on Linux and macOS: kitty
 // graphics where the terminal has them (ghostty, kitty, WezTerm), half blocks where it does not.
-import { arrivals } from "../kit/door"
-import { babelPage, clockFace, hasFound } from "../kit/eggs"
-import { bump as bumpTally, findSecret, newlyWon, night, serialize as serializeTally, won as wonTrophies, type Tally } from "../kit/trophies"
-import { reactLine, seatLine } from "../kit/seat-voices"
-import type { EventKind } from "../kit/events"
+import { babelPage, hasFound } from "../kit/eggs"
+import { findSecret, won as wonTrophies } from "../kit/trophies"
 import { save as saveWhim } from "../kit/whimsy-file"
 import { resolve as resolveWhim, type State as WhimState } from "../kit/whimsy"
-import { tickFromTriage, tickSlap } from "../kit/scharlach"
+import { tickSlap } from "../kit/scharlach"
 import { busiest, crewOf, needsYou, type Act } from "../kit/crew"
 import { resolvePets } from "../kit/pets"
-import { lastLanding } from "../kit/tv"
 import { baseLook, overrideFor } from "../kit/looks"
 import { ROLE } from "../kit/palette"
 import { candidateOf } from "../kit/hall"
 import { shirtOf } from "../kit/sprites"
-import { operatorOf, type Agents } from "../kit/types"
+import { operatorOf } from "../kit/types"
 import { RailRoom } from "../rooms/rail"
 import { WideRoom } from "../rooms/wide"
-import { say, lobbyOf, replies, conversation, speech } from "./talk"
+import { say, lobbyOf, conversation, speech } from "./talk"
 import * as data from "./data"
 import { bind } from "./keys"
 import { Editor } from "./editor"
@@ -30,18 +26,18 @@ import { loadPets } from "./pets"
 import { Reader, type ReaderDeps } from "./reader"
 import { ESC, out } from "./term"
 import { oneInFlight } from "./flight"
-import { earmarkOf, earmarksOut, freshPosts, handoffFrom } from "../kit/plane"
-import { State, STATE, TRAY, SAID, EARS, LOOKED, OFFICE, writeState, TROPHY_FILE, type Mode, type Cycle, type Prompt, type Pick, type Action } from "./state"
+import { earmarkOf } from "../kit/plane"
+import { State, STATE, OFFICE, writeState, type Mode, type Cycle, type Prompt, type Pick, type Action } from "./state"
 import { detail } from "./cards/index"
 import { cardBox, changed, hallCtx, threadOf, view, wsName } from "./select"
 import { DETAIL, cardKey, paneW, tidSeg } from "./ui"
-import { NEED_KIND } from "./cards/needs"
 import { newSchedule } from "./cards/schedule"
 import { boot, followPets } from "./boot"
 import type { Screen } from "./ctl"
 import { draw, layoutScreen, paint, scene } from "./draw"
 import { onKey, onMouse, onPaste } from "./input"
-import { drawZoom, leaveZoom, openDump, openSoul, pickDoc, play, quit, readPage, restorePage, syncDump, toRoom, zoomGit, zoomInput, zoomInto } from "./zoom"
+import { drawZoom, leaveZoom, openDump, openSoul, pickDoc, play, quit, readPage, restorePage, toRoom, zoomGit, zoomInput, zoomInto } from "./zoom"
+import { loadCard, loadThread, reactFor, record, refreshOnce, stampLooked, watchTrophies } from "./refresh"
 
 const app = new State()
 
@@ -59,23 +55,7 @@ function resort(step: () => void) {
 /** a thread with an open prompt opens with its box unfocused, so 1–9 answer at once */
 const asks = (tid: number) => !!threadOf(app, tid)?.prompt
 
-/** a seat's line for a scripted event, kept out of what it said lately */
-const reactFor = (who: string, kind: EventKind): string => {
-  const recent = app.recentBanter.get(who) ?? []
-  const line = reactLine(who, kind, recent)
-  app.recentBanter.set(who, [line, ...recent].slice(0, 8))
-  return line
-}
-function heard(turns: { who: string; line: string }[]) {
-  // a restart re-reads the server's recent lines: the log already has them
-  const fresh = turns.filter((t) => !app.said.some((x) => x.who === t.who && x.line === t.line))
-  app.said = [...app.said, ...fresh.map((t) => ({ at: Date.now(), ...t }))].slice(-50)
-  writeState(SAID, JSON.stringify(app.said))
-  if (fresh.length) record(bumpTally(app.trophies, "balloons", fresh.length))
-}
-const stampLooked = () => { app.looks.lookedAt = Math.floor(Date.now() / 1000); writeState(LOOKED, String(app.looks.lookedAt)) }
-
-const room = () => { const k = app.ws ?? 0; let r = app.rooms.get(k); if (!r) { app.rooms.set(k, (r = app.wide ? new WideRoom(app.wide) : new RailRoom())); r.setWhimsy(resolveWhim(app.whim)); if (app.petsNow) r.setPets(app.petsNow); if (r instanceof WideRoom) { r.setHome(app.homeNow); r.setTrophies(wonTrophies(app.trophies).length) } r.reactLine = reactFor; r.onSlap = () => { app.ledger = tickSlap(app.ledger) } } return r }
+const room = () => { const k = app.ws ?? 0; let r = app.rooms.get(k); if (!r) { app.rooms.set(k, (r = app.wide ? new WideRoom(app.wide) : new RailRoom())); r.setWhimsy(resolveWhim(app.whim)); if (app.petsNow) r.setPets(app.petsNow); if (r instanceof WideRoom) { r.setHome(app.homeNow); r.setTrophies(wonTrophies(app.trophies).length) } r.reactLine = (who, kind) => reactFor(app, who, kind); r.onSlap = () => { app.ledger = tickSlap(app.ledger) } } return r }
 /** the dial moved: remember it and hand every room the resolved dials */
 function setWhim(s: WhimState) {
   app.whim = s
@@ -99,190 +79,7 @@ function goWs(id: number) { choose(id); back(true); app.frame = null; void refre
 
 // ── staying current ───────────────────────────────────────────────────────────────────────────
 // one refresh in flight and at most one queued: a write's follow-up reads what it wrote (tui/flight.ts)
-const refresh = oneInFlight(refreshOnce)
-async function refreshOnce() {
-  for (const w of app.dumpSent.keys()) syncDump(app, ctl, w, true)
-  // the snapshot lands, and shows, as soon as it comes: the inbox read beside it takes seconds (a git
-  // check per stray worktree), and a finder opened meanwhile would list nothing
-  const rest = Promise.all([data.needs(), data.settings()])
-  app.all = await data.status()
-  if (app.officeRev === undefined && app.all.ok) app.officeRev = app.all.revs?.office ?? null
-  settleWorkspace()
-  draw(app, ctl)
-  let knobs: data.Settings | null
-  ;[app.bySurface, knobs] = await rest
-  app.needs = app.bySurface.items
-  app.settings = knobs ?? app.settings
-  if (app.all.ok && app.lastOk.ok) tellNews(app.lastOk, app.lastOkNeeds)
-  if (app.all.ok) { app.lastOk = app.all; app.lastOkNeeds = app.needs; tickerOn(app.all) }
-  const tid = openThread()
-  await Promise.all([tid !== null ? loadThread(tid) : null, app.reader ? app.reader.reload() : null, loadCard(), loadFeed(), loadMargin()])
-  await chatter()
-  void tickLedger()
-  draw(app, ctl)
-}
-/**
- * Scharlach's demerit ledger ticks when a coworker's build goes red. The sheriff's workspace's triage
- * carries each failed check's thread (whoever led it); a red first seen ticks, the same red held does
- * not, and one that clears then re-reds ticks again. Presentation only — it never touches the work.
- */
-async function tickLedger() {
-  if (!app.all.ok) return
-  const sws = app.all.bench.find((c) => c.archetype === "sheriff")?.workspace_id
-  if (sws == null) return
-  const count = app.all.triage[String(sws)] ?? 0
-  record(night(app.trophies, app.world ? app.world.now() : new Date(), count > 0))
-  const t = count > 0 ? await data.triage(sws) : null
-  if (count > 0 && !t) return
-  const before = new Map(app.ledger.demerits)
-  app.ledger = tickFromTriage(app.ledger, count, t?.failed_thread_ids ?? t?.failed_checks.shown.map((s) => s.thread_id) ?? [], app.all.threads)
-  // rimworld: a red build sours that coworker's afternoon — room-local, the room's own reading of what it already saw
-  for (const [who, n] of app.ledger.demerits) if (n > (before.get(who) ?? 0)) for (const r of app.rooms.values()) r.sourMood(who)
-}
-/** what changed since the last look that you'd want to hear about even with the office in the back */
-function tellNews(before: Agents, beforeNeeds: data.Need[]) {
-  // only an answer owed rings: a new item on the phone; several at once are one notification
-  const was = new Set(beforeNeeds.map((n) => n.key))
-  const fresh = app.bySurface.phone.filter((n) => !was.has(n.key))
-  if (fresh.length) out("\x07") // something new waits on you: the terminal's bell
-  if (fresh.length === 1) notify(needTitle(fresh[0]!), fresh[0]!.text)
-  else if (fresh.length > 1) notify(`${fresh.length} things wait on you`, fresh.map(needTitle).join(" · "))
-  if (before.health?.state === "ok" && app.all.health?.state === "warn") notify("tlon needs a look", app.all.health.problems.join("; "))
-  for (const kind of arrivals(before, app.all, beforeNeeds, app.needs)) room().ring(kind)
-  releaseOnTv(before, app.all)
-}
-/** the TV's ticker channel crawls the release, the merge queue, the phone and the newest landing's subject */
-function tickerOn(a: Agents) {
-  const t = { sha: a.release?.sha ?? null, queue: a.health?.merge_queue?.length ?? 0, phone: app.bySurface.counts.phone, last: lastLanding(a) }
-  for (const r of app.rooms.values()) if (r instanceof WideRoom) r.setTicker(t)
-}
-/** a cut puts Uqbar's entry on the TV; the next snapshot that holds the same sha ends it */
-function releaseOnTv(before: Agents, after: Agents) {
-  if (!before.ok || !after.ok || !after.release) return
-  for (const r of app.rooms.values()) {
-    if (!(r instanceof WideRoom)) continue
-    if (before.release?.sha !== after.release.sha) r.cut(after.release.sha, after.release.notes ?? [])
-    else if (r.cutting) r.cutDone()
-  }
-}
-/** a desktop notification (OSC 777, as ghostty, kitty, WezTerm and foot take it) */
-function notify(title: string, body: string) {
-  const clean = (s: string) => s.replace(/[;\x07\x1b]/g, " ").slice(0, 200)
-  out(`${ESC}]777;notify;${clean(title)};${clean(body)}${ESC}\\`)
-}
-async function loadMargin() { app.notes = app.ws === null ? [] : await data.margin(app.ws) }
-function record(next: Tally) {
-  if (next === app.trophies) return
-  for (const tr of newlyWon(app.trophies, next)) app.status = `trophy won: ${tr.name}`
-  app.trophies = next
-  writeState(TROPHY_FILE, serializeTally(next))
-  for (const r of app.rooms.values()) if (r instanceof WideRoom) r.setTrophies(wonTrophies(next).length)
-}
-/** the tallies only the sim knows: a drill begun, treats given, a secret clock face */
-function watchTrophies() {
-  let next = app.trophies
-  const alarmed = [...app.rooms.values()].some((r) => r.alarmed)
-  if (alarmed && !app.wasAlarmed) next = bumpTally(next, "drills")
-  app.wasAlarmed = alarmed
-  for (const r of app.rooms.values()) {
-    const n = r.treats - (app.seenTreats.get(r) ?? 0)
-    app.seenTreats.set(r, r.treats)
-    if (n > 0) next = bumpTally(next, "treats", n)
-  }
-  if (["404", "π"].includes(clockFace(app.world ? app.world.now() : new Date()))) next = findSecret(next, "clock")
-  record(next)
-}
-async function loadFeed() {
-  if (app.ws === null) return
-  const first = !app.feed.length
-  app.feed = (await data.activity(app.ws)) ?? app.feed
-  const v = view(app), r = room()
-  for (const x of freshPosts(app.feed, app.flown, first)) {
-    if (r instanceof WideRoom && r.fly(x.thread_id!, v, handoffFrom(app.feed, x.thread_id!, Date.now()))) {
-      app.earmarked.add(earmarkOf(x.thread_id!, x.at, x.who))
-      record(bumpTally(app.trophies, "planes"))
-      writeState(EARS, earmarksOut(app.earmarked))
-    }
-  }
-  // a first run starts with the tray read, not with everything that ever happened in it
-  if (!app.trayRead && app.feed[0]) { app.trayRead = app.feed[0].at; writeState(TRAY, app.trayRead) }
-}
-async function chatter() {
-  if (app.ws === null) return
-  const here = app.ws
-  const dials = resolveWhim(app.whim), banter = dials.banter
-  // the server writes these lines lazily, spending model tokens only when asked: with banter off, don't ask
-  if (banter) room().hear(await data.pets(app.ws, room().petProfile()))
-  // generated visitors, puns and reactions reach the room only past `curated`; the room ignores a pool it is not given
-  room().setToys(dials.weirdness === "curated" ? null : await data.toys(here))
-  // two together in the room: with souls on the server writes what they say now (from their souls), said turn by turn;
-  // with them off, in --sandbox, or wherever the server wrote nothing, each says a canned line in their own voice
-  room().onTogether = (situation, a, b) => !banter ? undefined : void (dials.souls ? data.talk(here, situation, a, b) : Promise.resolve([])).then((turns) => {
-    const said = turns.length ? turns : [a, b].map((who) => {
-      const recent = app.recentBanter.get(who) ?? []
-      const line = seatLine(who, recent, situation)
-      app.recentBanter.set(who, [line, ...recent].slice(0, 8))
-      return { who, line }
-    })
-    room().converse(said); heard(said); changed(app)
-  })
-  app.cork = banter ? await data.corkboard(app.ws) : []
-  room().pinboard(app.cork)
-  app.ideas = await data.suggestions(app.ws)
-  room().suggestionBox(app.ideas)
-  // a conversation the server wrote arrives as lines sharing one `at`: said as one, turn by turn
-  const convos = new Map<number, { who: string; line: string }[]>()
-  for (const b of banter ? await data.banter(app.ws) : []) {
-    const k = `${b.at} ${b.agent} ${b.line}`
-    if (app.seenLines.has(k)) continue
-    app.seenLines.add(k)
-    convos.set(b.at, [...(convos.get(b.at) ?? []), { who: b.agent, line: b.line }])
-  }
-  if (banter) for (const turns of convos.values()) { room().converse(turns); heard(turns); changed(app) }
-  await answers(app.ws)
-}
-async function answers(w: number) {
-  const lobby = lobbyOf(view(app).threads, w)
-  const v = lobby === null ? null : await data.thread(lobby)
-  if (!v) return
-  const fresh = replies(v.messages, operatorOf(app.all)).filter((r) => !app.answered?.has(r.id))
-  const first = app.answered === null
-  app.answered ??= new Set()
-  for (const r of fresh) {
-    app.answered.add(r.id)
-    if (first) continue
-    room().say(r.agent, r.line)
-    if (app.mode.kind !== "home") notify(`${r.agent} answered`, r.line)
-    changed(app)
-  }
-}
-async function loadThread(tid: number) { const v = await data.thread(tid); if (v) app.threads.set(tid, v) }
-/** the open card's own read, if it has one */
-async function loadCard() {
-  if (app.ws === null) return
-  const w = app.ws
-  const key = cardKey(app.mode)
-  const why = await data.reading(() => readCard(w))
-  if (why) app.readWhys.set(key, why); else app.readWhys.delete(key)
-}
-async function readCard(w: number) {
-  switch (app.mode.kind) {
-    case "archive": app.archived = await data.archive(w); break
-    case "triage": case "issue": app.stuck = await data.triage(w); break
-    case "health": [app.rack, app.settings] = await Promise.all([data.health(), data.settings()]); break
-    case "memory": app.shelf = await data.memory(w); break
-    case "ticket": case "epic": case "column": app.tickets = (await data.board(w)) ?? app.tickets; break
-    case "card": app.card = await data.workspaceCard(w); break
-    case "settings": app.settings = await data.settings(); break
-    case "review": app.review = await data.review(app.mode.tid); break
-    case "calendar": app.cal = await data.schedules(w); break
-    case "life": app.lifeCard = (await data.life(w)) ?? app.lifeCard; break
-    case "build": app.lifeCard = await data.life(w); break
-    case "pages": app.dumpPages = await data.dumpPages(w); break
-    case "runs": case "run": app.board = (await data.runs(app.mode.id)) ?? app.board; app.cal ??= await data.schedules(w); break
-    case "tray": app.trayRead = app.feed[0]?.at ?? app.trayRead; writeState(TRAY, app.trayRead); changed(app); break
-  }
-}
+const refresh = oneInFlight(() => refreshOnce(app, ctl))
 /** after a write: say what happened, then look again */
 async function did(p: Promise<string>) { app.status = await p; if (app.reader) app.reader.status = app.status; await refresh() }
 
@@ -302,7 +99,7 @@ function open(m: Mode) {
   if (m.kind === "pet" && m.who === "cat") { app.petDraft = structuredClone((app.petsNow ?? resolvePets(loadPets())).cat); app.previewTick = 0 }
   if (m.kind === "look") app.lookDraft = m.hall ? structuredClone(candidateOf(app.hall, hallCtx(app)).look) : { ...baseLook(m.name), ...overrideFor(m.name) }
   const tid = openThread()
-  void Promise.all([tid !== null ? loadThread(tid) : null, loadCard()]).then(() => draw(app, ctl))
+  void Promise.all([tid !== null ? loadThread(app, tid) : null, loadCard(app)]).then(() => draw(app, ctl))
   draw(app, ctl)
 }
 /** Esc: a card back to the card it was opened from, else home; home to nothing picked; `all` drops both at once */
@@ -427,7 +224,7 @@ async function finder() {
 /** a page of the Library of Babel, the width of the card */
 function openBabel() {
   const page = babelPage(DETAIL - 2, Math.max(20, paneW() - 4))
-  if (hasFound(page)) record(findSecret(app.trophies, "babel"))
+  if (hasFound(page)) record(app, findSecret(app.trophies, "babel"))
   open({ kind: "babel", page })
 }
 
@@ -439,7 +236,6 @@ function hearMachine() {
   open({ kind: "needs" })
   if (keys.length) void did(data.hear(keys))
 }
-const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 
 /** the verbs the finder offers by name — the same ones the keys reach */
 const VERBS: [string, () => void][] = [
@@ -532,11 +328,12 @@ function playDo(id: string): void {
 
 // ── startup ────────────────────────────────────────────────────────────────────────────────────
 const ctl: Screen = {
-  open, back, act, ask, ask2, did, refresh, loadCard, find, room, back1, resort, hire, talk, reply, newThread, newTicket, newNote,
+  open, back, act, ask, ask2, did, refresh, find, room, back1, resort, hire, talk, reply, newThread, newTicket, newNote,
   finder, inbox, goThread, goWs, openReader, closeReader, openConversation, openBabel, playDo, setWhim, bankReader, followPets: () => followPets(app),
   quit: () => quit(app), openDump: () => openDump(app, ctl), openSoul: (name) => openSoul(app, ctl, name), readPage: (id) => readPage(app, ctl, id), restorePage: (id) => restorePage(app, ctl, id),
   zoomInto: (tid) => zoomInto(app, ctl, tid), zoomGit: (tid) => zoomGit(app, ctl, tid), pickDoc: (tid) => pickDoc(app, ctl, tid), play: (g) => play(app, ctl, g),
-  loadThread, stampLooked, watchTrophies, openThread, record,
+  openThread, settleWorkspace,
+  loadCard: () => loadCard(app), loadThread: (tid) => loadThread(app, tid), stampLooked: () => stampLooked(app), watchTrophies: () => watchTrophies(app), record: (next) => record(app, next),
   zoomInput: (b) => zoomInput(app, ctl, b), drawZoom: () => drawZoom(app), leaveZoom: (toTheRoom) => leaveZoom(app, ctl, toTheRoom), toRoom: () => toRoom(app, ctl),
   draw: () => draw(app, ctl), layoutScreen: () => layoutScreen(app, ctl), paint: (roomOnly) => paint(app, ctl, roomOnly),
   onKey: (k) => onKey(app, ctl, k), onPaste: (text) => onPaste(app, ctl, text), onMouse: (m) => onMouse(app, ctl, m),
