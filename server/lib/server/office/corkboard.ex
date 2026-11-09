@@ -58,7 +58,7 @@ defmodule Server.Office.Corkboard do
 
   @doc """
   The workspace's corkboard, newest first: `%{id, author, kind, body, re, at}` (`re` the id of the
-  note it answers; `at` unix seconds) — and, when the last note is stale, a new one asked for in the
+  note it answers; `at` unix seconds; a side-project note also `n`, its step) — and, when the last note is stale, a new one asked for in the
   background. `[]` where banter is off.
   """
   @spec notes(integer()) :: [map()]
@@ -322,7 +322,7 @@ defmodule Server.Office.Corkboard do
     with {:ok, out} <- Server.Generator.run(prompt),
          body when is_binary(body) <- parse(out),
          {:ok, _} <- post_side_project(ws, name, body, n) do
-      %{author: name, kind: "side project", body: body, re: nil}
+      %{author: name, kind: "side project", body: body, re: nil, n: n}
     else
       _ -> nil
     end

@@ -176,7 +176,7 @@ defmodule Server.Office.CorkboardTest do
       assert Corkboard.notes(ws.id) == []
       notes = poll_until(ws, fn n -> Enum.any?(n, &(&1.kind == "side project")) && n end)
 
-      assert %{author: "daneri", body: "Stanza: the sea, again.", re: nil} =
+      assert %{author: "daneri", body: "Stanza: the sea, again.", re: nil, n: 1} =
                Enum.find(notes, &(&1.kind == "side project"))
 
       assert [%{author: "daneri"}] = side_messages(ws)
