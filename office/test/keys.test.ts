@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { Glob } from "bun"
 import { CARD_PARTS, HELPERS, KEYS, OMITS, everywhere, hints, verbOf, type Binding, type Scope } from "../tui/keys"
 import { balloonLines } from "../kit/canvas"
 import { PLAY } from "../tui/sandbox"
@@ -66,7 +67,7 @@ test("a card binds a digit once: the pet cards' numbered menus are per species, 
 test("the look editor's keys are in the table, and its hint line is drawn from it", async () => {
   expect(all.filter((b) => b.scope === "card:look-editor").map((b) => b.id)).toEqual(expect.arrayContaining(["lookedit.mirror", "lookedit.view", "lookedit.paint"]))
   expect(all.find((b) => b.id === "lookedit.mirror")?.key).toBe("m")
-  const src = await Bun.file(new URL("../tui/main.ts", import.meta.url)).text()
+  const src = await Bun.file(new URL("../tui/cards/look.ts", import.meta.url)).text()
   expect(src).not.toContain("1/2/3 view")
 })
 
@@ -94,7 +95,8 @@ test("every global hint's key is bound, and the crew hint names the key that ope
 })
 
 test("the table is the only source: no key is spelled out as a literal outside tui/keys.ts", async () => {
-  for (const f of ["main.ts", "reader.ts", "sandbox.ts", "talk.ts", "pane.ts", "hall.ts", "store.ts"]) {
+  const cards = [...new Glob("cards/*.ts").scanSync({ cwd: new URL("../tui", import.meta.url).pathname })]
+  for (const f of ["main.ts", "reader.ts", "sandbox.ts", "talk.ts", "pane.ts", "hall.ts", "store.ts", ...cards]) {
     const src = await Bun.file(new URL(`../tui/${f}`, import.meta.url)).text()
     expect(src.match(/key: "/g) ?? [], f).toEqual([])
   }
