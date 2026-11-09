@@ -275,18 +275,13 @@ defmodule Server.Jobs.KeepUp do
     :ok
   end
 
-  # the lobby's last word on a drift is its newest count; a notice, so it wakes nobody
+  # the ticket carries the newest count; the lobby heard the drift once, when the ticket was filed,
+  # and without a lobby the keyed note carries the count instead
   defp update(t, lobby, title, body) do
     with {:ok, _} <- Server.Tickets.update(t, %{title: title, body: body}),
-         %Server.Thread{id: tid} <- lobby,
-         {:ok, _} <- recount(t, tid, title, body),
+         %Server.Thread{} <- lobby,
          do: :ok
   end
-
-  defp recount(%{title: title}, _tid, title, _body), do: {:ok, nil}
-
-  defp recount(_t, tid, title, body),
-    do: Server.Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: "⚠ " <> title <> " — " <> body})
 
   defp label(repo), do: "drift:" <> repo
 

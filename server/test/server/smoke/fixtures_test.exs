@@ -148,10 +148,18 @@ defmodule Server.Smoke.FixturesTest do
     assert [%{title: "in bed by 23:00", window_remaining: left}] = Server.Life.due(ws.id)
     assert left <= 0
 
-    # the bedroom scene reads today's due, unstamped. (A few minutes after local midnight the due is
-    # yesterday's and falls out of `today`: not worth fighting.)
-    assert [%{title: "in bed by 23:00", done: false, due_at: due_at}] = Server.Life.status(ws.id).today
-    assert DateTime.compare(due_at, DateTime.utc_now()) != :gt
+    # the bedroom scene reads today's due, unstamped; in the first minutes after local midnight the
+    # fixture's due (five minutes ago) is yesterday's and `today` is empty
+    now = DateTime.utc_now()
+    today = Server.Life.status(ws.id, now).today
+
+    if Server.Schedules.local_date(DateTime.add(now, -5 * 60, :second)) == Server.Schedules.local_date(now) do
+      assert [%{title: "in bed by 23:00", done: false, due_at: due_at}] = today
+      assert DateTime.compare(due_at, now) != :gt
+    else
+      assert today == []
+    end
+
     assert [%{late: false}] = Server.Repo.all(Server.RoutineRun)
   end
 
