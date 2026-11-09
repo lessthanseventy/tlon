@@ -12,7 +12,8 @@ defmodule Server.Intake do
   (`Server.Tickets.start_thread/1`), and says so on its thread and the root: a handed-over ticket never holds a slot
   in silence — unless triage is in progress: the manager naming the ticket on the root thread, or a
   consult naming it, after the route, defers the 30 minutes (they run from the newest such message);
-  the manager's open operator ask naming it blocks until answered, then defers the same way.
+  the manager's open operator ask naming it blocks until answered, then defers the same way. Each deferral
+  is noted once on the root thread, with a ⏱ line.
   A ticket the manager labelled `held` (it waits on something; the why in its body) is
   neither routed nor started until the label comes off, and holds no slot while routed. A `review`
   ticket opens a plain thread, not a workline: it holds no slot either, and one goes each pass ahead
@@ -87,10 +88,12 @@ defmodule Server.Intake do
     after_s = opts[:stalled_after] || Server.OperatorConfig.setting("stalled_ticket_minutes") * 60
     now = DateTime.utc_now()
 
-    for ticket <- stalled(after_s),
-        not held?(ticket),
-        not in_triage?(ticket, after_s, now),
-        do: start_stalled_ticket(ticket)
+    for ticket <- stalled(after_s), not held?(ticket) do
+      case triage_message(ticket, after_s, now) do
+        nil -> start_stalled_ticket(ticket)
+        deferrer -> note_deferral(ticket, deferrer)
+      end
+    end
   end
 
   defp start_stalled_ticket(ticket) do
@@ -237,21 +240,50 @@ defmodule Server.Intake do
     length(self) >= length(mine)
   end
 
-  # Triage in progress: a consult ask naming the ticket, or the manager naming it on the workspace's
-  # root thread, after the route. A consult is never resolved, so like a manager reply it only
-  # defers: `after_s` runs from the newest such message. The manager's operator ask (a `prompt`)
-  # naming it blocks while open, and defers from its resolution once answered.
-  defp in_triage?(ticket, after_s, now) do
+  # The message holding a stalled ticket in triage, or nil. Triage is a consult ask naming the ticket,
+  # or the manager naming it on the workspace's root thread, after the route. A consult is never
+  # resolved, so like a manager reply it only defers: `after_s` runs from the newest such message. The
+  # manager's operator ask (a `prompt`) naming it holds the ticket while open, whatever its age.
+  defp triage_message(ticket, after_s, now) do
     consults = naming(ticket, dynamic([m], not is_nil(m.consult_id) and m.mirrored == false))
     replies = manager_messages(ticket)
 
-    if Enum.any?(replies, &(&1.kind == "prompt" and is_nil(&1.resolved_at))) do
-      true
-    else
-      stamps = Enum.flat_map(consults ++ replies, &[&1.created_at, &1.resolved_at])
-      newest = Enum.max([ticket.updated_at | Enum.reject(stamps, &is_nil/1)], DateTime)
-      DateTime.diff(now, newest) < after_s
+    case Enum.find(replies, &(&1.kind == "prompt" and is_nil(&1.resolved_at))) do
+      nil -> recent_triage(consults ++ replies, after_s, now)
+      open_ask -> open_ask
     end
+  end
+
+  defp recent_triage([], _after_s, _now), do: nil
+
+  defp recent_triage(messages, after_s, now) do
+    newest = Enum.max_by(messages, &touched/1, DateTime)
+    if DateTime.diff(now, touched(newest)) < after_s, do: newest
+  end
+
+  defp touched(message), do: Enum.max(Enum.reject([message.created_at, message.resolved_at], &is_nil/1), DateTime)
+
+  # One ⏱ line on the root thread per deferral: a line already newer than the deferring message says it.
+  defp note_deferral(ticket, deferrer) do
+    root = Server.Channel.machine_thread(ticket.workspace_id)
+
+    if root && !noted_since?(ticket, root, deferrer) do
+      Server.Channel.post(%{
+        thread_id: root.id,
+        author: "tlon",
+        body:
+          "⏱ ticket ##{ticket.id} is held in triage by #{deferrer.author}: intake waits until it has been quiet 30 minutes."
+      })
+    end
+  end
+
+  defp noted_since?(ticket, root, deferrer) do
+    from(m in Server.Message,
+      where: m.thread_id == ^root.id and m.author == "tlon" and like(m.body, "⏱%"),
+      where: m.created_at >= ^touched(deferrer)
+    )
+    |> Repo.all()
+    |> Enum.any?(&Regex.match?(~r/##{ticket.id}(?!\d)/, &1.body))
   end
 
   defp manager_messages(ticket) do
@@ -265,11 +297,15 @@ defmodule Server.Intake do
     end
   end
 
-  # Messages after the route whose body names `#id` (not `#id0`).
+  # Messages of the ticket's workspace, after the route, whose body names `#id`: not `#id0`, and not a
+  # `thread #id` or `PR #id`, which name a thread or a PR that happens to share the number.
   defp naming(ticket, filter) do
-    ref = ~r/##{ticket.id}(?!\d)/
+    ref = ~r/(?<!thread |pr )##{ticket.id}(?!\d)/i
 
     from(m in Server.Message,
+      join: th in Server.Thread,
+      on: th.id == m.thread_id,
+      where: th.workspace_id == ^ticket.workspace_id,
       where: ^dynamic([m], ^filter and m.created_at > ^ticket.updated_at and ilike(m.body, ^"%##{ticket.id}%"))
     )
     |> Repo.all()

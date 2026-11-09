@@ -356,6 +356,82 @@ defmodule Server.IntakeTest do
       assert %{status: "doing"} = Tickets.get(stalled.id)
     end
 
+    test "a consult that names a thread with the same number does not defer it", %{ws: ws, route: route} do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-r", archetype: "builder"})
+      stalled = routed(ws, "thread number", 31)
+      age(triage(ws, "hronir", stalled, %{consult_id: 999_003, body: "see thread ##{stalled.id}"}), 10)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "doing"} = Tickets.get(stalled.id)
+    end
+
+    test "a manager's PR number that names it does not defer it", %{ws: ws, route: route} do
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-s", archetype: "builder"})
+      stalled = routed(ws, "pr number", 31)
+      age(triage(ws, "tertius", stalled, %{body: "PR ##{stalled.id} landed"}), 10)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "doing"} = Tickets.get(stalled.id)
+    end
+
+    test "a manager's arrow from it to another ticket still defers it", %{ws: ws, route: route} do
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-t", archetype: "builder"})
+      stalled = routed(ws, "arrow", 31)
+      age(triage(ws, "tertius", stalled, %{body: "##{stalled.id} → #552"}), 10)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "todo"} = Tickets.get(stalled.id)
+    end
+
+    test "a consult in another workspace that names it does not defer it", %{ws: ws, route: route} do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-u", archetype: "builder"})
+      stalled = routed(ws, "elsewhere named", 31)
+      {:ok, other} = Server.Workspaces.create(%{name: "Elsewhere"})
+      other_root = Server.Channel.machine_thread(other.id)
+
+      {:ok, ask} =
+        Server.Channel.post(%{
+          thread_id: other_root.id,
+          author: "hronir",
+          body: "see ##{stalled.id}",
+          consult_id: 999_004
+        })
+
+      age(ask, 10)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "doing"} = Tickets.get(stalled.id)
+    end
+
+    test "a deferral past 30 minutes is noted once on the root thread, and the next pass adds no second note", %{
+      ws: ws,
+      route: route
+    } do
+      manager(ws)
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-v", archetype: "builder"})
+      busy = routed(ws, "noted", 31)
+      age(triage(ws, "tertius", busy), 10)
+
+      Intake.run(cap: 4, route: route)
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "todo"} = Tickets.get(busy.id)
+      root = Server.Channel.machine_thread(ws.id)
+
+      notes =
+        root
+        |> Server.Channel.thread_messages()
+        |> Enum.filter(&(&1.body =~ "⏱" and &1.body =~ "ticket ##{busy.id} "))
+
+      assert [%{author: "tlon"}] = notes
+    end
+
     test "when the fallback fires it says so on the root thread, naming the new thread", %{ws: ws, route: route} do
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-n", archetype: "builder"})
       stalled = routed(ws, "announced", 31)
