@@ -10,9 +10,9 @@ defmodule Server.Workline.Landing do
   alias Server.Dossier
   alias Server.Repo
   alias Server.Thread
-  alias Server.Workline
   alias Server.Workline.Artifacts.Git
   alias Server.Workline.Review
+  alias Server.Workline.Shared
   alias Server.Workline.Stage
 
   require Logger
@@ -51,7 +51,7 @@ defmodule Server.Workline.Landing do
 
     for thread <- stranded,
         not Server.Office.Needs.landing?(thread),
-        %{"by" => _, "sha" => _, "at" => _} = approval <- [Workline.approval(thread)],
+        %{"by" => _, "sha" => _, "at" => _} = approval <- [Stage.approval(thread)],
         {:ok, queued} <- [requeue_or_drop(thread, approval)] do
       queued
     end
@@ -108,12 +108,12 @@ defmodule Server.Workline.Landing do
 
         {:error, {:interrupted, why}} ->
           Server.Sheriff.report(thread, "the merge queue was cut off three times: #{why}")
-          Workline.bounce(thread, why, "the merge queue was cut off three times (#{why}); verify again, then approve")
+          Shared.bounce(thread, why, "the merge queue was cut off three times (#{why}); verify again, then approve")
 
         {:error, why} ->
           Server.Sheriff.report(thread, "the merge queue bounced it back to build: #{why}")
 
-          Workline.bounce(
+          Shared.bounce(
             thread,
             why,
             "the merge queue couldn't land it: #{why} Rebase work/#{thread.slug} onto origin/main, fix it test-first"
@@ -123,7 +123,7 @@ defmodule Server.Workline.Landing do
   end
 
   def land_queued(%Thread{stage: "review", awaiting: nil, state: "closed"} = thread, _opts) do
-    Workline.post_brief(
+    Shared.post_brief(
       thread,
       "⧗ its turn in the merge queue came, but the thread is closed — nothing landed. `tlon-cli reopen #{thread.id}` puts it back in the queue while its approval stands"
     )
@@ -145,7 +145,7 @@ defmodule Server.Workline.Landing do
     Server.Channel.reopen_if_closed(thread.id)
     Server.Tickets.undone_for(thread.id)
 
-    Workline.bounce(
+    Shared.bounce(
       Repo.get!(Thread, thread.id),
       why,
       todo ||
@@ -162,9 +162,9 @@ defmodule Server.Workline.Landing do
   Only an open `merged` workline; anything else is left as it is.
   """
   def merged(%Thread{stage: "landed", state: "open"} = thread, ref) do
-    Workline.record_landing(thread, "work_landed", %{"summary" => "merged: #{ref}", "evidence" => ref})
+    record_landing(thread, "work_landed", %{"summary" => "merged: #{ref}", "evidence" => ref})
     {:ok, closed} = Server.Channel.close_thread(thread)
-    Workline.post_brief(closed, "✓ merged: #{ref}")
+    Shared.post_brief(closed, "✓ merged: #{ref}")
     Server.Dossier.resolve_fixed(thread, ref)
     {:ok, closed}
   end
@@ -188,7 +188,7 @@ defmodule Server.Workline.Landing do
   """
   def landing_blocked(%Thread{} = thread, why) do
     with %{url: url, event: %{kind: kind}} when kind != "check_failed" <- pending_landing(thread),
-         do: Workline.record_landing(thread, "check_failed", Workline.landing_check(url, 1, why))
+         do: record_landing(thread, "check_failed", landing_check(url, 1, why))
 
     :ok
   end
@@ -203,13 +203,13 @@ defmodule Server.Workline.Landing do
   def rebase_landing(thread) do
     with %{url: url} <- pending_landing(thread) || {:error, :not_landing},
          {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id, reland: true})) do
-      Workline.record_landing(
+      record_landing(
         thread,
         "check_passed",
-        Workline.landing_check(url, 0, "back in the merge queue to land again")
+        landing_check(url, 0, "back in the merge queue to land again")
       )
 
-      Workline.post_brief(
+      Shared.post_brief(
         thread,
         "⧗ back in the merge queue: #{url} lands once rebased onto main and green there, merged at the head it gated"
       )
@@ -291,7 +291,7 @@ defmodule Server.Workline.Landing do
 
   def republish(%Thread{stage: "landed"} = thread, run) do
     if publish_failed?(thread),
-      do: Workline.publish(thread, Git.root(thread), "⤴ republished", "work/#{thread.slug}", run),
+      do: publish(thread, Git.root(thread), "⤴ republished", "work/#{thread.slug}", run),
       else: {:error, "#{thread.slug} has no failed publish to retry"}
   end
 
@@ -329,12 +329,12 @@ defmodule Server.Workline.Landing do
 
     case reopened do
       %Thread{stage: "review", awaiting: nil} ->
-        case Workline.approval(reopened) do
+        case Stage.approval(reopened) do
           %{"by" => by, "sha" => sha} ->
             Stage.queue(reopened, "reopened — #{by}'s approval at #{String.slice(sha, 0, 7)} still stands", by)
 
           nil ->
-            Workline.post_brief(
+            Shared.post_brief(
               reopened,
               "reopened at review — no approval stands for work/#{reopened.slug} as it is now"
             )
@@ -347,9 +347,11 @@ defmodule Server.Workline.Landing do
     end
   end
 
+  @doc false
   def landing_check(url, exit, tail),
     do: %{"cmd" => "GitHub merge of #{url}", "exit" => exit, "url" => url, "tail" => tail}
 
+  @doc false
   def record_landing(thread, kind, detail) do
     {:ok, _} =
       Dossier.record_event(%{
@@ -362,6 +364,7 @@ defmodule Server.Workline.Landing do
 
   # landed: what changed rolls out and the branch goes to GitHub, where it is not merged yet — the
   # thread stays open until GitHub merges the PR (`merged/2`). With no GitHub, the landing is the merge.
+  @doc false
   def finish(thread, %{repo: repo, from: from, to: to} = moved, run) do
     Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
     publish(thread, repo, "⤵ landed as #{String.slice(to, 0, 7)}", String.slice(to, 0, 7), run, moved[:gated])
@@ -373,13 +376,14 @@ defmodule Server.Workline.Landing do
   end
 
   # `gated`: the sha the merge queue's gate passed on, posted as tlon/check; a republish has none
+  @doc false
   def publish(thread, repo, landed, ref, run, gated \\ nil) do
     case Server.Workline.Publish.publish(repo, thread.slug, thread.title, run, gated: gated) do
       {:ok, url} = ok ->
         record_publish(thread, 0, url)
         record_landing(thread, "check_passed", landing_check(url, 0, "published"))
 
-        Workline.post_brief(
+        Shared.post_brief(
           thread,
           "#{landed}; published as #{url} — the thread closes once GitHub reports it merged"
         )
@@ -389,13 +393,13 @@ defmodule Server.Workline.Landing do
       {:auto_refused, url, why} = refused ->
         record_publish(thread, 0, url)
         record_landing(thread, "check_failed", landing_check(url, 1, "merge refused: #{why}"))
-        Workline.post_brief(thread, "#{landed}; published as #{url}, but GitHub refused to merge it: #{why}")
+        Shared.post_brief(thread, "#{landed}; published as #{url}, but GitHub refused to merge it: #{why}")
         refused
 
       :none ->
         record_publish(thread, 0, "no origin to publish to")
-        Workline.post_brief(thread, landed)
-        Workline.merged(thread, ref)
+        Shared.post_brief(thread, landed)
+        merged(thread, ref)
         :none
 
       {:error, why} = error ->
@@ -406,18 +410,20 @@ defmodule Server.Workline.Landing do
 
   # the failure is recorded for the operator's list (`Server.Office.Needs`' `publish_failed`), and the
   # sheriff is told too, so the work reaches main
+  @doc false
   def unpublished(thread, why) do
     record_publish(thread, 1, why)
-    Workline.post_brief(thread, why)
+    Shared.post_brief(thread, why)
     Server.Sheriff.report(thread, "work/#{thread.slug} — #{why}")
   end
 
+  @doc false
   def record_publish(thread, exit, tail) do
     {:ok, _} =
       Server.Dossier.record_event(%{
         thread_id: thread.id,
         kind: if(exit == 0, do: "check_passed", else: "check_failed"),
-        correlation: Workline.publish_correlation(thread),
+        correlation: publish_correlation(thread),
         detail: %{"cmd" => "publish work/#{thread.slug}", "exit" => exit, "tail" => tail}
       })
   end
@@ -438,12 +444,12 @@ defmodule Server.Workline.Landing do
   defp landed(thread, moved, run) do
     case Stage.flip(thread) do
       {:ok, flipped} ->
-        Workline.finish(flipped, moved, run)
+        finish(flipped, moved, run)
         Server.Jobs.enqueue(Server.Jobs.Retro.new(%{thread_id: flipped.id}))
         {:ok, flipped}
 
       {:error, {:moved, now}} ->
-        Workline.post_brief(
+        Shared.post_brief(
           thread,
           "⚠ the merge queue's gate passed, but the workline moved to #{now} while it ran — nothing landed."
         )
@@ -453,9 +459,9 @@ defmodule Server.Workline.Landing do
   end
 
   defp by_hand(thread, url) do
-    Workline.record_publish(thread, 0, url)
-    Workline.record_landing(thread, "check_passed", Workline.landing_check(url, 0, "opened by hand"))
-    Workline.post_brief(thread, "its PR opened by hand: #{url} — the thread closes when GitHub merges it")
+    record_publish(thread, 0, url)
+    record_landing(thread, "check_passed", landing_check(url, 0, "opened by hand"))
+    Shared.post_brief(thread, "its PR opened by hand: #{url} — the thread closes when GitHub merges it")
     {:ok, thread}
   end
 
@@ -473,22 +479,22 @@ defmodule Server.Workline.Landing do
       {:error, {:interrupted, why}} = cut ->
         if opts[:last],
           do:
-            Workline.record_landing(
+            record_landing(
               thread,
               "check_failed",
-              Workline.landing_check(url, 1, "the merge queue's gate was cut off: #{why}")
+              landing_check(url, 1, "the merge queue's gate was cut off: #{why}")
             )
 
         cut
 
       {:error, why} when auto? ->
-        Workline.record_landing(
+        record_landing(
           thread,
           "check_failed",
-          Workline.landing_check(url, 1, "the merge queue couldn't land it again: #{why}")
+          landing_check(url, 1, "the merge queue couldn't land it again: #{why}")
         )
 
-        Workline.post_brief(thread, "⚠ the merge queue couldn't land it again: #{why} — it waits on the operator")
+        Shared.post_brief(thread, "⚠ the merge queue couldn't land it again: #{why} — it waits on the operator")
         {:error, why}
 
       {:error, why} ->
@@ -503,16 +509,16 @@ defmodule Server.Workline.Landing do
          Server.Workline.Publish.post_check(repo, sha, run),
          how when how in [:merged, :auto] <- Server.Workline.Publish.merge_at(repo, url, sha, branch, run) do
       said = if how == :merged, do: "merged", else: "auto-merge armed at that head"
-      detail = Workline.landing_check(url, 0, "gated at #{String.slice(sha, 0, 7)}; #{said}")
+      detail = landing_check(url, 0, "gated at #{String.slice(sha, 0, 7)}; #{said}")
       # GitHub merges an armed head itself: KeepUp requeueing it again would gate it for nothing
       detail = if how == :auto, do: Map.put(detail, "requeued_head", sha), else: detail
-      Workline.record_landing(thread, "check_passed", detail)
-      Workline.post_brief(thread, "⤵ landed again as #{String.slice(sha, 0, 7)}, gated on main; #{url}: #{said}")
+      record_landing(thread, "check_passed", detail)
+      Shared.post_brief(thread, "⤵ landed again as #{String.slice(sha, 0, 7)}, gated on main; #{url}: #{said}")
       {:ok, thread}
     else
       {:error, why} ->
-        Workline.record_landing(thread, "check_failed", Workline.landing_check(url, 1, "merge refused: #{why}"))
-        Workline.post_brief(thread, "⚠ gated green at #{String.slice(sha, 0, 7)}, but GitHub refused it: #{why}")
+        record_landing(thread, "check_failed", landing_check(url, 1, "merge refused: #{why}"))
+        Shared.post_brief(thread, "⚠ gated green at #{String.slice(sha, 0, 7)}, but GitHub refused it: #{why}")
         {:error, why}
     end
   end
@@ -529,10 +535,10 @@ defmodule Server.Workline.Landing do
         )
 
       {:error, out} ->
-        Workline.record_landing(
+        record_landing(
           thread,
           "check_failed",
-          Workline.landing_check(url, 1, "#{why}; its PR wouldn't close: #{out}")
+          landing_check(url, 1, "#{why}; its PR wouldn't close: #{out}")
         )
 
         {:error, why}
@@ -543,10 +549,10 @@ defmodule Server.Workline.Landing do
     with {:ok, _job} <-
            Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id, reland: true, auto: true})) do
       detail =
-        Map.put(Workline.landing_check(url, 0, "#{why}: back in the merge queue on its own"), "requeued_head", head)
+        Map.put(landing_check(url, 0, "#{why}: back in the merge queue on its own"), "requeued_head", head)
 
-      Workline.record_landing(thread, "check_passed", detail)
-      Workline.post_brief(thread, "⧗ #{why} — back in the merge queue on its own: #{url} lands once rebased and gated")
+      record_landing(thread, "check_passed", detail)
+      Shared.post_brief(thread, "⧗ #{why} — back in the merge queue on its own: #{url} lands once rebased and gated")
       :ok
     end
   end
@@ -568,7 +574,7 @@ defmodule Server.Workline.Landing do
 
     case ride_on(first, repo, merger, run) do
       {:cont, :ok} ->
-        Workline.post_brief(
+        Shared.post_brief(
           lead,
           "🚃 landed in a merge train with #{Enum.map_join(rest, ", ", fn {t, _} -> "##{t.id}" end)}: one gate for all of them"
         )

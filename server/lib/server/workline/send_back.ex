@@ -7,7 +7,8 @@ defmodule Server.Workline.SendBack do
 
   alias Server.Repo
   alias Server.Thread
-  alias Server.Workline
+  alias Server.Workline.Review
+  alias Server.Workline.Shared
 
   @stages ~w(intent spec plan build verify review landed)
 
@@ -35,7 +36,7 @@ defmodule Server.Workline.SendBack do
            do: pull_landing(locked, unqueue?)
     end
 
-    Workline.move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by), allowed, by)
+    Shared.move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by), allowed, by)
   end
 
   defp behind(%Thread{stage: stage}, to) do
@@ -50,7 +51,7 @@ defmodule Server.Workline.SendBack do
     tech = tech_lead(thread)
 
     cond do
-      by == Workline.operator() or by == tech ->
+      by == Shared.operator() or by == tech ->
         :ok
 
       to == "build" ->
@@ -59,7 +60,7 @@ defmodule Server.Workline.SendBack do
       true ->
         {:error,
          {:not_yours,
-          "back to #{to} is the tech lead's call: say why on the thread and @#{tech || Workline.operator()}, who decides"}}
+          "back to #{to} is the tech lead's call: say why on the thread and @#{tech || Shared.operator()}, who decides"}}
     end
   end
 
@@ -78,10 +79,10 @@ defmodule Server.Workline.SendBack do
 
   defp uqbar_may_send_back(thread) do
     cond do
-      Workline.limit_hit?(thread) ->
+      Review.limit_hit?(thread) ->
         {:error, {:not_yours, "##{thread.id}'s grade hit a limit: its gate is the operator's"}}
 
-      thread.awaiting != Workline.operator() ->
+      thread.awaiting != Shared.operator() ->
         {:error, {:not_yours, "##{thread.id} is not parked on the operator's gate"}}
 
       true ->

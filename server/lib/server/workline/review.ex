@@ -15,10 +15,11 @@ defmodule Server.Workline.Review do
   alias Server.Dossier
   alias Server.Repo
   alias Server.Thread
-  alias Server.Workline
   alias Server.Workline.Artifacts.Git
   alias Server.Workline.Grade
   alias Server.Workline.Scribe
+  alias Server.Workline.Shared
+  alias Server.Workline.Staffing
   alias Server.Workline.Stage
 
   require Logger
@@ -71,7 +72,7 @@ defmodule Server.Workline.Review do
 
   def review_verdict(%Thread{stage: "review"} = thread, verdict, author, opts)
       when verdict in ~w(approve request_changes) do
-    sha = Keyword.get_lazy(opts, :branch_head, fn -> Workline.branch_head(thread) end)
+    sha = Keyword.get_lazy(opts, :branch_head, fn -> Stage.branch_head(thread) end)
 
     cond do
       why = self_review(thread, author) -> {:error, {:self_review, why}}
@@ -128,15 +129,15 @@ defmodule Server.Workline.Review do
 
     outcome =
       if verdict == "fail" do
-        Workline.bounce(
+        Shared.bounce(
           thread,
           "QA found a problem",
           "QA (#{by}) drove it and found:\n\n#{report}\n\nFix it test-first",
           author
         )
       else
-        Workline.post_brief(thread, "✓ QA passed (#{by}):\n\n#{report}")
-        Workline.advance(Repo.get!(Thread, thread.id), opts)
+        Shared.post_brief(thread, "✓ QA passed (#{by}):\n\n#{report}")
+        Stage.advance(Repo.get!(Thread, thread.id), opts)
       end
 
     {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []), :qa)
@@ -155,7 +156,7 @@ defmodule Server.Workline.Review do
     thread = Repo.get!(Thread, thread.id)
     checker = Keyword.get(opts, :artifacts, Git)
 
-    if thread.stage == "review" and thread.awaiting == Workline.operator() and
+    if thread.stage == "review" and thread.awaiting == Shared.operator() and
          auto_land?(thread, checker, opts),
        do: Stage.queue(thread, auto_land_note(thread, opts), "auto_land_risk"),
        else: {:ok, thread}
@@ -194,10 +195,10 @@ defmodule Server.Workline.Review do
 
     if items != [] do
       lead = Server.Channel.thread_lead(thread.id)
-      to = if lead && lead != author, do: "@#{lead} ", else: "@#{Workline.operator()} "
+      to = if lead && lead != author, do: "@#{lead} ", else: "@#{Shared.operator()} "
       list = items |> Enum.with_index(1) |> Enum.map_join("\n", fn {text, i} -> "#{i}. #{text}" end)
 
-      Workline.post_brief(
+      Shared.post_brief(
         thread,
         "#{to}follow-ups from #{author}'s #{door}:\n#{list}\n\n" <>
           "Fix any that sits in lines this change already touches before it lands. Drop the rest, or " <>
@@ -228,7 +229,7 @@ defmodule Server.Workline.Review do
         do: {:ok, _} = Server.Tickets.update(t, %{labels: t.labels -- ["held"], body: (t.body || "") <> note})
 
     if held != [],
-      do: Workline.post_brief(thread, "↗ follow-ups to intake: " <> Enum.map_join(held, ", ", &"##{&1.id} #{&1.title}"))
+      do: Shared.post_brief(thread, "↗ follow-ups to intake: " <> Enum.map_join(held, ", ", &"##{&1.id} #{&1.title}"))
 
     :ok
   end
@@ -275,7 +276,7 @@ defmodule Server.Workline.Review do
     outcome =
       if verdict == "request_changes" do
         bounced =
-          Workline.bounce(
+          Shared.bounce(
             thread,
             "the review requested changes",
             "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first",
@@ -283,7 +284,7 @@ defmodule Server.Workline.Review do
           )
 
         if changes_requested(thread) >= 2,
-          do: Workline.escalate(Repo.get!(Thread, thread.id), "the review asked for changes twice")
+          do: Staffing.escalate(Repo.get!(Thread, thread.id), "the review asked for changes twice")
 
         bounced
       else
@@ -315,7 +316,7 @@ defmodule Server.Workline.Review do
   # approval. A refused advance (review.md not committed, the queue down) would stall it, so it
   # is said on the thread and returned, never reported as parked; the verdict itself stands.
   defp park_approved(thread, opts) do
-    case Workline.advance(Repo.get!(Thread, thread.id), opts) do
+    case Stage.advance(Repo.get!(Thread, thread.id), opts) do
       {:awaiting, parked} ->
         {:ok, parked}
 
@@ -325,7 +326,7 @@ defmodule Server.Workline.Review do
       {:error, why} ->
         why = park_refusal(why)
 
-        Workline.post_brief(
+        Shared.post_brief(
           thread,
           "⚠ the approving verdict is recorded, but the workline is not parked at the gate: #{why}. " <>
             "It sits at review until its lead advances it (advance_stage)."
@@ -357,6 +358,7 @@ defmodule Server.Workline.Review do
   # risk grade has no axis over it (and no limit hit, no decision left open) lands without them,
   # through the same gated queue. Off unless set; a test hands the threshold outright.
   # A builder with a good enough record has earned a step more of it (`Server.Trust`).
+  @doc false
   def auto_land?(thread, checker, opts) do
     max = Keyword.get_lazy(opts, :auto_land_risk, fn -> if checker == Git, do: auto_land_risk() end)
 
@@ -365,6 +367,7 @@ defmodule Server.Workline.Review do
       qa_cleared(thread, opts) == :ok
   end
 
+  @doc false
   def auto_land_note(thread, opts) do
     {max, earned} = Server.Trust.allowance(thread, Keyword.get_lazy(opts, :auto_land_risk, &auto_land_risk/0))
 
@@ -378,6 +381,7 @@ defmodule Server.Workline.Review do
   end
 
   # the newest grade since the workline last entered review: nil if none, or the grader failed
+  @doc false
   def grade(thread) do
     case since_review(thread, "workline:#{thread.slug}:grade") do
       %{kind: "check_passed", detail: grade} -> grade
@@ -386,6 +390,7 @@ defmodule Server.Workline.Review do
   end
 
   # the newest event of `correlation` since the workline last entered review
+  @doc false
   def since_review(thread, correlation) do
     entered =
       Repo.one(
@@ -406,6 +411,7 @@ defmodule Server.Workline.Review do
 
   # at review, a change Andrew would see waits on a QA pass since it last entered review — where the
   # bench seats a qa; a bench without one lands it as before
+  @doc false
   def qa_cleared(thread, opts) do
     case qa_owed(thread, opts) do
       nil ->
@@ -421,6 +427,7 @@ defmodule Server.Workline.Review do
     end
   end
 
+  @doc false
   def qa_owed(%Thread{stage: "review", workspace_id: ws} = thread, opts) when not is_nil(ws) do
     with %Server.Coworker{} = seat <- qa_seat(thread),
          [_ | _] = paths <- Enum.filter(changed_paths(thread, opts), &String.starts_with?(&1, @user_visible)),
@@ -433,10 +440,11 @@ defmodule Server.Workline.Review do
 
   def qa_owed(_thread, _opts), do: nil
 
+  @doc false
   def to_qa(thread, seat, paths) do
-    handed = Workline.hand_to(thread, "qa", seat.name)
+    handed = Staffing.hand_to(thread, "qa", seat.name)
 
-    Workline.post_brief(
+    Shared.post_brief(
       handed,
       "🎭 QA: the review approved a change Andrew will see (#{Enum.join(Enum.take(paths, 5), ", ")}). " <>
         String.capitalize(qa_playbook(thread))
@@ -447,16 +455,17 @@ defmodule Server.Workline.Review do
 
   # the review approved the code it read (its verdict's `sha`): code committed after it goes back
   # to build like any other change, through verify and a review of what changed
+  @doc false
   def reviewed_current(%Thread{stage: "review"} = thread) do
     with %{detail: %{"sha" => seen}} when is_binary(seen) <- since_review(thread, "workline:#{thread.slug}:review"),
-         now when is_binary(now) <- Workline.branch_head(thread),
+         now when is_binary(now) <- Stage.branch_head(thread),
          {:changed, how} <- compare_code(thread, seen, now) do
       why =
         if how == :conflicts,
           do: "work/#{thread.slug} was rebased onto main with conflicts resolved after its review",
           else: "work/#{thread.slug} has code committed after its review"
 
-      Workline.bounce(
+      Shared.bounce(
         thread,
         why,
         "#{why} (reviewed at #{String.slice(seen, 0, 7)}, now #{String.slice(now, 0, 7)}): it comes back through verify and a review of what changed"
@@ -468,6 +477,7 @@ defmodule Server.Workline.Review do
 
   def reviewed_current(_thread), do: :ok
 
+  @doc false
   def main_ref(root) do
     Enum.find(
       ["origin/main", "main"],
@@ -481,6 +491,7 @@ defmodule Server.Workline.Review do
   # rebase onto a newer main (the merge queue keeps its rebase across a cut-off gate) is `:same`; the
   # same commits with other patches are `{:changed, :conflicts}`, a resolved rebase; anything else
   # `{:changed, :code}`. A git error is `{:changed, :unreadable}`, and logged.
+  @doc false
   def compare_code(_thread, sha, sha), do: :same
 
   def compare_code(thread, sha, head) do
@@ -537,7 +548,7 @@ defmodule Server.Workline.Review do
     seats = thread.workspace_id |> Server.Workspaces.bench() |> Enum.filter(&(&1.archetype == "qa"))
     current = Server.Channel.thread_lead(thread.id)
 
-    Enum.find(seats, &(&1.name == current)) || Enum.find(seats, &(not Workline.leading_another?(&1, thread))) ||
+    Enum.find(seats, &(&1.name == current)) || Enum.find(seats, &(not Staffing.leading_another?(&1, thread))) ||
       List.first(seats)
   end
 
