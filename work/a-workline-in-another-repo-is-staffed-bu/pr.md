@@ -1,7 +1,10 @@
-A lead whose spawn is refused now says so on its thread.
+A workline in a repo with its own `core.hooksPath` now staffs, and a lead whose spawn is refused says so on its thread.
 
-`Switchboard.maybe_spawn_absent` filtered `Spawn.join/3`'s `{:error, _}` out of its comprehension, so a refused checkout (worktree failure on the thread's repo) dropped the lead with no trace but the 1h stall alert. `join_exports/3` now posts the same "could not be seated" notice, with the reason, that a refused pane spawn already did.
+Why #550 never launched: `Worktree.ensure` refused any repo that has its own `core.hooksPath` (ficciones: `scripts/git-hooks`), and `Switchboard.maybe_spawn_absent` filtered `Spawn.join/3`'s `{:error, _}` out of its comprehension, so the refusal left nothing but the 1h stall alert.
 
-Closes ticket #864 (workline #550). A test also pins that a thread in a second git repo spawns its lead in that repo's worktree (`TLON_CWD`): the non-tlon path itself works, the silence was the bug; the original #550 refusal reason is not recoverable from the logs.
+- `Worktree`: such a repo keeps its hooks in its main checkout; its seat worktree alone is pointed at tlon's (`extensions.worktreeConfig` + `git config --worktree core.hooksPath`), so the fence and the `Tlon-Model` stamp still apply. Chaining the repo's own hooks is not done here.
+- `Switchboard.join_exports/3`: a lead's refused join posts the same "could not be seated … <reason>" notice a refused pane spawn does.
 
-Checked: `menard run test test/server/switchboard_test.exs` (67 tests, 0 failures; the refused-checkout test red first).
+Closes ticket #864 (workline #550).
+
+Checked: `menard run test` on worktree, switchboard and spawn tests (158, 0 failures); both new behaviours red first; credo clean.

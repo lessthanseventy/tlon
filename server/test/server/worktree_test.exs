@@ -48,13 +48,19 @@ defmodule Server.WorktreeTest do
       assert out =~ "#{wt}: trusted"
     end
 
-    test "a sibling repo's own core.hooksPath is refused, not overwritten", %{repo: repo, git: git} do
+    test "a sibling repo's own core.hooksPath stays; its worktree alone is pointed at tlon's", %{repo: repo, git: git} do
+      {:ok, root} = Server.Profiles.main_root()
+      hooks = Path.join(root, "scripts/git-hooks")
       {_, 0} = git.(["config", "core.hooksPath", "elsewhere"])
-      assert {:error, msg} = Worktree.ensure(repo, "hooked")
-      assert msg =~ "elsewhere"
+
+      for _ <- 1..2 do
+        assert {:ok, wt} = Worktree.ensure(repo, "hooked")
+        assert {out, 0} = System.cmd("git", ["-C", wt, "config", "core.hooksPath"])
+        assert String.trim(out) == hooks
+      end
+
       assert {out, 0} = git.(["config", "core.hooksPath"])
       assert String.trim(out) == "elsewhere"
-      refute File.exists?(Worktree.path(repo, "hooked"))
     end
 
     test "tlon's own checkout (any worktree of it) is never reconfigured" do
