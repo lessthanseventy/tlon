@@ -99,8 +99,10 @@ defmodule Server.Search do
   `ts_rank_cd` and normalised so the best match is 1.0. A map of id => relevance in (0, 1];
   unmatched ids are absent; empty for a blank query or id list. Only the query's first
   #{@relevance_terms} distinct terms count: the title leads it, and with a project's worth of ids
-  Postgres checks every term against every fact.
+  Postgres checks every term against every fact. The query is bounded by the search timeout: one
+  that outruns it answers `{:error, :timeout}`.
   """
+  @spec fact_relevance(String.t(), [integer()]) :: %{integer() => float()} | {:error, :timeout}
   def fact_relevance(query, fact_ids) when is_binary(query) and is_list(fact_ids) do
     terms = query |> tokens() |> Enum.uniq_by(&String.downcase/1) |> Enum.take(@relevance_terms)
 
@@ -119,11 +121,15 @@ defmodule Server.Search do
             FROM fact
             WHERE id = ANY($2) AND text_tsv @@ websearch_to_tsquery('english', $1)
             """,
-            [q, ids]
+            [q, ids],
+            timeout: timeout([])
           )
 
         normalise(rows)
     end
+  rescue
+    e in Postgrex.Error ->
+      if e.postgres && e.postgres.code == :query_canceled, do: {:error, :timeout}, else: reraise(e, __STACKTRACE__)
   end
 
   # ts_rank_cd is positive, best-highest; scale to (0, 1] against the best so the top hit is 1.0.

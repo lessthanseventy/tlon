@@ -110,7 +110,7 @@ defmodule Server.Recall do
         else: thread_facts
 
     ids = Enum.map(facts, & &1.id)
-    keyword = keyword_relevance(opts[:query], ids)
+    keyword = keyword_relevance(opts[:query], ids, opts[:keyword] || (&Server.Search.fact_relevance/2))
     touch_events = touches_by_fact(ids)
     superseded = superseded_ids(ids)
 
@@ -220,9 +220,20 @@ defmodule Server.Recall do
   defp keyword_rel(_fact, nil), do: 0.0
   defp keyword_rel(%{id: id}, keyword), do: Map.get(keyword, id, 0.0)
 
-  # The keyword half: each candidate's bm25 relevance to the query, or nil when there's no query.
-  defp keyword_relevance(nil, _ids), do: nil
-  defp keyword_relevance(query, ids), do: Server.Search.fact_relevance(query, ids)
+  # The keyword half: each candidate's bm25 relevance to the query, or nil when there's no query or
+  # the search ran out of time. `:keyword` replaces the search (a test seam).
+  defp keyword_relevance(nil, _ids, _search), do: nil
+
+  defp keyword_relevance(query, ids, search) do
+    case search.(query, ids) do
+      {:error, :timeout} ->
+        Logger.warning("recall: the keyword relevance query timed out, ranking without it")
+        nil
+
+      relevance ->
+        relevance
+    end
+  end
 
   @doc """
   Store a fact's embedding vector + model (written after `bank_fact`, off the write path), then let

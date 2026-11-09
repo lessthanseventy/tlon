@@ -15,6 +15,36 @@ defmodule Server.SearchTest do
     %{thread: thread}
   end
 
+  test "fact_relevance answers {:error, :timeout} when its query outruns the search timeout", %{thread: thread} do
+    {:ok, fact} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "alpha", provenance: "derived"})
+    previous = Application.get_env(:server, :search_timeout)
+    Application.put_env(:server, :search_timeout, 50)
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:server, :search_timeout, previous),
+        else: Application.delete_env(:server, :search_timeout)
+    end)
+
+    test = self()
+
+    holder =
+      Task.async(fn ->
+        Repo.transaction(fn ->
+          Repo.query!("LOCK TABLE fact IN ACCESS EXCLUSIVE MODE")
+          send(test, :locked)
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive :locked, 5_000
+    assert {:error, :timeout} = Search.fact_relevance("alpha", [fact.id])
+    send(holder.pid, :release)
+    Task.await(holder)
+    assert %{} = relevance = Search.fact_relevance("alpha", [fact.id])
+    assert Map.keys(relevance) == [fact.id]
+  end
+
   describe "history/2 — FTS over the message channel" do
     test "finds a message by a word in its body, ranked, with a snippet + its count", %{thread: thread} do
       {:ok, _} =

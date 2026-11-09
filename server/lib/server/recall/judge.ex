@@ -88,8 +88,14 @@ defmodule Server.Recall.Judge do
 
     scores =
       case embed.(text) do
-        {:ok, vector} -> for f <- pool, f.embedding, into: %{}, do: {f.id, Embedding.cosine(vector, f.embedding)}
-        {:error, _} -> Server.Search.fact_relevance(text, Enum.map(pool, & &1.id))
+        {:ok, vector} ->
+          for f <- pool, f.embedding, into: %{}, do: {f.id, Embedding.cosine(vector, f.embedding)}
+
+        {:error, _} ->
+          case Server.Search.fact_relevance(text, Enum.map(pool, & &1.id)) do
+            {:error, :timeout} -> %{}
+            relevance -> relevance
+          end
       end
 
     pool

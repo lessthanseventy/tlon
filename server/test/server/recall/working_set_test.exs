@@ -143,6 +143,23 @@ defmodule Server.Recall.WorkingSetTest do
     assert Map.keys(Server.Search.fact_relevance("#{filler} alpha omega", ids)) == [near.id]
   end
 
+  test "a keyword search that times out leaves the working set without its keyword half, and says so once",
+       %{thread: thread} do
+    {:ok, fact} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "alpha", provenance: "derived"})
+    timed_out = fn _query, _ids -> {:error, :timeout} end
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert [%{id: id, relevance: relevance}] =
+                 Recall.working_set_for_thread(thread, query: "alpha", keyword: timed_out, budget: 10_000)
+
+        assert id == fact.id
+        assert relevance == 1.0
+      end)
+
+    assert [_once] = Regex.scan(~r/keyword relevance query timed out/, log)
+  end
+
   test "a cited touch lifts a fact above an equal unreferenced one", %{thread: thread} do
     {:ok, plain} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "plain", provenance: "derived"})
     {:ok, used} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "used often", provenance: "derived"})
