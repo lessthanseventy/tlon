@@ -5,7 +5,7 @@ defmodule Server.Alerts do
 
     * **alarm** — a meeting from `alarm_minutes` (settings file, default 5) before it starts until
       ten minutes in: full screen, with Join;
-    * **decision** — work has stopped on a choice (a gate, a dialog, a question, a coworker's
+    * **decision** — work has stopped on a choice (a gate, a prompt, a question, a coworker's
       ask): a banner with its answers;
     * **sticky** — wants the operator, nothing waits on it (a red verify, stuck work): stays until
       dismissed or resolved. A rollout note raises nothing here: the office's inbox has it;
@@ -107,7 +107,7 @@ defmodule Server.Alerts do
   defp from_need(n) do
     level =
       cond do
-        n.kind in ~w(gate dialog question ask pr_blocked) -> "decision"
+        n.kind in ~w(gate question ask pr_blocked) -> "decision"
         n.kind == "mention" -> "info"
         true -> "sticky"
       end
@@ -139,15 +139,16 @@ defmodule Server.Alerts do
   defp put_away_label("quota"), do: "Wait for the reset"
   defp put_away_label(_kind), do: "Dismiss"
 
+  # a gate with a prompt behind it (a pane's dialog, the release gate) is answered by the prompt's
+  # own id, so a key meant for one prompt on a thread never lands in another
+  defp actions(%{kind: "gate", thread_id: t, ref: id, options: options}) when is_integer(id),
+    do: answers("/api/office/prompts/#{id}", options) ++ [other(t)]
+
   # a review gate has a build behind it, so it can also go back: to build for the code, to plan for its shape
   defp actions(%{kind: "gate", thread_id: t, stage: "review"}),
     do: [read_doc(t), call("Approve", "/approve", t), send_back("build", t), send_back("plan", t), other(t)]
 
   defp actions(%{kind: "gate", thread_id: t}), do: [read_doc(t), call("Approve", "/approve", t), other(t)]
-
-  # by the prompt's own id, so a key meant for one prompt on a thread never lands in another
-  defp actions(%{kind: "dialog", thread_id: t, ref: id, options: options}),
-    do: answers("/api/office/prompts/#{id}", options) ++ [other(t)]
 
   defp actions(%{kind: "ask", ref: id, options: options} = need) do
     handoff = %{label: "Hand it to Uqbar", method: "POST", path: "/api/office/prompts/#{id}/uqbar", body: %{}}

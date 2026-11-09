@@ -49,8 +49,8 @@ export function needActions(app: State, ctl: Ctl, n: data.Need): Action[] {
   // settled by Uqbar: overruling it is the one answer; it goes back to Uqbar, not to you
   if (n.route === "settled") return [{ ...bind("need.u.settled"), run: () => void ctl.did(data.overrule(n.key)).then(after) }, ...(tid ? [{ ...bind("need.v"), run: () => ctl.openReader(tid) }] : [])]
   const acts: Action[] = [
-    ...(n.kind === "gate" && tid ? [{ ...bind("need.A.gate"), run: () => void ctl.did(data.approve(tid)).then(after) }] : []),
-    ...(n.kind === "dialog" && n.ref ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void ctl.did(data.answer(n.ref!, o.key)).then(after) })) : []),
+    ...(n.kind === "gate" && tid && !n.ref ? [{ ...bind("need.A.gate"), run: () => void ctl.did(data.approve(tid)).then(after) }] : []),
+    ...(n.kind === "gate" && n.ref ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void ctl.did(data.answer(n.ref!, o.key)).then(after) })) : []),
     ...(n.kind === "ask" && n.ref ? (n.options ?? []).slice(0, 9).map((o): Action => ({ key: o.key, label: o.label, run: () => void ctl.did(data.answer(n.ref!, o.key)).then(after) })) : []),
     ...(n.kind === "ask" && n.ref && n.options?.length ? [{ ...bind("need.n.ask"), run: () => answerWithNote(app, ctl, n.ref!, n.options!, after) }] : []),
     ...(n.kind === "ask" && n.ref && n.ask !== "uqbar" ? [{ ...bind("need.u.ask"), run: () => void ctl.did(data.handToUqbar(n.ref!)).then(after) }] : []),
@@ -99,9 +99,9 @@ export function needActions(app: State, ctl: Ctl, n: data.Need): Action[] {
 }
 
 /** a need's one-line name: what kind, and where */
-export const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", stalled: "stalled", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", health: "the box", stranded: "stranded work", issue: "issue", blocked: "blocked on a ticket", publish_failed: "not on GitHub", release_failed: "cut failed", pr_blocked: "PR not merging", quota: "out of quota", no_seat: "no seat", tool_denied: "tool refused" }
+export const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", ask: "asks you", verify_failed: "verify red", stalled: "stalled", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", health: "the box", stranded: "stranded work", issue: "issue", blocked: "blocked on a ticket", publish_failed: "not on GitHub", release_failed: "cut failed", pr_blocked: "PR not merging", quota: "out of quota", no_seat: "no seat", tool_denied: "tool refused" }
 
-export const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, stalled: ROLE.attention, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, health: ROLE.alarm, stranded: ROLE.attention, issue: ROLE.alarm, blocked: ROLE.attention, publish_failed: ROLE.alarm, release_failed: ROLE.alarm, pr_blocked: ROLE.alarm, quota: ROLE.attention, no_seat: ROLE.attention, tool_denied: ROLE.alarm }
+export const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, ask: ROLE.key, verify_failed: ROLE.alarm, stalled: ROLE.attention, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, health: ROLE.alarm, stranded: ROLE.attention, issue: ROLE.alarm, blocked: ROLE.attention, publish_failed: ROLE.alarm, release_failed: ROLE.alarm, pr_blocked: ROLE.alarm, quota: ROLE.attention, no_seat: ROLE.attention, tool_denied: ROLE.alarm }
 
 export function triageCard(app: State, ctl: Ctl): Card {
   if (!app.stuck) return { title: "TRIAGE", rows: [{ segs: [waiting(app, "looking…")] }], actions: [ctl.back1] }
