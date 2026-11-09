@@ -109,12 +109,15 @@ defmodule Server.ProfilesTest do
           do: refute(gone in writes)
     end
 
-    # run from a linked worktree (as `.release` is), the source dir is not where `.worktrees/` lives
-    test "a seat writes the checkout that holds its worktree and its .git" do
+    # Claude Code mounts /dev/null over the protected files of every worktree under a write root; one
+    # removed after the session starts kills each later launch. Run from a linked worktree (as `.release`
+    # is), the source dir is not where `.worktrees/` lives.
+    test "a seat writes the checkout's .git, never the checkout that holds other seats' worktrees" do
       {common, 0} = System.cmd("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"])
-      checkout = common |> String.trim() |> Path.dirname()
+      common = String.trim(common)
       writes = Profiles.instantiate(%{archetype: :builder, name: "zunz"}).sandbox["filesystem"]["allowWrite"]
-      assert checkout in writes
+      assert common in writes
+      refute Path.dirname(common) in writes
     end
 
     test "carries the ORCHESTRATOR toolset (Slice 4D): staffing + cross-thread verbs, minus register/consult" do
