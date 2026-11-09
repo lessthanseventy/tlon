@@ -63,6 +63,7 @@ defmodule Server.Switchboard do
 
   # a session active more than this after its wake made a call of its own: it heard the message
   @heard_after 5
+  @let_go_hours 24
 
   @doc """
   Deliver one message (the live path): wake its addressed recipients (`recipients/1`),
@@ -127,7 +128,9 @@ defmodule Server.Switchboard do
   run on switchboard start so messages posted while it was down are still woken.
   COALESCED per recipient: each distinct pane is woken ONCE for the whole backlog
   (the burst guard), and only the messages that actually reached someone are marked
-  delivered.
+  delivered. A message still undelivered a day after its posting is let go unwoken: it stays
+  on its thread, but its addressee never became reachable, and reading it every minute is the
+  pass's whole cost.
   """
   def drain do
     if Server.Rollout.restart_pending?(), do: :ok, else: drain_now()
@@ -637,6 +640,13 @@ defmodule Server.Switchboard do
         " (It's from thread #{other}, not this window's: if you lead it or were @mentioned on it, answer there with post_message thread_id: #{other}; otherwise answer here and @mention #{author}.)"
 
   defp drain_now do
+    since = DateTime.add(DateTime.utc_now(), -@let_go_hours * 3600)
+
+    Repo.update_all(
+      from(m in Message, where: is_nil(m.delivered_at) and m.created_at < ^since),
+      set: [delivered_at: DateTime.truncate(DateTime.utc_now(), :second)]
+    )
+
     undelivered =
       Repo.all(from m in Message, where: is_nil(m.delivered_at), order_by: [asc: m.id])
 
