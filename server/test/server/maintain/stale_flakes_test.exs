@@ -3,7 +3,7 @@ defmodule Server.Maintain.StaleFlakesTest do
 
   import Ecto.Query
 
-  alias Server.Maintain.Sweep
+  alias Server.Maintain.Bands
   alias Server.Repo
   alias Server.Tickets
 
@@ -39,7 +39,7 @@ defmodule Server.Maintain.StaleFlakesTest do
     {:ok, real} = Tickets.file(%{workspace_id: ws.id, title: "the pool table plays itself"})
     aged(real, 30)
 
-    closed = Sweep.sweep_stale_flakes() |> Enum.map(& &1.id) |> Enum.sort()
+    closed = Bands.sweep_stale_flakes() |> Enum.map(& &1.id) |> Enum.sort()
 
     assert closed == Enum.sort([old.id, labelled.id])
     assert Tickets.get(old.id).body =~ "Closed by the sweep: a flake not seen again in 7 days"

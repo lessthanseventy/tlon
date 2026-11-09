@@ -28,7 +28,7 @@ and every layer the spine design's re-laid §9 asked for
   crews is unchanged); `Workspaces.bench/1` is the crew on plus `all` (`bench_all/1` everyone), so
   staffing picks only from it. A switch restaffs the going crew's worklines the workline's own way;
   their plain threads wait for them. Nothing switches by itself: Claude's usage limit on a pane
-  offers the other crews in the lobby, and a taken offer offers the way back at the reset. A
+  offers the other crews at the front desk, and a taken offer offers the way back at the reset. A
   provider's `Request rejected (429)` usage-limit line (a pane, or a one-shot's stderr through
   `Server.ModelCli`) is a `quota` Need at once, under the same key as the provider's balance poll.
 - **pause** (`Server.Pause`) — the office's stop controls, in the settings file's `"pause"` key so a
@@ -47,7 +47,7 @@ and every layer the spine design's re-laid §9 asked for
   leave it alone.
 - **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral
   instance; warmth is measured from `last_active_at`, never a heartbeat.
-- **panes roll themselves** (`Server.Staffing`, `Server.Arbiter.Tmux.launch_stamp/2`) — a pane keeps the
+- **panes roll themselves** (`Server.Sweep`, `Server.Arbiter.Tmux.launch_stamp/2`) — a pane keeps the
   launch it was born with, so spawn stamps its window `@funes_launch` (`Server.Profiles.fingerprint/1`:
   the launch command and env, sandbox, system prompt, tmux.conf) and the minute's staffing pass retires
   one idle pane whose stamp its profile no longer gives (none at all counts), never one mid-turn. A
@@ -59,8 +59,8 @@ and every layer the spine design's re-laid §9 asked for
   :stale_turn_seconds`, 600 s): a turn nothing has been heard from this long (its declare or its
   latest `presence_doing`) is a turn nothing will end; the thinking sweep clears it, and staffing and Needs stop counting it as someone at work. The *quiet
   workline* (the settings knob `quiet_workline_minutes`, 60): a workline that has not moved this long
-  gets a Maintain nudge and is a `stalled` Need. Other bands are not "stale": staffing's boot grace (a
-  window still booting) and Maintain's gate/stall bands (`Server.Maintain.Sweep`).
+  gets a Maintain nudge and is a `stalled` Need. Other bands are not "stale": the sweep's boot grace (a
+  window still booting) and Maintain's gate/stall bands (`Server.Maintain.Bands`).
 - **outside citizens** (`Server.Outside`) — agents seated on no bench, like `uqbar`, the operator's
   delegate: they post as themselves. Uqbar leads one thread of its own, its study (`Outside.study/1`),
   where a post spawns its pane on its citizen profile (`Profiles.citizen_profile/2`: the Claude plan,
@@ -182,7 +182,7 @@ and every layer the spine design's re-laid §9 asked for
   `reject_proposal/2` — absent, it says the judge isn't installed), retires or tombstones facts
   (`supersede_fact`/`forget_fact`, the reason recorded as a `superseded`/`forgotten` event; a landed
   workline's in-flight state forgotten, its lessons kept — `landed_facts`; a
-  `stated` fact is refused), and posts the weekly counts in the lobby (`knowledge_report`). Its
+  `stated` fact is refused), and posts the weekly counts at the front desk (`knowledge_report`). Its
   sweep (daily 07:00) and report (Mondays 07:30) are standing schedules, `ensure_schedules/2`.
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
@@ -193,7 +193,7 @@ and every layer the spine design's re-laid §9 asked for
   event correlated `branch:<name>:review`; the newest is the branch's verdict (`tlon-cli branch-review <branch>`).
   A verdict by a builder of the branch is refused (`BranchReview.builders/3`), and so is an approval by
   the PR's author at landing. Every review — a workline's `submit_review` or a branch's `review_branch` —
-  runs in a throwaway session on its own thread, ended by its verdict (`Server.Staffing.end_review/1`:
+  runs in a throwaway session on its own thread, ended by its verdict (`Server.Sweep.end_review/1`:
   the thread's sessions ended, its leaf window closed — a workline's from `Server.Jobs.EndReview`, once
   the verdict has parked or bounced the thread, since the window closing cancels the request on the
   server); `review_branch` from the standing thread is refused. A workline's reviewer reads the branch,

@@ -474,7 +474,7 @@ defmodule Server.SwitchboardTest do
       Switchboard.deliver(m)
 
       refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "could not be seated"))
-      assert Server.Staffing.parked_note?(thread.id)
+      assert Server.Sweep.parked_note?(thread.id)
     end
 
     test "a plain post on a leadless thread stays pending until a lead is assigned" do

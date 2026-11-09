@@ -177,7 +177,7 @@ defmodule Server.OfficeTest do
       desk = staffed.("at a desk", "hronir")
       {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name("hronir").id, thread_id: desk.id})
       parked = staffed.("parked", "borges")
-      :ok = Server.Staffing.note_parked(parked.id)
+      :ok = Server.Sweep.note_parked(parked.id)
       idle = staffed.("idle", "otto")
       # a warm session whose window is gone (the pane closed, the session never ended) is no desk
       gone = staffed.("window gone", "dana")

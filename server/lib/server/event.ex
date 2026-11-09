@@ -8,7 +8,7 @@ defmodule Server.Event do
   `forgotten` (the librarian's, with its reason), `supersede_proposed` and `supersede_rejected`
   (the correction judge's, `Server.Recall.Supersede`), and `tool_denied` (a seat's permission check
   refused a tool call: the adapter reports it, `Server.Office.Needs` reads it), and `pane_retired` (the server
-  closed a coworker's pane between turns: `Server.Staffing`, whose `left_off/2` tells the next session there). A message and a session are NOT events — they
+  closed a coworker's pane between turns: `Server.Sweep`, whose `left_off/2` tells the next session there). A message and a session are NOT events — they
   are their own rows with their own timestamps, and the timeline derives them; an
   event copying them would be a second source (§2) and a dual write (§10).
   `correlation` is the explicit id of the lifecycle a row belongs to; `detail` is

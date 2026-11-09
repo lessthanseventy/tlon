@@ -12,7 +12,7 @@ defmodule Server.Alerts do
     * **info** — something the operator set going took effect where they can't see it: a toast
       that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
       minutes after. Kinds: `seated`, a thread parked on the leaf cap got its coworker
-      (`Server.Staffing.note_seated/2`); `landed`, GitHub merged a workline's PR
+      (`Server.Sweep.note_seated/2`); `landed`, GitHub merged a workline's PR
       (`Server.Workline.landed_since/1`; one row per landing, keyed by its event, worded by
       `landed_title/1` — the desktop's toast and the Claude Code plugin's read this row); `fixing`, an issue a ticket
       took, saying who has it (`Server.Dossier.own_issue/3`); `live`, the service booted
@@ -40,7 +40,7 @@ defmodule Server.Alerts do
 
     build(Server.Office.Needs.list(), Server.Calendar.upcoming(window), now,
       alarm_minutes: minutes,
-      seated: Server.Staffing.seated_since(since),
+      seated: Server.Sweep.seated_since(since),
       landed: Server.Workline.landed_since(since),
       fixing: Server.Dossier.fixing_since(since),
       live: Server.Release.PM.live_since(since)

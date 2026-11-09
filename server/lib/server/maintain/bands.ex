@@ -1,4 +1,4 @@
-defmodule Server.Maintain.Sweep do
+defmodule Server.Maintain.Bands do
   @moduledoc """
   The Maintain back-edge (worklines slice 6): deterministic control-band sweeps with NO
   human in the invocation path — yet nothing it does is unsupervised, because every action
@@ -45,6 +45,8 @@ defmodule Server.Maintain.Sweep do
     quiet_ms: to_timeout(hour: 1)
   ]
 
+  @recheck_batch 25
+
   @doc "Both sweeps, with the default bands unless `opts` names one."
   def run(opts \\ []) do
     quiet = to_timeout(minute: Server.OperatorConfig.setting("quiet_workline_minutes"))
@@ -84,98 +86,6 @@ defmodule Server.Maintain.Sweep do
       Server.Dossier.resolve_owned(t.id, "its ticket ##{t.id} was closed: #{why}")
       closed
     end
-  end
-
-  # a lead whose window died never goes idle, so it never gets the continuation an idle schedules:
-  # a workline quiet for the band is nudged here, toward the same budget, and so stops on the
-  # operator if it is truly stuck
-  defp sweep_quiet(opts) do
-    since = DateTime.add(DateTime.utc_now(), -opts[:quiet_ms], :millisecond)
-
-    for t <-
-          Repo.all(
-            from t in Thread,
-              where: t.state == "open" and not is_nil(t.stage) and t.stage != "landed" and is_nil(t.awaiting)
-          ),
-        not Repo.exists?(from m in Server.Message, where: m.thread_id == ^t.id and m.created_at > ^since),
-        do: Server.Workline.Continuation.run(t.id, quiet: true)
-
-    :ok
-  end
-
-  defp sweep_tickets do
-    open_tied = fn kinds ->
-      Repo.all(
-        from l in Server.TicketThread,
-          join: t in Thread,
-          on: t.id == l.thread_id,
-          where: t.state == "open" and l.kind in ^kinds,
-          select: l.ticket_id,
-          distinct: true
-      )
-    end
-
-    working = MapSet.new(open_tied.(~w(promoted relates)))
-    started = open_tied.(~w(promoted))
-
-    # a claimed ticket is worked by hand (`Server.Tickets.claim/2`): no thread works it. An epic or
-    # initiative is doing because a child is, never because a thread works it: not this sweep's
-    for ticket <- Repo.all(from t in Server.Ticket, where: t.status == "doing" and t.kind == "ticket"),
-        not MapSet.member?(working, ticket.id),
-        not Server.Tickets.claimed?(ticket) do
-      note = "Back to the backlog #{Date.utc_today()}: no open thread was working on it."
-      Server.Tickets.update(ticket, %{status: "backlog", body: String.trim("#{ticket.body}\n\n#{note}")})
-    end
-
-    for ticket <- Repo.all(from t in Server.Ticket, where: t.id in ^started and t.status in ~w(backlog todo)) do
-      Server.Tickets.update(ticket, %{status: "doing"})
-    end
-
-    :ok
-  end
-
-  @recheck_batch 25
-
-  defp sweep_fact_rechecks do
-    last_check =
-      from e in Event,
-        where: e.kind in ["check_passed", "check_failed"] and like(e.detail, "%server recheck: %"),
-        group_by: e.correlation,
-        select: %{correlation: e.correlation, at: max(e.created_at)}
-
-    # prose and ref-less facts record nothing, so the batch counts only facts that got a verdict
-    from(f in Server.Fact,
-      left_join: c in subquery(last_check),
-      on: c.correlation == fragment("'fact:' || ?", f.id),
-      where:
-        is_nil(f.forgotten_at) and not is_nil(f.thread_id) and
-          f.id not in subquery(from s in Server.Fact, where: not is_nil(s.supersedes), select: s.supersedes),
-      order_by: [asc_nulls_first: c.at, asc: f.id]
-    )
-    |> Repo.all()
-    |> Enum.reduce_while(@recheck_batch, fn fact, left ->
-      left = if recheck(fact) == :skipped, do: left, else: left - 1
-      if left == 0, do: {:halt, 0}, else: {:cont, left}
-    end)
-    |> then(fn _ -> :ok end)
-  rescue
-    e ->
-      Logger.warning("fact recheck sweep failed: #{Exception.message(e)}")
-      :ok
-  end
-
-  defp recheck(fact) do
-    {:ok, verdict} = Server.Recall.Recheck.run(fact)
-    verdict
-  rescue
-    e ->
-      Logger.warning("recheck of fact #{fact.id} failed: #{Exception.message(e)}")
-      :skipped
-  end
-
-  defp sweep_worktrees do
-    reap_worktrees()
-    :ok
   end
 
   @doc """
@@ -248,5 +158,95 @@ defmodule Server.Maintain.Sweep do
     _ -> :ok
   catch
     :exit, _ -> :ok
+  end
+
+  # a lead whose window died never goes idle, so it never gets the continuation an idle schedules:
+  # a workline quiet for the band is nudged here, toward the same budget, and so stops on the
+  # operator if it is truly stuck
+  defp sweep_quiet(opts) do
+    since = DateTime.add(DateTime.utc_now(), -opts[:quiet_ms], :millisecond)
+
+    for t <-
+          Repo.all(
+            from t in Thread,
+              where: t.state == "open" and not is_nil(t.stage) and t.stage != "landed" and is_nil(t.awaiting)
+          ),
+        not Repo.exists?(from m in Server.Message, where: m.thread_id == ^t.id and m.created_at > ^since),
+        do: Server.Workline.Continuation.run(t.id, quiet: true)
+
+    :ok
+  end
+
+  defp sweep_tickets do
+    open_tied = fn kinds ->
+      Repo.all(
+        from l in Server.TicketThread,
+          join: t in Thread,
+          on: t.id == l.thread_id,
+          where: t.state == "open" and l.kind in ^kinds,
+          select: l.ticket_id,
+          distinct: true
+      )
+    end
+
+    working = MapSet.new(open_tied.(~w(promoted relates)))
+    started = open_tied.(~w(promoted))
+
+    # a claimed ticket is worked by hand (`Server.Tickets.claim/2`): no thread works it. An epic or
+    # initiative is doing because a child is, never because a thread works it: not this sweep's
+    for ticket <- Repo.all(from t in Server.Ticket, where: t.status == "doing" and t.kind == "ticket"),
+        not MapSet.member?(working, ticket.id),
+        not Server.Tickets.claimed?(ticket) do
+      note = "Back to the backlog #{Date.utc_today()}: no open thread was working on it."
+      Server.Tickets.update(ticket, %{status: "backlog", body: String.trim("#{ticket.body}\n\n#{note}")})
+    end
+
+    for ticket <- Repo.all(from t in Server.Ticket, where: t.id in ^started and t.status in ~w(backlog todo)) do
+      Server.Tickets.update(ticket, %{status: "doing"})
+    end
+
+    :ok
+  end
+
+  defp sweep_fact_rechecks do
+    last_check =
+      from e in Event,
+        where: e.kind in ["check_passed", "check_failed"] and like(e.detail, "%server recheck: %"),
+        group_by: e.correlation,
+        select: %{correlation: e.correlation, at: max(e.created_at)}
+
+    # prose and ref-less facts record nothing, so the batch counts only facts that got a verdict
+    from(f in Server.Fact,
+      left_join: c in subquery(last_check),
+      on: c.correlation == fragment("'fact:' || ?", f.id),
+      where:
+        is_nil(f.forgotten_at) and not is_nil(f.thread_id) and
+          f.id not in subquery(from s in Server.Fact, where: not is_nil(s.supersedes), select: s.supersedes),
+      order_by: [asc_nulls_first: c.at, asc: f.id]
+    )
+    |> Repo.all()
+    |> Enum.reduce_while(@recheck_batch, fn fact, left ->
+      left = if recheck(fact) == :skipped, do: left, else: left - 1
+      if left == 0, do: {:halt, 0}, else: {:cont, left}
+    end)
+    |> then(fn _ -> :ok end)
+  rescue
+    e ->
+      Logger.warning("fact recheck sweep failed: #{Exception.message(e)}")
+      :ok
+  end
+
+  defp recheck(fact) do
+    {:ok, verdict} = Server.Recall.Recheck.run(fact)
+    verdict
+  rescue
+    e ->
+      Logger.warning("recheck of fact #{fact.id} failed: #{Exception.message(e)}")
+      :skipped
+  end
+
+  defp sweep_worktrees do
+    reap_worktrees()
+    :ok
   end
 end

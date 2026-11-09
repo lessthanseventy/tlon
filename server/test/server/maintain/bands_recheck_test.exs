@@ -1,4 +1,4 @@
-defmodule Server.Maintain.SweepRecheckTest do
+defmodule Server.Maintain.BandsRecheckTest do
   # The sweep rechecks facts that name code (Server.Recall.Recheck): a batch per run, live facts only.
   use ExUnit.Case, async: false
 
@@ -7,7 +7,7 @@ defmodule Server.Maintain.SweepRecheckTest do
   alias Server.Channel
   alias Server.Dossier
   alias Server.Event
-  alias Server.Maintain.Sweep
+  alias Server.Maintain.Bands
   alias Server.Repo
 
   setup do
@@ -41,20 +41,20 @@ defmodule Server.Maintain.SweepRecheckTest do
     gone = fact(t, "`Server.A` was forgotten")
     Repo.update_all(from(f in Server.Fact, where: f.id == ^gone.id), set: [forgotten_at: DateTime.utc_now()])
 
-    Sweep.run()
+    Bands.run()
     assert kinds() == ["check_failed", "check_passed"]
   end
 
   test "a run rechecks 25 facts at most", %{thread: t} do
     for i <- 1..30, do: fact(t, "`Server.A` number #{i}")
-    Sweep.run()
+    Bands.run()
     assert length(kinds()) == 25
   end
 
   test "prose facts do not starve a code fact out of the batch", %{thread: t} do
     for i <- 1..30, do: fact(t, "prose note number #{i}")
     fact(t, "`Server.Gone` does the work")
-    Sweep.run()
+    Bands.run()
     assert kinds() == ["check_failed"]
   end
 end

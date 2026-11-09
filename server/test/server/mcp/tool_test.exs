@@ -60,9 +60,9 @@ defmodule Server.MCP.ToolTest do
       assert Tool.explain({:model_cli_timeout, 120, ""}) =~ "120"
     end
 
-    test "a hand-off refusal reads as Staffing's sentence, one source for both doors" do
+    test "a hand-off refusal reads as Sweep's sentence, one source for both doors" do
       for r <- [:lead_mid_turn, :clocked_out, :off_shift] do
-        assert Tool.explain(r) == Server.Staffing.explain(r)
+        assert Tool.explain(r) == Server.Sweep.explain(r)
         refute Tool.explain(r) == inspect(r)
       end
     end

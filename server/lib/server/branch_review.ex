@@ -194,7 +194,7 @@ defmodule Server.BranchReview do
   # the verdict ends the reviewer's throwaway session; a verdict recorded off any thread ends nothing
   defp end_review(thread_id) when is_integer(thread_id) do
     case Server.Repo.get(Server.Thread, thread_id) do
-      %Server.Thread{} = thread -> Server.Staffing.end_review(thread)
+      %Server.Thread{} = thread -> Server.Sweep.end_review(thread)
       nil -> :ok
     end
   end

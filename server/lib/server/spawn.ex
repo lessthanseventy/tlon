@@ -1,6 +1,6 @@
 defmodule Server.Spawn do
   @moduledoc """
-  The crew backend — a **capability, not a product**, the same seam as `Server.Arbiter`. Staffing a
+  The spawn backend — a **capability, not a product**, the same seam as `Server.Arbiter`. Staffing a
   reviewer (or any role) onto a thread means minting its server identity and standing up a terminal
   for it to run in; *how* that terminal is created is a local backend the design never names. server
   decides a role belongs on a thread; the backend *actuates*.

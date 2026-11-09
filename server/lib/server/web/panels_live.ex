@@ -16,7 +16,7 @@ defmodule Server.Web.PanelsLive do
   alias Server.Presence.Thinking
   alias Server.Repo
   alias Server.Staff
-  alias Server.Staffing
+  alias Server.Sweep
   alias Server.Thread
   alias Server.Tickets
   alias Server.Tmux
@@ -97,7 +97,7 @@ defmodule Server.Web.PanelsLive do
   # The pass waits on harness boots; it runs off the page's process and the roster re-reads on
   # the Bus (a spawned session announces itself).
   def handle_event("staff", _params, socket) do
-    Task.Supervisor.start_child(Server.TaskSupervisor, fn -> Staffing.pass() end)
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn -> Sweep.pass() end)
     {:noreply, assign(socket, flash_line: "staffing pass started")}
   end
 

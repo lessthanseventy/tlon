@@ -3,7 +3,7 @@ defmodule Server.Repo.Migrations.SessionThinking do
   use Ecto.Migration
 
   # When the session's harness declared a turn started and has not yet declared it over — durable,
-  # so a turn the machine cut off can be picked up again after a restart (Server.Staffing).
+  # so a turn the machine cut off can be picked up again after a restart (Server.Sweep).
   def change do
     alter table(:session) do
       add :thinking_since, :utc_datetime

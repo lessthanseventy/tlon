@@ -345,7 +345,7 @@ defmodule Server.Office.Needs do
     cap = knob.value
     target = min(cap + 2, knob.max)
 
-    parked = open |> Enum.filter(& &1.agent_id) |> Enum.map(& &1.id) |> Server.Staffing.parked_notes()
+    parked = open |> Enum.filter(& &1.agent_id) |> Enum.map(& &1.id) |> Server.Sweep.parked_notes()
 
     for {ws, threads} <-
           open |> Enum.filter(&MapSet.member?(parked, &1.id)) |> Enum.group_by(& &1.workspace_id),
@@ -899,7 +899,7 @@ defmodule Server.Office.Needs do
 
       blocked = Server.Blocked.thread_ids()
       paused = Server.Pause.paused_thread_ids()
-      duties = open |> Enum.map(& &1.id) |> Server.Staffing.duty_threads()
+      duties = open |> Enum.map(& &1.id) |> Server.Sweep.duty_threads()
 
       quiet =
         for %Thread{stage: stage} = t <- open,

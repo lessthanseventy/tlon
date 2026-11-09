@@ -6,7 +6,7 @@ defmodule Server.Workline.Continuation do
   — and the switchboard wakes the lead with it, the same for every harness.
 
   Bounded: at most `max_turns` (default 3) between stage advances. The third nudge of a round goes
-  to a fresh session: the lead's session on the thread is rolled first (`Server.Staffing.roll_leaf/1`).
+  to a fresh session: the lead's session on the thread is rolled first (`Server.Sweep.roll_leaf/1`).
   A coworker that genuinely cannot
   produce the artifact is not pushed again: the workline stops on the operator, saying it is stuck
   and why, so it reaches them as something to decide rather than sitting quiet.
@@ -62,7 +62,7 @@ defmodule Server.Workline.Continuation do
       # into a context full of failed attempts: roll the lead first, once per stage round.
       rolled = sent == @roll_after
 
-      if rolled, do: Server.Staffing.roll_leaf(thread)
+      if rolled, do: Server.Sweep.roll_leaf(thread)
 
       fresh = if rolled, do: " (a fresh session: the last #{sent} turns ended without it — read them above)", else: ""
 

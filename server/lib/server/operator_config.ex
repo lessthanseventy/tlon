@@ -258,7 +258,7 @@ defmodule Server.OperatorConfig do
   @doc """
   The maximum number of CONCURRENT leaf sessions on work threads the staffing pass will spawn (the
   runaway-fleet circuit breaker — every leaf is a live harness, most of them on the Claude
-  subscription at home); a standing duty's leaf takes no seat (`Server.Staffing.seated_leaves/1`).
+  subscription at home); a standing duty's leaf takes no seat (`Server.Sweep.seated_leaves/1`).
   Config key `"max_leaves"`; default #{6}. Threads staffed past the cap stay open and keep their
   lead; they just wait ("parked") until a seat frees.
   """

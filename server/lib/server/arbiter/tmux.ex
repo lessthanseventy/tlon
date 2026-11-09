@@ -3,7 +3,7 @@ defmodule Server.Arbiter.Tmux do
   The server's terminal backend, and the ONE arbiter: spawn a coworker when a message needs them
   and wake it, with no UI open. The coworker is a window in the workspace's private tmux session
   (`Server.Tmux` naming) — one per coworker on the standing thread, one leaf per other thread under
-  the leaf cap (a standing duty's leaf takes no seat, `Server.Staffing.seated_leaves/1`) — tagged with whose it is and when it was born, which the staffing pass reads to
+  the leaf cap (a standing duty's leaf takes no seat, `Server.Sweep.seated_leaves/1`) — tagged with whose it is and when it was born, which the staffing pass reads to
   close it once it goes cold. The harness is the coworker's profile's (`Server.Harness`).
   """
   @behaviour Server.Arbiter
@@ -103,15 +103,15 @@ defmodule Server.Arbiter.Tmux do
 
   defp under_cap(tabs, %Thread{id: id} = thread, false) do
     cond do
-      Server.Staffing.duty_thread?(id) ->
+      Server.Sweep.duty_thread?(id) ->
         :ok
 
-      length(Server.Staffing.seated_leaves(tabs)) < Server.OperatorConfig.max_leaves() and
-          Server.Staffing.seat_for?(thread, tabs) ->
+      length(Server.Sweep.seated_leaves(tabs)) < Server.OperatorConfig.max_leaves() and
+          Server.Sweep.seat_for?(thread, tabs) ->
         :ok
 
       true ->
-        Server.Staffing.note_parked(id)
+        Server.Sweep.note_parked(id)
         {:error, :at_cap}
     end
   end
@@ -243,7 +243,7 @@ defmodule Server.Arbiter.Tmux do
     with tabs when is_list(tabs) <- tmux_windows(ws),
          :absent <- running(tabs, thread, author, standing?),
          _ = Server.Orphans.retire(thread_id, author, Application.get_env(:server, :orphans, [])),
-         parked? = Server.Staffing.parked_note?(thread_id),
+         parked? = Server.Sweep.parked_note?(thread_id),
          :ok <- under_cap(tabs, thread, standing?) do
       leaf_thread = if(not standing?, do: thread_id)
       script = Tmux.boot_script(exports, launcher(ws, author))
@@ -258,7 +258,7 @@ defmodule Server.Arbiter.Tmux do
         {_out, 0} ->
           tag(ws, window, leaf_thread, author)
           Tmux.set_window_option(ws, "=" <> window, "@funes_launch", launch_stamp(ws, author))
-          _ = parked? and Server.Staffing.note_seated(thread, author)
+          _ = parked? and Server.Sweep.note_seated(thread, author)
           {:ok, target(ws, window)}
 
         {out, _} ->

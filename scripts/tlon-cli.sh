@@ -288,8 +288,8 @@ case "$cmd" in
     ;;
 
   reap)
-    # The Maintain sweep's worktree step, run now (Server.Maintain.Sweep.reap_worktrees/0).
-    exec "$SERVER" rpc "case Server.Maintain.Sweep.reap_worktrees() do [] -> IO.puts(\"nothing to reap\"); rs -> for {path, r} <- rs, do: IO.puts(case r do {:removed, _} -> \"removed  #{path}\"; {:kept, why} -> \"kept     #{path}: #{why}\"; other -> \"#{inspect(other)}  #{path}\" end) end"
+    # The Maintain sweep's worktree step, run now (Server.Maintain.Bands.reap_worktrees/0).
+    exec "$SERVER" rpc "case Server.Maintain.Bands.reap_worktrees() do [] -> IO.puts(\"nothing to reap\"); rs -> for {path, r} <- rs, do: IO.puts(case r do {:removed, _} -> \"removed  #{path}\"; {:kept, why} -> \"kept     #{path}: #{why}\"; other -> \"#{inspect(other)}  #{path}\" end) end"
     ;;
 
   ticket-file)
@@ -432,7 +432,7 @@ case "$cmd" in
     ;;
 
   hand-off)
-    # Hand a running thread to another coworker (Server.Staffing.hand_off), then staff it now
+    # Hand a running thread to another coworker (Server.Sweep.hand_off), then staff it now
     # rather than at the next minute's pass.
     tid="${1:-}"; handle="${2:-}"
     { int "$tid" && [ -n "$handle" ]; } || { echo 'usage: tlon-cli.sh hand-off <thread-id> <agent-name>' >&2; exit 2; }

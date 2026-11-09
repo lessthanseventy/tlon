@@ -280,9 +280,9 @@ defmodule Server.CLI do
   @doc "Hands a running thread to another coworker and staffs it now."
   @spec hand_off(integer(), String.t()) :: result()
   def hand_off(id, handle) do
-    case Server.Staffing.hand_off(id, handle) do
+    case Server.Sweep.hand_off(id, handle) do
       {:ok, t} ->
-        Task.start(fn -> Server.Staffing.pass(t.workspace_id) end)
+        Task.start(fn -> Server.Sweep.pass(t.workspace_id) end)
         {:ok, "handed thread ##{id} to #{handle}"}
 
       {:error, why} ->

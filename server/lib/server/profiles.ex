@@ -1265,7 +1265,7 @@ defmodule Server.Profiles do
   What a pane launched from `p` was launched with, as a short hash: its launch command (model,
   effort, deny list and the rest of its env), the scripts that command names (`launch_bytes/1`:
   launch.sh), and the bytes `materialise!/2` writes for it (sandbox, system prompt, tmux.conf). A live pane stamped with another one is running a launch its profile
-  no longer gives (`Server.Staffing`'s stale-launch sweep).
+  no longer gives (`Server.Sweep`'s stale-launch sweep).
   """
   def fingerprint(%Profile{} = p) do
     r = render(p)
