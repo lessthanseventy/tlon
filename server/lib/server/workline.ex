@@ -28,6 +28,7 @@ defmodule Server.Workline do
   alias Server.Workline.Brief
   alias Server.Workline.Grade
   alias Server.Workline.Scribe
+  alias Server.Workline.SendBack
 
   require Logger
 
@@ -1056,32 +1057,7 @@ defmodule Server.Workline do
   """
   def restaff_now(%Thread{} = thread), do: {:ok, restaff(thread)}
 
-  @doc """
-  Send `thread` back to an earlier working stage (`spec`, `plan` or `build`) on the same thread and
-  branch: what was built and reviewed stays, and the stage's lead is told to improve it, not redo
-  it. Back to build is the call of the workline's lead (its reviewer, QA or builder), or Uqbar's at a
-  gate parked on the operator whose grade hit no limit (`limit_hit?/1`); back to plan or
-  spec reshapes the build, a coherence call, so it is the tech lead's (`Server.Coworker.lead/1`) or
-  the operator's. An open workline only, and not while its verify or landing is queued or running:
-  either would move it on from under the send-back. With `unqueue: true` a landing that is queued but
-  not yet running is pulled from the merge queue in the same transaction as the move, so nothing
-  finds the thread at review to requeue it (`requeue_stranded/0`); a running landing, and a verify
-  in any state, still refuse. `{:ok, thread}` | `{:error, {:not_movable, stage}}` | `{:error,
-  {:in_flight, why}}` | `{:error, {:not_behind, stage}}` | `{:error, {:not_yours, why}}`.
-  """
-  def send_back(%Thread{} = thread, to, why, by, opts \\ []) do
-    unqueue? = Keyword.get(opts, :unqueue, false)
-
-    allowed = fn locked ->
-      with :ok <- movable(locked),
-           :ok <- not_in_flight(locked, unqueue?),
-           :ok <- behind(locked, to),
-           :ok <- may_send_back(locked, to, by),
-           do: pull_landing(locked, unqueue?)
-    end
-
-    move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by), allowed, by)
-  end
+  defdelegate send_back(thread, to, why, by, opts \\ []), to: SendBack
 
   @doc """
   A reviewer's or QA's non-blocking findings, posted on the workline for the lead its verdict hands
@@ -1313,7 +1289,7 @@ defmodule Server.Workline do
 
   # The brief IS the wake: a server-authored message rides the lead-wake path (slice 2).
   # Best-effort — a post failure never blocks the (already durable) transition.
-  defp post_brief(thread, body) do
+  def post_brief(thread, body) do
     Server.Channel.post(%{thread_id: thread.id, author: "tlon", body: body})
     :ok
   rescue
@@ -1363,7 +1339,7 @@ defmodule Server.Workline do
   # on as it moves; intent by the bench's lead (its first builder), who takes the ask in. Best-effort (the
   # stage already flipped; a restaff fault must not fail the advance). A workspace without that kind
   # keeps the current lead — quietly, except at review: a builder holding its own review is posted.
-  defp restaff(%Thread{stage: "intent", workspace_id: ws} = thread) when not is_nil(ws) do
+  def restaff(%Thread{stage: "intent", workspace_id: ws} = thread) when not is_nil(ws) do
     ws
     |> Server.Workspaces.bench()
     |> Server.Coworker.lead()
@@ -1375,7 +1351,7 @@ defmodule Server.Workline do
     _ -> thread
   end
 
-  defp restaff(%Thread{stage: stage} = thread) do
+  def restaff(%Thread{stage: stage} = thread) do
     case @staff_by_stage[stage] do
       nil -> thread
       kind -> restaff(thread, kind)
@@ -1491,7 +1467,7 @@ defmodule Server.Workline do
     end
   end
 
-  defp leading_another?(%Server.Coworker{agent_id: agent_id}, thread) do
+  def leading_another?(%Server.Coworker{agent_id: agent_id}, thread) do
     Repo.exists?(
       from t in Thread,
         where:
@@ -1524,7 +1500,7 @@ defmodule Server.Workline do
   end
 
   # Already theirs: nothing to hand over, and nothing to announce.
-  defp hand_to(thread, kind, name, note \\ nil) do
+  def hand_to(thread, kind, name, note \\ nil) do
     if Server.Channel.thread_lead(thread.id) == name do
       thread
     else
@@ -1544,12 +1520,12 @@ defmodule Server.Workline do
   # A thread has one window, its lead's: the old lead's must close or the new lead can never be
   # spawned (the builder kept the leaf and did verify's job; the reviewer's brief went nowhere).
   # The brief that follows spawns the new lead, as `Server.Staffing.hand_off/2` does.
-  defp close_leaf(%Thread{workspace_id: ws} = thread) when not is_nil(ws) do
+  def close_leaf(%Thread{workspace_id: ws} = thread) when not is_nil(ws) do
     with %{index: index} <- Server.Staffing.leaf_window(thread, "close_leaf"),
          do: Server.Tmux.kill_window(ws, index)
   end
 
-  defp close_leaf(_thread), do: :ok
+  def close_leaf(_thread), do: :ok
 
   defp restaff_miss(thread, "reviewer", why) do
     post_brief(thread, "⚠ review stage could not restaff a reviewer (#{why}) — the current lead still holds it")
@@ -1850,7 +1826,7 @@ defmodule Server.Workline do
   # lock the landing reads it under (`Server.Jobs.Land`), so a landing starting at the same instant
   # either sees the move or is seen by `allowed`. `by`, the seat that moved it back, is recorded for
   # the diary; nil when the machine did.
-  defp move_back(thread, to, why, brief, allowed, by) do
+  def move_back(thread, to, why, brief, allowed, by) do
     fn ->
       locked = Repo.one!(from t in Thread, where: t.id == ^thread.id, lock: "FOR UPDATE")
 
@@ -1885,72 +1861,6 @@ defmodule Server.Workline do
     end
   end
 
-  defp behind(%Thread{stage: stage}, to) do
-    index = &Enum.find_index(@stages, fn s -> s == &1 end)
-
-    if to in ~w(spec plan build) and stage in @stages and index.(to) < index.(stage),
-      do: :ok,
-      else: {:error, {:not_behind, to}}
-  end
-
-  defp may_send_back(thread, to, by) do
-    tech = tech_lead(thread)
-
-    cond do
-      by == operator() or by == tech ->
-        :ok
-
-      to == "build" ->
-        may_send_to_build(thread, by)
-
-      true ->
-        {:error,
-         {:not_yours,
-          "back to #{to} is the tech lead's call: say why on the thread and @#{tech || operator()}, who decides"}}
-    end
-  end
-
-  defp may_send_to_build(thread, "uqbar"), do: uqbar_may_send_back(thread)
-
-  defp may_send_to_build(thread, by) do
-    case Server.Channel.thread_lead(thread.id) do
-      ^by ->
-        :ok
-
-      lead ->
-        {:error,
-         {:not_yours, "only ##{thread.id}'s lead (#{lead}), the tech lead or the operator sends it back to build"}}
-    end
-  end
-
-  defp uqbar_may_send_back(thread) do
-    cond do
-      limit_hit?(thread) -> {:error, {:not_yours, "##{thread.id}'s grade hit a limit: its gate is the operator's"}}
-      thread.awaiting != operator() -> {:error, {:not_yours, "##{thread.id} is not parked on the operator's gate"}}
-      true -> :ok
-    end
-  end
-
-  defp tech_lead(%Thread{workspace_id: nil}), do: nil
-
-  defp tech_lead(%Thread{workspace_id: ws}) do
-    ws
-    |> Server.Workspaces.bench()
-    |> Server.Coworker.lead()
-    |> case do
-      %{name: name} -> name
-      nil -> nil
-    end
-  end
-
-  defp send_back_brief("build", why, by),
-    do:
-      "↩ back to build — sent back by #{by}: #{why}. The branch keeps the build and its review: fix what's named, then advance_stage; it comes back through verify and review."
-
-  defp send_back_brief(to, why, by),
-    do:
-      "↩ back to #{to} — sent back by #{by}: #{why}. The branch keeps the build and review.md: revise #{to}.md to say what changes and what stays, so the build is improved, not redone; then advance_stage."
-
   # the stage a workline was opened at, read from its earliest stage_advanced: the one from nowhere
   # (a promotion's) names it in `to`; otherwise the first advance left it, so it is that one's
   # `from`. Only `promote/1` writes an opening event — `open/1` at any stage writes none — so a
@@ -1973,61 +1883,6 @@ defmodule Server.Workline do
     )
     |> Repo.all()
     |> Enum.filter(&(is_list(&1.labels) and "follow-up" in &1.labels))
-  end
-
-  defp movable(%Thread{state: "open", stage: stage}) when stage in ~w(plan build verify review), do: :ok
-  defp movable(%Thread{stage: stage}), do: {:error, {:not_movable, stage}}
-
-  # With `unqueue?` only a verify or a landing already executing blocks; a landing still waiting its
-  # turn is `cancel_landings/1`'s to pull.
-  defp not_in_flight(thread, unqueue?) do
-    blocking =
-      thread
-      |> in_flight_jobs(["available", "scheduled", "executing", "retryable"])
-      |> Enum.filter(fn {queue, state, _id} -> not unqueue? or queue == "verify" or state == "executing" end)
-
-    case blocking do
-      [] ->
-        :ok
-
-      [{q, _, _} | _] ->
-        {:error,
-         {:in_flight, "its #{if q == "verify", do: "verify", else: "landing"} is queued or running; let it finish"}}
-    end
-  end
-
-  defp in_flight_jobs(thread, states) do
-    Repo.all(
-      from j in Oban.Job,
-        where:
-          j.queue in ["verify", "landing"] and j.state in ^states and
-            fragment("?->>'thread_id'", j.args) == ^to_string(thread.id),
-        select: {j.queue, j.state, j.id}
-    )
-  end
-
-  defp pull_landing(_thread, false), do: :ok
-  defp pull_landing(thread, true), do: cancel_landings(thread)
-
-  # Inside move_back's transaction, under the thread row's lock. The one window left: a landing that
-  # starts executing between not_in_flight's select and this cancel — Land takes the same row lock
-  # (`Server.Jobs.Land.perform/1`), so it waits on us, then finds the thread moved and does nothing.
-  defp cancel_landings(thread) do
-    thread
-    |> in_flight_jobs(["available", "scheduled", "retryable"])
-    |> Enum.reduce_while(:ok, fn
-      {"landing", _state, id}, :ok ->
-        case Server.Jobs.cancel(id) do
-          :ok ->
-            {:cont, :ok}
-
-          {:error, why} ->
-            {:halt, {:error, {:in_flight, "its landing is queued and can't be pulled here: #{inspect(why)}"}}}
-        end
-
-      _verify, :ok ->
-        {:cont, :ok}
-    end)
   end
 
   # the review approved the code it read (its verdict's `sha`): code committed after it goes back
@@ -2390,7 +2245,7 @@ defmodule Server.Workline do
     )
   end
 
-  defp operator, do: Server.OperatorConfig.operator()
+  def operator, do: Server.OperatorConfig.operator()
 
   defp owed_artifact(thread, checker),
     do: thread |> checker.check(Map.fetch!(@owed, thread.stage)) |> this_round(thread)
@@ -2489,7 +2344,7 @@ defmodule Server.Workline do
 
   # trust only breaks ties, so a lookup that fails leaves the candidate neutral (no `trust` key)
   # instead of dropping the handoff
-  defp with_trust(%{coworker: %{name: name}} = candidate) do
+  def with_trust(%{coworker: %{name: name}} = candidate) do
     Map.put(candidate, :trust, Application.get_env(:server, :trust_record, &Server.Trust.record/1).(name))
   rescue
     e ->
