@@ -1142,9 +1142,10 @@ defmodule Server.Office.Needs do
     end
   end
 
-  defp hold(_item, {state, _}) when state in ~w(available scheduled executing retryable), do: :held
+  defp hold(%{kind: "gate", stage: "review"}, {state, _}) when state in ~w(available scheduled executing retryable),
+    do: :held
 
-  defp hold(%{at: at} = item, {_, %DateTime{} = ended}),
+  defp hold(%{kind: "gate", stage: "review", at: at} = item, {_, %DateTime{} = ended}),
     do: %{item | at: Enum.max([at, DateTime.truncate(ended, :second)], DateTime)}
 
   defp hold(item, _), do: item

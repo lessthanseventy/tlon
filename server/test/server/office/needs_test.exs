@@ -1426,6 +1426,18 @@ defmodule Server.Office.NeedsTest do
       assert Enum.any?(Needs.list(), &(&1.key == key))
     end
 
+    test "a live grade job holds only the gate: an ask on the same thread still reaches the phone",
+         %{ws: ws, config: config} do
+      :ok = Server.OperatorConfig.put("auto_land_risk", 2, config)
+      key = review_gate(ws, %{"limits" => []})
+      "gate:" <> id = key
+      {:ok, own} = Server.Attention.ask(String.to_integer(id), "uqbar", "land it?", ["land", "hold"])
+      grade_job(key, "executing")
+
+      ask_key = "ask:#{own.id}"
+      assert [%{route: "pass_up"}] = Enum.filter(Needs.grouped().phone, &(&1.key == ask_key))
+    end
+
     test "once the grade job is done and the gate still waits, it routes to Uqbar, its clock from the grade",
          %{ws: ws, config: config} do
       :ok = Server.OperatorConfig.put("auto_land_risk", 2, config)
