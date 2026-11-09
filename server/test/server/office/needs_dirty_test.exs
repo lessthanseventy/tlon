@@ -3,10 +3,10 @@ defmodule Server.Office.NeedsDirtyTest do
 
   alias Server.Office.NeedsDirty
 
-  # Each test starts past any real clock and past the last test's, so the setup's take always runs
-  # and leaves `last` at `now`.
+  # Each test starts past any real clock and past the last test's (a monotonic integer: a merely
+  # unique one can go backwards), so the setup's take always runs and leaves `last` at `now`.
   setup do
-    now = DateTime.add(~U[2100-01-01 00:00:00Z], System.unique_integer([:positive]) * 1000)
+    now = DateTime.add(~U[2100-01-01 00:00:00Z], System.unique_integer([:positive, :monotonic]) * 1000)
     NeedsDirty.take(now)
     %{now: now}
   end
