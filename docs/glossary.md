@@ -28,7 +28,7 @@ begins `pending:` records a rename not yet made; the gate skips it. The source o
 | schedules | Oban cron or one-shot work the operator set: an agent prompt, a workline or a script. The TUI's `a`. | `Server.Schedules`, `Server.Schedule` | "calendar" |
 | calendar | The operator's `.ics` meetings, read for alerts. | `Server.Calendar` | "schedules" |
 | the room | The office screen: the pixel-art floor behind every card. `ctrl+] room` returns to it. | `office/tui/main.ts` | "lobby", "console", "cockpit" for the screen |
-| the front desk | A workspace's standing thread, where the operator talks to the bench. Its stored title is still `lobby` (pending). | `Server.Bootstrap` (`ensure_standing/1`) | "lobby" |
+| the front desk | A workspace's standing thread, where the operator talks to the bench. Its stored title is `the front desk`. | `Server.Bootstrap` (`ensure_standing/1`) | "lobby" |
 | at their desk | A coworker's home window: the tmux window that is theirs. | `Server.Arbiter` | "lounge" for a live window |
 | the office | The operator's surface: the standalone TUI over the server. | `office/tui`, `mise run office:check` | "console", "cockpit" |
 | funes | The Erlang node name of the server (`funes@`) and nothing else. The product is Tlön. | `server/rel/env.sh.eex` (`RELEASE_NODE`) | "funes" as a product name |

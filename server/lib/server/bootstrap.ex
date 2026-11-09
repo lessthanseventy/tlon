@@ -21,7 +21,7 @@ defmodule Server.Bootstrap do
   require Logger
 
   # Each workspace's standing machine thread — where the operator talks to the bench.
-  @standing_title "lobby"
+  @standing_title "the front desk"
 
   @doc """
   Seed-if-empty + repair. Returns `{:ok, default_workspace}` — the oldest workspace, which
@@ -142,7 +142,7 @@ defmodule Server.Bootstrap do
   end
 
   @doc """
-  Give `ws` its standing thread (the lobby) if it has none: exactly one open, stage-less machine
+  Give `ws` its standing thread (the front desk) if it has none: exactly one open, stage-less machine
   root, the thread its view scopes to and its coworkers' home windows live on, carrying its default
   project (adopted or made). Called at a workspace's birth (`Server.Workspaces.register/1`) and on
   every boot. Idempotent: a workspace that already has one is left untouched.
