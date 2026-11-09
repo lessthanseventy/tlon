@@ -1467,6 +1467,45 @@ defmodule Server.MCP.ServerTest do
     end
   end
 
+  describe "staff_child on a workline with an off-bench named lead" do
+    setup do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Off bench"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "senior"})
+      {:ok, _} = Staff.register_agent(%{name: "visitor", mandate: "build", engine: "fresh"})
+      {:ok, manager} = Staff.register_agent(%{name: "tertius", mandate: "route", engine: "fresh"})
+      {:ok, home} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, agent_id: manager.id})
+      token = MCP.Tokens.mint(home, manager)
+      session = handshake(token)
+      call(token, session, 3, "register", %{})
+      %{token: token, session: session}
+    end
+
+    test "a registered agent off the bench named as the lead leads the workline, as asked", %{
+      token: token,
+      session: session
+    } do
+      r =
+        call(token, session, 4, "staff_child", %{
+          "title" => "visitor build",
+          "lead" => "visitor",
+          "workline" => "build",
+          "brief" => "Build it."
+        })
+
+      refute r["isError"]
+      payload = decode_tool_json(r)
+      assert payload["lead"] == "visitor"
+      assert Channel.thread_lead(payload["thread_id"]) == "visitor"
+    end
+
+    test "a workline left unled names its thread and says to restaff it now" do
+      explained = Server.MCP.Tool.explain({:unled, 42})
+
+      assert explained =~ "thread #42"
+      assert explained =~ "restaff_now"
+    end
+  end
+
   describe "send_back and follow-ups" do
     setup do
       roster = [

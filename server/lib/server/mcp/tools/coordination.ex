@@ -200,7 +200,12 @@ defmodule Server.MCP.Tool.StaffChild do
   defp staff(%{stage: nil} = thread, wanted),
     do: with({:ok, _} <- Channel.assign_lead(thread.id, wanted), do: {:ok, wanted})
 
-  defp staff(thread, _wanted), do: {:ok, Channel.thread_lead(thread.id)}
+  defp staff(thread, _wanted) do
+    case Channel.thread_lead(thread.id) do
+      nil -> {:error, {:unled, thread.id}}
+      lead -> {:ok, lead}
+    end
+  end
 
   # The lead's seat is on the child, and it does not wait on delivery: the switchboard spawns who a
   # message ADDRESSES (`Server.Switchboard.target_names/1`), so a brief that mentions another coworker

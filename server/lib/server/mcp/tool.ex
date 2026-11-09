@@ -132,6 +132,8 @@ defmodule Server.MCP.Tool do
   def explain(:unknown_peer), do: "no agent by that name is registered — check the roster for the handle"
   def explain(:no_threads), do: "that peer has no thread to reach — name one with thread_id"
   def explain({:no_thread, id}), do: "no thread #{id} exists — check the id"
+
+  def explain({:unled, id}), do: "thread ##{id} is open with no lead — restaff_now it rather than staffing a new thread"
   def explain({:no_agent, name}), do: "no registered agent named #{name} — staff a handle from the workspace roster"
 
   def explain({:model_cli_timeout, s, _}),
