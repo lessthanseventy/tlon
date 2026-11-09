@@ -296,7 +296,8 @@ defmodule Server.Worktree do
 
   # tlon's own checkout gets its hooks from `server:setup`; a sibling repo has no scripts/git-hooks,
   # so its config points at tlon's (absolute), which fence on TLON_THREAD and are inert without it
-  # A repo with hooks of its own is refused, never overwritten.
+  # A repo with hooks of its own keeps them in its main checkout: only the seat's worktree is pointed
+  # at tlon's (`scope_hooks/2`), never the shared config.
   defp point_hooks_at_tlon(repo_path) do
     # the common dir, not tlon_root/0: the service is built in `.release`, a linked worktree of tlon
     with {:ok, root} <- Server.Profiles.main_root(),
@@ -310,7 +311,7 @@ defmodule Server.Worktree do
       {out, 0} ->
         if String.trim(out) == hooks,
           do: :ok,
-          else: {:error, "#{repo_path} has its own core.hooksPath (#{String.trim(out)}); not pointing it at tlon's"}
+          else: {:own, hooks}
 
       {_, 1} ->
         case git(repo_path, ["config", "core.hooksPath", hooks]) do
@@ -324,10 +325,22 @@ defmodule Server.Worktree do
   end
 
   defp do_ensure(repo_path, slug) do
-    with :ok <- point_hooks_at_tlon(repo_path),
-         {:ok, wt} <- ensure_checkout(repo_path, slug) do
+    with hooks when hooks == :ok or elem(hooks, 0) == :own <- point_hooks_at_tlon(repo_path),
+         {:ok, wt} <- ensure_checkout(repo_path, slug),
+         :ok <- scope_hooks(repo_path, wt, hooks) do
       trust_mise(wt)
       {:ok, wt}
+    end
+  end
+
+  defp scope_hooks(_repo_path, _wt, :ok), do: :ok
+
+  defp scope_hooks(repo_path, wt, {:own, hooks}) do
+    with {_, 0} <- git(repo_path, ["config", "extensions.worktreeConfig", "true"]),
+         {_, 0} <- git(wt, ["config", "--worktree", "core.hooksPath", hooks]) do
+      :ok
+    else
+      {out, _} -> {:error, "could not point the worktree's hooks at tlon's: #{String.slice(out, 0, 200)}"}
     end
   end
 
