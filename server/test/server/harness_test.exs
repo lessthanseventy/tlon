@@ -130,7 +130,8 @@ defmodule Server.HarnessTest do
 
       reviewer = deny.("vera", :reviewer)
       assert "mcp__tlon__edit_clause" in reviewer and "mcp__tlon__rename_identifier" in reviewer
-      assert "mcp__tlon__consult_peer" in deny.("hronir", :builder)
+      refute "mcp__tlon__consult_peer" in deny.("hronir", :builder), "a workline's lead keeps it"
+      assert "mcp__tlon__consult_peer" in deny.("vera-qa", :qa)
 
       tertius = deny.("tertius", :surveyor)
       assert "mcp__tlon__consult_peer" in tertius
