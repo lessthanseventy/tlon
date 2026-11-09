@@ -335,3 +335,27 @@ describe("planes, pizza and the power nap", () => {
     for (const id of ["play.planes", "play.pizza", "play.nap"]) expect(KEYS.some((b) => b.id === id)).toBe(true)
   }))
 })
+
+describe("the nap and the storm, placed", () => {
+  test("the nap seats the idle on the couch, as many as it holds, with zzz over every idle head", () => seeded(3, () => {
+    const r = new WideRoom(696), a = view(["w0", "w1", "w2", "w3"])
+    r.setClock(() => new Date(2026, 10, 9, 12))
+    run(r, a, 300)
+    expect(r.event("nap")).toBe(true)
+    run(r, a, 540)
+    const couch = (r as any).plan.lounge.filter((s: any) => s.kind === "couch") as { x: number; y: number }[]
+    const idle = (r as any).running.idle as string[]
+    const on = idle.filter((n) => couch.some((s) => Math.abs((r as any).actors.get(n).x - s.x) < 4 && Math.abs((r as any).actors.get(n).y - s.y) < 4))
+    expect(on).toHaveLength(Math.min(idle.length, couch.length))
+    expect(r.props().filter((p) => p.kind === "zzz")).toHaveLength(idle.length)
+  }))
+  test("Argos is at the catch spot before the first sheet has crossed the hall", () => seeded(3, () => {
+    const r = new WideRoom(696), a = view(["w0"])
+    r.setClock(() => new Date(2026, 10, 9, 12))
+    run(r, a, 300)
+    r.event("planes")
+    const g = (r as any).eventGeo() as Geo
+    run(r, a, 250)
+    expect(Math.abs((r as any).dog.x - planeCatch(g).x)).toBeLessThan(20)
+  }))
+})
