@@ -9,7 +9,7 @@ defmodule Server.MCP.OperatorAPI do
 
       GET    /api/sidebar                 Board.sidebar
       GET    /api/roster                  Staff.roster
-      GET    /api/office                  Office.status (every workspace: roster, benches, threads, …)
+      GET    /api/office                  Office.status (every workspace: roster, benches, threads, …); carries an ETag, and If-None-Match answers 304
       GET    /api/office/threads/:id      Office.thread_view (a page of messages, ?before=<id> for older, + what its pane shows + its activity feed)
       GET    /api/office/archive/:ws      Office.archive (a workspace's done tickets + closed threads)
       GET    /api/office/banter/:ws       Office.Banter.lines (recent small talk; asking may write the next line)
@@ -180,7 +180,7 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "GET", "sidebar", []), do: json(conn, 200, Board.sidebar())
   defp route(conn, "GET", "roster", []), do: json(conn, 200, Enum.map(Staff.roster(), &roster_row/1))
-  defp route(conn, "GET", "office", []), do: json(conn, 200, Office.status())
+  defp route(conn, "GET", "office", []), do: conditional_json(conn, Office.status())
 
   defp route(conn, "POST", "usage", ["claude"]) do
     {b, conn} = body(conn)
@@ -1302,6 +1302,18 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp operator, do: Server.OperatorConfig.operator()
+
+  defp conditional_json(conn, body) do
+    encoded = JSON.encode!(body)
+    etag = ~s("#{Base.encode16(:crypto.hash(:sha256, encoded), case: :lower)}")
+    conn = put_resp_header(conn, "etag", etag)
+
+    if etag in get_req_header(conn, "if-none-match") do
+      conn |> send_resp(304, "") |> halt()
+    else
+      conn |> put_resp_content_type("application/json") |> send_resp(200, encoded) |> halt()
+    end
+  end
 
   defp json(conn, status, body) do
     conn

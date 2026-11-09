@@ -160,6 +160,22 @@ defmodule Server.MCP.GatewayTest do
     assert {404, _} = get_json("/api/release/ran?check=smoke&sha=#{sha}")
   end
 
+  test "GET /api/office carries an ETag and answers 304 with no body to a matching If-None-Match" do
+    url = Process.get(:base_url) ++ ~c"/api/office"
+    {:ok, {{_, 200, _}, headers, _body}} = :httpc.request(:get, {url, []}, [], body_format: :binary)
+    {_, etag} = List.keyfind(headers, ~c"etag", 0)
+
+    {:ok, {{_, status, _}, _, body}} =
+      :httpc.request(:get, {url, [{~c"if-none-match", etag}]}, [], body_format: :binary)
+
+    assert {304, ""} = {status, body}
+
+    {:ok, {{_, other, _}, _, _}} =
+      :httpc.request(:get, {url, [{~c"if-none-match", ~c"\"stale\""}]}, [], body_format: :binary)
+
+    assert other == 200
+  end
+
   test "POST /api/usage/claude keeps the plan's limits for the office snapshot; a bad report is a 422" do
     Server.Usage.clear()
     assert {200, %{"usage" => %{"claude" => nil}}} = get_json("/api/office")
