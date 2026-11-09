@@ -1088,7 +1088,7 @@ defmodule Server.MCP.ServerTest do
 
   test "spawn_crew / kill_crew staff a role onto the connection's OWN thread via the crew backend",
        %{token: token, thread: thread} do
-    Application.put_env(:server, :crew, Server.Crew.Test)
+    Application.put_env(:server, :crew, Server.Spawn.Test)
     Application.put_env(:server, :test_pid, self())
     on_exit(fn -> Application.delete_env(:server, :crew) end)
 
@@ -1575,7 +1575,7 @@ defmodule Server.MCP.ServerTest do
 
   test "staff_child and spawn_crew refuse a blank brief, opening nothing", %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "hronir-machine", mandate: "build", engine: "fresh"})
-    Application.put_env(:server, :crew, Server.Crew.Test)
+    Application.put_env(:server, :crew, Server.Spawn.Test)
     Application.put_env(:server, :test_pid, self())
     on_exit(fn -> Application.delete_env(:server, :crew) end)
 

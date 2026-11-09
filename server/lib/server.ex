@@ -42,8 +42,8 @@ defmodule Server do
       MCP.Spawn,
       # The arbiter behaviour (`Server.Arbiter.Tmux` implements it).
       Arbiter,
-      # The crew behaviour (`Server.Crew.Tmux` implements it).
-      Crew,
+      # The spawn behaviour (`Server.Spawn.Tmux` implements it).
+      Spawn,
       # Structs read by consumers (pattern-matched, never changeset-built from outside).
       Thread,
       Message,

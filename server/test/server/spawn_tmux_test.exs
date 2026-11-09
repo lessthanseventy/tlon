@@ -1,11 +1,11 @@
-defmodule Server.Crew.TmuxTest do
+defmodule Server.Spawn.TmuxTest do
   # The crew backend on the workspace's tmux server: the
   # role's identity is minted on the thread, its profile materialised, its window opened beside the
   # lead, and the opening turn typed only once the pane shows the registered footer.
   use ExUnit.Case, async: false
 
   alias Server.Channel
-  alias Server.Crew
+  alias Server.Spawn
   alias Server.Tmux
 
   setup do
@@ -48,19 +48,19 @@ defmodule Server.Crew.TmuxTest do
   end
 
   test "the pure role helpers: roles, window names, the reverse lookup" do
-    assert %{handle: "reviewer", window_prefix: "r", profile: "reviewer"} = Crew.role("reviewer")
-    assert Crew.role("nope") == nil
-    assert Map.keys(Crew.roles()) == ["reviewer"]
-    assert Crew.crew_window("reviewer", 42) == "r42"
-    assert Crew.crew_window("reviewer", "42") == "r42"
-    assert_raise ArgumentError, fn -> Crew.crew_window("planner", 42) end
-    assert Crew.handle_role("reviewer") == "reviewer"
-    assert Crew.handle_role("claude") == nil
+    assert %{handle: "reviewer", window_prefix: "r", profile: "reviewer"} = Spawn.role("reviewer")
+    assert Spawn.role("nope") == nil
+    assert Map.keys(Spawn.roles()) == ["reviewer"]
+    assert Spawn.crew_window("reviewer", 42) == "r42"
+    assert Spawn.crew_window("reviewer", "42") == "r42"
+    assert_raise ArgumentError, fn -> Spawn.crew_window("planner", 42) end
+    assert Spawn.handle_role("reviewer") == "reviewer"
+    assert Spawn.handle_role("claude") == nil
   end
 
   test "spawn mints the reviewer's identity on the thread and opens r<id> in the thread's workspace session",
        %{thread: t, session: session} do
-    assert {:ok, "r" <> _} = Crew.Tmux.spawn("reviewer", t.id, "review HEAD~1", inject: false)
+    assert {:ok, "r" <> _} = Spawn.Tmux.spawn("reviewer", t.id, "review HEAD~1", inject: false)
     assert_receive {:join, tid, "reviewer", opts}
     assert tid == t.id
     assert opts[:mandate] == "machine"
@@ -95,7 +95,7 @@ defmodule Server.Crew.TmuxTest do
       File.rm_rf!(proc)
     end)
 
-    assert {:ok, _} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+    assert {:ok, _} = Spawn.Tmux.spawn("reviewer", t.id, "x", inject: false)
     assert_received {:retired, 4242}
     assert_received {:forced, 4242}
     assert Enum.any?(Channel.thread_messages(t), &(&1.author == "tlon" and &1.body =~ "retired 1 process(es)"))
@@ -130,7 +130,7 @@ defmodule Server.Crew.TmuxTest do
       File.rm_rf!(proc)
     end)
 
-    assert {:error, {:already_running, "r" <> _}} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+    assert {:error, {:already_running, "r" <> _}} = Spawn.Tmux.spawn("reviewer", t.id, "x", inject: false)
     refute_received {:retired, _}
     refute_received {:forced, _}
     refute_received {:join, _, _, _}
@@ -149,16 +149,16 @@ defmodule Server.Crew.TmuxTest do
         {"", 0}
     end)
 
-    assert {:ok, _} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+    assert {:ok, _} = Spawn.Tmux.spawn("reviewer", t.id, "x", inject: false)
     assert_receive {:tmux, ["-L", _, "new-session", "-d", "-s", ^session, "-n", _, _]}
   end
 
   test "typed errors: unknown role, unknown thread, a tmux failure", %{thread: t} do
-    assert {:error, {:unknown_role, "planner"}} = Crew.Tmux.spawn("planner", t.id, "x")
-    assert {:error, :no_thread} = Crew.Tmux.spawn("reviewer", 999_999, "x")
+    assert {:error, {:unknown_role, "planner"}} = Spawn.Tmux.spawn("planner", t.id, "x")
+    assert {:error, :no_thread} = Spawn.Tmux.spawn("reviewer", 999_999, "x")
 
     Application.put_env(:server, :tmux_cmd, fn "tmux", _argv, _opts -> {"dup window", 1} end)
-    assert {:error, {:tmux, "dup window"}} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+    assert {:error, {:tmux, "dup window"}} = Spawn.Tmux.spawn("reviewer", t.id, "x", inject: false)
   end
 
   test "a tmux that cannot list windows fails closed: nothing is retired, joined or opened", %{thread: t} do
@@ -189,7 +189,7 @@ defmodule Server.Crew.TmuxTest do
       File.rm_rf!(proc)
     end)
 
-    assert {:error, {:tmux, "server busy"}} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+    assert {:error, {:tmux, "server busy"}} = Spawn.Tmux.spawn("reviewer", t.id, "x", inject: false)
     refute_received {:retired, _}
     refute_received {:forced, _}
     refute_received {:join, _, _, _}
@@ -205,7 +205,7 @@ defmodule Server.Crew.TmuxTest do
       {"", 0}
     end)
 
-    assert {:ok, _window} = Crew.Tmux.spawn("reviewer", t.id, "review HEAD~1")
+    assert {:ok, _window} = Spawn.Tmux.spawn("reviewer", t.id, "review HEAD~1")
 
     refute_received {:tmux, ["-L", _, "send-keys" | _]}
     assert [text] = Server.Wake.take(t.id, "reviewer")
@@ -215,14 +215,14 @@ defmodule Server.Crew.TmuxTest do
   end
 
   test "kill drops the role's window; a missing thread is a quiet :ok", %{thread: t} do
-    assert :ok = Crew.Tmux.kill("reviewer", t.id)
+    assert :ok = Spawn.Tmux.kill("reviewer", t.id)
     target = "w#{t.workspace_id}:r#{t.id}"
     assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^target]}
-    assert :ok = Crew.Tmux.kill("reviewer", 999_999)
+    assert :ok = Spawn.Tmux.kill("reviewer", 999_999)
   end
 
   test "the behaviour doors delegate", %{thread: t} do
-    assert {:ok, "r" <> _} = Crew.Tmux.spawn_role("reviewer", t.id, "review the diff")
-    assert :ok = Crew.Tmux.kill_role("reviewer", t.id)
+    assert {:ok, "r" <> _} = Spawn.Tmux.spawn_role("reviewer", t.id, "review the diff")
+    assert :ok = Spawn.Tmux.kill_role("reviewer", t.id)
   end
 end

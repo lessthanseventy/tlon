@@ -16,7 +16,7 @@ begins `pending:` records a rename not yet made; the gate skips it. The source o
 | bench | Everyone seated in a workspace: the employed seats. Not the live sessions (that is the roster). | `Server.Coworker` | "crew", "team" |
 | roster | The in-flight list of live sessions: who is on the clock. | `Server.Staff` (`roster/0`) | "bench" |
 | crew | A named shift only (day, night, ...): a set of coworkers a taken offer swaps in. | `Server.Shifts` (`crews/1`) | "crew" for the whole cast or for the tmux backend; "team" |
-| crew backend | The seam that opens a terminal for a coworker. Pending rename: `Server.Crew` becomes `Server.Spawn`, so "crew" stops meaning two things. | pending: `Server.Crew` → `Server.Spawn` | "crew" |
+| spawn backend | The seam that opens a terminal for a coworker (a config-selected behaviour; the tmux one is `Server.Spawn.Tmux`). Not `Server.MCP.Spawn`, which mints a pane's identity. | `Server.Spawn`, `Server.Spawn.Tmux` | "crew" |
 | staffing | Assigning a thread to a coworker. | `Server.Staff` (`assign/2`) | "the sweep" |
 | the sweep | The per-minute tmux pass that closes windows nobody needs. Pending rename: the module and job are named `Staffing`, which collides with staffing a thread. | pending: `Server.Staffing` → `Server.Sweep` | "staffing" |
 | triage | The server's one meaning: what needs a hand in a workspace, namely blockers, failed checks and unled threads. | `Server.Office.Room` (`triage/1`) | "what awaits the operator" (that is Needs) |

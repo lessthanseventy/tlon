@@ -467,12 +467,12 @@ defmodule Server.MCP.Tool.SpawnCrew do
   assignment. MVP role is `reviewer`. Like every self-thread tool it takes no thread parameter: the
   role joins the connection's own thread, so a lead spawns a reviewer onto the work it is leading.
 
-  Actuated by the configured crew backend (`Server.Crew`), which opens the window on the workspace's
+  Actuated by the configured crew backend (`Server.Spawn`), which opens the window on the workspace's
   tmux server. With no backend configured it reports unavailable rather than faking a spawn.
   """
   use Server.MCP.Tool
 
-  alias Server.Crew
+  alias Server.Spawn
 
   schema do
     field :task, :string, required: true, description: "The opening assignment — what the role should do"
@@ -493,7 +493,7 @@ defmodule Server.MCP.Tool.SpawnCrew do
   end
 
   defp spawn_role(frame, role, thread_id, task) do
-    case Crew.spawn_role(role, thread_id, task) do
+    case Spawn.spawn_role(role, thread_id, task) do
       {:ok, window} ->
         ok(frame, %{"role" => role, "thread_id" => thread_id, "window" => to_string(window)})
 
@@ -514,7 +514,7 @@ defmodule Server.MCP.Tool.KillCrew do
   """
   use Server.MCP.Tool
 
-  alias Server.Crew
+  alias Server.Spawn
 
   schema do
     field :role, :string, description: "Crew role to tear down (default reviewer)"
@@ -525,7 +525,7 @@ defmodule Server.MCP.Tool.KillCrew do
     identity = Identity.from_frame(frame)
     role = Map.get(params, :role) || "reviewer"
 
-    case Crew.kill_role(role, identity.thread_id) do
+    case Spawn.kill_role(role, identity.thread_id) do
       :ok -> ok(frame, %{"killed" => role, "thread_id" => identity.thread_id})
       {:error, :no_crew} -> fail(frame, "crew teardown is unavailable here — no crew backend is configured")
       {:error, reason} -> fail(frame, "crew kill failed: #{explain(reason)}")
