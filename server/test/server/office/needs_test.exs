@@ -40,7 +40,7 @@ defmodule Server.Office.NeedsTest do
     assert Needs.list() == []
   end
 
-  test "a pane dialog or the release gate is a dialog, carrying its prompt's id to answer by", %{ws: ws} do
+  test "the release gate is a gate of scope release, carrying its prompt's id to answer by", %{ws: ws} do
     {:ok, t} = Channel.open_thread(%{title: "root", workspace_id: ws.id})
 
     gate =
@@ -57,7 +57,7 @@ defmodule Server.Office.NeedsTest do
         created_at: DateTime.truncate(DateTime.utc_now(), :second)
       })
 
-    assert [%{kind: "dialog", ref: ref}] = Needs.list()
+    assert [%{kind: "gate", scope: "release", ref: ref}] = Needs.list()
     assert ref == gate.id
   end
 
@@ -1009,7 +1009,7 @@ defmodule Server.Office.NeedsTest do
 
   describe "surface/1 — who acts on each kind" do
     test "the table: phone owes an answer, the machine is information, the clipboard is the crew's" do
-      phone = ~w(gate question dialog ask seats quota no_seat tool_denied)
+      phone = ~w(gate question ask seats quota no_seat tool_denied)
       machine = ~w(mention rollout)
 
       clipboard =

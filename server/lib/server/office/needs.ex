@@ -8,7 +8,7 @@ defmodule Server.Office.Needs do
   from `kinds/0` raises, so a new one can't reach the list unrouted):
 
     * **phone** — an answer is owed; the office's one count, ringing while it is above zero:
-      `gate`, `question`, `dialog`, `ask`, `seats`, `quota`, `no_seat`, `tool_denied`;
+      `gate`, `question`, `ask`, `seats`, `quota`, `no_seat`, `tool_denied`;
     * **machine** — information for the operator: `mention`, `rollout`. It holds an item until the
       operator plays it (`hear/1`, kept in `need_heard` until something newer comes under its key)
       or for a day;
@@ -20,8 +20,9 @@ defmodule Server.Office.Needs do
   items within a surface and decides what `dismiss/1` refuses:
 
     * **blocking** — work has stopped until the operator acts:
-      `gate` (a workline at its gate: approve), `question` (a coworker asked: reply), `dialog` (a pane
-      sits on a prompt, or the PM's release gate waits: pick an option, answered by `ref`, the prompt's id), `ask` (one decision a
+      `gate` (a workline at its gate: approve; or, with `ref` and `options`, a prompt parked on the operator — a pane
+      sitting on a dialog, `scope` `pane`, or the PM's release gate, `scope` `release`: pick an option, answered by `ref`, the prompt's id),
+      `question` (a coworker asked: reply), `ask` (one decision a
       coworker filed with its answers, `Server.Attention.ask/4`: one item per ask, `ref` its id, `ask` who filed it,
       answered by key), `verify_failed` (a workline whose last gate run was red — the sheriff, where
       there is one, gets a copy: `Server.Sheriff`), `stalled` (a workline, a standing duty's thread aside, nothing has moved for past
@@ -86,7 +87,7 @@ defmodule Server.Office.Needs do
   |---|---|
   | seats, quota, tool_denied (a permission refusal), Uqbar's own ask | always |
   | gate whose grade hit a limit (a db migration, …: `Server.Workline.limit_hit?/1`) | always |
-  | gate, question, dialog, ask, no_seat | if irreversible, outward, costly, a host command, or an `auto_land_risk` gate |
+  | gate, question, ask, no_seat | if irreversible, outward, costly, a host command, or an `auto_land_risk` gate |
   | issue, blocked, stalled, verify_failed, job_failed, health, stranded, tool_denied (a hook's) | if irreversible or a host command |
   | pr_blocked, publish_failed, release_failed | if it needs a host command |
   | mention, rollout | information: never routed |
@@ -120,7 +121,7 @@ defmodule Server.Office.Needs do
   @landing_grace_s 3600
   @holds_ttl_s 300
   @tips_hold_s 60
-  @phone ~w(gate question dialog ask seats quota no_seat tool_denied)
+  @phone ~w(gate question ask seats quota no_seat tool_denied)
   @machine ~w(mention rollout)
   @clipboard ~w(issue blocked stalled verify_failed pr_blocked publish_failed release_failed job_failed health stranded)
   @broad [:irreversible, :outward, :costly, :host_command, :auto_land_risk]
@@ -197,7 +198,7 @@ defmodule Server.Office.Needs do
   def pass_up_rule(%{kind: "tool_denied", hook: true}), do: {:when, @narrow}
   def pass_up_rule(%{kind: k}) when k in ~w(seats quota tool_denied), do: :always
   def pass_up_rule(%{kind: k}) when k in @machine, do: :info
-  def pass_up_rule(%{kind: k}) when k in ~w(gate question dialog ask no_seat), do: {:when, @broad}
+  def pass_up_rule(%{kind: k}) when k in ~w(gate question ask no_seat), do: {:when, @broad}
 
   def pass_up_rule(%{kind: k}) when k in ~w(issue blocked stalled verify_failed job_failed health stranded),
     do: {:when, @narrow}
@@ -207,7 +208,7 @@ defmodule Server.Office.Needs do
   @doc """
   The operator puts an item away without acting on it (the inbox's `d`): it leaves the list until
   something newer arrives under its key, a later mention on that thread say. An ask is withdrawn and
-  its asker told; a failed job and a rollout note are dismissed as their kinds are. A gate, a dialog,
+  its asker told; a failed job and a rollout note are dismissed as their kinds are. A gate,
   a question or a red verify is never put away — work waits on it: approve, answer or fix it. `:ok`,
   `{:error, :blocking}`, or `{:error, :not_found}` for a key the list does not hold.
   """
@@ -283,13 +284,18 @@ defmodule Server.Office.Needs do
     end
   end
 
-  # a pane on a prompt is a dialog; else an `awaiting` is a gate (workline at its gate) or a question
+  # a pane on a prompt is a gate answered by the prompt's id; else an `awaiting` is a workline gate or a question
   defp waits(open, prompts) do
     for t <- open, item = wait(t, prompts[t.id]), item, do: item
   end
 
   defp wait(t, %{} = prompt),
-    do: item("dialog", "blocking", t, prompt.summary, prompt_at(prompt.id), %{options: prompt.options, ref: prompt.id})
+    do:
+      item("gate", "blocking", t, prompt.summary, prompt_at(prompt.id), %{
+        options: prompt.options,
+        ref: prompt.id,
+        scope: prompt.scope
+      })
 
   defp wait(%Thread{awaiting: nil}, nil), do: nil
 

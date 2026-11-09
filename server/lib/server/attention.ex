@@ -217,14 +217,22 @@ defmodule Server.Attention do
     )
   end
 
-  @doc "The open prompts keyed by thread — one query for a sidebar: `%{thread_id => %{id, summary, options}}`."
+  @doc "The open prompts keyed by thread — one query for a sidebar: `%{thread_id => %{id, summary, options, scope}}`; `scope` is `release` for the PM's release gate, else `pane`."
   def open_prompts_by_thread do
     from(m in Message,
       where: m.kind == "prompt" and is_nil(m.resolved_at) and fragment("NOT (? \\? 'ask')", m.payload),
       order_by: [asc: m.id]
     )
     |> Repo.all()
-    |> Map.new(&{&1.thread_id, %{id: &1.id, summary: &1.payload["summary"], options: &1.payload["options"]}})
+    |> Map.new(
+      &{&1.thread_id,
+       %{
+         id: &1.id,
+         summary: &1.payload["summary"],
+         options: &1.payload["options"],
+         scope: if(Map.has_key?(&1.payload, "release"), do: "release", else: "pane")
+       }}
+    )
   end
 
   @doc "Every unanswered ask (`ask/4`), oldest first."

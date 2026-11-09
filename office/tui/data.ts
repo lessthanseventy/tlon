@@ -103,9 +103,11 @@ export async function corkboard(ws: number): Promise<CorkNote[]> {
 }
 /** an item waiting on the operator (`Server.Office.Needs`): blocking ones stop work until acted on */
 export type Need = {
-  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "stalled" | "mention" | "rollout" | "seats" | "job_failed" | "health" | "stranded" | "issue" | "blocked" | "publish_failed" | "release_failed" | "pr_blocked" | "quota" | "no_seat" | "tool_denied"
+  key: string; kind: "gate" | "question" | "ask" | "verify_failed" | "stalled" | "mention" | "rollout" | "seats" | "job_failed" | "health" | "stranded" | "issue" | "blocked" | "publish_failed" | "release_failed" | "pr_blocked" | "quota" | "no_seat" | "tool_denied"
   level: "blocking" | "decide"; thread_id: number | null; workspace_id: number | null; title: string; text: string; at: string
   options: { key: string; label: string }[] | null; ref: number | null
+  /** a gate with a prompt behind it: the PM's release gate or a pane sitting on a dialog, answered by `ref` */
+  scope?: "release" | "pane"
   /** a pr_blocked item's PR */
   url?: string
   /** no_seat: the kind of seat the workline's stage needs */

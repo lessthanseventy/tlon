@@ -63,11 +63,11 @@ defmodule Server.AlertsTest do
            ] = a.actions
   end
 
-  test "a dialog is a decision, each option answering that prompt by its id; a question takes a reply" do
+  test "a prompt gate is a decision, each option answering that prompt by its id; a question takes a reply" do
     [d, q] =
       Alerts.build(
         [
-          need("dialog", %{ref: 42, options: [%{"key" => "y", "label" => "Yes"}, %{"key" => "n", "label" => "No"}]}),
+          need("gate", %{ref: 42, options: [%{"key" => "y", "label" => "Yes"}, %{"key" => "n", "label" => "No"}]}),
           need("question", %{key: "question:8", thread_id: 8})
         ],
         [],

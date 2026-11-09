@@ -731,6 +731,13 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   per-kind caching possible), `staffing.ex` (908), `profiles.ex` (1,310).
 - Check: file sizes in the PR; `mise run check` green; no behaviour change (the suites are the
   check).
+- Done 2026-11-09, the server half: `workline.ex` is a 315-line facade over `workline/{stage,review,landing,send_back,staffing,shared}.ex`,
+  one slice per commit, the suite green at each. The office half: `tui/main.ts` is 343 lines; its state is one
+  `State` object (`tui/state.ts`), the 42 `detail()` cards are one function each under `tui/cards/` with `tui/ctl.ts`
+  listing what a card may call back, and `boot.ts`, `draw.ts`, `input.ts`, `zoom.ts` and `refresh.ts` hold the timers,
+  the draw path, the handlers, the zoomed terminals and the polls; `office/docs/tui.md` maps them. No golden frame
+  changed. Left: the navigation, prompts and reader glue stay in `main.ts` (they call into each other and into
+  `draw`); the next-in-line files are untouched.
 
 **G2 · The whiteboard is implemented twice.** `Sonnet · M`
 - Why: `rooms/rail.ts` and `rooms/wide.ts` each build `boardColumns`/`stickyItems`/`COL_W`/`PER_COL`
@@ -762,6 +769,14 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
 - Change, in order: the title migration; `dialog` → `gate`; the two module renames with
   `menard rename`, each its own PR; the glossary rows lose `pending:`.
 - Check: `mise run check:names` green with the `pending:` markers removed.
+- Done 2026-11-09: the standing thread is stored as `the front desk` (a migration retitles the existing ones);
+  `Server.Crew`/`.Tmux` are `Server.Spawn`/`.Tmux`; `Server.Staffing` is `Server.Sweep` and `Server.Maintain.Sweep` is
+  `Server.Maintain.Bands` (the per-minute tmux sweep keeps the word; the control-band passes take a new one); a prompt
+  parked on the operator is a Need of kind `gate` with `ref`, `options` and `scope` (`release` for the PM's gate, `pane`
+  for a pane's dialog), and the office answers it by `ref` where it approves a workline gate. No glossary row says
+  `pending:`. Left, each a small follow-up: the `:crew`/`:crew_join` app-env keys and `{:crew_spawn, _}` test tags,
+  the `spawn_crew`/`kill_crew` tool names, `TLON_LOBBY` and "lobby" as a nickname in prompts and docs, the
+  `lobby` → front desk shim in `office/tui/data.ts` (dead once the migration has run) and the office fixtures titled `lobby`.
 
 **G5 · Dead and stale things the tree says exist.** `Haiku · S`
 - `adapters/{consult,footer,pi,reload}/` hold only untracked `node_modules` and empty `.claude`
@@ -906,6 +921,7 @@ countdown and release channel, the facing fix for Argos's chase (2026-11-07).
   other four tests' `expect` take other arguments and stay; `say`, `fail`, `pg` and `cleanup` are not in the
   tree; `tlon-cli.test.sh` covers the header, `token` against a stubbed curl, the usage exit and the pause
   fixture; `workline-verify.sh`'s test is G9's last piece.
+- Done 2026-11-09: `scripts/workline-verify.test.sh` exists and runs as `check:scripts:workline-verify`; G9 is closed.
 
 **G10 · `work/` holds 304 directories of finished worklines.** `Opus · S (decision)`
 - Why: 620 tracked files, 3.4 MB — the artifact chain of every workline ever, at the repo root.
