@@ -87,9 +87,9 @@ end
 # The terminal backends: the server's own tmux ones (one-brain piece B, slices 1–2). A wake is
 # send-keys into the thread's window on the workspace's tmux server, a spawn a new window there,
 # a crew role a window beside the lead. Guarded out of
-# :test (the suite uses Server.Arbiter.Test / Server.Crew.Test).
+# :test (the suite uses Server.Arbiter.Test / Server.Spawn.Test).
 if config_env() != :test do
-  config :server, arbiter: Server.Arbiter.Tmux, crew: Server.Crew.Tmux
+  config :server, arbiter: Server.Arbiter.Tmux, crew: Server.Spawn.Tmux
 end
 
 # The web UI (one-brain piece D): opt-in like MCP — TLON_START_WEB=1, TLON_WEB_PORT (4042),

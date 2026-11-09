@@ -467,7 +467,7 @@ defmodule Server.Profiles do
   """
 
   # The reviewer persona → `system_prompt.md`. Names the write-deny explicitly so the model doesn't
-  # keep retrying a denied tool — it should escalate instead. See Server.Crew.Tmux / the crew MVP contract.
+  # keep retrying a denied tool — it should escalate instead. See Server.Spawn.Tmux / the crew MVP contract.
   @reviewer_role """
   You are {{handle}}, a code REVIEWER on this server task thread. Read the diff you are asked to
   review (use `git diff`/`git show` — you have repo READ access) and post terse, high-signal findings

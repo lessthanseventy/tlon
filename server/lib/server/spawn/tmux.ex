@@ -1,4 +1,4 @@
-defmodule Server.Crew.Tmux do
+defmodule Server.Spawn.Tmux do
   @moduledoc """
   The crew backend on the workspace's tmux server. `spawn_role/3` mints the role's identity on the
   thread, materialises its profile (`Server.Profiles`), opens the `r<tid>` window in the thread's
@@ -10,24 +10,21 @@ defmodule Server.Crew.Tmux do
   `:server, :crew_join` (default `Server.MCP.Spawn.join/3`); the settle/poll budgets are app env
   so tests pay no real wait.
   """
-  @behaviour Server.Crew
+  @behaviour Server.Spawn
 
   alias Server.Arbiter
-  alias Server.Crew
   alias Server.Harness
-  alias Server.MCP.Spawn
   alias Server.Profile
   alias Server.Profiles
   alias Server.Repo
+  alias Server.Spawn
   alias Server.Thread
   alias Server.Tmux
 
-  defp joiner, do: Application.get_env(:server, :crew_join, &Spawn.join/3)
-
-  @impl Crew
+  @impl Spawn
   def spawn_role(role_key, thread_id, task), do: spawn(role_key, thread_id, task, [])
 
-  @impl Crew
+  @impl Spawn
   def kill_role(role_key, thread_id), do: kill(role_key, thread_id)
 
   @doc """
@@ -39,11 +36,11 @@ defmodule Server.Crew.Tmux do
   def spawn(role_key, thread_id, task, opts \\ []) do
     thread_id = to_int(thread_id)
 
-    with %{handle: handle, profile: profile_name} <- Crew.role(role_key) || {:error, {:unknown_role, role_key}},
+    with %{handle: handle, profile: profile_name} <- Spawn.role(role_key) || {:error, {:unknown_role, role_key}},
          %Thread{} = thread <- Repo.get(Thread, thread_id) || {:error, :no_thread},
          ws when is_integer(ws) <- Arbiter.Tmux.workspace_id(thread) || {:error, :no_workspace},
          %Profile{} = profile <- Profiles.fetch(profile_name, ws) || {:error, {:missing_profile, profile_name}},
-         window = Crew.crew_window(role_key, thread_id),
+         window = Spawn.crew_window(role_key, thread_id),
          :absent <- window_state(ws, window),
          :ok <- materialise(profile),
          {:ok, %{exports: exports}} <- joiner().(thread_id, handle, mandate: "machine", assign: false),
@@ -66,7 +63,7 @@ defmodule Server.Crew.Tmux do
 
     with %Thread{} = thread <- Repo.get(Thread, thread_id),
          ws when is_integer(ws) <- Arbiter.Tmux.workspace_id(thread) do
-      _ = Tmux.kill_window(ws, Crew.crew_window(role_key, thread_id))
+      _ = Tmux.kill_window(ws, Spawn.crew_window(role_key, thread_id))
     end
 
     :ok
@@ -106,7 +103,7 @@ defmodule Server.Crew.Tmux do
       "Task: #{task}. Read the diff (git diff/show), post findings, and escalate any fix per your protocol."
   end
 
-  defp window_name(role_key, thread_id), do: Crew.crew_window(role_key, thread_id)
+  defp window_name(role_key, thread_id), do: Spawn.crew_window(role_key, thread_id)
 
   # Orphans.retire is only safe on a windowless seat: a live window's harness holds the same
   # identity. A tmux fault is an error, never "absent": the window may be there.
@@ -117,4 +114,6 @@ defmodule Server.Crew.Tmux do
       {:error, why} -> {:error, {:tmux, why}}
     end
   end
+
+  defp joiner, do: Application.get_env(:server, :crew_join, &Server.MCP.Spawn.join/3)
 end

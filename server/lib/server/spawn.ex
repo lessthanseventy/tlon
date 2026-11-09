@@ -1,12 +1,12 @@
-defmodule Server.Crew do
+defmodule Server.Spawn do
   @moduledoc """
   The crew backend — a **capability, not a product**, the same seam as `Server.Arbiter`. Staffing a
   reviewer (or any role) onto a thread means minting its server identity and standing up a terminal
   for it to run in; *how* that terminal is created is a local backend the design never names. server
   decides a role belongs on a thread; the backend *actuates*.
 
-  The backend is chosen by config — `config :server, :crew, SomeModule` (a `Server.Crew` behaviour).
-  That is `Server.Crew.Tmux`: a window beside the lead on the workspace's tmux server.
+  The backend is chosen by config — `config :server, :crew, SomeModule` (a `Server.Spawn` behaviour).
+  That is `Server.Spawn.Tmux`: a window beside the lead on the workspace's tmux server.
 
   **No backend configured is a valid state**: `spawn_role`/`kill_role` return `{:error, :no_crew}` —
   degrade honestly, no crash. `spawn_crew`/`kill_crew` (the MCP tools) surface that as an
@@ -68,13 +68,13 @@ defmodule Server.Crew do
   end
 end
 
-defmodule Server.Crew.Test do
+defmodule Server.Spawn.Test do
   @moduledoc """
   A capturing crew backend for tests: sends `{:crew_spawn, role, thread_id, task}` /
   `{:crew_kill, role, thread_id}` to the pid in `config :server, :test_pid`, so a test asserts what
   server decided to staff — without a real terminal.
   """
-  @behaviour Server.Crew
+  @behaviour Server.Spawn
 
   @impl true
   def spawn_role(role, thread_id, task) do

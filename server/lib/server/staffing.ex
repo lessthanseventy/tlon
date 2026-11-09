@@ -30,7 +30,6 @@ defmodule Server.Staffing do
 
   alias Server.Agent
   alias Server.Channel
-  alias Server.Crew
   alias Server.Message
   alias Server.OperatorConfig
   alias Server.Presence
@@ -39,6 +38,7 @@ defmodule Server.Staffing do
   alias Server.Schedule
   alias Server.ScheduleRun
   alias Server.Session
+  alias Server.Spawn
   alias Server.Staff
   alias Server.Thread
   alias Server.Tmux
@@ -728,7 +728,7 @@ defmodule Server.Staffing do
   defp still_theirs?(tid, _agent, standing) when tid == standing, do: true
 
   defp still_theirs?(tid, agent, _standing) do
-    Crew.handle_role(agent) != nil or Channel.thread_lead(tid) in [nil, agent]
+    Spawn.handle_role(agent) != nil or Channel.thread_lead(tid) in [nil, agent]
   end
 
   # A pane launched with what its profile no longer gives (a release, a profile edit; no stamp at
