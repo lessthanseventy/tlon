@@ -26,7 +26,7 @@ defmodule Server.MCP.Tool.ReviewBranch do
     if standing?(identity.thread_id) do
       fail(
         frame,
-        "refused: a review runs on its own thread, in a session its verdict ends — open a thread for this PR (open_thread, lead you) and review there"
+        "refused: a review runs on its own thread, in a session its verdict ends — ask @tertius for a review thread on this PR (staff_child, led by you), or open one yourself with open_thread when your seat has it, and review there"
       )
     else
       record(params, identity, frame)
