@@ -96,7 +96,7 @@ test("every global hint's key is bound, and the crew hint names the key that ope
 
 test("the table is the only source: no key is spelled out as a literal outside tui/keys.ts", async () => {
   const cards = [...new Glob("cards/*.ts").scanSync({ cwd: new URL("../tui", import.meta.url).pathname })]
-  for (const f of ["main.ts", "reader.ts", "sandbox.ts", "talk.ts", "pane.ts", "hall.ts", "store.ts", ...cards]) {
+  for (const f of ["main.ts", "input.ts", "draw.ts", "boot.ts", "reader.ts", "sandbox.ts", "talk.ts", "pane.ts", "hall.ts", "store.ts", ...cards]) {
     const src = await Bun.file(new URL(`../tui/${f}`, import.meta.url)).text()
     expect(src.match(/key: "/g) ?? [], f).toEqual([])
   }
@@ -113,7 +113,7 @@ test("? is the help key everywhere: a global, and the help card lists the reader
 
 test("the screen is the room: no hint says ctrl+] goes to the lobby", async () => {
   expect(all.find((b) => b.id === "global.room")?.label).toBe("room")
-  for (const f of ["main.ts", "reader.ts", "keys.ts"]) expect(await Bun.file(new URL(`../tui/${f}`, import.meta.url)).text(), f).not.toMatch(/ctrl\+\] lobby/)
+  for (const f of ["main.ts", "input.ts", "draw.ts", "reader.ts", "keys.ts"]) expect(await Bun.file(new URL(`../tui/${f}`, import.meta.url)).text(), f).not.toMatch(/ctrl\+\] lobby/)
 })
 
 test("a clipped balloon names the key that opens the conversation", () => {

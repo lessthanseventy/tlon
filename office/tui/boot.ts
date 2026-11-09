@@ -21,7 +21,7 @@ import { PALETTE, LOOKS, SOULS, HALL, CAST, STORE, PLAY_SEEN, readState, writeSt
 import { changed, threadOf, view } from "./select"
 import { cols } from "./ui"
 import type { State } from "./state"
-import type { Boot } from "./ctl"
+import type { Screen } from "./ctl"
 
 /** a hand edit of hall.json shows up on the next poll; true when it did */
 export function followHall(app: State): boolean {
@@ -120,7 +120,7 @@ export async function relaunch() {
   process.exit(await child.exited)
 }
 
-export async function pollPlayer(app: State, ctl: Boot) {
+export async function pollPlayer(app: State, ctl: Screen) {
   if (app.playerBusy || Date.now() < app.playerRetry || !(ctl.room() instanceof WideRoom)) return
   app.playerBusy = true
   let now: NowPlaying | null = null
@@ -136,14 +136,14 @@ export async function pollPlayer(app: State, ctl: Boot) {
 }
 
 /** refresh a thread's close look; true when its activity feed moved */
-export async function pollActivity(app: State, ctl: Boot, tid: number) {
+export async function pollActivity(app: State, ctl: Screen, tid: number) {
   const was = app.threads.get(tid)?.activity?.at(-1)
   await ctl.loadThread(tid)
   const now = app.threads.get(tid)?.activity?.at(-1)
   return was?.at !== now?.at || was?.summary !== now?.summary
 }
 
-export async function boot(app: State, ctl: Boot) {
+export async function boot(app: State, ctl: Screen) {
   if (!process.stdin.isTTY) { console.error("office: needs a terminal"); process.exit(1) }
   followPalette(app)
   followLooks(app)
