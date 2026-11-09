@@ -2914,10 +2914,11 @@ async function main() {
   // it always steps; it is the repaint (a whole frame each) that costs a room nobody watches a core:
   // none while the terminal is unfocused (the return to focus draws), 2 Hz while the office is calm
   // (paused, or no coworker live)
+  const animate = process.env.OFFICE_NO_ANIMATE !== "1" // tests boot the TUI with it off: no frame to wait on
   let beat = 0, frames = 0, stale = false
   const calm = () => all.pause === "pencils_down" || all.pause === "lights_out" || !all.threads.some((t) => t.live)
   every(() => {
-    if (!reader && room().step(view())) { changed(); stale = true }
+    if (animate && !reader && room().step(view())) { changed(); stale = true }
     // the header and the pane catch up once a second; the frames between repaint the room alone
     if (stale && focused && (++beat % 5 === 0 || !calm())) { stale = false; paint(++frames % 10 !== 0) }
   }, 100)

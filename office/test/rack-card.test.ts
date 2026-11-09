@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { killServer } from "./kill-server"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // The rack card (H) has one LANDING & CHECKS list: the waiters in the order the server sends them,
 // the running train as one block (its gate, holding the check it runs, then its cars), who waits
@@ -41,20 +42,15 @@ afterAll(() => {
 })
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const deadline = performance.now() + 25_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
-}
 
 test("the rack lists landing & checks in one place, in order: a train is one block, its check not listed twice", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the room", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "H")
-  await until("the rack", () => screen().includes("THE RACK"))
-  await until("the list", () => screen().includes("LANDING & CHECKS"))
+  await waitFor(screen, "THE RACK", "the rack")
+  await waitFor(screen, "LANDING & CHECKS", "the list")
   const s = screen()
   expect(s).not.toContain("CHECKS QUEUE")
   expect(s).not.toContain("MERGE QUEUE")
@@ -72,10 +68,10 @@ test("a node with no job queue reads neutral under all green: a dim ○ row, no 
   current = { ...health, jobs: false, checks: { running: null, waiting: [] }, merge_queue: [] } as unknown as typeof health
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the room", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "H")
-  await until("the rack, all green", () => screen().includes("THE RACK · all green"))
+  await waitFor(screen, "THE RACK · all green", "the rack, all green")
   const s = screen()
   expect(s).not.toContain("✕")
   expect(s).toContain("○ no job queue on this node")

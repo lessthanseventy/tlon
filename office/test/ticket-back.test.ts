@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // esc from a ticket or an epic opened out of a list goes back to that list, not home: column →
 // epic → ticket, then esc, esc walks back the way it came. Drives the real TUI against a stub server.
@@ -31,27 +32,22 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const deadline = performance.now() + 25_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
-}
 const keys = (...k: string[]) => tmux("send-keys", "-t", "0", ...k)
 
 test("esc from a ticket or epic returns to the list it was opened from", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the workspace in the header", () => screen().includes("Toy"))
   keys("t")
-  await until("the tickets column", () => screen().includes("TICKETS ·"))
+  await waitFor(screen, "TICKETS ·", "the tickets column")
   keys("Space")
-  await until("the epic", () => screen().includes("EPIC #10"))
+  await waitFor(screen, "EPIC #10", "the epic")
   keys("Down", "Down", "Down", "Enter")
-  await until("the child ticket", () => screen().includes("TICKET #11"))
+  await waitFor(screen, "TICKET #11", "the child ticket")
   keys("Escape")
-  await until("back on the epic", () => screen().includes("EPIC #10"))
+  await waitFor(screen, "EPIC #10", "back on the epic")
   keys("Escape")
-  await until("back on the column", () => screen().includes("TICKETS ·"))
+  await waitFor(screen, "TICKETS ·", "back on the column")
   expect(screen()).not.toContain("EPIC #10")
 }, TUI_TEST)

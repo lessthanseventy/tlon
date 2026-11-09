@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // The triage card's lit row and the issue card: each item's own keys, through the real TUI against a stub server.
 const blocker = { thread_id: 144, title: "the sheriff's beat", text: "the build is red", issue_id: 7, found_by: "scharlach", created_at: new Date(Date.now() - 3 * 3600_000).toISOString(), summary: "the build is red on main", evidence: "mix test: three failures in the room test, first red at four oh four" }
@@ -33,42 +34,37 @@ afterAll(() => {
 })
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const deadline = performance.now() + 20_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
-}
 const keys = (...k: string[]) => tmux("send-keys", "-t", "0", ...k)
 
 test("triage rows name the issue and carry the actions of the lit row; the issue card reads whole and acts", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the room", () => screen().includes("Toy"))
   keys("!")
-  await until("the triage rows", () => screen().includes("#7") && screen().includes("scharlach"))
+  await waitFor(screen, () => screen().includes("#7") && screen().includes("scharlach"), "the triage rows")
   expect(screen()).toMatch(/\$ +get it fixed/)
   expect(screen()).toMatch(/x +resolve/)
   expect(screen()).toMatch(/v +read the thread/)
 
   keys("Down", "Down") // the section headers are rows the cursor steps over
-  await until("a failed check's action", () => /y +run verify again/.test(screen()))
+  await waitFor(screen, /y +run verify again/, "a failed check's action")
   expect(screen()).not.toMatch(/get it fixed/)
   keys("Down", "Down", "Down")
-  await until("an unled thread's action", () => /@ +hand it to/.test(screen()))
+  await waitFor(screen, /@ +hand it to/, "an unled thread's action")
 
   keys("Up", "Up", "Up", "Up", "Up")
   keys("Enter")
-  await until("the issue card", () => screen().includes("ISSUE #7"))
+  await waitFor(screen, "ISSUE #7", "the issue card")
   expect(screen()).toContain("first red at four oh four")
   expect(screen()).toMatch(/scharlach/)
 
   keys("x")
-  await until("the why prompt", () => /resolve — why/.test(screen()))
+  await waitFor(screen, /resolve — why/, "the why prompt")
   keys("Escape")
   keys("$")
-  await until("the fix posted", () => posts.some((p) => p.path.endsWith("/issues/7/fix")))
-  await until("the card gone back to triage, the blocker gone", () => screen().includes("TRIAGE") && !screen().includes("#7"))
+  await waitFor(screen, () => posts.some((p) => p.path.endsWith("/issues/7/fix")), "the fix posted")
+  await waitFor(screen, () => screen().includes("TRIAGE") && !screen().includes("#7"), "the card gone back to triage, the blocker gone")
 }, TUI_TEST)
 
 test("an issue a ticket took names it, and its key opens the ticket rather than filing another", async () => {
@@ -77,12 +73,12 @@ test("an issue a ticket took names it, and its key opens the ticket rather than 
   if (!screen().includes("Toy") && !screen().includes("TRIAGE")) {
     const office = join(import.meta.dir, "..")
     tmux("new-session", "-d", "-x", "150", "-y", "50",
-      `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+      `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   }
   keys("Escape")
   await started(tmux, "the room", () => screen().includes("Toy") && !screen().includes("TRIAGE"))
   keys("!")
-  await until("the owned issue's row", () => screen().includes("#8") && screen().includes("→ ticket #452 todo"))
+  await waitFor(screen, () => screen().includes("#8") && screen().includes("→ ticket #452 todo"), "the owned issue's row")
   expect(screen()).toMatch(/\$ +open ticket #452/)
   expect(screen()).not.toMatch(/get it fixed/)
 }, TUI_TEST)

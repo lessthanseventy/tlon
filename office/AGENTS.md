@@ -78,7 +78,7 @@ Each area has its own page under `docs/`; read the one you are changing.
 - `mise run office:watch` — the suite on every change; `mise run office:test` once. A test that boots the
   TUI in a tmux pane waits for its first paint with `test/started.ts` (`started`, its own 120 s budget;
   `TUI_TEST` the test's timeout) — never on a step's budget: under the gate a cold `bun tui/main.ts` has
-  taken over 25 s to paint. Kill its tmux with `test/kill-server.ts`.
+  taken over 25 s to paint. Kill its tmux with `test/kill-server.ts`. A test waits on the screen with `test/wait-for.ts` (`waitFor`), never a fixed sleep for something that appears, and boots with `OFFICE_NO_ANIMATE=1` (the room stops stepping, so no frame moves under it).
 - `office/test/drive/run.sh [walk]` — replays a drive walk (`walk.steps`, `wide.steps`: one `office:drive` step per line) in the sandbox on a throwaway `TMPDIR`; exits 1 on a malformed step or TUI stderr. Re-run it after a UI fix and read the screens; `OFFICE_WIDE=1` / `OFFICE_COLS`/`OFFICE_ROWS` size the window.
 - `mise run office:golden` — re-hash the wide room's golden frames (`test/golden.json`) after a
   change meant to move its pixels. A landing re-hashes them itself after its rebase, so two such

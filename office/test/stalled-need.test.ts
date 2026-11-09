@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { started, TUI_TEST } from "./started"
+import { waitFor } from "./wait-for"
 
 // A stalled need's own keys (nudge, hand off, close), through the real TUI against a stub server.
 const need = { key: "n1", kind: "stalled", level: "blocking", thread_id: 7, workspace_id: 1, title: "a stalled thing", text: "", at: new Date().toISOString(), options: null, ref: null }
@@ -28,24 +29,19 @@ afterAll(() => {
 })
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const until = async (what: string, ok: () => boolean) => {
-  const deadline = performance.now() + 25_000
-  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
-}
 const keys = (...k: string[]) => tmux("send-keys", "-t", "0", ...k)
 
 test("a stalled need lists nudge / hand off / close from the key table, and each does its thing", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the phone in the header", () => screen().includes("1 waiting on you"))
   keys("i")
-  await until("the stalled card", () => screen().includes("nudge the lead"))
+  await waitFor(screen, "nudge the lead", "the stalled card")
   expect(screen()).toMatch(/\^ +nudge the lead/)
   expect(screen()).toMatch(/@ +hand it to/)
   expect(screen()).toMatch(/x +close it/)
   keys("^")
-  await until("the nudge posted", () => posts.some((p) => p.path.endsWith("/threads/7/messages")))
+  await waitFor(screen, () => posts.some((p) => p.path.endsWith("/threads/7/messages")), "the nudge posted")
   expect(posts.find((p) => p.path.endsWith("/threads/7/messages"))!.body.body ?? JSON.stringify(posts[0]!.body)).toContain("Nothing has moved")
 }, TUI_TEST)
