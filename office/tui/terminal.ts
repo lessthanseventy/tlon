@@ -3,6 +3,7 @@
 // its pane's output fed to a headless VT (@xterm/headless), the VT's screen drawn back as rows.
 // Keys go back as raw bytes (`send-keys -H`), but a known escape sequence goes as its key name
 // (`keyArgs`). Nothing native: it compiles into the one binary.
+import { random } from "../kit/rng"
 import xterm from "@xterm/headless"
 import type { Subprocess } from "bun"
 
@@ -95,7 +96,7 @@ export function rows(t: xterm.Terminal): string[] {
 export class TerminalView {
   readonly vt: xterm.Terminal
   private readonly proc: Subprocess<"pipe", "pipe", "ignore">
-  private readonly name = `tlon-office-${process.pid}-${Math.random().toString(36).slice(2, 7)}`
+  private readonly name = `tlon-office-${process.pid}-${random().toString(36).slice(2, 7)}`
   private pane: string | null = null
   // output that arrived before the pane was known, by pane: the placeholder window's shell (a login
   // banner, a fortune) prints too, and only the coworker's pane may reach the view

@@ -222,9 +222,9 @@ export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot, bpm: number | 
   if (d.said && sc.tick >= d.saidFrom && sc.tick < d.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(d.said), cx: d.x, top: y })
 }
 
-export const SPECIES = ["cat", "dog", "rabbit", "bird", "hamster", "rock", "baoaqu"] as const
+export const SPECIES = ["cat", "dog", "rabbit", "bird", "hamster", "rock", "baoaqu", "frog"] as const
 /** what each slot may hold: the cat slot is the room's cat-family pet */
-export const SLOT_SPECIES = { cat: ["cat", "rabbit", "bird", "hamster", "rock", "baoaqu"], dog: ["dog"] } as const
+export const SLOT_SPECIES = { cat: ["cat", "rabbit", "bird", "hamster", "rock", "baoaqu", "frog"], dog: ["dog"] } as const
 export type CatSpecies = (typeof SLOT_SPECIES.cat)[number]
 /** the cat slot's card opens with a line about whoever lives in it: the species it holds now, not the one it started as */
 export const SPECIES_BLURB: Record<CatSpecies, string> = {
@@ -234,6 +234,7 @@ export const SPECIES_BLURB: Record<CatSpecies, string> = {
   hamster: "your hamster, small and busy. she does what you ask — if she feels like it — then her own day carries on.",
   rock: "your pet rock. it does what you ask, which is nothing, magnificently.",
   baoaqu: "A Bao A Qu, who only wakes when someone climbs. it does what you ask — if it feels like it.",
+  frog: "your frog, damp and unbothered. he does what you ask — if he feels like it — then his own day carries on.",
 }
 /** the slot a species lives in, or undefined for a name no slot holds */
 export const slotOf = (sp: string): "cat" | "dog" | undefined => (["cat", "dog"] as const).find((s) => (SLOT_SPECIES[s] as readonly string[]).includes(sp))
@@ -241,7 +242,8 @@ export const slotOf = (sp: string): "cat" | "dog" | undefined => (["cat", "dog"]
 export type Species = (typeof SPECIES)[number]
 export const SHADES = 4
 /** `shade` 0..SHADES-1: a lighter fur within the species, never a different sprite */
-export type PetSetting = { name: string; species: Species; temperament: Temperament; shade?: number }
+/** `absent`: the slot holds no one, and the room draws and runs nothing for it */
+export type PetSetting = { name: string; species: Species; temperament: Temperament; shade?: number; absent?: true }
 type SlotFile = Partial<Omit<PetSetting, "temperament">> & { temperament?: string | Partial<Temperament> }
 export type PetsFile = { preset?: string; cat?: SlotFile; dog?: SlotFile }
 export type Pets = { cat: PetSetting; dog: PetSetting }
@@ -261,13 +263,13 @@ export const DEFAULT_PETS: Pets = {
 }
 const dogOf = (name: string, temperament: Temperament, shade = 0): PetSetting => ({ name, species: "dog", temperament, shade })
 const catOf = (name: string, species: CatSpecies, temperament: Temperament, shade = 0): PetSetting => ({ name, species, temperament, shade })
-/** both slots always hold someone, so the pet-free presets are the quietest pair the species allow */
+/** `none` leaves both slots empty; the species it names are placeholders the room never draws */
 export const PRESETS: Record<string, Pets> = {
   "nina-and-argos": DEFAULT_PETS,
   "cat-only": { cat: DEFAULT_PETS.cat, dog: dogOf(DOG_NAME, TEMPERAMENTS["old cat"]!) },
   menagerie: { cat: catOf("Pip", "bird", TEMPERAMENTS.gremlin!, 1), dog: dogOf("Biscuit", TEMPERAMENTS["golden retriever"]!, 2) },
-  "pond-life": { cat: catOf("Lily", "rabbit", TEMPERAMENTS.zen!, 2), dog: dogOf("Moss", TEMPERAMENTS.zen!, 1) },
-  none: { cat: catOf("Pebble", "rock", TEMPERAMENTS.zen!), dog: dogOf("Sleepy", TEMPERAMENTS["old cat"]!, 3) },
+  "pond-life": { cat: catOf("Lily", "frog", TEMPERAMENTS.zen!, 2), dog: dogOf("Moss", TEMPERAMENTS.zen!, 1) },
+  none: { cat: { ...catOf("Pebble", "rock", TEMPERAMENTS.zen!), absent: true }, dog: { ...dogOf("Sleepy", TEMPERAMENTS["old cat"]!, 3), absent: true } },
 }
 
 function resolveSlot(slot: keyof typeof SLOT_SPECIES, base: PetSetting, f: SlotFile | undefined): PetSetting {
@@ -281,6 +283,7 @@ function resolveSlot(slot: keyof typeof SLOT_SPECIES, base: PetSetting, f: SlotF
     species: (SLOT_SPECIES[slot] as readonly string[]).includes(f.species as string) ? f.species! : base.species,
     temperament,
     shade: Number.isInteger(f.shade) && f.shade! >= 0 && f.shade! < SHADES ? f.shade! : (base.shade ?? 0),
+    ...(base.absent ? { absent: true as const } : {}),
   }
 }
 

@@ -114,9 +114,13 @@ export function paintTile(c: Canvas, x: number, y: number, t: HomeTile, weather?
   if (t.kind === "gym") paintDumbbell(c, x, y, Math.max(0, ...(frames ?? []).map((f) => f.tier)))
 }
 
+/** the tiles the streaks show on: the first living tile, the first trophy shelf and the first gym */
+const hungTiles = (home: Home) => new Set(["living", "trophy-shelf", "gym"].map((k) => home.tiles.find((q) => q.kind === k)))
+
 /** paints the home's tiles on the floor canvas at their absolute cells (the office rows above are the room's own). Canvas clips what overruns the width. */
-export function paintFloor(c: Canvas, h: Home) {
-  for (const t of h.tiles) { const [x, y] = cellPx(t.at); paintTile(c, x, y, t) }
+export function paintFloor(c: Canvas, h: Home, frames?: StreakFrame[]) {
+  const hung = hungTiles(h)
+  for (const t of h.tiles) { const [x, y] = cellPx(t.at); paintTile(c, x, y, t, null, null, hung.has(t) ? frames : null) }
 }
 
 export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number; weather?: string | null; mail?: Mailbox | null; frames?: StreakFrame[]; bed?: BedScene | null; top?: number }
@@ -128,8 +132,7 @@ export function renderHome({ home, cursor, carrying, refused, w, h, weather, mai
   const win = gridWindow(home, cursor)
   const ox = Math.floor((w - (win.x1 - win.x0 + 1) * CELL) / 2), oy = Math.floor((h - (win.y1 - win.y0 + 1) * CELL) / 2)
   const pos = ([x, y]: Pt): Pt => [ox + (x - win.x0) * CELL + 1, oy + (y - win.y0) * CELL + 1]
-  const firstOf = (k: string) => home.tiles.find((q) => q.kind === k)
-  const hung = new Set([firstOf("living"), firstOf("trophy-shelf"), firstOf("gym")])
+  const hung = hungTiles(home)
   for (let y = win.y0; y <= win.y1; y++) for (let x = win.x0; x <= win.x1; x++) {
     const [px, py] = pos([x, y])
     const t = home.tiles.find((q) => q.at[0] === x && q.at[1] === y)

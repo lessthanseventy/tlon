@@ -209,5 +209,14 @@ describe("the gym and the trophy shelf", () => {
   test("the best tier counts, not the first routine's", () =>
     expect(view("gym", [{ routine: 1, tier: 1 }, { routine: 2, tier: 3 }])).toBe(view("gym", [{ routine: 2, tier: 3 }])))
   test("streak photos hang on the trophy shelf", () => expect(view("trophy-shelf", [{ routine: 1, tier: 1 }])).not.toBe(view("trophy-shelf")))
+  test("the placed floor's gym takes the best tier too", () => {
+    const paint = (frames?: { routine: number; tier: number }[]) => {
+      const home = { tiles: [{ kind: "gym" as const, at: [0, OFFICE_ROWS] as [number, number] }] }, c = new Canvas(60, floorHeight(home))
+      paintFloor(c, home, frames)
+      return Buffer.from(c.rgba).toString("hex")
+    }
+    expect(paint([{ routine: 1, tier: 3 }])).not.toBe(paint())
+    expect(paint([])).toBe(paint())
+  })
   test("the pond has no streak and draws the same with frames", () => expect(view("pond", [{ routine: 1, tier: 3 }])).toBe(view("pond")))
 })
