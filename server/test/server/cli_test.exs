@@ -227,7 +227,7 @@ defmodule Server.CLITest do
     end
 
     test "pause names the office's state" do
-      path = Path.join(System.tmp_dir!(), "cli-pause-#{System.unique_integer([:positive])}.json")
+      path = Path.join(System.tmp_dir!(), "cli-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
       prior = Application.get_env(:server, :operator_config_path)
       Application.put_env(:server, :operator_config_path, path)
       File.write!(path, "{}")
