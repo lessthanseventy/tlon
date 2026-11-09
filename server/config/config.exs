@@ -49,6 +49,8 @@ config :server, Oban,
        {"5 * * * *", Server.Jobs.Triage},
        # the souls' diaries: Monday 06:00, each builder's week (Server.Jobs.Diary)
        {"0 6 * * 1", Server.Jobs.Diary},
+       # the PM's review of tickets held 30+ days: Monday 07:00 (Server.HeldReview)
+       {"0 7 * * 1", Server.Jobs.HeldReview},
        # the nightly cut, in UTC: 04:00 or 05:00 on the machine, after the nightly gate and smoke
        {"0 11 * * *", Server.Jobs.Release, args: %{"action" => "auto"}}
      ]}
