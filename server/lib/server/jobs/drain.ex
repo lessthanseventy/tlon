@@ -6,7 +6,7 @@ defmodule Server.Jobs.Drain do
   recipient was cold is delivered the moment a session appears — and a wake its addressee never
   acted on (`Server.Switchboard.redeliver_unheard/1`) is offered again. Idempotent — `drain/0` claims
   atomically, so a concurrent live delivery can never double-poke. The same pass pages Uqbar for
-  needs newly in its group (`Server.Office.NeedsPage`).
+  needs newly in its group (`Server.Office.NeedsPage`), when something changed (`Server.Office.NeedsDirty`).
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 30]
 
@@ -15,7 +15,7 @@ defmodule Server.Jobs.Drain do
     _ = Server.Wake.report_overdue()
     _ = Server.Switchboard.redeliver_unheard()
     _ = Server.Switchboard.drain()
-    _ = Server.Office.NeedsPage.run()
+    _ = if Server.Office.NeedsDirty.take(), do: Server.Office.NeedsPage.run()
     :ok
   end
 end

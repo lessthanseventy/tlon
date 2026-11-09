@@ -48,6 +48,8 @@ defmodule Server.Application do
         {Task.Supervisor, name: Server.TaskSupervisor},
         # Explicit thinking/idle declarations (in-memory liveness; harnesses re-declare after a restart).
         Server.Presence.Thinking,
+        # Whether the needs may have changed since Server.Jobs.Drain last paged on them.
+        Server.Office.NeedsDirty,
         # The Claude plan's limits as the last session on it reported them: the office's meter.
         Server.Usage,
         # What a merge into tlon rolls out, and the notes it leaves the operator.
