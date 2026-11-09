@@ -14,6 +14,7 @@ defmodule Server.Workline.Stage do
   alias Server.Workline.Artifacts.Git
   alias Server.Workline.Brief
   alias Server.Workline.Grade
+  alias Server.Workline.Review
   alias Server.Workline.Scribe
 
   # Stages whose EXIT waits on the operator; a machine-born intent gates its exit too.
@@ -56,8 +57,8 @@ defmodule Server.Workline.Stage do
     with :ok <- still_open(thread),
          :ok <- advanceable(thread, checker),
          :ok <- verified_artifact(thread, checker),
-         :ok <- Workline.qa_cleared(thread, opts) do
-      if gated?(thread), do: park(thread, checker, opts), else: Workline.flip(thread)
+         :ok <- Review.qa_cleared(thread, opts) do
+      if gated?(thread), do: park(thread, checker, opts), else: flip(thread)
     else
       {:error, {:artifact_missing, why}} when thread.stage == "verify" ->
         if Keyword.get(opts, :reverify, checker == Git),
@@ -96,7 +97,7 @@ defmodule Server.Workline.Stage do
       Keyword.get(opts, :as) == "uqbar" and Workline.limit_hit?(thread) ->
         {:error, :limit_hit}
 
-      reason != "" and Workline.qa_owed(thread, opts) ->
+      reason != "" and Review.qa_owed(thread, opts) ->
         Workline.landing(thread.id, fn ->
           skip_qa(thread, reason)
           do_approve(thread, opts)
@@ -158,7 +159,7 @@ defmodule Server.Workline.Stage do
         {:error, why} -> why
       end
 
-    risk = if grade = Workline.grade(thread), do: " · #{Grade.line(grade)}", else: ""
+    risk = if grade = Review.grade(thread), do: " · #{Grade.line(grade)}", else: ""
     "#{verdict} · #{size}#{risk} — approve to land it through the merge queue"
   end
 
@@ -195,7 +196,7 @@ defmodule Server.Workline.Stage do
 
   def at_gate?(%Thread{stage: stage} = thread, opts) do
     stage in @gated and match?({:ok, _}, Keyword.get(opts, :artifacts, Git).check(thread, Map.fetch!(@owed, stage))) and
-      Workline.qa_cleared(thread, opts) == :ok
+      Review.qa_cleared(thread, opts) == :ok
   rescue
     # an artifact that can't even be checked (no slug, no repo): the cautious reading, a gate
     _ -> true
@@ -241,7 +242,7 @@ defmodule Server.Workline.Stage do
     # A question, not a move: only advance and approve record the artifact check, or every brief
     # and turn-end nudge writes one (two at the same instant when both ask).
     with {:ok, _} <- owed_artifact(thread, checker),
-         :ok <- Workline.qa_cleared(thread, opts) do
+         :ok <- Review.qa_cleared(thread, opts) do
       {:ok, "#{thread.stage} artifact committed"}
     else
       {:error, {:artifact_missing, why}} -> {:error, why}
@@ -251,7 +252,7 @@ defmodule Server.Workline.Stage do
 
   @doc "Whether `thread` owes a QA pass at review and its qa seat is the one leading it. `opts` as `advance/2`'s."
   def qa_leads?(thread, opts \\ []) do
-    case Workline.qa_owed(thread, opts) do
+    case Review.qa_owed(thread, opts) do
       {seat, _paths} -> Server.Channel.thread_lead(thread.id) == seat.name
       nil -> false
     end
@@ -329,7 +330,7 @@ defmodule Server.Workline.Stage do
   # review.md stays on the branch across rounds: back at review after a bounce, the file is the last
   # round's, so only a verdict since the workline re-entered review is this round's review
   defp this_round({:ok, _} = ok, %Thread{stage: "review"} = thread) do
-    if is_nil(Workline.since_review(thread, "workline:#{thread.slug}:review")) and reviewed_before?(thread),
+    if is_nil(Review.since_review(thread, "workline:#{thread.slug}:review")) and reviewed_before?(thread),
       do: {:error, "work/#{thread.slug}/review.md is the last round's — submit_review this round's verdict"},
       else: ok
   end
@@ -350,10 +351,10 @@ defmodule Server.Workline.Stage do
     # review.md stays on the branch across rounds: with no verdict yet this round, an approval in it
     # is the last round's and owes nothing
     with true <- line =~ ~r/approve/i and not (line =~ ~r/request.?changes/i),
-         false <- is_nil(Workline.since_review(thread, "workline:#{thread.slug}:review")) and reviewed_before?(thread),
-         {seat, paths} <- Workline.qa_owed(thread, opts),
+         false <- is_nil(Review.since_review(thread, "workline:#{thread.slug}:review")) and reviewed_before?(thread),
+         {seat, paths} <- Review.qa_owed(thread, opts),
          false <- Server.Channel.thread_lead(thread.id) == seat.name do
-      {:ok, Workline.to_qa(thread, seat, paths)}
+      {:ok, Review.to_qa(thread, seat, paths)}
     else
       _ -> nil
     end
@@ -379,10 +380,10 @@ defmodule Server.Workline.Stage do
     end
 
     with :ok <- verified_artifact(thread, checker),
-         :ok <- Workline.reviewed_current(thread),
-         :ok <- Workline.qa_cleared(thread, opts) do
+         :ok <- Review.reviewed_current(thread),
+         :ok <- Review.qa_cleared(thread, opts) do
       if queue?(thread, checker, opts),
-        do: Workline.queue(thread, "approved", Keyword.get(opts, :as) || thread.awaiting || Workline.operator()),
+        do: queue(thread, "approved", Keyword.get(opts, :as) || thread.awaiting || Workline.operator()),
         else: approve_now(thread, checker, opts)
     end
   end
@@ -390,7 +391,7 @@ defmodule Server.Workline.Stage do
   defp approve_now(thread, checker, opts) do
     with {:ok, landed} <- land(thread, checker, opts),
          {:ok, cleared} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
-         {:ok, flipped} <- Workline.flip(cleared) do
+         {:ok, flipped} <- flip(cleared) do
       if landed, do: Workline.finish(flipped, landed, Keyword.get(opts, :run, &Server.Cmd.run/3))
       {:ok, flipped}
     end
@@ -407,7 +408,7 @@ defmodule Server.Workline.Stage do
 
   defp queue?(_thread, _checker, _opts), do: false
 
-  defp same_code?(thread, sha, head), do: Workline.compare_code(thread, sha, head) == :same
+  defp same_code?(thread, sha, head), do: Review.compare_code(thread, sha, head) == :same
 
   defp advanceable(%Thread{stage: nil}, _checker), do: {:error, :not_a_workline}
   defp advanceable(%Thread{stage: "landed"}, _checker), do: {:error, :terminal}
@@ -461,11 +462,11 @@ defmodule Server.Workline.Stage do
   defp park(%Thread{stage: "review"} = thread, checker, opts) do
     case approval(thread) do
       %{"by" => by, "sha" => sha} ->
-        Workline.queue(thread, "#{by}'s approval at #{String.slice(sha, 0, 7)} still stands", by)
+        queue(thread, "#{by}'s approval at #{String.slice(sha, 0, 7)} still stands", by)
 
       nil ->
-        if Workline.auto_land?(thread, checker, opts),
-          do: Workline.queue(thread, Workline.auto_land_note(thread, opts), "auto_land_risk"),
+        if Review.auto_land?(thread, checker, opts),
+          do: queue(thread, Review.auto_land_note(thread, opts), "auto_land_risk"),
           else: park_on_operator(thread, checker)
     end
   end
@@ -491,5 +492,106 @@ defmodule Server.Workline.Stage do
     |> Enum.uniq_by(& &1.detail["cmd"])
     |> Enum.take(5)
     |> Enum.map(&%{cmd: &1.detail["cmd"], exit: &1.detail["exit"]})
+  end
+
+  def queue(thread, why, by) do
+    with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
+         :ok <- if(match?(%{"by" => ^by}, Workline.approval(queued)), do: :ok, else: record_approval(queued, by)),
+         {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
+      Workline.post_brief(
+        queued,
+        "⧗ #{why} — in the merge queue: it lands once rebased onto main and green there, with any landings queued beside it on one gate"
+      )
+
+      {:ok, queued}
+    else
+      {:error, why} ->
+        # back on whoever held the gate: from the row as written, or the change is a no-op on `thread`
+        {:ok, _} =
+          Thread
+          |> Repo.get!(thread.id)
+          |> Thread.workline_stage_changeset(%{awaiting: thread.awaiting})
+          |> Repo.update()
+
+        {:error, {:queue, why}}
+    end
+  end
+
+  # One transaction: the stage flip and its ledger row commit together or not at all, on the row
+  # locked FOR UPDATE and only from the stage `thread` was read at, open: a landing or an advance
+  # working from a stale read (a bounce, a second advance, a close since) flips nothing,
+  # `{:error, {:moved, stage}}`.
+  def flip(thread) do
+    to = next(thread.stage)
+
+    fn ->
+      locked = Repo.one!(from t in Thread, where: t.id == ^thread.id, lock: "FOR UPDATE")
+
+      if locked.stage != thread.stage or locked.state != "open",
+        do: Repo.rollback({:moved, if(locked.state == "open", do: locked.stage, else: "closed")})
+
+      {:ok, flipped} = locked |> Thread.workline_stage_changeset(%{stage: to, awaiting: nil}) |> Repo.update()
+
+      {:ok, _event} =
+        Dossier.record_event(%{
+          thread_id: thread.id,
+          kind: "stage_advanced",
+          correlation: "workline:#{thread.slug}",
+          detail: %{"from" => thread.stage, "to" => to}
+        })
+
+      flipped
+    end
+    |> Repo.transaction()
+    |> case do
+      {:ok, flipped} -> flipped_after(flipped)
+      {:error, moved} -> {:error, moved}
+    end
+  end
+
+  defp next(stage), do: Enum.at(@stages, Enum.find_index(@stages, &(&1 == stage)) + 1)
+
+  # the newest review verdict's commit, any round: where a returning reviewer last looked
+  defp last_reviewed(thread) do
+    Repo.one(
+      from e in Server.Event,
+        where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:review",
+        order_by: [desc: e.id],
+        limit: 1,
+        select: fragment("(?::jsonb ->> 'sha')", e.detail)
+    )
+  end
+
+  defp flipped_after(flipped) do
+    # Restaff BEFORE broadcasting: subscribers acting on the advance must never observe the
+    # last stage's worker still leading this one.
+    flipped = Workline.restaff(flipped)
+    Server.Bus.broadcast({:workline_advanced, flipped})
+
+    Workline.post_brief(
+      flipped,
+      Brief.stage_message(flipped, last_reviewed: flipped.stage == "review" && last_reviewed(flipped))
+    )
+
+    if flipped.stage == "verify",
+      do: Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: flipped.id, slug: flipped.slug}))
+
+    {:ok, flipped}
+  end
+
+  # what was approved is the branch at that commit: a later push needs approving again. Recorded
+  # before its Land job, so the job's time is never before the approval's (second-truncated) one.
+  # A db fault is returned, not raised: queue/3 has already cleared `awaiting` and puts it back.
+  defp record_approval(thread, by) do
+    with {:ok, _} <-
+           Dossier.record_event(%{
+             thread_id: thread.id,
+             kind: "check_passed",
+             correlation: "workline:#{thread.slug}:approval",
+             detail: %{"cmd" => "approved by #{by}", "exit" => 0, "by" => by, "sha" => Workline.branch_head(thread)}
+           }),
+         do: :ok
+  rescue
+    e in [Postgrex.Error, DBConnection.ConnectionError] -> {:error, Exception.message(e)}
   end
 end

@@ -24,9 +24,7 @@ defmodule Server.Workline do
   alias Server.Dossier
   alias Server.Repo
   alias Server.Thread
-  alias Server.Workline.Artifacts.Git
   alias Server.Workline.Brief
-  alias Server.Workline.Grade
   alias Server.Workline.Landing
   alias Server.Workline.Review
   alias Server.Workline.SendBack
@@ -44,8 +42,6 @@ defmodule Server.Workline do
     "verify" => "builder",
     "review" => "reviewer"
   }
-  # What Andrew sees: the office, and the operator API it reads (the office snapshot rides on it).
-  @user_visible ~w(office/ server/lib/server/mcp/operator_api.ex server/lib/server/office)
 
   defdelegate stages, to: Stage
 
@@ -213,73 +209,11 @@ defmodule Server.Workline do
 
   defdelegate landing(thread_id, fun), to: Landing
 
-  def queue(thread, why, by) do
-    with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
-         :ok <- if(match?(%{"by" => ^by}, approval(queued)), do: :ok, else: record_approval(queued, by)),
-         {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
-      post_brief(
-        queued,
-        "⧗ #{why} — in the merge queue: it lands once rebased onto main and green there, with any landings queued beside it on one gate"
-      )
-
-      {:ok, queued}
-    else
-      {:error, why} ->
-        # back on whoever held the gate: from the row as written, or the change is a no-op on `thread`
-        {:ok, _} =
-          Thread
-          |> Repo.get!(thread.id)
-          |> Thread.workline_stage_changeset(%{awaiting: thread.awaiting})
-          |> Repo.update()
-
-        {:error, {:queue, why}}
-    end
-  end
-
-  # what was approved is the branch at that commit: a later push needs approving again. Recorded
-  # before its Land job, so the job's time is never before the approval's (second-truncated) one.
-  # A db fault is returned, not raised: queue/3 has already cleared `awaiting` and puts it back.
-  defp record_approval(thread, by) do
-    with {:ok, _} <-
-           Dossier.record_event(%{
-             thread_id: thread.id,
-             kind: "check_passed",
-             correlation: "workline:#{thread.slug}:approval",
-             detail: %{"cmd" => "approved by #{by}", "exit" => 0, "by" => by, "sha" => branch_head(thread)}
-           }),
-         do: :ok
-  rescue
-    e in [Postgrex.Error, DBConnection.ConnectionError] -> {:error, Exception.message(e)}
-  end
-
   defdelegate approval(thread), to: Stage
 
   defdelegate branch_head(thread), to: Stage
 
-  @doc """
-  Reopen a closed thread. A workline that was in the merge queue (at review, waiting on no one)
-  goes back into it while its approval stands (`approval/1`); one whose branch moved since is left
-  at review for its reviewer, saying so. `{:ok, thread}`.
-  """
-  def reopen(%Thread{} = thread) do
-    Server.Channel.reopen_if_closed(thread.id)
-    reopened = Repo.get!(Thread, thread.id)
-
-    case reopened do
-      %Thread{stage: "review", awaiting: nil} ->
-        case approval(reopened) do
-          %{"by" => by, "sha" => sha} ->
-            queue(reopened, "reopened — #{by}'s approval at #{String.slice(sha, 0, 7)} still stands", by)
-
-          nil ->
-            post_brief(reopened, "reopened at review — no approval stands for work/#{reopened.slug} as it is now")
-            {:ok, reopened}
-        end
-
-      _ ->
-        {:ok, reopened}
-    end
-  end
+  defdelegate reopen(thread), to: Landing
 
   defdelegate requeue_stranded, to: Landing
 
@@ -303,18 +237,9 @@ defmodule Server.Workline do
 
   defdelegate reland_landing(thread, run \\ &Server.Cmd.run/3), to: Landing
 
-  def landing_check(url, exit, tail),
-    do: %{"cmd" => "GitHub merge of #{url}", "exit" => exit, "url" => url, "tail" => tail}
+  defdelegate landing_check(url, exit, tail), to: Landing
 
-  def record_landing(thread, kind, detail) do
-    {:ok, _} =
-      Dossier.record_event(%{
-        thread_id: thread.id,
-        kind: kind,
-        correlation: "workline:#{thread.slug}:landing",
-        detail: detail
-      })
-  end
+  defdelegate record_landing(thread, kind, detail), to: Landing
 
   defdelegate landed_since(since), to: Landing
 
@@ -346,65 +271,9 @@ defmodule Server.Workline do
 
   defdelegate graded(thread, opts \\ []), to: Review
 
-  # A standing approval: the operator's `auto_land_risk` — a reviewed-and-approved workline whose
-  # risk grade has no axis over it (and no limit hit, no decision left open) lands without them,
-  # through the same gated queue. Off unless set; a test hands the threshold outright.
-  # A builder with a good enough record has earned a step more of it (`Server.Trust`).
-  def auto_land?(thread, checker, opts) do
-    max = Keyword.get_lazy(opts, :auto_land_risk, fn -> if checker == Git, do: auto_land_risk() end)
-
-    is_integer(max) and review_approved?(thread) and
-      Grade.allows?(grade(thread), elem(Server.Trust.allowance(thread, max), 0)) and
-      qa_cleared(thread, opts) == :ok
-  end
-
-  def auto_land_note(thread, opts) do
-    {max, earned} = Server.Trust.allowance(thread, Keyword.get_lazy(opts, :auto_land_risk, &auto_land_risk/0))
-
-    by =
-      if earned,
-        do:
-          ": one over your setting, earned by #{earned.name}#{if earned.model, do: " on #{earned.model}"}, who landed #{earned.first_time} of their last #{earned.led} builds first time",
-        else: ""
-
-    "auto-approved by your standing approval (reviewed; #{Grade.line(grade(thread))}, none over #{max}#{by})"
-  end
-
-  defp auto_land_risk, do: Server.OperatorConfig.setting("auto_land_risk")
-
   defdelegate grade_limits(thread), to: Review
 
   defdelegate limit_hit?(thread), to: Review
-
-  # the newest grade since the workline last entered review: nil if none, or the grader failed
-  def grade(thread) do
-    case since_review(thread, "workline:#{thread.slug}:grade") do
-      %{kind: "check_passed", detail: grade} -> grade
-      _ -> nil
-    end
-  end
-
-  defp review_approved?(thread),
-    do: match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:review"))
-
-  # the newest event of `correlation` since the workline last entered review
-  def since_review(thread, correlation) do
-    entered =
-      Repo.one(
-        from e in Server.Event,
-          where:
-            e.thread_id == ^thread.id and e.kind == "stage_advanced" and
-              fragment("(?::jsonb ->> 'to') = 'review'", e.detail),
-          select: max(e.id)
-      ) || 0
-
-    Repo.one(
-      from e in Server.Event,
-        where: e.thread_id == ^thread.id and e.correlation == ^correlation and e.id > ^entered,
-        order_by: [desc: e.id],
-        limit: 1
-    )
-  end
 
   def bounce(thread, why, headline, by \\ nil) do
     {:ok, _} =
@@ -456,38 +325,6 @@ defmodule Server.Workline do
 
   defdelegate proof(thread, opts \\ []), to: Stage
 
-  # One transaction: the stage flip and its ledger row commit together or not at all, on the row
-  # locked FOR UPDATE and only from the stage `thread` was read at, open: a landing or an advance
-  # working from a stale read (a bounce, a second advance, a close since) flips nothing,
-  # `{:error, {:moved, stage}}`.
-  def flip(thread) do
-    to = next(thread.stage)
-
-    fn ->
-      locked = Repo.one!(from t in Thread, where: t.id == ^thread.id, lock: "FOR UPDATE")
-
-      if locked.stage != thread.stage or locked.state != "open",
-        do: Repo.rollback({:moved, if(locked.state == "open", do: locked.stage, else: "closed")})
-
-      {:ok, flipped} = locked |> Thread.workline_stage_changeset(%{stage: to, awaiting: nil}) |> Repo.update()
-
-      {:ok, _event} =
-        Dossier.record_event(%{
-          thread_id: thread.id,
-          kind: "stage_advanced",
-          correlation: "workline:#{thread.slug}",
-          detail: %{"from" => thread.stage, "to" => to}
-        })
-
-      flipped
-    end
-    |> Repo.transaction()
-    |> case do
-      {:ok, flipped} -> flipped_after(flipped)
-      {:error, moved} -> {:error, moved}
-    end
-  end
-
   # The brief IS the wake: a server-authored message rides the lead-wake path (slice 2).
   # Best-effort — a post failure never blocks the (already durable) transition.
   def post_brief(thread, body) do
@@ -498,8 +335,6 @@ defmodule Server.Workline do
   catch
     :exit, _ -> :ok
   end
-
-  defp next(stage), do: Enum.at(@stages, Enum.find_index(@stages, &(&1 == stage)) + 1)
 
   defdelegate owed_status(thread, opts \\ []), to: Stage
 
@@ -707,17 +542,7 @@ defmodule Server.Workline do
 
   defp restaff_miss(thread, _kind, _why), do: thread
 
-  # landed: what changed rolls out and the branch goes to GitHub, where it is not merged yet — the
-  # thread stays open until GitHub merges the PR (`merged/2`). With no GitHub, the landing is the merge.
-  def finish(thread, %{repo: repo, from: from, to: to} = moved, run) do
-    Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
-    publish(thread, repo, "⤵ landed as #{String.slice(to, 0, 7)}", String.slice(to, 0, 7), run, moved[:gated])
-  rescue
-    e ->
-      why = "merged, but its close-out failed (not published to GitHub): #{Exception.message(e)}"
-      require(Logger) && Logger.warning("workline #{thread.slug}: #{why}")
-      unpublished(thread, "⚠ #{why}")
-  end
+  defdelegate finish(thread, moved, run), to: Landing
 
   defdelegate republish(thread, run \\ &Server.Cmd.run/3), to: Landing
 
@@ -725,55 +550,11 @@ defmodule Server.Workline do
 
   defdelegate publish_correlation(thread), to: Landing
 
-  # `gated`: the sha the merge queue's gate passed on, posted as tlon/check; a republish has none
-  def publish(thread, repo, landed, ref, run, gated \\ nil) do
-    case Server.Workline.Publish.publish(repo, thread.slug, thread.title, run, gated: gated) do
-      {:ok, url} = ok ->
-        record_publish(thread, 0, url)
-        record_landing(thread, "check_passed", landing_check(url, 0, "published"))
+  defdelegate publish(thread, repo, landed, ref, run, gated \\ nil), to: Landing
 
-        post_brief(
-          thread,
-          "#{landed}; published as #{url} — the thread closes once GitHub reports it merged"
-        )
+  defdelegate unpublished(thread, why), to: Landing
 
-        ok
-
-      {:auto_refused, url, why} = refused ->
-        record_publish(thread, 0, url)
-        record_landing(thread, "check_failed", landing_check(url, 1, "merge refused: #{why}"))
-        post_brief(thread, "#{landed}; published as #{url}, but GitHub refused to merge it: #{why}")
-        refused
-
-      :none ->
-        record_publish(thread, 0, "no origin to publish to")
-        post_brief(thread, landed)
-        merged(thread, ref)
-        :none
-
-      {:error, why} = error ->
-        unpublished(thread, "#{landed}, but not published to GitHub: #{why}")
-        error
-    end
-  end
-
-  # the failure is recorded for the operator's list (`Server.Office.Needs`' `publish_failed`), and the
-  # sheriff is told too, so the work reaches main
-  def unpublished(thread, why) do
-    record_publish(thread, 1, why)
-    post_brief(thread, why)
-    Server.Sheriff.report(thread, "work/#{thread.slug} — #{why}")
-  end
-
-  def record_publish(thread, exit, tail) do
-    {:ok, _} =
-      Server.Dossier.record_event(%{
-        thread_id: thread.id,
-        kind: if(exit == 0, do: "check_passed", else: "check_failed"),
-        correlation: publish_correlation(thread),
-        detail: %{"cmd" => "publish work/#{thread.slug}", "exit" => exit, "tail" => tail}
-      })
-  end
+  defdelegate record_publish(thread, exit, tail), to: Landing
 
   # what the stage's lead should be: the grade and area the ask names; for a review, also not the
   # builder's model and no lower than the builder's grade (roster design §3)
@@ -802,73 +583,6 @@ defmodule Server.Workline do
       end)
 
     " — " <> Enum.join(why, "; ") <> ". Say so in review.md's first line."
-  end
-
-  # at review, a change Andrew would see waits on a QA pass since it last entered review — where the
-  # bench seats a qa; a bench without one lands it as before
-  def qa_cleared(thread, opts) do
-    case qa_owed(thread, opts) do
-      nil ->
-        :ok
-
-      {seat, _paths} ->
-        if Server.Channel.thread_lead(thread.id) == seat.name,
-          do: {:error, {:artifact_missing, "QA is yours: " <> qa_playbook(thread)}},
-          else:
-            {:error,
-             {:artifact_missing,
-              "QA hasn't passed this user-visible change: #{seat.name} drives it against a scratch release and files what it saw with submit_qa"}}
-    end
-  end
-
-  defp qa_playbook(thread) do
-    """
-    drive the changed path as Andrew would, against a scratch release of work/#{thread.slug}: \
-    `start_smoke(thread_id: #{thread.id})` has the service build it on its own port and db, smoke it and keep it up \
-    (it posts the url here); drive it with `drive_smoke(keys, thread_id: #{thread.id})`, the steps of `office:drive`; \
-    `stop_smoke` when done. Your own Bash can run neither: it has no Postgres socket and a network of its own. \
-    Never :4040, the live service. Then submit_qa with thread_id: #{thread.id}: pass, or fail with the \
-    finding — what you pressed and the screen text you saw.\
-    """
-  end
-
-  def qa_owed(%Thread{stage: "review", workspace_id: ws} = thread, opts) when not is_nil(ws) do
-    with %Server.Coworker{} = seat <- qa_seat(thread),
-         [_ | _] = paths <- Enum.filter(changed_paths(thread, opts), &String.starts_with?(&1, @user_visible)),
-         false <- match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:qa")) do
-      {seat, paths}
-    else
-      _ -> nil
-    end
-  end
-
-  def qa_owed(_thread, _opts), do: nil
-
-  defp changed_paths(thread, opts) do
-    Keyword.get_lazy(opts, :paths, fn ->
-      if Keyword.get(opts, :artifacts, Git) == Git, do: Git.changed_paths(thread), else: []
-    end)
-  end
-
-  # the thread's lead when it is the qa already, else a free one, else any
-  defp qa_seat(thread) do
-    seats = thread.workspace_id |> Server.Workspaces.bench() |> Enum.filter(&(&1.archetype == "qa"))
-    current = Server.Channel.thread_lead(thread.id)
-
-    Enum.find(seats, &(&1.name == current)) || Enum.find(seats, &(not leading_another?(&1, thread))) ||
-      List.first(seats)
-  end
-
-  def to_qa(thread, seat, paths) do
-    handed = hand_to(thread, "qa", seat.name)
-
-    post_brief(
-      handed,
-      "🎭 QA: the review approved a change Andrew will see (#{Enum.join(Enum.take(paths, 5), ", ")}). " <>
-        String.capitalize(qa_playbook(thread))
-    )
-
-    handed
   end
 
   # A thread opens with the manager as its lead; a workline is a builder's — a free one, else one
@@ -930,139 +644,6 @@ defmodule Server.Workline do
       {:error, refusal} ->
         {:error, refusal}
     end
-  end
-
-  # the review approved the code it read (its verdict's `sha`): code committed after it goes back
-  # to build like any other change, through verify and a review of what changed
-  def reviewed_current(%Thread{stage: "review"} = thread) do
-    with %{detail: %{"sha" => seen}} when is_binary(seen) <- since_review(thread, "workline:#{thread.slug}:review"),
-         now when is_binary(now) <- branch_head(thread),
-         {:changed, how} <- compare_code(thread, seen, now) do
-      why =
-        if how == :conflicts,
-          do: "work/#{thread.slug} was rebased onto main with conflicts resolved after its review",
-          else: "work/#{thread.slug} has code committed after its review"
-
-      bounce(
-        thread,
-        why,
-        "#{why} (reviewed at #{String.slice(seen, 0, 7)}, now #{String.slice(now, 0, 7)}): it comes back through verify and a review of what changed"
-      )
-    else
-      _ -> :ok
-    end
-  end
-
-  def reviewed_current(_thread), do: :ok
-
-  # the newest review verdict's commit, any round: where a returning reviewer last looked
-  defp last_reviewed(thread) do
-    Repo.one(
-      from e in Server.Event,
-        where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:review",
-        order_by: [desc: e.id],
-        limit: 1,
-        select: fragment("(?::jsonb ->> 'sha')", e.detail)
-    )
-  end
-
-  # no commits of its own on either side (its code is on main already): the trees decide
-  defp same_tree?(root, sha, head, slug),
-    do: match?({_, 0}, Server.Git.cmd(root, ["diff", "--quiet", sha, head, "--", ".", ":!work/#{slug}"]))
-
-  def main_ref(root) do
-    Enum.find(
-      ["origin/main", "main"],
-      &match?({_, 0}, Server.Git.cmd(root, ["rev-parse", "--verify", "--quiet", &1]))
-    )
-  end
-
-  # `{subject, patch-id}` of each of `ref`'s commits main doesn't have that touches code, oldest first
-  defp own_patches(root, base, ref, slug) do
-    case Server.Git.cmd(root, ["cherry", base, ref]) do
-      {out, 0} ->
-        commits = for "+ " <> c <- String.split(out, "\n", trim: true), do: c
-        patches_of(root, slug, commits)
-
-      {out, code} ->
-        {:error, {code, String.slice(out, 0, 200)}}
-    end
-  end
-
-  defp patches_of(_root, _slug, []), do: {:ok, []}
-
-  defp patches_of(root, slug, commits) do
-    # pipefail: a git failure is the pipeline's, not hidden behind patch-id's exit
-    script = ~s(git -C "$1" show --format='commit %H' "${@:3}" -- . ":!work/$2" | git patch-id --stable)
-
-    with {ids, 0} <-
-           Server.Cmd.run("bash", ["-o", "pipefail", "-c", script, "bash", root, slug | commits],
-             stderr_to_stdout: true
-           ),
-         {subjects, 0} <-
-           Server.Git.cmd(root, ["show", "-s", "--format=%H%x09%s" | commits]) do
-      id_of =
-        Map.new(String.split(ids, "\n", trim: true), &(&1 |> String.split(" ") |> Enum.reverse() |> List.to_tuple()))
-
-      subject_of =
-        Map.new(String.split(subjects, "\n", trim: true), &(&1 |> String.split("\t", parts: 2) |> List.to_tuple()))
-
-      {:ok, for(c <- commits, id = id_of[c], do: {subject_of[c], id})}
-    else
-      {out, code} -> {:error, {code, String.slice(out, 0, 200)}}
-    end
-  end
-
-  # The branch's own change at `head` against what was judged at `sha`, not their trees: its commits
-  # main doesn't already have (`git cherry`, so a commit main took on its own drops out), each by the
-  # patch-id of its code (work/<slug>/ left out: the server commits review.md after a verdict). A
-  # rebase onto a newer main (the merge queue keeps its rebase across a cut-off gate) is `:same`; the
-  # same commits with other patches are `{:changed, :conflicts}`, a resolved rebase; anything else
-  # `{:changed, :code}`. A git error is `{:changed, :unreadable}`, and logged.
-  def compare_code(_thread, sha, sha), do: :same
-
-  def compare_code(thread, sha, head) do
-    root = Git.root(thread)
-
-    with base when is_binary(base) <- main_ref(root),
-         {:ok, seen} <- own_patches(root, base, sha, thread.slug),
-         {:ok, now} <- own_patches(root, base, head, thread.slug) do
-      patches_compared(seen, now, fn -> same_tree?(root, sha, head, thread.slug) end)
-    else
-      why ->
-        require(Logger) && Logger.warning("workline #{thread.slug}: can't compare #{sha} with #{head}: #{inspect(why)}")
-        {:changed, :unreadable}
-    end
-  end
-
-  # `{subject, patch-id}` lists: the same patches are the same change; the same commits with other
-  # patches, a rebase whose conflicts were resolved. No commits of its own on either side (its code
-  # is on main already): `same_tree?` decides.
-  defp patches_compared([], [], same_tree?), do: if(same_tree?.(), do: :same, else: {:changed, :code})
-
-  defp patches_compared(seen, now, _same_tree?) do
-    cond do
-      Enum.map(seen, &elem(&1, 1)) == Enum.map(now, &elem(&1, 1)) -> :same
-      Enum.map(seen, &elem(&1, 0)) == Enum.map(now, &elem(&1, 0)) -> {:changed, :conflicts}
-      true -> {:changed, :code}
-    end
-  end
-
-  defp flipped_after(flipped) do
-    # Restaff BEFORE broadcasting: subscribers acting on the advance must never observe the
-    # last stage's worker still leading this one.
-    flipped = restaff(flipped)
-    Server.Bus.broadcast({:workline_advanced, flipped})
-
-    post_brief(
-      flipped,
-      Brief.stage_message(flipped, last_reviewed: flipped.stage == "review" && last_reviewed(flipped))
-    )
-
-    if flipped.stage == "verify",
-      do: Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: flipped.id, slug: flipped.slug}))
-
-    {:ok, flipped}
   end
 
   def operator, do: Server.OperatorConfig.operator()
