@@ -36,6 +36,15 @@ defmodule Server.BranchReviewTest do
     assert BranchReview.latest("local-check") == nil
   end
 
+  test "the same verdict sent again is the one event", %{thread: thread} do
+    {:ok, first} = review(thread, %{})
+    {:ok, again} = review(thread, %{})
+    assert again.id == first.id
+
+    assert 1 ==
+             Server.Repo.aggregate(from(e in Server.Event, where: e.correlation == "branch:local-check:review"), :count)
+  end
+
   test "the newest verdict is the branch's, with its sha, reviewer and body", %{thread: thread} do
     {:ok, _} = review(thread, %{})
     {:ok, _} = review(thread, %{sha: @b, verdict: "request_changes", by: "tzinacan", body: "the lease is wrong"})

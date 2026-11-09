@@ -15,24 +15,13 @@ defmodule Server.BranchReview do
   Record a verdict: `%{branch, sha, verdict, by, body, thread_id}`, `sha` the full 40-hex commit read.
   With `repo:`, the commit must be in it and `by` must not have built it (`builders/3`: no review of
   your own work). `{:ok, event}` | `{:error, why}` (main, a short sha, an unknown verdict, a commit not
-  in the repo, a builder reviewing).
+  in the repo, a builder reviewing). The same verdict on the same sha by the same reviewer sent again
+  (a retried tool call) is the one already recorded.
   """
-  def record(%{branch: branch, sha: sha, verdict: verdict, by: by, body: body} = attrs) do
-    with nil <- malformed(branch, sha, verdict),
-         nil <- if(attrs[:repo], do: not_reviewable(attrs.repo, branch, sha, by)),
-         {:ok, event} <-
-           Server.Dossier.record_event(%{
-             thread_id: attrs[:thread_id],
-             kind: if(verdict == "approve", do: "check_passed", else: "check_failed"),
-             correlation: correlation(branch),
-             detail: %{"sha" => sha, "verdict" => verdict, "by" => by, "body" => body}
-           }) do
-      announce(attrs)
-      end_review(attrs[:thread_id])
-      {:ok, event}
-    else
-      {:error, why} -> {:error, why}
-      why -> {:error, why}
+  def record(%{branch: branch, sha: sha, verdict: verdict, by: by} = attrs) do
+    case repeated(branch, sha, verdict, by) do
+      nil -> record_new(attrs)
+      event -> {:ok, event}
     end
   end
 
@@ -211,4 +200,36 @@ defmodule Server.BranchReview do
   end
 
   defp end_review(_thread_id), do: :ok
+
+  defp record_new(%{branch: branch, sha: sha, verdict: verdict, by: by, body: body} = attrs) do
+    with nil <- malformed(branch, sha, verdict),
+         nil <- if(attrs[:repo], do: not_reviewable(attrs.repo, branch, sha, by)),
+         {:ok, event} <-
+           Server.Dossier.record_event(%{
+             thread_id: attrs[:thread_id],
+             kind: if(verdict == "approve", do: "check_passed", else: "check_failed"),
+             correlation: correlation(branch),
+             detail: %{"sha" => sha, "verdict" => verdict, "by" => by, "body" => body}
+           }) do
+      announce(attrs)
+      end_review(attrs[:thread_id])
+      {:ok, event}
+    else
+      {:error, why} -> {:error, why}
+      why -> {:error, why}
+    end
+  end
+
+  defp repeated(branch, sha, verdict, by) do
+    from(e in Server.Event,
+      where: e.correlation == ^correlation(branch) and e.kind in ["check_passed", "check_failed"],
+      order_by: [desc: e.id],
+      limit: 1
+    )
+    |> Server.Repo.one()
+    |> case do
+      %{detail: %{"sha" => ^sha, "verdict" => ^verdict, "by" => ^by}} = event -> event
+      _ -> nil
+    end
+  end
 end

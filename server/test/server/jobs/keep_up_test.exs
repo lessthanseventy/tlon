@@ -82,16 +82,14 @@ defmodule Server.Jobs.KeepUpTest do
       assert [%{title: "land local main's 4 commits"}] = Tickets.open_in_workspace(ws.id)
     end
 
-    test "a later count updates the one ticket and says the new count on the lobby as a notice", %{ws: ws, lobby: lobby} do
+    test "a later count updates the one ticket and posts nothing more", %{ws: ws, lobby: lobby} do
       KeepUp.drifted("/r/owned", {:diverged, 4})
       KeepUp.drifted("/r/owned", {:diverged, 6})
 
       assert [%{title: "land local main's 6 commits"}] = Tickets.open_in_workspace(ws.id)
 
-      assert [%Message{kind: "chat"}, %Message{kind: "notice", body: body}] =
-               Repo.all(from m in Message, where: m.thread_id == ^lobby.id and m.author == "tlon", order_by: m.id)
-
-      assert body =~ "/r/owned" and body =~ "6 commit"
+      assert [%Message{kind: "chat"}] =
+               Repo.all(from m in Message, where: m.thread_id == ^lobby.id and m.author == "tlon")
     end
 
     test "an unchanged count posts nothing more", %{lobby: lobby} do
