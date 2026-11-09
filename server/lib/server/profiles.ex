@@ -337,9 +337,13 @@ defmodule Server.Profiles do
     }
   }
 
+  # A workline's lead (planner, builder, reviewer by stage) and the sheriff keep `consult_peer`: a
+  # lead asks a builder on a thread it cites. Every other seat relays by an @mention.
+  @lead_mcp update_in(@tlon_mcp, ["tlon", "excludeTools"], &(&1 -- ["consult_peer"]))
+
   # A reviewer reads and never edits: the source EDIT verbs are cut from its surface (the
   # introspection ones — outline_file — stay).
-  @reviewer_mcp update_in(@tlon_mcp, ["tlon", "excludeTools"], &(&1 ++ ["rename_identifier", "edit_clause"]))
+  @reviewer_mcp update_in(@lead_mcp, ["tlon", "excludeTools"], &(&1 ++ ["rename_identifier", "edit_clause"]))
 
   # tertius's surface is the ORCHESTRATOR toolset (Slice 4D): the base machine-citizen tools PLUS the
   # cross-thread read `machine_overview` AND the staffing verbs a manager routes with — `staff_child`
@@ -351,11 +355,6 @@ defmodule Server.Profiles do
                  ["tlon", "excludeTools"],
                  &(&1 -- ["open_thread", "close_thread", "operator_inbox", "staff_child", "assign_lead"])
                )
-
-  # The sheriff routes red the way tertius routes work, so it is the one worker that reaches across:
-  # the cross-thread read and `consult_peer` (to hand a lead its fix) — never the staffing verbs; it
-  # tells leads, it does not reassign them.
-  @sheriff_mcp update_in(@tlon_mcp, ["tlon", "excludeTools"], &(&1 -- ["consult_peer"]))
 
   # The PM owns what ships and in what order — the release and the backlog's urgency — and reads
   # across the work to judge it; it neither edits code nor staffs.
@@ -379,7 +378,8 @@ defmodule Server.Profiles do
   @qa_mcp update_in(
             @reviewer_mcp,
             ["tlon", "excludeTools"],
-            &((&1 -- ~w(submit_qa start_smoke drive_smoke stop_smoke)) ++ ["submit_review", "review_branch"])
+            &((&1 -- ~w(submit_qa start_smoke drive_smoke stop_smoke)) ++
+                ["submit_review", "review_branch", "consult_peer"])
           )
 
   # Shared chat etiquette — the office shows a live "…is typing" indicator while a coworker works,
@@ -820,21 +820,21 @@ defmodule Server.Profiles do
     },
     builder: %{
       model: @sonnet,
-      mcp: @tlon_mcp,
+      mcp: @lead_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @builder_role
     },
     planner: %{
       model: @sonnet,
-      mcp: @tlon_mcp,
+      mcp: @lead_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @planner_role
     },
     sheriff: %{
       model: @sonnet,
-      mcp: @sheriff_mcp,
+      mcp: @lead_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @sheriff_role
