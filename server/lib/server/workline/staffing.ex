@@ -42,6 +42,7 @@ defmodule Server.Workline.Staffing do
   def restaff(%Thread{stage: "intent", workspace_id: ws} = thread) when not is_nil(ws) do
     ws
     |> Server.Workspaces.bench()
+    |> Enum.reject(&leading_another?(&1, thread))
     |> Server.Coworker.lead()
     |> case do
       %Server.Coworker{name: name} -> hand_to(thread, "lead", name)
