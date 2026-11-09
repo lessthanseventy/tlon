@@ -260,6 +260,10 @@ run = "scripts/server-restart.test.sh"
 description = "script test: tlon-cli.sh hands the client node a writable stderr when the caller closed its own, mints a token through a stubbed curl, and prints usage with exit 2 on no arguments (offline)"
 run = "scripts/tlon-cli.test.sh"
 
+["check:scripts:workline-verify"]
+description = "script test: workline-verify.sh scopes its gates, advances on green and sends red back, records nothing in a landing gate, runs the canary A/B only for a verify (offline, temp repo, fake mise, curl and tlon-cli)"
+run = "scripts/workline-verify.test.sh"
+
 ["check:ignored"]
 description = "tracked-junk gate: fail on any tracked file that .gitignore ignores (scratch committed under an ignored path such as server/tmp)"
 run = 'junk="$(git ls-files -ci --exclude-standard)"; [ -z "$junk" ] || { echo "check:ignored — tracked files under ignored paths (git rm --cached them, or stop ignoring them):"; echo "$junk"; exit 1; }'
