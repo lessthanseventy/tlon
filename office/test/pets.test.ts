@@ -1,6 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing, furOf } from "../kit/draw"
+import { mulberry32 } from "../kit/rng"
 import { ARGOS, cycleAxis, DEFAULT_PETS, dots, drawDog, paperHeadline, PRESETS, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
 import { bucketFor, NINA, SWEET } from "../kit/voices"
 import { CAT, DOG, fillArt, SPECIES_ART } from "../kit/sprites"
@@ -451,6 +452,10 @@ describe("the dog's shade", () => {
 })
 
 describe("Argos fetches the morning paper", () => {
+  // his trips are walks of chance against a fixed step budget, so the draws are pinned and every run is the same run
+  let real: () => number
+  beforeEach(() => { real = Math.random; Math.random = mulberry32(7) })
+  afterEach(() => { Math.random = real })
   const at = (h: number) => { const d = new Date(); d.setHours(h, 30, 0, 0); return d }
   const paperRoom = (h: number, release: Agents["release"]) => {
     const room = new WideRoom(560), a = { ...viewOf(office({ thinking: false }), 1), release }, inside = room as unknown as Pets & { paper: { leg: string } | null }
