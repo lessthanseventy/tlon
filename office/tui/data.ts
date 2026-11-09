@@ -16,7 +16,7 @@ let fake: Toy | null = null
 /** a new source: what was held belongs to the old one */
 export const useFake = (t: Toy | null) => { fake = t; lastGood = null; lastNeeds = noNeeds; down = null }
 
-async function call(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<{ status: number; json: any }> {
+async function call(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown, headers: Record<string, string> = {}): Promise<{ status: number; json: any; etag?: string | null }> {
   if (fake) {
     if (method !== "GET") return { status: 409, json: { error: "it's a toy — nothing here to change" } }
     if (path === "/office") return { status: 200, json: fake.snapshot() }
@@ -25,26 +25,32 @@ async function call(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: s
   }
   const r = await fetch(`${base()}/api${path}`, {
     method,
-    headers: body === undefined ? {} : { "content-type": "application/json" },
+    headers: body === undefined ? headers : { ...headers, "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(8000),
   })
-  return { status: r.status, json: await r.json().catch(() => null) }
+  return { status: r.status, json: await r.json().catch(() => null), etag: r.headers.get("etag") }
 }
 
 /** the last snapshot that answered, and when: a down channel returns it marked down, never an empty office */
-let lastGood: { a: Agents; at: number } | null = null
+let lastGood: { a: Agents; at: number; etag?: string } | null = null
 /** the last status's down note, for the server it asked: a write there refuses up front rather than wait out the timeout */
 let down: { url: string; note: string } | null = null
 export async function status(): Promise<Agents> {
   try {
-    const { status, json: j } = await call("GET", "/office")
+    const held = lastGood?.etag
+    const { status, json: j, etag } = await call("GET", "/office", undefined, held ? { "if-none-match": held } : {})
+    if (status === 304 && lastGood) {
+      lastGood.at = Date.now()
+      down = null
+      return lastGood.a
+    }
     if (status !== 200 || !j) throw new Error(`office ${status}`)
     const a: Agents = {
       ok: true, roster: j.roster ?? [], threads: (j.threads ?? []).map((t: Thread) => (t.standing && t.title === "lobby" ? { ...t, title: "the front desk" } : t)), counts: j.counts ?? {}, awaiting: j.awaiting ?? 0,
       bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], shifts: j.shifts ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {}, revs: j.revs, release: j.release, usage: j.usage, pause: j.pause, flags: j.flags ?? {}, life: j.life ?? {}, ticket_open: j.ticket_open, ticket_week: j.ticket_week,
     }
-    lastGood = { a, at: Date.now() }
+    lastGood = { a, at: Date.now(), etag: etag ?? undefined }
     down = null
     return a
   } catch {
