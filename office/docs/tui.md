@@ -7,14 +7,14 @@ world, `data.useFake` the one seam in `data.ts`; one play key, `E`, opens a numb
 The sandbox keeps its looks, souls, hall, cast, pets and store in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire or adopt never reaches the machine's files.
 The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, taken)` is seeded, no model, no I/O; a lock is kept by `pass` baking it into the overrides —
 `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `l` lists it), → hire, space locks a row so a pass keeps it, `e` edits the lit row (name, pitch and soul by prompt; archetype/grade/specialty cycle the roster vocabulary; a slot row opens the look card on a draft of the candidate's look, whose `s` saves it as `overrides.look` — never `looks.json` until hired) as an edit over the seed; `W` draws the candidate's soul and pitch (`data.draftSoul` → `POST /api/workspaces/:id/hire/draft`, `Server.Soul.preview`: nothing written or seated; the render never calls it) and stores them as the `soul`/`pitch`/`drawn` edits, so `e` edits the draft and → hires what was seen (`s` is taken: sort). `hall.json`
-(`TLON_HALL`, polled like `looks.json`) holds seed + locks + edits + pile, never the rendered card; an edited name that fails `Server.Soul`'s name check is dropped on load, so it never reaches a file name. → hires — onto the toy's bench in the
+(`TLON_HALL`, followed like `looks.json` (`fs.watch` on its directory, `tui/watch.ts`; a stat poll where that fails)) holds seed + locks + edits + pile, never the rendered card; an edited name that fails `Server.Soul`'s name check is dropped on load, so it never reaches a file name. → hires — onto the toy's bench in the
 sandbox, through `data.hire` (`POST /api/workspaces/:id/coworkers`) on a live office — and keeps the candidate's look in `looks.json` and its soul in the souls dir (never over one already there).
 The cast editor, the god view (`` ` `` from home; `tui/cast.ts` its rows, pure): one row per bench seat, one cell per field —
 name, archetype, look, soul, voice, grade, specialty, model; ←/→ the lit field, `}` the Office tab (the wackiness dials).
 ⏎ hands the lit cell to the editor that already owns it (the look card, the soul in `$EDITOR` like the dump — souls/<name>.md
 made blank when absent, never overwritten — the persona and model pickers), `y` rerolls look, grade or specialty, `-` lets the
 seat go; name and archetype only show (no server route renames or retypes a seat). Grade and specialty have no server field:
-`cast.json` (`TLON_CAST`, `kit/cast.ts`, polled like `looks.json`) keeps them by seat name.
+`cast.json` (`TLON_CAST`, `kit/cast.ts`, followed like `looks.json` (`fs.watch` on its directory, `tui/watch.ts`; a stat poll where that fails)) keeps them by seat name.
 The pet store (`*` from home; `kit/store.ts` the pure candidate — `roll(species, seed, taken)`, seeded, no model, no I/O —
 `tui/store.ts` its card rows): ←/→ the shelf (every species, each into the slot its family belongs to: cat, dog, rabbit, bird, hamster, pet rock, A Bao A Qu), ↑ pass,
 ↓ back, space locks a row, `e` renames, ⏎ adopts into the species' slot — the occupant leaves by the door (one pet per slot, no

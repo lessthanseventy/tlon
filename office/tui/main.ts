@@ -31,6 +31,7 @@ import { corkLabel, soulFor, useSouls } from "../kit/souls"
 import { personCard } from "./person-card"
 import { lastLanding } from "../kit/tv"
 import { paced } from "./pace"
+import { watchDirs } from "./watch"
 import { loadSouls, soulsSignature } from "./souls"
 import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
@@ -956,6 +957,7 @@ const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== o
 /** start this TUI over on the new code: hand the terminal back and exec the same command in place */
 // every interval this process runs, so a relaunch can stop them all
 const timers: ReturnType<typeof setInterval>[] = []
+const closers: (() => void)[] = []
 const every = (fn: () => unknown, ms: number) => { timers.push(setInterval(fn, ms)) }
 /** a timer that, with the terminal unfocused, runs once per `idleMs` instead of every `ms` */
 const everyFocused = (fn: () => unknown, ms: number, idleMs = 30_000) => every(paced(() => focused, idleMs, fn), ms)
@@ -967,6 +969,7 @@ async function relaunch() {
   // ticking draws its own room on alternate frames with the child's (a strobe) and takes its keys
   mute()
   for (const t of timers) clearInterval(t)
+  for (const c of closers) c()
   process.stdin.removeAllListeners("data")
   process.stdin.pause()
   const child = Bun.spawn(selfArgv(), { stdio: ["inherit", "inherit", "inherit"], env: process.env })
@@ -2894,7 +2897,12 @@ async function main() {
   every(() => { looks.tick(1); if (focused && ++sec % 5 === 0) stampLooked(); if (focused && !reader && !zoom && notes.some((n) => { const a = looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
   every(() => { if (focused && ((mode.kind === "pet" && petDraft) || mode.kind === "store")) { previewTick += 10; draw() } }, 1000)
   every(() => { if (focused && bySurface.counts.phone > 0) draw() }, 1000) // the phone rings: its glyph shakes once a second
-  everyFocused(() => { if (followPalette() || followLooks() || followSouls() || followPets() || followHall() || followStore() || followCast()) { frame = null; draw() } }, 1000)
+  const followFiles = () => { if ([followPalette(), followLooks(), followSouls(), followPets(), followHall(), followStore(), followCast()].some(Boolean)) { frame = null; draw() } }
+  const real = (p: string) => { try { return realpathSync(p) } catch { return p } }
+  const files = [PALETTE, LOOKS, PETS_PATH, HALL, STORE, CAST]
+  const watched = watchDirs([...files, ...files.map(real)].map((f) => dirname(f)).concat(SOULS), followFiles)
+  closers.push(watched.close)
+  if (!watched.ok) everyFocused(followFiles, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
   let seenFocus = (await data.focus())?.at ?? 0
