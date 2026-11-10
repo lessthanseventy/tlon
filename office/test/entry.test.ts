@@ -85,6 +85,13 @@ describe("the entry (U)", () => {
     }
   })
 
+  test("today is the local day, not UTC's", () => {
+    const late = new Date(2026, 9, 10, 23, 30), early = new Date(2026, 9, 10, 0, 30).toISOString()
+    const landed: EntryEvent[] = [{ kind: "work_landed", at: early, thread_id: 12, who: "tlon", text: "#12 landed" }]
+    const shipped = entryOf(v, ctx, [], landed, late).sections.find((s) => s.label.startsWith("SHIPPED"))!
+    expect(shipped.lines.map((l) => l.text)).toEqual(["#12 landed"])
+  })
+
   test("shipped today and Uqbar's diary come from today's events", () => {
     const shipped = e.sections.find((s) => s.label.startsWith("SHIPPED"))!
     expect(shipped.lines.map((l) => l.text)).toEqual(["#12 landed", "#11 landed"])
