@@ -43,6 +43,8 @@ describe("adapterForFile — route a file to its language server", () => {
     ["/x/README.md", "markdown"],
     ["/x/mise.toml", "toml"],
     ["/x/.github/workflows/ci.yml", "yaml"],
+    ["/x/src/app.zig", "zig"],
+    ["/x/build.zig.zon", "zig"],
     ["/x/notes.txt", null],
     ["/x/no-extension", null],
   ];
