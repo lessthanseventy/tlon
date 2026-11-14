@@ -177,7 +177,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 |---|---|
 | `cap` | Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md) |
 | `check` | Everything green, one at a time on this machine: waits its turn in the checks queue (scripts/checks-queue.sh), runs check:all, then posts the verdict as GitHub's commit status tlon/check on HEAD — only on a clean tree (scripts/check.sh; TLON_CHECK_STATUS=0 posts nothing) |
-| `land` | land a reviewed PR — `land -- <pr>`: handed to the server's merge queue (the same line and gate as worklines), which takes it only when its branch's review on tlon approves its head, then rebases, gates, posts tlon/check and merges at exactly that head; the outcome is posted on the review's thread |
+| `land` | land a reviewed PR — `land -- <pr>` (`-- <pr> --operator`: on the operator's word in place of the review): handed to the server's merge queue (the same line and gate as worklines), which takes it only when its branch's review on tlon approves its head, then rebases, gates, posts tlon/check and merges at exactly that head; the outcome is posted on the review's thread |
 | `lspd` | adapters/lspd: run the LSP sidecar daemon in the foreground (bun --watch, dev) |
 | `watch` | Re-run a command on every file change, printing cap's signal — register in the background, edit, get pass/fail automatically (see AGENTS.md) |
 
