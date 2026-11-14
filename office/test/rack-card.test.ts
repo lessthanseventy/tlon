@@ -46,7 +46,7 @@ const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
 test("the rack lists landing & checks in one place, in order: a train is one block, its check not listed twice", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' XDG_CONFIG_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the room", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "H")
   await waitFor(screen, "THE RACK", "the rack")
@@ -68,7 +68,7 @@ test("a node with no job queue reads neutral under all green: a dim ○ row, no 
   current = { ...health, jobs: false, checks: { running: null, waiting: [] }, merge_queue: [] } as unknown as typeof health
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' XDG_CONFIG_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the room", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "H")
   await waitFor(screen, "THE RACK · all green", "the rack, all green")
