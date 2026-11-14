@@ -24,7 +24,7 @@ import { Editor } from "./editor"
 import { ticketPicks } from "./finder"
 import { loadPets } from "./pets"
 import { Reader, type ReaderDeps } from "./reader"
-import { ESC, out } from "./term"
+import { CLEAR_IMAGES, ESC, out } from "./term"
 import { oneInFlight } from "./flight"
 import { earmarkOf } from "../kit/plane"
 import { State, STATE, OFFICE, writeState, type Mode, type Cycle, type Prompt, type Pick, type Action } from "./state"
@@ -265,7 +265,7 @@ function openReader(tid: number, extra: Partial<ReaderDeps> = {}, focus = !asks(
   const v = app.threads.get(tid)
   if (v) app.reader.take(v)
   void app.reader.reload().then(() => draw(app, ctl))
-  out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[2J`)
+  out(`${CLEAR_IMAGES}${ESC}[2J`)
   draw(app, ctl)
 }
 /** the conversation with `name`: the lobby filtered to them and the operator's words to them; a reply goes to them */
