@@ -10,9 +10,10 @@
 // With no thread identity and TLON_OPERATOR_MODE set, the same mod is the operator's: a band of what
 // waits on them, the release and their streak, and the coworkers' asks put to them as questions.
 
-import { commandOf, doingOf, summaryOf } from "./lib/doing.ts";
-import { ago, asDossier, renderBrief, type ChatterMessage, type Dossier } from "./lib/brief.ts";
-import { detectCorrection } from "./lib/recall.ts";
+import type { EngineInterface, On, RenderChildren } from "claude-code";
+import { commandOf, doingOf, summaryOf } from "./lib/doing.js";
+import { ago, asDossier, renderBrief, type ChatterMessage, type Dossier } from "./lib/brief.js";
+import { detectCorrection } from "./lib/recall.js";
 import {
   buildExtractionPrompt,
   DEFAULT_CAPTURE_MODEL,
@@ -21,11 +22,11 @@ import {
   redactSecrets,
   serializeDelta,
   type Entry,
-} from "./lib/capture.ts";
-import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
-import { seatGlyph, seatStatus } from "./lib/status.ts";
-import { attribution, bandParts, figureCells, gateOf, landedAlerts, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.ts";
-import { CHIME_WAV } from "./lib/chime.ts";
+} from "./lib/capture.js";
+import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.js";
+import { seatGlyph, seatStatus } from "./lib/status.js";
+import { attribution, bandParts, figureCells, gateOf, landedAlerts, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.js";
+import { CHIME_WAV } from "./lib/chime.js";
 
 // Below this much new transcript a turn's capture waits for the next turn instead of paying for
 // an extraction call; a compaction flushes whatever is there.
@@ -105,11 +106,11 @@ let release = "";
 let life = "";
 let api = operatorApi(undefined);
 
-function declare($, tool: string, args: Record<string, unknown> = {}) {
+function declare($: EngineInterface, tool: string, args: Record<string, unknown> = {}) {
   $.mcp.call("tlon", tool, args).catch(() => {});
 }
 
-async function call($, tool: string, args: Record<string, unknown> = {}): Promise<unknown> {
+async function call($: EngineInterface, tool: string, args: Record<string, unknown> = {}): Promise<unknown> {
   const r = await $.mcp.call("tlon", tool, args);
   const text = r.content.find((b) => b.type === "text")?.text ?? "";
   if (r.isError) throw new Error(text || `${tool} failed`);
@@ -124,7 +125,7 @@ async function call($, tool: string, args: Record<string, unknown> = {}): Promis
 // banked — the counts that say whether the operator's own words reach the store), one line each in
 // $XDG_STATE_HOME/tlon/citizen-<author>.log (the last 200): the pane's transcript shows only that a
 // hook was skipped, never what it got.
-async function note($, what: string) {
+async function note($: EngineInterface, what: string) {
   try {
     const state = (await $.env.get("XDG_STATE_HOME")) || `${(await $.env.get("HOME")) ?? ""}/.local/state`;
     const path = `${state}/tlon/citizen-${author || "unknown"}.log`;
@@ -140,14 +141,14 @@ async function note($, what: string) {
 // replies landing out of order would let the older overwrite the newer and advance seenMessage twice.
 let dossierFlight: Promise<void> | null = null;
 let dossierQueued: Promise<void> | null = null;
-function refresh($): Promise<void> {
+function refresh($: EngineInterface): Promise<void> {
   if (!dossierFlight) return (dossierFlight = readDossier($).finally(() => { dossierFlight = null; }));
   const again = () => { dossierQueued = null; return refresh($); };
   return (dossierQueued ??= dossierFlight.then(again, again));
 }
 
 // The thread's dossier, and what in it is news: a mention of this seat, a workline landing.
-async function readDossier($) {
+async function readDossier($: EngineInterface) {
   let got: unknown;
   try {
     // a sleep the host refuses never gives up rather than abandoning a call that may yet answer
@@ -183,7 +184,7 @@ async function readDossier($) {
 }
 
 // The landing rows of the alerts the desktop raises, so both surfaces toast the server's own wording.
-async function landedToday($) {
+async function landedToday($: EngineInterface) {
   try {
     const res = await $.http.fetch(`${api}/alerts`);
     return res.ok ? landedAlerts(JSON.parse(res.text)) : [];
@@ -193,7 +194,7 @@ async function landedToday($) {
 }
 
 // The office from this seat: who else is on, what is red here, this seat's voice, a line now and then.
-async function refreshGlance($) {
+async function refreshGlance($: EngineInterface) {
   try {
     const got = (await call($, "office_glance")) as Glance;
     if (!got || !Array.isArray(got.red) || !Array.isArray(got.crew)) return;
@@ -217,7 +218,7 @@ async function refreshGlance($) {
 }
 
 // The coworker's own figure, from the office's art (`office/cli.ts figure`), for the pane.
-async function loadFigure($, archetype: string | null) {
+async function loadFigure($: EngineInterface, archetype: string | null) {
   const office = `${$.plugin.root}/../office/cli.ts`;
   try {
     const r = await $.process.run(["bun", office, "figure", author, ...(archetype ? [archetype] : [])]);
@@ -234,13 +235,13 @@ let superseded = false;
 let registering: Promise<void> | null = null;
 // A pane_ref is only the workspace's own when $TMUX is its socket (tlon-workspace-<n>): a `%N` from
 // another tmux, the operator's own, would read as a workspace pane on the server.
-async function paneRegistration($): Promise<Record<string, unknown>> {
+async function paneRegistration($: EngineInterface): Promise<Record<string, unknown>> {
   const pane = await $.env.get("TMUX_PANE");
-  const socket = ((await $.env.get("TMUX")) ?? "").split(",")[0].split("/").pop() ?? "";
+  const socket = ((await $.env.get("TMUX")) ?? "").split(",")[0]?.split("/").pop() ?? "";
   return pane && /^tlon-workspace-\d+$/.test(socket) ? { pane_ref: pane } : {};
 }
 
-function registerNow($): Promise<void> {
+function registerNow($: EngineInterface): Promise<void> {
   return (registering ??= (async () => {
     const args = registration;
     if (!args) return;
@@ -268,7 +269,7 @@ function registerNow($): Promise<void> {
 // A wake (a teammate's message, an opening assignment) arrives as if typed: Claude Code holds it
 // until the session is idle, so it never lands on a booting input or a half-written prompt. Taking
 // deletes the server's row, so a wake whose submit fails is put back for the next poll.
-function submitWakes($, texts: string[]) {
+function submitWakes($: EngineInterface, texts: string[]) {
   pendingSubmits++;
   const gen = submitGen;
   submitting = submitting.then(async () => {
@@ -288,7 +289,7 @@ function submitWakes($, texts: string[]) {
   });
 }
 
-async function drainWakes($) {
+async function drainWakes($: EngineInterface) {
   if (draining || pendingSubmits > 0) return;
   draining = true;
   try {
@@ -318,7 +319,7 @@ async function drainWakes($) {
   }
 }
 
-async function loadMessages($) {
+async function loadMessages($: EngineInterface) {
   try {
     const got = await call($, "get_messages", { limit: 40 });
     if (Array.isArray(got)) messages = got as Message[];
@@ -328,7 +329,7 @@ async function loadMessages($) {
   $.ui.invalidate("ui.render");
 }
 
-async function ollamaKey($): Promise<string> {
+async function ollamaKey($: EngineInterface): Promise<string> {
   const key = await $.env.get("OLLAMA_API_KEY");
   if (key) return key;
   const runtime = (await $.env.get("XDG_RUNTIME_DIR")) ?? "";
@@ -340,7 +341,7 @@ async function ollamaKey($): Promise<string> {
 }
 
 // Side jobs (extraction, image descriptions) run on the ollama bucket, never the session's own model.
-async function complete($, model: string, content: unknown): Promise<string> {
+async function complete($: EngineInterface, model: string, content: unknown): Promise<string> {
   const key = await ollamaKey($);
   if (!key) throw new Error("no OLLAMA_API_KEY");
   const res = await $.http.fetch("https://ollama.com/v1/chat/completions", {
@@ -355,7 +356,7 @@ async function complete($, model: string, content: unknown): Promise<string> {
 
 // Claude Code's own WebSearch runs on Anthropic's side, so a session on the ollama gateway searches
 // through ollama's.
-async function webSearch($, query: string, max: number): Promise<string> {
+async function webSearch($: EngineInterface, query: string, max: number): Promise<string> {
   const key = await ollamaKey($);
   if (!key) return "web_search: no OLLAMA_API_KEY";
   const res = await $.http.fetch("https://ollama.com/api/web_search", {
@@ -372,7 +373,7 @@ async function webSearch($, query: string, max: number): Promise<string> {
 // A consult is a one-shot Claude Code on the ollama gateway: no session saved, no tlon identity,
 // read-only tools — a bash of its own would run outside the asking session's sandbox — and the
 // seat's own deny rules, so it reads nothing the seat may not.
-async function delegate($, model: string, task: string): Promise<string> {
+async function delegate($: EngineInterface, model: string, task: string): Promise<string> {
   const key = await ollamaKey($);
   if (!key) throw new Error("no OLLAMA_API_KEY for the delegate");
   const tools = "Read,Grep,Glob";
@@ -388,13 +389,13 @@ async function delegate($, model: string, task: string): Promise<string> {
   return r.stdout.trim();
 }
 
-async function consultTask($, prompt: string, withTranscript: boolean): Promise<string> {
+async function consultTask($: EngineInterface, prompt: string, withTranscript: boolean): Promise<string> {
   if (!withTranscript) return prompt;
   const context = serializeTranscript(await $.session.messages());
   return context ? `${context}\n\n---\n\n${prompt}` : prompt;
 }
 
-async function runConsult($, verb: "consult" | "fresh", args: string) {
+async function runConsult($: EngineInterface, verb: "consult" | "fresh", args: string) {
   const { model, prompt } = parseArgs(args);
   if (!prompt) return { text: `usage: /${verb} [model] <prompt>  (default model: ${DEFAULT_MODEL})` };
   $.ui.toast(`asking ${model}…`, { timeoutMs: 8_000 });
@@ -407,7 +408,7 @@ async function runConsult($, verb: "consult" | "fresh", args: string) {
 }
 
 // A model that cannot see images gets its image reads described by one that can.
-async function describeImage($, path: string): Promise<string | null> {
+async function describeImage($: EngineInterface, path: string): Promise<string | null> {
   if (!onOllama || VISION_MODELS.includes(await $.session.model())) return null;
   const b64 = await $.process.run(["base64", "-w0", path]);
   if (b64.exitCode !== 0) return null;
@@ -420,7 +421,7 @@ async function describeImage($, path: string): Promise<string | null> {
 }
 
 // What the language server says about a file just written, for the model to read with the result.
-async function diagnosticsOf($, path: string): Promise<string | null> {
+async function diagnosticsOf($: EngineInterface, path: string): Promise<string | null> {
   try {
     const r = await $.mcp.call("lsp", "diagnostics", { path });
     const text = r.content.find((b) => b.type === "text")?.text?.trim() ?? "";
@@ -433,7 +434,7 @@ async function diagnosticsOf($, path: string): Promise<string | null> {
 
 // Bank what the conversation learned since the last capture, as `derived` facts. The brief rides
 // each prompt as context; it is cut out here so the record is never re-banked from its own view.
-async function capture($, floor: number) {
+async function capture($: EngineInterface, floor: number) {
   if (capturing) return;
   capturing = true;
   try {
@@ -457,7 +458,7 @@ async function capture($, floor: number) {
 }
 
 // The operator's band: what waits on them, the release pointer, their streak.
-async function refreshOperator($) {
+async function refreshOperator($: EngineInterface) {
   try {
     const res = await $.http.fetch(`${api}/office/needs`);
     if (res.ok) needs = JSON.parse(res.text) as Need[];
@@ -474,7 +475,7 @@ async function refreshOperator($) {
   void askNext($);
 }
 
-async function refreshRelease($) {
+async function refreshRelease($: EngineInterface) {
   try {
     const r = await $.process.run(["mise", "run", "-q", "release:status"], { cwd: `${$.plugin.root}/..`, timeoutMs: 60_000 });
     const lines = r.stdout.split("\n");
@@ -488,7 +489,7 @@ async function refreshRelease($) {
 }
 
 // A coworker's ask (one decision with its answers) put to the operator in their own session.
-async function askNext($) {
+async function askNext($: EngineInterface) {
   if (asking) return;
   const ask = needs.find((n) => n.kind === "ask" && n.ref && n.options?.length && !asked.has(n.key));
   if (!ask) return;
@@ -510,12 +511,12 @@ function percent(n: number | undefined): string {
   return n === undefined ? "?" : `${Math.round(n)}%`;
 }
 
-async function fiveHourUsed($): Promise<number> {
+async function fiveHourUsed($: EngineInterface): Promise<number> {
   const usage = await $.session.usage();
   return usage.rateLimits.find((r) => r.kind === "five_hour")?.percentUsed ?? 0;
 }
 
-export function register(on) {
+export function register(on: On) {
   on("session.start", async ($, e, next) => {
     thread = (await $.env.get("TLON_THREAD")) ?? "";
     author = (await $.env.get("TLON_AUTHOR")) ?? "";
@@ -671,7 +672,7 @@ export function register(on) {
   // A refusal is reported, never acted on: the server derives the operator's `tool_denied` Need from
   // these (two or more since the workline last moved, nobody working it), the check's reason with it.
   on("tool.check", async ($, e, next) => {
-    const r = (await next(e)) as { decision?: string; reason?: string } | undefined;
+    const r = await next(e);
     if (thread && r?.decision === "deny") {
       const command = commandOf(e.tool, e.input, cwd);
       declare($, "tool_denied", { tool: e.tool, summary: summaryOf(e.tool, e.input, cwd), ...(command ? { command } : {}), ...(r.reason ? { reason: r.reason } : {}) });
@@ -722,8 +723,9 @@ export function register(on) {
       }
     }
     if (e.tool === `mcp__${$.plugin.name}__web_search`) {
-      const max = Math.min(10, Math.max(1, Number(e.max_results) || 5));
-      return { result: await webSearch($, String(e.query ?? ""), max) };
+      const search = e as unknown as { max_results?: unknown; query?: unknown };
+      const max = Math.min(10, Math.max(1, Number(search.max_results) || 5));
+      return { result: await webSearch($, String(search.query ?? ""), max) };
     }
     if (e.tool === "Read" && isImagePath(e.file_path ?? "")) {
       try {
@@ -842,9 +844,11 @@ export function register(on) {
 
   on("ui.render", { component: "Pane" }, async ($, e, next) => {
     if (e.requestId !== THREAD_PANE) return next(e);
-    const { Box, Text, Markdown, Button, Raster } = $.ui.resolve(e);
+    const elements = $.ui.resolve(e);
+    const { Box, Text, Markdown, Button } = elements;
+    const Raster = "Raster" in elements ? elements.Raster : undefined;
     const d = dossier;
-    const head: unknown[] = [];
+    const head: RenderChildren[] = [];
     const who = [Text({ bold: true, children: [author] })];
     if (glance?.persona?.voice) who.push(Text({ dimColor: true, children: [glance.persona.voice] }));
     head.push(
@@ -853,13 +857,13 @@ export function register(on) {
         flexDirection: "row",
         columnGap: 2,
         children: [
-          ...(figure && e.surface === "terminal" ? [Raster({ key: "figure", columns: figure.columns, rows: figure.rows, cells: figure.cells })] : []),
+          ...(figure && Raster && e.surface === "terminal" ? [Raster({ key: "figure", columns: figure.columns, rows: figure.rows, cells: figure.cells })] : []),
           Box({ flexDirection: "column", children: who }),
         ],
       }),
     );
     if (d?.workline) {
-      head.push(Text({ key: "stage", children: [`stage ${d.workline.stage}${d.workline.awaiting ? ` — awaiting ${d.workline.awaiting}` : ""}${d.workline.why ? ` (${d.workline.why})` : ""}`] }));
+      head.push(Text({ children: [`stage ${d.workline.stage}${d.workline.awaiting ? ` — awaiting ${d.workline.awaiting}` : ""}${d.workline.why ? ` (${d.workline.why})` : ""}`] }));
       head.push(
         Box({
           key: "gates",
@@ -873,14 +877,14 @@ export function register(on) {
       );
     }
     const commits = d?.commits?.shown ?? [];
-    if (commits.length) head.push(Text({ key: "commits", dimColor: true, children: [`${commits.length + (d?.commits?.more ?? 0)} commits · ${commits[0]!.subject}`] }));
-    if (d?.cited?.length) head.push(Text({ key: "cited", dimColor: true, children: [`cites ${d.cited.map((c) => `#${c.id}${c.stage ? ` (${c.stage})` : ""}`).join(", ")}`] }));
+    if (commits.length) head.push(Text({ dimColor: true, children: [`${commits.length + (d?.commits?.more ?? 0)} commits · ${commits[0]!.subject}`] }));
+    if (d?.cited?.length) head.push(Text({ dimColor: true, children: [`cites ${d.cited.map((c) => `#${c.id}${c.stage ? ` (${c.stage})` : ""}`).join(", ")}`] }));
     const crew = glance?.crew ?? [];
     if (crew.length)
-      head.push(Text({ key: "crew", children: [crew.map((c) => `${seatGlyph(seatStatus(c))} ${c.agent}${c.doing ? ` ${c.doing}` : ""}`).join("  ")] }));
+      head.push(Text({ children: [crew.map((c) => `${seatGlyph(seatStatus(c))} ${c.agent}${c.doing ? ` ${c.doing}` : ""}`).join("  ")] }));
     const body = messages.length
       ? messages.map((m, i) => Box({ key: `m${i}`, flexDirection: "column", children: [Text({ bold: true, children: [m.author] }), Markdown({ text: m.body })] }))
-      : [Text({ key: "empty", dimColor: true, children: ["no messages on this thread yet"] })];
-    return Box({ flexDirection: "column", children: [...head, Text({ key: "rule", dimColor: true, children: ["─".repeat(20)] }), ...body] });
+      : [Text({ dimColor: true, children: ["no messages on this thread yet"] })];
+    return Box({ flexDirection: "column", children: [...head, Text({ dimColor: true, children: ["─".repeat(20)] }), ...body] });
   });
 }
