@@ -39,7 +39,7 @@ const ago = (at: string, now: Date): string => {
 
 const sameDay = (at: string, now: Date): boolean => {
   const d = new Date(at), n = now
-  return d.getUTCFullYear() === n.getUTCFullYear() && d.getUTCMonth() === n.getUTCMonth() && d.getUTCDate() === n.getUTCDate()
+  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()
 }
 
 const thread = (tid: number | null): Act | null => (tid != null ? { kind: "thread", tid } : null)
