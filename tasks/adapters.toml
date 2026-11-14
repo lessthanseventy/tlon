@@ -39,8 +39,16 @@ dir = "adapters"
 run = """
 set -e
 command -v claude >/dev/null || { echo "adapters:claude-code:mod: skipped — claude is not on PATH"; exit 0; }
-claude plugin validate --strict .
-claude plugin validate --strict claude-code/plan
+# strict for what the runtime would take silently (an unknown field, a misnamed hook), but not the
+# validator's type check of a mod: it compiles without the mod's tsconfig, so every `.ts` import and
+# kit-typed parameter reads as wrong
+validate() {
+  claude plugin validate "$1" >/dev/null || { claude plugin validate "$1"; return 1; }
+  claude plugin validate --strict --json "$1" | jq -e '[.manifest.warnings[]?, .contents[]?.warnings[]?]
+    | map(select(.message | startswith("error TS") | not)) | if length == 0 then true else (map(.message) | join("\\n") | halt_error) end' >/dev/null
+}
+validate .
+validate claude-code/plan
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 git ls-files --cached --others --exclude-standard | grep -v '\\.test\\.tsx\\?$' | cpio -pdm --quiet "$stage"
