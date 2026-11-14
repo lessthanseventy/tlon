@@ -299,7 +299,7 @@ description = "manual: fail if the generated task manual drifts from its source 
 run = "scripts/manual-gen.sh --check"
 
 ["land"]
-description = "land a reviewed PR — `land -- <pr>`: handed to the server's merge queue (the same line and gate as worklines), which takes it only when its branch's review on tlon approves its head, then rebases, gates, posts tlon/check and merges at exactly that head; the outcome is posted on the review's thread"
+description = "land a reviewed PR — `land -- <pr>` (`-- <pr> --operator`: on the operator's word in place of the review): handed to the server's merge queue (the same line and gate as worklines), which takes it only when its branch's review on tlon approves its head, then rebases, gates, posts tlon/check and merges at exactly that head; the outcome is posted on the review's thread"
 run = "scripts/land.sh"
 
 ["check:main"]
