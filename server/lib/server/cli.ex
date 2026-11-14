@@ -128,10 +128,10 @@ defmodule Server.CLI do
     end
   end
 
-  @doc "Queues a reviewed PR in the merge queue."
-  @spec land_pr(integer(), String.t(), String.t()) :: result()
-  def land_pr(pr, branch, author) do
-    case Server.PRLanding.queue(Server.Profiles.tlon_root(), pr, branch, author) do
+  @doc "Queues a reviewed PR in the merge queue; `operator` true is the operator's word in place of a review."
+  @spec land_pr(integer(), String.t(), String.t(), boolean()) :: result()
+  def land_pr(pr, branch, author, operator \\ false) do
+    case Server.PRLanding.queue(Server.Profiles.tlon_root(), pr, branch, author, operator: operator) do
       {:ok, _} ->
         {:ok, "queued: PR ##{pr} (#{branch}) is in the merge queue — its outcome is posted on its review's thread"}
 

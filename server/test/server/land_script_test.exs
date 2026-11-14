@@ -26,12 +26,12 @@ defmodule Server.LandScriptTest do
     File.chmod!(Path.join(dir, name), 0o755)
   end
 
-  defp land(ctx, env \\ []) do
+  defp land(ctx, env \\ [], args \\ ["7"]) do
     env =
       [{"PATH", "#{ctx.tmp}:#{System.get_env("PATH")}"}, {"LOG", ctx.log}, {"TLON_CLI", Path.join(ctx.tmp, "tlon-cli")}] ++
         env
 
-    System.cmd("bash", [@script, "7"], env: env, stderr_to_stdout: true)
+    System.cmd("bash", [@script | args], env: env, stderr_to_stdout: true)
   end
 
   defp calls(ctx), do: if(File.exists?(ctx.log), do: File.read!(ctx.log), else: "")
@@ -40,6 +40,17 @@ defmodule Server.LandScriptTest do
     assert {out, 0} = land(ctx)
     assert calls(ctx) =~ "tlon-cli land-pr 7 feature andrew"
     assert out =~ "queued"
+  end
+
+  test "--operator is the operator's word in place of a review, passed to the queue", ctx do
+    assert {_out, 0} = land(ctx, [], ["7", "--operator"])
+    assert calls(ctx) =~ "tlon-cli land-pr 7 feature andrew --operator"
+  end
+
+  test "an argument it does not know is refused with its usage", ctx do
+    assert {out, 2} = land(ctx, [], ["7", "--force"])
+    assert out =~ "usage"
+    refute calls(ctx) =~ "land-pr"
   end
 
   test "refused before it is queued: closed, not onto main, a fork, main itself, a protected branch", ctx do

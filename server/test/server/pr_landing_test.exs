@@ -91,6 +91,26 @@ defmodule Server.PRLandingTest do
       assert jobs() == []
     end
 
+    test "the operator's word: approved at its head by the operator, queued, with no review on tlon", ctx do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      head = origin(ctx, "feature")
+      assert {:ok, _} = PRLanding.queue(ctx.repo, 7, "feature", "lonnrot", operator: true)
+      assert [%{"pr" => 7, "branch" => "feature"}] = jobs()
+      assert %{verdict: "approve", by: "the operator", sha: ^head} = BranchReview.latest("feature")
+    end
+
+    test "the operator's approval is of the head it was given for: new commits are reviewed again", ctx do
+      PRLanding.queue(ctx.repo, 7, "feature", nil, operator: true)
+
+      sh!(
+        ctx.repo,
+        "git checkout -q feature && echo g >g && git add g && git commit -qm more && git push -q origin feature && git checkout -q main"
+      )
+
+      assert {:error, why} = land(ctx)
+      assert why =~ "review it again"
+    end
+
     test "main is never queued", ctx do
       assert {:error, why} = PRLanding.queue(ctx.repo, 7, "main")
       assert why =~ "main"

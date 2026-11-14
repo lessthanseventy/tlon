@@ -20,11 +20,13 @@ defmodule Server.PRLanding do
   @doc """
   Queue PR `pr` on `branch` of `repo` for landing, `pr_author` its GitHub author (who may not be its
   reviewer): `{:ok, job}`, or `{:error, why}` when it is main or its review doesn't approve its head
-  on origin.
+  on origin. `operator: true` is the operator's word in place of a review: an approval of the head
+  as fetched now, by "the operator", recorded as any review is, so new commits still need one.
   """
   def queue(repo, pr, branch, pr_author \\ nil, opts \\ []) do
     with :ok <- not_main(branch),
          {:ok, head} <- fetch(repo, branch),
+         :ok <- operator_approval(repo, branch, head, opts[:operator]),
          {:ok, review} <- BranchReview.approves(repo, branch, head, pr_author: pr_author),
          {:ok, job} <-
            Server.Jobs.enqueue(
@@ -146,6 +148,21 @@ defmodule Server.PRLanding do
       git(repo, ["branch", "-D", ref])
     end
   end
+
+  defp operator_approval(repo, branch, head, true) do
+    with {:ok, _event} <-
+           BranchReview.record(%{
+             branch: branch,
+             sha: head,
+             verdict: "approve",
+             by: "the operator",
+             body: "landed on the operator's word, with no review on tlon",
+             repo: repo
+           }),
+         do: :ok
+  end
+
+  defp operator_approval(_repo, _branch, _head, _operator), do: :ok
 
   defp queued_by(nil), do: ""
   defp queued_by(by), do: ", queued by #{by}"

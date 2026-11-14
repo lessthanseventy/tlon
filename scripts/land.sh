@@ -4,13 +4,16 @@
 # head (a review by neither the PR's author nor a builder of it), then rebases it onto origin/main,
 # gates it, posts tlon/check and merges at exactly that head.
 # Here: GitHub says what the PR is, and a PR from main, a fork, a protected branch, one closed or one
-# not onto main is refused before it is queued. The service must be up.
+# not onto main is refused before it is queued. The service must be up. --operator is the operator's
+# word in place of that review: an approval of the head as it is now, recorded as the operator's.
 #
-#   scripts/land.sh <pr-number>
+#   scripts/land.sh <pr-number> [--operator]
 set -uo pipefail
 
 pr="${1:-}"
-case "$pr" in '' | *[!0-9]*) echo "usage: land.sh <pr-number>" >&2; exit 2 ;; esac
+operator=()
+case "${2:-}" in '') ;; --operator) operator=(--operator) ;; *) pr="" ;; esac
+case "$pr" in '' | *[!0-9]*) echo "usage: land.sh <pr-number> [--operator]" >&2; exit 2 ;; esac
 cli="${TLON_CLI:-$(dirname "$0")/tlon-cli.sh}"
 stop() { echo "land #$pr: $*" >&2; exit 1; }
 
@@ -24,4 +27,4 @@ read -r head base state cross author <<<"$(gh pr view "$pr" --json headRefName,b
 protected="$(gh api "repos/{owner}/{repo}/branches/$head" --template '{{.protected}}' 2>/dev/null)"
 [ "$protected" != true ] || stop "its branch $head is protected — refused"
 [ "$protected" = false ] || stop "can't tell whether its branch $head is protected (gh said: ${protected:-nothing}) — refused"
-exec "$cli" land-pr "$pr" "$head" "${author:-}"
+exec "$cli" land-pr "$pr" "$head" "${author:-}" "${operator[@]}"

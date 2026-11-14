@@ -74,6 +74,7 @@
 #   land-pr <pr> <branch> [author] queue a reviewed PR in the merge queue (`mise run land`); refused
 #                                  unless the branch's review on tlon, by neither its author nor a
 #                                  builder of it, approves its head
+#     land-pr … [author] --operator  …approved by the operator's word in place of a review
 #   approve <id>                   complete a workline's parked gate (awaiting the operator)
 #     approve <id> --skip-qa <why…>  …and land a review past an owed QA pass, recorded with why
 #     (TLON_AUTHOR set → approved as that seat; Uqbar's cannot approve a limit-hit gate)
@@ -608,8 +609,9 @@ case "$cmd" in
 
   land-pr)
     pr="${1:-}"; branch="${2:-}"; author="${3:-}"
-    { int "$pr" && [ -n "$branch" ]; } || { echo 'usage: tlon-cli.sh land-pr <pr> <branch> [author]' >&2; exit 2; }
-    exec "$SERVER" rpc "Server.CLI.land_pr($pr, \"$(esc "$branch")\", \"$(esc "$author")\") |> Server.CLI.out(:stderr)"
+    case "${4:-}" in '') operator=false ;; --operator) operator=true ;; *) pr="" ;; esac
+    { int "$pr" && [ -n "$branch" ]; } || { echo 'usage: tlon-cli.sh land-pr <pr> <branch> [author] [--operator]' >&2; exit 2; }
+    exec "$SERVER" rpc "Server.CLI.land_pr($pr, \"$(esc "$branch")\", \"$(esc "$author")\", $operator) |> Server.CLI.out(:stderr)"
     ;;
 
   branch-review)
