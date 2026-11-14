@@ -101,6 +101,14 @@ export const ADAPTERS: LanguageAdapter[] = [
     rootFor: (f) => path.dirname(f),
     serverPackage: "yaml-language-server (with the schema store: CI workflows, compose files)",
   },
+  {
+    name: "zig",
+    command: "zls",
+    args: [],
+    extensions: ["zig", "zon"],
+    rootFor: (f) => findRootWith(f, "build.zig") ?? path.dirname(f),
+    serverPackage: "zls (the Zig LSP; its minor version must match the Zig mise installs)",
+  },
 ];
 
 // Route a file to its adapter by extension. Pure — pinned by tests.
