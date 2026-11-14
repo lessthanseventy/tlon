@@ -5,7 +5,20 @@
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tmp="$(mktemp -d)"
-trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$tmp"' EXIT
+# `job X &` is a subshell around checks-queue.sh: killing the job kills only the subshell, so end every
+# descendant of this script on any exit, a signal included.
+# shellcheck disable=SC2329 # runs from the EXIT trap
+descendants() { local p; for p in $(pgrep -P "$1"); do descendants "$p"; echo "$p"; done; }
+# shellcheck disable=SC2329 # runs from the EXIT trap
+cleanup() {
+  trap '' INT TERM HUP
+  # shellcheck disable=SC2046
+  kill $(descendants $$) 2>/dev/null
+  wait 2>/dev/null
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+trap 'exit 1' INT TERM HUP
 . "$here/lib/test.sh"
 export XDG_RUNTIME_DIR="$tmp/run" CHECKS_POLL=0.05 TLON_STALE_SCRIPTS_OK=1
 unset CHECKS_UNQUEUED
