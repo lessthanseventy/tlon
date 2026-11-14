@@ -16,7 +16,7 @@ import { rank } from "./fuzzy"
 import { loadFloor } from "./home"
 import { geometry, kittyImage, measureFor, textLayer } from "./paint"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
-import { badge, cells, ESC, line, out, type Seg } from "./term"
+import { badge, CLEAR_IMAGES, cells, ESC, line, out, UNDER_TMUX, type Seg } from "./term"
 import { centerViewport, clipFrame, type Viewport } from "./viewport"
 import { downHeader } from "./down"
 import { type Row, type Prompt } from "./state"
@@ -75,7 +75,7 @@ export function layoutScreen(app: State, ctl: Screen) {
     ? centerViewport({ x: 0, y: 0, w: vw, h: vh }, OFF_W / 2, (BAND + OFF_DOOR) / 2, app.g.floorW, app.g.floorH)
     : centerViewport({ ...app.viewport, w: vw, h: vh }, app.viewport.x + app.viewport.w / 2, app.viewport.y + app.viewport.h / 2, app.g.floorW, app.g.floorH)
   app.frame = null; app.sentImage = false
-  out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[2J`)
+  out(`${CLEAR_IMAGES}${ESC}[2J`)
 }
 
 /** `roomOnly`: the room's clock moved and nothing else did — repaint the room and its tip, leave the header and the pane as the last full draw made them */
@@ -132,7 +132,7 @@ export function paint(app: State, ctl: Screen, roomOnly: boolean) {
   } else if (fresh || app.roomChanged) { app.frame = room0.render(a, { picked: app.lit ?? app.picked, person: app.mode.kind === "person" ? app.mode.name : null, tray: unread(app), board: boardCtx(app), machine: app.bySurface.counts.machine, clipboard: app.bySurface.clipboard.filter((n) => n.workspace_id == null || n.workspace_id === app.ws) }, measureFor(app.g), app.world?.now()); app.roomChanged = false }
   const seen = clipFrame(app.frame!, vp)
   if (!building) addMargin(app, seen, vp)
-  if (app.g.kitty && (!app.sentImage || fresh || app.imageDirty || app.panned)) { o += kittyImage(seen, app.g, vp); app.sentImage = true; app.imageDirty = false }
+  if (app.g.kitty && (!app.sentImage || fresh || app.imageDirty || app.panned)) { o += kittyImage(seen, app.g, vp, UNDER_TMUX); app.sentImage = true; app.imageDirty = false }
   if (!app.g.kitty) textLayer(seen, app.g, vp).forEach((l, i) => { o += `${ESC}[${app.g.row + 1 + i};${app.g.col + 1}H${l}` })
   app.panned = false
   // the tip line: what the pointer is over, or what just happened

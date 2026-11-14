@@ -3,7 +3,7 @@ import { dirname, join } from "node:path"
 import { ROLE } from "../kit/palette"
 import { BLANK_SOUL } from "../kit/hall"
 import * as data from "./data"
-import { ESC, leave, line, out } from "./term"
+import { CLEAR_IMAGES, ESC, leave, line, out } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { STATE_DIR, SOULS } from "./state"
 import { threadOf } from "./select"
@@ -165,7 +165,7 @@ export function play(app: State, ctl: Screen, g: (typeof GAMES)[number]) {
 
 export function zoomOn(app: State, ctl: Screen, target: Target, label: string, after?: () => void) {
   const colsN = cols(), rowsN = Math.max(2, (process.stdout.rows ?? 24) - 1)
-  out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[2J`)
+  out(`${CLEAR_IMAGES}${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[2J`)
   app.zoom = { label, after, view: new TerminalView(target, colsN, rowsN, () => drawZoom(app), () => leaveZoom(app, ctl)) }
   drawZoom(app)
 }

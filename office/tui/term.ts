@@ -17,7 +17,13 @@ export const out = (s: string) => { if (!muted) process.stdout.write(s) }
 export function mute() { muted = true }
 
 export const ENTER = `${ESC}[?1049h${ESC}[?25l${ESC}[?1003h${ESC}[?1006h${ESC}[?2004h${ESC}[?1004h${ESC}[2J${ESC}[22;2t${ESC}]2;tlon office${ESC}\\`
-export const LEAVE = `${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[?1004l${ESC}[?25h${ESC}[?1049l${ESC}[23;2t`
+/** a kitty command as tmux passes one through to its client (arena unwraps it), else nothing reaches the terminal */
+export const passthrough = (apc: string) => `${ESC}Ptmux;${apc.replaceAll(ESC, ESC + ESC)}${ESC}\\`
+export const UNDER_TMUX = !!process.env.TMUX
+/** a kitty command, wrapped where tmux sits between this and the terminal */
+export const gfx = (apc: string) => (UNDER_TMUX ? passthrough(apc) : apc)
+export const CLEAR_IMAGES = gfx(`${ESC}_Ga=d,d=A,q=2${ESC}\\`)
+export const LEAVE = `${CLEAR_IMAGES}${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[?1004l${ESC}[?25h${ESC}[?1049l${ESC}[23;2t`
 export function enter() {
   process.stdin.setRawMode(true)
   process.stdin.resume()
@@ -32,7 +38,7 @@ export function leave() {
 }
 /** ask for the cell size in pixels, and whether kitty graphics work (answered before the DA reply, or never) */
 export function query() {
-  out(`${ESC}[16t${ESC}_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA${ESC}\\${ESC}[c`)
+  out(`${ESC}[16t${gfx(`${ESC}_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA${ESC}\\`)}${ESC}[c`)
 }
 
 const KEYS: Record<string, string> = {

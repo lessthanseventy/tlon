@@ -172,8 +172,7 @@ export async function boot(app: State, ctl: Screen) {
   })
   query()
   await ready
-  // tmux eats the graphics protocol unless told to pass it through; blocks there by default
-  if (process.env.TMUX && process.env.OFFICE_GRAPHICS !== "kitty") app.kitty = false
+
   ctl.layoutScreen()
   process.stdout.on("resize", () => {
     if (app.zoom) { app.zoom.view.resize(cols(), Math.max(2, (process.stdout.rows ?? 24) - 1)); return ctl.drawZoom() }

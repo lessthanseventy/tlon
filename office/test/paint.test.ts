@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { Frame } from "../kit/canvas"
 import { geometry, kittyImage, textLayer } from "../tui/paint"
+import { passthrough } from "../tui/term"
+import { DIACRITICS } from "../tui/diacritics"
 
 describe("kittyImage", () => {
   test("transmits the full floor once and crops via the placement's source rect, scaled by k", () => {
@@ -9,6 +11,27 @@ describe("kittyImage", () => {
     const out = kittyImage(fr, g, { x: 4, y: 4, w: 10, h: 10 })
     expect(out).toContain("a=t,")
     expect(out).toContain("x=8,y=8,w=20,h=20")
+  })
+
+  test("under tmux every command is wrapped for passthrough and the room is placeholder cells, numbered by row", () => {
+    // a frame of its own: one already sent is not sent again
+    const fr = { rgba: new Uint8Array(20 * 20 * 4).fill(7), width: 20, height: 20, ink: [], hits: [] }
+    const g = { k: 2, cw: 8, ch: 10, col: 3, row: 1, cols: 10, rows: 10, kitty: true, floorW: 20, floorH: 20 }
+    const out = kittyImage(fr, g, { x: 0, y: 0, w: 16, h: 15 }, true)
+    const bare = out.replace(/\x1bPtmux;(?:\x1b\x1b|[^\x1b])*\x1b\\/g, "")
+    expect(bare).not.toContain("\x1b_G")
+    expect(out).toContain("\x1bPtmux;\x1b\x1b_Ga=t,")
+    expect(out).toContain("a=p,U=1,i=1,p=1,q=2,c=4,r=3,x=0,y=0,w=32,h=30")
+    const rows = bare.split(/\x1b\[\d+;\d+H/).slice(1)
+    expect(rows.length).toBe(3)
+    expect(bare).toContain("\x1b[2;4H")
+    rows.forEach((r, n) => {
+      expect(r).toStartWith("\x1b[38;2;0;0;1m\u{10EEEE}" + String.fromCodePoint(DIACRITICS[n]!, DIACRITICS[0]!) + "\u{10EEEE}".repeat(3))
+    })
+  })
+
+  test("under tmux the query and the clear are wrapped too", () => {
+    expect(passthrough("\x1b_Ga=d,d=A,q=2\x1b\\")).toBe("\x1bPtmux;\x1b\x1b_Ga=d,d=A,q=2\x1b\x1b\\\x1b\\")
   })
 })
 

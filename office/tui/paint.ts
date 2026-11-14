@@ -6,8 +6,9 @@ import { balloonLines, type Frame, type Hit, type Ink, type Measure } from "../k
 import { placeBox, type Box } from "../kit/balloon"
 import { BODY, SMALL, type Cut } from "../kit/font"
 import { contrast, LINEAR, luminance, rgb, ROLE } from "../kit/palette"
+import { DIACRITICS } from "./diacritics"
 import { png } from "./png"
-import { ESC, line, type Seg } from "./term"
+import { ESC, line, passthrough, type Seg } from "./term"
 import type { Viewport } from "./viewport"
 
 /** where the room sits: `k` screen px per art px; cells of `cw`×`ch` px; the image's cell box; the floor's own size */
@@ -133,6 +134,20 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
 
 let lastImageKey: string | null = null
 
+
+/**
+ * Under tmux an image cannot be placed at the cursor, as tmux owns the screen: it is placed
+ * virtually (`U=1`) and shown by cells of U+10EEEE, coloured with its id and numbered by row; the
+ * rest of a row's cells take their column from the cell before.
+ */
+function placeholders(g: Geometry, cols: number, rows: number): string {
+  let o = ""
+  for (let r = 0; r < rows; r++) {
+    o += `${ESC}[${g.row + 1 + r};${g.col + 1}H${ESC}[38;2;0;0;1m\u{10EEEE}${String.fromCodePoint(DIACRITICS[r]!, DIACRITICS[0]!)}${"\u{10EEEE}".repeat(cols - 1)}${ESC}[39m`
+  }
+  return o
+}
+
 /** what the encoded image depends on: the art, its ink and cover, the scale, and the viewport where a balloon is placed against it */
 function imageKey(fr: Frame, g: Geometry, viewport: Viewport): string {
   const view = fr.ink.some((i) => i.t === "balloon") ? viewport : null
@@ -144,7 +159,8 @@ function imageKey(fr: Frame, g: Geometry, viewport: Viewport): string {
  * (`a=t`, image id 1) — then placed (`a=p`) cropped to the viewport on every call, so panning
  * repositions the crop without ever re-encoding or re-sending the bitmap.
  */
-export function kittyImage(fr: Frame, g: Geometry, viewport: Viewport): string {
+export function kittyImage(fr: Frame, g: Geometry, viewport: Viewport, tmux = false): string {
+  const cmd = tmux ? passthrough : (apc: string) => apc
   const key = imageKey(fr, g, viewport)
   let o = ""
   if (key !== lastImageKey) {
@@ -160,14 +176,15 @@ export function kittyImage(fr: Frame, g: Geometry, viewport: Viewport): string {
     lastImageKey = key
     for (let i = 0; i < data.length; i += 4096) {
       const more = i + 4096 < data.length ? 1 : 0
-      o += i === 0
+      o += cmd(i === 0
         ? `${ESC}_Ga=t,f=100,i=1,q=2,m=${more};${data.slice(i, i + 4096)}${ESC}\\`
-        : `${ESC}_Gm=${more};${data.slice(i, i + 4096)}${ESC}\\`
+        : `${ESC}_Gm=${more};${data.slice(i, i + 4096)}${ESC}\\`)
     }
   }
   const x = Math.round(viewport.x * g.k), y = Math.round(viewport.y * g.k), vw = Math.round(viewport.w * g.k), vh = Math.round(viewport.h * g.k)
-  o += `${ESC}[${g.row + 1};${g.col + 1}H${ESC}_Ga=d,d=i,i=1,p=1,q=2${ESC}\\${ESC}_Ga=p,i=1,p=1,q=2,C=1,z=-1,x=${x},y=${y},w=${vw},h=${vh}${ESC}\\`
-  return o
+  if (!tmux) return o + `${ESC}[${g.row + 1};${g.col + 1}H${ESC}_Ga=d,d=i,i=1,p=1,q=2${ESC}\\${ESC}_Ga=p,i=1,p=1,q=2,C=1,z=-1,x=${x},y=${y},w=${vw},h=${vh}${ESC}\\`
+  const cols = Math.min(g.cols, Math.ceil(vw / g.cw)), rows = Math.min(g.rows, Math.ceil(vh / g.ch))
+  return o + cmd(`${ESC}_Ga=p,U=1,i=1,p=1,q=2,c=${cols},r=${rows},x=${x},y=${y},w=${vw},h=${vh}${ESC}\\`) + placeholders(g, cols, rows)
 }
 
 type Cell = { ch: string; fg?: string; bg?: string }
