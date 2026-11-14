@@ -67,8 +67,9 @@ test("a node with no job queue reads neutral under all green: a dim ○ row, no 
   killServer(socket)
   current = { ...health, jobs: false, checks: { running: null, waiting: [] }, merge_queue: [] } as unknown as typeof health
   const office = join(import.meta.dir, "..")
+  // no machine palette: the colour asserted is the default inactive, whatever theme this box has
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' TLON_PALETTE=/nonexistent OFFICE_GRAPHICS=blocks OFFICE_NO_ANIMATE=1 XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   await started(tmux, "the room", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "H")
   await waitFor(screen, "THE RACK · all green", "the rack, all green")
