@@ -3,10 +3,19 @@
 # directory is touched. Runs under a private TMUX_TMPDIR, never the real /tmp/tmux-<uid>.
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+tmp="$(mktemp -d)"
+dir="$tmp/tmux-$(id -u)"
+# A tmux server outlives the script unless killed: kill on every exit, a setup failure included.
+# shellcheck disable=SC2329 # runs from the EXIT trap
+cleanup() {
+  local s
+  for s in "$dir"/*; do [ -S "$s" ] && tmux -S "$s" kill-server 2>/dev/null; done
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+trap 'exit 1' INT TERM HUP
 bad=0
 export TMUX_TMPDIR="$tmp"
-dir="$tmp/tmux-$(id -u)"
 mkdir -p "$dir"
 
 live="$dir/tlon-sweep-live"
@@ -40,5 +49,4 @@ out="$("$here/tmux-sweep.sh" 2>&1)"; code=$?
 [ -f "$dir/not-a-socket" ] && echo "ok   a non-socket entry is left alone" || { echo "FAIL the sweep touched a non-socket"; bad=1; }
 case "$out" in *"removed 1"*) echo "ok   it says how many it removed" ;; *) echo "FAIL it prints the count: $out"; bad=1 ;; esac
 
-tmux -S "$live" kill-server 2>/dev/null
 exit "$bad"
