@@ -15,7 +15,12 @@
 #                                            (a restart that never happened): told of the cut, it
 #                                            restarts, and a restart it can't make fails the cut;
 #                                            otherwise the server is asked to hot-load the build
-#                                            (Server.Release.HotLoad) and restarts if it can't
+#                                            (Server.Release.HotLoad) and restarts if it can't;
+#                                            a cut that changes office/kit or office/rooms is
+#                                            refused when the desktop shell that bundles them
+#                                            (TLON_SHELL_FLAKE, default ~/projects/ficciones) no
+#                                            longer builds, and unchecked where that flake or nix
+#                                            is not found
 #   release.sh status                        what runs, what main has that it doesn't, and
 #                                            whether main is releasable (the server's checks)
 #   release.sh build                         build .release at the current release (server:release;
@@ -90,6 +95,19 @@ case "$cmd" in
       server_same=1
     else
       server_same=""
+    fi
+
+    # The home machine's desktop shell bundles office/kit and office/rooms at this pointer, so a
+    # cut that changes them builds that shell against the new ones first, where its flake is.
+    shell_flake="${TLON_SHELL_FLAKE:-$HOME/projects/ficciones}"
+    if [ -n "$from" ] && [ -z "$rollback" ] && [ -e "$shell_flake/flake.nix" ] && command -v nix >/dev/null &&
+      ! git diff --quiet "$from" "$to" -- office/kit office/rooms; then
+      nix build --no-link --no-write-lock-file "$shell_flake#astal-shell" \
+        --override-input tlon "git+file://$root?ref=refs/remotes/origin/main&rev=$to" >/dev/null || {
+        echo "release refused: the desktop shell in $shell_flake does not build against ${to:0:7}'s office kit — live stays at ${from:0:7}" >&2
+        exit 1
+      }
+      echo "desktop shell: builds against ${to:0:7}'s office kit"
     fi
 
     # built first, moved after: a build that fails leaves the pointer naming what still runs

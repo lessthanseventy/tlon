@@ -2,7 +2,7 @@
 # Self-test of release.sh's pointer cut: only a fast-forward onto a commit on origin/main, a rollback
 # only when asked, the pointer pushed, and a cut that changes nothing the server runs restarts
 # nothing. Runs a copy of the real script in a private clone against a private origin, with a fake
-# release build (so no mix) and a fake curl.
+# release build (so no mix), a fake curl and a fake nix.
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tmp="$(mktemp -d)"
@@ -76,5 +76,31 @@ expect "status names the release and what main has that it lacks" "$(echo "$out"
 expect "  and reads the server's checks" "$(echo "$out" | grep -c '^  gate ok')" "1"
 
 rel nonsense >/dev/null; expect "an unknown command is a usage error" "$?" "2"
+
+# a cut that changes the office kit builds the desktop shell that bundles it first
+export TLON_SHELL_FLAKE="$tmp/flake"
+mkdir "$tmp/flake" && touch "$tmp/flake/flake.nix"
+printf '#!/bin/sh\necho "$@" >>"%s/nix"\nexit "$(cat "%s/nix-code")"\n' "$tmp" "$tmp" >"$tmp/bin/nix"
+chmod +x "$tmp/bin/nix"
+g checkout -q --detach "$c3"
+mkdir -p "$tmp/repo/office/kit"
+commit office/kit/a.ts x "kit"
+c4="$(g rev-parse HEAD)"
+g push -q origin HEAD:main
+
+echo 1 >"$tmp/nix-code"
+out="$(rel cut "$c4" --no-restart)"; code=$?
+expect "a kit the desktop shell does not build against is refused" "$code:$(live)" "1:$c1"
+expect "  and says so" "$(echo "$out" | grep -c 'does not build against')" "1"
+expect "  and .release stays where it was" "$(git -C "$TLON_RELEASE_DIR" rev-parse HEAD)" "$c1"
+
+echo 0 >"$tmp/nix-code"
+out="$(rel cut "$c4" --no-restart)"; code=$?
+expect "a kit it builds against is cut" "$code:$(live)" "0:$c4"
+expect "  and the shell was built at that commit" "$(grep -c "astal-shell --override-input tlon .*rev=$c4" "$tmp/nix")" "2"
+
+rm "$tmp/nix"
+out="$(rel cut "$c3" --rollback --no-restart)"; code=$?
+expect "a rollback builds no shell" "$code:$(live):$(cat "$tmp/nix" 2>/dev/null | wc -l)" "0:$c3:0"
 
 exit "$bad"
