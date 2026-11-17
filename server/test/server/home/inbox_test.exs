@@ -36,6 +36,13 @@ defmodule Server.Home.InboxTest do
     assert_received {:said, "42", "I can only keep text so far" <> _}
   end
 
+  test "the messenger's own command is greeted and never kept", %{say: say} do
+    assert Inbox.hear([%{id: 2, chat: "42", text: "/start"}], "telegram", "42", say) == 3
+
+    assert bodies() == []
+    assert_received {:said, "42", "Text me anything" <> _}
+  end
+
   test "with no chat paired, a chat is told its id and nothing is kept", %{say: say} do
     Inbox.hear([%{id: 1, chat: "99", text: "hello"}], "telegram", "", say)
 

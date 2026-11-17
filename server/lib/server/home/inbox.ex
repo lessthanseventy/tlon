@@ -5,8 +5,10 @@ defmodule Server.Home.Inbox do
   operator's, the `home_chat` setting; until one is set a chat that writes is told its own id and
   nothing is kept, and once one is set every other chat is ignored. The messenger is a module
   (`:home_messenger`, default `Server.Home.Telegram`) answering `name/0`, `token/0`, `updates/1`
-  and `say/2`. On unless `TLON_HOME_INBOX=0` (`:start_home_inbox`); with no token on the machine it
-  does not start.
+  and `say/2`. A message that starts with `/` is the messenger's own command (`/start`), greeted and
+  never kept. Off unless `TLON_START_HOME_INBOX=1` (`:start_home_inbox`), which the service alone
+  sets: a second node polling the same bot would take the operator's messages from it. With no token
+  on the machine it does not start.
   """
   use GenServer
 
@@ -66,6 +68,8 @@ defmodule Server.Home.Inbox do
       "This helper is not paired with a chat yet. This chat's id is #{from}: set `home_chat` to it in tlon's settings."
     )
   end
+
+  defp take(%{chat: chat, text: "/" <> _command}, _via, chat, say), do: say.(chat, "Text me anything and I'll keep it.")
 
   defp take(%{chat: chat, text: text, id: id}, via, chat, say) when is_binary(text) do
     with {:ok, _jot} <- Jot.take(via, id, text), do: say.(chat, "got it")
