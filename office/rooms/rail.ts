@@ -136,7 +136,7 @@ export class RailRoom extends Sim<Layout> {
     // floors and walls, lighter than the room's black so a black cat reads on every one; each area
     // its own pattern
     const tileA = tint(ROLE.prose, ROLE.ground, 0.27), tileB = tint(ROLE.prose, ROLE.ground, 0.21)
-    for (let ty = BAND; ty < H; ty += 8) for (let tx = 0; tx < W; tx += 8) px(tx, ty, 8, 8, ((tx + ty) / 8) % 2 ? tileA : tileB)
+    for (let ty = BAND; ty < H; ty += 8) for (let tx = 0; tx < W; tx += 8) px(tx, ty, 8, 8, ((tx + ty - BAND) / 8) % 2 ? tileA : tileB)
     // your office: a carpet, flecked
     px(0, BAND, 71, 104 - BAND, tint(ROLE.meta, ROLE.ground, 0.3))
     for (let y = BAND + 15; y < 104; y += 3) for (let x = (y * 5) % 7; x < 70; x += 7) px(x, y, 1, 1, tint(ROLE.meta, ROLE.ground, 0.4))
