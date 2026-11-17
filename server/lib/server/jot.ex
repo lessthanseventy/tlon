@@ -2,7 +2,10 @@ defmodule Server.Jot do
   @moduledoc """
   Something the operator sent the home's inbox from away from the machine, kept exactly as it came:
   `via` the messenger it arrived through, `external_id` that messenger's own id for it, so one
-  delivered twice is one jot. Nothing is filed or read here: a jot is the raw capture.
+  delivered twice is one jot. `body` is the raw capture and never changes. Beside it is the reading
+  `Server.Home.Reader` made of it, absent until one is made: `kind` (`"reminder"`, `"note"`, or
+  `"amend"` for a message that only corrected the jot before it), `text`, a reminder's `due_at`, and
+  `nudged_at` once the operator has been told.
   """
   use Ecto.Schema
 
@@ -10,12 +13,51 @@ defmodule Server.Jot do
 
   alias Server.Repo
 
+  @type t :: %__MODULE__{}
+
   schema "jot" do
     field :via, :string
     field :external_id, :integer
     field :body, :string
     field :received_at, :utc_datetime
+    field :kind, :string
+    field :text, :string
+    field :due_at, :utc_datetime
+    field :nudged_at, :utc_datetime
   end
+
+  @doc "Put a reading on `jot`, in place of any it had: a reminder so changed is told again."
+  @spec file(%__MODULE__{}, %{kind: String.t(), text: String.t() | nil, due_at: DateTime.t() | nil}) :: %__MODULE__{}
+  def file(%__MODULE__{} = jot, %{kind: kind, text: text, due_at: due_at}),
+    do: jot |> Ecto.Changeset.change(kind: kind, text: text, due_at: due_at, nudged_at: nil) |> Repo.update!()
+
+  @doc "The newest jot from `via` read as a reminder or a note, nil when none is."
+  @spec last_filed(String.t()) :: %__MODULE__{} | nil
+  def last_filed(via) do
+    Repo.one(
+      from(j in __MODULE__,
+        where: j.via == ^via and j.kind in ["reminder", "note"],
+        order_by: [desc: j.external_id],
+        limit: 1
+      )
+    )
+  end
+
+  @doc "The reminders from `via` due at `now` that the operator has not been told, oldest first."
+  @spec due(String.t(), DateTime.t()) :: [%__MODULE__{}]
+  def due(via, now) do
+    Repo.all(
+      from(j in __MODULE__,
+        where: j.via == ^via and j.kind == "reminder" and is_nil(j.nudged_at) and j.due_at <= ^now,
+        order_by: j.due_at
+      )
+    )
+  end
+
+  @doc "Record that the operator was told `jot` at `now`."
+  @spec nudged(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
+  def nudged(%__MODULE__{} = jot, now),
+    do: jot |> Ecto.Changeset.change(nudged_at: DateTime.truncate(now, :second)) |> Repo.update!()
 
   @doc "Keep `body`: `{:ok, jot}`, or `:seen` when `via` already delivered `external_id`."
   @spec take(String.t(), integer(), String.t()) :: {:ok, %__MODULE__{}} | :seen

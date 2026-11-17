@@ -6,8 +6,70 @@ defmodule Server.Home.InboxTest do
 
   setup do
     Server.TestDB.clean!()
+    reads(fn _body, _previous -> :error end)
+    on_exit(fn -> Application.delete_env(:server, :home_reader) end)
     me = self()
-    %{say: fn chat, text -> send(me, {:said, chat, text}) end}
+
+    %{
+      say: fn chat, text ->
+        send(me, {:said, chat, text})
+        :ok
+      end
+    }
+  end
+
+  defp reads(reader), do: Application.put_env(:server, :home_reader, reader)
+
+  defp friday, do: ~U[2026-11-20 16:00:00Z]
+
+  defp dentist(due, amends), do: {:ok, %{kind: "reminder", text: "call the dentist", due_at: due, amends: amends}}
+
+  test "a jot is read, and the reading is kept beside it and said back", %{say: say} do
+    reads(fn "call the dentist friday", nil -> dentist(friday(), false) end)
+
+    Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", say)
+
+    assert [%{body: "call the dentist friday", kind: "reminder", text: "call the dentist", due_at: due}] =
+             Jot.recent("telegram", 10)
+
+    assert due == friday()
+    assert_received {:said, "42", "I'll remind you " <> _}
+  end
+
+  test "a message that corrects the jot before it changes that jot's reading", %{say: say} do
+    reads(fn _body, nil -> dentist(friday(), false) end)
+    Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", say)
+    saturday = DateTime.add(friday(), 86_400)
+    reads(fn "no, saturday", %Jot{external_id: 7} -> dentist(saturday, true) end)
+
+    Inbox.hear([%{id: 8, chat: "42", text: "no, saturday"}], "telegram", "42", say)
+
+    assert [%{kind: "amend", body: "no, saturday"}, %{kind: "reminder", due_at: ^saturday}] = Jot.recent("telegram", 10)
+    assert_received {:said, "42", "changed: I'll remind you " <> _}
+  end
+
+  test "a reminder is said once it is due, and once only", %{say: say} do
+    reads(fn _body, nil -> dentist(friday(), false) end)
+    Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", say)
+    assert_received {:said, "42", "I'll remind you " <> _}
+
+    Inbox.nudge("telegram", "42", say, DateTime.add(friday(), -60))
+    refute_received {:said, _, _}
+
+    Inbox.nudge("telegram", "42", say, friday())
+    assert_received {:said, "42", "reminder: call the dentist"}
+
+    Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 60))
+    refute_received {:said, _, _}
+  end
+
+  test "a reminder whose message did not go out is said at the next poll" do
+    reads(fn _body, nil -> dentist(friday(), false) end)
+    Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", fn _, _ -> :ok end)
+
+    Inbox.nudge("telegram", "42", fn _chat, _text -> {:error, :timeout} end, friday())
+
+    assert [%{nudged_at: nil}] = Jot.due("telegram", friday())
   end
 
   defp bodies, do: Enum.map(Jot.recent("telegram", 10), & &1.body)
