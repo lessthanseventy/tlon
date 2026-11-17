@@ -7,7 +7,7 @@ const BACKDROP := Color("1f1b24")
 var _demo := false
 var _shot := ""
 var _base := "http://127.0.0.1:4040"
-var _demo_data := {}
+
 var _data := {"open": [], "coming": [], "notes": []}
 var _busy := false
 
@@ -46,8 +46,7 @@ func _ready() -> void:
 		_add_note(Control.PRESET_TOP_LEFT, "art not found")
 
 	if _demo:
-		_demo_data = JSON.parse_string(FileAccess.get_file_as_string("res://demo.json"))
-		_apply(_demo_data)
+		_apply(JSON.parse_string(FileAccess.get_file_as_string("res://demo.json")))
 	else:
 		_http = HTTPRequest.new()
 		_http.timeout = 4.0

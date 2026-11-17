@@ -1,9 +1,9 @@
 # tlon — boundaries for a session at the repo root
 
 Tlön, the dev product: `server/` (the always-up brain — threads, facts, worklines, staffing; its node
-is `funes@`), `adapters/` (what makes a Claude Code session a citizen of the server) and `office/`
+is `funes@`), `adapters/` (what makes a Claude Code session a citizen of the server), `office/`
 (the pixel-art room over it: a shared kit, its rooms, and the standalone TUI that is the operator's
-surface). It runs on any box with Postgres and mise; the home machine wires it in from
+surface) and `house/` (a standalone Godot window over the home: what the operator's jots left open). It runs on any box with Postgres and mise; the home machine wires it in from
 ficciones (`~/projects/ficciones`), which is where the Nix, the desktop and the secrets live.
 
 ## The dev loop — one shared API
