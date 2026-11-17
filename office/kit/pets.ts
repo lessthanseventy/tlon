@@ -145,16 +145,21 @@ export function stepDog(d: Dog, ctx: {
     const to = d.path[0]!
     // faced before the step: a chase hands him a point one step off, and after it there is no way left to face
     if (to.x !== d.x) d.face = Math.sign(to.x - d.x)
-    d.x += Math.sign(to.x - d.x); d.y += Math.sign(to.y - d.y)
-    if (d.x === to.x && d.y === to.y) d.path.shift()
+    // a point between two pixels counts as reached from the pixel beside it: stepping a whole
+    // pixel at a time he would cross it for ever
+    if (Math.abs(to.x - d.x) >= 1) d.x += Math.sign(to.x - d.x)
+    if (Math.abs(to.y - d.y) >= 1) d.y += Math.sign(to.y - d.y)
+    if (Math.abs(to.x - d.x) < 1 && Math.abs(to.y - d.y) < 1) d.path.shift()
     if (!d.path.length) {
       d.creep = false
       const bed = ctx.bed(), asleep = d.x === bed.x && d.y === bed.y
       d.mode = asleep ? "sleep" : "sit"
       d.until = ctx.tick + (asleep ? 900 : 200) + Math.floor(random() * 400)
-      const host = d.host ? ctx.actors.get(d.host) : undefined
-      if (host && d.cheer) {
-        d.cheer = false; host.emote = "♥"; host.emoteUntil = ctx.tick + 60; ctx.say(ctx.argos("cheer", host.seat.agent))
+      const host = d.host ? ctx.actors.get(d.host) : undefined, cheer = d.cheer
+      // the visit is spent here: the next place he stops is not beside them
+      d.host = null; d.cheer = false
+      if (host && cheer) {
+        host.emote = "♥"; host.emoteUntil = ctx.tick + 60; ctx.say(ctx.argos("cheer", host.seat.agent))
       } else if (host) {
         if (random() < 0.6) ctx.fussDog(host)
         else { host.emote = "♥"; host.emoteUntil = ctx.tick + 40; ctx.say(ctx.argos("visit", host.seat.agent)) }
