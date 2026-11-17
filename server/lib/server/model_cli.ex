@@ -39,7 +39,10 @@ defmodule Server.ModelCli do
   @doc """
   `prompt/5` with the command and model named outright, for a caller that picks them itself. A
   `provider/model` model (`anthropic/claude-haiku-5-5`) runs through `gateway.sh` on that
-  provider's endpoint; a bare one (`haiku`) on the operator's own Claude login.
+  provider's endpoint; a bare one (`haiku`) on the operator's own Claude login. `opts[:cd]` is the
+  directory the CLI runs in, `opts[:tools]` the tools a call on the Claude plan may use
+  (`"Read,Grep,Glob"`), `opts[:settings]` the setting sources it loads (`"user"` leaves out the
+  working directory's own `.claude/settings.json`).
   """
   def run(prompt, cmd, model, opts \\ []) do
     base = Path.join(System.tmp_dir!(), "model-cli-#{System.unique_integer([:positive])}")
@@ -59,6 +62,7 @@ defmodule Server.ModelCli do
     timeout = opts[:timeout_s] || Application.get_env(:server, :model_cli_timeout_s, 120)
 
     {provider, model, flags} = parse_model(model)
+    flags = flags ++ tools(provider, opts[:tools]) ++ settings(provider, opts[:settings])
 
     # The prompt is the CLI's stdin, read from a file: as an argument, one past 128 KB (a grade's
     # diff) can't be passed to exec at all. A file, never the command's own stdin, which stays an open
@@ -69,7 +73,10 @@ defmodule Server.ModelCli do
       ["-c", ~s(exec timeout "$0" "$@" <"$MODEL_CLI_IN" 2>"$MODEL_CLI_ERR"), to_string(timeout)] ++
         [Server.Harness.ClaudeCode.gateway(), provider, cmd, "-p", "--model", model] ++ flags
 
-    case Server.Cmd.run("sh", args, env: [{"MODEL_CLI_ERR", err}, {"MODEL_CLI_IN", input} | keys()], timeout: :infinity) do
+    run = [env: [{"MODEL_CLI_ERR", err}, {"MODEL_CLI_IN", input} | keys()], timeout: :infinity]
+    run = if opts[:cd], do: [{:cd, opts[:cd]} | run], else: run
+
+    case Server.Cmd.run("sh", args, run) do
       {out, 0} -> {:ok, out}
       # `timeout` kills the CLI before `why` could be read elsewhere, so a hang keeps its stderr here
       {out, 124} -> {:error, {:model_cli_timeout, timeout, why(err, out)}}
@@ -79,6 +86,13 @@ defmodule Server.ModelCli do
   rescue
     e in ErlangError -> {:error, {:model_cli_missing, Exception.message(e)}}
   end
+
+  # off the Claude plan a call is bare, with no tools at all
+  defp tools("anthropic", tools) when is_binary(tools), do: ["--tools", tools]
+  defp tools(_provider, _tools), do: []
+
+  defp settings("anthropic", sources) when is_binary(sources), do: ["--setting-sources", sources]
+  defp settings(_provider, _sources), do: []
 
   defp refused(provider, why) do
     Server.Shifts.refused(provider, why)

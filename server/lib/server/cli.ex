@@ -140,6 +140,19 @@ defmodule Server.CLI do
     end
   end
 
+  @doc """
+  Reviews a branch headless (`Server.BranchReview.Headless`): the review and its verdict, with what
+  the merge queue said to an approval. Requested changes are an error, so a caller reads them as red.
+  """
+  @spec review(String.t()) :: result()
+  def review(branch) do
+    case Server.BranchReview.Headless.review(Server.Profiles.tlon_root(), branch) do
+      {:ok, %{verdict: "approve"} = review} -> {:ok, reviewed("✓ approved", branch, review)}
+      {:ok, review} -> {:error, reviewed("✗ changes requested", branch, review)}
+      {:error, why} -> {:error, "not reviewed: " <> why}
+    end
+  end
+
   @doc "The newest review verdict on a branch, as JSON (`null` when there is none)."
   @spec branch_review(String.t()) :: result()
   def branch_review(branch) do
@@ -384,4 +397,10 @@ defmodule Server.CLI do
 
   defp reason(why) when is_binary(why), do: why
   defp reason(why), do: inspect(why)
+
+  defp reviewed(mark, branch, %{sha: sha, by: by, body: body, landing: landing}) do
+    [body, "#{mark}: #{branch} at #{String.slice(sha, 0, 12)}, read by #{by}", landing]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join("\n\n")
+  end
 end
