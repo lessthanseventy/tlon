@@ -6,7 +6,7 @@ defmodule Server.Home.InboxTest do
 
   setup do
     Server.TestDB.clean!()
-    reads(fn _body, _previous -> :error end)
+    reads(fn _body, _context -> :error end)
     on_exit(fn -> Application.delete_env(:server, :home_reader) end)
     me = self()
 
@@ -26,7 +26,7 @@ defmodule Server.Home.InboxTest do
   defp dentist(due, amends), do: {:ok, %{kind: "reminder", text: "call the dentist", due_at: due, amends: amends}}
 
   test "a jot is read, and the reading is kept beside it and said back", %{say: say} do
-    reads(fn "call the dentist friday", nil -> dentist(friday(), false) end)
+    reads(fn "call the dentist friday", %{previous: nil, open: [], notes: []} -> dentist(friday(), false) end)
 
     Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", say)
 
@@ -38,10 +38,10 @@ defmodule Server.Home.InboxTest do
   end
 
   test "a message that corrects the jot before it changes that jot's reading", %{say: say} do
-    reads(fn _body, nil -> dentist(friday(), false) end)
+    reads(fn _body, _context -> dentist(friday(), false) end)
     Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", say)
     saturday = DateTime.add(friday(), 86_400)
-    reads(fn "no, saturday", %Jot{external_id: 7} -> dentist(saturday, true) end)
+    reads(fn "no, saturday", %{previous: %Jot{external_id: 7}} -> dentist(saturday, true) end)
 
     Inbox.hear([%{id: 8, chat: "42", text: "no, saturday"}], "telegram", "42", say)
 
@@ -49,8 +49,122 @@ defmodule Server.Home.InboxTest do
     assert_received {:said, "42", "changed: I'll remind you " <> _}
   end
 
+  defp keep(id, text, reading, say) do
+    reads(fn _body, _context -> {:ok, Map.merge(%{due_at: nil, every: nil, ids: [], amends: false}, reading)} end)
+    Inbox.hear([%{id: id, chat: "42", text: text}], "telegram", "42", say)
+    assert_received {:said, "42", _}
+    [jot] = Jot.recent("telegram", 1)
+    jot
+  end
+
+  test "a to-do and an overdue reminder are still open, a later one is coming up, each open one with its tick", %{
+    say: say
+  } do
+    milk = keep(1, "buy milk", %{kind: "todo", text: "buy milk"}, say)
+    keep(2, "wifi is on the fridge", %{kind: "note", text: "wifi is on the fridge"}, say)
+    dentist = keep(3, "dentist", %{kind: "reminder", text: "call the dentist", due_at: ~U[2026-11-01 16:00:00Z]}, say)
+    keep(4, "bins", %{kind: "reminder", text: "bins", due_at: DateTime.add(friday(), 2, :day)}, say)
+
+    assert {text, choices: [[{"✓ buy milk", tick}], [{"✓ call the dentist", _}]]} =
+             Inbox.digest("telegram", DateTime.add(friday(), 1, :hour))
+
+    assert tick == "tick:#{milk.id}"
+    assert text =~ "Still open:\n• buy milk\n• call the dentist\n\nComing up:\n• "
+    assert text =~ ": bins"
+    refute text =~ "wifi"
+
+    Inbox.hear([press("tick", milk)], "telegram", "42", say)
+    assert_received {:said, "42", "Still open:\n• call the dentist" <> _}
+    assert_received {:with, replace: 90, choices: [[{"✓ call the dentist", _}]]}
+
+    Inbox.hear([press("tick", dentist)], "telegram", "42", say)
+    assert_received {:said, "42", "Coming up:" <> _}
+    assert Inbox.digest("telegram", DateTime.add(friday(), 3, :day)) != nil
+  end
+
+  test "asked what is open, the helper lists it, and the question is kept as nothing", %{say: say} do
+    keep(1, "buy milk", %{kind: "todo", text: "buy milk"}, say)
+
+    reads(fn "what's on my list?", %{open: [%Jot{text: "buy milk"}]} ->
+      {:ok, %{kind: "list", text: "", ids: [], amends: false}}
+    end)
+
+    Inbox.hear([%{id: 2, chat: "42", text: "what's on my list?"}], "telegram", "42", say)
+
+    assert_received {:said, "42", "Still open:\n• buy milk"}
+    assert [%{kind: "talk"}, %{kind: "todo"}] = Jot.recent("telegram", 10)
+  end
+
+  test "told in words that things are done, the helper closes them", %{say: say} do
+    milk = keep(1, "buy milk", %{kind: "todo", text: "buy milk"}, say)
+    reads(fn _body, _context -> {:ok, %{kind: "done", text: "", ids: [milk.id, 999], amends: false}} end)
+
+    Inbox.hear([%{id: 2, chat: "42", text: "got the milk"}], "telegram", "42", say)
+
+    assert_received {:said, "42", "done: buy milk"}
+    assert Inbox.digest("telegram", friday()) == nil
+
+    Inbox.hear([%{id: 3, chat: "42", text: "got the milk again"}], "telegram", "42", say)
+    assert_received {:said, "42", "I couldn't tell which one you meant.\n\nNothing open."}
+  end
+
+  test "a question is answered from the notes it is shown, and kept as nothing", %{say: say} do
+    keep(1, "wifi at mom's is on the fridge", %{kind: "note", text: "wifi at mom's is on the fridge"}, say)
+
+    reads(fn "where's mom's wifi?", %{notes: ["wifi at mom's is on the fridge"]} ->
+      {:ok, %{kind: "answer", text: "On the fridge.", ids: [], amends: false}}
+    end)
+
+    Inbox.hear([%{id: 2, chat: "42", text: "where's mom's wifi?"}], "telegram", "42", say)
+
+    assert_received {:said, "42", "On the fridge."}
+    assert Jot.notes("telegram", 10) == ["wifi at mom's is on the fridge"]
+  end
+
+  test "a reminder that repeats is put off to its next time when done", %{say: say} do
+    jot = keep(1, "bins every week", %{kind: "reminder", text: "bins", due_at: friday(), every: "week"}, say)
+    Inbox.nudge("telegram", "42", say, friday())
+    assert_received {:said, "42", "reminder: bins"}
+
+    Inbox.hear([press("done", jot)], "telegram", "42", say)
+
+    assert_received {:said, "42", "done: bins. Next: " <> _}
+    assert [%{done_at: nil, due_at: due, nudges: 0}] = Jot.recent("telegram", 1)
+    assert DateTime.diff(due, friday(), :day) == 7
+  end
+
+  test "a reminder that repeats and was never answered moves on to its newest time", %{say: say} do
+    keep(1, "bins every day", %{kind: "reminder", text: "bins", due_at: friday(), every: "day"}, say)
+    Inbox.nudge("telegram", "42", say, friday())
+    assert_received {:said, "42", "reminder: bins"}
+
+    Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 49, :hour))
+
+    assert_received {:said, "42", "reminder: bins"}
+    assert [%{due_at: due, nudges: 1}] = Jot.recent("telegram", 1)
+    assert DateTime.diff(due, friday(), :hour) == 48
+  end
+
+  test "the daily list is said once a day, after its time, and not on the day the inbox starts late", %{say: say} do
+    keep(1, "buy milk", %{kind: "todo", text: "buy milk"}, say)
+    before = Server.Home.Clock.utc(~N[2026-11-20 17:00:00])
+    past = Server.Home.Clock.utc(~N[2026-11-20 17:31:00])
+
+    assert Inbox.daily("telegram", "42", say, past, "17:30", :boot) == ~D[2026-11-20]
+    assert Inbox.daily("telegram", "42", say, before, "17:30", :boot) == ~D[2026-11-19]
+    assert Inbox.daily("telegram", "42", say, before, "17:30", ~D[2026-11-19]) == ~D[2026-11-19]
+    refute_received {:said, _, _}
+
+    assert Inbox.daily("telegram", "42", say, past, "17:30", ~D[2026-11-19]) == ~D[2026-11-20]
+    assert_received {:said, "42", "Before you clock out:\n\nStill open:\n• buy milk"}
+
+    assert Inbox.daily("telegram", "42", say, past, "17:30", ~D[2026-11-20]) == ~D[2026-11-20]
+    assert Inbox.daily("telegram", "42", say, past, "", ~D[2026-11-19]) == ~D[2026-11-19]
+    refute_received {:said, _, _}
+  end
+
   defp reminded(say) do
-    reads(fn _body, nil -> dentist(friday(), false) end)
+    reads(fn _body, _context -> dentist(friday(), false) end)
     Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", say)
     assert_received {:said, "42", "I'll remind you " <> _}
     [jot] = Jot.recent("telegram", 1)
@@ -67,7 +181,7 @@ defmodule Server.Home.InboxTest do
 
     Inbox.nudge("telegram", "42", say, friday())
     assert_received {:said, "42", "reminder: call the dentist"}
-    assert_received {:with, choices: [{"Done", done}, {"In an hour", _}, {"Tomorrow", _}]}
+    assert_received {:with, choices: [[{"Done", done}, {"In an hour", _}, {"Tomorrow", _}]]}
     assert done == "done:#{jot.id}"
   end
 

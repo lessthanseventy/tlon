@@ -156,6 +156,12 @@ defmodule Server.OperatorConfig do
     %{key: "weather_location", type: "string", default: "", doc: "where the office's weather comes from"},
     %{key: "home_chat", type: "string", default: "", doc: "the messenger chat the home's inbox keeps jots from"},
     %{
+      key: "home_list_at",
+      type: "string",
+      default: "17:30",
+      doc: "when the home's helper says what is still open each day, local HH:MM; empty for never"
+    },
+    %{
       key: "intake_every_minutes",
       type: "int",
       min: 1,

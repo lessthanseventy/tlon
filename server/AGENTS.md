@@ -186,7 +186,10 @@ and every layer the spine design's re-laid §9 asked for
   sweep (daily 07:00) and report (Mondays 07:30) are standing schedules, `ensure_schedules/2`.
 - **the home's inbox** (`Server.Home.Inbox`, `Server.Jot`) — what the operator texts a messenger bot
   from their phone, kept raw as a `jot`, then read by one small model call (`Server.Home.Reader`: a
-  reminder with its time, or a note) and the reading said back; a message that corrects the jot before it
+  reminder with its time and whether it repeats, a to-do, or a note) and the reading said back. A
+  message can also ask the helper for something and is then kept as nothing: that things are done,
+  what is open, or a question its notes answer. What is open is also said once a day at the
+  `home_list_at` setting, each thing with a button that ticks it off. A message that corrects the jot before it
   changes that jot's reading, and a reminder is said in the chat when it comes due, with done / in an
   hour / tomorrow under it, and again if left unanswered (never at night, six times at most). No
   reading, and the answer is "got it". Times are the machine's zone (`Server.Home.Clock`). The

@@ -40,13 +40,21 @@ defmodule Server.Home.Telegram do
   end
 
   @doc """
-  Send `text` to `chat`. `opts[:choices]`, `[{label, data}]`, are buttons under it, a tap on one
-  coming back from `updates/1`; `opts[:replace]` is the `ref` of a message this one takes the place
-  of, its buttons gone.
+  Send `text` to `chat`. `opts[:choices]`, rows of `{label, data}`, are buttons under it, a tap on
+  one coming back from `updates/1`; `opts[:replace]` is the `ref` of a message this one takes the
+  place of, its buttons with it.
   """
   @spec say(String.t(), String.t(), keyword()) :: :ok | {:error, term()}
   def say(chat, text, opts \\ []) do
-    with {:ok, _} <- get(call(chat, text, opts[:replace], opts[:choices] || []), 10_000), do: :ok
+    query = [chat_id: chat, text: text] ++ markup(opts[:choices] || [])
+
+    call =
+      case opts[:replace] do
+        nil -> "sendMessage?" <> URI.encode_query(query)
+        ref -> "editMessageText?" <> URI.encode_query([message_id: ref] ++ query)
+      end
+
+    with {:ok, _} <- get(call, 10_000), do: :ok
   end
 
   @doc "A `getUpdates` reply as `updates/1` answers it."
@@ -95,13 +103,10 @@ defmodule Server.Home.Telegram do
   defp present(""), do: nil
   defp present(value), do: value
 
-  defp call(chat, text, nil, []), do: "sendMessage?" <> URI.encode_query(chat_id: chat, text: text)
+  defp markup([]), do: []
 
-  defp call(chat, text, nil, choices) do
-    keys = [Enum.map(choices, fn {label, data} -> %{text: label, callback_data: data} end)]
-    "sendMessage?" <> URI.encode_query(chat_id: chat, text: text, reply_markup: JSON.encode!(%{inline_keyboard: keys}))
+  defp markup(rows) do
+    keys = for row <- rows, do: for({label, data} <- row, do: %{text: label, callback_data: data})
+    [reply_markup: JSON.encode!(%{inline_keyboard: keys})]
   end
-
-  defp call(chat, text, ref, _choices),
-    do: "editMessageText?" <> URI.encode_query(chat_id: chat, message_id: ref, text: text)
 end
