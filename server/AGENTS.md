@@ -184,6 +184,9 @@ and every layer the spine design's re-laid §9 asked for
   workline's in-flight state forgotten, its lessons kept — `landed_facts`; a
   `stated` fact is refused), and posts the weekly counts at the front desk (`knowledge_report`). Its
   sweep (daily 07:00) and report (Mondays 07:30) are standing schedules, `ensure_schedules/2`.
+- **review marks** (`Server.ReviewMarks`, swept each minute) — each tmux pane on a checkout of this
+  repo carries `@arena_review` (`reviewed`, `changes`, `queued`, `landed`, or unset), the state of the
+  branch it is on, for arena's rail; a commit after the review clears it.
 - **the home's inbox** (`Server.Home.Inbox`, `Server.Jot`) — what the operator texts a messenger bot
   from their phone (a voice note heard on this machine by whisper.cpp, `Server.Home.Ear`, when
   `TLON_WHISPER_MODEL` names a model), kept raw as a `jot`, then read by one small model call (`Server.Home.Reader`: a
