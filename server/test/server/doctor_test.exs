@@ -22,6 +22,7 @@ defmodule Server.DoctorTest do
                "habit",
                "health_since",
                "issue",
+               "jot",
                "message",
                "need_dismissal",
                "need_heard",

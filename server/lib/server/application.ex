@@ -66,6 +66,7 @@ defmodule Server.Application do
         maybe(:start_banter, false, Server.Office.Random) ++
         maybe(:start_weather, false, {Server.Office.Weather, []}) ++
         maybe(:start_calendar, false, {Server.Calendar, []}) ++
+        maybe(:start_home_inbox, false, {Server.Home.Inbox, []}) ++
         maybe(:start_mcp, false, mcp_children()) ++
         maybe(
           :start_oban,

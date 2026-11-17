@@ -51,7 +51,9 @@ if config_env() != :test do
     start_banter: System.get_env("TLON_BANTER") not in ~w(0 false no),
     # the weather outside the office's windows (Server.Office.Weather, wttr.in): on unless TLON_WEATHER=0
     start_weather: System.get_env("TLON_WEATHER") not in ~w(0 false no),
-    start_calendar: System.get_env("TLON_CALENDAR") not in ~w(0 false no)
+    start_calendar: System.get_env("TLON_CALENDAR") not in ~w(0 false no),
+    # the home's inbox (Server.Home.Inbox): on unless TLON_HOME_INBOX=0; idle without a bot token
+    start_home_inbox: System.get_env("TLON_HOME_INBOX") not in ~w(0 false no)
 end
 
 # The operator's handle — who the human IS on this machine's channel. Local

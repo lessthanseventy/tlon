@@ -48,6 +48,7 @@ defmodule Server.TestDB do
     "generated_part",
     "need_dismissal",
     "need_routing",
+    "jot",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so
     # tickets clear before all of them; note has no FK.
     Server.Ticket,
