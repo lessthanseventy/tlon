@@ -50,7 +50,7 @@ defmodule Server.Home.Reader do
   @doc "A reading, or a filed jot, as the helper says it back."
   @spec say(%{kind: String.t(), text: String.t(), due_at: DateTime.t() | nil}) :: String.t()
   def say(%{kind: "reminder", text: text, due_at: %DateTime{} = due}),
-    do: "I'll remind you #{Calendar.strftime(local(due), "%a %-d %b %H:%M")}: #{text}"
+    do: "I'll remind you #{Server.Home.Clock.say(due)}: #{text}"
 
   def say(%{kind: "note", text: text}), do: "noted: #{text}"
 
@@ -61,28 +61,12 @@ defmodule Server.Home.Reader do
 
   defp at(text) when is_binary(text) do
     case NaiveDateTime.from_iso8601(if String.length(text) == 16, do: text <> ":00", else: text) do
-      {:ok, local} -> utc(local)
+      {:ok, local} -> Server.Home.Clock.utc(local)
       _ -> nil
     end
   end
 
   defp at(_none), do: nil
-
-  # an hour that happens twice (clocks back) is its first; one that never happens is the hour after
-  defp utc(local) do
-    case :calendar.local_time_to_universal_time_dst(NaiveDateTime.to_erl(local)) do
-      [utc | _] -> utc |> NaiveDateTime.from_erl!() |> DateTime.from_naive!("Etc/UTC")
-      [] -> utc(NaiveDateTime.add(local, 3600))
-    end
-  end
-
-  defp local(utc) do
-    utc
-    |> DateTime.to_naive()
-    |> NaiveDateTime.to_erl()
-    |> :calendar.universal_time_to_local_time()
-    |> NaiveDateTime.from_erl!()
-  end
 
   defp prompt(body, previous, now) do
     """
