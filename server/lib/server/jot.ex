@@ -4,7 +4,9 @@ defmodule Server.Jot do
   `via` the messenger it arrived through, `external_id` that messenger's own id for it, so one
   delivered twice is one jot. `body` is the raw capture and never changes. Beside it is the reading
   `Server.Home.Reader` made of it, absent until one is made: `kind` (`"reminder"`, `"note"`, or
-  `"amend"` for a message that only corrected the jot before it), `text`, a reminder's `due_at`, when
+  `"todo"`, `"amend"` for a message that only corrected the jot before it, `"talk"` for one that
+  asked or told the helper something and is nothing to keep), `text`, a reminder's `due_at` and the
+  `every` it repeats by, when
   and how often the operator has been told (`nudged_at`, `nudges`), and `done_at` once they say it is
   done.
   """
@@ -27,19 +29,56 @@ defmodule Server.Jot do
     field :nudged_at, :utc_datetime
     field :nudges, :integer, default: 0
     field :done_at, :utc_datetime
+    field :every, :string
   end
 
-  @doc "Put a reading on `jot`, in place of any it had: a reminder so changed is open again and told again."
+  @doc """
+  Put a reading on `jot`, in place of any it had: a reminder so changed is open again and told
+  again. `every` (`"day"`, `"week"`, `"month"`) is a reminder that repeats.
+  """
   @spec file(%__MODULE__{}, %{kind: String.t(), text: String.t() | nil, due_at: DateTime.t() | nil}) :: %__MODULE__{}
-  def file(%__MODULE__{} = jot, %{kind: kind, text: text, due_at: due_at}),
-    do: put(jot, kind: kind, text: text, due_at: due_at, nudged_at: nil, nudges: 0, done_at: nil)
+  def file(%__MODULE__{} = jot, %{kind: kind, text: text, due_at: due_at} = reading) do
+    put(jot,
+      kind: kind,
+      text: text,
+      due_at: due_at,
+      every: Map.get(reading, :every),
+      nudged_at: nil,
+      nudges: 0,
+      done_at: nil
+    )
+  end
 
-  @doc "The newest jot from `via` read as a reminder or a note, nil when none is."
+  @doc "Everything from `via` still open, reminders and to-dos: the to-dos first, then the reminders by their time."
+  @spec opens(String.t()) :: [%__MODULE__{}]
+  def opens(via) do
+    Repo.all(
+      from(j in __MODULE__,
+        where: j.via == ^via and j.kind in ["reminder", "todo"] and is_nil(j.done_at),
+        order_by: [asc_nulls_first: j.due_at, asc: j.id]
+      )
+    )
+  end
+
+  @doc "The text of the newest `limit` notes from `via`, newest first."
+  @spec notes(String.t(), pos_integer()) :: [String.t()]
+  def notes(via, limit) do
+    Repo.all(
+      from(j in __MODULE__,
+        where: j.via == ^via and j.kind == "note",
+        order_by: [desc: j.id],
+        limit: ^limit,
+        select: j.text
+      )
+    )
+  end
+
+  @doc "The newest jot from `via` read as a reminder, a to-do or a note, nil when none is."
   @spec last_filed(String.t()) :: %__MODULE__{} | nil
   def last_filed(via) do
     Repo.one(
       from(j in __MODULE__,
-        where: j.via == ^via and j.kind in ["reminder", "note"],
+        where: j.via == ^via and j.kind in ["reminder", "todo", "note"],
         order_by: [desc: j.external_id],
         limit: 1
       )
@@ -69,21 +108,24 @@ defmodule Server.Jot do
     )
   end
 
-  @doc "The open reminder `id` from `via`, nil when it is none or is done."
+  @doc "The open reminder or to-do `id` from `via`, nil when it is none or is done."
   @spec open(String.t(), integer()) :: %__MODULE__{} | nil
-  def open(via, id),
-    do:
-      Repo.one(
-        from(j in __MODULE__, where: j.via == ^via and j.id == ^id and j.kind == "reminder" and is_nil(j.done_at))
+  def open(via, id) do
+    Repo.one(
+      from(j in __MODULE__,
+        where: j.via == ^via and j.id == ^id and j.kind in ["reminder", "todo"] and is_nil(j.done_at)
       )
+    )
+  end
 
   @doc "Record that the operator was told `jot` at `now`."
   @spec nudged(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
   def nudged(%__MODULE__{} = jot, now), do: put(jot, nudged_at: DateTime.truncate(now, :second), nudges: jot.nudges + 1)
 
-  @doc "Record that `jot` was done at `now`."
+  @doc "Record that `jot` was done at `now`. A reminder that repeats stays open, put off to its next time."
   @spec done(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
-  def done(%__MODULE__{} = jot, now), do: put(jot, done_at: DateTime.truncate(now, :second))
+  def done(%__MODULE__{every: nil} = jot, now), do: put(jot, done_at: DateTime.truncate(now, :second))
+  def done(%__MODULE__{every: every} = jot, now), do: put_off(jot, Server.Home.Clock.next(jot.due_at, every, now))
 
   @doc "Put the reminder `jot` off to `due_at`: told afresh then."
   @spec put_off(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}

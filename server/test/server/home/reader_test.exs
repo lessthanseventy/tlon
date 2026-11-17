@@ -13,12 +13,30 @@ defmodule Server.Home.ReaderTest do
   end
 
   test "a reminder with no time it can read is a note" do
-    assert {:ok, %{kind: "note", due_at: nil}} = Reader.parse(~s({"kind":"reminder","text":"milk","at":"friday"}))
+    assert {:ok, %{kind: "todo", due_at: nil}} = Reader.parse(~s({"kind":"reminder","text":"milk","at":"friday"}))
 
     assert {:ok, %{kind: "note", text: "milk", amends: true} = note} =
              Reader.parse(~s({"kind":"note","text":"milk","at":null,"amends":true}))
 
     assert Reader.say(note) == "noted: milk"
+  end
+
+  test "a reminder that repeats says how, and says so back" do
+    reply = ~s({"kind":"reminder","text":"bins","at":"2026-11-19T19:00","every":"week","ids":[],"amends":false})
+
+    assert {:ok, %{kind: "reminder", every: "week"} = reading} = Reader.parse(reply)
+    assert Reader.say(reading) == "I'll remind you Thu 19 Nov 19:00, then every week: bins"
+    assert {:ok, %{every: nil}} = Reader.parse(String.replace(reply, "week", "fortnight"))
+  end
+
+  test "what the operator wants of the helper needs no text, but an answer does" do
+    assert {:ok, %{kind: "done", ids: [3, 4]}} = Reader.parse(~s({"kind":"done","ids":[3,"x",4]}))
+    assert {:ok, %{kind: "list", ids: []}} = Reader.parse(~s({"kind":"list","text":""}))
+
+    assert {:ok, %{kind: "answer", text: "On the fridge."}} =
+             Reader.parse(~s({"kind":"answer","text":"On the fridge."}))
+
+    assert Reader.parse(~s({"kind":"answer","text":""})) == :error
   end
 
   test "a reply that holds no reading is none" do
@@ -43,7 +61,16 @@ defmodule Server.Home.ReaderTest do
 
     previous = %Server.Jot{body: "milk", kind: "note", text: "milk"}
 
-    assert Reader.read("no, oat milk", previous) == {:ok, %{kind: "note", text: "oat milk", due_at: nil, amends: true}}
+    context = %{
+      previous: previous,
+      open: [%Server.Jot{id: 12, kind: "todo", text: "buy bread"}],
+      notes: ["the bins go out thursday"]
+    }
+
+    assert Reader.read("no, oat milk", context) ==
+             {:ok, %{kind: "note", text: "oat milk", due_at: nil, every: nil, ids: [], amends: true}}
+
+    assert File.read!(Path.join(dir, "asked")) =~ "OPEN:\n12: to do: buy bread\nNOTES:\n- the bins go out thursday"
     asked = File.read!(Path.join(dir, "asked"))
     assert asked =~ "MESSAGE: no, oat milk"
     assert asked =~ "PREVIOUS MESSAGE: milk"
