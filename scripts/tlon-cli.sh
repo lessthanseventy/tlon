@@ -71,6 +71,9 @@
 #   red-verify <id> <finding…>     a red verify back to build on the same branch, with its finding
 #   branch-review <branch>         the newest review verdict on a non-workline branch, as JSON
 #                                  ({verdict, sha, by, body}, or null)
+#   review <branch>                review a branch headless, on a model that wrote none of it, and
+#                                  print the review (`mise run review`); an approval queues the
+#                                  branch's open PR in the merge queue, requested changes exit 1
 #   land-pr <pr> <branch> [author] queue a reviewed PR in the merge queue (`mise run land`); refused
 #                                  unless the branch's review on tlon, by neither its author nor a
 #                                  builder of it, approves its head
@@ -612,6 +615,12 @@ case "$cmd" in
     case "${4:-}" in '') operator=false ;; --operator) operator=true ;; *) pr="" ;; esac
     { int "$pr" && [ -n "$branch" ]; } || { echo 'usage: tlon-cli.sh land-pr <pr> <branch> [author] [--operator]' >&2; exit 2; }
     exec "$SERVER" rpc "Server.CLI.land_pr($pr, \"$(esc "$branch")\", \"$(esc "$author")\", $operator) |> Server.CLI.out(:stderr)"
+    ;;
+
+  review)
+    branch="${1:-}"
+    [ -n "$branch" ] || { echo 'usage: tlon-cli.sh review <branch>' >&2; exit 2; }
+    exec "$SERVER" rpc "Server.CLI.review(\"$(esc "$branch")\") |> Server.CLI.out()"
     ;;
 
   branch-review)

@@ -214,6 +214,11 @@ defmodule Server.CLITest do
       assert CLI.branch_review("no-such-branch") == {:ok, "null"}
     end
 
+    test "review says why a branch could not be reviewed" do
+      assert CLI.review("main") ==
+               {:error, "not reviewed: main is never reviewed as a branch — review the branch that lands on it"}
+    end
+
     test "land_pr refuses a branch no review approves" do
       assert {:error, "refused: " <> _} = CLI.land_pr(1, "no-such-branch", "")
     end
