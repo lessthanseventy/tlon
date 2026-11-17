@@ -2,8 +2,9 @@ defmodule Server.ReviewMarks do
   @moduledoc """
   A branch's review, shown where the operator watches their sessions. Each tmux pane whose directory
   is a checkout of this repo carries the pane option `@arena_review`, which arena draws on its rail:
-  `queued` while the branch's landing waits or runs; `landed` once the commit its newest review
-  (`Server.BranchReview`) is of is on origin's main; `reviewed` or `changes` when that review is of
+  `queued` while the branch's landing waits or runs; `landed` once the commits its newest review
+  (`Server.BranchReview`) is of are on origin's main, by their patches, since a rebase-merge gives
+  them new names; `reviewed` or `changes` when that review is of
   the commit checked out; unset otherwise, so a commit made after a review clears the mark. Kept by
   a sweep (`Server.Jobs.ReviewMarks`), not by the events, so a pane that changes branch is right at
   the next pass. With no tmux there is nothing to mark.
@@ -53,10 +54,18 @@ defmodule Server.ReviewMarks do
 
   defp of(false, %{sha: sha, verdict: verdict}, head, dir) do
     cond do
-      git(dir, ["merge-base", "--is-ancestor", sha, "origin/main"]) == {:ok, ""} -> "landed"
+      landed?(dir, sha) -> "landed"
       sha != head -> ""
       verdict == "approve" -> "reviewed"
       true -> "changes"
+    end
+  end
+
+  # `git cherry` marks with `+` each commit whose patch main does not hold
+  defp landed?(dir, sha) do
+    case git(dir, ["cherry", "origin/main", sha]) do
+      {:ok, out} -> not String.contains?(out, "+ ")
+      :error -> false
     end
   end
 
