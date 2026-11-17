@@ -993,6 +993,29 @@ defmodule Server.MCP.GatewayTest do
     end
   end
 
+  describe "/api/home — what the operator's jots have left open (Server.MCP.OperatorAPI)" do
+    test "open things, what is coming and the notes; a thing is done once" do
+      Server.TestDB.clean!()
+      {:ok, milk} = Server.Jot.take("telegram", 1, "buy milk")
+      Server.Jot.file(milk, %{kind: "todo", text: "buy milk", due_at: nil})
+      {:ok, bins} = Server.Jot.take("telegram", 2, "bins")
+      Server.Jot.file(bins, %{kind: "reminder", text: "bins", due_at: ~U[2099-01-01 09:00:00Z], every: "week"})
+      {:ok, wifi} = Server.Jot.take("telegram", 3, "wifi")
+      Server.Jot.file(wifi, %{kind: "note", text: "wifi is on the fridge", due_at: nil})
+
+      {200, home} = get_json("/api/home")
+
+      assert [%{"id" => id, "kind" => "todo", "text" => "buy milk"}] = home["open"]
+      assert [%{"text" => "bins", "every" => "week", "due_at" => "2099-01-01T09:00:00Z"}] = home["coming"]
+      assert home["notes"] == ["wifi is on the fridge"]
+
+      assert {200, %{"id" => ^id, "text" => "buy milk"}} = post_json("/api/home/#{id}/done", %{})
+      assert {404, _} = post_json("/api/home/#{id}/done", %{})
+      assert {404, _} = post_json("/api/home/nope/done", %{})
+      assert {200, %{"open" => []}} = get_json("/api/home")
+    end
+  end
+
   describe "/api/life — routines, quests, xp (Server.MCP.OperatorAPI)" do
     test "the full loop: status, create a routine and a quest, edit, stamp done, stamp twice" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Home", type: "home"})
