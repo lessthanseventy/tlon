@@ -184,6 +184,11 @@ and every layer the spine design's re-laid §9 asked for
   workline's in-flight state forgotten, its lessons kept — `landed_facts`; a
   `stated` fact is refused), and posts the weekly counts at the front desk (`knowledge_report`). Its
   sweep (daily 07:00) and report (Mondays 07:30) are standing schedules, `ensure_schedules/2`.
+- **the home's inbox** (`Server.Home.Inbox`, `Server.Jot`) — what the operator texts a messenger bot
+  from their phone, kept raw as a `jot` and answered "got it"; nothing files or reads a jot yet. The
+  messenger is a module (`Server.Home.Telegram`: outbound long polling, so no port is opened; its token
+  is the machine's, `TELEGRAM_BOT_TOKEN` or agenix `telegram-bot-token`). Only the `home_chat` setting's
+  chat is kept; unset, a chat that writes is told its id. No token, no poller.
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board); a script's `ran-on: <check> <sha>` line records the commit

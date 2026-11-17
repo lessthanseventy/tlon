@@ -154,6 +154,7 @@ defmodule Server.OperatorConfig do
       doc: "the provider/model every one-shot runs on: banter, titles, the judge, the toys"
     },
     %{key: "weather_location", type: "string", default: "", doc: "where the office's weather comes from"},
+    %{key: "home_chat", type: "string", default: "", doc: "the messenger chat the home's inbox keeps jots from"},
     %{
       key: "intake_every_minutes",
       type: "int",
