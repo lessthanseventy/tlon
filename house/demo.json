@@ -1,0 +1,18 @@
+{
+  "open": [
+    {"id": 1, "kind": "todo", "text": "buy milk", "due_at": null, "every": null},
+    {"id": 2, "kind": "reminder", "text": "call the dentist back about the appointment", "due_at": "2026-11-17T09:30:00Z", "every": null},
+    {"id": 3, "kind": "todo", "text": "send Sam the photos", "due_at": null, "every": null}
+  ],
+  "coming": [
+    {"id": 4, "kind": "reminder", "text": "take the bins out", "due_at": "2026-11-17T18:00:00Z", "every": "week"},
+    {"id": 5, "kind": "reminder", "text": "pay rent", "due_at": "2026-11-28T08:00:00Z", "every": "month"},
+    {"id": 6, "kind": "reminder", "text": "water the plant", "due_at": "2026-12-02T10:00:00Z", "every": "week"}
+  ],
+  "notes": [
+    "wifi at mom's is on the fridge",
+    "the good pen is in the blue drawer",
+    "Sam prefers texts to calls",
+    "library card number ends 4417"
+  ]
+}
