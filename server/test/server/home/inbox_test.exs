@@ -11,8 +11,9 @@ defmodule Server.Home.InboxTest do
     me = self()
 
     %{
-      say: fn chat, text ->
+      say: fn chat, text, opts ->
         send(me, {:said, chat, text})
+        if opts != [], do: send(me, {:with, opts})
         :ok
       end
     }
@@ -48,28 +49,111 @@ defmodule Server.Home.InboxTest do
     assert_received {:said, "42", "changed: I'll remind you " <> _}
   end
 
-  test "a reminder is said once it is due, and once only", %{say: say} do
+  defp reminded(say) do
     reads(fn _body, nil -> dentist(friday(), false) end)
     Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", say)
     assert_received {:said, "42", "I'll remind you " <> _}
+    [jot] = Jot.recent("telegram", 1)
+    jot
+  end
+
+  defp press(what, jot), do: %{id: 20, chat: "42", text: nil, tap: "#{what}:#{jot.id}", tap_id: "q", ref: 90}
+
+  test "a reminder is said when it is due, with its choices under it", %{say: say} do
+    jot = reminded(say)
 
     Inbox.nudge("telegram", "42", say, DateTime.add(friday(), -60))
     refute_received {:said, _, _}
 
     Inbox.nudge("telegram", "42", say, friday())
     assert_received {:said, "42", "reminder: call the dentist"}
-
-    Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 60))
-    refute_received {:said, _, _}
+    assert_received {:with, choices: [{"Done", done}, {"In an hour", _}, {"Tomorrow", _}]}
+    assert done == "done:#{jot.id}"
   end
 
-  test "a reminder whose message did not go out is said at the next poll" do
-    reads(fn _body, nil -> dentist(friday(), false) end)
-    Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", fn _, _ -> :ok end)
+  test "a reminder left unanswered is said again after half an hour, then an hour after that", %{say: say} do
+    reminded(say)
+    Inbox.nudge("telegram", "42", say, friday())
+    assert_received {:said, "42", "reminder: " <> _}
 
-    Inbox.nudge("telegram", "42", fn _chat, _text -> {:error, :timeout} end, friday())
+    Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 29, :minute))
+    refute_received {:said, _, _}
 
-    assert [%{nudged_at: nil}] = Jot.due("telegram", friday())
+    Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 30, :minute))
+    assert_received {:said, "42", "reminder: " <> _}
+
+    Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 89, :minute))
+    refute_received {:said, _, _}
+
+    Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 90, :minute))
+    assert_received {:said, "42", "reminder: " <> _}
+  end
+
+  test "an unanswered reminder waits out the night", %{say: say} do
+    reminded(say)
+    night = Server.Home.Clock.utc(~N[2026-11-20 23:00:00])
+    Inbox.nudge("telegram", "42", say, DateTime.add(night, -3600))
+    assert_received {:said, "42", "reminder: " <> _}
+
+    Inbox.nudge("telegram", "42", say, night)
+    refute_received {:said, _, _}
+
+    Inbox.nudge("telegram", "42", say, Server.Home.Clock.utc(~N[2026-11-21 08:00:00]))
+    assert_received {:said, "42", "reminder: " <> _}
+  end
+
+  test "a tap on done closes the reminder, in place of the message it was under", %{say: say} do
+    jot = reminded(say)
+    Inbox.nudge("telegram", "42", say, friday())
+    assert_received {:said, "42", "reminder: " <> _}
+    assert_received {:with, choices: _}
+
+    assert Inbox.hear([press("done", jot)], "telegram", "42", say) == 21
+
+    assert_received {:said, "42", "done: call the dentist"}
+    assert_received {:with, replace: 90}
+    Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 30, :minute))
+    refute_received {:said, _, _}
+
+    Inbox.hear([press("done", jot)], "telegram", "42", say)
+    assert_received {:said, "42", "That one is already done."}
+  end
+
+  test "a tap on in an hour or tomorrow puts the reminder off, to be said afresh then", %{say: say} do
+    jot = reminded(say)
+    Inbox.nudge("telegram", "42", say, friday())
+
+    Inbox.hear([press("tomorrow", jot)], "telegram", "42", say)
+
+    [%{due_at: due, nudges: 0, nudged_at: nil}] = Jot.recent("telegram", 1)
+    local = Server.Home.Clock.local(due)
+    assert NaiveDateTime.to_time(local) == ~T[09:00:00]
+
+    assert Date.diff(NaiveDateTime.to_date(local), NaiveDateTime.to_date(Server.Home.Clock.local(DateTime.utc_now()))) ==
+             1
+
+    Inbox.hear([press("hour", jot)], "telegram", "42", say)
+    [%{due_at: due}] = Jot.recent("telegram", 1)
+    assert_in_delta DateTime.diff(due, DateTime.utc_now()), 3600, 5
+  end
+
+  test "done typed in the chat is the reminder said last, and is kept as no jot", %{say: say} do
+    reminded(say)
+    Inbox.nudge("telegram", "42", say, friday())
+    assert_received {:said, "42", "reminder: " <> _}
+
+    Inbox.hear([%{id: 9, chat: "42", text: " Done "}], "telegram", "42", say)
+
+    assert_received {:said, "42", "done: call the dentist"}
+    assert [%{done_at: %DateTime{}}] = Jot.recent("telegram", 10)
+  end
+
+  test "a reminder whose message did not go out is said at the next poll", %{say: say} do
+    reminded(say)
+
+    Inbox.nudge("telegram", "42", fn _chat, _text, _opts -> {:error, :timeout} end, friday())
+
+    assert [%{nudged_at: nil, nudges: 0}] = Jot.due("telegram", friday())
   end
 
   defp bodies, do: Enum.map(Jot.recent("telegram", 10), & &1.body)

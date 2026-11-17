@@ -12,6 +12,14 @@ defmodule Server.Home.TelegramTest do
              {:ok, [%{id: 5, chat: "42", text: "milk"}, %{id: 6, chat: "42", text: nil}]}
   end
 
+  test "a tap on a choice carries the choice's data and the message it was under" do
+    body =
+      ~s({"ok":true,"result":[{"update_id":7,"callback_query":{"id":"q1","data":"done:3",) <>
+        ~s("message":{"message_id":90,"chat":{"id":42}}}}]})
+
+    assert Telegram.parse(body) == {:ok, [%{id: 7, chat: "42", text: nil, tap: "done:3", tap_id: "q1", ref: 90}]}
+  end
+
   test "an update that is no message (an edit, a join) keeps its id and names no chat" do
     assert Telegram.parse(~s({"ok":true,"result":[{"update_id":9,"edited_message":{}}]})) ==
              {:ok, [%{id: 9, chat: nil, text: nil}]}

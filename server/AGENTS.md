@@ -187,8 +187,9 @@ and every layer the spine design's re-laid §9 asked for
 - **the home's inbox** (`Server.Home.Inbox`, `Server.Jot`) — what the operator texts a messenger bot
   from their phone, kept raw as a `jot`, then read by one small model call (`Server.Home.Reader`: a
   reminder with its time, or a note) and the reading said back; a message that corrects the jot before it
-  changes that jot's reading, and a reminder is said in the chat when it comes due. No reading, and the
-  answer is "got it". The
+  changes that jot's reading, and a reminder is said in the chat when it comes due, with done / in an
+  hour / tomorrow under it, and again if left unanswered (never at night, six times at most). No
+  reading, and the answer is "got it". Times are the machine's zone (`Server.Home.Clock`). The
   messenger is a module (`Server.Home.Telegram`: outbound long polling, so no port is opened; its token
   is the machine's, `TELEGRAM_BOT_TOKEN` or agenix `telegram-bot-token`). Only the `home_chat` setting's
   chat is kept; unset, a chat that writes is told its id. Opt-in, `TLON_START_HOME_INBOX=1`, set by the
