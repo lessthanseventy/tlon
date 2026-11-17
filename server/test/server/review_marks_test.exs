@@ -87,6 +87,19 @@ defmodule Server.ReviewMarksTest do
     assert_received {:tmux, ["set-option", "-p", "-t", "%1", "@arena_review", "landed"]}
   end
 
+  test "landed when main holds the reviewed commit under another name, as a rebase-merge leaves it", %{repo: repo} do
+    {:ok, _} = review(repo, "approve")
+    reviewed = git(repo, ~w(rev-parse HEAD))
+    git(repo, ~w(switch -q --detach refs/remotes/origin/main))
+    git(repo, ["cherry-pick", "-x", reviewed])
+    refute git(repo, ~w(rev-parse HEAD)) == reviewed
+    git(repo, ~w(update-ref refs/remotes/origin/main HEAD))
+    git(repo, ~w(switch -q feat))
+
+    swept(repo, [{"%1", repo, "reviewed"}])
+    assert_received {:tmux, ["set-option", "-p", "-t", "%1", "@arena_review", "landed"]}
+  end
+
   test "main, an unreviewed branch, and a pane somewhere else carry no mark", %{repo: repo, dir: dir} do
     swept(repo, [{"%1", repo, ""}, {"%2", dir, ""}, {"%3", "/nonexistent", ""}])
     refute_received {:tmux, _}
