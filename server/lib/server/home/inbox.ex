@@ -6,7 +6,8 @@ defmodule Server.Home.Inbox do
   nothing is kept, and once one is set every other chat is ignored. The messenger is a module
   (`:home_messenger`, default `Server.Home.Telegram`) answering `name/0`, `token/0`, `updates/1`
   and `say/2`. A message that starts with `/` is the messenger's own command (`/start`), greeted and
-  never kept. A kept jot is read (`:home_reader`, default `Server.Home.Reader.read/2`) and the reading
+  never kept. A voice note is heard on this machine (`:home_ear`, default `Server.Home.Ear.hear/1`)
+  and its words are the jot, said back as heard. A kept jot is read (`:home_reader`, default `Server.Home.Reader.read/2`) and the reading
   said back, so a wrong one shows at once; a message that corrects the jot before it changes that
   jot's reading; with no reading the answer is "got it" and the jot stays raw. A message can also
   ask the helper for something, and is then nothing to keep: that things are done, what is open
@@ -188,6 +189,20 @@ defmodule Server.Home.Inbox do
           {text, opts} = filed(jot, via, now)
           say.(chat, text, opts)
         end
+    end
+  end
+
+  defp take(%{chat: chat, voice: file, id: id}, via, chat, say) do
+    case Application.get_env(:server, :home_ear, &Server.Home.Ear.hear/1).(file) do
+      {:ok, heard} ->
+        with {:ok, jot} <- Jot.take(via, id, heard) do
+          {text, opts} = filed(jot, via, DateTime.utc_now())
+          say.(chat, "heard: “#{heard}”\n" <> text, opts)
+        end
+
+      {:error, why} ->
+        Logger.warning("home inbox: a voice note was not heard: #{inspect(why)}")
+        say.(chat, "I couldn't make that one out: type it and I'll keep it.", [])
     end
   end
 

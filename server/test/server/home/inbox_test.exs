@@ -289,6 +289,29 @@ defmodule Server.Home.InboxTest do
     refute_received {:said, _, _}
   end
 
+  test "a voice note's words are the jot, said back as heard", %{say: say} do
+    Application.put_env(:server, :home_ear, fn "f1" -> {:ok, "call the dentist friday"} end)
+    on_exit(fn -> Application.delete_env(:server, :home_ear) end)
+    reads(fn "call the dentist friday", _context -> dentist(friday(), false) end)
+
+    assert Inbox.hear([%{id: 7, chat: "42", text: nil, voice: "f1"}], "telegram", "42", say) == 8
+
+    assert [%{body: "call the dentist friday", kind: "reminder"}] = Jot.recent("telegram", 10)
+    assert_received {:said, "42", "heard: “call the dentist friday”\nI'll remind you " <> _}
+  end
+
+  test "a voice note that cannot be heard is kept nowhere, and said so", %{say: say} do
+    Application.put_env(:server, :home_ear, fn _file -> {:error, :silence} end)
+    on_exit(fn -> Application.delete_env(:server, :home_ear) end)
+
+    ExUnit.CaptureLog.capture_log(fn ->
+      Inbox.hear([%{id: 7, chat: "42", text: nil, voice: "f1"}], "telegram", "42", say)
+    end)
+
+    assert bodies() == []
+    assert_received {:said, "42", "I couldn't make that one out" <> _}
+  end
+
   test "what is not text is kept nowhere, and said so", %{say: say} do
     assert Inbox.hear([%{id: 3, chat: "42", text: nil}], "telegram", "42", say) == 4
 
