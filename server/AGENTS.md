@@ -188,7 +188,9 @@ and every layer the spine design's re-laid §9 asked for
   from their phone, kept raw as a `jot` and answered "got it"; nothing files or reads a jot yet. The
   messenger is a module (`Server.Home.Telegram`: outbound long polling, so no port is opened; its token
   is the machine's, `TELEGRAM_BOT_TOKEN` or agenix `telegram-bot-token`). Only the `home_chat` setting's
-  chat is kept; unset, a chat that writes is told its id. No token, no poller.
+  chat is kept; unset, a chat that writes is told its id. Opt-in, `TLON_START_HOME_INBOX=1`, set by the
+  service alone: a dev boot, an eval or a smoke node that polled would take the operator's messages
+  from the service. No token, no poller.
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board); a script's `ran-on: <check> <sha>` line records the commit
