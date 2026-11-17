@@ -39,6 +39,7 @@ defmodule Server.Jobs.OutcomeContractTest do
     Server.Jobs.KeepUp => "the checkouts, not a thread",
     Server.Jobs.Maintain => "every workline's sweep",
     Server.Jobs.Release => "a cut names a sha, not a thread",
+    Server.Jobs.ReviewMarks => "every pane's mark",
     Server.Jobs.RunSchedule => "a schedule run has its own record",
     Server.Jobs.ShiftBack => "a crew's offer back",
     Server.Jobs.Staff => "the staffing pass",

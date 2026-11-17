@@ -41,6 +41,8 @@ config :server, Oban,
        {"*/30 * * * *", Server.Jobs.Maintain},
        # the staffing pass: cold, orphaned and stale coworker windows closed, each minute
        {"* * * * *", Server.Jobs.Staff},
+       # each pane's review mark, for arena's rail (Server.ReviewMarks)
+       {"* * * * *", Server.Jobs.ReviewMarks},
        # the calendar: fire what the operator scheduled that is due (Server.Schedules)
        {"* * * * *", Server.Jobs.Dispatch},
        # the backlog's intake: the next ready ticket to the manager while worklines are under the cap
