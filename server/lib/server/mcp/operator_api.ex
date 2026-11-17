@@ -156,6 +156,8 @@ defmodule Server.MCP.OperatorAPI do
       PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe; the page it replaces is kept
       GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
+      GET    /api/home                   Server.Home.status; {open, coming, notes}: what the operator's jots have left open
+      POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
   """
 
   import Plug.Conn
@@ -558,6 +560,17 @@ defmodule Server.MCP.OperatorAPI do
     do: with_row(conn, Server.Routine, id, &done_routine(conn, &1))
 
   defp route(conn, "POST", "life", ["quests", id, "done"]), do: with_row(conn, Server.Quest, id, &done_quest(conn, &1))
+
+  defp route(conn, "GET", "home", []), do: json(conn, 200, Server.Home.status(DateTime.utc_now()))
+
+  defp route(conn, "POST", "home", [id, "done"]) do
+    with {id, ""} <- Integer.parse(id),
+         {:ok, jot} <- Server.Home.done(id, DateTime.utc_now()) do
+      json(conn, 200, %{id: jot.id, text: jot.text, done_at: jot.done_at, due_at: jot.due_at})
+    else
+      _ -> no_route(conn)
+    end
+  end
 
   defp route(conn, _, _, _), do: no_route(conn)
 

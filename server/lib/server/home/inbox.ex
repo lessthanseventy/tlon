@@ -74,8 +74,7 @@ defmodule Server.Home.Inbox do
   """
   @spec digest(String.t(), DateTime.t()) :: {String.t(), keyword()} | nil
   def digest(via, now) do
-    {coming, open} =
-      via |> Jot.opens() |> Enum.split_with(&(&1.kind == "reminder" and DateTime.after?(&1.due_at, now)))
+    {coming, open} = Server.Home.board(via, now)
 
     parts =
       [
