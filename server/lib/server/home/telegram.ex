@@ -27,6 +27,7 @@ defmodule Server.Home.Telegram do
   @doc """
   The updates from `offset` on, waiting up to #{@wait_s} s for one: `{:ok, [%{id, chat, text}]}`,
   `chat` nil for an update that is no message and `text` nil for a message that is not text. A tap
+  A voice note is `%{id, chat, text: nil, voice}`, `voice` the file `fetch/1` reads. A tap
   on one of a message's choices is `%{id, chat, text: nil, tap, tap_id, ref}`: `tap` the choice's
   data, `ref` the message it was under. A tap is acknowledged here, so the button stops waiting.
   """
@@ -57,6 +58,18 @@ defmodule Server.Home.Telegram do
     with {:ok, _} <- get(call, 10_000), do: :ok
   end
 
+  @doc "The bytes of the file `file`, a voice note's `voice` in an update."
+  @spec fetch(String.t()) :: {:ok, binary()} | {:error, term()}
+  def fetch(file) do
+    with {:ok, body} <- get("getFile?" <> URI.encode_query(file_id: file), 10_000),
+         {:ok, %{"result" => %{"file_path" => path}}} <- JSON.decode(body) do
+      request("https://api.telegram.org/file/bot#{token()}/#{path}", 30_000)
+    else
+      {:error, why} -> {:error, why}
+      _ -> {:error, "Telegram named no file"}
+    end
+  end
+
   @doc "A `getUpdates` reply as `updates/1` answers it."
   @spec parse(binary()) :: {:ok, [map()]} | {:error, term()}
   def parse(body) do
@@ -66,6 +79,9 @@ defmodule Server.Home.Telegram do
       _ -> {:error, "not a Telegram reply"}
     end
   end
+
+  defp update(%{"update_id" => id, "message" => %{"chat" => %{"id" => chat}, "voice" => %{"file_id" => file}}}),
+    do: %{id: id, chat: to_string(chat), text: nil, voice: file}
 
   defp update(%{"update_id" => id, "message" => %{"chat" => %{"id" => chat}} = message}),
     do: %{id: id, chat: to_string(chat), text: message["text"]}
@@ -82,7 +98,9 @@ defmodule Server.Home.Telegram do
 
   defp update(%{"update_id" => id}), do: %{id: id, chat: nil, text: nil}
 
-  defp get(call, timeout) do
+  defp get(call, timeout), do: request("https://api.telegram.org/bot#{token()}/#{call}", timeout)
+
+  defp request(url, timeout) do
     _ = Application.ensure_all_started([:inets, :ssl])
 
     ssl = [
@@ -91,9 +109,9 @@ defmodule Server.Home.Telegram do
       customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
     ]
 
-    url = ~c"https://api.telegram.org/bot#{token()}/#{call}"
-
-    case :httpc.request(:get, {url, []}, [timeout: timeout, connect_timeout: 5_000, ssl: ssl], body_format: :binary) do
+    case :httpc.request(:get, {String.to_charlist(url), []}, [timeout: timeout, connect_timeout: 5_000, ssl: ssl],
+           body_format: :binary
+         ) do
       {:ok, {{_v, 200, _r}, _headers, body}} -> {:ok, body}
       {:ok, {{_v, code, _r}, _headers, _body}} -> {:error, "Telegram answered #{code}"}
       {:error, why} -> {:error, why}

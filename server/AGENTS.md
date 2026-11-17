@@ -185,7 +185,8 @@ and every layer the spine design's re-laid §9 asked for
   `stated` fact is refused), and posts the weekly counts at the front desk (`knowledge_report`). Its
   sweep (daily 07:00) and report (Mondays 07:30) are standing schedules, `ensure_schedules/2`.
 - **the home's inbox** (`Server.Home.Inbox`, `Server.Jot`) — what the operator texts a messenger bot
-  from their phone, kept raw as a `jot`, then read by one small model call (`Server.Home.Reader`: a
+  from their phone (a voice note heard on this machine by whisper.cpp, `Server.Home.Ear`, when
+  `TLON_WHISPER_MODEL` names a model), kept raw as a `jot`, then read by one small model call (`Server.Home.Reader`: a
   reminder with its time and whether it repeats, a to-do, or a note) and the reading said back. A
   message can also ask the helper for something and is then kept as nothing: that things are done,
   what is open, or a question its notes answer. What is open is also said once a day at the

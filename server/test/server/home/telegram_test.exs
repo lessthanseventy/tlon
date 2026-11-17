@@ -12,6 +12,12 @@ defmodule Server.Home.TelegramTest do
              {:ok, [%{id: 5, chat: "42", text: "milk"}, %{id: 6, chat: "42", text: nil}]}
   end
 
+  test "a voice note carries the file to fetch" do
+    body = ~s({"ok":true,"result":[{"update_id":8,"message":{"chat":{"id":42},"voice":{"file_id":"f1","duration":3}}}]})
+
+    assert Telegram.parse(body) == {:ok, [%{id: 8, chat: "42", text: nil, voice: "f1"}]}
+  end
+
   test "a tap on a choice carries the choice's data and the message it was under" do
     body =
       ~s({"ok":true,"result":[{"update_id":7,"callback_query":{"id":"q1","data":"done:3",) <>
