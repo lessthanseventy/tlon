@@ -103,7 +103,7 @@ var h:
 		return _hw.get_ref()
 var rng := RandomNumberGenerator.new()
 var found := {}
-var persist := true
+var persist := false
 var scene := {}
 var things: Array = []
 var fall := {}
