@@ -82,6 +82,9 @@ const NOTE_SPOTS := {
 }
 const NOTE_TILT := [-0.1, 0.07, 0.05, -0.07]
 
+# a scripted run (the soak) keeps nothing in user://, whatever its arguments
+static var scripted := false
+
 var room: Control
 var pets := Pets.new()
 var look := Look.new()
@@ -260,7 +263,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 					)
 	if "--shot" in args and seed_value < 0:
 		seed_value = 7
-	var staged := "--demo" in args or "--shot" in args
+	var staged := scripted or "--demo" in args or "--shot" in args
 	if "--demo" in args:
 		focus.persist = false
 	elif focus.persist:

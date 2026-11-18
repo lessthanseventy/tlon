@@ -23,7 +23,7 @@ const EVENTS := [
 
 var muted := true
 var store := "user://house_sound.json"
-var persist := true
+var persist := false
 var requested: Array = []
 var mark_left := 0.0
 

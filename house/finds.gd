@@ -56,7 +56,7 @@ var line_text := ""
 
 var _mouse_next := 600.0
 var _t := 0.0
-var _persist := true
+var _persist := false
 
 
 func setup(home, persist_it: bool) -> void:

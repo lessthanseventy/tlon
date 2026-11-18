@@ -46,6 +46,7 @@ var _state := {
 
 
 func _initialize() -> void:
+	load("res://home.gd").scripted = true
 	_run.call_deferred()
 
 
