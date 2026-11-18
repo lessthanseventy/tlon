@@ -256,6 +256,71 @@ defmodule Server.Home.FormsTest do
     end
   end
 
+  describe "a put-off repeat edited back in" do
+    test "an edit of only the repeat moves the time to the next one after now, as revive does" do
+      {:ok, %{id: id}} = add(kind: "reminder", text: "bins", at: "2026-11-25T09:00", every: "week")
+      {:ok, %{id: twin}} = add(kind: "reminder", text: "bins too", at: "2026-11-25T09:00", every: "week")
+      for id <- [id, twin], do: set(fresh(id), due_at: local("2026-11-10 09:00:00"))
+      for id <- [id, twin], do: Jot.someday(fresh(id), now())
+
+      assert {:ok, %{due_at: due}} = edit(id, every: "2 week")
+      assert due == local("2026-11-24 09:00:00")
+      assert %{someday_at: nil} = fresh(id)
+
+      assert {:ok, %{due_at: ^due}} = Home.revive(twin, now())
+    end
+  end
+
+  describe "how far from now a time may be" do
+    test "a time a year back or twenty years ahead is refused with one line, nothing crashes or hangs" do
+      for at <- [
+            "1900-01-01T09:00",
+            "1900-01-01T09:00Z",
+            "1969-12-31T23:00",
+            "2025-11-01T09:00",
+            "2047-01-01T09:00",
+            "2999-01-01T09:00Z"
+          ] do
+        task = Task.async(fn -> add(kind: "reminder", text: "x", at: at) end)
+        assert {:ok, {:error, "at is " <> _}} = Task.yield(task, 3000) || Task.shutdown(task, :brutal_kill), at
+      end
+    end
+
+    test "a time within a year back or twenty years ahead is kept as given" do
+      for {at, due} <- [
+            {"2025-11-21T09:00", "2025-11-21 09:00:00"},
+            {"2026-11-19T09:00", "2026-11-19 09:00:00"},
+            {"2046-11-19T09:00", "2046-11-19 09:00:00"}
+          ] do
+        expected = local(due)
+        assert {:ok, %{due_at: ^expected}} = add(kind: "reminder", text: "x", at: at)
+      end
+    end
+
+    test "a repeat started in the past starts from its next time after now, a monthly one keeping its day" do
+      assert {:ok, %{due_at: due}} = add(kind: "reminder", text: "daily", at: "2026-11-10T09:00", every: "day")
+      assert due == local("2026-11-21 09:00:00")
+
+      assert {:ok, %{id: id, due_at: due}} = add(kind: "reminder", text: "rent", at: "2026-01-31T09:00", every: "month")
+      assert due == local("2026-11-30 09:00:00")
+      assert %{every_day: 31} = fresh(id)
+
+      {:ok, %{id: id}} = add(kind: "reminder", text: "later", at: "2026-11-25T09:00", every: "week")
+      assert {:ok, %{due_at: due}} = edit(id, at: "2026-11-10T09:00")
+      assert due == local("2026-11-24 09:00:00")
+    end
+  end
+
+  describe "the Telegram cursor" do
+    test "counts only ids a messenger gave: forms alone leave it where a new install starts" do
+      {:ok, _} = add(kind: "todo", text: "from a form")
+      assert Jot.cursor("telegram") == nil
+
+      {:ok, _} = "telegram" |> Jot.take(12, "said") |> then(&{:ok, &1})
+      assert Jot.cursor("telegram") == 12
+    end
+  end
+
   describe "at" do
     defp expected_at(%NaiveDateTime{} = local), do: Clock.utc(local)
     defp expected_at(%DateTime{} = utc), do: utc

@@ -401,10 +401,7 @@ defmodule Server.Home.Organize do
   end
 
   def revive(jot, now) do
-    due =
-      if jot.every && !DateTime.after?(jot.due_at, now),
-        do: Clock.next(jot.due_at, jot.every, now, jot.every_day),
-        else: jot.due_at
+    due = if jot.every, do: Clock.forward(jot.due_at, jot.every, now, jot.every_day), else: jot.due_at
 
     reopened(
       Jot.file(jot, %{kind: jot.kind, text: jot.text, due_at: due, every: jot.every, every_day: jot.every_day}, now),
@@ -413,7 +410,7 @@ defmodule Server.Home.Organize do
   end
 
   @doc """
-  The operator's change to the thing `jot` at `now`, from `Server.Home.Form.edit/2`'s `changes`
+  The operator's change to the thing `jot` at `now`, from `Server.Home.Form.edit/3`'s `changes`
   (`text`, `kind` only to-do or reminder, `due_at`, `every`): a touch. A reminder given a time is
   told afresh then. A question on a to-do or a reminder (a review, a smaller start) no longer
   applies. The thing as it is.
@@ -426,11 +423,14 @@ defmodule Server.Home.Organize do
     due = Map.get(attrs, :due_at, jot.due_at)
 
     wanted? = Map.has_key?(changes, :due_at) or Map.has_key?(changes, :every)
+    anchor = anchor(jot, changes, every, due)
+    back? = wanted? and not is_nil(jot.someday_at)
+    attrs = if moved? or back?, do: forwarded(attrs, due, every, anchor, now), else: attrs
 
     changed =
       Map.to_list(attrs) ++
-        [every_day: anchor(jot, changes, every, due)] ++
-        if(wanted? and jot.someday_at, do: [someday_at: nil], else: []) ++
+        [every_day: anchor] ++
+        if(back?, do: [someday_at: nil], else: []) ++
         if(moved?, do: [nudged_at: nil, nudges: 0], else: []) ++
         if(jot.kind in ["todo", "reminder"], do: [ask: nil, proposed: nil], else: [])
 
@@ -538,6 +538,12 @@ defmodule Server.Home.Organize do
 
   defp review_at(""), do: @review_at
   defp review_at(at), do: at
+
+  # a repeat's time that has passed is its next one after now, as a revive makes it
+  defp forwarded(attrs, %DateTime{} = due, every, anchor, now) when is_binary(every),
+    do: Map.put(attrs, :due_at, Clock.forward(due, every, now, anchor))
+
+  defp forwarded(attrs, _due, _every, _anchor, _now), do: attrs
 
   # the day a monthly repeat is on is worked out again when its time or its repeat changes, else it stays
   defp anchor(%Jot{every_day: kept, every: was}, changes, every, due) do

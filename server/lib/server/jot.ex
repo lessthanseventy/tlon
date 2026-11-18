@@ -397,9 +397,10 @@ defmodule Server.Jot do
   def recent(via, limit),
     do: Repo.all(from(j in __MODULE__, where: j.via == ^via, order_by: [desc: j.external_id], limit: ^limit))
 
-  @doc "The highest `external_id` kept from `via`, nil when it has delivered nothing."
+  @doc "The highest `external_id` a messenger gave from `via` (a form's are negative), nil when it has delivered nothing."
   @spec cursor(String.t()) :: integer() | nil
-  def cursor(via), do: Repo.one(from(j in __MODULE__, where: j.via == ^via, select: max(j.external_id)))
+  def cursor(via),
+    do: Repo.one(from(j in __MODULE__, where: j.via == ^via and j.external_id > 0, select: max(j.external_id)))
 
   @doc "The day of the month a repeat by months is on, kept so a short month does not move it: nil for any other repeat."
   @spec anchor(String.t() | nil, DateTime.t() | nil) :: pos_integer() | nil

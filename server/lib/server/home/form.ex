@@ -4,7 +4,9 @@ defmodule Server.Home.Form do
   model, so a date the operator picks is the date they get. Bodies are JSON maps with string keys;
   an error is `{:error, reason}`, one line. A time (`at`) is ISO 8601: with a zone (`Z`, `+02:00`) it
   is that instant, without one (`2026-11-21T09:00`) it is the operator's wall clock in the machine's
-  zone, as the reader reads times. `every` is `Server.Home.Clock.every/1`.
+  zone, as the reader reads times, and no more than a year back or 20 years ahead of now: a time
+  already past is told at the next tick, a repeat's starts from its next one. `every` is
+  `Server.Home.Clock.every/1`.
   """
 
   alias Server.Home.Clock
@@ -14,6 +16,7 @@ defmodule Server.Home.Form do
   @max_text 500
   @max_list 50
   @every "every is day, week or month, or a number then one of them: 6 week"
+  @range "at is no more than a year back or 20 years ahead"
   @at "at is ISO 8601: 2026-11-21T09:00 (local) or with a zone, 2026-11-21T09:00:00Z"
 
   @doc """
@@ -22,27 +25,27 @@ defmodule Server.Home.Form do
   reminder, which needs `at`), `who` (a waiting-on), `steps` (a project, at least one) and `project`
   (a to-do's project id, in the reading as `project`).
   """
-  @spec add(map()) :: {:ok, map()} | {:error, String.t()}
-  def add(%{"kind" => kind} = params) when kind in @kinds do
+  @spec add(map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()}
+  def add(%{"kind" => kind} = params, now) when kind in @kinds do
     with {:ok, text} <- text(params["text"]),
-         {:ok, due} <- time(params["at"], kind),
+         {:ok, due} <- time(params["at"], kind, now),
          {:ok, every} <- repeat(params["every"], kind),
          {:ok, extra} <- extra(kind, params) do
       {:ok, Map.merge(%{kind: kind, text: text, due_at: due, every: every, ids: [], amends: false}, extra)}
     end
   end
 
-  def add(_params), do: {:error, "kind is todo, reminder, note, waiting or project"}
+  def add(_params, _now), do: {:error, "kind is todo, reminder, note, waiting or project"}
 
   @doc """
   What an edit of `jot` changes, from its body (`text`, `at`, `every` or null to stop it, `kind` only
   `todo` or `reminder`): a map of the fields changed, `text`, `kind`, `due_at`, `every`.
   """
-  @spec edit(Jot.t(), map()) :: {:ok, map()} | {:error, String.t()}
-  def edit(%Jot{kind: current} = jot, params) do
+  @spec edit(Jot.t(), map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()}
+  def edit(%Jot{kind: current} = jot, params, now) do
     with {:ok, kind} <- kind(jot, params),
          {:ok, text} <- edited_text(params),
-         {:ok, at} <- edited_at(params),
+         {:ok, at} <- edited_at(params, now),
          {:ok, every} <- edited_every(params) do
       shape(jot, kind || current, text, at, every, current)
     end
@@ -68,16 +71,26 @@ defmodule Server.Home.Form do
 
   defp text(_none), do: {:error, "text is required"}
 
-  defp time(nil, "reminder"), do: {:error, "a reminder needs at"}
-  defp time(nil, _kind), do: {:ok, nil}
-  defp time(at, "reminder"), do: parse(at)
-  defp time(_at, _kind), do: {:error, "at is for a reminder"}
+  defp time(nil, "reminder", _now), do: {:error, "a reminder needs at"}
+  defp time(nil, _kind, _now), do: {:ok, nil}
+  defp time(at, "reminder", now), do: parse(at, now)
+  defp time(_at, _kind, _now), do: {:error, "at is for a reminder"}
 
-  defp parse(at) when is_binary(at) do
-    with :error <- zoned(at), :error <- local(at), do: {:error, @at}
+  defp parse(at, now) when is_binary(at) do
+    with :error <- zoned(at), :error <- local(at) do
+      {:error, @at}
+    else
+      {:ok, at} -> within(at, now)
+    end
   end
 
-  defp parse(_at), do: {:error, @at}
+  defp parse(_at, _now), do: {:error, @at}
+
+  defp within(at, now) do
+    if DateTime.before?(at, DateTime.shift(now, year: -1)) or DateTime.after?(at, DateTime.shift(now, year: 20)),
+      do: {:error, @range},
+      else: {:ok, at}
+  end
 
   defp zoned(at) do
     at
@@ -143,9 +156,9 @@ defmodule Server.Home.Form do
   defp edited_text(%{"text" => text}), do: text(text)
   defp edited_text(_params), do: {:ok, nil}
 
-  defp edited_at(%{"at" => nil}), do: {:ok, nil}
-  defp edited_at(%{"at" => at}), do: parse(at)
-  defp edited_at(_params), do: {:ok, nil}
+  defp edited_at(%{"at" => nil}, _now), do: {:ok, nil}
+  defp edited_at(%{"at" => at}, now), do: parse(at, now)
+  defp edited_at(_params, _now), do: {:ok, nil}
 
   defp edited_every(%{"every" => nil}), do: {:ok, :stop}
   defp edited_every(%{"every" => every}), do: every(every)
