@@ -668,19 +668,18 @@ defmodule Server.Home.OrganizeTest do
       assert [%{text: "Next for plan mom's birthday: Call the venue?"}] = Home.asked()
     end
 
-    test "it runs once on its weekday after its time, never on another day, and not on the day the inbox starts late",
+    test "it runs once after its weekday's time, not before, and not on the day the inbox starts late",
          %{say: say} do
       stale(1, "old", 15)
       at = fn date, time -> Clock.utc(NaiveDateTime.new!(date, time)) end
       week = fn now, on, reviewed -> Organize.weekly("telegram", "42", say, now, on, "17:30", reviewed) end
 
       assert week.(at.(~D[2026-11-20], ~T[17:29:00]), "fri", ~D[2026-11-13]) == ~D[2026-11-13]
-      assert week.(at.(~D[2026-11-22], ~T[17:35:00]), "fri", ~D[2026-11-13]) == ~D[2026-11-13]
       assert week.(at.(~D[2026-11-20], ~T[17:35:00]), "", ~D[2026-11-13]) == ~D[2026-11-13]
       refute_received {:said, _, _}
 
       assert week.(at.(~D[2026-11-20], ~T[17:35:00]), "fri", :boot) == ~D[2026-11-20]
-      assert week.(at.(~D[2026-11-20], ~T[17:20:00]), "fri", :boot) == ~D[2026-11-19]
+      assert week.(at.(~D[2026-11-20], ~T[17:20:00]), "fri", :boot) == ~D[2026-11-13]
       refute_received {:said, _, _}
 
       assert week.(at.(~D[2026-11-20], ~T[17:35:00]), "fri", ~D[2026-11-13]) == ~D[2026-11-20]
@@ -1014,18 +1013,48 @@ defmodule Server.Home.OrganizeTest do
   end
 
   describe "quiet hours hold every unasked message" do
-    test "a daily list set inside quiet hours waits for the morning, once", %{say: say} do
+    defp days(say, time, from, count) do
+      Enum.reduce(0..(count - 1), from, fn n, listed ->
+        day = Date.add(~D[2026-11-20], n)
+        night = Clock.utc(NaiveDateTime.new!(day, ~T[23:50:00]))
+        morning = Clock.utc(NaiveDateTime.new!(Date.add(day, 1), ~T[08:05:00]))
+        noon = Clock.utc(NaiveDateTime.new!(Date.add(day, 1), ~T[12:00:00]))
+        slot = Clock.utc(NaiveDateTime.new!(day, (time <> ":00") |> Time.from_iso8601!() |> Time.add(300)))
+
+        for now <- [slot, night, morning, noon, morning], reduce: listed do
+          listed -> Inbox.daily("telegram", "42", say, now, time, listed)
+        end
+      end)
+    end
+
+    test "a list set inside quiet hours is said every morning, once each", %{say: say} do
       todo(1, "milk")
-      list = fn now, listed -> Inbox.daily("telegram", "42", say, now, "22:30", listed) end
+      assert days(say, "22:30", ~D[2026-11-19], 4) == ~D[2026-11-23]
+      assert length(for(_ <- 1..4, do: assert_received({:said, "42", "Before you clock out:" <> _}))) == 4
+      refute_received {:said, _, _}
+    end
 
-      assert list.(Clock.utc(~N[2026-11-20 22:35:00]), ~D[2026-11-19]) == ~D[2026-11-19]
+    test "a list at 17:30 is said once a day, and one between 00:00 and 07:59 once each morning", %{say: say} do
+      todo(1, "milk")
+      assert days(say, "17:30", ~D[2026-11-19], 3) == ~D[2026-11-22]
+      for _ <- 1..3, do: assert_received({:said, "42", "Before you clock out:" <> _})
       refute_received {:said, _, _}
 
-      assert list.(Clock.utc(~N[2026-11-21 08:05:00]), ~D[2026-11-19]) == ~D[2026-11-21]
+      assert days(say, "03:00", ~D[2026-11-19], 3) == ~D[2026-11-23]
+      for _ <- 1..3, do: assert_received({:said, "42", "Before you clock out:" <> _})
+      refute_received {:said, _, _}
+    end
+
+    test "a slot missed with the node down is said at the first waking moment, not at night", %{say: say} do
+      todo(1, "milk")
+      list = fn now, listed -> Inbox.daily("telegram", "42", say, now, "17:30", listed) end
+
+      assert list.(Clock.utc(~N[2026-11-20 23:00:00]), ~D[2026-11-19]) == ~D[2026-11-19]
+      refute_received {:said, _, _}
+      assert list.(Clock.utc(~N[2026-11-21 08:00:00]), ~D[2026-11-19]) == ~D[2026-11-20]
       assert_received {:said, "42", "Before you clock out:" <> _}
-
-      assert list.(Clock.utc(~N[2026-11-21 09:05:00]), ~D[2026-11-21]) == ~D[2026-11-21]
-      refute_received {:said, _, _}
+      assert list.(Clock.utc(~N[2026-11-21 17:35:00]), ~D[2026-11-20]) == ~D[2026-11-21]
+      assert_received {:said, "42", "Before you clock out:" <> _}
     end
 
     test "with the daily list off the review runs at 17:30 on its own day", %{say: say} do
@@ -1049,8 +1078,20 @@ defmodule Server.Home.OrganizeTest do
       assert week.(at.(~D[2026-11-20], ~T[22:30:00])) == ~D[2026-11-13]
       refute_received {:said, _, _}
 
-      assert week.(at.(~D[2026-11-21], ~T[08:05:00])) == ~D[2026-11-21]
+      assert week.(at.(~D[2026-11-21], ~T[08:05:00])) == ~D[2026-11-20]
       assert_received {:said, "42", "Still want this? old"}
+    end
+
+    test "a review whose day the node was down is said at the first waking moment, once", %{say: say} do
+      stale(1, "old", 15)
+      at = fn date, time -> Clock.utc(NaiveDateTime.new!(date, time)) end
+      week = fn now, reviewed -> Organize.weekly("telegram", "42", say, now, "sun", "17:30", reviewed) end
+
+      assert week.(at.(~D[2026-11-23], ~T[08:00:00]), ~D[2026-11-15]) == ~D[2026-11-22]
+      assert_received {:said, "42", "Still want this? old"}
+      assert week.(at.(~D[2026-11-23], ~T[09:00:00]), ~D[2026-11-22]) == ~D[2026-11-22]
+      assert week.(at.(~D[2026-11-24], ~T[09:00:00]), ~D[2026-11-22]) == ~D[2026-11-22]
+      refute_received {:said, _, _}
     end
 
     test "the smaller start waits too, and is offered when it is morning", %{say: say} do

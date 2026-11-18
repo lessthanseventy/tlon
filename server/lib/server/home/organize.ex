@@ -10,8 +10,8 @@ defmodule Server.Home.Organize do
       Chased (asked again in three days) or Tomorrow.
     * **The weekly review** (`weekly/7`): up to five open things untouched for 14 days, each with Keep,
       Later or Drop; anything untouched for 28 days is moved to someday on its own and said in a line.
-      A reminder that repeats is a routine: never reviewed, never moved. The day it falls on asleep
-      it is said the next morning.
+      A reminder that repeats is a routine: never reviewed, never moved. One whose time went by asleep
+      is said at the first waking moment.
     * **Deleting** (`delete/2`): the operator's no to a thing, which is dropped and never told again.
     * **Shrinking** (`shrink/2`): a to-do that has sat a week is offered a two-minute start, once, as
       its own message once the model has written it after the daily list (`offer_shrink/6`). Add that
@@ -276,37 +276,27 @@ defmodule Server.Home.Organize do
   end
 
   @doc """
-  The weekly review: once `now` is past `at` (`"17:30"`, local; `""` is 17:30) on the weekday `on`
-  (`"sun"`; `""` is never) and the day has not been reviewed, what has gone stale is put to the operator in `chat`.
-  `reviewed` is the day it was last done, `:boot` when the inbox has just started; the day it now
-  stands at is answered.
+  The weekly review: when the slot of the weekday `on` (`"sun"`; `""` is never) at `at` (`"17:30"`,
+  local; `""` is 17:30) has come round and was not done (`Server.Home.Clock.due/4`), what has gone
+  stale is put to the operator in `chat`, in waking hours: one missed asleep or with the node down is
+  done at the first waking moment after it, whatever the day. `reviewed` is the date of the last
+  slot done, `:boot` when the inbox has just started, which counts the newest slot as done; the date
+  of the slot now done is answered.
   """
   @spec weekly(String.t(), String.t(), say() | nil, DateTime.t(), String.t(), String.t(), Date.t() | :boot) :: Date.t()
-  def weekly(_via, _chat, _say, now, on, at, :boot) do
-    today = now |> Clock.local() |> NaiveDateTime.to_date()
-    if due?(now, on, at), do: today, else: Date.add(today, -1)
-  end
+  def weekly(_via, _chat, _say, now, on, at, :boot),
+    do: Clock.slot(now, review_at(at), on) || now |> Clock.local() |> NaiveDateTime.to_date() |> Date.add(-1)
 
   def weekly(via, chat, say, now, on, at, %Date{} = reviewed) do
-    today = now |> Clock.local() |> NaiveDateTime.to_date()
+    case Clock.due(reviewed, now, review_at(at), on) do
+      {:say, slot} ->
+        review(via, chat, say, now)
+        slot
 
-    cond do
-      not Clock.awake?(now) or reviewed == today -> reviewed
-      due?(now, on, at) or held?(on, today, reviewed) -> review(via, chat, say, now)
-      true -> reviewed
+      :wait ->
+        reviewed
     end
   end
-
-  # yesterday was the day and was slept through: the review is said when the morning comes
-  defp held?(on, today, reviewed) do
-    yesterday = Date.add(today, -1)
-    on != "" and weekday(yesterday) == on and Date.compare(reviewed, yesterday) == :lt
-  end
-
-  defp weekday(date), do: date |> Calendar.strftime("%a") |> String.downcase()
-
-  defp past?(time, {:ok, at}), do: Time.compare(time, at) != :lt
-  defp past?(_time, _never), do: false
 
   defp review(via, chat, say, now) do
     {_coming, open} = Home.board(via, now)
@@ -325,7 +315,7 @@ defmodule Server.Home.Organize do
       put(jot, "review", nil, chat, say, now)
     end
 
-    now |> Clock.local() |> NaiveDateTime.to_date()
+    :ok
   end
 
   defp stale?(jot, now, days), do: DateTime.diff(now, Jot.touched(jot)) >= days * 86_400
@@ -468,12 +458,6 @@ defmodule Server.Home.Organize do
 
   defp reopened(jot, _now), do: jot
 
-  defp due?(now, on, ""), do: due?(now, on, @review_at)
-
-  defp due?(now, on, at) do
-    local = Clock.local(now)
-
-    on != "" and weekday(NaiveDateTime.to_date(local)) == on and
-      past?(NaiveDateTime.to_time(local), Time.from_iso8601(at <> ":00"))
-  end
+  defp review_at(""), do: @review_at
+  defp review_at(at), do: at
 end
