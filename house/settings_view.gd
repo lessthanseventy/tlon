@@ -253,6 +253,11 @@ func _ready() -> void:
 	r = Paper.row(col)
 	_top = Paper.chip("widget stays on top", r, func() -> void: _put("on_top", _top.button_pressed), true)
 
+	_head(col, "weather")
+	r = Paper.row(col)
+	r.add_child(Paper.label("degrees", 14, Paper.QUIET))
+	_menu(r, "degrees", ["f", "c"], ["°F", "°C"])
+
 	_head(col, "looks")
 	for key in LOOKS:
 		r = Paper.row(col)
@@ -319,6 +324,7 @@ func open() -> void:
 	_kind2.show_kind(Pets.kind_of(settings.value("pet2"), "argos"))
 	for key in _menus:
 		_menus[key][0].select(maxi(0, _menus[key][1].find(settings.value(key))))
+	_menus["degrees"][0].select(_menus["degrees"][1].find(settings.degrees()))
 	for key in _things:
 		_things[key].set_pressed_no_signal(bool(settings.value(key)))
 	_sound.set_pressed_no_signal(not home.sound.muted)
@@ -519,10 +525,10 @@ func _field(parent: Control, hint: String, key: String) -> LineEdit:
 	return e
 
 
-func _menu(parent: Control, key: String, values: Array) -> void:
+func _menu(parent: Control, key: String, values: Array, labels: Array = []) -> void:
 	var o := OptionButton.new()
-	for v in values:
-		o.add_item(str(v))
+	for i in values.size():
+		o.add_item(str(labels[i] if i < labels.size() else values[i]))
 	Paper.skin(o)
 	o.item_selected.connect(func(i: int) -> void: _put(key, values[i]))
 	parent.add_child(o)

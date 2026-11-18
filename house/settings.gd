@@ -27,6 +27,9 @@ const DEFAULTS := {
 	"on_top": true,
 	"url": "",
 	"where": "server",
+	"degrees": "",
+	"weather": true,
+	"weather_town": "",
 	"telegram": false,
 	"telegram_list_at": "17:30",
 	"claude": false,
@@ -83,6 +86,23 @@ func value(key: String) -> Variant:
 
 func is_local() -> bool:
 	return value("where") == "local"
+
+
+# "f" or "c": the chosen one, else "f" where the system's locale is the United States, "c" elsewhere
+func degrees() -> String:
+	var v := str(value("degrees"))
+	return v if v in ["f", "c"] else default_degrees(OS.get_locale())
+
+
+static func default_degrees(locale: String) -> String:
+	var parts := locale.replace("-", "_").get_slice(".", 0).get_slice("@", 0).split("_")
+	return "f" if parts.size() > 1 and parts[1].to_upper() == "US" else "c"
+
+
+# a temperature given in Celsius, worded in `unit` ("f" or "c"): "54°F"
+static func temp(celsius: Variant, unit: String) -> String:
+	var c := float(celsius)
+	return "%d°F" % roundi(c * 9.0 / 5.0 + 32.0) if unit == "f" else "%d°C" % roundi(c)
 
 
 func server_url() -> String:

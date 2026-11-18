@@ -1481,8 +1481,7 @@ func _draw_card(bounds: Rect2) -> void:
 	elif key == "window":
 		text = weather_desc if weather_desc != "" else weather
 		if temp_c != null:
-			var c := float(temp_c)
-			text += "\n%d°C (%d°F)" % [roundi(c), roundi(c * 9.0 / 5.0 + 32.0)]
+			text += "\n" + Settings.temp(temp_c, settings.degrees())
 	elif key == "wardrobe":
 		text = "the closet  (C)"
 	elif key == "pad":
@@ -1619,8 +1618,7 @@ func _weather_blocks() -> Array:
 		{"t": "text", "text": "Outside there is %s." % sky},
 	]
 	if temp_c != null:
-		var c := float(temp_c)
-		blocks.append({"t": "text", "text": "%d°C (%d°F)" % [roundi(c), roundi(c * 9.0 / 5.0 + 32.0)]})
+		blocks.append({"t": "text", "text": Settings.temp(temp_c, settings.degrees())})
 	var hour := _hour()
 	var part := "night"
 	if hour >= 5.5 and hour < 12.0:

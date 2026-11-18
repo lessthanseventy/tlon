@@ -31,7 +31,7 @@ runs on the local list.
   The big window over the sofa is the view: sky by local time (dawn, day, golden hour, dusk, night
   with moon and stars), a skyline, hills and a tree, and the weather kinds of `weather.ex` on top
   (sun, drifting clouds, fog, rain with a wet glass, storm flashes, snow that settles on the sill).
-  Hover shows the description and `°C (°F)`. Nina sometimes sits on the sill. The plant droops a
+  Hover shows the description and the temperature in his `degrees`. Nina sometimes sits on the sill. The plant droops a
   little as more things are open; no text says so.
 - **The person** (`person.gd`) walks the pets' grid and picks by state: at the desk in the chair
   (typing) when things are open, on the sofa when clear, watching the TV now and then when nothing
@@ -63,7 +63,7 @@ runs on the local list.
   A click on a thing opens its form. A quiet "today is my birthday" line shows only while no birthday
   is set (the file's `birthday` wins; on the day the card says so). Jar: the count, and the names newest
   first when the status has `done` (`[{text, done_at}]`; ten shown). Window: the weather in words
-  and `°C (°F)`. Clock (a `clock` piece on a wall): the time and date, the next reminder and how long
+  and the temperature in his `degrees`. Clock (a `clock` piece on a wall): the time and date, the next reminder and how long
   ("in 2 h 10 min"), and timers: in 10 min / 30 min / 1 h make a reminder "timer" at once, "named..."
   opens its form. Board (`things.gd`, tabs): Notes (five a page, "add a note", an `x` that asks "sure?"
   once), Projects (each with its open step and the plan; a project's page has Done/Delete on the open
@@ -246,6 +246,8 @@ runs on the local list.
   `PERSONA` its offline lines; `quirks.gd` `_react` how it takes a visitor; `eggs.gd` `pace` how soon the big things
   come. Lines the server writes are not changed by it), `pet_chatter` (`quiet`, `normal`, `chatty`: stretches the
   waits between remarks), `visitors` and `visitors_rate`, `litter_box`, `bowls`, `pet_things` (the switches),
+  `degrees` (`"f"` or `"c"`; absent follows the system locale, `f` for a US one, else `c`: the server sends Celsius,
+  `Settings.temp` words it everywhere a temperature is shown),
   `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
   `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server), and over the
   house's own list only `telegram` (off), `telegram_list_at` (`"17:30"`), `claude` (off) and `claude_command`
