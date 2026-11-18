@@ -6,8 +6,8 @@ signal closed
 const INK := Color("2a2530")
 const PAPER := Color("f3ead6")
 const ACCENT := Color("e8b86d")
-const PANEL := Vector2(700, 440)
-const ROW_H := 25.0
+const PANEL := Vector2(700, 520)
+const ROW_H := 22.0
 
 var look
 
@@ -210,7 +210,7 @@ func _draw() -> void:
 			draw_rect(r, Color("ebe2c8"))
 		draw_string(
 			font,
-			r.position + Vector2(6, 17),
+			r.position + Vector2(6, 16),
 			_rows[i]["label"],
 			HORIZONTAL_ALIGNMENT_LEFT,
 			-1,

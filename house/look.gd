@@ -28,7 +28,10 @@ const DEFAULT := {
 	"shoes": "shoes",
 	"shoes_c": "black",
 	"hat": "",
-	"extra": "glasses_black",
+	"eyewear": "glasses_black",
+	"scarf": "",
+	"backpack": "",
+	"apron": "",
 	"flat_skin": 1,
 	"flat_shirt": 0,
 	"flat_hat": 0,
@@ -48,8 +51,18 @@ const LAYER_ROWS := [
 	["shoes", "Shoes"],
 	["shoes_c", "Shoe colour"],
 	["hat", "Hat"],
-	["extra", "Extra"],
+	["eyewear", "Eyewear"],
+	["scarf", "Scarf"],
+	["backpack", "Backpack"],
+	["apron", "Apron"],
 ]
+const SLOTS := {
+	"eyewear": ["glasses", "sunglasses"],
+	"scarf": ["scarf"],
+	"backpack": ["backpack"],
+	"apron": ["apron"],
+}
+const OPTIONAL := ["hair", "beard", "hat", "eyewear", "scarf", "backpack", "apron"]
 const FLAT_SKIN := [
 	Color("f1c9a5"), Color("e0b07a"), Color("c68b59"), Color("8d5a3b"), Color("5e3a26")
 ]
@@ -68,6 +81,7 @@ const FLAT_SCARF := [Color(0, 0, 0, 0), Color("c8483f"), Color("4f8fd9"), Color(
 const INK := Color("2a2530")
 
 var root := ""
+var store := STORE
 var layered := false
 var cfg := DEFAULT.duplicate()
 var opts := {}
@@ -125,7 +139,21 @@ func _scan() -> void:
 	opts["shoes"] = groups["shoes"]["styles"]
 	opts["shoes_c"] = groups["shoes"]["colours"]
 	opts["hat"] = [""] + groups["headwear"]["combos"]
-	opts["extra"] = [""] + groups["accessory"]["combos"]
+	for slot in SLOTS:
+		opts[slot] = (
+			[""]
+			+ groups["accessory"]["combos"].filter(
+				func(combo: String) -> bool: return slot_of(combo) == slot
+			)
+		)
+
+
+static func slot_of(combo: String) -> String:
+	var style := combo.substr(0, maxi(combo.rfind("_"), 0))
+	for slot in SLOTS:
+		if style in SLOTS[slot]:
+			return slot
+	return ""
 
 
 func _recipes() -> void:
@@ -149,7 +177,8 @@ func _from_recipe(r: Dictionary) -> Dictionary:
 	c["hair"] = ""
 	c["beard"] = ""
 	c["hat"] = ""
-	c["extra"] = ""
+	for slot in SLOTS:
+		c[slot] = ""
 	for l in r["layers"]:
 		var key: String = l[0]
 		var colour: String = l[1]
@@ -167,14 +196,16 @@ func _from_recipe(r: Dictionary) -> Dictionary:
 			"headwear":
 				c["hat"] = style + "_" + colour
 			"accessory":
-				c["extra"] = style + "_" + colour
+				var slot := slot_of(style + "_" + colour)
+				if slot != "":
+					c[slot] = style + "_" + colour
 	return c
 
 
 func _load() -> void:
 	var parsed: Variant = (
-		JSON.parse_string(FileAccess.get_file_as_string(STORE))
-		if FileAccess.file_exists(STORE)
+		JSON.parse_string(FileAccess.get_file_as_string(store))
+		if FileAccess.file_exists(store)
 		else null
 	)
 	var base: Dictionary = (
@@ -186,6 +217,12 @@ func _load() -> void:
 		for key in base:
 			if parsed.has(key) and typeof(parsed[key]) == typeof(base[key]):
 				base[key] = parsed[key]
+		if parsed.get("extra") is String:
+			for slot in SLOTS:
+				base[slot] = ""
+			var slot := slot_of(parsed["extra"])
+			if slot != "":
+				base[slot] = parsed["extra"]
 	cfg = _sane(base)
 
 
@@ -200,12 +237,20 @@ func _sane(c: Dictionary) -> Dictionary:
 	if layered:
 		for key in opts:
 			if not (opts[key] as Array).has(c.get(key)):
-				c[key] = opts[key][0] if key not in ["hair", "beard", "hat", "extra"] else ""
+				c[key] = "" if key in OPTIONAL else opts[key][0]
 	return c
 
 
+# `--look key=value,...`: a look for a picture, not kept
+func stage(spec: String) -> void:
+	for pair in spec.split(",", false):
+		var kv := pair.split("=")
+		cfg[kv[0]] = kv[1] if kv.size() > 1 else ""
+	cfg = _sane(cfg)
+
+
 func save() -> void:
-	var f := FileAccess.open(STORE, FileAccess.WRITE)
+	var f := FileAccess.open(store, FileAccess.WRITE)
 	if f != null:
 		f.store_string(JSON.stringify(cfg))
 
@@ -216,7 +261,7 @@ func random_cfg() -> Dictionary:
 		for key in opts:
 			var list: Array = opts[key]
 			var pick: String = list[randi() % list.size()]
-			if key in ["beard", "hat", "extra"] and randf() < 0.5:
+			if key in OPTIONAL and key != "hair" and randf() < 0.5:
 				pick = ""
 			c[key] = pick
 	else:
@@ -240,8 +285,9 @@ func layer_paths(c: Dictionary, held: String = "") -> Array:
 		_file(b, "bottom", "bottom_%s_%s" % [c["bottom"], c["bottom_c"]]),
 		_file(b, "top", "top_%s_%s" % [c["top"], c["top_c"]]),
 	]
-	if c["extra"] != "":
-		out.append(_file(b, "accessory", "accessory_" + str(c["extra"])))
+	for slot in ["apron", "backpack", "scarf", "eyewear"]:
+		if c[slot] != "":
+			out.append(_file(b, "accessory", "accessory_" + str(c[slot])))
 	if c["beard"] != "":
 		out.append(_file(b, "facial", "facial_" + str(c["beard"])))
 	if c["hair"] != "":
