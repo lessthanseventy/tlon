@@ -402,7 +402,7 @@ runs on the local list.
   `Pets.life_options` (extra rows for `_decide_*`) and a spot's `use` key. A thing is not there when the owner's furniture
   stands on its cell; none of it is saved or movable in decorate mode.
 - Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
-  (sweet, not bright). Clicking one pets it; a right click opens its card, "who is this?" (`pet_view.gd`: the animal as a grid of idling sprites and `none`, and the name; the same `pet1`/`pet2`, `cat`/`dog` the settings screen writes; `--pet-card nina|argos` stages it). Their lines are `voices.gd`: `GET /api/home/pets`, a batch a
+  (sweet, not bright). Clicking one pets it; a right click opens its card, "who is this?" (`pet_view.gd`: the animal as a grid of idling sprites and `none`, the name and the way; the same `pet1`/`pet2`, `cat`/`dog` the settings screen writes; `--pet-card nina|argos` stages it). Their lines are `voices.gd`: `GET /api/home/pets` (with `nina_name`, `nina_species`, `nina_personality` and the same three for `argos`, URL-encoded: the first and second pet as set; a pet that is `none` sends none; an older server ignores them; any of the six changing asks once more), a batch a
   model wrote for the home as it is now, `{Nina: {occasion: [lines]}, Argos: {...}, duo: [[
   "Nina: ...", "Argos: ..."]]}` (`{}` until the first exists). Asked at start, every 20 s while empty
   (3 min, then every 5 min), else every 5 min, and once 60 s after the open list changes; a failure or

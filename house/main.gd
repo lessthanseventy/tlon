@@ -20,6 +20,8 @@ const WIDGET_SIZE := Vector2i(656, 432)
 const WIDGET_STORE := "user://house_widget.json"
 const FormScript := preload("res://form.gd")
 const SettingsView := preload("res://settings_view.gd")
+const Pets := preload("res://pets.gd")
+const Settings := preload("res://settings.gd")
 const PetView := preload("res://pet_view.gd")
 const ChatView := preload("res://chat_view.gd")
 const BackendHttp := preload("res://backend_http.gd")
@@ -69,6 +71,7 @@ var _reach := {}
 var _busy := false
 var _slow_step := ""
 var _pets_busy := false
+var _pets_stale := false
 var _pets_timer: Timer
 var _pets_nudged: Timer
 var _pets_since := 0.0
@@ -1043,6 +1046,8 @@ func _on_setting(key: String) -> void:
 			if _backend.local:
 				_room.home.set_office({})
 			_refresh()
+		"cat", "dog", "pet1", "pet2", "pet1_personality", "pet2_personality":
+			_pets_changed()
 		"on_top":
 			if _widget:
 				get_window().always_on_top = _room.home.settings.value("on_top")
@@ -1255,13 +1260,37 @@ func _on_slow(reached: bool, code: int, body: Variant) -> void:
 		_room.home.set_weather(parsed.get("weather"))
 
 
+# the pets' own names, animals and personalities, for a server that writes lines to suit them; a pet
+# that is not in the room sends nothing
+func _pets_path() -> String:
+	var settings = _room.home.settings
+	var parts: PackedStringArray = []
+	for who in [["nina", "pet1", "cat", "pet1_personality"], ["argos", "pet2", "dog", "pet2_personality"]]:
+		var kind := Pets.kind_of(settings.value(who[1]), who[0])
+		if kind == Pets.NONE:
+			continue
+		var name: String = Settings.cat if who[0] == "nina" else Settings.dog
+		var way := Pets.persona_of(settings.value(who[3]), who[0])
+		for pair in [["name", name], ["species", Pets.KINDS[kind]["species"]], ["personality", way]]:
+			parts.append("%s_%s=%s" % [who[0], pair[0], str(pair[1]).uri_encode()])
+	return "/api/home/pets" + ("?" + "&".join(parts) if not parts.is_empty() else "")
+
+
+func _pets_changed() -> void:
+	if _pets_nudged != null and not _backend.local:
+		_pets_nudged.start(minf(pets_nudge, 2.0))
+
+
 func _pets_ask() -> void:
-	if _pets_busy or _probing:
+	if _pets_busy:
+		_pets_stale = true
+		return
+	if _probing:
 		return
 	if not _room.home.has_voices() and _pets_since == 0.0:
 		_pets_since = Time.get_ticks_msec() / 1000.0
 	_pets_busy = true
-	_backend.fetch("/api/home/pets", _on_pets, 8.0)
+	_backend.fetch(_pets_path(), _on_pets, 8.0)
 
 
 func _on_pets(reached: bool, code: int, body: Variant) -> void:
@@ -1270,6 +1299,9 @@ func _on_pets(reached: bool, code: int, body: Variant) -> void:
 	if reached and parsed is Dictionary and not parsed.is_empty():
 		_room.home.set_voices(parsed)
 	_pets_later()
+	if _pets_stale:
+		_pets_stale = false
+		_pets_ask()
 
 
 func _pets_later() -> void:
