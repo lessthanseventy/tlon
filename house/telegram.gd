@@ -390,7 +390,7 @@ func handled(id: int, what: String) -> void:
 		return
 	var m: Dictionary = _msgs[id]
 	_msgs.erase(id)
-	var said := str(m["text"]) + "\n" + OUTCOME.get(what, OUTCOME["gone"])
+	var said: String = str(m["text"]) + "\n" + OUTCOME.get(what, OUTCOME["gone"])
 	_after_sent(m, func(mid: int) -> void: _edit(mid, said, {"inline_keyboard": []}))
 
 
