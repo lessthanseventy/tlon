@@ -14,10 +14,12 @@ const Jar := preload("res://jar.gd")
 const Knock := preload("res://knock.gd")
 const Door := preload("res://door.gd")
 const Rhythm := preload("res://rhythm.gd")
+const Layout := preload("res://layout.gd")
 
+const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
-const COLS := 8
-const ROWS := 8
+const COLS := 10
+const ROWS := 10
 const DAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const MONTH_DAYS := [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 const TODO_COLOR := Color("f6e27a")
@@ -59,6 +61,7 @@ var jar := Jar.new()
 var knock := Knock.new()
 var door := Door.new()
 var rhythm := Rhythm.new()
+var layout := Layout.new()
 var perk_left := 0.0
 var water_left := 0.0
 var fake_day := ""
@@ -124,6 +127,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	var seed_value := -1
 	var nina_at := ""
 	var argos_at := ""
+	var layout_file := ""
 	for i in args.size():
 		var next: String = args[i + 1] if i + 1 < args.size() else ""
 		match args[i]:
@@ -180,6 +184,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				_arg_reply = next
 			"--ring":
 				_arg_ring = int(next)
+			"--layout":
+				layout_file = next
 			"--now":
 				var parts := next.split(":")
 				focus.persist = false
@@ -199,6 +205,10 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	knock.persist = not staged
 	rhythm.persist = not staged
 	rhythm.load_days()
+	if layout_file == "" and not staged:
+		layout_file = LAYOUT_STORE
+	layout.setup(room._index, room.art_found, layout_file, layout_file != "")
+	pets.blocked_cells = layout.blocked()
 	pets.is_night = _env_now()["day"] < 0.15
 	pets.setup(art_dir, seed_value)
 	look.setup(art_dir)
@@ -213,6 +223,28 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 		pets.place(pets.critter("argos"), "bed", "sleep")
 	_place_arg("nina", nina_at)
 	_place_arg("argos", argos_at)
+
+
+# the cells somebody or something rests on or is headed for: furniture never goes there
+func busy_cells() -> Array:
+	var out: Array = []
+	for c in pets.critters:
+		var targets: Array = [c.pos]
+		if not c.jump.is_empty():
+			targets.append(c.jump["to"])
+		for at in targets:
+			out.append(Vector2i(int(floor(at.x)), int(floor(at.y))))
+	for t in pets.toys:
+		out.append(pets._cell_of(t["pos"]))
+		if not (t["hop"] as Dictionary).is_empty():
+			out.append(pets._cell_of(t["hop"]["to"]))
+	return out.filter(func(cell): return cell.x >= 1 and cell.y >= 1)
+
+
+# the furniture changed: the walkers' grid follows
+func apply_layout() -> void:
+	pets.blocked_cells = layout.blocked()
+	pets.reroute()
 
 
 func _point(text: String) -> Vector2:
