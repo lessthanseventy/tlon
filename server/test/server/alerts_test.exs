@@ -242,6 +242,20 @@ defmodule Server.AlertsTest do
     assert done == %{label: "Done", method: "POST", path: "/api/home/7/done", body: nil}
     assert hour.body == %{until: "hour"}
 
+    asked = %{
+      id: 9,
+      key: "ask:9:review:1",
+      at: @now,
+      text: "Still want this? milk",
+      choices: [{"Keep", "keep"}],
+      typed: nil
+    }
+
+    assert [%{key: "reminder:7:2"}, %{key: "ask:9:review:1", level: "sticky", kind: "home_ask", actions: [keep]}] =
+             Alerts.build([], [], @now, told: [told], asked: [asked])
+
+    assert keep == %{label: "Keep", method: "POST", path: "/api/home/9/answer", body: %{choice: "keep"}}
+
     assert [info] = Alerts.build([], [], @now, live: [live])
     assert %{key: "live:92", level: "info", kind: "live", title: "release 7b54006 is live — 3 changes"} = info
     assert info.actions == []

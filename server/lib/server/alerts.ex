@@ -48,6 +48,7 @@ defmodule Server.Alerts do
       fixing: Server.Dossier.fixing_since(since),
       live: Server.Release.PM.live_since(since),
       told: Server.Home.told(),
+      asked: Server.Home.asked(),
       home_list: List.wrap(Server.Home.listing(now))
     )
   end
@@ -56,7 +57,8 @@ defmodule Server.Alerts do
   The alerts for these needs and meetings at `now` — `list/0` without the reads. Raised as info:
   `seated:` the seating notices, `landed:` the landings, `fixing:` the issues a ticket took,
   `live:` the live-release notices, `home_list:` the home's daily list. `told:` the reminders
-  told and not done, raised sticky.
+  told and not done, raised sticky, and `asked:` the questions the home put and the operator has
+  not answered (`Server.Home.asked/0`), sticky too, each choice a call on `/api/home/:id/answer`.
   """
   def build(needs, meetings, now, opts \\ []) do
     lead = Keyword.get(opts, :alarm_minutes, @alarm_minutes) * 60
@@ -73,6 +75,7 @@ defmodule Server.Alerts do
       Enum.filter(from_needs, &(&1.level == "decision")) ++
       Enum.filter(from_needs, &(&1.level == "sticky")) ++
       Enum.map(Keyword.get(opts, :told, []), &reminder/1) ++
+      Enum.map(Keyword.get(opts, :asked, []), &asked/1) ++
       Enum.filter(from_needs, &(&1.level == "info")) ++
       Enum.map(Keyword.get(opts, :seated, []), &info("seated", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :landed, []), &info("landed", &1, landed_title(&1))) ++
@@ -272,6 +275,33 @@ defmodule Server.Alerts do
   defp other(t), do: "Other…" |> call("/messages", t) |> Map.put(:input, "body")
 
   defp send_back(stage, t), do: "Back to #{stage}…" |> call("/send_back", t, %{stage: stage}) |> Map.put(:input, "why")
+
+  defp asked(question) do
+    answer = fn label, choice, extra ->
+      Map.merge(
+        %{label: label, method: "POST", path: "/api/home/#{question.id}/answer", body: %{choice: choice}},
+        extra
+      )
+    end
+
+    typed =
+      case question.typed do
+        nil -> []
+        choice -> [answer.("Something else…", choice, %{input: "text"})]
+      end
+
+    %{
+      key: question.key,
+      level: "sticky",
+      kind: "home_ask",
+      title: question.text,
+      body: nil,
+      at: question.at,
+      thread_id: nil,
+      link: nil,
+      actions: for({label, choice} <- question.choices, do: answer.(label, choice, %{})) ++ typed
+    }
+  end
 
   # keyed by the telling, so one dismissed on the desktop comes back when it is told again
   defp reminder(jot) do

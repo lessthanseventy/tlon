@@ -1015,6 +1015,56 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"open" => [], "done_week" => 1}} = get_json("/api/home")
     end
 
+    test "projects, what others owe, the one thing to do now, and the answer to a question the home put" do
+      Server.TestDB.clean!()
+      {:ok, plan} = Server.Jot.take("telegram", 1, "plan")
+
+      project =
+        Server.Jot.file(plan, %{kind: "project", text: "plan mom's birthday", due_at: nil, steps: ["call", "write"]})
+
+      step = Server.Jot.step(project, "call", DateTime.utc_now(), 10)
+      {:ok, wait} = Server.Jot.take("telegram", 2, "waiting on Sam for the photos")
+      Server.Jot.file(wait, %{kind: "waiting", text: "the photos", due_at: ~U[2099-01-01 09:00:00Z], who: "Sam"})
+      pid = project.id
+      sid = step.id
+
+      {200, home} = get_json("/api/home")
+
+      assert [
+               %{
+                 "id" => ^pid,
+                 "text" => "plan mom's birthday",
+                 "next" => %{"id" => ^sid, "text" => "call"},
+                 "done" => 0
+               }
+             ] =
+               home["projects"]
+
+      assert [%{"text" => "the photos", "who" => "Sam", "due_at" => "2099-01-01T09:00:00Z", "since" => since}] =
+               home["waiting"]
+
+      assert is_binary(since)
+      assert [%{"id" => ^sid, "project" => %{"id" => ^pid, "text" => "plan mom's birthday"}}] = home["open"]
+
+      assert {200,
+              %{"pick" => %{"id" => ^sid, "text" => "call", "why" => "next step of plan mom's birthday"}, "say" => say}} =
+               get_json("/api/home/now")
+
+      assert say == "plan mom's birthday: call — next step of plan mom's birthday"
+      assert {200, %{"pick" => nil, "say" => "Nothing open" <> _}} = get_json("/api/home/now?skip=#{sid}&minutes=10")
+      assert {400, _} = get_json("/api/home/now?minutes=ten")
+      assert {400, _} = get_json("/api/home/now?skip=a,b")
+
+      assert {200, _} = post_json("/api/home/#{sid}/done", %{})
+      assert {400, _} = post_json("/api/home/#{pid}/answer", %{})
+      assert {404, _} = post_json("/api/home/#{pid}/answer", %{choice: "dance"})
+      assert {404, _} = post_json("/api/home/nope/answer", %{choice: "add"})
+      assert {200, %{"reply" => "added: write"}} = post_json("/api/home/#{pid}/answer", %{choice: "add"})
+      assert {404, _} = post_json("/api/home/#{pid}/answer", %{choice: "add"})
+
+      assert {200, %{"projects" => [%{"next" => %{"text" => "write"}, "done" => 1}]}} = get_json("/api/home")
+    end
+
     test "a thing typed is kept and read as a text is; an open thing is put off" do
       Server.TestDB.clean!()
       reader = Application.get_env(:server, :home_reader)

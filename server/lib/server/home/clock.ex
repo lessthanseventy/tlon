@@ -57,6 +57,10 @@ defmodule Server.Home.Clock do
     if DateTime.after?(stepped, now), do: utc, else: latest(stepped, every, now)
   end
 
+  @doc "Whether the operator is up at `utc`: not between 22:00 and 08:00 local, when nothing unasked is said."
+  @spec awake?(DateTime.t()) :: boolean()
+  def awake?(%DateTime{} = utc), do: local(utc).hour in 8..21
+
   @doc "A UTC instant as the helper says it: `Fri 20 Nov 09:00`, local."
   @spec say(DateTime.t()) :: String.t()
   def say(%DateTime{} = utc), do: Calendar.strftime(local(utc), "%a %-d %b %H:%M")
