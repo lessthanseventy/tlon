@@ -28,14 +28,7 @@ defmodule Server.BranchReview.Headless do
   """
   @spec review(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, String.t()}
   def review(repo, branch, opts \\ []) do
-    models = opts[:models] || Application.get_env(:server, :branch_reviewers, @models)
-
-    with :ok <- named(branch),
-         {:ok, base, head} <- refs(repo, branch),
-         {:ok, model} <- reviewer(repo, "#{base}..#{head}", models),
-         {:ok, diff} <- changes(repo, branch, "#{base}...#{head}"),
-         {:ok, reply} <- read(repo, head, prompt(branch, head, diff), model, opts),
-         {:ok, verdict, body} <- verdict(reply),
+    with {:ok, %{verdict: verdict, sha: head, by: model, body: body}} <- opinion(repo, branch, opts),
          {:ok, _event} <-
            BranchReview.record(%{
              branch: branch,
@@ -47,6 +40,25 @@ defmodule Server.BranchReview.Headless do
              thread_id: nil
            }) do
       {:ok, %{verdict: verdict, sha: head, by: model, body: body, landing: landing(verdict, repo, branch, opts)}}
+    end
+  end
+
+  @doc """
+  The review alone, recorded nowhere and queued nowhere: `{:ok, %{verdict, sha, by, body}}`, the
+  errors and `opts` as `review/3`'s. For a branch of a repo whose reviews and landings are not this
+  server's to keep.
+  """
+  @spec opinion(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, String.t()}
+  def opinion(repo, branch, opts \\ []) do
+    models = opts[:models] || Application.get_env(:server, :branch_reviewers, @models)
+
+    with :ok <- named(branch),
+         {:ok, base, head} <- refs(repo, branch),
+         {:ok, model} <- reviewer(repo, "#{base}..#{head}", models),
+         {:ok, diff} <- changes(repo, branch, "#{base}...#{head}"),
+         {:ok, reply} <- read(repo, head, prompt(branch, head, diff), model, opts),
+         {:ok, verdict, body} <- verdict(reply) do
+      {:ok, %{verdict: verdict, sha: head, by: model, body: body}}
     end
   end
 

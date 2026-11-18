@@ -299,7 +299,7 @@ description = "manual: fail if the generated task manual drifts from its source 
 run = "scripts/manual-gen.sh --check"
 
 ["review"]
-description = "review a branch — `review -- <branch>`: one headless model run on a model that wrote none of the branch reads its diff in a checkout of its head and prints the review; the verdict is recorded on that commit, an approval queues the branch's open PR in the merge queue (as `land` does), requested changes exit 1"
+description = "review a branch — `review -- <branch>`: one headless model run on a model that wrote none of the branch reads its diff in a checkout of its head and prints the review; the verdict is recorded on that commit, an approval queues the branch's open PR in the merge queue (as `land` does), requested changes exit 1. `review -- <branch> <repo>` reviews a branch of another repo's checkout and only prints the review: nothing is recorded or queued"
 run = "scripts/tlon-cli.sh review"
 
 ["land"]
