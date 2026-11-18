@@ -16,9 +16,11 @@ const HOME := {
 	"cols": 8,
 	"rows": 8,
 	"floor": "oak",
-	"wall": "plaster",
+	"wall": "wallpaper",
 	"furniture":
 	[
+		["plant_small", 0, 0, 1, 1, 14, Color("5f8a4f")],
+		["armchair_se", 0, 1, 1, 1, 17, Color("9a4f58")],
 		["wardrobe_sw", 1, 0, 1, 1, 44, Color("8a5a3c")],
 		["computer_desk_sw", 4, 0, 2, 1, 31, Color("b58a5a")],
 		["office_chair_ne", 4, 1, 1, 1, 26, Color("5a6f8a")],
@@ -29,6 +31,8 @@ const HOME := {
 		["floor_lamp", 0, 6, 1, 1, 33, Color("d9b86a")],
 	],
 	"rug": ["rug_blue_nwse", 1, 4, 3, 2, Color("4a6a9a")],
+	# what hangs on a wall: id, col, row of the cell whose back edge it is on
+	"decor": [["painting_ne", 0, 0], ["clock_ne", 7, 0], ["painting_nw", 0, 6]],
 	"windows": {"ne": [4], "nw": []},
 	"door": {"row": 7, "label": "to the office"},
 	"figures": [],
@@ -253,6 +257,8 @@ func _draw() -> void:
 		items.append_array(home.items())
 	for w in _walls():
 		items.append({"key": w["c"] + w["r"], "pri": 0, "wall": w})
+	for d in _desc.get("decor", []):
+		items.append({"key": d[1] + d[2], "pri": 0.3, "furn": d})
 	for f in _desc["furniture"]:
 		var pri := 1.8 if _desc == HOME and f[0] == "office_chair_ne" else 1.0
 		items.append({"key": f[1] + f[3] - 1 + f[2] + f[4] - 1, "pri": pri, "furn": f})
@@ -353,7 +359,8 @@ func _draw_furniture(origin: Vector2, f: Array) -> void:
 		return
 	var s := _sprite(f[0])
 	if s.is_empty():
-		_flat_box(origin, f[1], f[2], f[3], f[4], f[5], f[6])
+		if f.size() > 3:
+			_flat_box(origin, f[1], f[2], f[3], f[4], f[5], f[6])
 		return
 	draw_texture(s["tex"], (_p(origin, f[1], f[2]) - s["anchor"]).round())
 
