@@ -644,7 +644,6 @@ func _toy_dest(from: Vector2, dir: int) -> Vector2:
 
 
 func _step_toy(t: Dictionary, dt: float) -> bool:
-	t["spin"] += dt * 4.0
 	var h: Dictionary = t["hop"]
 	if h.is_empty():
 		return false
