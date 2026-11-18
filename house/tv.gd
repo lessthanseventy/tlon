@@ -1,7 +1,6 @@
 extends RefCounted
 
 const Hacks := preload("res://hacks.gd")
-const INK := Color("2a2530")
 const MANUAL_SECONDS := 90.0
 
 var on := false
@@ -54,21 +53,3 @@ func screen(c: CanvasItem, q: PackedVector2Array) -> void:
 	if not on:
 		return
 	hacks.draw(c, q)
-
-
-func big(c: CanvasItem, q: PackedVector2Array, bounds: Rect2) -> void:
-	if not on:
-		return
-	var size := Vector2(288, 162)
-	var at := (q[0] + q[2]) / 2.0
-	var pos := Vector2(at.x + 36, at.y - 30)
-	pos.x = clampf(pos.x, bounds.position.x + 6, bounds.end.x - size.x - 10)
-	pos.y = clampf(pos.y, bounds.position.y + 44, bounds.end.y - size.y - 10)
-	c.draw_rect(
-		Rect2(pos - Vector2(6, 6) + Vector2(3, 5), size + Vector2(12, 12)), Color(0, 0, 0, 0.35)
-	)
-	c.draw_rect(Rect2(pos - Vector2(6, 6), size + Vector2(12, 12)), INK)
-	var sq := PackedVector2Array(
-		[pos, pos + Vector2(size.x, 0), pos + size, pos + Vector2(0, size.y)]
-	)
-	hacks.draw(c, sq)

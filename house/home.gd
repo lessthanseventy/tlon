@@ -1322,8 +1322,6 @@ func draw_over() -> void:
 		if not c.away:
 			_draw_extras(c, bounds)
 	Props.caption(room, Vector2(room.size.x / 2.0, 30), _next_text)
-	if _hover == "tv" and tv.on and not menu.is_open and not card.is_open():
-		tv.big(room, _tv_quad(), bounds)
 	var plane_hit := door.draw_plane(room, _o, _k, bounds)
 	if plane_hit.size() > 0:
 		_register("plane", plane_hit, plane_hit[2])
