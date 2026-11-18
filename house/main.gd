@@ -45,6 +45,7 @@ var _phone := Telegram.new()
 var _fixture := ""
 var _probing := false
 var _starters := false
+var _forecast_arg: Variant = null
 
 var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": null}
 var _form: PanelContainer
@@ -125,6 +126,8 @@ func _ready() -> void:
 	talk_live = not _room.home.staged
 	_set_up_phone()
 	_use_backend(args)
+	if "--forecast" in args:
+		_forecast_arg = _staged_forecast(args[args.find("--forecast") + 1])
 	_decorate = DecorateScript.new()
 	_decorate.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
 	_decorate.offset_left = -PANEL_WIDTH
@@ -188,6 +191,7 @@ func _ready() -> void:
 			_room.home.set_voices(demo.get("pets", {}))
 		if "--visitor" in args:
 			_room.home.set_office(_office)
+		demo["forecast"] = _dated(demo.get("forecast", []))
 		_apply(demo)
 		if "--tick-demo" in args:
 			get_tree().create_timer(0.75).timeout.connect(func(): _on_ticked(1))
@@ -454,12 +458,35 @@ static func _home_data(d: Dictionary) -> Dictionary:
 		"someday": d.get("someday", []),
 		"projects": d.get("projects", []),
 		"note_rows": d.get("note_rows", []),
+		"forecast": d.get("forecast", []),
 	}
+
+
+# `--forecast none|JSON`: the card's days for a picture, JSON rows as the server's with `in_days`
+# (0 is today) where a date would go, so a staged forecast never goes stale
+func _staged_forecast(spec: String) -> Array:
+	var rows: Variant = JSON.parse_string(spec) if spec != "none" else []
+	return _dated(rows) if rows is Array else []
+
+
+func _dated(rows: Array) -> Array:
+	var today := Time.get_unix_time_from_datetime_string(_room.home.today() + "T00:00:00")
+	return rows.map(
+		func(row: Variant) -> Variant:
+			if not row is Dictionary or not row.has("in_days"):
+				return row
+			var at := Time.get_date_string_from_unix_time(int(today) + int(row["in_days"]) * 86400)
+			return row.merged({"date": at})
+	)
 
 
 func _apply(data: Dictionary) -> void:
 	_data = _home_data(data)
 	_room.home.set_data(_data)
+	if _forecast_arg != null:
+		_room.home.set_forecast(_forecast_arg)
+	elif not _backend.local:
+		_room.home.set_forecast(_data["forecast"])
 	var ids: Array = []
 	for t in _data["open"]:
 		ids.append(int(t["id"]))

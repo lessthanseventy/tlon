@@ -63,7 +63,10 @@ runs on the local list.
   A click on a thing opens its form. A quiet "today is my birthday" line shows only while no birthday
   is set (the file's `birthday` wins; on the day the card says so). Jar: the count, and the names newest
   first when the status has `done` (`[{text, done_at}]`; ten shown). Window: the weather in words
-  and the temperature in his `degrees`. Clock (a `clock` piece on a wall): the time and date, the next reminder and how long
+  and the temperature in his `degrees`, then up to three forecast rows (Today, Tomorrow, the weekday; an icon
+  from `forecast.gd`, high / low, the chance of rain or snow from 20%; none when there is none, no "unavailable"
+  line; days before today are dropped, the server may hold a stale forecast). The forecast is `GET /api/home`'s
+  `forecast` (`[{date, high_c, low_c, kind, wet}]`; an older server has no key). Clock (a `clock` piece on a wall): the time and date, the next reminder and how long
   ("in 2 h 10 min"), and timers: in 10 min / 30 min / 1 h make a reminder "timer" at once, "named..."
   opens its form. Board (`things.gd`, tabs): Notes (five a page, "add a note", an `x` that asks "sure?"
   once), Projects (each with its open step and the plan; a project's page has Done/Delete on the open
@@ -475,7 +478,8 @@ picture. The door's click and Tab need a pointer and keys, which that run has no
 User args (after `--`) that fix a state for a picture; `--shot` also freezes the pets' own choices
 and seeds their dice (`--seed N` to pick another):
 
-- `--at HH:MM` pretend local time; `--weather clear|partly|cloudy|fog|rain|storm|snow`.
+- `--at HH:MM` pretend local time; `--weather clear|partly|cloudy|fog|rain|storm|snow`;
+  `--forecast none|JSON` the card's days (rows as the server's, `in_days` for `date`: 0 is today; `demo.json` has three).
 - `--tick-demo` ticks thing 1 off at 0.75 s (a picture at 1.5 s catches the paper in the air);
   `--tick-all` ticks 1, 2, 3 for the confetti; `--bat` makes the paper miss so Nina chases it;
   `--empty` is the demo with nothing open, no notes, nothing coming.

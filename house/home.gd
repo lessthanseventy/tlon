@@ -28,6 +28,7 @@ const Delights := preload("res://delights.gd")
 const Things := preload("res://things.gd")
 const Sure := preload("res://sure.gd")
 const Settings := preload("res://settings.gd")
+const Forecast := preload("res://forecast.gd")
 const Chat := preload("res://chat.gd")
 const Looks := preload("res://looks.gd")
 const Glow := preload("res://glow.gd")
@@ -125,6 +126,7 @@ var fake_day := ""
 var done_week := 0
 var weather_desc := ""
 var temp_c: Variant = null
+var forecast: Array = []
 var reply_text := ""
 var reply_left := 0.0
 var ring_ids: Array = []
@@ -426,6 +428,22 @@ func set_weather(w: Variant) -> void:
 		weather = w["kind"]
 		weather_desc = str(w.get("desc", ""))
 		temp_c = w.get("temp_c")
+
+
+func set_forecast(days: Variant) -> void:
+	forecast = days if days is Array else []
+
+
+# the weather the room has none of: what it shows with no report at all
+func clear_weather() -> void:
+	weather = "clear"
+	weather_desc = ""
+	temp_c = null
+	forecast = []
+
+
+func today() -> String:
+	return Time.get_date_string_from_unix_time(int(_now_local()))
 
 
 func set_data(d: Dictionary) -> void:
@@ -1628,6 +1646,21 @@ func _weather_blocks() -> Array:
 	elif hour >= 17.0 and hour < 21.0:
 		part = "evening"
 	blocks.append({"t": "dim", "text": "It is %s." % part})
+	var today := today()
+	var unit := settings.degrees()
+	var rows := Forecast.upcoming(forecast, today)
+	if not rows.is_empty():
+		blocks.append({"t": "gap"})
+	for day in rows:
+		blocks.append(
+			{
+				"t": "day",
+				"name": Forecast.name_of(day["date"], today),
+				"kind": day["kind"],
+				"temps": "%s / %s" % [Settings.temp(day["high_c"], unit), Settings.temp(day["low_c"], unit)],
+				"wet": Forecast.wet_text(day),
+			}
+		)
 	return blocks
 
 
