@@ -627,7 +627,14 @@ func _open_chat() -> bool:
 
 # mode "new" (a preset for the form) or "edit" ({row, due}); false when something else is up
 func _open_form(mode: String, spec: Dictionary) -> bool:
-	if _at != "home" or _widget or _form_blocked() or _overlay():
+	if (
+		_at != "home"
+		or _widget
+		or _form_blocked()
+		or _settings_view.visible
+		or _pet_view.visible
+		or _chat_view.visible
+	):
 		return false
 	var home = _room.home
 	home.close_card()

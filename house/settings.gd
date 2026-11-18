@@ -18,6 +18,8 @@ const DEFAULTS := {
 	"litter_box": true,
 	"bowls": true,
 	"pet_things": true,
+	"visitors": "all",
+	"visitors_rate": "sometimes",
 	"widget": false,
 	"on_top": true,
 	"url": "",

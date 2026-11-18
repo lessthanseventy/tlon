@@ -995,6 +995,7 @@ func _room(seed_value: int = 7) -> Control:
 	h.sound.persist = false
 	h.sound.muted = true
 	h.eggs.setup(h, seed_value + 4, false)
+	h.petlife.setup(h)
 	h.outside.setup(h)
 	h.finds.setup(h)
 	h.quirks.setup(h)

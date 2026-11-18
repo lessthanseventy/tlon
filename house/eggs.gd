@@ -94,6 +94,8 @@ const CATALOGUE := [
 	["visitor", "a hero at the door"],
 	["visitor_city", "a passer-by"],
 	["visitor_monster", "a monster at the door"],
+	["visitor_farm", "a farm animal wandering through"],
+	["visitor_wild", "a wild animal outside the window"],
 	["konami", "the old code"],
 	["tlon", "Tlon"],
 	["uqbar", "Uqbar"],
