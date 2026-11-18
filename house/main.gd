@@ -336,9 +336,7 @@ func _first_start() -> void:
 
 
 func _art_dir() -> String:
-	if OS.has_environment("TLON_ART_DIR"):
-		return OS.get_environment("TLON_ART_DIR")
-	return OS.get_environment("HOME").path_join("projects/thatch/packs/x")
+	return preload("res://art.gd").dir(OS.get_cmdline_user_args())
 
 
 func _add_note(preset: Control.LayoutPreset, text: String) -> void:

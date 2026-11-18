@@ -20,6 +20,7 @@ const EggSoak := preload("res://soak_eggs.gd")
 const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
 const LocalSoak := preload("res://soak_local.gd")
+const ArtSoak := preload("res://soak_art.gd")
 const DEADLINE_MS := 540000
 
 var _srv := TCPServer.new()
@@ -96,6 +97,8 @@ func _run() -> void:
 	await _cards()
 	_where = "routes"
 	await _routes()
+	_where = "art"
+	ArtSoak.new(self).run()
 	print("SOAK %s (%d failures)" % ["OK" if _failures.is_empty() else "FAILED", _failures.size()])
 	quit(0 if _failures.is_empty() else 1)
 
