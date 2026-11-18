@@ -32,6 +32,7 @@ defmodule Server.Home.Inbox do
   alias Server.Home.Clock
   alias Server.Home.Organize
   alias Server.Home.Reader
+  alias Server.Home.Slot
   alias Server.Jot
 
   require Logger
@@ -112,8 +113,9 @@ defmodule Server.Home.Inbox do
   start for a to-do that has sat (`Server.Home.Organize.shrink/2`); with no chat the offer is still
   put, for the desktop. Only in waking hours: a slot that went by asleep, or with the node down, is
   said at the first waking moment after it, once. `listed` is the date of the last slot said (a list
-  said this morning for last night's 22:30 is last night's date), `:boot` when the inbox has just
-  started, which counts the newest slot as said; the date of the slot now said is answered.
+  said this morning for last night's 22:30 is last night's date), `:boot` when none is kept under the
+  list's present time (`Server.Home.Clock.resume/2`), which counts the newest slot as said; the
+  date of the slot now said is answered. `slots/7` keeps it (`Server.Home.Slot`) across a restart.
   """
   @spec daily(
           String.t(),
@@ -205,10 +207,10 @@ defmodule Server.Home.Inbox do
     if messenger.token() do
       send(self(), :poll)
 
-      {:ok, %{messenger: messenger, offset: (Jot.cursor(messenger.name()) || -1) + 1, listed: :boot, reviewed: :boot}}
+      {:ok, Map.merge(%{messenger: messenger, offset: (Jot.cursor(messenger.name()) || -1) + 1}, kept())}
     else
       send(self(), :tick)
-      {:ok, %{messenger: messenger, listed: :boot, reviewed: :boot}}
+      {:ok, Map.merge(%{messenger: messenger}, kept())}
     end
   end
 
@@ -268,12 +270,49 @@ defmodule Server.Home.Inbox do
   # fails alone and is tried again at the next poll
   defp tend(%{messenger: messenger} = state, chat, say, now) do
     via = messenger.name()
-    at = Server.OperatorConfig.setting("home_list_at")
     guarded(:ok, fn -> Organize.waiting(via, chat, say, now) end)
-    on = Server.OperatorConfig.setting("home_review_on")
-    reviewed = guarded(state.reviewed, fn -> Organize.weekly(via, chat, say, now, on, at, state.reviewed) end)
-    listed = guarded(state.listed, fn -> daily(via, chat, say, now, at, state.listed) end)
-    %{state | reviewed: reviewed, listed: listed}
+
+    slots(
+      state,
+      via,
+      chat,
+      say,
+      now,
+      Server.OperatorConfig.setting("home_list_at"),
+      Server.OperatorConfig.setting("home_review_on")
+    )
+  end
+
+  @doc "The slots kept from before the inbox started: `%{listed, reviewed}`, each `{date, setting}` or nil."
+  @spec kept() :: %{listed: {Date.t(), String.t()} | nil, reviewed: {Date.t(), String.t()} | nil}
+  def kept, do: %{listed: Slot.get("daily"), reviewed: Slot.get("weekly")}
+
+  @doc """
+  Say what is due on a schedule at `now`, with the list at `at` and the review on `on`: the daily
+  list and the weekly review, each trusted only under the setting its last slot was kept for. The
+  slot said is written (`Server.Home.Slot`) and the state the inbox carries is answered.
+  """
+  @spec slots(
+          map(),
+          String.t(),
+          String.t(),
+          (String.t(), String.t(), keyword() -> term()) | nil,
+          DateTime.t(),
+          String.t(),
+          String.t()
+        ) ::
+          map()
+  def slots(state, via, chat, say, now, at, on) do
+    listed = slot("daily", state.listed, at, &daily(via, chat, say, now, at, &1))
+    reviewed = slot("weekly", state.reviewed, at <> "|" <> on, &Organize.weekly(via, chat, say, now, on, at, &1))
+    %{state | listed: listed, reviewed: reviewed}
+  end
+
+  defp slot(name, kept, setting, run) do
+    last = Clock.resume(kept, setting)
+    new = guarded(last, fn -> run.(last) end)
+    if new != last and new != :boot, do: Slot.put(name, new, setting)
+    {new, setting}
   end
 
   defp guarded(default, fun) do
@@ -515,6 +554,4 @@ defmodule Server.Home.Inbox do
 
     :ok
   end
-
-  # the list's time is a sleeping hour and yesterday's slot went by: it is said when the morning comes
 end

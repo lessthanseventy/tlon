@@ -280,7 +280,7 @@ defmodule Server.Home.Organize do
   local; `""` is 17:30) has come round and was not done (`Server.Home.Clock.due/4`), what has gone
   stale is put to the operator in `chat`, in waking hours: one missed asleep or with the node down is
   done at the first waking moment after it, whatever the day. `reviewed` is the date of the last
-  slot done, `:boot` when the inbox has just started, which counts the newest slot as done; the date
+  slot done, `:boot` when none is kept under the present settings, which counts the newest slot as done; the date
   of the slot now done is answered.
   """
   @spec weekly(String.t(), String.t(), say() | nil, DateTime.t(), String.t(), String.t(), Date.t() | :boot) :: Date.t()

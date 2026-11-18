@@ -50,6 +50,12 @@ defmodule Server.Home.ClockTest do
     end
   end
 
+  test "resume/2 trusts a kept slot only under the setting it was kept for" do
+    assert Clock.resume({~D[2026-11-20], "17:30"}, "17:30") == ~D[2026-11-20]
+    assert Clock.resume({~D[2026-11-20], "17:30"}, "22:30") == :boot
+    assert Clock.resume(nil, "17:30") == :boot
+  end
+
   test "slot/3 is the date of the newest slot not after now" do
     assert Clock.slot(at("2026-11-20", "17:35:00"), "17:30") == ~D[2026-11-20]
     assert Clock.slot(at("2026-11-20", "17:20:00"), "17:30") == ~D[2026-11-19]
