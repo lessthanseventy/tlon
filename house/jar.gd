@@ -99,50 +99,53 @@ func draw(c: CanvasItem, o: Vector2, k: int) -> PackedVector2Array:
 	c.draw_colored_polygon(
 		PackedVector2Array([a + dv, b + dv, b + dv + lip, a + dv + lip]), Color("8a5a3c")
 	)
-	var base := Props.wall_pt(o, k, 1, JAR_S, SHELF_H) + dv * 0.55
-	var body := Rect2(base + Vector2(-7, -15) * k, Vector2(14, 15) * k)
+	var base := Props.wall_pt(o, k, 1, JAR_S, SHELF_H) + dv * 0.4
+	# the jar is drawn in the wall's plane (sheared like the shelf), so its foot lies along the board
+	var xf := Transform2D(Vector2(k, 0.5 * k), Vector2(0, k), base)
+	var line := maxf(1.0, 0.6 * k) / k
+	var body := Rect2(Vector2(-7, -15), Vector2(14, 15))
+	c.draw_set_transform_matrix(xf)
 	c.draw_rect(body, Color(0.78, 0.92, 1.0, 0.18))
 	for i in mini(shown, CAP):
 		var hop := 0.0
 		for cl in clinks:
 			if cl["slot"] == i:
 				hop = 2.4 * sin(PI * cl["t"] / CLINK) * (1.0 - cl["t"] / CLINK)
-		_marble(c, base + (slot_pos(i) - Vector2(0, hop)) * k, k, colour(i), 1.0)
+		_marble(c, slot_pos(i) - Vector2(0, hop), 1, colour(i), 1.0)
 	for d in drops:
 		var u: float = d["t"] / FALL
 		if u < 0.0:
 			continue
 		var land := slot_pos(shown + drops.find(d))
 		var y := lerpf(-27.0, land.y, u * u)
-		_marble(c, base + Vector2(land.x, y) * k, k, colour(shown + drops.find(d)), 1.0)
+		_marble(c, Vector2(land.x, y), 1, colour(shown + drops.find(d)), 1.0)
 	for cl in clinks:
 		var u: float = cl["t"] / CLINK
-		var at: Vector2 = base + slot_pos(cl["slot"]) * k
+		var at: Vector2 = slot_pos(cl["slot"])
 		var fade := 1.0 - u
 		for i in 4:
 			var ang := -PI / 2.0 + (i - 1.5) * 0.7
-			var r0 := (2.0 + u * 2.0) * k
-			var r1 := (3.6 + u * 3.5) * k
+			var r0 := 2.0 + u * 2.0
+			var r1 := 3.6 + u * 3.5
 			c.draw_line(
-				at + Vector2(cos(ang), sin(ang)) * r0 + Vector2(0, -2 * k),
-				at + Vector2(cos(ang), sin(ang)) * r1 + Vector2(0, -2 * k),
+				at + Vector2(cos(ang), sin(ang)) * r0 + Vector2(0, -2),
+				at + Vector2(cos(ang), sin(ang)) * r1 + Vector2(0, -2),
 				Color(1, 1, 0.85, fade),
-				maxf(1.0, 0.7 * k)
+				line
 			)
-	c.draw_rect(body, Color(0.85, 0.96, 1.0, 0.75), false, maxf(1.0, 0.6 * k))
-	c.draw_rect(
-		Rect2(body.position + Vector2(1.5, 1.5) * k, Vector2(1.4, 9) * k), Color(1, 1, 1, 0.35)
-	)
-	var neck := Rect2(body.position + Vector2(2, -3) * k, Vector2(10, 3) * k)
+	c.draw_rect(body, Color(0.85, 0.96, 1.0, 0.75), false, line)
+	c.draw_rect(Rect2(body.position + Vector2(1.5, 1.5), Vector2(1.4, 9)), Color(1, 1, 1, 0.35))
+	var neck := Rect2(body.position + Vector2(2, -3), Vector2(10, 3))
 	c.draw_rect(neck, Color(0.78, 0.92, 1.0, 0.25))
-	c.draw_rect(neck, Color(0.85, 0.96, 1.0, 0.75), false, maxf(1.0, 0.6 * k))
-	c.draw_rect(Rect2(neck.position + Vector2(-0.5, -2) * k, Vector2(11, 2.4) * k), Color("c8483f"))
+	c.draw_rect(neck, Color(0.85, 0.96, 1.0, 0.75), false, line)
+	c.draw_rect(Rect2(neck.position + Vector2(-0.5, -2), Vector2(11, 2.4)), Color("c8483f"))
+	c.draw_set_transform_matrix(Transform2D.IDENTITY)
 	return PackedVector2Array(
 		[
-			body.position + Vector2(0, -5 * k),
-			body.position + Vector2(body.size.x, -5 * k),
-			body.end,
-			body.position + Vector2(0, body.size.y),
+			xf * (body.position + Vector2(0, -5)),
+			xf * (body.position + Vector2(body.size.x, -5)),
+			xf * body.end,
+			xf * (body.position + Vector2(0, body.size.y)),
 		]
 	)
 
