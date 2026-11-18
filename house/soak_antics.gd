@@ -30,6 +30,7 @@ func run() -> void:
 	var h = pair[1]
 	_table(h)
 	_gates(h)
+	_alone(h)
 	_rates()
 	_egg(h)
 	_random()
@@ -38,9 +39,9 @@ func run() -> void:
 
 func _user() -> Array:
 	var out: Array = []
-	for f in DirAccess.get_files_at("user://"):
-		var p := "user://" + f
-		out.append([f, FileAccess.get_modified_time(p)])
+	for f in ["house_settings", "house_found", "house_layout", "house_sound", "house_rhythm"]:
+		var p := "user://%s.json" % f
+		out.append([f, FileAccess.get_modified_time(p) if FileAccess.file_exists(p) else 0])
 	return out
 
 
@@ -97,18 +98,38 @@ func _table(h) -> void:
 				kinds = [kind_of(sp), "cat_black" if sp != "cat" else "dog_golden"]
 			tidy(h, kinds)
 			var c = h.pets.critter("nina")
+			if e.get("pair", false):
+				h.pets.set_persona(c, "bold" if e.get("only", false) else "sweet")
+				h.pets.set_persona(h.pets.critter("argos"), "shy" if e.has("bpers") else "sweet")
 			if e.get("need") == "asleep":
 				c.mode = "sleep"
 				c.anim = "sleep"
 			var n: int = h.antics.started.size()
 			h.antics.force(name, "nina")
 			var ended := _finish(h)
+			if name == "standoff":
+				_finish(h, 150)
+				for i in 150:
+					h.process(0.1)
 			var tag := "%s as %s" % [name, sp]
 			s._check(h.antics.started.size() > n, tag + " starts when forced")
 			s._check(ended, tag + " runs to its end")
 			normal(h, c, tag)
 			normal(h, h.pets.critter("argos"), tag + " (the other)")
 	s._check(species.size() >= 12, "the table covers the species")
+
+
+func _alone(h) -> void:
+	for name in Antics.ANTICS:
+		if not Antics.ANTICS[name].get("pair", false):
+			continue
+		tidy(h, ["cat_black", "dog_golden"])
+		h.pets.change_kind(h.pets.critter("argos"), "none")
+		var n: int = h.antics.started.count(name)
+		h.antics.force(name, "nina")
+		_finish(h, 20)
+		s._check(h.antics.started.count(name) == n, "%s never runs with one pet gone" % name)
+		s._check(h.antics._weight(name, h.pets.critter("nina")) == 0.0, "%s has no weight" % name)
 
 
 func _gates(h) -> void:

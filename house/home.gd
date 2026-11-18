@@ -680,7 +680,7 @@ func process(dt: float) -> void:
 	quirks.process(dt)
 	delights.process(dt)
 	antics.process(dt)
-	if _t > 0.3 and _arg_antic[0] != "":
+	if _t > 0.3 and _seen_data and _arg_antic[0] != "":
 		antics.staged = _arg_antic.duplicate()
 		_arg_antic[0] = ""
 	sound.loop("rain", _env["weather"] in ["rain", "storm"])
