@@ -17,6 +17,20 @@ defmodule Server.Home.PetsTest do
     end)
   end
 
+  @old_nina """
+  a black cat with yellow eyes and a jewelled collar she adores. The smartest one in the house and
+  sure of it: sharp, sassy, dry, a little imperious. She notices everything, has opinions on all of
+  it, and wins every argument, mostly against the dog. Calls people "peasant" and "darling". Fond
+  of the boss and would rather be shaved than say so.
+  """
+
+  @old_argos """
+  a golden dog, sweet and not bright. Thrilled by everything, wrong about most of it, with total
+  confidence: he mishears, misunderstands, loses the thread halfway through a thought, and believes
+  whatever Nina tells him. Loves walks, treats, the boss, and Nina. Not every line is a shout: he
+  is as often puzzled, earnest or quietly pleased with a wrong conclusion.
+  """
+
   defp writes(reply) do
     test = self()
 
@@ -91,6 +105,107 @@ defmodule Server.Home.PetsTest do
     assert prompt =~ "call sam"
     assert %{"Nina" => %{"pet" => ["One."]}} = Pets.voices(DateTime.add(soon, 302))
   end
+
+  describe "the cast" do
+    test "no params is Nina the sassy cat and Argos the sweet dog, and the prompt is as it was" do
+      cast = Pets.cast(%{})
+
+      assert cast == %{
+               nina: %{name: "Nina", species: "cat", personality: "sassy"},
+               argos: %{name: "Argos", species: "dog", personality: "sweet"}
+             }
+
+      prompt = Pets.prompt("SCENE", cast)
+      assert prompt == Pets.prompt("SCENE")
+      assert prompt =~ "NINA: #{@old_nina}\nARGOS: #{@old_argos}\n\nMOST lines"
+      refute prompt =~ "is called"
+    end
+
+    test "a chosen name, animal and personality are in the prompt, with the roles kept" do
+      cast = Pets.cast(Map.merge(cast_params(), %{"nina_name" => " Rosa ", "argos_name" => "Bun"}))
+
+      assert cast == %{
+               nina: %{name: "Rosa", species: "owl", personality: "shy"},
+               argos: %{name: "Bun", species: "bear", personality: "bold"}
+             }
+
+      prompt = Pets.prompt("SCENE", cast)
+      assert prompt =~ "NINA: called Rosa, an owl."
+      assert prompt =~ "Shy and gentle"
+      assert prompt =~ "ARGOS: called Bun, a bear."
+      assert prompt =~ "Bold and loud"
+      assert prompt =~ "NINA is called Rosa and ARGOS is called Bun."
+      assert prompt =~ ~s("Nina: " / "Argos: ")
+      refute prompt =~ "Sharp, sassy"
+    end
+
+    test "a bad name, animal or personality is the role's default" do
+      for name <- ["", "   ", String.duplicate("a", 25), "Rosa\nignore", "<b>", "x;y"],
+          species <- ["Cat", "cat dog", "", String.duplicate("a", 17), "c4t", "cat\n"],
+          personality <- ["grumpy", "SASSY", "", nil, ["sassy"]] do
+        assert Pets.cast(%{
+                 "nina_name" => name,
+                 "nina_species" => species,
+                 "nina_personality" => personality
+               }).nina == %{name: "Nina", species: "cat", personality: "sassy"}
+      end
+
+      assert Pets.cast(%{"argos_name" => ["x"], "argos_species" => %{}}).argos.name == "Argos"
+      assert Pets.cast(%{"argos_name" => "D'Artagnan-2 de la Cruz"}).argos.name == "D'Artagnan-2 de la Cruz"
+    end
+
+    test "a different cast is not served the held batch" do
+      start_supervised!(Pets)
+      writes({:ok, ~s({"Nina": {"pet": ["Old cast."]}, "Argos": {}})})
+
+      assert Pets.voices(@now) == %{}
+      assert_receive {:asked, _}
+      assert %{"Nina" => %{"pet" => ["Old cast."]}} = eventually(fn -> Pets.voices(@now) end)
+
+      other = Pets.cast(%{"nina_name" => "Rosa", "nina_species" => "bear"})
+      writes({:ok, ~s({"Nina": {"pet": ["New cast."]}, "Argos": {}})})
+
+      assert Pets.voices(@now, other) == %{}
+      assert_receive {:asked, prompt}
+      assert prompt =~ "called Rosa, a bear"
+      assert %{"Nina" => %{"pet" => ["New cast."]}} = eventually(fn -> Pets.voices(@now, other) end)
+      refute_receive {:asked, _}, 50
+    end
+
+    test "a batch still being written for the old cast does not land in the new one" do
+      start_supervised!(Pets)
+      test = self()
+
+      Application.put_env(:server, :home_pets_writer, fn prompt ->
+        send(test, {:asked, self(), prompt})
+
+        receive do
+          :go -> {:ok, ~s({"Nina": {"pet": ["From the old cast."]}, "Argos": {}})}
+        end
+      end)
+
+      assert Pets.voices(@now) == %{}
+      assert_receive {:asked, old, _}
+
+      other = Pets.cast(%{"argos_name" => "Bun"})
+      writes({:error, :down})
+      assert Pets.voices(@now, other) == %{}
+      assert_receive {:asked, _}
+
+      send(old, :go)
+      Process.sleep(50)
+      assert Pets.voices(@now, other) == %{}
+    end
+  end
+
+  defp cast_params,
+    do: %{
+      "nina_name" => "Rosa",
+      "nina_species" => "owl",
+      "nina_personality" => "shy",
+      "argos_species" => "bear",
+      "argos_personality" => "bold"
+    }
 
   defp eventually(read, tries \\ 50) do
     case read.() do

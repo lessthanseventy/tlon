@@ -1135,6 +1135,33 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"open" => [], "coming" => [%{"id" => ^id, "kind" => "reminder", "due_at" => ^due}]}} =
                get_json("/api/home")
     end
+
+    test "the pets' cast is read from the query and reaches the writer's prompt" do
+      Server.TestDB.clean!()
+      writer = Application.get_env(:server, :home_pets_writer)
+
+      on_exit(fn ->
+        if writer,
+          do: Application.put_env(:server, :home_pets_writer, writer),
+          else: Application.delete_env(:server, :home_pets_writer)
+      end)
+
+      test = self()
+
+      Application.put_env(:server, :home_pets_writer, fn prompt ->
+        send(test, {:asked, prompt})
+        {:error, :down}
+      end)
+
+      start_supervised!(Server.Home.Pets)
+
+      assert {200, %{}} =
+               get_json("/api/home/pets?nina_name=Rosa&nina_species=bear&nina_personality=shy&argos_personality=nope")
+
+      assert_receive {:asked, prompt}
+      assert prompt =~ "called Rosa, a bear"
+      assert prompt =~ "ARGOS: a golden dog"
+    end
   end
 
   describe "/api/life — routines, quests, xp (Server.MCP.OperatorAPI)" do

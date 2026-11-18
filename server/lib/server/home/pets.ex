@@ -9,6 +9,10 @@ defmodule Server.Home.Pets do
   changed and the last is older than `@changed_s`, or when it is older than `@every_s`. The writer
   is the reader's model (`Server.Home.Reader`), since the scene holds what the operator jotted. A
   reply that does not parse leaves the last batch standing.
+
+  The two pets are roles, `nina` and `argos`, each with a chosen name, animal and personality (the
+  cast, `cast/1`). The batch held is for one cast: asked for another, it is dropped and written
+  anew, and the caller gets `%{}` until that is done.
   """
   use GenServer
 
@@ -33,6 +37,44 @@ defmodule Server.Home.Pets do
   is as often puzzled, earnest or quietly pleased with a wrong conclusion.
   """
 
+  @defaults %{
+    nina: %{name: "Nina", species: "cat", personality: "sassy"},
+    argos: %{name: "Argos", species: "dog", personality: "sweet"}
+  }
+
+  @sketches %{
+    "sassy" => """
+    Sharp, sassy and dry, a little imperious. Notices everything, has opinions on all of it, and
+    wins every argument, mostly against the other pet. Fond of the boss and would rather be
+    shaved than say so.
+    """,
+    "sweet" => """
+    Sweet and not bright. Thrilled by everything, wrong about most of it, with total confidence:
+    mishears, misunderstands, loses the thread halfway through a thought. Not every line is a
+    shout: as often puzzled, earnest or quietly pleased with a wrong conclusion.
+    """,
+    "lazy" => """
+    Lazy and proud of it. Every plan is too far away and every chair is the right one. Speaks in
+    yawns and half-sentences, is philosophical about naps, and is only ever roused by food or by
+    someone else getting the good spot.
+    """,
+    "mischievous" => """
+    Mischievous, always mid-scheme. Delighted by small chaos, an expert at looking innocent, and
+    keeps a running list of things to knock over next. Never malicious, only curious about what
+    happens if.
+    """,
+    "shy" => """
+    Shy and gentle, a whisperer. Trails off, apologises to furniture, and is braver than it
+    believes in small, sudden moments. Admires the other pet from a safe distance and loves the
+    boss quietly.
+    """,
+    "bold" => """
+    Bold and loud about it. Has never doubted a decision, announces plans like a general, and
+    treats every doorway as a conquest. Generous with courage, short on caution, and certain the
+    house is its kingdom.
+    """
+  }
+
   @occasions [
     {"pet", "the boss clicks on them to pet them"},
     {"wake", "they are woken from a nap"},
@@ -48,8 +90,28 @@ defmodule Server.Home.Pets do
     {"night", "it is late and the boss is still up"}
   ]
 
-  def start_link(_),
-    do: GenServer.start_link(__MODULE__, %{lines: %{}, at: nil, asked: nil, key: nil, writing: false}, name: __MODULE__)
+  def start_link(_) do
+    state = %{lines: %{}, at: nil, asked: nil, key: nil, writing: nil, cast: @defaults}
+    GenServer.start_link(__MODULE__, state, name: __MODULE__)
+  end
+
+  @doc """
+  The cast a request asks for, `%{nina: pet, argos: pet}` with each `pet` `%{name, species,
+  personality}`, from `params` (`nina_name`, `nina_species`, `nina_personality`, and the same for
+  `argos`). A value that is missing or not well-formed is that role's default, so nothing else of
+  the request reaches the prompt.
+  """
+  @spec cast(map()) :: %{nina: map(), argos: map()}
+  def cast(params) do
+    for {role, default} <- @defaults, into: %{} do
+      {role,
+       %{
+         name: name(params["#{role}_name"], default.name),
+         species: species(params["#{role}_species"], default.species),
+         personality: personality(params["#{role}_personality"], default.personality)
+       }}
+    end
+  end
 
   @doc "The occasions a batch has lines for, `{name, what happened}`."
   @spec occasions() :: [{String.t(), String.t()}]
@@ -61,8 +123,15 @@ defmodule Server.Home.Pets do
   written, and where this is off.
   """
   @spec voices(DateTime.t()) :: map()
-  def voices(now) do
-    if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:voices, now}), else: %{}
+  def voices(now), do: voices(now, @defaults)
+
+  @doc """
+  `voices/1` for `cast` (`cast/1`). The held batch is for one cast: asked for another, it is
+  dropped, a batch for the new one is written, and the answer is `%{}` until it is.
+  """
+  @spec voices(DateTime.t(), %{nina: map(), argos: map()}) :: map()
+  def voices(now, cast) do
+    if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:voices, now, cast}), else: %{}
   end
 
   @doc "The home at `now` as the writer is told it, from `status` (`Server.Home.status/1`) and the weather."
@@ -78,9 +147,16 @@ defmodule Server.Home.Pets do
     """
   end
 
-  @doc "The prompt for one batch about `scene`."
+  @doc "The prompt for one batch about `scene`, for the default cast."
   @spec prompt(String.t()) :: String.t()
-  def prompt(scene) do
+  def prompt(scene), do: prompt(scene, @defaults)
+
+  @doc """
+  The prompt for one batch about `scene` for `cast`. The roles stay `Nina` and `Argos` in the
+  answer's keys and turn prefixes; inside a line the pets may use each other's chosen names.
+  """
+  @spec prompt(String.t(), %{nina: map(), argos: map()}) :: String.t()
+  def prompt(scene, cast) do
     """
     You write what two pets say in a small cosy game of the boss's home. Be funny: dry, specific,
     surprising. No stock pet jokes, no exclamation-mark cheer, nothing a greeting card would say.
@@ -89,9 +165,9 @@ defmodule Server.Home.Pets do
     can see it): react to it sideways. No two lines may share a joke or an image, and do not lean on
     the examples in the descriptions below; invent.
 
-    NINA: #{@nina}
-    ARGOS: #{@argos}
-
+    NINA: #{describe(:nina, cast.nina)}
+    ARGOS: #{describe(:argos, cast.argos)}
+    #{naming(cast)}
     MOST lines are pure personality: who they are, what they want, their opinions, their schemes,
     each other, a non sequitur. Only about one line in four may touch the home as it is now (an open
     thing by its name, the hour, the weather), and only where the occasion calls for it or it is
@@ -128,39 +204,86 @@ defmodule Server.Home.Pets do
   def init(state), do: {:ok, state}
 
   @impl true
-  def handle_call({:voices, now}, _from, state) do
+  def handle_call({:voices, now, cast}, _from, state) do
+    state =
+      if cast == state.cast,
+        do: state,
+        else: %{state | cast: cast, lines: %{}, at: nil, key: nil, writing: nil}
+
     status = Home.status(now)
     key = {Enum.map(status.open, & &1.id), status.done_week}
     age = state.at && DateTime.diff(now, state.at)
     stale = age == nil or age >= @every_s or (key != state.key and age >= @changed_s)
 
-    if stale and not state.writing do
-      write(scene(status, Server.Office.Weather.now(), now))
-      {:reply, state.lines, %{state | writing: true, key: key, asked: now}}
+    if stale and state.writing == nil do
+      ref = make_ref()
+      write(ref, prompt(scene(status, Server.Office.Weather.now(), now), cast))
+      {:reply, state.lines, %{state | writing: ref, key: key, asked: now}}
     else
       {:reply, state.lines, state}
     end
   end
 
   @impl true
-  def handle_cast({:wrote, {:ok, lines}}, state),
-    do: {:noreply, %{state | lines: lines, at: state.asked, writing: false}}
+  def handle_cast({:wrote, ref, {:ok, lines}}, %{writing: ref} = state),
+    do: {:noreply, %{state | lines: lines, at: state.asked, writing: nil}}
 
-  def handle_cast({:wrote, :error}, state), do: {:noreply, %{state | at: state.asked, writing: false}}
+  def handle_cast({:wrote, ref, :error}, %{writing: ref} = state),
+    do: {:noreply, %{state | at: state.asked, writing: nil}}
 
-  defp write(scene) do
+  def handle_cast({:wrote, _ref, _result}, state), do: {:noreply, state}
+
+  defp write(ref, prompt) do
     writer = Application.get_env(:server, :home_pets_writer, &ask/1)
 
     Task.start(fn ->
       result =
-        case writer.(prompt(scene)) do
+        case writer.(prompt) do
           {:ok, out} -> parse(out)
           _ -> :error
         end
 
-      GenServer.cast(__MODULE__, {:wrote, result})
+      GenServer.cast(__MODULE__, {:wrote, ref, result})
     end)
   end
+
+  defp describe(:nina, %{name: "Nina", species: "cat", personality: "sassy"}), do: @nina
+  defp describe(:argos, %{name: "Argos", species: "dog", personality: "sweet"}), do: @argos
+
+  defp describe(_role, %{name: name, species: species, personality: personality}) do
+    article = if String.starts_with?(species, ["a", "e", "i", "o", "u"]), do: "an", else: "a"
+    "called #{name}, #{article} #{species}. Let the animal show naturally.\n#{Map.fetch!(@sketches, personality)}"
+  end
+
+  defp naming(cast) when cast == @defaults, do: ""
+
+  defp naming(%{nina: nina, argos: argos}) do
+    """
+
+    NINA is called #{nina.name} and ARGOS is called #{argos.name}. Inside the text of a line they may
+    call each other, and the boss, by these names. The JSON keys and the "Nina: " / "Argos: " turn
+    prefixes stay exactly as written below, whatever the names.
+    """
+  end
+
+  defp name(value, default) when is_binary(value) do
+    trimmed = String.trim(value)
+    if trimmed =~ ~r/\A[\p{L}0-9 '-]{1,24}\z/u, do: trimmed, else: default
+  end
+
+  defp name(_, default), do: default
+
+  defp species(value, default) when is_binary(value) do
+    if value =~ ~r/\A[a-z]{1,16}\z/, do: value, else: default
+  end
+
+  defp species(_, default), do: default
+
+  defp personality(value, default) when is_binary(value) do
+    if is_map_key(@sketches, value), do: value, else: default
+  end
+
+  defp personality(_, default), do: default
 
   defp ask(prompt) do
     Server.ModelCli.prompt(prompt, :home_reader_cmd, :home_reader_model, {"claude", "haiku"},
