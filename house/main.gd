@@ -19,7 +19,11 @@ const ChatView := preload("res://chat_view.gd")
 const BackendHttp := preload("res://backend_http.gd")
 const BackendLocal := preload("res://backend_local.gd")
 const LocalList := preload("res://local_list.gd")
+const ReaderClaude := preload("res://reader_claude.gd")
+const Telegram := preload("res://telegram.gd")
 
+# false in a staged or scripted run: nothing is sent to Claude or anywhere else
+var talk_live := false
 var pets_retry := 20.0
 var pets_every := 300.0
 var pets_nudge := 60.0
@@ -28,6 +32,8 @@ var pets_window := 180.0
 var _demo := false
 var _shot := ""
 var _backend: Node
+var _claude := ReaderClaude.new()
+var _phone := Telegram.new()
 var _fixture := ""
 var _probing := false
 var _starters := false
@@ -106,6 +112,8 @@ func _ready() -> void:
 	_panel.add_pressed.connect(_add_thing)
 	_panel.now_pressed.connect(_what_now)
 	add_child(_panel)
+	talk_live = not _room.home.staged
+	_set_up_phone()
 	_use_backend(args)
 	_decorate = DecorateScript.new()
 	_decorate.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
@@ -142,6 +150,8 @@ func _ready() -> void:
 	_room.home.things.post.connect(func(path: String, body: Dictionary) -> void: _write(path, body))
 	_settings_view = SettingsView.new()
 	_settings_view.setup(_room.home.settings, _room.home)
+	_settings_view.claude = _claude
+	_settings_view.phone = _phone
 	_settings_view.check_requested.connect(_check_server)
 	add_child(_settings_view)
 	_room.home.settings.changed.connect(_on_setting)
@@ -300,8 +310,17 @@ func _install(node: Node) -> void:
 	_reach = {}
 	_backend = node
 	_backend.changed.connect(_refresh)
+	_backend.told.connect(
+		func(row: Dictionary) -> void:
+			if _phone_on():
+				_phone.on_told(row)
+	)
 	add_child(_backend)
 	_apply_where()
+	_apply_talk()
+	if _backend.local and _phone_on():
+		for row in _backend.started:
+			_phone.on_told(row)
 
 
 # what only means something with a server is not shown over the house's own list
@@ -312,6 +331,57 @@ func _apply_where() -> void:
 	_panel.set_reachable(true)
 	if not served and _at == "office":
 		_enter("home")
+
+
+func _set_up_phone() -> void:
+	var home = _room.home
+	_phone.persist = not home.staged
+	_phone.load_state()
+	_phone.clock = Callable(home, "_now_local")
+	_phone.bias = home._bias()
+	_phone.status = func() -> Dictionary: return _backend.list.status() if _backend.local else {}
+	_phone.rng.randomize()
+	_phone.heard.connect(_phone_heard)
+	_phone.tapped.connect(_phone_tapped)
+	add_child(_phone)
+
+
+# Claude and Telegram work only over the house's own list, and only while their setting is on
+func _apply_talk() -> void:
+	var settings = _room.home.settings
+	var cmd := str(settings.value("claude_command")).strip_edges()
+	_claude.command = cmd if cmd != "" else "claude"
+	if _backend.local:
+		_backend.claude = _claude if talk_live and settings.value("claude") else null
+	_phone.live = talk_live
+	_phone.list_at = str(settings.value("telegram_list_at"))
+	if _phone_on():
+		_phone.start()
+	else:
+		_phone.stop()
+
+
+func _phone_on() -> bool:
+	return _backend.local and talk_live and _room.home.settings.value("telegram")
+
+
+# a line from the paired chat goes the way the chat's own do, marked as from the phone
+func _phone_heard(text: String, finish: Callable) -> void:
+	_tell(
+		text,
+		func(ok: bool, reply: String) -> void: finish.call(reply if ok else "I couldn't keep that."),
+		"phone"
+	)
+
+
+func _phone_tapped(id: int, what: String, finish: Callable) -> void:
+	_act(
+		id,
+		what,
+		func() -> void:
+			_room.home.chat.resolve(id, what)
+			finish.call()
+	)
 
 
 # the first start of a house with no settings yet: the default address is asked once; with nobody
@@ -664,6 +734,8 @@ func _on_act(id: int, what: String) -> void:
 
 # `ok` runs once the server has said yes
 func _act(id: int, what: String, ok: Callable = Callable()) -> void:
+	if what in ["done", "delete", "hour", "tomorrow"] and _phone_on():
+		ok = _then(ok, func() -> void: _phone.handled(id, what))
 	match what:
 		"done":
 			_write("/api/home/%d/done" % id, {}, _then(ok, func() -> void: _remove(id)))
@@ -870,16 +942,17 @@ func _send_jot(text: String) -> void:
 
 # A line to the home, from the notepad or the chat: both are kept in the chat's history. `done`
 # gets (reached, the reply); the room is read again at once.
-func _tell(text: String, done: Callable) -> void:
+func _tell(text: String, done: Callable, via: String = "") -> void:
 	var chat = _room.home.chat
-	chat.add("me", text)
+	var marks := {"via": via} if via != "" else {}
+	chat.add("me", text, marks)
 	var finished := func(ok: bool, code: int, body: Variant) -> void:
 		var reached: bool = ok and code == 200
 		var reply := "kept"
 		if reached and body is Dictionary and body.get("reply") is String:
 			reply = body["reply"]
 		if reached:
-			chat.add("home", reply)
+			chat.add("home", reply, marks)
 			if _demo:
 				var id: int = 100 + _data["open"].size()
 				_data["open"] = _data["open"] + [
@@ -943,6 +1016,8 @@ func _on_setting(key: String) -> void:
 		"on_top":
 			if _widget:
 				get_window().always_on_top = _room.home.settings.value("on_top")
+		"claude", "claude_command", "telegram", "telegram_list_at":
+			_apply_talk()
 
 
 func _enter(where: String) -> void:
@@ -991,6 +1066,12 @@ func _on_polled(reached: bool, code: int, body: Variant) -> void:
 		if polled == "home":
 			_data = _home_data(parsed)
 			_room.home.sync_chat(_data)
+			if _phone_on():
+				_phone.sync(
+					_data["open"]
+					. filter(func(t): return t.get("told_at") != null)
+					. map(func(t): return int(t["id"]))
+				)
 		else:
 			_office = parsed
 			_room.home.set_weather(parsed.get("weather"))
@@ -1203,15 +1284,29 @@ func _stage_settings(spec: String) -> void:
 	for p in spec.split(";", false):
 		var key := p.get_slice("=", 0)
 		var val := p.substr(p.find("=") + 1) if "=" in p else ""
-		if key in ["name", "cat", "dog", "birthday"]:
+		if key in ["name", "cat", "dog", "birthday", "claude_command"]:
 			settings.put(key, val)
+		elif key in ["claude", "telegram"]:
+			settings.put(key, val == "on")
+		elif key == "phone":
+			_stage_phone(val)
 	_open_settings()
 	for p in spec.split(";", false):
 		match p.get_slice("=", 0):
 			"scroll":
-				_settings_view._scroll.scroll_vertical = 100000
+				var to := p.substr(p.find("=") + 1) if "=" in p else ""
+				_settings_view._scroll.scroll_vertical = int(to) if to != "" else 100000
 			"armed":
 				_settings_view.sure.ask(p.get_slice("=", 1))
+
+
+# `phone=pairing|paired` in `--settings`: the bot's state for a picture, a made-up token
+func _stage_phone(how: String) -> void:
+	_phone.token = "12345:staged-0000abcd"
+	_phone.me = "@house_demo_bot"
+	_phone.code = "4821"
+	_phone.chat = 7 if how == "paired" else 0
+	_phone.reached_at = _room.home._now_local() - 90.0 if how == "paired" else 0.0
 
 
 # `--chat "empty|talk,reminder,acted,pet,reading,fail"`, for a picture: a made-up conversation
@@ -1233,6 +1328,13 @@ func _stage_chat(spec: String) -> void:
 			if "acted" in kinds:
 				m["done"] = "hour"
 			chat.messages.append(m)
+	if "phone" in kinds:
+		chat.messages.append(
+			{"t": now - 60, "who": "me", "text": "pick up the parcel tomorrow at 5pm", "via": "phone"}
+		)
+		chat.messages.append(
+			{"t": now - 59, "who": "home", "text": "Reminder set: pick up the parcel, tomorrow 17:00.", "via": "phone"}
+		)
 	if "reading" in kinds:
 		chat.messages.append({"t": now - 5, "who": "me", "text": "move the dentist to friday"})
 		_chat_view.reading = true
