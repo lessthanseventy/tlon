@@ -1460,7 +1460,7 @@ func _upcoming(items: Array, n: int) -> Array:
 
 func _repeats(item: Dictionary) -> String:
 	var every := _every(item)
-	return "" if every == "" else "every " + every
+	return "" if every == "" else Card.every_words(every)
 
 
 # what the open card shows, built fresh each frame from what the home holds

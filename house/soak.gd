@@ -1049,6 +1049,36 @@ func _card_logic() -> void:
 	var late := Card.unix(2026, 1, 31, 9, 0)
 	_check(days.call(Card.occurrences(late, "month", Card.unix(2026, 2, 1), from)).has(28), "month end")
 	_check(Card.occurrences(late, "month", Card.unix(2026, 2, 1), Card.unix(2026, 3, 1)).size() == 1, "once a month")
+	_every_logic()
+
+
+func _every_logic() -> void:
+	var days := func(list: Array) -> Array:
+		return list.map(func(at): return Time.get_datetime_dict_from_unix_time(int(at))["day"])
+	var nov := Card.unix(2026, 11, 1)
+	var dec := Card.unix(2026, 12, 1)
+	var due := Card.unix(2026, 11, 3, 9, 0)
+	_check(days.call(Card.occurrences(due, "1 week", nov, dec)) == [3, 10, 17, 24], "1 week is every week")
+	_check(days.call(Card.occurrences(due, "2 week", nov, dec)) == [3, 17], "every other week")
+	_check(days.call(Card.occurrences(due, "6 week", nov, dec)) == [3], "every 6 weeks: one in the month")
+	_check(days.call(Card.occurrences(due, "6 week", dec, Card.unix(2027, 1, 1))) == [15], "every 6 weeks lands on the 15th of December")
+	_check(days.call(Card.occurrences(due, "3 day", nov, dec)) == [3, 6, 9, 12, 15, 18, 21, 24, 27, 30], "every 3 days")
+	var k31 := Card.unix(2026, 1, 31, 9, 0)
+	var want := {2: 28, 3: 31, 4: 30, 5: 31, 6: 30}
+	for m in want:
+		var got: Array = days.call(Card.occurrences(k31, "month", Card.unix(2026, m, 1), Card.unix(2026, m + 1, 1)))
+		_check(got == [want[m]], "monthly from the 31st in month %d: %s" % [m, str(got)])
+	var q := Card.unix(2026, 1, 15, 8, 30)
+	var hits: Array = []
+	for m in range(1, 13):
+		hits.append(Card.occurrences(q, "3 month", Card.unix(2026, m, 1), Card.unix(2026, m + 1, 1)).size())
+	_check(hits == [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0], "every 3 months: Jan, Apr, Jul, Oct (%s)" % str(hits))
+	_check(Card.occurrences(due, "garbage", nov, dec) == [due], "an unknown every counts as once")
+	_check(Card.every_words("week") == "every week" and Card.every_words("day") == "every day", "every week, every day")
+	_check(Card.every_words("2 week") == "every other week", "2 weeks is every other week")
+	_check(Card.every_words("6 week") == "every 6 weeks", "every 6 weeks")
+	_check(Card.every_words("3 month") == "every 3 months", "every 3 months")
+	_check(Card.every_words("1 month") == "every month", "1 month is every month")
 
 
 # the point of a hit area nobody sits over, for each key
