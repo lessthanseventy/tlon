@@ -23,7 +23,7 @@ var _demo := false
 var _shot := ""
 var _base := "http://127.0.0.1:4040"
 
-var _data := {"open": [], "coming": [], "notes": [], "done_week": 0}
+var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": null}
 var _jot: PanelContainer
 var _closet: Control
 var _decorate: Control
@@ -233,6 +233,7 @@ func _apply(data: Dictionary) -> void:
 		"coming": data.get("coming", []),
 		"notes": data.get("notes", []),
 		"done_week": data.get("done_week", 0),
+		"done": data.get("done"),
 	}
 	_room.home.set_data(_data)
 	var ids: Array = []
@@ -286,11 +287,14 @@ func _input(event: InputEvent) -> void:
 			_set_widget(not _widget)
 		KEY_ESCAPE:
 			_room.home.menu.close()
+			_room.home.close_card()
 			_room.home.dismiss_slip()
 
 
 func _process(_dt: float) -> void:
 	_room.home.jot_open = _jot.visible
+	_room.home.closet_open = _closet.visible
+	_room.home.decorating = _decorate.active
 	if _jot.visible:
 		var w := size.x - (0 if _widget else PANEL_WIDTH)
 		_jot.size = _jot.get_combined_minimum_size()
@@ -486,6 +490,7 @@ func _send_jot(text: String) -> void:
 
 
 func _enter(where: String) -> void:
+	_room.home.close_card()
 	if where == "home" and _at == "office" and _away_at > 0.0:
 		if Time.get_ticks_msec() / 1000.0 - _away_at >= AWAY_FOR_GREETING:
 			_room.home.came_back()
@@ -531,6 +536,7 @@ func _on_polled(result: int, code: int, _headers: PackedStringArray, body: Packe
 				"coming": parsed.get("coming", []),
 				"notes": parsed.get("notes", []),
 				"done_week": parsed.get("done_week", 0),
+				"done": parsed.get("done"),
 			}
 		else:
 			_office = parsed
@@ -745,6 +751,10 @@ func _on_watch(result: int, code: int, _h: PackedStringArray, body: PackedByteAr
 
 func _remove(id: int) -> void:
 	_room.home.tick_off(id)
+	var at := Time.get_datetime_string_from_system(true) + "Z"
+	for t in _data["open"]:
+		if int(t["id"]) == id and _data.get("done") is Array:
+			_data["done"] = [{"text": t["text"], "done_at": at}] + _data["done"]
 	var kept: Array = _data["open"].filter(func(t): return int(t["id"]) != id)
 	_data["open"] = kept
 	_data["done_week"] = int(_data.get("done_week", 0)) + 1

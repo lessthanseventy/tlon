@@ -13,6 +13,7 @@ const Voices := preload("res://voices.gd")
 const Layout := preload("res://layout.gd")
 const Decorate := preload("res://decorate.gd")
 const Closet := preload("res://closet.gd")
+const Card := preload("res://card.gd")
 
 var _srv := TCPServer.new()
 var _conns: Array = []
@@ -62,6 +63,8 @@ func _run() -> void:
 	_decorate_logic()
 	_looks()
 	await _hacks_draw()
+	_card_logic()
+	await _cards()
 	await _routes()
 	print("SOAK %s (%d failures)" % ["OK" if _failures.is_empty() else "FAILED", _failures.size()])
 	quit(0 if _failures.is_empty() else 1)
@@ -989,6 +992,184 @@ func _night_logic() -> void:
 	h.fake_hour = 14.0
 	_run_home(h, 8.0)
 	_check(h.tv.on, "he turns the TV on when he sits down to watch")
+	room.queue_free()
+
+
+func _card_logic() -> void:
+	_check(Card.until_text(130 * 60.0) == "in 2 h 10 min", "in 2 h 10 min: " + Card.until_text(7800.0))
+	_check(Card.until_text(25 * 60.0) == "in 25 min", "in 25 min")
+	_check(Card.until_text(2 * 3600.0) == "in 2 h", "in 2 h")
+	_check(Card.until_text(25 * 3600.0) == "in 1 day 1 h", "in 1 day 1 h")
+	_check(Card.until_text(3 * 86400.0) == "in 3 days", "in 3 days")
+	_check(Card.until_text(20.0) == "now", "under half a minute is now")
+	var nov := Card.month_info(2026, 11)
+	_check(nov["first"] == 0 and nov["days"] == 30, "November 2026 starts on a Sunday, 30 days")
+	_check(Card.days_in(2028, 2) == 29 and Card.days_in(2026, 12) == 31, "days in a month")
+	var from := Card.unix(2026, 11, 1)
+	var to := Card.unix(2026, 12, 1)
+	var days := func(list: Array) -> Array:
+		return list.map(func(at): return Time.get_datetime_dict_from_unix_time(int(at))["day"])
+	var due := Card.unix(2026, 11, 3, 9, 0)
+	_check(days.call(Card.occurrences(due, "week", from, to)) == [3, 10, 17, 24], "every week")
+	_check(days.call(Card.occurrences(due, "", from, to)) == [3], "once")
+	_check(days.call(Card.occurrences(due, "day", from, to)).size() == 28, "every day from the 3rd")
+	var late := Card.unix(2026, 1, 31, 9, 0)
+	_check(days.call(Card.occurrences(late, "month", Card.unix(2026, 2, 1), from)).has(28), "month end")
+	_check(Card.occurrences(late, "month", Card.unix(2026, 2, 1), Card.unix(2026, 3, 1)).size() == 1, "once a month")
+
+
+# the point of a hit area nobody sits over, for each key
+func _hit_points(h) -> Dictionary:
+	var pts := {}
+	for x in range(0, 1100, 4):
+		for y in range(0, 700, 4):
+			var key: String = h._topmost(Vector2(x, y))
+			if not pts.has(key):
+				pts[key] = []
+			if pts[key].size() < 60:
+				pts[key].append(Vector2(x, y))
+	return pts
+
+
+func _cards() -> void:
+	var room := _room()
+	room.size = Vector2(1100, 700)
+	var h = room.home
+	h.fake_hour = 8.0
+	h.pets.freeze = true
+	var day := Time.get_datetime_dict_from_system()
+	var bias: float = h._bias()
+	var iso := func(d: int, hour: int, minute: int) -> String:
+		var at := Card.unix(day["year"], day["month"], d, hour, minute) - bias
+		return Time.get_datetime_string_from_unix_time(int(at)) + "Z"
+	var today := int(h._now_local() / 86400.0)
+	var soon := Time.get_datetime_string_from_unix_time(int(today * 86400.0 + 10.1666667 * 3600.0 - bias)) + "Z"
+	var data := {
+		"open": [],
+		"coming":
+		[
+			{"id": 1, "kind": "reminder", "text": "water the plant", "due_at": soon, "every": "week"},
+			{"id": 2, "kind": "reminder", "text": "pay rent", "due_at": iso.call(20, 10, 0), "every": null},
+		],
+		"notes": ["a", "b", "c", "d", "e", "f", "g"],
+		"done_week": 3,
+	}
+	h.set_data(data)
+	h.set_weather({"kind": "rain", "desc": "Light rain", "temp_c": 9})
+	for _i in 4:
+		await process_frame
+	if not room.art_found:
+		print("cards: no art, hit areas not tested")
+		room.queue_free()
+		return
+	var pts := _hit_points(h)
+	var empty: Vector2 = pts[""][pts[""].size() - 1]
+	var things := {
+		"calendar": "cal", "jar": "jar", "weather": "window", "clock": "clock",
+		"plant": "plant", "tv": "tv", "board": "board",
+	}
+	for kind in things:
+		var key: String = things[kind]
+		_check(pts.has(key), "%s has a hit area" % kind)
+		if not pts.has(key):
+			continue
+		h.click(pts[key][0])
+		_check(h.card.kind == kind and h.card.key == key, "a click on %s opens its card" % key)
+		_check(not h.card_blocks().is_empty(), "the %s card has something to say" % kind)
+		await process_frame
+		var out: bool = h.click(empty)
+		_check(not h.card.is_open() and out, "a click outside closes the %s card" % kind)
+		h.click(pts[key][0])
+		h.close_card()
+		_check(not h.card.is_open(), "Esc closes the %s card" % kind)
+		h.click(pts[key][0])
+		await process_frame
+		for p in pts[key]:
+			if not h.card._box.has_point(p):
+				h.click(p)
+				_check(not h.card.is_open(), "the same thing again closes the %s card" % kind)
+				break
+		h.close_card()
+	print("cards: %d things open their card from their hit area" % things.size())
+	h.click(pts["note:0"][0] if pts.has("note:0") else pts["board"][0])
+	_check(h.card.kind == "board", "a note opens the board card")
+	h.close_card()
+	h.click(pts["cal"][0])
+	await process_frame
+	var jar_pt := Vector2(-1, -1)
+	for p in pts["jar"]:
+		if not h.card._box.has_point(p):
+			jar_pt = p
+	_check(jar_pt.x >= 0, "a jar point outside the calendar card")
+	h.click(jar_pt)
+	_check(h.card.kind == "jar", "another thing replaces the card: one at a time (%s)" % h.card.kind)
+	h.close_card()
+	for state in ["jot_open", "closet_open", "decorating"]:
+		h.set(state, true)
+		h.click(pts["cal"][0])
+		_check(not h.card.is_open(), "no card while %s" % state)
+		h.set(state, false)
+	h.menu.show_at(1, Vector2(300, 300), "x", [{"label": "a", "act": "done"}])
+	h.click(pts["cal"][0])
+	_check(not h.card.is_open() and not h.menu.is_open, "no card over a menu; its click only closes it")
+	h.click(pts["cal"][0])
+	_check(h.card.kind == "calendar", "the card opens once the menu is gone")
+	h.jot_open = true
+	h.process(0.1)
+	_check(not h.card.is_open(), "opening the notepad closes the card")
+	h.jot_open = false
+	h.rhythm.kind = "home"
+	h.click(pts["cal"][0])
+	_check(not h.card.is_open(), "no card over the day's slip")
+	h.rhythm.kind = ""
+	h.open_card("calendar")
+	_check(h.card.kind == "calendar", "--card opens by name")
+
+	var month: Dictionary = h.card_blocks()[0]
+	_check(month["t"] == "month" and month["marks"].has(20), "the reminder is marked on its day")
+	_check(month["marks"].has(Time.get_datetime_dict_from_unix_time(today * 86400)["day"]), "and the weekly one today")
+	h.card.kind = "clock"
+	var clock: Array = h.card_blocks()
+	_check("in 2 h 10 min" in str(clock), "the clock says how long: %s" % str(clock.slice(2)))
+	h.card.kind = "plant"
+	_check("water the plant" in str(h.card_blocks()), "the plant says when it is next watered")
+	h.set_data(data.merged({"coming": []}, true))
+	_check("needs water" in str(h.card_blocks()), "no watering due: a plain line")
+	h.card.kind = "weather"
+	_check("Light rain" in str(h.card_blocks()) and "9°C (48°F)" in str(h.card_blocks()), "the weather in words")
+	h.card.kind = "jar"
+	var plain: Array = h.card_blocks()
+	_check(plain.size() == 2 and "3 done" in str(plain), "the jar without names says the count only")
+	h.set_data(
+		data.merged(
+			{
+				"done":
+				[
+					{"text": "older", "done_at": "2026-11-14T10:00:00Z"},
+					{"text": "newest", "done_at": "2026-11-16T10:00:00Z"},
+					{"text": "middle", "done_at": "2026-11-15T10:00:00Z"},
+				]
+			},
+			true
+		)
+	)
+	var named: Array = h.card_blocks()
+	_check(named.size() == 5 and "newest" in named[2]["text"] and "older" in named[4]["text"], "the jar lists names newest first")
+	h.set_data(data.merged({"done_week": 0}, true))
+	_check("fresh" in str(h.card_blocks()), "an empty week says so")
+	h.card.kind = "board"
+	_check(h.card_blocks().size() == 8 and h.card.page == 0, "the board shows a page of notes")
+	h.card.page = 5
+	_check(h.card_blocks().size() == 5 and h.card.page == 1, "the board pages clamp")
+	h.card.kind = "tv"
+	h.tv.force_on(true)
+	h.tv.hacks.force("plasma")
+	h.card.key = "tv"
+	await process_frame
+	await process_frame
+	var button: Rect2 = h.card._buttons[0]["rect"]
+	h.click(button.get_center())
+	_check(h.tv.hacks.current != "plasma" and h.card.kind == "tv", "Next changes the TV's picture")
 	room.queue_free()
 
 

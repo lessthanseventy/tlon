@@ -121,6 +121,12 @@
     ]
   },
   "done_week": 4,
+  "done": [
+    {"text": "return the library book", "done_at": "2026-11-17T08:05:00Z"},
+    {"text": "email Sam the invoice", "done_at": "2026-11-16T19:40:00Z"},
+    {"text": "book the dentist", "done_at": "2026-11-16T10:15:00Z"},
+    {"text": "renew the car insurance", "done_at": "2026-11-15T14:30:00Z"}
+  ],
   "open": [
     {
       "id": 1,

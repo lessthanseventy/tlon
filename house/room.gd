@@ -380,7 +380,10 @@ func _draw_furniture(origin: Vector2, f: Array) -> void:
 		if f.size() > 3:
 			_flat_box(origin, f[1], f[2], f[3], f[4], f[5], f[6])
 		return
-	draw_texture(s["tex"], (_p(origin, f[1], f[2]) - s["anchor"]).round())
+	var at: Vector2 = (_p(origin, f[1], f[2]) - s["anchor"]).round()
+	draw_texture(s["tex"], at)
+	if _desc == HOME and str(f[0]).begins_with("clock_"):
+		home.register_sprite("clock", s["tex"], at)
 
 
 func _flat_box(origin: Vector2, c: int, r: int, fc: int, fr: int, h: float, col: Color) -> void:
