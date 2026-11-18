@@ -18,6 +18,130 @@ func _init(soak) -> void:
 func run() -> void:
 	_kinds()
 	_picker()
+	_things()
+
+
+func _home(seed_value: int, pet1: String, pet2: String) -> Control:
+	var room: Control = s._room(seed_value)
+	var h = room.home
+	h.fake_hour = 14.0
+	h.fake_day = "06-15"
+	h.set_data(s._data([s._thing(1, 1.0)], 0))
+	h.settings.put("pet1", pet1)
+	h.settings.put("pet2", pet2)
+	return room
+
+
+func _names(list: Array) -> Array:
+	return list.map(func(o): return o[0])
+
+
+# the things in the pets' corner: only for whom they are for, switchable, never on furniture
+func _things() -> void:
+	var room := _home(43, "cat_grey", "dog_golden")
+	var h = room.home
+	var life = h.petlife
+	s._check(
+		life.has_litter() and life.has_post() and life.has_mat(),
+		"a cat has its box and post, a dog its bone"
+	)
+	s._check(life.items().size() == 3, "the box (two halves) and the post are drawn")
+	s._check(not life.has_hay() and life.pieces().is_empty(), "no hay for a cat and a dog")
+	s._check(
+		_names(life.options(h.pets.critter("nina"))).has("bowl"), "the first pet may go to its bowl"
+	)
+	h.settings.put("litter_box", false)
+	s._check(not life.has_litter() and life.has_post(), "the litter box switch hides the box only")
+	s._check(
+		not _names(life.options(h.pets.critter("nina"))).has("litter"), "and nobody is sent to it"
+	)
+	h.settings.put("litter_box", true)
+	h.settings.put("bowls", false)
+	var names := _names(life.options(h.pets.critter("argos")))
+	s._check(
+		not names.has("bowl") and not names.has("water"),
+		"the bowls switch removes both bowls from the pets' day"
+	)
+	h.settings.put("bowls", true)
+	h.settings.put("pet_things", false)
+	s._check(
+		not life.has_post() and not life.has_mat() and life.has_litter(),
+		"the pet things switch hides the rest, not the box"
+	)
+	h.settings.put("pet_things", true)
+	h.layout.pieces.append({"p": "crate", "f": "", "c": 7, "r": 5})
+	s._check(not life.has_litter(), "a crate of his on the cell: no litter box")
+	h.layout.pieces.pop_back()
+	h.settings.put("pet1", "rabbit_white")
+	s._check(not life.has_litter() and not life.has_post(), "no cat, no box and no post")
+	h.settings.put("pet1", Pets.NONE)
+	h.settings.put("pet2", Pets.NONE)
+	s._check(
+		not life.has_litter() and life.options(h.pets.critter("nina")).is_empty(),
+		"no pets, no things to use"
+	)
+	h.settings.put("pet1", "cat_grey")
+	h.settings.put("pet2", "dog_golden")
+	life.level["food"] = 0.3
+	s._check(life.click("bowl:food") and life.level["food"] == 1.0, "a click on the bowl fills it")
+	s._check(h.sound.requested.has("clink"), "with a small sound")
+	s._check(not life.click("furn:piano"), "a click elsewhere is not the bowl's")
+	var cat = h.pets.critter("nina")
+	h.pets.place(cat, "bowl", "sit")
+	h.pets.arrive_at(cat, "bowl")
+	life.level["food"] = 1.0
+	s._run_home(h, 20.0)
+	s._check(cat.anim == "eat" or cat.spot != "bowl", "a pet at the bowl eats")
+	life.litter_wait = 0.0
+	cat.hold = false
+	h.pets.freeze = true
+	var seen := 0
+	for i in 40:
+		life.litter_wait = 0.0
+		h.pets.place(cat, "rug", "sit")
+		s._run_home(h, 0.2)
+		var before: int = life.visits
+		h.pets.go(cat, "litter", "sit", 5.0)
+		s._run_home(h, 14.0, func(): return cat.use == "litter")
+		if cat.use == "litter":
+			seen += 1
+			s._run_home(h, 6.0)
+			s._check(life.visits == before + 1, "each trip to the box is one visit")
+		s._check(
+			not h.pets._blocked(h.pets._cell_of(cat.pos)) or cat.z > 0.0,
+			"the cat is never on a blocked cell"
+		)
+	s._check(
+		seen == 40 and life.visits == 40,
+		"the cat goes into the box and is counted (%d)" % life.visits
+	)
+	var wait: float = life.litter_wait
+	s._check(wait >= 420.0, "and the next visit is minutes away (%.0f)" % wait)
+	room.queue_free()
+	room = _home(44, "chicken_white", "cow_holstein")
+	h = room.home
+	s._check(
+		h.petlife.has_hay() and h.layout.guests.is_empty(),
+		"farm animals want hay, lent when the room draws"
+	)
+	h.room.guests.update(h)
+	s._check(
+		h.layout.guests.any(func(p): return p["p"] == "farm.hay_round"),
+		"the hay bale is a lent piece"
+	)
+	s._check(h.pets._blocked(Vector2i(5, 6)), "and it blocks its cell like furniture")
+	var names2 := _names(h.petlife.options(h.pets.critter("nina")))
+	s._check(names2.has("hay_top"), "a chicken perches on the hay")
+	s._check(
+		_names(h.petlife.options(h.pets.critter("argos"))).has("hay_eat"), "a cow eats from it"
+	)
+	h.settings.put("pet_things", false)
+	h.room.guests.update(h)
+	s._check(
+		h.layout.guests.is_empty() and not h.pets._blocked(Vector2i(5, 6)),
+		"off, the hay is gone and the cell is free"
+	)
+	room.queue_free()
 
 
 # the card writes the settings the settings screen writes, and the room follows at once

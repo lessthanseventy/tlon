@@ -118,12 +118,12 @@ func _draw_meal(h, t: Dictionary, tex: Array) -> void:
 # the guests follow the date and the layout: chosen again when either changes
 func update(h) -> void:
 	var on: bool = h.layout.art and last_week_of_october(h._now_local())
-	var stamp := [on, h.layout.version]
+	var stamp := [on, h.layout.version, h.petlife.sig()]
 	if stamp == _seen:
 		return
 	_seen = stamp
 	var before: Array = h.layout.guests
-	h.layout.guests = _choose(h) if on else []
+	h.layout.guests = _choose(h) if on else h.petlife.pieces()
 	if h.layout.guests != before:
 		h.apply_layout()
 
@@ -133,7 +133,7 @@ func _choose(h) -> Array:
 	var r := RandomNumberGenerator.new()
 	r.seed = Time.get_datetime_dict_from_unix_time(int(h._now_local()))["year"]
 	var busy: Array = h.busy_cells()
-	var out: Array = []
+	var out: Array = h.petlife.pieces()
 	var sides: Array = []
 	l.guests = out
 	for name in SEASONAL:
