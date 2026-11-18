@@ -7,6 +7,10 @@ const ReaderRules := preload("res://reader_rules.gd")
 
 var list: RefCounted
 var reader: RefCounted = ReaderRules.new()
+# when set (`reader_claude.gd`), a loose line is asked of it first; `reader` reads what it cannot
+var claude: RefCounted
+# the reminders that came due while the house was closed: the first tick tells them before anyone listens
+var started: Array = []
 
 
 func _init() -> void:
@@ -21,8 +25,11 @@ func setup(path: String, clock: Callable, bias: float, keep: bool = true) -> voi
 	list.load_file()
 	if not keep:
 		list.path = ""
-	list.told.connect(func(row: Dictionary) -> void: told.emit(row))
+	var first := func(row: Dictionary) -> void: started.append(row)
+	list.told.connect(first)
 	list.tick()
+	list.told.disconnect(first)
+	list.told.connect(func(row: Dictionary) -> void: told.emit(row))
 
 
 func _ready() -> void:
@@ -42,6 +49,12 @@ func fetch(path: String, cb: Callable, _timeout: float = 8.0) -> void:
 
 
 func send(path: String, body: Dictionary, cb: Callable, _timeout: float = 6.0) -> void:
+	var text := str(body.get("text", ""))
+	if claude != null and path == "/api/home" and text.strip_edges() != "":
+		claude.ask(
+			text, _context(), func(reading: Dictionary) -> void: _deliver(cb, _tell(text, reading))
+		)
+		return
 	_deliver.call_deferred(cb, _route("POST", path, body))
 
 
@@ -101,13 +114,15 @@ func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 	return {"code": 404, "body": null}
 
 
-# a loose line: read, carried out, and answered in the reader's words
-func _tell(text: String) -> Dictionary:
+func _context() -> Dictionary:
+	return {"now": list.now(), "bias": list.bias, "status": list.status()}
+
+
+# a loose line: read (by `given`, else the rules), carried out, and answered in the reader's words
+func _tell(text: String, given: Dictionary = {}) -> Dictionary:
 	if text.strip_edges() == "":
 		return {"code": 400, "body": {"error": "text is required"}}
-	var reading: Dictionary = reader.read(
-		text, {"now": list.now(), "bias": list.bias, "status": list.status()}
-	)
+	var reading: Dictionary = given if not given.is_empty() else reader.read(text, _context())
 	var said: String = reading["say"]
 	var made := {"code": 200}
 	match reading["action"]:
