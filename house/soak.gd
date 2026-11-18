@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Pets := preload("res://pets.gd")
+const Settings := preload("res://settings.gd")
 const Look := preload("res://look.gd")
 const Person := preload("res://person.gd")
 const Jar := preload("res://jar.gd")
@@ -507,6 +508,43 @@ func _routes() -> void:
 	main._on_act(1, "done")
 	await create_timer(1.0).timeout
 	_check(_count("/api/home/pets") == asks + 1, "the open list changing asks once more")
+	var first := _last_query("/api/home/pets")
+	_check(
+		first
+		== (
+			"nina_name=Nina&nina_species=cat&nina_personality=sassy"
+			+ "&argos_name=Argos&argos_species=dog&argos_personality=sweet"
+		),
+		"the pets ask names, animals and ways (%s)" % first
+	)
+	var settings = main._room.home.settings
+	asks = _count("/api/home/pets")
+	settings.put("cat", "Mimi Q")
+	settings.put("pet1", "fox_red")
+	settings.put("pet2_personality", "bold")
+	await create_timer(1.2).timeout
+	_check(_count("/api/home/pets") == asks + 1, "changes made together ask once more")
+	var again := _last_query("/api/home/pets")
+	_check(
+		again
+		== (
+			"nina_name=Mimi%20Q&nina_species=fox&nina_personality=sassy"
+			+ "&argos_name=Argos&argos_species=dog&argos_personality=bold"
+		),
+		"the chosen values are sent, encoded (%s)" % again
+	)
+	_check(Settings.pets("Nina and Argos") == "Mimi Q and Argos", "the chosen name is what is shown")
+	settings.put("pet2", "none")
+	await create_timer(1.0).timeout
+	_check(
+		not "argos_" in _last_query("/api/home/pets"), "a pet that is none sends nothing"
+	)
+	settings.put("pet2", "dog_golden")
+	settings.put("cat", "")
+	settings.put("pet1", "cat_black")
+	settings.put("pet2_personality", "sweet")
+	await create_timer(1.0).timeout
+	_check(_count("/api/home/pets") >= asks + 3, "each change was asked about")
 	_check(_seen("POST", "/api/home/1/done"), "done posted")
 	_check(main._data["open"].size() == 1, "done removed the thing")
 	main._on_act(2, "hour")
@@ -593,7 +631,7 @@ func reply_for(text: String) -> String:
 func _count(path: String) -> int:
 	var n := 0
 	for l in _log:
-		if l[0] == "GET" and l[1] == path:
+		if l[0] == "GET" and l[1].get_slice("?", 0) == path:
 			n += 1
 	return n
 
@@ -711,7 +749,8 @@ func _serve() -> void:
 
 
 func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> void:
-	_log.append([method, path, body])
+	var query := path.get_slice("?", 1) if "?" in path else ""
+	_log.append([method, path, body, query])
 	var code := 200
 	var out: Variant = {}
 	var parsed: Variant = JSON.parse_string(body) if body != "" else {}
@@ -721,7 +760,7 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 		out = answer["body"]
 	elif method == "GET" and path == "/api/home":
 		out = _state
-	elif method == "GET" and path == "/api/home/pets":
+	elif method == "GET" and path.get_slice("?", 0) == "/api/home/pets":
 		out = _pets_batch
 	elif method == "GET" and path == "/api/office":
 		out = _office
@@ -1952,3 +1991,10 @@ func _packs_october() -> void:
 	none.update(h)
 	_check(h.layout.guests.is_empty(), "no guests without the mansion")
 	room.queue_free()
+
+
+func _last_query(path: String) -> String:
+	for i in range(_log.size() - 1, -1, -1):
+		if _log[i][0] == "GET" and _log[i][1].get_slice("?", 0) == path:
+			return _log[i][3]
+	return ""
