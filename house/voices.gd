@@ -19,6 +19,7 @@ const FALLBACK := {
 		"wake": ["I was not asleep, peasant."],
 		"muse": ["Still the smartest one here."],
 		"old": ["It fell. I saw nothing."],
+		"visitor": ["I have seen worse.", "hm. unimpressed."],
 	},
 	"Argos":
 	{
@@ -26,6 +27,7 @@ const FALLBACK := {
 		"muse": ["Is Nina a small dog?"],
 		"done": ["Done! Done! What was it?"],
 		"home": ["You're back! Who are you?"],
+		"visitor": ["is it friendly?", "hello?? hello monster?"],
 	},
 }
 
@@ -99,10 +101,60 @@ const OWN := {
 	},
 }
 
+# what a personality says offline, beside the species' lines; the two the house began with also
+# keep the lines of the pet they belong to
+const ROLE_PERSONALITY := {"Nina": "sassy", "Argos": "sweet"}
+const PERSONA := {
+	"sassy":
+	{
+		"pet": ["Fine. Two more.", "You may continue."],
+		"wake": ["Do not narrate my naps."],
+		"muse": ["I am right. It is tiring."],
+		"visitor": ["Another one. How tedious.", "hm. unimpressed."],
+	},
+	"sweet":
+	{
+		"pet": ["More! please!", "I love this. I love you."],
+		"wake": ["Oh! hi! I was dreaming of you."],
+		"muse": ["Everything is nice."],
+		"visitor": ["Hello! Hello! Who are you?", "is it friendly?"],
+	},
+	"lazy":
+	{
+		"pet": ["mm. a little left.", "yes. do not stop. do not move."],
+		"wake": ["five more minutes. a year."],
+		"muse": ["...", "the floor is good."],
+		"visitor": ["...visitor? tell me later."],
+	},
+	"mischievous":
+	{
+		"pet": ["pet me and I take your pen.", "hehe. distracted."],
+		"wake": ["I was plotting."],
+		"muse": ["something is about to fall."],
+		"visitor": ["I will hide their shoe."],
+	},
+	"shy":
+	{
+		"pet": ["oh. ...okay.", "...thank you."],
+		"wake": ["oh. you saw me."],
+		"muse": ["I like it quiet."],
+		"visitor": ["...is it safe?", "I will be over there."],
+	},
+	"bold":
+	{
+		"pet": ["Of course. I am excellent.", "Yes! Again! Louder!"],
+		"wake": ["Up! What are we conquering?"],
+		"muse": ["I could do anything today."],
+		"visitor": ["Halt! Who goes there?", "I'll greet them."],
+	},
+}
+
 var batch := {}
 var rng := RandomNumberGenerator.new()
 # each pet's species by name, kept by `Pets.set_kind`
 var species := {"Nina": "cat", "Argos": "dog"}
+# each pet's personality by name, kept by `Pets.set_persona`
+var personality := ROLE_PERSONALITY.duplicate()
 
 var _used := {}
 var _last := ""
@@ -136,7 +188,11 @@ func line(who: String, occasion: String, thing: String = "") -> String:
 
 
 func _offline(who: String, occasion: String) -> Array:
-	var pool: Array = FALLBACK.get(who, {}).get(occasion, []).duplicate()
+	var pool: Array = []
+	if personality.get(who) == ROLE_PERSONALITY.get(who):
+		pool.append_array(FALLBACK.get(who, {}).get(occasion, []))
+	else:
+		pool.append_array(PERSONA.get(personality.get(who, ""), {}).get(occasion, []))
 	pool.append_array(OWN.get(species.get(who, ""), {}).get(occasion, []))
 	return pool
 

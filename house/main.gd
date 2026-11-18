@@ -1,5 +1,10 @@
 extends Control
 
+const STAGED_TEXT := [
+	"name", "cat", "dog", "pet1", "pet2", "birthday", "claude_command", "pet1_personality",
+	"pet2_personality", "pet_chatter", "visitors", "visitors_rate",
+]
+const STAGED_FLAGS := ["claude", "telegram", "litter_box", "bowls", "pet_things"]
 const POLL_SECONDS := 5.0
 const SLOW_SECONDS := 300.0
 const WATCH_SECONDS := 60.0
@@ -1309,9 +1314,9 @@ func _stage_settings(spec: String) -> void:
 	for p in spec.split(";", false):
 		var key := p.get_slice("=", 0)
 		var val := p.substr(p.find("=") + 1) if "=" in p else ""
-		if key in ["name", "cat", "dog", "pet1", "pet2", "birthday", "claude_command"]:
+		if key in STAGED_TEXT:
 			settings.put(key, val)
-		elif key in ["claude", "telegram"]:
+		elif key in STAGED_FLAGS:
 			settings.put(key, val == "on")
 		elif key == "phone":
 			_stage_phone(val)

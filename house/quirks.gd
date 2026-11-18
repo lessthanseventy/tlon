@@ -121,10 +121,6 @@ const PACKS := {
 	},
 }
 const LOOK_DIRS := [1, 0, 7]
-const REACTION := {
-	"Nina": ["I have seen worse.", "hm. unimpressed."],
-	"Argos": ["is it friendly?", "hello?? hello monster?"]
-}
 
 var _hw: WeakRef
 var h:
@@ -528,26 +524,42 @@ func _wild_pick(pool: Array) -> String:
 	return from[h.eggs.rng.randi() % from.size()]
 
 
-# the cat-species pet watches from the sill, the dog-species pet barks once and hops; a monster
-# gets its own lines
+# by personality: sassy watches (a cat from the sill), sweet hops and a dog barks once, lazy does
+# not mind, mischievous comes to the middle of the room, shy hides in the nook, bold goes to the
+# door; a monster always draws a line, any other visit one time in three
 func _react(kind: String, _name: String) -> void:
 	var r: RandomNumberGenerator = h.eggs.rng
 	for id in ["argos", "nina"]:
 		var c = h.pets.critter(id)
 		if not h.eggs.loose(c):
 			continue
-		match c.species:
-			"cat":
-				h.pets.go(c, "sill", "sit", 14.0)
-				c.wait = 9999.0
-			"dog":
+		match c.persona:
+			"sassy":
+				if c.species == "cat":
+					_go(c, "sill", 14.0)
+			"sweet":
 				c.hops = 2
-				h.sound.request(h.pets.cry(c))
-		if kind == "monster":
-			if id == "argos" and c.species == "dog" and r.randf() < 0.5:
-				h.pets.go(c, "nook", "sit", 15.0)
-				c.wait = 9999.0
-			h.pets.say(c, REACTION[c.title][r.randi() % 2])
+				_bark(c)
+			"mischievous":
+				c.hops = 1
+				_go(c, "mid", 12.0)
+			"shy":
+				_go(c, "nook", 14.0)
+			"bold":
+				_go(c, "door_in", 12.0)
+				_bark(c)
+		if kind == "monster" or r.randf() < 0.33:
+			h.pets.speak(c, "visitor")
+
+
+func _go(c, spot: String, seconds: float) -> void:
+	h.pets.go(c, spot, "sit", seconds)
+	c.wait = 9999.0
+
+
+func _bark(c) -> void:
+	if c.species == "dog":
+		h.sound.request(h.pets.cry(c))
 
 
 func _visit(dt: float) -> void:

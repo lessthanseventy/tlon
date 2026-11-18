@@ -21,6 +21,8 @@ func run() -> void:
 	_picker()
 	_things()
 	_visits()
+	_ways()
+	_settings()
 
 
 func _clear(h) -> void:
@@ -414,3 +416,134 @@ func _kinds() -> void:
 		v.species = {"Nina": Pets.KINDS[kind]["species"]}
 		if Voices.OWN.has(Pets.KINDS[kind]["species"]):
 			s._check(v.line("Nina", "pet") != "", "%s answers a pat" % kind)
+
+
+# each personality moves a number, and the line pool and the settings follow
+func _ways() -> void:
+	var room := _home(49, "cat_grey", "dog_golden")
+	var h = room.home
+	var nina = h.pets.critter("nina")
+	var rows := func() -> Array:
+		return [["sofa", 2.0, "sleep", 10.0], ["rug", 2.0, "sit", 10.0], ["yarn", 2.0, "chase", 0.0]]
+	var sleep := {}
+	var talk := {}
+	var pools := {}
+	for p in Pets.PERSONALITIES:
+		h.settings.put("pet1_personality", p)
+		s._check(nina.persona == p and h.pets.personalities["nina"] == p, "%s is set at once" % p)
+		var out: Array = h.pets._weigh(nina, rows.call())
+		sleep[p] = out[0][1]
+		talk[p] = h.pets.talk_scale(nina)
+		pools[p] = h.pets.voices._offline("Nina", "pet")
+		s._check(not pools[p].is_empty(), "%s has lines" % p)
+	s._check(sleep["lazy"] > sleep["sassy"] and sleep["sassy"] > sleep["bold"], "lazy sleeps more, bold less")
+	s._check(sleep["mischievous"] < sleep["sassy"], "mischievous sleeps less")
+	s._check(talk["lazy"] > talk["sassy"] and talk["sassy"] > talk["bold"], "bold talks most, lazy least")
+	var seen := []
+	for p in Pets.PERSONALITIES:
+		s._check(not seen.has(pools[p]), "%s says what no other says" % p)
+		seen.append(pools[p])
+	h.settings.put("pet1_personality", "mischievous")
+	var play: Array = h.pets._weigh(nina, rows.call())
+	s._check(play[2][1] > 5.0, "mischievous plays with the yarn more")
+	h.settings.put("pet1_personality", "sassy")
+	nina.persona = "sassy"
+	var runs := {}
+	for p in ["sassy", "lazy", "bold", "shy"]:
+		h.settings.put("pet1_personality", p)
+		var n := 0
+		for i in 300:
+			if h.pets._runs(nina, "sit"):
+				n += 1
+		runs[p] = n
+	s._check(runs["bold"] > 50 and runs["sassy"] == 0 and runs["lazy"] == 0, "bold runs, the others walk (%s)" % [runs])
+	s._check(not h.pets._runs(nina, "sleep"), "nobody runs to sleep")
+	h.settings.put("pet1_personality", "lazy")
+	var lazy_speed: float = nina.speed
+	h.settings.put("pet1_personality", "bold")
+	s._check(nina.speed > lazy_speed, "bold walks faster than lazy")
+	h.pets.freeze = false
+	h.settings.put("pet1_personality", "shy")
+	h.pets.place(nina, "rug", "idle")
+	h.pets.pat(nina, "pet")
+	s._check(nina.pat_t < 0.0, "a shy pet does not answer a pat at once")
+	for i in 30:
+		h.pets.process(0.1)
+	s._check(nina.pat_t >= 0.0 or nina.say_left > 0.0 or nina.hearts.size() > 0, "but does, a moment later")
+	h.settings.put("pet1_personality", "sassy")
+	h.pets.pat(nina, "pet")
+	s._check(nina.pat_t == 0.0, "a sassy one answers at once")
+	h.settings.put("pet1_personality", "no such way")
+	s._check(Pets.persona_of("no such way", "nina") == "sassy", "an unknown way is the pet's own")
+	for p in ["sassy", "sweet", "lazy", "mischievous", "shy", "bold"]:
+		h.settings.put("pet2_personality", p)
+		s._check(h.pets.critter("argos").persona == p, "the second pet is %s" % p)
+	# the visitors move them by personality
+	var react := {}
+	for p in ["sweet", "shy", "bold", "mischievous", "lazy"]:
+		_clear(h)
+		h.settings.put("pet2_personality", p)
+		var dog = h.pets.critter("argos")
+		h.pets.place(dog, "rug2", "idle")
+		h.pets.freeze = false
+		h.quirks.start_visit("city")
+		react[p] = dog.goal if dog.goal != "" else dog.spot
+		_clear(h)
+	s._check(react["shy"] == "nook" and react["bold"] == "door_in" and react["mischievous"] == "mid", "visitors: shy hides, bold greets (%s)" % [react])
+	s._check(react["lazy"] == "rug2", "lazy does not get up")
+	# the big things come sooner for a mischievous pet
+	h.settings.put("pet1_personality", "mischievous")
+	h.settings.put("pet2_personality", "mischievous")
+	var quick: float = h.eggs.pace()
+	h.settings.put("pet1_personality", "lazy")
+	h.settings.put("pet2_personality", "lazy")
+	s._check(quick < 1.0 and h.eggs.pace() > 1.0, "mischievous hurries the big things, lazy slows them")
+	# chatter
+	for k in Pets.CHATTER:
+		h.settings.put("pet_chatter", k)
+		s._check(is_equal_approx(h.pets.chatter, Pets.CHATTER[k]), "chatter %s is obeyed" % k)
+	s._check(Pets.CHATTER["quiet"] > Pets.CHATTER["normal"] and Pets.CHATTER["normal"] > Pets.CHATTER["chatty"], "quiet waits longer")
+	room.queue_free()
+
+
+# every key round-trips through the file, an absent key is the default, and the switches hide
+func _settings() -> void:
+	var keys := {
+		"pet1_personality": ["bold", "sassy"],
+		"pet2_personality": ["shy", "sweet"],
+		"pet_chatter": ["chatty", "normal"],
+		"visitors": ["calm", "all"],
+		"visitors_rate": ["often", "sometimes"],
+		"litter_box": [false, true],
+		"bowls": [false, true],
+		"pet_things": [false, true],
+	}
+	var path := "user://soak_ways_settings.json"
+	DirAccess.remove_absolute(path)
+	var a := Settings.new()
+	a.store = path
+	a.setup(true)
+	for k in keys:
+		s._check(a.value(k) == keys[k][1], "%s starts as %s" % [k, keys[k][1]])
+		a.put(k, keys[k][0])
+	var b := Settings.new()
+	b.store = path
+	b.setup(true)
+	for k in keys:
+		s._check(b.value(k) == keys[k][0], "%s round-trips" % k)
+	DirAccess.remove_absolute(path)
+	var room := _home(50, "cat_grey", "dog_golden")
+	var h = room.home
+	h.settings.put("pet1_personality", "bold")
+	h.settings.put("litter_box", false)
+	s._check(not h.petlife.has_litter(), "the litter box is gone with its switch")
+	h.settings.put("litter_box", true)
+	s._check(h.petlife.has_litter(), "and back")
+	h.settings.put("bowls", false)
+	s._check(not h.petlife.pieces().any(func(p) -> bool: return str(p).contains("bowl")), "no bowls with its switch")
+	h.settings.put("bowls", true)
+	h.settings.put("pet_things", false)
+	s._check(not h.petlife.has_post() and not h.petlife.has_mat() and not h.petlife.has_hay(), "no post, blanket or hay with its switch")
+	h.settings.put("pet_things", true)
+	s._check(h.petlife.has_post(), "and back again")
+	room.queue_free()

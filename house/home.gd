@@ -317,6 +317,9 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	pets.is_night = _env_now()["day"] < 0.15
 	pets.kinds["nina"] = Pets.kind_of(settings.value("pet1"), "nina")
 	pets.kinds["argos"] = Pets.kind_of(settings.value("pet2"), "argos")
+	pets.personalities["nina"] = Pets.persona_of(settings.value("pet1_personality"), "nina")
+	pets.personalities["argos"] = Pets.persona_of(settings.value("pet2_personality"), "argos")
+	pets.chatter = Pets.CHATTER.get(str(settings.value("pet_chatter")), 1.0)
 	pets.setup(art_dir, seed_value)
 	settings.changed.connect(_on_setting)
 	look.setup(art_dir)
@@ -392,6 +395,11 @@ func _place_arg(id: String, spec: String) -> void:
 func _on_setting(key: String) -> void:
 	if key == "font":
 		Fonts.apply()
+	if key == "pet_chatter":
+		pets.chatter = Pets.CHATTER.get(str(settings.value(key)), 1.0)
+	if key in ["pet1_personality", "pet2_personality"]:
+		var who := "nina" if key == "pet1_personality" else "argos"
+		pets.set_persona(pets.critter(who), Pets.persona_of(settings.value(key), who))
 	if key in ["pet1", "pet2"]:
 		var id := "nina" if key == "pet1" else "argos"
 		var c: Pets.Critter = pets.critter(id)

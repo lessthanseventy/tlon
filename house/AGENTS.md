@@ -239,7 +239,14 @@ runs on the local list.
   house prints them, the server's pet lines too, by `Settings.pets`; the server and `voices.gd` still key on Nina and
   Argos), `pet1` and `pet2` (the animal of the first, aloof pet and the second, eager one: a key of `Pets.KINDS`
   or `"none"`; absent is `cat_black` and `dog_golden`; applies at once; a pet that is `none` is not in the room and
-  every scene, line, sound and card that needs it is skipped; `--pets cat=KIND,dog=KIND` stages them), `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
+  every scene, line, sound and card that needs it is skipped; `--pets cat=KIND,dog=KIND` stages them),
+  `pet1_personality`/`pet2_personality` (`sassy`, `sweet`, `lazy`, `mischievous`, `shy`, `bold`; absent is sassy for
+  the first, sweet for the second; applies at once. `Pets.TRAITS` holds what each moves: the wait between remarks,
+  the weight of sleeping and of the yarn, the walk, the chance of a run, a shy pet's pause before a pat; `voices.gd`
+  `PERSONA` its offline lines; `quirks.gd` `_react` how it takes a visitor; `eggs.gd` `pace` how soon the big things
+  come. Lines the server writes are not changed by it), `pet_chatter` (`quiet`, `normal`, `chatty`: stretches the
+  waits between remarks), `visitors` and `visitors_rate`, `litter_box`, `bowls`, `pet_things` (the switches),
+  `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
   `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server), and over the
   house's own list only `telegram` (off), `telegram_list_at` (`"17:30"`), `claude` (off) and `claude_command`
   (`"claude"`): the two helpers below (the bot's token is not here but in its own file); and the four
