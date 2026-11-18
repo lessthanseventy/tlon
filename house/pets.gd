@@ -186,6 +186,7 @@ class Critter:
 	var hearts: Array = []
 	var run := false
 	var hops := 0
+	var lift := 0.0
 	var flip := false
 	var hold := false
 	var carry := ""
@@ -1058,6 +1059,7 @@ func feet(c: Critter, o: Vector2, k: int) -> Vector2:
 	var hop: float = 0.0
 	if c.pat_t >= 0.0:
 		hop = 7.0 * sin(PI * c.pat_t / 0.42)
+	hop += c.lift
 	return Vector2(16.0 * (c.pos.x - c.pos.y), 8.0 * (c.pos.x + c.pos.y) - c.z - hop) * k + o
 
 

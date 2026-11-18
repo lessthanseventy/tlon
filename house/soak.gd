@@ -28,6 +28,7 @@ const PackLooksSoak := preload("res://soak_looks.gd")
 const TalkSoak := preload("res://soak_talk.gd")
 const TelegramSoak := preload("res://soak_telegram.gd")
 const WeatherSoak := preload("res://soak_weather.gd")
+const AnticSoak := preload("res://soak_antics.gd")
 const DEADLINE_MS := 540000
 
 # what the stub of wttr.in (`?format=j1` on any path) answers
@@ -109,6 +110,8 @@ func _run() -> void:
 	GuestSoak.new(self).run()
 	_where = "pet life"
 	PetLifeSoak.new(self).run()
+	_where = "antics"
+	AnticSoak.new(self).run()
 	_where = "cards"
 	await _cards()
 	_where = "routes"
@@ -1048,6 +1051,7 @@ func _room(seed_value: int = 7) -> Control:
 	h.finds.setup(h)
 	h.quirks.setup(h)
 	h.delights.setup(h)
+	h.antics.setup(h)
 	h.fake_day = "06-15"
 	h.layout.setup(room._index, room.art_found, "", false)
 	h.apply_layout()

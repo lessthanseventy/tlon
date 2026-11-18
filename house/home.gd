@@ -25,6 +25,7 @@ const Finds := preload("res://finds.gd")
 const Secrets := preload("res://secrets.gd")
 const Quirks := preload("res://quirks.gd")
 const Delights := preload("res://delights.gd")
+const Antics := preload("res://antics.gd")
 const Things := preload("res://things.gd")
 const Sure := preload("res://sure.gd")
 const Settings := preload("res://settings.gd")
@@ -117,6 +118,7 @@ var finds := Finds.new()
 var secrets := Secrets.new()
 var quirks := Quirks.new()
 var delights := Delights.new()
+var antics := Antics.new()
 var door := Door.new()
 var rhythm := Rhythm.new()
 var layout := Layout.new()
@@ -177,6 +179,7 @@ var _scripted := {}
 var _say_done := false
 var _arg_duo := false
 var _deep := 0.0
+var _arg_antic := ["", "", 0.0]
 var _ringing := 0
 var _arg_jar := -1
 var _arg_drop := false
@@ -249,6 +252,12 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				_arg_wave = next
 			"--egg":
 				eggs.forced = Array(next.split(",", false))
+			"--antic":
+				_arg_antic[0] = next
+			"--antic-who":
+				_arg_antic[1] = next
+			"--antic-t":
+				_arg_antic[2] = float(next)
 			"--laser":
 				eggs.laser_at = _point(next)
 				eggs.laser_pin = true
@@ -339,6 +348,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	secrets.setup(self)
 	quirks.setup(self)
 	delights.setup(self)
+	antics.setup(self)
 	person.snap()
 	if "--shot" in args:
 		pets.freeze = true
@@ -669,6 +679,10 @@ func process(dt: float) -> void:
 	secrets.process(dt)
 	quirks.process(dt)
 	delights.process(dt)
+	antics.process(dt)
+	if _t > 0.3 and _arg_antic[0] != "":
+		antics.staged = _arg_antic.duplicate()
+		_arg_antic[0] = ""
 	sound.loop("rain", _env["weather"] in ["rain", "storm"])
 	if jar.clinks.any(func(cl): return cl["t"] < dt + 0.001):
 		sound.request("clink")
@@ -1332,6 +1346,7 @@ func draw_over() -> void:
 	secrets.draw_over(room)
 	quirks.draw_over(room)
 	delights.draw_over(room)
+	antics.draw_over(room)
 	sound.draw_mark(room, Vector2(14, 14), 2)
 	rhythm.draw(room, bounds)
 	_draw_now(bounds)

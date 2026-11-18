@@ -223,6 +223,9 @@ func _ready() -> void:
 	r = Paper.row(col)
 	r.add_child(Paper.label("how much they talk", 14, Paper.QUIET))
 	_menu(r, "pet_chatter", Pets.CHATTER.keys())
+	r = Paper.row(col)
+	r.add_child(Paper.label("how much they get up to", 14, Paper.QUIET))
+	_menu(r, "pet_antics", ["few", "some", "lots"])
 	for key in THINGS:
 		r = Paper.row(col)
 		var put := func() -> void: _put(key, _things[key].button_pressed)
