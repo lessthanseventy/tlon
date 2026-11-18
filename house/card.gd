@@ -2,7 +2,9 @@ extends RefCounted
 
 # The card: one paper popup near a thing the person clicked. It is told what to show as blocks:
 # {"t": "title"|"text"|"dim", "text"}, {"t": "gap"}, {"t": "month", "year", "month", "today",
-# "marks": {day: true}}, {"t": "buttons", "items": [{"label", "act"}]}.
+# "marks": {day: true}, "pick": bool, "sel": day} (arrows and the name act "mprev" "mnext" "mtoday",
+# a day "day:N"), {"t": "buttons", "items": [{"label", "act", "on"}]} (they wrap), {"t": "row",
+# "text", "act", "dim", "marks": [{"label", "act"}]}, {"t": "foot", "text", "act"}.
 const Props := preload("res://props.gd")
 const WIDTH := 330.0
 const PAD := 16.0
@@ -177,8 +179,40 @@ static func _height(font: Font, b: Dictionary, wrap: float) -> float:
 			var rows := ceili((info["first"] + info["days"]) / 7.0)
 			return font.get_height(17) + 8.0 + CELL.y + rows * CELL.y + 6.0
 		"buttons":
-			return 38.0
+			return 34.0 * _button_rows(font, b["items"], wrap).size() + 4.0
+		"row":
+			var marks_w := _marks_width(font, b.get("marks", []))
+			return maxf(_text_size(font, b["text"], 15, wrap - marks_w).y, 22.0) + 8.0
+		"foot":
+			return _text_size(font, b["text"], 12, wrap).y + 8.0
 	return 8.0
+
+
+static func _item_width(font: Font, item: Dictionary) -> float:
+	var size: int = item.get("s", 15)
+	var w := font.get_string_size(item["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	return w + (24.0 if size >= 15 else 14.0)
+
+
+# the buttons of a block split into lines that fit: [[item, ...], ...]
+static func _button_rows(font: Font, items: Array, wrap: float) -> Array:
+	var rows: Array = [[]]
+	var used := 0.0
+	for item in items:
+		var w := _item_width(font, item) + 8.0
+		if used + w > wrap + 8.0 and not rows[-1].is_empty():
+			rows.append([])
+			used = 0.0
+		rows[-1].append(item)
+		used += w
+	return rows
+
+
+static func _marks_width(font: Font, marks: Array) -> float:
+	var w := 0.0
+	for m in marks:
+		w += font.get_string_size(m["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 18.0
+	return w
 
 
 func draw(c: CanvasItem, bounds: Rect2, anchor: Vector2, blocks: Array) -> void:
@@ -229,27 +263,75 @@ func draw(c: CanvasItem, bounds: Rect2, anchor: Vector2, blocks: Array) -> void:
 			"month":
 				_draw_month(c, font, Vector2(x, y), inner, b)
 			"buttons":
-				var bx := x
-				for item in b["items"]:
-					var w := (
-						font.get_string_size(item["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
-					)
-					var r := Rect2(Vector2(bx, y + 2), Vector2(w + 24, 28))
-					bx += r.size.x + 8.0
-					_buttons.append({"rect": r, "act": item["act"]})
-					c.draw_rect(r, Props.INK)
-					var lit := _buttons.size() - 1 == _hover
-					c.draw_rect(r.grow(-2), Color("f8efb8") if lit else Color("e4d8bd"))
-					c.draw_string(
-						font,
-						r.position + Vector2(12, 19),
-						item["label"],
-						HORIZONTAL_ALIGNMENT_LEFT,
-						-1,
-						15,
-						Props.INK
-					)
+				var line := 0
+				for items in _button_rows(font, b["items"], inner):
+					var bx := x
+					for item in items:
+						var w := _item_width(font, item)
+						var r := Rect2(Vector2(bx, y + 2 + line * 34.0), Vector2(w, 28))
+						bx += w + 8.0
+						_button(c, font, r, item["label"], item["act"], item.get("s", 15), item.get("on", false))
+					line += 1
+			"row":
+				var marks: Array = b.get("marks", [])
+				var mw := _marks_width(font, marks)
+				var rh: float = _height(font, b, inner)
+				var main := Rect2(Vector2(x - 4, y), Vector2(inner + 8 - mw, rh - 2))
+				_buttons.append({"rect": main, "act": b["act"]})
+				if _buttons.size() - 1 == _hover:
+					c.draw_rect(main, Color("f8efb8"))
+				c.draw_multiline_string(
+					font,
+					Vector2(x, y + 2 + font.get_ascent(15)),
+					b["text"],
+					HORIZONTAL_ALIGNMENT_LEFT,
+					inner - mw,
+					15,
+					-1,
+					Color(Props.INK, 0.55 if b.get("dim", false) else 1.0)
+				)
+				var mx := x + inner + 4.0 - mw
+				for m in marks:
+					var w := font.get_string_size(m["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+					var r := Rect2(Vector2(mx + 4, y + 1), Vector2(w + 12, 22))
+					mx += w + 18.0
+					_button(c, font, r, m["label"], m["act"], 13, false)
+			"foot":
+				var lit := false
+				if b.get("act", "") != "":
+					var r := Rect2(Vector2(x, y), Vector2(inner, _height(font, b, inner) - 2))
+					_buttons.append({"rect": r, "act": b["act"]})
+					lit = _buttons.size() - 1 == _hover
+				c.draw_multiline_string(
+					font,
+					Vector2(x, y + 2 + font.get_ascent(12)),
+					b["text"],
+					HORIZONTAL_ALIGNMENT_LEFT,
+					inner,
+					12,
+					-1,
+					Color(Props.INK, 0.9 if lit else 0.5)
+				)
 		y += _height(font, b, inner)
+
+
+func _button(
+	c: CanvasItem, font: Font, r: Rect2, label: String, act: String, size: int, on: bool
+) -> void:
+	_buttons.append({"rect": r, "act": act})
+	var lit := _buttons.size() - 1 == _hover
+	c.draw_rect(r, Props.INK)
+	c.draw_rect(r.grow(-2), Color("f8efb8") if lit else Color("e8c77a") if on else Color("e4d8bd"))
+	var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	c.draw_string(
+		font,
+		r.position + Vector2((r.size.x - w) / 2.0, r.size.y / 2.0 + size * 0.35),
+		label,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		size,
+		Props.INK
+	)
 
 
 func _draw_month(c: CanvasItem, font: Font, at: Vector2, inner: float, b: Dictionary) -> void:
@@ -263,6 +345,15 @@ func _draw_month(c: CanvasItem, font: Font, at: Vector2, inner: float, b: Dictio
 		17,
 		Props.INK
 	)
+	if b.get("pick", false):
+		var name_w := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x
+		_buttons.append({"rect": Rect2(at, Vector2(name_w, 24)), "act": "mtoday"})
+		_button(
+			c, font, Rect2(at + Vector2(inner - 58, -1), Vector2(26, 24)), "<", "mprev", 16, false
+		)
+		_button(
+			c, font, Rect2(at + Vector2(inner - 28, -1), Vector2(26, 24)), ">", "mnext", 16, false
+		)
 	var top := at + Vector2((inner - 7.0 * CELL.x) / 2.0, font.get_height(17) + 8.0)
 	for i in 7:
 		var w := font.get_string_size(WEEK[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
@@ -281,6 +372,12 @@ func _draw_month(c: CanvasItem, font: Font, at: Vector2, inner: float, b: Dictio
 		var idx: int = int(info["first"]) + d - 1
 		var cell := top + Vector2((idx % 7) * CELL.x, CELL.y + (idx / 7) * CELL.y)
 		var mid := cell + CELL / 2.0
+		if b.get("pick", false):
+			_buttons.append({"rect": Rect2(cell, CELL), "act": "day:%d" % d})
+			if _buttons.size() - 1 == _hover:
+				c.draw_rect(Rect2(cell, CELL), Color("f8efb8"))
+			if d == int(b.get("sel", 0)):
+				c.draw_arc(mid + Vector2(0, -1), 12.0, 0.0, TAU, 24, Props.INK, 2.0)
 		if d == int(b.get("today", 0)):
 			c.draw_circle(mid + Vector2(0, -1), 11.0, Color("e8b86d"))
 		var label := str(d)

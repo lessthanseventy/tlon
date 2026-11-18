@@ -24,6 +24,8 @@ const Finds := preload("res://finds.gd")
 const Secrets := preload("res://secrets.gd")
 const Quirks := preload("res://quirks.gd")
 const Delights := preload("res://delights.gd")
+const Things := preload("res://things.gd")
+const Sure := preload("res://sure.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -130,6 +132,9 @@ var jot_open := false
 var closet_open := false
 var decorating := false
 var card := Card.new()
+var things := Things.new()
+var sure := Sure.new()
+var form_open := false
 var done: Variant = null
 var show_note := -1
 
@@ -268,6 +273,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 		focus.persist = false
 	elif focus.persist:
 		focus.load_saved()
+	things.setup(self)
 	knock.persist = not staged
 	rhythm.persist = not staged
 	rhythm.load_days()
@@ -359,6 +365,7 @@ func set_data(d: Dictionary) -> void:
 	notes = d["notes"]
 	done_week = int(d.get("done_week", 0))
 	done = d["done"] if d.get("done") is Array else null
+	things.set_data(d)
 	var ids: Array = []
 	ring_ids = []
 	for item in open:
@@ -524,6 +531,7 @@ func _cap(text: String, n: int) -> String:
 
 func process(dt: float) -> void:
 	_t += dt
+	sure.tick(dt)
 	_env = _env_now()
 	pets.is_night = _env["day"] < 0.15
 	pets.jot_open = jot_open
@@ -746,6 +754,7 @@ func open_item_menu(id: int) -> void:
 			"label": "Not now" if focus.id == id else "Now",
 			"act": "unnow" if focus.id == id else "now"
 		},
+		{"label": "Delete", "act": "delete"},
 	]
 	if hearth.lit:
 		rows.insert(1, {"label": "Into the fire", "act": "fire"})
@@ -1423,6 +1432,9 @@ func _draw_card(bounds: Rect2) -> void:
 func _draw_paper(bounds: Rect2) -> void:
 	if not card.is_open():
 		return
+	if card.kind == "pick":
+		card.draw(room, bounds, bounds.get_center() - Vector2(0, 90), card_blocks())
+		return
 	for h in _hits:
 		if h["key"] == card.key:
 			card.draw(room, bounds, h["below"], card_blocks())
@@ -1467,15 +1479,17 @@ func _repeats(item: Dictionary) -> String:
 func card_blocks() -> Array:
 	match card.kind:
 		"calendar":
-			return _calendar_blocks()
+			return things.calendar_blocks()
 		"jar":
 			return _jar_blocks()
 		"weather":
 			return _weather_blocks()
 		"clock":
-			return _clock_blocks()
+			return things.clock_blocks(_clock_blocks())
 		"board":
-			return _board_blocks()
+			return things.board_blocks()
+		"pick":
+			return things.pick_blocks()
 		"plant":
 			return _plant_blocks()
 		"tv":
@@ -1483,36 +1497,6 @@ func card_blocks() -> Array:
 		"book", "found":
 			return finds.blocks(card.kind)
 	return []
-
-
-func _calendar_blocks() -> Array:
-	var d := Time.get_datetime_dict_from_unix_time(int(_now_local()))
-	var from := Card.unix(d["year"], d["month"], 1)
-	var to := Card.unix(d["year"] + d["month"] / 12, d["month"] % 12 + 1, 1)
-	var marks := {}
-	for item in _timed():
-		for at in Card.occurrences(_due(item), _every(item), from, to):
-			marks[Time.get_datetime_dict_from_unix_time(int(at))["day"]] = true
-	var blocks: Array = [
-		{"t": "month", "year": d["year"], "month": d["month"], "today": d["day"], "marks": marks},
-		{"t": "title", "text": "Coming up"},
-	]
-	var next := _upcoming(coming.filter(func(i): return i.get("due_at") != null), 5)
-	for item in next:
-		blocks.append({"t": "text", "text": "%s  %s" % [_stamp(_due(item)), item["text"]]})
-		if _every(item) != "":
-			blocks.append({"t": "dim", "text": _repeats(item)})
-	if next.is_empty():
-		blocks.append({"t": "text", "text": "Nothing coming up."})
-	var mine: bool = finds.birthday == finds.today_key()
-	blocks.append(
-		{
-			"t": "buttons",
-			"items":
-			[{"label": "Not my birthday" if mine else "Today is my birthday", "act": "birthday"}]
-		}
-	)
-	return blocks
 
 
 func _jar_blocks() -> Array:
@@ -1581,22 +1565,6 @@ func _clock_blocks() -> Array:
 	return blocks
 
 
-func _board_blocks() -> Array:
-	var pages := maxi(1, ceili(notes.size() / float(NOTES_PER_PAGE)))
-	card.page = clampi(card.page, 0, pages - 1)
-	var blocks: Array = [{"t": "title", "text": "On the board"}]
-	for note in notes.slice(card.page * NOTES_PER_PAGE, (card.page + 1) * NOTES_PER_PAGE):
-		blocks.append({"t": "text", "text": "- " + str(note)})
-	if notes.is_empty():
-		blocks.append({"t": "text", "text": "Nothing is pinned."})
-	if pages > 1:
-		blocks.append({"t": "dim", "text": "page %d of %d" % [card.page + 1, pages]})
-		blocks.append(
-			{"t": "buttons", "items": [{"label": "<", "act": "prev"}, {"label": ">", "act": "next"}]}
-		)
-	return blocks
-
-
 func _watering() -> Dictionary:
 	var found: Array = []
 	for item in _timed():
@@ -1644,6 +1612,8 @@ func _topmost(pos: Vector2) -> String:
 
 func hover(pos: Vector2) -> bool:
 	finds.touch()
+	if form_open:
+		return false
 	if rhythm.hover(pos):
 		_hover = ""
 		return true
@@ -1660,6 +1630,8 @@ func hover(pos: Vector2) -> bool:
 
 func click(pos: Vector2) -> bool:
 	finds.touch()
+	if form_open:
+		return true
 	var blocked := _cards_blocked()
 	if not menu.is_open:
 		var slip := rhythm.click(pos)
@@ -1677,6 +1649,9 @@ func click(pos: Vector2) -> bool:
 			return true
 		if act != "outside":
 			var id := menu.id
+			if act == "delete" and Sure.needs(things.find(id)) and not sure.ask("del:%d" % id):
+				menu.rows[-1]["label"] = "Delete for good?"
+				return true
 			menu.close()
 			if act == "fire":
 				eggs.toss_ids.append(id)
@@ -1696,11 +1671,14 @@ func click(pos: Vector2) -> bool:
 			finds.toggle_birthday()
 			card.close()
 			return true
+		if things.act(hit):
+			return true
 		card.close()
 	var key := _topmost(pos)
 	var wants := _card_kind(key)
 	if wants != "":
 		if not blocked and wants != shown:
+			things.reset()
 			card.open(wants, key)
 		return true
 	if key.begins_with("pet:"):
@@ -1765,7 +1743,7 @@ func click(pos: Vector2) -> bool:
 
 
 func _cards_blocked() -> bool:
-	return menu.is_open or jot_open or closet_open or decorating or rhythm.kind != ""
+	return menu.is_open or jot_open or closet_open or decorating or rhythm.kind != "" or form_open
 
 
 func _card_kind(key: String) -> String:
@@ -1777,17 +1755,39 @@ func close_card() -> void:
 
 
 func key(code: int) -> bool:
+	if card.kind == "calendar" and code in [KEY_LEFT, KEY_RIGHT]:
+		things.act("mprev" if code == KEY_LEFT else "mnext")
+		return true
 	return eggs.key(code)
 
 
-# `name` is a card kind: calendar jar weather clock plant tv board
+# `name` is a card kind: calendar jar weather clock plant tv board; a staged one may follow
+# its kind after a colon: calendar:DAY[:MONTHS_AHEAD], board:TAB[:PROJECT_ID]
 func open_card(name: String) -> void:
 	if _cards_blocked():
 		return
+	var parts := name.split(":")
 	for key in _hits.map(func(h: Dictionary) -> String: return h["key"]):
-		if _card_kind(key) == name:
-			card.open(name, key)
+		if _card_kind(key) == parts[0]:
+			things.reset()
+			card.open(parts[0], key)
+			if parts[0] == "calendar" and parts.size() > 1:
+				things.day = int(parts[1])
+				things.mo = int(parts[2]) if parts.size() > 2 else 0
+			if parts[0] == "board" and parts.size() > 1:
+				things.tab = parts[1]
+				things.proj = int(parts[2]) if parts.size() > 2 else 0
 			return
+
+
+# the "what now" slip, over the middle of the room
+func show_pick(row: Dictionary, say: String) -> void:
+	if _cards_blocked():
+		return
+	things.reset()
+	things.pick = row
+	things.say = say
+	card.open("pick", "pick")
 
 
 func leave() -> void:

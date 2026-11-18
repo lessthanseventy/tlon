@@ -15,12 +15,14 @@ const Decorate := preload("res://decorate.gd")
 const Closet := preload("res://closet.gd")
 const Card := preload("res://card.gd")
 const EggSoak := preload("res://soak_eggs.gd")
+const FormSoak := preload("res://soak_forms.gd")
 const DEADLINE_MS := 540000
 
 var _srv := TCPServer.new()
 var _conns: Array = []
 var _log: Array = []
 var _fail_jot := false
+var _mode := ""
 var _where := "start"
 var _office := {
 	"weather": {"kind": "rain", "desc": "Light rain", "temp_c": 9},
@@ -526,6 +528,8 @@ func _routes() -> void:
 		not home.door.plane.is_empty() and home.door.plane["title"] == "second",
 		"a new landing sends a plane"
 	)
+	_where = "forms"
+	await FormSoak.new(self, main).run()
 	_srv.stop()
 
 
@@ -672,6 +676,24 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 		_state["coming"] = [
 			{"id": id, "kind": "reminder", "text": "send photos", "due_at": out["due_at"]}
 		]
+	elif method == "GET" and path.begins_with("/api/home/now"):
+		var skip: Array = []
+		if "?skip=" in path:
+			skip = path.get_slice("?skip=", 1).split(",")
+		var rest: Array = _state["open"].filter(func(t): return not str(t["id"]) in skip)
+		out = {"pick": null if rest.is_empty() else rest[0], "say": "nothing open"}
+	elif method == "POST" and path.ends_with("/drop"):
+		var id := int(path.get_slice("/", 3))
+		_state["open"] = _state["open"].filter(func(t): return int(t["id"]) != id)
+		out = {"id": id, "text": "x"}
+	elif method == "POST" and (path == "/api/home/add" or path.get_slice("/", 4) in ["edit", "plan", "revive", "answer"]):
+		if _mode == "400":
+			code = 400
+			out = {"error": "at is more than a year back"}
+		elif _mode == "404":
+			code = 404
+		else:
+			out = {"id": 99, "text": str(parsed.get("text", "")), "reply": "ok"}
 	elif method == "POST" and path == "/api/home":
 		if _fail_jot:
 			code = 404
@@ -1071,7 +1093,7 @@ func _every_logic() -> void:
 	var q := Card.unix(2026, 1, 15, 8, 30)
 	var hits: Array = []
 	for m in range(1, 13):
-		hits.append(Card.occurrences(q, "3 month", Card.unix(2026, m, 1), Card.unix(2026, m + 1, 1)).size())
+		hits.append(Card.occurrences(q, "3 month", Card.unix(2026, m, 1), Card.unix(2026 + m / 12, m % 12 + 1, 1)).size())
 	_check(hits == [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0], "every 3 months: Jan, Apr, Jul, Oct (%s)" % str(hits))
 	_check(Card.occurrences(due, "garbage", nov, dec) == [due], "an unknown every counts as once")
 	_check(Card.every_words("week") == "every week" and Card.every_words("day") == "every day", "every week, every day")
