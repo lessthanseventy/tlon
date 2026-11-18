@@ -44,6 +44,37 @@ const SPOTS := {
 }
 const BIN_TOP := Vector2(6.5, 0.5)
 const BIN_Z := 11.0
+const NONE := "none"
+const ROLE_KINDS := {"nina": "cat_black", "argos": "dog_golden"}
+# The animals either pet may be, in the order the settings offer them. Every one has all of
+# ANIMS in the pack, so each animation plays under its own name; `species` keys what a pet says
+# and sounds like (voices.gd `SPECIES`, `cry`), `shadow` is the pack's own for the animal.
+const ANIMS := ["idle", "walk", "run", "sleep", "attack", "eat"]
+const KINDS := {
+	"cat_black": {"label": "black cat", "species": "cat", "head": 18.0, "shadow": "shadow_small"},
+	"cat_grey": {"label": "grey cat", "species": "cat", "head": 18.0, "shadow": "shadow_small"},
+	"cat_orange": {"label": "orange cat", "species": "cat", "head": 18.0, "shadow": "shadow_small"},
+	"dog_golden":
+	{"label": "golden dog", "species": "dog", "head": 20.0, "shadow": "shadow_medium"},
+	"dog_black":
+	{"label": "black & white dog", "species": "dog", "head": 20.0, "shadow": "shadow_medium"},
+	"dog_brown": {"label": "brown dog", "species": "dog", "head": 20.0, "shadow": "shadow_medium"},
+	"rabbit_brown":
+	{"label": "brown rabbit", "species": "rabbit", "head": 18.0, "shadow": "shadow_small"},
+	"rabbit_white":
+	{"label": "white rabbit", "species": "rabbit", "head": 18.0, "shadow": "shadow_small"},
+	"fox_red": {"label": "red fox", "species": "fox", "head": 17.0, "shadow": "shadow_small"},
+	"fox_arctic": {"label": "arctic fox", "species": "fox", "head": 17.0, "shadow": "shadow_small"},
+	"chicken_white":
+	{"label": "white chicken", "species": "chicken", "head": 15.0, "shadow": "shadow_small"},
+	"chicken_brown":
+	{"label": "brown chicken", "species": "chicken", "head": 15.0, "shadow": "shadow_small"},
+	"pig_pink": {"label": "pink pig", "species": "pig", "head": 16.0, "shadow": "shadow_medium"},
+	"pig_spotted":
+	{"label": "spotted pig", "species": "pig", "head": 16.0, "shadow": "shadow_medium"},
+	"sheep_white":
+	{"label": "white sheep", "species": "sheep", "head": 19.0, "shadow": "shadow_medium"},
+}
 
 var spots := SPOTS.duplicate(true)
 var toys: Array = []
@@ -52,6 +83,7 @@ var blocked_cells := {}
 var voices := Voices.new()
 var on_say := Callable()
 var rng := RandomNumberGenerator.new()
+var kinds := ROLE_KINDS.duplicate()
 var animals_dir := ""
 var chars_dir := ""
 var freeze := false
@@ -75,6 +107,9 @@ class Critter:
 	var title := ""
 	var pack := "animals"
 	var sheet := ""
+	var species := ""
+	var shadow := "shadow_medium"
+	var away := false
 	var speed := 1.4
 	var head := 22.0
 	var pos := Vector2.ZERO
@@ -116,6 +151,8 @@ func setup(art_dir: String, seed_value: int) -> void:
 	var argos := _make("argos", "Argos", "animals", "dog_golden", 1.25, 20.0)
 	var person := _make("person", "", "chars", "villager", 1.3, 46.0)
 	critters = [nina, argos, person]
+	set_kind(nina, kinds["nina"])
+	set_kind(argos, kinds["argos"])
 	place(nina, "sofa", "sleep" if not is_night else "sit")
 	place(argos, "rug", "sit")
 	place(person, "board", "sit")
@@ -153,6 +190,64 @@ func critter(id: String) -> Critter:
 		if c.id == id:
 			return c
 	return null
+
+
+# the kind a settings value names for a pet, else that pet's own
+static func kind_of(value: Variant, id: String) -> String:
+	var k := str(value)
+	return k if k == NONE or KINDS.has(k) else ROLE_KINDS[id]
+
+
+func set_kind(c: Critter, kind: String) -> void:
+	kinds[c.id] = kind
+	c.away = kind == NONE
+	if c.away:
+		c.species = ""
+		voices.species.erase(c.title)
+		return
+	var k: Dictionary = KINDS[kind]
+	c.sheet = kind
+	c.species = k["species"]
+	voices.species[c.title] = c.species
+	c.head = k["head"]
+	c.shadow = k["shadow"]
+
+
+# the pet is another animal (or gone) now: whatever it was doing is dropped and it starts over
+func change_kind(c: Critter, kind: String) -> void:
+	set_kind(c, kind)
+	c.hold = false
+	c.run = false
+	c.flip = false
+	c.hops = 0
+	c.carry = ""
+	c.hearts = []
+	c.bat_toy = {}
+	c.plan = {}
+	c.say_left = 0.0
+	c.pat_t = -1.0
+	c.bat_t = -1.0
+	c.wait = 5.0
+	if not c.away:
+		place(c, "sofa" if c.id == "nina" else "rug", "sit")
+
+
+# the pet's own voice: a cat purrs and a dog barks, nothing else makes either sound
+func cry(c: Critter) -> String:
+	return {"cat": "purr", "dog": "bark"}.get(c.species, "")
+
+
+func species_here() -> Array:
+	return (
+		critters
+		. filter(func(c): return not c.away and c.id != "person")
+		. map(func(c): return c.species)
+	)
+
+
+# both pets in the room, as the pair scenes need
+func pair() -> bool:
+	return not (critter("nina").away or critter("argos").away)
 
 
 func _center(cell: Vector2i) -> Vector2:
@@ -237,6 +332,8 @@ func _cell_of(p: Vector2) -> Vector2i:
 
 
 func go(c: Critter, spot: String, mode: String, dur: float) -> void:
+	if c.away:
+		return
 	var s: Dictionary = spots[spot]
 	c.plan = {"spot": spot, "mode": mode, "dur": dur}
 	c.goal = spot
@@ -322,6 +419,8 @@ func process(dt: float) -> int:
 
 
 func _step(c: Critter, dt: float) -> void:
+	if c.away:
+		return
 	c.anim_t += dt
 	if c.pat_t >= 0.0:
 		c.pat_t += dt
@@ -544,6 +643,8 @@ func _toy_of(kind: String) -> Dictionary:
 
 
 func chase(c: Critter, toy: Dictionary, hits: int) -> void:
+	if c.away:
+		return
 	toy["hits"] = hits
 	c.bat_toy = toy
 	c.run = true
@@ -708,7 +809,7 @@ func pat(c: Critter, occasion: String) -> void:
 
 
 func say(c: Critter, text: String) -> void:
-	if text == "":
+	if text == "" or c.away:
 		return
 	c.say_text = Settings.pets(text)
 	c.say_left = Voices.bubble_time(text)
@@ -736,7 +837,7 @@ func nearest(spot: String) -> Critter:
 	var best: Critter = null
 	for id in ["nina", "argos"]:
 		var c := critter(id)
-		if c.mode == "sleep" or c.say_left > 0.0 or not duo_turns.is_empty():
+		if c.away or c.mode == "sleep" or c.say_left > 0.0 or not duo_turns.is_empty():
 			continue
 		if best == null or c.pos.distance_to(at) < best.pos.distance_to(at):
 			best = c
@@ -763,7 +864,7 @@ func _duo(dt: float) -> void:
 		if duo_left <= 0.0:
 			_duo_turn()
 		return
-	if freeze:
+	if freeze or not pair():
 		return
 	duo_next -= dt
 	if duo_next > 0.0:
@@ -781,6 +882,8 @@ func _duo(dt: float) -> void:
 
 
 func play_duo(turns: Array) -> void:
+	if not pair():
+		return
 	duo_turns = turns.duplicate()
 	_duo_turn()
 
@@ -831,10 +934,9 @@ func hit_rect(c: Critter, o: Vector2, k: int) -> Rect2:
 
 
 func draw_shadow(canvas: CanvasItem, c: Critter, o: Vector2, k: int) -> void:
-	if c.z > 0.5:
+	if c.z > 0.5 or c.away:
 		return
-	var name := "shadow_small" if c.id == "nina" else "shadow_medium"
-	var tex := _load(animals_dir + "Effects/%dx/%s.png" % [k, name])
+	var tex := _load(animals_dir + "Effects/%dx/%s.png" % [k, c.shadow])
 	var f := feet(c, o, k)
 	if tex == null:
 		return
@@ -867,8 +969,22 @@ func draw(canvas: CanvasItem, c: Critter, o: Vector2, k: int) -> void:
 	if c.flip:
 		canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
-	if c.id == "nina":
+	if c.species == "cat":
 		_draw_collar(canvas, c, f, k)
+
+
+# a kind's idle frame facing the viewer's right, feet on `at`, for the settings screen
+func draw_preview(canvas: CanvasItem, kind: String, t: float, at: Vector2, k: int) -> void:
+	var tex := _load(animals_dir + "Sheets/%dx/%s/%s_idle.png" % [k, kind, kind])
+	if tex == null:
+		return
+	var cell := 64 * k
+	var frame := int(t * FPS["idle"]) % maxi(1, tex.get_width() / cell)
+	canvas.draw_texture_rect_region(
+		tex,
+		Rect2((at - Vector2(32, 46) * k).round(), Vector2(cell, cell)),
+		Rect2(frame * cell, DIRS["se"] * cell, cell, cell)
+	)
 
 
 func _draw_collar(canvas: CanvasItem, c: Critter, f: Vector2, k: int) -> void:
@@ -888,7 +1004,7 @@ func _draw_flat(canvas: CanvasItem, c: Critter, f: Vector2, k: int) -> void:
 			Rect2(f - Vector2(5 * k, 34 * k), Vector2(10 * k, 30 * k)), Color("6f8fb0")
 		)
 		return
-	var cat: bool = c.id == "nina"
+	var cat: bool = c.species == "cat"
 	var body := Color("231f2b") if cat else Color("d9a95a")
 	var asleep: bool = c.mode == "sleep"
 	var wob := sin(c.anim_t * 6.0) * 0.4 * k if c.mode == "walk" else 0.0

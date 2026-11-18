@@ -212,6 +212,9 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				nina_at = next
 			"--argos":
 				argos_at = next
+			"--pets":
+				for p in next.split(",", false):
+					settings.forced["pet1" if p.get_slice("=", 0) == "cat" else "pet2"] = p.get_slice("=", 1)
 			"--note":
 				show_note = int(next)
 			"--seed":
@@ -298,7 +301,10 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	layout.setup(room._index, room.art_found, layout_file, layout_file != "")
 	pets.blocked_cells = layout.blocked()
 	pets.is_night = _env_now()["day"] < 0.15
+	pets.kinds["nina"] = Pets.kind_of(settings.value("pet1"), "nina")
+	pets.kinds["argos"] = Pets.kind_of(settings.value("pet2"), "argos")
 	pets.setup(art_dir, seed_value)
+	settings.changed.connect(_on_setting)
 	look.setup(art_dir)
 	look.stage(look_spec)
 	person.setup(pets, look, seed_value)
@@ -326,6 +332,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 func busy_cells() -> Array:
 	var out: Array = []
 	for c in pets.critters:
+		if c.away:
+			continue
 		var targets: Array = [c.pos]
 		if not c.jump.is_empty():
 			targets.append(c.jump["to"])
@@ -357,7 +365,24 @@ func _place_arg(id: String, spec: String) -> void:
 		parts[1] if parts.size() > 1 else ("sleep" if parts[0] in ["sofa", "bed"] else "sit")
 	)
 	if Pets.SPOTS.has(parts[0]):
-		pets.place(pets.critter(id), parts[0], mode)
+		var c: Pets.Critter = pets.critter(id)
+		pets.place(c, parts[0], "sit" if mode in ["walk", "run"] else mode)
+		if mode in ["walk", "run"]:
+			c.anim = mode
+
+
+func _on_setting(key: String) -> void:
+	if key in ["pet1", "pet2"]:
+		var id := "nina" if key == "pet1" else "argos"
+		var c: Pets.Critter = pets.critter(id)
+		var kind := Pets.kind_of(settings.value(key), id)
+		if kind == pets.kinds[id]:
+			return
+		if not eggs.scene.is_empty():
+			eggs.release_scene()
+		if c.id == "nina":
+			knock.pending = -1
+		pets.change_kind(c, kind)
 
 
 func set_voices(v: Dictionary) -> void:
@@ -710,7 +735,9 @@ func tick_off(id: int) -> void:
 	sound.request("done")
 	var fire := eggs.toss_ids.has(id) and hearth.lit
 	eggs.toss_ids.erase(id)
-	var miss: bool = not fire and (force_bat or pets.rng.randf() < 0.4)
+	var miss: bool = (
+		not fire and not pets.critter("nina").away and (force_bat or pets.rng.randf() < 0.4)
+	)
 	(
 		_crumples
 		. append(
@@ -869,6 +896,8 @@ func items() -> Array:
 	for t in pets.toys:
 		out.append({"key": t["pos"].x + t["pos"].y - 1.0, "pri": 1.8, "fn": _draw_toy.bind(t)})
 	for c in pets.critters:
+		if c.away:
+			continue
 		var pri := person.pri() if c.id == "person" else 2.0
 		out.append({"key": pets.sort_key(c), "pri": pri, "fn": _draw_critter.bind(c)})
 	return out
@@ -1241,7 +1270,8 @@ func draw_over() -> void:
 			Props.confetti(room, p["pos"], p["color"], _k, p["spin"] + p["t"] * 6.0)
 	var bounds := Rect2(Vector2.ZERO, room.size)
 	for c in pets.critters:
-		_draw_extras(c, bounds)
+		if not c.away:
+			_draw_extras(c, bounds)
 	Props.caption(room, Vector2(room.size.x / 2.0, 30), _next_text)
 	if _hover == "tv" and tv.on and not menu.is_open and not card.is_open():
 		tv.big(room, _tv_quad(), bounds)
@@ -1628,7 +1658,7 @@ func _tv_blocks() -> Array:
 
 func _topmost(pos: Vector2) -> String:
 	for c in pets.critters:
-		if c.id != "person" and pets.hit_rect(c, _o, _k).has_point(pos):
+		if c.id != "person" and not c.away and pets.hit_rect(c, _o, _k).has_point(pos):
 			return "pet:" + c.id
 	for i in range(_hits.size() - 1, -1, -1):
 		if Geometry2D.is_point_in_polygon(pos, _hits[i]["poly"]):
@@ -1943,7 +1973,7 @@ func _knocking(dt: float) -> void:
 			knock.flying = {}
 			if _open_ids().has(id):
 				knock.id = id
-	if pets.freeze or not _seen_data:
+	if pets.freeze or not _seen_data or pets.critter("nina").away:
 		return
 	var id := knock.due(dt, open, Time.get_unix_time_from_system(), _hour(), pets.is_night)
 	if id >= 0:

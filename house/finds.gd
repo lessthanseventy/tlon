@@ -127,7 +127,7 @@ func _run_mouse(dt: float) -> void:
 	var at := mouse_pos()
 	for id in ["nina", "argos"]:
 		var c = h.pets.critter(id)
-		if c.mode != "sleep" and c.pos.distance_to(at) < 4.0:
+		if not c.away and c.mode != "sleep" and c.pos.distance_to(at) < 4.0:
 			_scare()
 			return
 	if mouse["t"] > 6.0:
@@ -146,11 +146,20 @@ func pick_book() -> void:
 	var r: RandomNumberGenerator = h.eggs.rng
 	var t: Array = TITLES[r.randi() % TITLES.size()]
 	var who: String = "Nina" if r.randf() < 0.5 else "Argos"
+	if h.pets.critter(who.to_lower()).away:
+		who = "Argos" if who == "Nina" else "Nina"
+	if h.pets.critter(who.to_lower()).away:
+		who = ""
 	var said: String = h.pets.line(who, "muse")
 	if said == "" or said.contains("{thing}"):
 		said = BUILT_IN[r.randi() % BUILT_IN.size()]
 	book = {"title": t[0], "about": t[1], "who": who, "blurb": said}
 	h.eggs.find("book")
+
+
+func _said(b: Dictionary) -> String:
+	var who: String = b.get("who", "")
+	return str(b.get("blurb", "")) if who == "" else "%s: %s" % [who, b.get("blurb", "")]
 
 
 func glow_book() -> void:
@@ -167,7 +176,7 @@ func blocks(kind: String) -> Array:
 			{"t": "title", "text": str(book.get("title", ""))},
 			{"t": "dim", "text": "Jorge Luis Borges - " + str(book.get("about", ""))},
 			{"t": "gap"},
-			{"t": "text", "text": Settings.pets("%s: %s" % [book.get("who", ""), book.get("blurb", "")])},
+			{"t": "text", "text": Settings.pets(_said(book))},
 		]
 	var out: Array = [{"t": "title", "text": "Found so far"}]
 	var n: int = h.eggs.found.size()

@@ -17,6 +17,7 @@ const Decorate := preload("res://decorate.gd")
 const Closet := preload("res://closet.gd")
 const Card := preload("res://card.gd")
 const EggSoak := preload("res://soak_eggs.gd")
+const GuestSoak := preload("res://soak_guests.gd")
 const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
 const LocalSoak := preload("res://soak_local.gd")
@@ -97,6 +98,8 @@ func _run() -> void:
 	_card_logic()
 	_where = "eggs"
 	EggSoak.new(self).run()
+	_where = "guests"
+	GuestSoak.new(self).run()
 	_where = "cards"
 	await _cards()
 	_where = "routes"

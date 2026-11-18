@@ -8,6 +8,7 @@ signal check_requested(url: String)
 
 const Paper := preload("res://paper.gd")
 const Settings := preload("res://settings.gd")
+const Pets := preload("res://pets.gd")
 const Sure := preload("res://sure.gd")
 const LocalList := preload("res://local_list.gd")
 const Claude := preload("res://reader_claude.gd")
@@ -30,6 +31,8 @@ var _month: OptionButton
 var _day: OptionButton
 var _cat: LineEdit
 var _dog: LineEdit
+var _kind1: KindPicker
+var _kind2: KindPicker
 var _sound: Button
 var _volume: HSlider
 var _widget: Button
@@ -64,6 +67,48 @@ var _claude_say: Label
 var _claude_last: Label
 var _cmd_seen := "\u0000"
 var _loading := false
+
+
+# which animal a pet is: a list of the kinds and "none", and the chosen one idling beside it
+class KindPicker:
+	extends HBoxContainer
+	signal picked(kind: String)
+	var pets
+	var kind := ""
+	var _ids: Array = Pets.KINDS.keys() + [Pets.NONE]
+	var _list := OptionButton.new()
+	var _t := 0.0
+
+	func _init(the_pets) -> void:
+		pets = the_pets
+		add_theme_constant_override("separation", 6)
+		for id in _ids:
+			_list.add_item(Pets.KINDS[id]["label"] if id != Pets.NONE else "none")
+		Paper.skin(_list)
+		_list.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_list.item_selected.connect(
+			func(i: int) -> void:
+				kind = _ids[i]
+				picked.emit(kind)
+		)
+		add_child(_list)
+		var view := Control.new()
+		view.custom_minimum_size = Vector2(80, 64)
+		view.clip_contents = true
+		view.draw.connect(_draw_kind.bind(view))
+		add_child(view)
+
+	func show_kind(k: String) -> void:
+		kind = k
+		_list.select(_ids.find(k))
+
+	func _process(dt: float) -> void:
+		_t += dt
+		get_child(1).queue_redraw()
+
+	func _draw_kind(view: Control) -> void:
+		if kind != Pets.NONE:
+			pets.draw_preview(view, kind, _t, Vector2(40, 58), 2)
 
 
 class Cog:
@@ -142,11 +187,15 @@ func _ready() -> void:
 
 	_head(col, "the pets")
 	r = Paper.row(col)
-	r.add_child(Paper.label("the cat", 14, Paper.QUIET))
+	r.add_child(Paper.label("the first pet", 14, Paper.QUIET))
 	_cat = _field(r, Settings.CAT, "cat")
+	_cat.custom_minimum_size.x = 100
+	_kind1 =_kind_picker(r, "pet1")
 	r = Paper.row(col)
-	r.add_child(Paper.label("the dog", 14, Paper.QUIET))
+	r.add_child(Paper.label("the second pet", 14, Paper.QUIET))
 	_dog = _field(r, Settings.DOG, "dog")
+	_dog.custom_minimum_size.x = 100
+	_kind2 =_kind_picker(r, "pet2")
 
 	_head(col, "sound")
 	r = Paper.row(col)
@@ -223,6 +272,8 @@ func open() -> void:
 	_day.disabled = _month.selected == 0
 	_cat.text = settings.data.get("cat", "")
 	_dog.text = settings.data.get("dog", "")
+	_kind1.show_kind(Pets.kind_of(settings.value("pet1"), "nina"))
+	_kind2.show_kind(Pets.kind_of(settings.value("pet2"), "argos"))
 	_sound.set_pressed_no_signal(not home.sound.muted)
 	if _volume != null:
 		_volume.set_value_no_signal(float(home.sound.volume))
@@ -417,6 +468,13 @@ func _field(parent: Control, hint: String, key: String) -> LineEdit:
 	e.text_submitted.connect(func(t: String) -> void: _put(key, t.strip_edges()))
 	e.focus_exited.connect(func() -> void: _put(key, e.text.strip_edges()))
 	return e
+
+
+func _kind_picker(parent: Control, key: String) -> KindPicker:
+	var p := KindPicker.new(home.pets)
+	p.picked.connect(func(kind: String) -> void: _put(key, kind))
+	parent.add_child(p)
+	return p
 
 
 func _put(key: String, v: Variant) -> void:

@@ -140,7 +140,8 @@ func new_look() -> void:
 		a.anim = "idle"
 	a.hops = 3
 	h.pets.say(a, NEW_LOOK["Argos"])
-	h.sound.request("bark")
+	if h.pets.cry(a) == "bark":
+		h.sound.request("bark")
 	var n = h.pets.critter("nina")
 	n.wait = minf(n.wait, 3.0)
 

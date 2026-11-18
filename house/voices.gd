@@ -4,6 +4,12 @@ const Settings := preload("res://settings.gd")
 const THING_MAX := 32
 const BUBBLE_MIN := 3.5
 const BUBBLE_MAX := 9.0
+# a line that only fits one species is left out for any other (the house's own, not the server's)
+const SPECIES := {
+	"Is Nina a small dog?": "dog",
+	"the bed is a cat's.": "cat",
+	"the cat has opinions.": "cat",
+}
 
 # Last resort: only when the server has given nothing for that pet and occasion.
 const FALLBACK := {
@@ -25,6 +31,8 @@ const FALLBACK := {
 
 var batch := {}
 var rng := RandomNumberGenerator.new()
+# each pet's species by name, kept by `Pets.set_kind`
+var species := {"Nina": "cat", "Argos": "dog"}
 
 var _used := {}
 var _last := ""
@@ -53,8 +61,13 @@ func line(who: String, occasion: String, thing: String = "") -> String:
 			if l is String and l.strip_edges() != "":
 				served.append(l)
 	if served.is_empty():
-		return _pick("fb|" + who + "|" + occasion, FALLBACK.get(who, {}).get(occasion, []), thing)
-	return _pick(who + "|" + occasion, served, thing)
+		return _pick("fb|" + who + "|" + occasion, FALLBACK.get(who, {}).get(occasion, []), thing, who)
+	return _pick(who + "|" + occasion, served, thing, who)
+
+
+# whether a line of the house's own suits one of these species
+static func fits(text: String, kinds: Array) -> bool:
+	return not SPECIES.has(text) or SPECIES[text] in kinds
 
 
 func duo() -> Array:
@@ -105,9 +118,14 @@ static func _turns(exchange: Variant) -> Array:
 	return out
 
 
-func _pick(key: String, pool: Array, thing: String) -> String:
+func _pick(key: String, pool: Array, thing: String, who: String) -> String:
 	var usable := pool.filter(
-		func(l): return (thing != "" or not "{thing}" in l) and (Settings.person != "" or not "{name}" in l)
+		func(l):
+			return (
+				(thing != "" or not "{thing}" in l)
+				and (Settings.person != "" or not "{name}" in l)
+				and fits(l, [species.get(who, "")])
+			)
 	)
 	if usable.is_empty():
 		return ""

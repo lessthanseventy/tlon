@@ -130,7 +130,12 @@ runs on the local list.
   (not in the notepad): `borges` (shelf glows, a Babel line), `tlon` (colours drift), `uqbar` (a second
   moon), `argos` (he hops). `quirks.gd`: desk fidgets (`spin pencil stretch nod`, `--egg ...`), hero perks
   (staff: `cast` lights the fire; blade: salutes a visitor at the door; bow: an arrow stays in the wall), and a
-  rare hero visitor (`--egg visitor`). `delights.gd`: a moth at the lamp at night, an umbrella by the door in
+  rare visitor who walks in at the door, stands, looks around and leaves, one at a time, 25-66 min apart
+  between 09:00 and 21:00 whatever the kind: a hero (`--egg visitor`), a seeded pedestrian of the city-people
+  pack, any day (`--egg visitor_city[:punk]`), and on 25-31 October (house clock, never after 22:00) a friendly
+  monster of the monsters pack (`--egg visitor_monster[:ghost]`; the dog-role pet hops or hides, the cat-role
+  pet is unimpressed). Each kind met is one "found" entry; a missing pack removes its kind. `Quirks.allowed`
+  is the date/hour rule, `Quirks.PEDESTRIANS`/`MONSTERS` the casts. `delights.gd`: a moth at the lamp at night, an umbrella by the door in
   rain, Nina at the sill in rain, Argos hiding in a storm, TV remarks, a greeting for a new look, sparks when
   the jar fills; a snowman on the sill in snow and a lit pumpkin after dark (`outside.gd`, `home.gd`).
 - **Sound** (`sound.gd`): a cue plays a file of the Gridwright UI and Retro packs found under the art dir
@@ -199,7 +204,9 @@ runs on the local list.
   scripted or staged run: `name` (used in the birthday line and a server line's `{name}`; a line with `{name}` and
   no name is skipped), `birthday` (`"MM-DD"`, `""`), `cat` and `dog` (default Nina and Argos: shown everywhere the
   house prints them, the server's pet lines too, by `Settings.pets`; the server and `voices.gd` still key on Nina and
-  Argos), `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
+  Argos), `pet1` and `pet2` (the animal of the first, aloof pet and the second, eager one: a key of `Pets.KINDS`
+  or `"none"`; absent is `cat_black` and `dog_golden`; applies at once; a pet that is `none` is not in the room and
+  every scene, line, sound and card that needs it is skipped; `--pets cat=KIND,dog=KIND` stages them), `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
   `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server), and over the
   house's own list only `telegram` (off), `telegram_list_at` (`"17:30"`), `claude` (off) and `claude_command`
   (`"claude"`): the two helpers below (the bot's token is not here but in its own file).
@@ -338,6 +345,12 @@ runs on the local list.
 - **Widget** (`--widget`, `W`, `mise run house:widget`): the room alone in a borderless always-on-top
   window of 656x432, exactly the room at scale 2 so it stays crisp; drag the room to move it, the
   spot is kept in `user://house_widget.json`.
+- The pets are roles, not animals: `nina` (naps on furniture, pushes things off the desk, walks the piano) and
+  `argos` (brings gifts, flops), each any animal of `Pets.KINDS` (cats, dogs, rabbits, foxes, chickens, pigs, a
+  sheep: the small ones that read at pet size; every sheet has all of `Pets.ANIMS`, so each animation plays under
+  its own name) or `none` (`Critter.away`: not stepped, drawn, hit, heard or counted). Species keys the voice:
+  `Pets.cry` (only a cat purrs, only a dog barks) and `Voices.SPECIES` (house lines that suit one species).
+  A new kind is a row in `KINDS`, and its sheets are in the art pack at once (`art_pack.gd`).
 - Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
   (sweet, not bright). Clicking one pets it. Their lines are `voices.gd`: `GET /api/home/pets`, a batch a
   model wrote for the home as it is now, `{Nina: {occasion: [lines]}, Argos: {...}, duo: [[
@@ -413,7 +426,7 @@ and seeds their dice (`--seed N` to pick another):
 - `--tick-demo` ticks thing 1 off at 0.75 s (a picture at 1.5 s catches the paper in the air);
   `--tick-all` ticks 1, 2, 3 for the confetti; `--bat` makes the paper miss so Nina chases it;
   `--empty` is the demo with nothing open, no notes, nothing coming.
-- `--say Nina|Argos` a bubble at 0.3 s (`--occasion NAME` for its line; `--duo` plays an exchange; `--no-voices` drops the demo batch to show the built-ins); `--nina SPOT[:sleep|sit]`, `--argos SPOT[:...]` start a pet
+- `--say Nina|Argos` a bubble at 0.3 s (`--occasion NAME` for its line; `--duo` plays an exchange; `--no-voices` drops the demo batch to show the built-ins); `--nina SPOT[:sleep|sit|walk|run]`, `--argos SPOT[:...]` start a pet
   at a spot (`pets.gd` `SPOTS`: `sofa`, `desk`, `rug`, `bed`, ...); `--wait SECONDS` when to shoot.
 - `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a card, a
   name tag or a pat can be photographed without a pointer.

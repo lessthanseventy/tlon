@@ -5,6 +5,7 @@ extends RefCounted
 const Props := preload("res://props.gd")
 const Pets := preload("res://pets.gd")
 const Look := preload("res://look.gd")
+const Guests := preload("res://guests.gd")
 
 const SPIN := [7, 1, 3, 5]
 const DESK_FACE := 5
@@ -16,6 +17,55 @@ const ARROW_STAYS := 150.0
 const VISIT := {"in": 2.6, "stay": 2.8, "out": 2.6}
 const DOORWAY := Vector2(0.45, 7.5)
 const INSIDE := Vector2(2.6, 7.0)
+const KIND_ID := {"hero": "visitor", "city": "visitor_city", "monster": "visitor_monster"}
+# the pedestrians of the city pack (not its workers), and the monsters that are only comic: the
+# animation each moves with and its shadow
+const PEDESTRIANS := [
+	"man_tee",
+	"woman_dress",
+	"student",
+	"office_man",
+	"business_woman",
+	"jogger",
+	"grandpa",
+	"grandma",
+	"teen_hoodie",
+	"tourist",
+	"woman_jeans",
+	"punk",
+	"man_coat",
+	"girl_skirt",
+]
+const MONSTERS := {
+	"slime": ["hop", "shadow_small"],
+	"ghost": ["float", "shadow_small"],
+	"pumpkin_knight": ["walk", "shadow_medium"],
+	"bat": ["fly", "shadow_small"],
+	"imp": ["fly", "shadow_small"],
+	"golem": ["walk", "shadow_medium"],
+}
+# a pack's folder, its sheet cell, the anchor in it and the weight of its kind in the dice
+const PACKS := {
+	"city":
+	{
+		"dir": "isometric-city-people/Gridwright Isometric City People/",
+		"cell": 32,
+		"anchor": Vector2(16, 28),
+		"weight": 2.0
+	},
+	"monster":
+	{
+		"dir": "isometric-monsters/Gridwright Isometric Monsters/",
+		"cell": 64,
+		"anchor": Vector2(32, 46),
+		"weight": 2.0
+	},
+}
+const LOOK_DIRS := [1, 0, 7]
+const REACTION := {
+	"Nina": ["I have seen worse.", "hm. unimpressed."],
+	"Argos": ["is it friendly?", "hello?? hello monster?"]
+}
 
 var _hw: WeakRef
 var h:
@@ -66,7 +116,7 @@ func process(dt: float) -> void:
 
 
 func _start(name: String) -> void:
-	match name:
+	match name.get_slice(":", 0):
 		"spin", "pencil", "stretch", "nod":
 			fidget(name)
 		"cast", "bow":
@@ -76,6 +126,8 @@ func _start(name: String) -> void:
 			h.eggs.find("salute")
 		"visitor":
 			start_visit()
+		"visitor_city", "visitor_monster":
+			start_visit(name.get_slice("_", 1).get_slice(":", 0), name.get_slice(":", 1))
 
 
 func fidget(kind: String) -> void:
@@ -285,26 +337,106 @@ func draw_over(c: CanvasItem) -> void:
 		)
 
 
-func start_visit() -> bool:
-	if visiting():
-		return false
+# which kinds of visitor may come on this date and hour: the hero and a pedestrian any day, a
+# monster only 25-31 October and never at night
+static func allowed(hour: float, october_week: bool) -> Array:
+	var out := ["hero", "city"]
+	if october_week and hour >= 6.0 and hour < 22.0:
+		out.append("monster")
+	return out
+
+
+# the sheets of a pack's visitors that exist under the art folder, in the pack's own order
+func guest_names(kind: String) -> Array:
+	var pool: Array = PEDESTRIANS if kind == "city" else MONSTERS.keys()
+	var dir: String = h.room.art_dir.path_join(PACKS[kind]["dir"])
+	return pool.filter(
+		func(n):
+			return _sheets(kind, n).all(
+				func(a): return FileAccess.file_exists(_sheet_path(dir, n, a, 1))
+			)
+	)
+
+
+# a visitor's sheet at room scale k
+static func _sheet_path(dir: String, name: String, anim: String, k: int) -> String:
+	return dir + "Sheets/%dx/%s/%s_%s.png" % [k, name, name, anim]
+
+
+func _sheets(kind: String, name: String) -> Array:
+	return ["idle", "walk", "phone"] if kind == "city" else ["idle", MONSTERS[name][0]]
+
+
+func _hero_ready() -> bool:
 	if _vlook == null:
 		_vlook = Look.new()
 		_vlook.store = "user://house_visitor_never_written.json"
 		_vlook.setup(h.room.art_dir)
 		_vcrit = Pets.Critter.new()
-	if not _vlook.hero_ready or _vlook.hero_recipes.is_empty():
+	return _vlook.hero_ready and not _vlook.hero_recipes.is_empty()
+
+
+# the kinds that can come now: by the house's date and hour, and whose pack is there
+func kinds_now() -> Array:
+	var day: float = h._now_local()
+	var out: Array = []
+	for kind in allowed(h._hour(), Guests.last_week_of_october(day)):
+		if _hero_ready() if kind == "hero" else not guest_names(kind).is_empty():
+			out.append(kind)
+	return out
+
+
+func _pick_kind(kinds: Array) -> String:
+	var total := 0.0
+	for k in kinds:
+		total += PACKS[k]["weight"] if PACKS.has(k) else 1.0
+	var roll: float = h.eggs.rng.randf() * total
+	for k in kinds:
+		roll -= PACKS[k]["weight"] if PACKS.has(k) else 1.0
+		if roll <= 0.0:
+			return k
+	return kinds[0]
+
+
+# one visitor at a time; `who` names a pedestrian or monster, else the dice pick
+func start_visit(kind: String = "hero", who: String = "") -> bool:
+	if visiting() or kind not in kinds_now():
 		return false
-	var rec: Dictionary = _vlook.hero_recipes[h.eggs.rng.randi() % _vlook.hero_recipes.size()]
-	_vlook.wear = "hero"
-	_vlook.hero_cfg = (rec["cfg"] as Dictionary).duplicate()
-	visitor = {"t": 0.0, "name": rec["name"]}
 	_vcrit.pos = DOORWAY
 	_vcrit.dir = 7
 	_vcrit.z = 0.0
 	_vcrit.key = -1.0
-	h.eggs.find("visitor")
+	if kind == "hero":
+		var rec: Dictionary = _vlook.hero_recipes[h.eggs.rng.randi() % _vlook.hero_recipes.size()]
+		_vlook.wear = "hero"
+		_vlook.hero_cfg = (rec["cfg"] as Dictionary).duplicate()
+		visitor = {"t": 0.0, "kind": kind, "name": rec["name"]}
+	else:
+		var pool := guest_names(kind)
+		var name: String = who if who in pool else pool[h.eggs.rng.randi() % pool.size()]
+		var stay := "phone" if kind == "city" and h.eggs.rng.randf() < 0.35 else "idle"
+		visitor = {"t": 0.0, "kind": kind, "name": name, "stay": stay}
+		h.sound.request("egg_visitor")
+	h.eggs.find(KIND_ID[kind])
+	if kind == "monster":
+		_react()
 	return true
+
+
+# the dog-role pet hops or hides, the cat-role pet is unimpressed
+func _react() -> void:
+	var r: RandomNumberGenerator = h.eggs.rng
+	var argos = h.pets.critter("argos")
+	var nina = h.pets.critter("nina")
+	if h.eggs.loose(argos):
+		if r.randf() < 0.5:
+			argos.hops = 3
+		else:
+			h.pets.go(argos, "nook", "sit", 15.0)
+			argos.wait = 9999.0
+		h.pets.say(argos, REACTION["Argos"][r.randi() % 2])
+	if h.eggs.loose(nina):
+		h.pets.say(nina, REACTION["Nina"][r.randi() % 2])
 
 
 func _visit(dt: float) -> void:
@@ -316,7 +448,9 @@ func _visit(dt: float) -> void:
 			_next_visit = h.eggs.rng.randf_range(1500.0, 4000.0)
 			var hour: float = h._hour()
 			if hour >= 9.0 and hour < 21.0 and h.eggs.calm() and h.eggs.scene.is_empty():
-				start_visit()
+				var kinds := kinds_now()
+				if not kinds.is_empty():
+					start_visit(_pick_kind(kinds))
 		return
 	visitor["t"] += dt
 	var t: float = visitor["t"]
@@ -327,6 +461,9 @@ func _visit(dt: float) -> void:
 	elif t < VISIT["in"] + VISIT["stay"]:
 		_vcrit.pos = INSIDE
 		_vcrit.dir = 1
+		if visitor["kind"] != "hero":
+			var third: float = VISIT["stay"] / LOOK_DIRS.size()
+			_vcrit.dir = LOOK_DIRS[mini(int((t - VISIT["in"]) / third), LOOK_DIRS.size() - 1)]
 	else:
 		_vcrit.pos = INSIDE.lerp(DOORWAY, (t - VISIT["in"] - VISIT["stay"]) / VISIT["out"])
 		_vcrit.dir = 3
@@ -339,11 +476,13 @@ func _visit(dt: float) -> void:
 				break
 
 
-func _anim() -> String:
+func _moving() -> bool:
 	var t: float = visitor["t"]
-	if t < VISIT["in"] or t >= VISIT["in"] + VISIT["stay"]:
-		return "walk"
-	return "block"
+	return t < VISIT["in"] or t >= VISIT["in"] + VISIT["stay"]
+
+
+func _anim() -> String:
+	return "walk" if _moving() else "block"
 
 
 func items() -> Array:
@@ -355,6 +494,9 @@ func items() -> Array:
 func _draw_visitor() -> void:
 	var k: int = h._k
 	var f: Vector2 = h.pets.feet(_vcrit, h._o, k)
+	if visitor["kind"] != "hero":
+		_draw_guest(f, k)
+		return
 	_vlook.draw_frame(
 		h.room,
 		_vlook.sheet(_vlook.current(), k),
@@ -363,4 +505,30 @@ func _draw_visitor() -> void:
 		visitor["t"],
 		f,
 		k
+	)
+
+
+func _draw_guest(f: Vector2, k: int) -> void:
+	var kind: String = visitor["kind"]
+	var name: String = visitor["name"]
+	var pack: Dictionary = PACKS[kind]
+	var dir: String = h.room.art_dir.path_join(pack["dir"])
+	var move: String = "walk" if kind == "city" else MONSTERS[name][0]
+	var anim: String = move if _moving() else str(visitor.get("stay", "idle"))
+	var shadow: String = "shadow_small" if kind == "city" else MONSTERS[name][1]
+	var sh: Texture2D = h.pets._load(dir + "Effects/%dx/%s.png" % [k, shadow])
+	if sh != null:
+		h.room.draw_texture(
+			sh, (f - Vector2(sh.get_width(), sh.get_height()) / 2.0).round(), Color(1, 1, 1, 0.35)
+		)
+	var tex: Texture2D = h.pets._load(_sheet_path(dir, name, anim, k))
+	if tex == null:
+		return
+	var cell: int = pack["cell"] * k
+	var fps: float = {"idle": 6.0, "phone": 4.0}.get(anim, 10.0)
+	var frame := int(visitor["t"] * fps) % maxi(1, tex.get_width() / cell)
+	h.room.draw_texture_rect_region(
+		tex,
+		Rect2((f - (pack["anchor"] as Vector2) * k).round(), Vector2(cell, cell)),
+		Rect2(frame * cell, _vcrit.dir * cell, cell, cell)
 	)
