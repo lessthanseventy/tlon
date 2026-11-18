@@ -123,7 +123,7 @@ static func bubble(
 	c: CanvasItem, tip: Vector2, text: String, bounds: Rect2, alpha: float, font_size: int = 14
 ) -> void:
 	var font := ThemeDB.fallback_font
-	var wrap := 168.0
+	var wrap := 168.0 if text.length() <= 60 else 232.0
 	var sz := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, wrap, font_size)
 	var box := Vector2(sz.x + 18, sz.y + 14)
 	var pos := Vector2(tip.x - box.x / 2.0, tip.y - box.y - 10)

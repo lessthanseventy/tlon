@@ -13,6 +13,11 @@ const WAITING_SHOWN := 5
 const WIDGET_SIZE := Vector2i(528, 368)
 const WIDGET_STORE := "user://house_widget.json"
 
+var pets_retry := 20.0
+var pets_every := 300.0
+var pets_nudge := 60.0
+var pets_window := 180.0
+
 var _demo := false
 var _shot := ""
 var _base := "http://127.0.0.1:4040"
@@ -33,7 +38,12 @@ var _reach := {}
 var _busy := false
 var _slow: HTTPRequest
 var _slow_step := ""
-var _pets_retried := false
+var _pets_req: HTTPRequest
+var _pets_timer: Timer
+var _pets_nudged: Timer
+var _pets_since := 0.0
+var _ids: Array = []
+var _ids_known := false
 var _watch: HTTPRequest
 var _away_at := 0.0
 
@@ -95,6 +105,8 @@ func _ready() -> void:
 		if "--empty" in args:
 			demo.merge({"open": [], "coming": [], "notes": []}, true)
 		_room.home.set_weather(demo.get("weather"))
+		if "--no-voices" not in args:
+			_room.home.set_voices(demo.get("pets", {}))
 		if "--visitor" in args:
 			_room.home.set_office(_office)
 		_apply(demo)
@@ -114,6 +126,19 @@ func _ready() -> void:
 		add_child(slow_timer)
 		slow_timer.start()
 		_slow_poll()
+		_pets_req = HTTPRequest.new()
+		_pets_req.timeout = 8.0
+		_pets_req.request_completed.connect(_on_pets)
+		add_child(_pets_req)
+		_pets_timer = Timer.new()
+		_pets_timer.one_shot = true
+		_pets_timer.timeout.connect(_pets_ask)
+		add_child(_pets_timer)
+		_pets_nudged = Timer.new()
+		_pets_nudged.one_shot = true
+		_pets_nudged.timeout.connect(_pets_ask)
+		add_child(_pets_nudged)
+		_pets_ask()
 		_watch = HTTPRequest.new()
 		_watch.timeout = 6.0
 		_watch.request_completed.connect(_on_watch)
@@ -187,6 +212,14 @@ func _apply(data: Dictionary) -> void:
 		"done_week": data.get("done_week", 0),
 	}
 	_room.home.set_data(_data)
+	var ids: Array = []
+	for t in _data["open"]:
+		ids.append(int(t["id"]))
+	ids.sort()
+	if _ids_known and ids != _ids and _pets_nudged != null:
+		_pets_nudged.start(pets_nudge)
+	_ids = ids
+	_ids_known = true
 	if _at == "home":
 		_room.show_home()
 		_panel.show_data(_data)
@@ -622,16 +655,31 @@ func _on_slow(result: int, code: int, _headers: PackedStringArray, body: PackedB
 		return
 	if step == "office":
 		_room.home.set_weather(parsed.get("weather"))
-		for w in parsed.get("workspaces", []):
-			if w.get("name") == "Home":
-				_slow_step = "pets"
-				if _slow.request(_base + "/api/office/pets/%d" % int(w["id"])) != OK:
-					_slow_step = ""
-	elif step == "pets":
+
+
+func _pets_ask() -> void:
+	if _pets_req.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return
+	if not _room.home.has_voices() and _pets_since == 0.0:
+		_pets_since = Time.get_ticks_msec() / 1000.0
+	if _pets_req.request(_base + "/api/home/pets") != OK:
+		_pets_later()
+
+
+func _on_pets(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if code == 200 else null
+	if result == HTTPRequest.RESULT_SUCCESS and parsed is Dictionary and not parsed.is_empty():
 		_room.home.set_voices(parsed)
-		if parsed.is_empty() and not _pets_retried:
-			_pets_retried = true
-			get_tree().create_timer(45.0).timeout.connect(_slow_poll)
+	_pets_later()
+
+
+func _pets_later() -> void:
+	var wait := pets_every
+	if _room.home.has_voices():
+		_pets_since = 0.0
+	elif Time.get_ticks_msec() / 1000.0 - _pets_since < pets_window:
+		wait = pets_retry
+	_pets_timer.start(wait)
 
 
 func _watch_door() -> void:

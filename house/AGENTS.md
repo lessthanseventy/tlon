@@ -7,7 +7,7 @@ from a description (floor, walls, furniture, figures, door), `panel.gd` the list
 
 The home is a lived-in room, not a dashboard. `home.gd` owns its state and the order it draws in
 (it hands `room.gd` sortable items); `pets.gd` is Nina, Argos and the grid they and the person walk
-(perches, toys, speech lines); `props.gd` is everything the packs do not have, drawn in code (paper,
+(perches, toys); `voices.gd` is what they say; `props.gd` is everything the packs do not have, drawn in code (paper,
 corkboard, calendar, phone, notepad, bubbles, light and weather). One file per thing that lives in it:
 `person.gd` (the person's activities), `look.gd` (who they are: layered composition, flat fallback,
 saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (the window's scene),
@@ -91,10 +91,19 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 - **Widget** (`--widget`, `W`, `mise run house:widget`): the room alone in a borderless always-on-top
   window of 528x368, exactly the room at scale 2 so it stays crisp; drag the room to move it, the
   spot is kept in `user://house_widget.json`.
-- Nina is a black cat with a jewelled collar, Argos a golden dog. Clicking one pets it. Their lines
-  are `GET /api/office/pets/:id` for the workspace named "Home", asked at start, once more 45 s later
-  if it came back empty, then every 5 min (the server writes a batch when asked, so rarely); lines
-  with `{name}` are skipped. With none, or no server, built-in lines in the same voices.
+- Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
+  (sweet, not bright). Clicking one pets it. Their lines are `voices.gd`: `GET /api/home/pets`, a batch a
+  model wrote for the home as it is now, `{Nina: {occasion: [lines]}, Argos: {...}, duo: [[
+  "Nina: ...", "Argos: ..."]]}` (`{}` until the first exists). Asked at start, every 20 s while empty
+  (3 min, then every 5 min), else every 5 min, and once 60 s after the open list changes; a failure or
+  `{}` keeps what is held. Occasions: `pet` (click), `wake` (clicked or woken), `muse` (unprompted),
+  `done` (Argos names the thing; `all_done` for the last), `old` (Nina as she knocks), `jot` (note sent),
+  `ring`, `home` (Argos at the door), `morning`, `tv`, `night`; the pet nearest and awake speaks, never
+  two at once. `{thing}` is the thing's text, trimmed; a line with it and no thing is skipped. A line
+  never repeats until the pet's others for that occasion have been used (reset on a new batch), nor
+  twice in a row; a bubble wraps and stays 3.5-9 s by length. Now and then both awake and idle play a
+  `duo`, alternating bubbles. Built-in lines (one or two) are only for a pet and occasion the server gave
+  nothing for; none and no line means no bubble. `--demo` serves `pets` from `demo.json`.
 
 ## Law
 
@@ -109,7 +118,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   `since` and `told_at`; `done_week` fills the jar) or `GET /api/office` —
   and posts `POST /api/home/:id/done`, `POST /api/home/:id/later` (`{"until": "hour"|"tomorrow"}`)
   and `POST /api/home` (`{"text"}` → `{"reply"}`, slow: a model reads it). The home also asks
-  `/api/settings` and `/api/office` (weather, the door) every 60 s and the pets' lines every 5 min. The house has no local reads: it talks only to the server. A server that does not answer leaves the
+  `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). The house has no local reads: it talks only to the server. A server that does not answer leaves the
   last data on screen and a quiet line saying so; a post that fails moves nothing.
 - **Rooms.** The window starts in the home, or the office with `--office`. The door in each room, its
   panel button and Tab go between them. A coworker's state is the roster row's `status`
@@ -144,7 +153,7 @@ and seeds their dice (`--seed N` to pick another):
 - `--tick-demo` ticks thing 1 off at 0.75 s (a picture at 1.5 s catches the paper in the air);
   `--tick-all` ticks 1, 2, 3 for the confetti; `--bat` makes the paper miss so Nina chases it;
   `--empty` is the demo with nothing open, no notes, nothing coming.
-- `--say Nina|Argos` a bubble at 0.3 s; `--nina SPOT[:sleep|sit]`, `--argos SPOT[:...]` start a pet
+- `--say Nina|Argos` a bubble at 0.3 s (`--occasion NAME` for its line; `--duo` plays an exchange; `--no-voices` drops the demo batch to show the built-ins); `--nina SPOT[:sleep|sit]`, `--argos SPOT[:...]` start a pet
   at a spot (`pets.gd` `SPOTS`: `sofa`, `desk`, `rug`, `bed`, ...); `--wait SECONDS` when to shoot.
 - `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a card, a
   name tag or a pat can be photographed without a pointer.
