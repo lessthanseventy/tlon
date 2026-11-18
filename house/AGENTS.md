@@ -44,7 +44,7 @@ runs on the local list.
   the person watches and off otherwise and in the deep night; its card's button turns it on for 90 s
   or changes the channel. On, it runs one of the code-drawn screen hacks (`spectrum stars plasma logo
   rain life pipes moire scope sunset fireworks toasters note`), a new one every 2-4 minutes through
-  a short static flicker, never the same twice in a row. Hover shows the same hack large, no text.
+  a short static flicker, never the same twice in a row.
   Add a hack: a `_name(c, q, t)` drawer in `hacks.gd` and its name in `NAMES`. Nina sometimes sits
   in front of it when it is on.
 - **The done jar** (`jar.gd`) is a glass jar on a shelf over the bin: one marble per thing done this
