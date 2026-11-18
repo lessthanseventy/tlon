@@ -311,7 +311,7 @@ defmodule Server.Home.Inbox do
   defp slot(name, kept, setting, run) do
     last = Clock.resume(kept, setting)
     new = guarded(last, fn -> run.(last) end)
-    if new != last and new != :boot, do: Slot.put(name, new, setting)
+    if new != last and new != :boot, do: guarded(:ok, fn -> Slot.put(name, new, setting) end)
     {new, setting}
   end
 
