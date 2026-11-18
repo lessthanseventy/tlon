@@ -198,7 +198,7 @@ and every layer the spine design's re-laid §9 asked for
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
   open next step or a question about it, a waiting-on is asked about after three days, a weekly review
   (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28
-  days to someday, and a to-do that sat a week is offered a two-minute start with the daily list. Each
+  days to someday, and a to-do that sat a week is offered a two-minute start after the daily list (written in the background). Each
   question is a `jot` row with an `ask`, said in the chat and raised on the desktop
   (`Server.Home.asked/0`, a sticky `home_ask` alert whose buttons call `POST /api/home/:id/answer`), so it
   works with no messenger. Its two model calls (next step, a start) go through the reader's provider

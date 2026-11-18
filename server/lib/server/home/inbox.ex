@@ -19,7 +19,7 @@ defmodule Server.Home.Inbox do
   is the reminder said last. A reminder that repeats is put off to its next time when done, and
   moves on to it by itself when it was never answered. What the home organizes by itself
   (`Server.Home.Organize`: a project's next step, waiting-ons, the weekly review at `home_review_on`
-  and the daily list's offer of a smaller start) is said in the same chat with its choices under it, and
+  and the offer of a smaller start after the daily list) is said in the same chat with its choices under it, and
   is answered by a tap or, for a project's next step, by typing it. "What now" is answered with one
   open thing and Done, Something else and Not today under it (`Server.Home.Now`). Off unless `TLON_START_HOME_INBOX=1` (`:start_home_inbox`), which the service alone
   sets: a second node polling the same bot would take the operator's messages from it. With no token
@@ -40,6 +40,13 @@ defmodule Server.Home.Inbox do
   @nudges 6
   @kept ["reminder", "todo", "note", "project", "waiting"]
   @done ["done", "did it", "did that"]
+
+  @doc "Offer the smaller start `start` for the to-do `id` in the chat, once the model has written it."
+  @spec shrink_offered(integer(), String.t(), DateTime.t()) :: :ok
+  def shrink_offered(id, start, now) do
+    if GenServer.whereis(__MODULE__), do: GenServer.cast(__MODULE__, {:shrink, id, start, now})
+    :ok
+  end
 
   @callback_limit 64
 
@@ -236,6 +243,19 @@ defmodule Server.Home.Inbox do
         tell_ask(messenger.name(), Server.OperatorConfig.setting("home_chat"), &messenger.say/3, id)
       end)
     end
+
+    {:noreply, state}
+  end
+
+  def handle_cast({:shrink, id, start, now}, %{messenger: messenger} = state) do
+    guarded(:ok, fn ->
+      {chat, say} =
+        if Map.has_key?(state, :offset),
+          do: {Server.OperatorConfig.setting("home_chat"), &messenger.say/3},
+          else: {"", nil}
+
+      Organize.offer_shrink(messenger.name(), id, start, chat, say, now)
+    end)
 
     {:noreply, state}
   end
@@ -465,16 +485,13 @@ defmodule Server.Home.Inbox do
   defp past?(_time, _never), do: false
 
   defp said(via, chat, say, now, today) do
-    offer = Organize.shrink(via, now)
+    Organize.shrink(via, now)
 
     with true <- chat != "",
-         {text, opts} <- via |> digest(now) |> offered(offer) do
+         {text, opts} <- digest(via, now) do
       say.(chat, "Before you clock out:\n\n" <> text, opts)
     end
 
     today
   end
-
-  defp offered(nil, _offer), do: nil
-  defp offered(base, offer), do: join(base, offer)
 end
