@@ -7,7 +7,6 @@ const Props := preload("res://props.gd")
 const COLD_C := 8.0
 const WINTER := [11, 12, 1, 2]
 const BARS := 22
-const BOX := Rect2(13.0, 38.0, 9.0, 13.0)
 const SCALE := [0, 2, 4, 7, 9, 12, 14]
 
 var _hw: WeakRef
@@ -97,12 +96,18 @@ func puff() -> void:
 
 
 # over the sprite: an unlit fire is a dark firebox
-func dress(c: CanvasItem, at: Vector2, k: int) -> void:
-	if not lit:
-		c.draw_rect(Rect2(at + BOX.position * k, BOX.size * k), Color("1c1820"))
-		c.draw_rect(
-			Rect2(at + (BOX.position + Vector2(1, 9)) * k, Vector2(6, 2) * k), Color("3a3430")
-		)
+func dress(c: CanvasItem, at: Vector2, k: int, id: String) -> void:
+	if lit:
+		return
+	var flip := "nw" not in id
+	var quad := func(pts: Array, col: Color) -> void:
+		var out := PackedVector2Array()
+		for p in pts:
+			out.append(at + Vector2(32.0 - p.x if flip else p.x, p.y) * k)
+		c.draw_colored_polygon(out, col)
+	quad.call([Vector2(12, 42), Vector2(16, 44), Vector2(16, 54), Vector2(12, 52)], Color("1c1820"))
+	quad.call([Vector2(12, 51), Vector2(16, 53), Vector2(16, 54), Vector2(12, 52)], Color("6e6a70"))
+	quad.call([Vector2(13, 49), Vector2(16, 51), Vector2(16, 53), Vector2(13, 51)], Color("5a4636"))
 
 
 func draw_over(c: CanvasItem) -> void:
