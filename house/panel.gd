@@ -16,6 +16,7 @@ const MONTHS := [
 ]
 
 const GOOD := Color("8fd18a")
+const Card := preload("res://card.gd")
 
 var _title: Label
 var _door: Button
@@ -287,7 +288,7 @@ func _when(thing: Dictionary) -> String:
 	if thing.get("due_at") != null:
 		parts.append(_local(str(thing["due_at"])))
 	if thing.get("every") != null:
-		parts.append("every " + str(thing["every"]))
+		parts.append(Card.every_words(str(thing["every"])))
 	return "  -  ".join(parts)
 
 

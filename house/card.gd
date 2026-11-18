@@ -49,36 +49,54 @@ static func month_info(year: int, month: int) -> Dictionary:
 	return {"first": wd, "days": days_in(year, month)}
 
 
+# {"n", "unit"} of an `every` the server sends ("week", "6 week"), {} for anything else
+static func parse_every(every: String) -> Dictionary:
+	var parts := every.strip_edges().split(" ", false)
+	if parts.is_empty() or parts.size() > 2 or parts[-1] not in ["day", "week", "month"]:
+		return {}
+	var n := 1 if parts.size() == 1 else (int(parts[0]) if parts[0].is_valid_int() else 0)
+	return {} if n < 1 else {"n": n, "unit": parts[-1]}
+
+
+# "every week", "every other week", "every 6 weeks", "every 3 months"
+static func every_words(every: String) -> String:
+	var e := parse_every(every)
+	if e.is_empty():
+		return "every " + every
+	if e["n"] == 1:
+		return "every " + e["unit"]
+	return "every other " + e["unit"] if e["n"] == 2 else "every %d %ss" % [e["n"], e["unit"]]
+
+
 # the times (unix, local) a reminder falls on in [from, to): its due time, and for a repeating one
-# every day, week or month after it
+# every N days, weeks or months after it (a monthly one on its day, clamped in short months)
 static func occurrences(due: float, every: String, from: float, to: float) -> Array:
 	var out: Array = []
-	match every:
-		"day", "week":
-			var step := 86400.0 if every == "day" else 604800.0
-			var at := due
-			if at < from:
-				at += ceilf((from - at) / step) * step
-			while at < to:
+	var e := parse_every(every)
+	if e.is_empty():
+		if due >= from and due < to:
+			out.append(due)
+		return out
+	var n: int = e["n"]
+	if e["unit"] == "month":
+		var d := Time.get_datetime_dict_from_unix_time(int(due))
+		var base: int = int(d["year"]) * 12 + int(d["month"]) - 1
+		for k in 1200:
+			var y: int = (base + k * n) / 12
+			var m: int = (base + k * n) % 12 + 1
+			var at := unix(y, m, mini(int(d["day"]), days_in(y, m)), d["hour"], d["minute"])
+			if at >= to:
+				break
+			if at >= from:
 				out.append(at)
-				at += step
-		"month":
-			var d := Time.get_datetime_dict_from_unix_time(int(due))
-			var y: int = d["year"]
-			var m: int = d["month"]
-			for _i in 1200:
-				var at := unix(y, m, mini(int(d["day"]), days_in(y, m)), d["hour"], d["minute"])
-				if at >= to:
-					break
-				if at >= due and at >= from:
-					out.append(at)
-				m += 1
-				if m > 12:
-					m = 1
-					y += 1
-		_:
-			if due >= from and due < to:
-				out.append(due)
+		return out
+	var step := 86400.0 * n * (7 if e["unit"] == "week" else 1)
+	var at := due
+	if at < from:
+		at += ceilf((from - at) / step) * step
+	while at < to:
+		out.append(at)
+		at += step
 	return out
 
 
