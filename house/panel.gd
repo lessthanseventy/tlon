@@ -5,6 +5,8 @@ signal door_pressed
 signal opened(id: int)
 signal now_cleared
 signal timer_pressed(what: String)
+signal add_pressed
+signal now_pressed
 
 const INK := Color("f1e9dc")
 const QUIET := Color("a89fb0")
@@ -20,6 +22,7 @@ const Card := preload("res://card.gd")
 
 var _title: Label
 var _door: Button
+var _acts: HBoxContainer
 var _box: VBoxContainer
 var _status: Label
 var _last := ""
@@ -51,6 +54,16 @@ func _ready() -> void:
 	_door.pressed.connect(func(): door_pressed.emit())
 	head.add_child(_door)
 	outer.add_child(head)
+	_acts = HBoxContainer.new()
+	_acts.add_theme_constant_override("separation", 6)
+	for pair in [["add  (I)", add_pressed], ["what now?  (H)", now_pressed]]:
+		var b := Button.new()
+		b.text = pair[0]
+		b.focus_mode = Control.FOCUS_NONE
+		b.add_theme_font_size_override("font_size", 14)
+		b.pressed.connect(func() -> void: (pair[1] as Signal).emit())
+		_acts.add_child(b)
+	outer.add_child(_acts)
 	_status = _label("can't reach tlon", 13, QUIET)
 	_status.visible = false
 	outer.add_child(_status)
@@ -143,6 +156,7 @@ func _process(_dt: float) -> void:
 func set_room(room: String, door_text: String) -> void:
 	_title.text = "the " + room
 	_door.text = door_text
+	_acts.visible = room == "home"
 	_last = ""
 
 

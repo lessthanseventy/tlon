@@ -13,6 +13,7 @@ const WAITING_SHOWN := 5
 const DecorateScript := preload("res://decorate.gd")
 const WIDGET_SIZE := Vector2i(656, 432)
 const WIDGET_STORE := "user://house_widget.json"
+const FormScript := preload("res://form.gd")
 
 var pets_retry := 20.0
 var pets_every := 300.0
@@ -24,6 +25,10 @@ var _shot := ""
 var _base := "http://127.0.0.1:4040"
 
 var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": null}
+var _form: PanelContainer
+var _skip: Array = []
+var _again := false
+var _demo_ids := 1000
 var _jot: PanelContainer
 var _closet: Control
 var _decorate: Control
@@ -85,6 +90,8 @@ func _ready() -> void:
 	_panel.opened.connect(func(id: int) -> void: _room.home.open_item_menu(id))
 	_panel.now_cleared.connect(func() -> void: _room.home.focus.clear())
 	_panel.timer_pressed.connect(_on_timer)
+	_panel.add_pressed.connect(_add_thing)
+	_panel.now_pressed.connect(_what_now)
 	add_child(_panel)
 	_decorate = DecorateScript.new()
 	_decorate.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
@@ -109,6 +116,14 @@ func _ready() -> void:
 	_closet = preload("res://closet.gd").new()
 	_closet.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_closet)
+	_form = FormScript.new()
+	_form.submitted.connect(
+		func(req: Dictionary) -> void: _write(req["path"], req["body"], _form.finish)
+	)
+	_form.acted.connect(func(id: int, what: String) -> void: _act(id, what, _form.finish))
+	add_child(_form)
+	_room.home.things.form_wanted.connect(_open_form)
+	_room.home.things.post.connect(func(path: String, body: Dictionary) -> void: _write(path, body))
 
 	if _demo:
 		var demo: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://demo.json"))
@@ -196,6 +211,11 @@ func _ready() -> void:
 					_jot.sending(true)
 		)
 
+	if "--form" in args:
+		var form_spec: String = args[args.find("--form") + 1]
+		get_tree().create_timer(0.4).timeout.connect(func() -> void: _stage_form(form_spec))
+	if "--what-now" in args:
+		get_tree().create_timer(0.4).timeout.connect(_what_now)
 	if _shot != "":
 		var wait := float(args[args.find("--wait") + 1]) if "--wait" in args else 1.5
 		await get_tree().create_timer(wait).timeout
@@ -227,14 +247,22 @@ func _add_note(preset: Control.LayoutPreset, text: String) -> void:
 	add_child(l)
 
 
-func _apply(data: Dictionary) -> void:
-	_data = {
-		"open": data.get("open", []),
-		"coming": data.get("coming", []),
-		"notes": data.get("notes", []),
-		"done_week": data.get("done_week", 0),
-		"done": data.get("done"),
+static func _home_data(d: Dictionary) -> Dictionary:
+	return {
+		"open": d.get("open", []),
+		"coming": d.get("coming", []),
+		"notes": d.get("notes", []),
+		"done_week": d.get("done_week", 0),
+		"done": d.get("done"),
+		"waiting": d.get("waiting", []),
+		"someday": d.get("someday", []),
+		"projects": d.get("projects", []),
+		"note_rows": d.get("note_rows", []),
 	}
+
+
+func _apply(data: Dictionary) -> void:
+	_data = _home_data(data)
 	_room.home.set_data(_data)
 	var ids: Array = []
 	for t in _data["open"]:
@@ -258,7 +286,7 @@ func _toggle() -> void:
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
-	if _closet.visible or _jot.visible or event.ctrl_pressed or event.alt_pressed:
+	if _closet.visible or _jot.visible or _form.visible or event.ctrl_pressed or event.alt_pressed:
 		return
 	if event.keycode == KEY_TAB:
 		get_viewport().set_input_as_handled()
@@ -285,6 +313,14 @@ func _input(event: InputEvent) -> void:
 			if _at == "home":
 				get_viewport().set_input_as_handled()
 				_open_closet()
+		KEY_I:
+			if _at == "home":
+				get_viewport().set_input_as_handled()
+				_add_thing()
+		KEY_H:
+			if _at == "home":
+				get_viewport().set_input_as_handled()
+				_what_now()
 		KEY_W:
 			get_viewport().set_input_as_handled()
 			_set_widget(not _widget)
@@ -298,6 +334,13 @@ func _process(_dt: float) -> void:
 	_room.home.jot_open = _jot.visible
 	_room.home.closet_open = _closet.visible
 	_room.home.decorating = _decorate.active
+	if _form.visible and _form_blocked():
+		_form.close()
+	_room.home.form_open = _form.visible
+	if _form.visible:
+		var room_w := size.x - (0 if _widget else PANEL_WIDTH)
+		_form.size = _form.get_combined_minimum_size()
+		_form.position = ((Vector2(room_w, size.y) - _form.size) / 2.0).round()
 	var at_mouse := _room.get_local_mouse_position()
 	_room.home.eggs.set_laser(
 		_at == "home"
@@ -334,6 +377,98 @@ func _set_decorate(on: bool) -> void:
 		_decorate.enter()
 	else:
 		_decorate.leave()
+
+
+func _form_blocked() -> bool:
+	var h = _room.home
+	return _jot.visible or _closet.visible or _decorate.active or h.menu.is_open or h.rhythm.kind != ""
+
+
+# mode "new" (a preset for the form) or "edit" ({row, due}); false when something else is up
+func _open_form(mode: String, spec: Dictionary) -> bool:
+	if _at != "home" or _widget or _form_blocked():
+		return false
+	var home = _room.home
+	home.close_card()
+	var today: Dictionary = home.things.today()
+	if mode == "edit":
+		_form.open_edit(spec["row"], spec["due"], today)
+	else:
+		_form.open_new(spec, today)
+	home.form_open = true
+	return true
+
+
+func _add_thing() -> void:
+	_open_form("new", {"kinds": ["todo", "reminder", "note", "waiting", "project"]})
+
+
+func _what_now() -> void:
+	_skip = []
+	_ask_now()
+
+
+func _ask_now() -> void:
+	if _demo:
+		var rows: Array = _data["open"].filter(func(t): return not _skip.has(int(t["id"])))
+		var pick: Variant = rows[0].duplicate() if not rows.is_empty() else null
+		if pick != null:
+			pick["why"] = "it has sat the longest"
+		_show_pick(pick, "nothing open")
+		return
+	var req := HTTPRequest.new()
+	req.timeout = 8.0
+	add_child(req)
+	var query := "" if _skip.is_empty() else "?skip=" + ",".join(_skip.map(str))
+	req.request_completed.connect(
+		func(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+			req.queue_free()
+			var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+			if result == HTTPRequest.RESULT_SUCCESS and code == 200 and parsed is Dictionary:
+				_show_pick(parsed.get("pick"), str(parsed.get("say", "")))
+			else:
+				_trouble(_why(result == HTTPRequest.RESULT_SUCCESS, code, parsed))
+	)
+	if req.request(_base + "/api/home/now" + query) != OK:
+		req.queue_free()
+		_trouble(_why(false, 0, null))
+
+
+func _show_pick(pick: Variant, say: String) -> void:
+	if pick == null:
+		_skip = []
+	_room.home.show_pick(pick if pick is Dictionary else {}, say)
+
+
+# `--form KIND;key=value;...` or `--form edit:ID;...` (keys: kinds text who steps date time every
+# error), for a picture
+func _stage_form(spec: String) -> void:
+	var parts := spec.split(";")
+	var kv := {}
+	for p in parts.slice(1):
+		kv[p.get_slice("=", 0)] = p.substr(p.find("=") + 1)
+	var today: Dictionary = _room.home.things.today()
+	var fill := {}
+	for k in ["text", "who", "steps", "time", "every"]:
+		if kv.has(k):
+			fill[k] = str(kv[k]).replace("\\n", "\n")
+	if kv.has("date"):
+		var d := str(kv["date"]).split("-")
+		fill["date"] = {
+			"y": int(d[0]) if d.size() == 3 else int(today["y"]),
+			"m": int(d[-2]),
+			"d": int(d[-1])
+		}
+	if parts[0].begins_with("edit:"):
+		var home = _room.home
+		var row: Dictionary = home.things.find(int(parts[0].substr(5)))
+		_open_form("edit", {"row": row, "due": home._due(row) if row.get("due_at") != null else -1.0})
+	else:
+		var preset := {"kinds": str(kv.get("kinds", parts[0])).split(",")}
+		_open_form("new", preset)
+	_form.fill(fill)
+	if kv.has("error"):
+		_form.fail(kv["error"])
 
 
 func _open_closet() -> void:
@@ -377,9 +512,24 @@ func _set_widget(on: bool) -> void:
 
 
 func _on_act(id: int, what: String) -> void:
+	_act(id, what)
+
+
+# `ok` runs once the server has said yes
+func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 	match what:
 		"done":
-			_on_ticked(id)
+			_write("/api/home/%d/done" % id, {}, _then(ok, func() -> void: _remove(id)))
+		"delete":
+			_write("/api/home/%d/drop" % id, {}, _then(ok, func() -> void: _gone(id)))
+		"revive":
+			_write("/api/home/%d/revive" % id, {}, ok)
+		"nottoday":
+			var close := func() -> void: _room.home.close_card()
+			_write("/api/home/%d/answer" % id, {"choice": "nottoday"}, _then(ok, close))
+		"else":
+			_skip.append(id)
+			_ask_now()
 		"hour", "tomorrow":
 			_later(id, what)
 		"now":
@@ -395,6 +545,95 @@ func _on_act(id: int, what: String) -> void:
 		"jot":
 			_jot.open()
 
+
+func _then(first: Callable, second: Callable) -> Callable:
+	return func() -> void:
+		second.call()
+		if first.is_valid():
+			first.call()
+
+
+# A change the server keeps. It answers yes (the room is read again at once, `ok` runs) or a line
+# for `_trouble`; asking the server nothing in the demo.
+func _write(path: String, body: Dictionary, ok: Callable = Callable()) -> void:
+	if _demo:
+		_demo_write(path, body)
+		if ok.is_valid():
+			ok.call()
+		return
+	_post(
+		path,
+		body,
+		func(reached: bool, code: int, parsed: Variant) -> void:
+			_panel.set_reachable(reached)
+			if reached:
+				_refresh()
+			if reached and code == 200:
+				if ok.is_valid():
+					ok.call()
+			else:
+				_trouble(_why(reached, code, parsed))
+	)
+
+
+static func _why(reached: bool, code: int, parsed: Variant) -> String:
+	if not reached:
+		return "couldn't reach tlon - nothing was changed"
+	if code == 400 and parsed is Dictionary and parsed.get("error") is String:
+		return parsed["error"]
+	if code == 404:
+		return "that one is not there any more"
+	return "tlon answered %d" % code
+
+
+# one line where he is looking: the form, else the open card, else a slip
+func _trouble(line: String) -> void:
+	if _form.visible:
+		_form.fail(line)
+	elif _room.home.card.is_open():
+		_room.home.things.flash = line
+	else:
+		_room.home.show_reply(line)
+
+
+# read the room again now; one already on its way may have started before the change
+func _refresh() -> void:
+	if _demo or _at != "home":
+		return
+	if _busy:
+		_again = true
+	else:
+		_poll()
+
+
+func _gone(id: int) -> void:
+	for key in ["open", "coming", "waiting", "someday", "projects"]:
+		_data[key] = _data[key].filter(func(t): return int(t["id"]) != id)
+	_data["note_rows"] = _data["note_rows"].filter(func(t): return int(t["id"]) != id)
+	if _room.home.card.kind == "pick":
+		_room.home.close_card()
+	_apply(_data)
+
+
+func _demo_write(path: String, body: Dictionary) -> void:
+	var parts := path.split("/")
+	if path == "/api/home/add":
+		_demo_ids += 1
+		var row := {"id": _demo_ids, "kind": body["kind"], "text": body["text"], "due_at": null}
+		row["every"] = body.get("every")
+		if body["kind"] == "note":
+			_data["notes"] = [body["text"]] + _data["notes"]
+			_data["note_rows"] = [{"id": _demo_ids, "text": body["text"]}] + _data["note_rows"]
+		elif body["kind"] == "reminder":
+			var bias := float(Time.get_time_zone_from_system()["bias"]) * 60.0
+			var utc := Time.get_unix_time_from_datetime_string(str(body["at"])) - bias
+			row["due_at"] = Time.get_datetime_string_from_unix_time(int(utc)) + "Z"
+			_data["coming"] = _data["coming"] + [row]
+		elif body["kind"] == "todo":
+			_data["open"] = _data["open"] + [row]
+		_apply(_data)
+	elif parts.size() == 5 and parts[4] == "drop":
+		_gone(int(parts[3]))
 
 func _on_timer(what: String) -> void:
 	var f: RefCounted = _room.home.focus
@@ -446,6 +685,7 @@ func _later(id: int, until: String) -> void:
 			_moved(id, due + "Z")
 		else:
 			_panel.set_reachable(code > 0)
+			_trouble(_why(code > 0, code, body))
 			_apply(_data)
 	if _demo:
 		moved.call(true, 200, null)
@@ -538,19 +778,16 @@ func _poll() -> void:
 
 func _on_polled(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_busy = false
+	if _again:
+		_again = false
+		_poll.call_deferred()
 	var polled := _inflight
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if code == 200 else null
 	var ok: bool = result == HTTPRequest.RESULT_SUCCESS and parsed is Dictionary
 	_reach[polled] = ok
 	if ok:
 		if polled == "home":
-			_data = {
-				"open": parsed.get("open", []),
-				"coming": parsed.get("coming", []),
-				"notes": parsed.get("notes", []),
-				"done_week": parsed.get("done_week", 0),
-				"done": parsed.get("done"),
-			}
+			_data = _home_data(parsed)
 		else:
 			_office = parsed
 			_room.home.set_weather(parsed.get("weather"))
@@ -671,26 +908,7 @@ func _asks(t: Dictionary) -> String:
 
 
 func _on_ticked(id: int) -> void:
-	if _demo:
-		_remove(id)
-		return
-	var req := HTTPRequest.new()
-	add_child(req)
-	req.request_completed.connect(
-		func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
-			req.queue_free()
-			if result == HTTPRequest.RESULT_SUCCESS and code == 200:
-				_remove(id)
-			else:
-				_panel.set_reachable(result == HTTPRequest.RESULT_SUCCESS)
-				_apply(_data)
-	)
-	req.request(
-		_base + "/api/home/%d/done" % id,
-		["Content-Type: application/json"],
-		HTTPClient.METHOD_POST,
-		"{}"
-	)
+	_act(id, "done")
 
 
 func _slow_poll() -> void:

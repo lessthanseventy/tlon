@@ -51,11 +51,20 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   readable size; hover keeps the small tooltip and the pointing hand. One at a time: Esc, a click
   outside, or a click on another thing closes it (the same thing again too); none opens while a menu,
   the notepad, the closet, decorate mode or the day's slip is up, and one open closes when they do.
-  Calendar: the month grid with a dot on each day a reminder falls (a repeating one on each of its days)
-  and the next five coming up (day, time, text, "every week"). Jar: the count, and the names newest
+  Calendar: the month grid with a dot on each day a reminder falls (a repeating one on each of its days,
+  `every` being `day|week|month` or `"N unit"`, worded "every other week", "every 6 weeks"), today
+  marked, `<` `>` (and the arrow keys) for the month and a click on its name for today's; a click on a
+  day lists that day's things and an "add" button; the next five coming up when no day is picked.
+  A click on a thing opens its form. A quiet "today is my birthday" line shows only while no birthday
+  is set (the file's `birthday` wins; on the day the card says so). Jar: the count, and the names newest
   first when the status has `done` (`[{text, done_at}]`; ten shown). Window: the weather in words
   and `°C (°F)`. Clock (a `clock` piece on a wall): the time and date, the next reminder and how long
-  ("in 2 h 10 min"). Board: every note, five a page with `<` `>`. Plant: when a repeating reminder
+  ("in 2 h 10 min"), and timers: in 10 min / 30 min / 1 h make a reminder "timer" at once, "named..."
+  opens its form. Board (`things.gd`, tabs): Notes (five a page, "add a note", an `x` that asks "sure?"
+  once), Projects (each with its open step and the plan; a project's page has Done/Delete on the open
+  step, the planned steps with up/down/remove, the steps done dimmed, "add a step", "finish project",
+  Delete asking twice, "new project"), Waiting (who and how long, "got it", `x`, "add") and Someday
+  ("bring back", `x`). Plant: when a repeating reminder
   that mentions water or the plant is next due, else a plain line. TV: the screen hack playing and a
   Next (or Turn on) button; no play state, no media titles. The pets' bowls and bed have none.
 - **Argos celebrates** every done thing: runs to the desk and hops, with a line. He greets the person
@@ -107,7 +116,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   apart on the seeded dice, only in the weather and hour that suit it; `--egg bird|balloon|plane|nightcat|star|fireworks`
   (use `--at 23:00` for the night ones).
 - **Finds** (`finds.gd`): a birthday (`user://house_settings.json` `{"birthday":"MM-DD"}`, set by the calendar
-  card's button; `--birthday` forces it) puts a cake on the table; a click on a book gives a Borges card in
+  card's quiet line while none is set; `--birthday` forces it) puts a cake on the table; a click on a book gives a Borges card in
   Nina's or Argos's voice (the `muse` lines, built-in fallback); a mouse leaves its hole on a quiet night
   (`--egg mouse`) and flees a pet or a click; the snow globe shakes on a click. The "found" card (`--egg found`,
   click the mouse hole) says only "N of M found"; `eggs.CATALOGUE` is the list, `user://house_found.json`
@@ -163,8 +172,22 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   for a few seconds. A server that does not answer says "couldn't reach tlon — not kept" and keeps
   the text in the field.
 - **Acting on a thing**: click a sticky, a panel row, or a stack (which asks "which one?") for a paper
-  menu: Done (the crumple), In an hour, Tomorrow (the paper flies to the wall calendar), Now.
-  The panel's tick circle still ticks.
+  menu: Done (the crumple), In an hour, Tomorrow (the paper flies to the wall calendar), Now, Delete.
+  The panel's tick circle still ticks. Delete asks nothing of a one-off; a repeating reminder or a
+  project asks again on the same button ("Delete for good?", 4 s, `sure.gd`).
+- **Forms** (`form.gd`, `things.gd`): `I` or the panel's "add" opens the paper form: to-do, reminder,
+  note, waiting-on or project; a reminder has a date (a month grid), a time (typed `HH:MM`, default
+  09:00, chips morning/noon/evening) and a repeat (once, every day/week/month, or every N day/week/month).
+  The calendar's day and its things, the clock's named timer, the board and its tabs open it too, and a
+  thing is changed the same way (to-do or reminder, text, date, time, repeat; Done, Delete, "Stop
+  repeating"). Enter saves (Ctrl+Enter in the project's steps), Esc cancels, Tab moves between fields.
+  One at a time, never over the notepad, closet, decorate mode, a menu or the day's slip (they close
+  it); the room ignores clicks while it is up. A refused request (the server's 400 line, 404, no
+  answer) is said on the form, which stays as typed; after any change the room is read again at once.
+  Local times go to the server without a zone. `H` or the panel's "what now?" asks `GET /api/home/now`
+  and shows the pick on a slip: Done, Something else (the skip list grows), Not today
+  (`POST /api/home/:id/answer` `nottoday`), Delete. In `--demo` nothing is sent: adds and deletes only
+  change what is on screen.
 - **The phone** on the desk buzzes with a ring mark while an open reminder has `told_at` (the server
   has nudged it); the window asks for attention once per reminder; click it for that reminder's menu.
 - **Now** pins one open thing: large above the monitor and as a card on top of the panel, with a
@@ -198,8 +221,10 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 - **It talks to the server only over the operator API**, on `TLON_URL` (default
   `http://127.0.0.1:4040`): the room in view is polled every 5 s — `GET /api/home` (rows carry
   `since` and `told_at`; `done_week` fills the jar, an optional `done` list names what was done) or `GET /api/office` —
-  and posts `POST /api/home/:id/done`, `POST /api/home/:id/later` (`{"until": "hour"|"tomorrow"}`)
-  and `POST /api/home` (`{"text"}` → `{"reply"}`, slow: a model reads it). The home also asks
+  (`GET /api/home` also carries `waiting`, `someday`, `projects` and `note_rows`) and posts
+  `POST /api/home/:id/done`, `.../later` (`{"until": "hour"|"tomorrow"}`), `.../drop`, `.../revive`,
+  `.../edit`, `.../plan`, `.../answer`, `POST /api/home/add`, asks `GET /api/home/now?skip=`, and
+  `POST /api/home` (`{"text"}` → `{"reply"}`, slow: a model reads it). The home also asks
   `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). The house has no local reads: it talks only to the server. A server that does not answer leaves the
   last data on screen and a quiet line saying so; a post that fails moves nothing.
 - **Rooms.** The window starts in the home, or the office with `--office`. The door in each room, its
@@ -219,7 +244,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   this is not part of `mise run check`.
 - `mise run house:soak` — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, and the POST and GET routes against a local stub. Stdout ends `SOAK OK`.
+  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats). Stdout ends `SOAK OK`.
 
 ## Verify
 
@@ -240,7 +265,7 @@ and seeds their dice (`--seed N` to pick another):
 - `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a card, a
   name tag or a pat can be photographed without a pointer.
 - `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--wave "text"` a coworker at the door; `--plane "title"` a landed plane; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--visitor` feed the demo office to the door; `--person
-  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--card calendar|jar|weather|clock|board|plant|tv` opens that card at 0.45 s; `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
+  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--card calendar|jar|weather|clock|board|plant|tv` opens that card at 0.45 s (`calendar:DAY[:MONTHS_AHEAD]`, `board:projects|waiting|someday[:PROJECT_ID]`); `--form "KIND;key=value;..."` opens a form at 0.4 s (`todo reminder note waiting project`, or `edit:ID`; keys `kinds text who steps date time every error`, `date` as `MM-DD` or `YYYY-MM-DD`, `steps` lines split by `\n`); `--what-now` the slip; `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
   "text"` opens the jot field (`--sending` shows the scribble); `--reply "text"` the reply slip;
   `--menu ID` the paper menu on thing ID; `--ring ID` rings the phone for thing ID; `--now
   ID[:MINUTES[:DONE_FRACTION]]` pins thing ID with a running timer (nothing saved); `--widget`;

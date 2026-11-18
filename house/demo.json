@@ -122,10 +122,22 @@
   },
   "done_week": 4,
   "done": [
-    {"text": "return the library book", "done_at": "2026-11-17T08:05:00Z"},
-    {"text": "email Sam the invoice", "done_at": "2026-11-16T19:40:00Z"},
-    {"text": "book the dentist", "done_at": "2026-11-16T10:15:00Z"},
-    {"text": "renew the car insurance", "done_at": "2026-11-15T14:30:00Z"}
+    {
+      "text": "return the library book",
+      "done_at": "2026-11-17T08:05:00Z"
+    },
+    {
+      "text": "email Sam the invoice",
+      "done_at": "2026-11-16T19:40:00Z"
+    },
+    {
+      "text": "book the dentist",
+      "done_at": "2026-11-16T10:15:00Z"
+    },
+    {
+      "text": "renew the car insurance",
+      "done_at": "2026-11-15T14:30:00Z"
+    }
   ],
   "open": [
     {
@@ -276,5 +288,106 @@
         "prompt": null
       }
     ]
-  }
+  },
+  "note_rows": [
+    {
+      "id": 31,
+      "text": "wifi at mom's is on the fridge"
+    },
+    {
+      "id": 32,
+      "text": "the good pen is in the blue drawer"
+    },
+    {
+      "id": 33,
+      "text": "Sam prefers texts to calls"
+    },
+    {
+      "id": 34,
+      "text": "library card number ends 4417"
+    }
+  ],
+  "waiting": [
+    {
+      "id": 41,
+      "kind": "waiting",
+      "text": "the signed lease",
+      "who": "Dana",
+      "due_at": null,
+      "every": null,
+      "since": "2026-11-12T10:00:00Z",
+      "told_at": null,
+      "project": null
+    },
+    {
+      "id": 42,
+      "kind": "waiting",
+      "text": "a quote for the fence",
+      "who": "Okafor Fencing",
+      "due_at": null,
+      "every": null,
+      "since": "2026-11-16T10:00:00Z",
+      "told_at": null,
+      "project": null
+    }
+  ],
+  "someday": [
+    {
+      "id": 51,
+      "kind": "todo",
+      "text": "learn to bake sourdough",
+      "due_at": null,
+      "every": null,
+      "since": "2026-10-01T10:00:00Z",
+      "told_at": null,
+      "project": null
+    },
+    {
+      "id": 52,
+      "kind": "todo",
+      "text": "repaint the hallway",
+      "due_at": null,
+      "every": null,
+      "since": "2026-09-01T10:00:00Z",
+      "told_at": null,
+      "project": null
+    }
+  ],
+  "projects": [
+    {
+      "id": 61,
+      "kind": "project",
+      "text": "Move to the new flat",
+      "since": "2026-11-01T10:00:00Z",
+      "next": {
+        "id": 62,
+        "text": "book the van"
+      },
+      "done": 2,
+      "plan": [
+        "pack the books",
+        "change the address",
+        "clean the old place"
+      ],
+      "steps_done": [
+        "sign the lease",
+        "measure the rooms"
+      ]
+    },
+    {
+      "id": 63,
+      "kind": "project",
+      "text": "Tax return",
+      "since": "2026-11-10T10:00:00Z",
+      "next": {
+        "id": 64,
+        "text": "find the P60"
+      },
+      "done": 0,
+      "plan": [
+        "fill in the form"
+      ],
+      "steps_done": []
+    }
+  ]
 }
