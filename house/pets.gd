@@ -657,8 +657,11 @@ func _toy_dest(from: Vector2, dir: int) -> Vector2:
 			step = Vector2(0, -1)
 	for dist in [2.0, 1.0, 3.0]:
 		var p: Vector2 = from + step * float(dist)
-		if not _blocked(_cell_of(p)) and p.x >= 1.0 and p.y >= 1.0 and p.x < COLS and p.y < ROWS:
-			return _center(_cell_of(p))
+		var to := _cell_of(p)
+		var inside := p.x >= 1.0 and p.y >= 1.0 and p.x < COLS and p.y < ROWS
+		# a hop clears furniture, but a toy never lands where nobody can walk to it
+		if inside and not _blocked(to) and not route(_cell_of(from), to).is_empty():
+			return _center(to)
 	return from
 
 

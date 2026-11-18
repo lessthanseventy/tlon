@@ -874,7 +874,7 @@ func _tv_logic() -> void:
 	_check(frozen.t == 0.0, "an off TV runs no clock")
 
 
-func _room() -> Control:
+func _room(seed_value: int = 7) -> Control:
 	var room: Control = load("res://room.gd").new()
 	room.art_dir = _art()
 	root.add_child(room)
@@ -884,6 +884,9 @@ func _room() -> Control:
 	h.rhythm.persist = false
 	h.rhythm.days = {"home": "", "morning": ""}
 	h.pets.freeze = false
+	h.pets.rng.seed = seed_value
+	h.person.rng.seed = seed_value + 1
+	h.knock._rng.seed = seed_value + 2
 	h.layout.setup(room._index, room.art_found, "", false)
 	h.apply_layout()
 	return room
@@ -1324,7 +1327,8 @@ func _decorate_logic() -> void:
 		_check(accepted > 0, "random layout %d took some pieces" % n)
 
 	_decorate_files(rng)
-	_decorate_walk(rng)
+	_decorate_walk(2024)
+	_decorate_regressions()
 	_decorate_pointer()
 
 
@@ -1396,15 +1400,17 @@ func _decorate_files(rng: RandomNumberGenerator) -> void:
 	room.queue_free()
 
 
-func _decorate_walk(rng: RandomNumberGenerator) -> void:
-	var room := _room()
+func _decorate_walk(seed_value: int, limit: int = 24000) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var room := _room(seed_value)
 	var h = room.home
 	var adds := 0
 	var moves := 0
 	var removes := 0
 	var refused := 0
 	var steps := 0
-	while steps < 24000:
+	while steps < limit:
 		steps += 1
 		if steps % 600 == 1:
 			var items: Array = []
@@ -1439,14 +1445,15 @@ func _decorate_walk(rng: RandomNumberGenerator) -> void:
 			h.apply_layout()
 			_check(
 				l.reaches(h.pets.blocked_cells, h.busy_cells()),
-				"every spot stays reachable at step %d" % steps
+				"every spot stays reachable at step %d (seed %d): %s" % [steps, seed_value, _unreached(h)]
 			)
 		h.process(0.1)
 		var why := _walkers_ok(h)
 		if why != "":
 			_check(false, "%s at step %d" % [why, steps])
 			break
-	_check(adds > 20 and moves > 5 and removes > 5, "decorating happened: %d added, %d moved, %d removed, %d refused" % [adds, moves, removes, refused])
+	if limit >= 24000:
+		_check(adds > 20 and moves > 5 and removes > 5, "decorating happened: %d added, %d moved, %d removed, %d refused" % [adds, moves, removes, refused])
 	print("decorate: %d steps, %d added, %d moved, %d removed, %d refused" % [steps, adds, moves, removes, refused])
 	room.queue_free()
 
@@ -1516,3 +1523,37 @@ func _decorate_pointer() -> void:
 	_check(deco.sel == "", "right click with a piece chosen only lets go of it")
 	_check(deco.key(KEY_ESCAPE) and left[0], "Esc leaves the mode")
 	room.queue_free()
+
+
+# what `Layout.reaches` could not reach, for a failing message
+func _unreached(h) -> String:
+	var blocked: Dictionary = h.pets.blocked_cells
+	var seen := {Layout.DOOR_FRONT: true}
+	var queue: Array = [Layout.DOOR_FRONT]
+	while not queue.is_empty():
+		var cur: Vector2i = queue.pop_back()
+		for d in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]:
+			var n: Vector2i = cur + d
+			if seen.has(n) or blocked.has(n) or n.x < 1 or n.y < 1:
+				continue
+			if n.x >= Pets.COLS or n.y >= Pets.ROWS:
+				continue
+			seen[n] = true
+			queue.append(n)
+	var out: Array = []
+	for name in Pets.SPOTS:
+		if not seen.has(Pets.SPOTS[name]["cell"]):
+			out.append("spot " + name)
+	for c in h.pets.critters:
+		out.append("%s at %s mode %s jump %s" % [c.id, str(c.pos), c.mode, str(c.jump)])
+	for t in h.pets.toys:
+		out.append("toy at %s hop %s" % [str(t["pos"]), str(t["hop"])])
+	return "; ".join(out) + " | busy " + str(h.busy_cells())
+
+
+# seeds that once let a toy hop into a pocket no one can reach, and a small sweep besides
+func _decorate_regressions() -> void:
+	for s in [54, 10, 9]:
+		_decorate_walk(s, 6000)
+	for s in range(100, 106):
+		_decorate_walk(s, 3000)
