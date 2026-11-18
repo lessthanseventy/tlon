@@ -14,6 +14,7 @@ const Quirks := preload("res://quirks.gd")
 const Glow := preload("res://glow.gd")
 const Weather := preload("res://weather.gd")
 const Spells := preload("res://spells.gd")
+const Fonts := preload("res://fonts.gd")
 const SCALES := [1, 2, 3]
 const INTERIORS := "isometric-interiors/Gridwright Isometric Interiors/"
 
@@ -139,7 +140,7 @@ func _sound() -> void:
 
 
 func _looks() -> void:
-	for rel in Glow.files() + Weather.files() + Spells.files():
+	for rel in Glow.files() + Weather.files() + Spells.files() + Fonts.files():
 		_add(rel)
 
 

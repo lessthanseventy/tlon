@@ -6,6 +6,7 @@ extends RefCounted
 # a day "day:N"), {"t": "buttons", "items": [{"label", "act", "on"}]} (they wrap), {"t": "row",
 # "text", "act", "dim", "marks": [{"label", "act"}]}, {"t": "foot", "text", "act"}.
 const Props := preload("res://props.gd")
+const Fonts := preload("res://fonts.gd")
 const WIDTH := 330.0
 const PAD := 16.0
 const CELL := Vector2(40.0, 26.0)
@@ -238,9 +239,10 @@ func draw(c: CanvasItem, bounds: Rect2, anchor: Vector2, blocks: Array) -> void:
 	for b in blocks:
 		match b["t"]:
 			"title":
+				var title_font := Fonts.heading()
 				c.draw_string(
-					font,
-					Vector2(x, y + font.get_ascent(20)),
+					title_font,
+					Vector2(x, y + title_font.get_ascent(20)),
 					b["text"],
 					HORIZONTAL_ALIGNMENT_LEFT,
 					inner,

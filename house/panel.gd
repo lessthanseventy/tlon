@@ -8,6 +8,7 @@ signal timer_pressed(what: String)
 signal add_pressed
 signal now_pressed
 
+const Fonts := preload("res://fonts.gd")
 const INK := Color("f1e9dc")
 const QUIET := Color("a89fb0")
 const ACCENT := Color("e8b86d")
@@ -46,6 +47,7 @@ func _ready() -> void:
 
 	var head := HBoxContainer.new()
 	_title = _label("the home", 24, ACCENT)
+	_title.theme_type_variation = Fonts.HEADING
 	head.add_child(_title)
 	_door = Button.new()
 	_door.focus_mode = Control.FOCUS_NONE
@@ -244,7 +246,9 @@ func _heading(text: String) -> void:
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 10
 	_box.add_child(spacer)
-	_box.add_child(_label(text, 18, ACCENT))
+	var l := _label(text, 18, ACCENT)
+	l.theme_type_variation = Fonts.HEADING
+	_box.add_child(l)
 
 
 func _section(title: String, things: Array, empty: String, tickable: bool) -> void:

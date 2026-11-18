@@ -79,7 +79,7 @@ func _ready() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	add_child(col)
-	col.add_child(Paper.label("The phone", 18, Paper.INK))
+	col.add_child(Paper.heading("The phone", 18, Paper.INK))
 	_log = Log.new(self)
 	col.add_child(_log)
 	_note = Paper.label("", 13, Paper.QUIET)
