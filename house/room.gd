@@ -382,6 +382,8 @@ func _draw_furniture(origin: Vector2, f: Array) -> void:
 		return
 	var at: Vector2 = (_p(origin, f[1], f[2]) - s["anchor"]).round()
 	draw_texture(s["tex"], at)
+	if _desc == HOME:
+		home.furn(str(f[0]), s["tex"], at)
 	if _desc == HOME and str(f[0]).begins_with("clock_"):
 		home.register_sprite("clock", s["tex"], at)
 

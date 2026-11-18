@@ -14,6 +14,7 @@ const Layout := preload("res://layout.gd")
 const Decorate := preload("res://decorate.gd")
 const Closet := preload("res://closet.gd")
 const Card := preload("res://card.gd")
+const EggSoak := preload("res://soak_eggs.gd")
 
 var _srv := TCPServer.new()
 var _conns: Array = []
@@ -65,6 +66,7 @@ func _run() -> void:
 	_looks()
 	await _hacks_draw()
 	_card_logic()
+	EggSoak.new(self).run()
 	await _cards()
 	await _routes()
 	print("SOAK %s (%d failures)" % ["OK" if _failures.is_empty() else "FAILED", _failures.size()])
@@ -889,6 +891,10 @@ func _room(seed_value: int = 7) -> Control:
 	h.person.rng.seed = seed_value + 1
 	h.knock._rng.seed = seed_value + 2
 	h.tv.setup(seed_value + 3)
+	h.sound.persist = false
+	h.sound.muted = true
+	h.eggs.setup(h, seed_value + 4, false)
+	h.fake_day = "06-15"
 	h.layout.setup(room._index, room.art_found, "", false)
 	h.apply_layout()
 	return room
