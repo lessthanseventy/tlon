@@ -165,8 +165,8 @@ defmodule Server.Home.Pets do
     can see it): react to it sideways. No two lines may share a joke or an image, and do not lean on
     the examples in the descriptions below; invent.
 
-    NINA: #{describe(:nina, cast.nina)}
-    ARGOS: #{describe(:argos, cast.argos)}
+    NINA: #{describe(:nina, cast)}
+    ARGOS: #{describe(:argos, cast)}
     #{naming(cast)}
     MOST lines are pure personality: who they are, what they want, their opinions, their schemes,
     each other, a non sequitur. Only about one line in four may touch the home as it is now (an open
@@ -247,12 +247,20 @@ defmodule Server.Home.Pets do
     end)
   end
 
-  defp describe(:nina, %{name: "Nina", species: "cat", personality: "sassy"}), do: @nina
-  defp describe(:argos, %{name: "Argos", species: "dog", personality: "sweet"}), do: @argos
+  defp describe(:nina, cast) when cast == @defaults, do: @nina
+  defp describe(:argos, cast) when cast == @defaults, do: @argos
 
-  defp describe(_role, %{name: name, species: species, personality: personality}) do
+  defp describe(role, cast) do
+    pet = Map.fetch!(cast, role)
+    other = Map.fetch!(cast, if(role == :nina, do: :argos, else: :nina))
+
+    "called #{pet.name}, #{animal(pet)}. Let the animal show naturally. Shares the house with " <>
+      "#{other.name}, #{animal(other)}.\n#{Map.fetch!(@sketches, pet.personality)}"
+  end
+
+  defp animal(%{species: species}) do
     article = if String.starts_with?(species, ["a", "e", "i", "o", "u"]), do: "an", else: "a"
-    "called #{name}, #{article} #{species}. Let the animal show naturally.\n#{Map.fetch!(@sketches, personality)}"
+    "#{article} #{species}"
   end
 
   defp naming(cast) when cast == @defaults, do: ""
