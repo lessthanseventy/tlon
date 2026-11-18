@@ -30,6 +30,9 @@ const TelegramSoak := preload("res://soak_telegram.gd")
 const WeatherSoak := preload("res://soak_weather.gd")
 const DEADLINE_MS := 540000
 
+# what the stub of wttr.in (`?format=j1` on any path) answers
+var wttr_code := 200
+var wttr_body: Variant = {}
 var _srv := TCPServer.new()
 var _conns: Array = []
 var _log: Array = []
@@ -761,6 +764,9 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 		var answer: Dictionary = bot.call(path, parsed)
 		code = answer["code"]
 		out = answer["body"]
+	elif method == "GET" and path.ends_with("?format=j1"):
+		code = wttr_code
+		out = wttr_body
 	elif method == "GET" and path == "/api/home":
 		out = _state
 	elif method == "GET" and path.get_slice("?", 0) == "/api/home/pets":
@@ -1326,7 +1332,10 @@ func _cards() -> void:
 	h.set_data(data.merged({"coming": []}, true))
 	_check("needs water" in str(h.card_blocks()), "no watering due: a plain line")
 	h.card.kind = "weather"
-	_check("Light rain" in str(h.card_blocks()) and "9°C (48°F)" in str(h.card_blocks()), "the weather in words")
+	h.settings.forced["degrees"] = "c"
+	_check("Light rain" in str(h.card_blocks()) and "9°C" in str(h.card_blocks()), "the weather in words")
+	h.settings.forced["degrees"] = "f"
+	_check("48°F" in str(h.card_blocks()), "the weather in Fahrenheit")
 	h.card.kind = "jar"
 	var plain: Array = h.card_blocks()
 	_check(plain.size() == 2 and "3 done" in str(plain), "the jar without names says the count only")

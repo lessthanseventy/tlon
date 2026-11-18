@@ -52,6 +52,9 @@ var _volume: HSlider
 var _widget: Button
 var _top: Button
 var _looks := {}
+var _weather_box: VBoxContainer
+var _weather_on: Button
+var _town: LineEdit
 var _found: Label
 var _forget: Button
 var _reset: Button
@@ -257,6 +260,16 @@ func _ready() -> void:
 	r = Paper.row(col)
 	r.add_child(Paper.label("degrees", 14, Paper.QUIET))
 	_menu(r, "degrees", ["f", "c"], ["°F", "°C"])
+	_weather_box = VBoxContainer.new()
+	_weather_box.add_theme_constant_override("separation", 7)
+	col.add_child(_weather_box)
+	r = Paper.row(_weather_box)
+	var toggle := func() -> void: _put("weather", _weather_on.button_pressed)
+	_weather_on = Paper.chip("weather outside the window", r, toggle, true)
+	r = Paper.row(_weather_box)
+	r.add_child(Paper.label("town", 14, Paper.QUIET))
+	_town = _field(r, "empty: found from your internet address", "weather_town")
+	_quiet(_weather_box).text = "asks wttr.in about every half hour; nothing of yours is sent"
 
 	_head(col, "looks")
 	for key in LOOKS:
@@ -330,6 +343,8 @@ func open() -> void:
 	_sound.set_pressed_no_signal(not home.sound.muted)
 	if _volume != null:
 		_volume.set_value_no_signal(float(home.sound.volume))
+	_weather_on.set_pressed_no_signal(bool(settings.value("weather")))
+	_town.text = str(settings.data.get("weather_town", ""))
 	_widget.set_pressed_no_signal(bool(settings.value("widget")))
 	_top.set_pressed_no_signal(bool(settings.value("on_top")))
 	for key in _looks:
@@ -608,6 +623,7 @@ func _refresh() -> void:
 	_local_say.visible = local
 	_local_say.text = "kept in " + ProjectSettings.globalize_path(LocalList.STORE)
 	_talk_box.visible = local
+	_weather_box.visible = local
 	_tg_on.set_pressed_no_signal(bool(settings.value("telegram")))
 	_tg_box.visible = _tg_on.button_pressed
 	_tg_lines()

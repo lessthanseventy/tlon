@@ -35,6 +35,9 @@ some), the `TLON_ART_DIR` folder, none (flat shapes, and it says so).
 
 The one zip for that computer. Nothing else: the list lives on that computer.
 
+On its own list the house asks wttr.in for the weather by internet address about every half hour and sends
+nothing else; "weather" in its settings names a town or switches it off.
+
 ## First run
 
 Neither build is signed: Windows and macOS warn about any program they do not know, and this build cannot be
