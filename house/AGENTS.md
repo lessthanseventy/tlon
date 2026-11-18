@@ -128,10 +128,17 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   rare hero visitor (`--egg visitor`). `delights.gd`: a moth at the lamp at night, an umbrella by the door in
   rain, Nina at the sill in rain, Argos hiding in a storm, TV remarks, a greeting for a new look, sparks when
   the jar fills; a snowman on the sill in snow and a lit pumpkin after dark (`outside.gd`, `home.gd`).
-- **Sound** (`sound.gd`): every sound is synthesized, no files, and it starts muted. `M` toggles, the choice
-  is `user://house_sound.json` (`{"muted": bool}`), a speaker mark shows a moment. Events: `piano`, `bad_piano`,
-  `crackle` and `rain` (loops), `clink`, `purr`, `bark`, `rustle`, `ring`, `wish`; each is requested through
-  `sound.request(name)` (kept in `requested`, which the soak reads) and none peaks above 0.4.
+- **Sound** (`sound.gd`): a cue plays a file of the Gridwright UI and Retro packs found under the art dir
+  (`TLON_ART_DIR`; loaded at runtime with `AudioStreamOggVorbis.load_from_file`, never imported, never in the
+  repo), and falls back per cue to a synth when the pack or file is missing. `CUES` is the one table (file
+  list rotated on repeat, dB, pitch jitter, gap); `piano`, `bad_piano`, `purr`, `bark`, `meow`, `squeak`,
+  `rustle` and the `crackle`/`rain` loops stay synthesized (no pack fit). It starts muted; `M` toggles,
+  `-`/`=` change the master volume by 0.1 (not while typing), kept with the mute in `user://house_sound.json`
+  (`{"muted", "volume"}`, default 0.6); the speaker mark shows the level. At most `MAX_VOICES` sound at once
+  (the oldest is cut) and a cue's `gap` drops a burst of itself. Cues come from `sound.request(name)` (kept
+  in `requested`, which the soak reads; a name with no cue is ignored), from `sound.process(dt, home)`
+  watching the card, menu, note, closet, decorate, door and timer open and close, and from `eggs.find(id)` as
+  `egg_<id>`. `--sounds` prints every cue with the file it resolved to (or `synth`/`none`) and quits.
 - **Decorate** (`D`, or `--decorate`; the home only, not the widget): the side panel becomes the
   catalogue (`decorate.gd`): wall and floor styles, `reset`, and every placeable piece of the pack's
   index grouped and scrolled, a piece's four sides (or a rug's two, a wall piece's two) one entry. Click a piece, a ghost follows the pointer

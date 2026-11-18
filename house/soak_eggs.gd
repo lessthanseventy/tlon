@@ -21,6 +21,7 @@ func _home(seed_value: int = 7, items: Array = []) -> Array:
 
 func run() -> void:
 	_sound()
+	_sound_files()
 	_pets()
 	_hearth()
 	_calm()
@@ -76,6 +77,105 @@ func _sound() -> void:
 	for name in ["purr", "bark", "rustle", "clink", "rain", "ring"]:
 		s._check(h.sound.requested.has(name), "%s is requested by its event" % name)
 	s._check(h.sound.muted, "the room stays muted")
+	made[0].queue_free()
+
+
+func _sound_files() -> void:
+	var art: String = s._art()
+	var packed := FileAccess.file_exists(art.path_join(Sound.CUES["done"]["f"][0]))
+	if not packed:
+		print("sounds: packs not found under %s, files not tested" % art)
+	var longest := 0.0
+	for name in Sound.CUES:
+		for rel in Sound.CUES[name]["f"]:
+			if not packed:
+				break
+			var ogg := AudioStreamOggVorbis.load_from_file(art.path_join(rel))
+			s._check(ogg != null and ogg.get_length() > 0.0, "%s loads: %s" % [name, rel])
+			if ogg != null:
+				longest = maxf(longest, ogg.get_length())
+	print("sounds: %d cues, longest file %.2fs" % [Sound.CUES.size(), longest])
+
+	var empty := DirAccess.create_temp("soak_art", true)
+	var bare := Sound.new()
+	bare.setup(s.root, false, empty.get_current_dir() if empty != null else "/nonexistent")
+	bare.muted = false
+	for name in Sound.CUES:
+		bare.request(name)
+	for name in bare.played:
+		s._check(name in Sound.EVENTS, "%s without packs falls to synth or silence" % name)
+	s._check(bare.requested.has("done") and not bare.played.has("done"), "a missing pack is silent")
+	bare.request("clink")
+	s._check(bare.played.has("clink"), "a missing file falls back to the synth")
+	var listed := Sound.listing(empty.get_current_dir() if empty != null else "/nonexistent")
+	s._check(listed.contains("clink -> synth") and listed.contains("done -> none"), "--sounds says synth or none")
+
+	var quiet := Sound.new()
+	quiet.setup(s.root, false, art)
+	for name in Sound.CUES:
+		quiet.request(name)
+	s._check(quiet.muted and quiet.played.is_empty(), "muted requests play nothing")
+
+	var loud := Sound.new()
+	loud.setup(s.root, false, art)
+	loud.muted = false
+	for _i in 20:
+		loud.request("done")
+	s._check(loud.played.count("done") == 1, "a burst of one cue sounds once")
+	loud.process(0.3)
+	loud.request("done")
+	s._check(loud.played.count("done") == 2, "it sounds again past its gap")
+	if packed:
+		s._check(loud._rot["done"] == 2, "a repeat takes the next file")
+	for name in ["card_open", "save", "all_done", "egg_konami", "timer_done", "door", "closet_open"]:
+		loud.request(name)
+	s._check(loud.active() <= Sound.MAX_VOICES, "voices stay within the cap (%d)" % loud.active())
+	s._check(loud._players.size() <= Sound.MAX_VOICES, "players stay within the cap")
+	s._check(loud.played.size() >= 5, "a full house still takes the new cue")
+
+	loud.volume = 0.95
+	loud.nudge(0.1)
+	s._check(is_equal_approx(loud.volume, 1.0), "volume clamps at 1")
+	loud.nudge(-5.0)
+	s._check(is_equal_approx(loud.volume, 0.0), "volume clamps at 0")
+	var n := loud.played.size()
+	loud.process(3.0)
+	loud.request("save")
+	s._check(loud.played.size() == n, "volume 0 plays nothing")
+
+	var kept := Sound.new()
+	kept.store = "user://soak_volume.json"
+	DirAccess.remove_absolute(kept.store)
+	kept.setup(null, true)
+	s._check(is_equal_approx(kept.volume, 0.6) and kept.muted, "it starts muted at 0.6")
+	kept.nudge(-0.2)
+	var back := Sound.new()
+	back.store = kept.store
+	back.setup(null, true)
+	s._check(is_equal_approx(back.volume, 0.4), "the volume is kept when persisting")
+	DirAccess.remove_absolute(kept.store)
+	var loose := Sound.new()
+	loose.store = kept.store
+	loose.setup(null, false)
+	loose.nudge(0.1)
+	s._check(not FileAccess.file_exists(kept.store), "a staged run keeps no volume")
+
+	var made := _home()
+	var h = made[1]
+	h.decorating = true
+	h.closet_open = true
+	s._run_home(h, 0.3)
+	s._check(
+		h.sound.requested.has("decorate_on") and h.sound.requested.has("closet_open"),
+		"the room's modes are cued"
+	)
+	h.eggs.find("konami")
+	s._check(h.sound.requested.has("egg_konami"), "a find is cued")
+	var was: float = h.sound.volume
+	h.eggs.key(KEY_EQUAL)
+	h.eggs.key(KEY_MINUS)
+	h.eggs.key(KEY_MINUS)
+	s._check(is_equal_approx(h.sound.volume, was - 0.1), "- and = change the volume")
 	made[0].queue_free()
 
 

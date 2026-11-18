@@ -76,6 +76,11 @@ func _process(dt: float) -> void:
 		queue_redraw()
 
 
+func _nope(text: String) -> void:
+	_say(text)
+	home.sound.request("nope")
+
+
 func _say(text: String) -> void:
 	_message = text
 	_message_left = 2.5
@@ -263,6 +268,7 @@ func _turn() -> void:
 	var faces: Array = home.layout.entry(sel)["faces"]
 	if faces.size() > 1:
 		face = faces[(faces.find(face) + 1) % faces.size()]
+		home.sound.request("rotate")
 	queue_redraw()
 
 
@@ -271,9 +277,10 @@ func _click() -> void:
 		var p := _ghost()
 		var why: String = home.layout.place(p, held, home.busy_cells())
 		if why != "":
-			_say(why)
+			_nope(why)
 			return
 		home.apply_layout()
+		home.sound.request("place")
 		if held != null:
 			held = null
 			sel = ""
@@ -281,10 +288,10 @@ func _click() -> void:
 	var hit: Variant = _piece_at(_mouse)
 	if hit == null:
 		if _stays(_mouse):
-			_say("that one stays")
+			_nope("that one stays")
 		return
 	if hit.has("fixed"):
-		_say("that one stays")
+		_nope("that one stays")
 		return
 	held = hit
 	sel = hit["p"]
@@ -296,10 +303,11 @@ func _remove_or_drop() -> void:
 	if hit == null:
 		sel = ""
 	elif hit.has("fixed"):
-		_say("that one stays")
+		_nope("that one stays")
 	else:
 		home.layout.remove(hit)
 		home.apply_layout()
+		home.sound.request("remove")
 		held = null
 		sel = ""
 

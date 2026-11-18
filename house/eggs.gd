@@ -147,6 +147,7 @@ func setup(home, seed_value: int, persist_it: bool) -> void:
 
 # met a secret: counted once, kept in user://house_found.json ({"found": [id, ...]})
 func find(id: String) -> void:
+	h.sound.request("egg_" + id)
 	if found.has(id):
 		return
 	found[id] = true
@@ -863,6 +864,9 @@ func draw_desk() -> void:
 func key(code: int) -> bool:
 	if code == KEY_M:
 		h.sound.toggle()
+		return true
+	if code == KEY_MINUS or code == KEY_EQUAL:
+		h.sound.nudge(-0.1 if code == KEY_MINUS else 0.1)
 		return true
 	return h.secrets.key(code)
 
