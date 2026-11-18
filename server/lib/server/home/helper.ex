@@ -17,10 +17,21 @@ defmodule Server.Home.Helper do
   `:error` when the model gave none or says the project is finished.
   """
   @spec next_step(Jot.t(), [String.t()], [String.t()]) :: {:ok, String.t()} | :error
-  def next_step(%Jot{text: text}, finished, notes), do: text |> next_prompt(finished, notes) |> ask()
+  def next_step(%Jot{text: text}, finished, notes) do
+    text
+    |> next_prompt(finished, notes)
+    |> ask()
+    |> case do
+      {:ok, step} -> {:ok, step}
+      _none_or_error -> :error
+    end
+  end
 
-  @doc "A two-minute start on the to-do `jot`, from the operator's `notes`: `{:ok, start}`, `:error` when none came."
-  @spec start(Jot.t(), [String.t()]) :: {:ok, String.t()} | :error
+  @doc """
+  A two-minute start on the to-do `jot`, from the operator's `notes`: `{:ok, start}`, `:none` when
+  the model had no start for it (`DONE` or nothing), `:error` when it did not answer.
+  """
+  @spec start(Jot.t(), [String.t()]) :: {:ok, String.t()} | :none | :error
   def start(%Jot{text: text}, notes), do: text |> start_prompt(notes) |> ask()
 
   @doc "The one line a model's `reply` holds, bullets and quotes off: `{:ok, line}`, `:error` when it is empty or `DONE`."
@@ -42,7 +53,7 @@ defmodule Server.Home.Helper do
 
     case asker.(prompt) do
       {:ok, reply} ->
-        line(reply)
+        with :error <- line(reply), do: :none
 
       {:error, why} ->
         Logger.warning("home helper: no answer: #{inspect(why)}")

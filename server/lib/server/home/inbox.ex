@@ -108,7 +108,7 @@ defmodule Server.Home.Inbox do
 
   @doc """
   The daily list: once `now` is past `at` (`"17:30"`, local; `""` is never) on a day it has not been
-  said, what is open is said in `chat`, with an offer of a smaller start for a to-do that has sat
+  said, in waking hours (one set for a sleeping hour is said the next morning), what is open is said in `chat`, with an offer of a smaller start for a to-do that has sat
   (`Server.Home.Organize.shrink/2`, in waking hours); with no chat the offer is still put, for the desktop.
   `listed` is the day it was last said, `:boot` when the inbox
   has just started; the day it now stands at is answered.
@@ -130,8 +130,9 @@ defmodule Server.Home.Inbox do
     cond do
       listed == :boot and past? -> today
       listed == :boot -> Date.add(today, -1)
-      not past? or listed == today -> listed
-      true -> said(via, chat, say, now, today)
+      not Clock.awake?(now) or listed == today -> listed
+      past? or held?(at, today, listed) -> said(via, chat, say, now, today)
+      true -> listed
     end
   end
 
@@ -514,5 +515,17 @@ defmodule Server.Home.Inbox do
     end
 
     today
+  end
+
+  # the list's time is a sleeping hour and yesterday's slot went by: it is said when the morning comes
+  defp held?(at, today, listed) do
+    case Time.from_iso8601(at <> ":00") do
+      {:ok, time} ->
+        yesterday = Date.add(today, -1)
+        not Clock.awake?(Clock.utc(NaiveDateTime.new!(yesterday, time))) and Date.compare(listed, yesterday) == :lt
+
+      _never ->
+        false
+    end
   end
 end

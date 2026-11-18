@@ -12,14 +12,17 @@ defmodule Server.Home.OrganizeTest do
   setup do
     Server.TestDB.clean!()
     reads(fn _body, _context -> :error end)
-    helps(fn prompt -> flunk("the model was asked: #{prompt}") end)
+    me = self()
+
+    helps(fn prompt ->
+      send(me, {:model_asked, prompt})
+      {:error, :unasked}
+    end)
 
     on_exit(fn ->
       Application.delete_env(:server, :home_reader)
       Application.delete_env(:server, :home_helper)
     end)
-
-    me = self()
 
     %{
       say: fn chat, text, opts ->
@@ -53,6 +56,11 @@ defmodule Server.Home.OrganizeTest do
   end
 
   defp await, do: Server.TestDB.await_background()
+
+  defp no_model do
+    await()
+    refute_received {:model_asked, _}
+  end
 
   defp press(data, ref \\ 90), do: %{id: 20, chat: "42", text: nil, tap: data, tap_id: "q", ref: ref}
 
@@ -835,8 +843,53 @@ defmodule Server.Home.OrganizeTest do
 
       assert_received {:said, "42", "ok, leaving it."}
       assert %{kind: "todo", ask: nil, shrunk_at: %DateTime{}} = fresh(taxes)
-      helps(fn prompt -> flunk("asked again: #{prompt}") end)
       daily(say, DateTime.add(friday(), 1, :day), ~D[2026-11-20])
+      no_model()
+    end
+
+    test "a to-do the model had no start for is marked tried, so a younger one gets its turn the next day", %{say: say} do
+      todo(1, "old taxes", received_at: DateTime.add(friday(), -10, :day))
+      todo(2, "young taxes", received_at: DateTime.add(friday(), -8, :day))
+      me = self()
+
+      helps(fn prompt ->
+        send(me, {:helped, prompt})
+        if prompt =~ "TO DO: old taxes", do: {:ok, "DONE"}, else: {:ok, "Find the return"}
+      end)
+
+      daily(say)
+      await()
+      assert_received {:helped, first}
+      assert first =~ "TO DO: old taxes"
+      assert %{shrunk_at: %DateTime{}, ask: nil} = Repo.get_by!(Jot, text: "old taxes")
+
+      daily(say, DateTime.add(friday(), 1, :day), ~D[2026-11-20])
+      await()
+      assert_received {:helped, second}
+      assert second =~ "TO DO: young taxes"
+    end
+
+    test "a model that failed is not marked: the same to-do is tried again the next day", %{say: say} do
+      todo(1, "old taxes", received_at: DateTime.add(friday(), -10, :day))
+      todo(2, "young taxes", received_at: DateTime.add(friday(), -8, :day))
+      me = self()
+
+      helps(fn prompt ->
+        send(me, {:helped, prompt})
+        {:error, :down}
+      end)
+
+      ExUnit.CaptureLog.capture_log(fn ->
+        daily(say)
+        await()
+        daily(say, DateTime.add(friday(), 1, :day), ~D[2026-11-20])
+        await()
+      end)
+
+      assert_received {:helped, first}
+      assert_received {:helped, second}
+      assert first =~ "TO DO: old taxes" and second =~ "TO DO: old taxes"
+      assert %{shrunk_at: nil} = Repo.get_by!(Jot, text: "old taxes")
     end
 
     test "a to-do that has sat less than a week, a project's step and a model with no start get no offer", %{say: say} do
@@ -844,6 +897,7 @@ defmodule Server.Home.OrganizeTest do
       todo(12, "stepped", received_at: DateTime.add(friday(), -9, :day), project_id: 99)
       daily(say)
       assert_received {:said, "42", "Before you clock out:\n\nStill open:\n• new\n• stepped"}
+      no_model()
 
       sat_todo()
       helps(fn _prompt -> {:ok, "DONE"} end)
@@ -924,7 +978,69 @@ defmodule Server.Home.OrganizeTest do
     end
   end
 
+  describe "the project's next step is asked once" do
+    test "calls that overlap for one project put the question and say it once", %{say: _say} do
+      Process.register(self(), Server.Home.Inbox)
+      {:ok, plan} = Jot.take("telegram", 1, "plan")
+      project = Jot.file(plan, %{kind: "project", text: "plan mom's birthday", due_at: nil, steps: ["a"]})
+      me = self()
+
+      helps(fn _prompt ->
+        send(me, {:helped, self()})
+
+        receive do
+          :go -> {:ok, "Call the venue"}
+        end
+      end)
+
+      steps = for text <- ~w(a b c d e f), do: Jot.step(project, text, friday())
+      for step <- steps, do: Jot.done(step, friday())
+      for step <- steps, do: Organize.advance(step, friday())
+
+      tasks =
+        for _ <- steps do
+          assert_receive {:helped, task}
+          task
+        end
+
+      for task <- tasks, do: send(task, :go)
+      await()
+
+      assert [%{ask: "next", proposed: "Call the venue"}] = Jot.asked("telegram")
+      assert_received {:"$gen_cast", {:asked, id}}
+      assert id == project.id
+      refute_received {:"$gen_cast", {:asked, _}}
+    end
+  end
+
   describe "quiet hours hold every unasked message" do
+    test "a daily list set inside quiet hours waits for the morning, once", %{say: say} do
+      todo(1, "milk")
+      list = fn now, listed -> Inbox.daily("telegram", "42", say, now, "22:30", listed) end
+
+      assert list.(Clock.utc(~N[2026-11-20 22:35:00]), ~D[2026-11-19]) == ~D[2026-11-19]
+      refute_received {:said, _, _}
+
+      assert list.(Clock.utc(~N[2026-11-21 08:05:00]), ~D[2026-11-19]) == ~D[2026-11-21]
+      assert_received {:said, "42", "Before you clock out:" <> _}
+
+      assert list.(Clock.utc(~N[2026-11-21 09:05:00]), ~D[2026-11-21]) == ~D[2026-11-21]
+      refute_received {:said, _, _}
+    end
+
+    test "with the daily list off the review runs at 17:30 on its own day", %{say: say} do
+      stale(1, "old", 15)
+      at = fn time -> Clock.utc(NaiveDateTime.new!(~D[2026-11-20], time)) end
+      week = fn now, on -> Organize.weekly("telegram", "42", say, now, on, "", ~D[2026-11-13]) end
+
+      assert week.(at.(~T[17:29:00]), "fri") == ~D[2026-11-13]
+      assert week.(at.(~T[17:35:00]), "") == ~D[2026-11-13]
+      refute_received {:said, _, _}
+
+      assert week.(at.(~T[17:35:00]), "fri") == ~D[2026-11-20]
+      assert_received {:said, "42", "Still want this? old"}
+    end
+
     test "the weekly review waits for the morning and is not lost", %{say: say} do
       stale(1, "old", 15)
       at = fn date, time -> Clock.utc(NaiveDateTime.new!(date, time)) end
