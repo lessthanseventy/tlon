@@ -106,6 +106,19 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   reply and a chime), snow on the sill Dec-Feb, fireworks 31 Dec 23:00 to 1 Jan 01:00. Each comes minutes
   apart on the seeded dice, only in the weather and hour that suit it; `--egg bird|balloon|plane|nightcat|star|fireworks`
   (use `--at 23:00` for the night ones).
+- **Finds** (`finds.gd`): a birthday (`user://house_settings.json` `{"birthday":"MM-DD"}`, set by the calendar
+  card's button; `--birthday` forces it) puts a cake on the table; a click on a book gives a Borges card in
+  Nina's or Argos's voice (the `muse` lines, built-in fallback); a mouse leaves its hole on a quiet night
+  (`--egg mouse`) and flees a pet or a click; the snow globe shakes on a click. The "found" card (`--egg found`,
+  click the mouse hole) says only "N of M found"; `eggs.CATALOGUE` is the list, `user://house_found.json`
+  `{"found":[ids]}` the state.
+- **Secrets** (`secrets.gd`): the old code (arrows, `B`, `A`) is ten seconds of disco; typed words at home
+  (not in the notepad): `borges` (shelf glows, a Babel line), `tlon` (colours drift), `uqbar` (a second
+  moon), `argos` (he hops). `quirks.gd`: desk fidgets (`spin pencil stretch nod`, `--egg ...`), hero perks
+  (staff: `cast` lights the fire; blade: salutes a visitor at the door; bow: an arrow stays in the wall), and a
+  rare hero visitor (`--egg visitor`). `delights.gd`: a moth at the lamp at night, an umbrella by the door in
+  rain, Nina at the sill in rain, Argos hiding in a storm, TV remarks, a greeting for a new look, sparks when
+  the jar fills; a snowman on the sill in snow and a lit pumpkin after dark (`outside.gd`, `home.gd`).
 - **Sound** (`sound.gd`): every sound is synthesized, no files, and it starts muted. `M` toggles, the choice
   is `user://house_sound.json` (`{"muted": bool}`), a speaker mark shows a moment. Events: `piano`, `bad_piano`,
   `crackle` and `rain` (loops), `clink`, `purr`, `bark`, `rustle`, `ring`, `wish`; each is requested through

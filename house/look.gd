@@ -17,6 +17,8 @@ const HERO_ACT := {
 	"wave": "block",
 	"cheer": "cast",
 	"pickup": "thrust",
+	"shoot": "shoot",
+	"slash": "slash",
 }
 const HERO_ROWS := [
 	["cape", "Cape", true],

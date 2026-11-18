@@ -50,6 +50,7 @@ func start(name: String) -> void:
 	if not act.has(name):
 		var r: RandomNumberGenerator = h.eggs.rng
 		act[name] = {"t": 0.0, "v": r.randf(), "w": r.randf()}
+		h.eggs.find(name)
 
 
 func eligible(name: String) -> bool:
@@ -126,7 +127,11 @@ func star_at(q: PackedVector2Array) -> Vector2:
 
 # drawn in the glass: balloon, plane, the fence cat, the star, fireworks
 func draw(q: PackedVector2Array, c: CanvasItem, k: int, env: Dictionary) -> void:
-	var day: float = env["day"]
+	if h.secrets.moon > 0.0:
+		var m := Props.qlerp(q, 0.3, 0.74)
+		var a := minf(1.0, h.secrets.moon / 1.5)
+		c.draw_circle(m, 4.4 * k, Color("f0b060", 0.5 * a))
+		c.draw_circle(m + Vector2(1.0, -0.6) * k, 3.4 * k, Color("f8d890", a))
 	if act.has("balloon"):
 		var a: Dictionary = act["balloon"]
 		var f: float = a["t"] / LONG["balloon"]
@@ -212,6 +217,14 @@ func hits(c: CanvasItem, _frame: PackedVector2Array) -> void:
 				Props.qlerp(top, u, 0.1) + Vector2(0, -1) * k, (1.6 + (i % 2)) * k, Color("f4f8fc")
 			)
 		h.eggs.find("sillsnow")
+		if h._env["weather"] == "snow":
+			var s := Props.qlerp(top, 0.8, 0.5) + Vector2(0, -2.0) * k
+			c.draw_circle(s, 3.0 * k, Color("fbfdff"))
+			c.draw_circle(s + Vector2(0, -4.4) * k, 2.2 * k, Color("fbfdff"))
+			c.draw_rect(Rect2(s + Vector2(-0.9, -5.2) * k, Vector2(k, k)), Props.INK)
+			c.draw_rect(Rect2(s + Vector2(0.9, -5.2) * k, Vector2(k, k)), Props.INK)
+			c.draw_rect(Rect2(s + Vector2(0, -4.3) * k, Vector2(2.4, 0.9) * k), Color("e8842c"))
+			h.eggs.find("snowman")
 	if act.has("bird"):
 		var a: Dictionary = act["bird"]
 		var t: float = a["t"]

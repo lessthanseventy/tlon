@@ -26,6 +26,10 @@ func run() -> void:
 	_calm()
 	keys()
 	outside()
+	finds()
+	secrets()
+	quirks()
+	delights()
 
 
 func _sound() -> void:
@@ -342,4 +346,165 @@ func outside() -> void:
 		for k in o.act:
 			days[k] = true
 	s._check(days.size() >= 1 and days.size() <= 5, "outside things come by themselves, rarely")
+	made[0].queue_free()
+
+
+func finds() -> void:
+	var made := _home(71)
+	var h = made[1]
+	var f = h.finds
+	f.store = "user://soak_settings.json"
+	DirAccess.remove_absolute(f.store)
+	f._persist = true
+	h.fake_day = "03-15"
+	s._check(not f.is_birthday(), "no cake on an ordinary day")
+	f.toggle_birthday()
+	s._check(f.is_birthday() and f.birthday == "03-15", "the calendar button says today is the birthday")
+	s._check(not f.table().is_empty(), "there is a table for the cake")
+	var g = load("res://finds.gd").new()
+	g.store = f.store
+	g.setup(h, true)
+	s._check(g.birthday == "03-15", "the birthday is kept in user://")
+	h.fake_day = "03-16"
+	s._check(not f.is_birthday(), "and is only on its day")
+	h.fake_day = "03-15"
+	f.toggle_birthday()
+	s._check(not f.is_birthday(), "the button takes it back")
+	DirAccess.remove_absolute(f.store)
+	h.fake_day = "03-15"
+	f._persist = false
+
+	h.pets.set_voices({"Nina": {"muse": ["a Nina line"]}, "Argos": {"muse": ["an Argos line"]}})
+	var titles: Array = f.TITLES.map(func(t): return t[0])
+	for i in 6:
+		f.pick_book()
+		s._check(f.book["title"] in titles and f.book["blurb"] in ["a Nina line", "an Argos line"], "a book card: %s" % str(f.book))
+	h.pets.set_voices({})
+	f.pick_book()
+	s._check(str(f.book["blurb"]) != "", "a book has a blurb with no voices from the server")
+	f.glow_book()
+	s._check(f.glow > 0.0 and h.eggs.found.has("borges"), "the shelf glows for the word")
+
+	f.shake = 0.0
+	h.fake_hour = 23.0
+	f.last_touch = -1000.0
+	f._t = 1000.0
+	s._check(f.quiet_night(), "a quiet night")
+	f.start_mouse()
+	s._check(not f.mouse.is_empty() and h.eggs.found.has("mouse"), "a mouse comes out")
+	f.touch()
+	s._check(f.mouse.is_empty(), "a click and it is gone")
+	f.start_mouse()
+	var nn = h.pets.critter("nina")
+	nn.mode = "idle"
+	nn.pos = f.mouse_pos()
+	f.process(0.1)
+	s._check(f.mouse.is_empty(), "a pet near and it is gone")
+	nn.mode = "sleep"
+	f._t = 1001.0
+	s._check(not f.quiet_night(), "not quiet right after a touch")
+	h.fake_hour = 14.0
+	f._t = 5000.0
+	s._check(not f.quiet_night(), "never by day")
+
+	var b: Array = f.blocks("found")
+	s._check(str(b[1]["text"]).begins_with("%d of %d" % [h.eggs.found.size(), h.eggs.CATALOGUE.size()]), "the found card counts")
+	made[0].queue_free()
+
+
+func _type(h, text: String) -> void:
+	for ch in text:
+		h.key(KEY_A + ch.unicode_at(0) - 97)
+
+
+func secrets() -> void:
+	var made := _home(81)
+	var h = made[1]
+	var sc = h.secrets
+	var arrows := {"up": KEY_UP, "down": KEY_DOWN, "left": KEY_LEFT, "right": KEY_RIGHT, "b": KEY_B}
+	for t in ["up", "up", "down", "down", "left", "right", "left", "right", "b"]:
+		h.key(arrows[t])
+	s._check(sc.disco == 0.0, "nine of the ten keys do nothing")
+	h.key(KEY_A)
+	s._check(sc.disco > 0.0 and h.eggs.found.has("konami"), "the old code starts the disco")
+	s._check(h.tv.manual > 0.0, "the TV is on for it")
+	s._run_home(h, 12.0, func(): return sc.disco <= 0.0)
+	s._check(
+		sc.disco == 0.0 and not h.pets.critter("nina").hold and not h.pets.critter("argos").hold,
+		"the disco ends and lets the pets go"
+	)
+	_type(h, "borges")
+	s._check(h.finds.glow > 0.0 and h.eggs.found.has("borges"), "borges lights the shelf")
+	_type(h, "tlon")
+	s._check(sc.shift > 0.0, "tlon shifts the colours")
+	_type(h, "uqbar")
+	s._check(sc.moon > 0.0, "uqbar shows a second moon")
+	_type(h, "argos")
+	s._check(
+		h.eggs.found.has("argos_word") and h.pets.critter("argos").hops >= 1,
+		"his name makes Argos hop"
+	)
+	s._run_home(h, 15.0, func(): return false)
+	s._check(sc.shift == 0.0 and sc.moon == 0.0, "the colours and the moon go back")
+	sc.hist = []
+	_type(h, "xbor")
+	_type(h, "gestlo")
+	s._check(sc.shift == 0.0, "a word broken up does nothing")
+	made[0].queue_free()
+
+
+func quirks() -> void:
+	var made := _home(91)
+	var h = made[1]
+	var q = h.quirks
+	h.pets.freeze = false
+	h.person.forced = "desk"
+	s._run_home(h, 20.0, func(): return h.person.act == "desk" and h.person.phase == "idle")
+	q.fidget("spin")
+	var dirs := {}
+	for i in 30:
+		h.process(0.1)
+		dirs[h.person.c.dir] = true
+	s._check(dirs.size() >= 3, "the chair spins through directions: %s" % str(dirs.keys()))
+	s._run_home(h, 6.0, func(): return q.fx_kind == "")
+	s._check(
+		q.fx_kind == "" and h.person.fx.is_empty() and h.person.c.dir == q.DESK_FACE,
+		"the spin ends facing the desk"
+	)
+	q.fidget("stretch")
+	s._check(h.person.anim() == "cheer", "a stretch is the cheer pose")
+	s._run_home(h, 4.0, func(): return q.fx_kind == "")
+	s._check(h.person.fx.is_empty(), "and ends")
+	h.pets.freeze = true
+	q._next_fx = 0.0
+	q.process(0.1)
+	s._check(q.fx_kind == "", "frozen for a photo, no fidget starts by itself")
+	h.pets.freeze = false
+	q.start_visit()
+	var can: bool = q._vlook.hero_ready and not q._vlook.hero_recipes.is_empty()
+	s._check(q.visiting() == can, "a visitor needs the hero pack")
+	if q.visiting():
+		s._check(not q.items().is_empty(), "and is drawn")
+		s._run_home(h, 12.0, func(): return not q.visiting())
+		s._check(not q.visiting(), "and leaves")
+	made[0].queue_free()
+
+
+func delights() -> void:
+	var made := _home(101)
+	var h = made[1]
+	var d = h.delights
+	d.start_moth()
+	s._check(d.moth > 0.0 and h.eggs.found.has("moth"), "a moth comes to the lamp")
+	s._run_home(h, 35.0, func(): return false)
+	s._check(d.moth == 0.0, "and goes")
+	d.new_look()
+	s._check(
+		h.pets.critter("argos").hops >= 1 and h.eggs.found.has("new_look"),
+		"Argos greets a new look"
+	)
+	var seen := {}
+	for row in h.eggs.CATALOGUE:
+		s._check(not seen.has(row[0]), "catalogue id %s once" % row[0])
+		seen[row[0]] = true
 	made[0].queue_free()

@@ -15,11 +15,13 @@ const Decorate := preload("res://decorate.gd")
 const Closet := preload("res://closet.gd")
 const Card := preload("res://card.gd")
 const EggSoak := preload("res://soak_eggs.gd")
+const DEADLINE_MS := 540000
 
 var _srv := TCPServer.new()
 var _conns: Array = []
 var _log: Array = []
 var _fail_jot := false
+var _where := "start"
 var _office := {
 	"weather": {"kind": "rain", "desc": "Light rain", "temp_c": 9},
 	"pause": null,
@@ -48,6 +50,9 @@ func _initialize() -> void:
 
 
 func _process(_dt: float) -> bool:
+	if Time.get_ticks_msec() > DEADLINE_MS:
+		print("FAIL: the soak passed its deadline in section ", _where)
+		quit(1)
 	_serve()
 	return false
 
@@ -60,14 +65,23 @@ func _check(ok: bool, what: String) -> void:
 
 func _run() -> void:
 	seed(7)
+	_where = "logic"
 	_logic()
+	_where = "soak"
 	_soak()
+	_where = "decorate"
 	_decorate_logic()
+	_where = "looks"
 	_looks()
+	_where = "hacks"
 	await _hacks_draw()
+	_where = "cards logic"
 	_card_logic()
+	_where = "eggs"
 	EggSoak.new(self).run()
+	_where = "cards"
 	await _cards()
+	_where = "routes"
 	await _routes()
 	print("SOAK %s (%d failures)" % ["OK" if _failures.is_empty() else "FAILED", _failures.size()])
 	quit(0 if _failures.is_empty() else 1)
@@ -898,6 +912,9 @@ func _room(seed_value: int = 7) -> Control:
 	h.sound.muted = true
 	h.eggs.setup(h, seed_value + 4, false)
 	h.outside.setup(h)
+	h.finds.setup(h, false)
+	h.quirks.setup(h)
+	h.delights.setup(h)
 	h.fake_day = "06-15"
 	h.layout.setup(room._index, room.art_found, "", false)
 	h.apply_layout()

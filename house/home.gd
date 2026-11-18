@@ -20,6 +20,10 @@ const Sound := preload("res://sound.gd")
 const Eggs := preload("res://eggs.gd")
 const Hearth := preload("res://hearth.gd")
 const Outside := preload("res://outside.gd")
+const Finds := preload("res://finds.gd")
+const Secrets := preload("res://secrets.gd")
+const Quirks := preload("res://quirks.gd")
+const Delights := preload("res://delights.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -36,6 +40,7 @@ const CARD_KEYS := {
 	"tv": "tv",
 	"board": "board",
 	"more": "board",
+	"mousehole": "found",
 }
 const FURN_KEYS := ["piano", "fireplace", "bookshelf"]
 const NOTES_PER_PAGE := 5
@@ -90,6 +95,10 @@ var sound := Sound.new()
 var eggs := Eggs.new()
 var hearth := Hearth.new()
 var outside := Outside.new()
+var finds := Finds.new()
+var secrets := Secrets.new()
+var quirks := Quirks.new()
+var delights := Delights.new()
 var door := Door.new()
 var rhythm := Rhythm.new()
 var layout := Layout.new()
@@ -214,6 +223,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				eggs.laser_at = _point(next)
 				eggs.laser_pin = true
 				eggs.laser_on = true
+			"--birthday":
+				finds.birthday_forced = true
 			"--plane":
 				_arg_plane = next
 			"--homecoming":
@@ -272,6 +283,10 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	eggs.setup(self, seed_value, not staged)
 	hearth.setup(self)
 	outside.setup(self)
+	finds.setup(self, not staged)
+	secrets.setup(self)
+	quirks.setup(self)
+	delights.setup(self)
 	person.snap()
 	if "--shot" in args:
 		pets.freeze = true
@@ -535,7 +550,7 @@ func process(dt: float) -> void:
 			pets.nudge("desk", "night")
 	jar.process(dt)
 	door.process(dt)
-	room.door_ajar = door.ajar() or person.arrive_left > 3.0
+	room.door_ajar = door.ajar() or person.arrive_left > 3.0 or quirks.visiting()
 	rhythm.process(dt)
 	perk_left = maxf(0.0, perk_left - dt)
 	water_left = maxf(0.0, water_left - dt)
@@ -545,6 +560,10 @@ func process(dt: float) -> void:
 	eggs.process(dt)
 	hearth.process(dt)
 	outside.process(dt)
+	finds.process(dt)
+	secrets.process(dt)
+	quirks.process(dt)
+	delights.process(dt)
 	sound.loop("rain", _env["weather"] in ["rain", "storm"])
 	if jar.clinks.any(func(cl): return cl["t"] < dt + 0.001):
 		sound.request("clink")
@@ -808,6 +827,9 @@ func items() -> Array:
 	if person.bag == "down":
 		out.append({"key": Person.BAG_AT.x + Person.BAG_AT.y - 1.0, "pri": 1.7, "fn": _draw_bag})
 	out.append_array(eggs.items())
+	out.append_array(finds.items())
+	out.append_array(quirks.items())
+	out.append_array(delights.items())
 	for t in pets.toys:
 		out.append({"key": t["pos"].x + t["pos"].y - 1.0, "pri": 1.8, "fn": _draw_toy.bind(t)})
 	for c in pets.critters:
@@ -819,6 +841,7 @@ func items() -> Array:
 func _draw_critter(c: Pets.Critter) -> void:
 	if c.id == "person":
 		person.draw(room, _o, _k)
+		quirks.draw_person(room, pets.feet(c, _o, _k), _k)
 	else:
 		pets.draw(room, c, _o, _k)
 		if c.carry != "":
@@ -1007,6 +1030,8 @@ func furn(id: String, tex: Texture2D, at: Vector2) -> void:
 	for name in FURN_KEYS:
 		if id.begins_with(name):
 			register_sprite("furn:" + name, tex, at)
+			if name == "bookshelf" and finds.glow > 0.0:
+				room.draw_texture(tex, at, Color(1.8, 1.5, 0.7, 0.45 * minf(1.0, finds.glow)))
 			if name == "fireplace":
 				hearth.dress(room, at, _k)
 
@@ -1186,6 +1211,9 @@ func draw_over() -> void:
 	_draw_water()
 	hearth.draw_over(room)
 	eggs.draw_over(bounds)
+	secrets.draw_over(room)
+	quirks.draw_over(room)
+	delights.draw_over(room)
 	sound.draw_mark(room, Vector2(14, 14), 2)
 	rhythm.draw(room, bounds)
 	_draw_now(bounds)
@@ -1449,6 +1477,8 @@ func card_blocks() -> Array:
 			return _plant_blocks()
 		"tv":
 			return _tv_blocks()
+		"book", "found":
+			return finds.blocks(card.kind)
 	return []
 
 
@@ -1471,6 +1501,14 @@ func _calendar_blocks() -> Array:
 			blocks.append({"t": "dim", "text": _repeats(item)})
 	if next.is_empty():
 		blocks.append({"t": "text", "text": "Nothing coming up."})
+	var mine: bool = finds.birthday == finds.today_key()
+	blocks.append(
+		{
+			"t": "buttons",
+			"items":
+			[{"label": "Not my birthday" if mine else "Today is my birthday", "act": "birthday"}]
+		}
+	)
 	return blocks
 
 
@@ -1602,6 +1640,7 @@ func _topmost(pos: Vector2) -> String:
 
 
 func hover(pos: Vector2) -> bool:
+	finds.touch()
 	if rhythm.hover(pos):
 		_hover = ""
 		return true
@@ -1617,6 +1656,7 @@ func hover(pos: Vector2) -> bool:
 
 
 func click(pos: Vector2) -> bool:
+	finds.touch()
 	var blocked := _cards_blocked()
 	if not menu.is_open:
 		var slip := rhythm.click(pos)
@@ -1649,6 +1689,10 @@ func click(pos: Vector2) -> bool:
 		if hit == "tv_next":
 			tv.click()
 			return true
+		if hit == "birthday":
+			finds.toggle_birthday()
+			card.close()
+			return true
 		card.close()
 	var key := _topmost(pos)
 	var wants := _card_kind(key)
@@ -1666,6 +1710,20 @@ func click(pos: Vector2) -> bool:
 		return true
 	if key == "star":
 		outside.wish()
+		return true
+	if key == "cake":
+		finds.candles = false
+		show_reply("make a wish.")
+		sound.request("wish")
+		return true
+	if key == "globe":
+		finds.shake = 4.0
+		eggs.find("globe")
+		sound.request("clink")
+		return true
+	if key == "furn:bookshelf" and not blocked:
+		finds.pick_book()
+		card.open("book", key)
 		return true
 	if key.begins_with("furn:") and not blocked:
 		eggs.furn_click(key.substr(5))
@@ -1933,6 +1991,8 @@ func _season() -> String:
 
 
 func _celebrating() -> bool:
+	if finds.is_birthday():
+		return true
 	var today := int(_now_local() / 86400.0)
 	var texts: Array = notes.duplicate()
 	for item in open:
@@ -1963,6 +2023,12 @@ func _draw_season(frame: PackedVector2Array) -> void:
 			room.draw_circle(at, 3.4 * _k, Color("e8842c"))
 			room.draw_circle(at + Vector2(-1.6, 0) * _k, 2.2 * _k, Color("f0963c"))
 			room.draw_rect(Rect2(at + Vector2(-0.4, -4.6) * _k, Vector2(1, 1.8) * _k), Color("4a6a2a"))
+			if _env["day"] < 0.3:
+				var glow := Color("ffd86a", 0.75 + 0.25 * sin(_t * 7.0))
+				room.draw_rect(Rect2(at + Vector2(-2.2, -1.2) * _k, Vector2(1.3, 1.3) * _k), glow)
+				room.draw_rect(Rect2(at + Vector2(0.9, -1.2) * _k, Vector2(1.3, 1.3) * _k), glow)
+				room.draw_rect(Rect2(at + Vector2(-1.4, 1.0) * _k, Vector2(2.8, 0.9) * _k), glow)
+				eggs.find("lantern")
 		"hearts":
 			Props.heart(room, Props.qlerp(frame, 0.82, 0.96), maxi(1, _k - 1), Color("e8576b"))
 
