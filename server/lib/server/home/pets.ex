@@ -180,7 +180,7 @@ defmodule Server.Home.Pets do
     #{Enum.map_join(@occasions, "\n", fn {name, what} -> "- #{name}: #{what}" end)}
 
     Then "duo": #{@per} short exchanges between them (2 to 4 turns, each turn "Nina: …" or "Argos: …"):
-    she is quick, he is lost.
+    #{duo_voices(cast)}
 
     Answer with one JSON object and nothing else:
     {"Nina": {"pet": ["…"], …}, "Argos": {"pet": ["…"], …}, "duo": [["Nina: …", "Argos: …"]]}
@@ -262,6 +262,9 @@ defmodule Server.Home.Pets do
     article = if String.starts_with?(species, ["a", "e", "i", "o", "u"]), do: "an", else: "a"
     "#{article} #{species}"
   end
+
+  defp duo_voices(cast) when cast == @defaults, do: "she is quick, he is lost."
+  defp duo_voices(_cast), do: "each speaks in their own character as described above."
 
   defp naming(cast) when cast == @defaults, do: ""
 

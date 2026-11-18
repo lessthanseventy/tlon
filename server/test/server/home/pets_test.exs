@@ -119,6 +119,7 @@ defmodule Server.Home.PetsTest do
       assert prompt == Pets.prompt("SCENE")
       assert prompt =~ "NINA: #{@old_nina}\nARGOS: #{@old_argos}\n\nMOST lines"
       refute prompt =~ "is called"
+      assert prompt =~ "\"Argos: …\"):\nshe is quick, he is lost.\n\nAnswer"
     end
 
     test "a chosen name, animal and personality are in the prompt, with the roles kept" do
@@ -146,6 +147,8 @@ defmodule Server.Home.PetsTest do
       assert prompt =~ "Shares the house with Bruno, a bear."
       assert prompt =~ "ARGOS: called Bruno, a bear."
       assert prompt =~ "Shares the house with Nina, a cat."
+      refute prompt =~ "she is quick"
+      assert prompt =~ "each speaks in their own character as described above."
       refute prompt =~ "the dog"
       refute prompt =~ "Nina tells him"
       refute prompt =~ "jewelled collar"
