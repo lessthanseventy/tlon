@@ -145,11 +145,17 @@ defmodule Server.CLI do
   the merge queue said to an approval. Requested changes are an error, so a caller reads them as red.
   """
   @spec review(String.t()) :: result()
-  def review(branch) do
-    case Server.BranchReview.Headless.review(Server.Profiles.tlon_root(), branch) do
-      {:ok, %{verdict: "approve"} = review} -> {:ok, reviewed("✓ approved", branch, review)}
-      {:ok, review} -> {:error, reviewed("✗ changes requested", branch, review)}
-      {:error, why} -> {:error, "not reviewed: " <> why}
+  def review(branch), do: said(Server.BranchReview.Headless.review(Server.Profiles.tlon_root(), branch), branch)
+
+  @doc """
+  Reviews a branch of another repo, the checkout at `repo`: the review and its verdict alone. Nothing
+  is recorded or queued, since that repo's reviews and landings are not this server's.
+  """
+  @spec review(String.t(), String.t()) :: result()
+  def review(branch, repo) do
+    case Server.BranchReview.Headless.opinion(Path.expand(repo), branch) do
+      {:ok, opinion} -> said({:ok, Map.put(opinion, :landing, nil)}, branch)
+      error -> said(error, branch)
     end
   end
 
@@ -403,4 +409,8 @@ defmodule Server.CLI do
     |> Enum.reject(&(&1 in [nil, ""]))
     |> Enum.join("\n\n")
   end
+
+  defp said({:ok, %{verdict: "approve"} = review}, branch), do: {:ok, reviewed("✓ approved", branch, review)}
+  defp said({:ok, review}, branch), do: {:error, reviewed("✗ changes requested", branch, review)}
+  defp said({:error, why}, _branch), do: {:error, "not reviewed: " <> why}
 end

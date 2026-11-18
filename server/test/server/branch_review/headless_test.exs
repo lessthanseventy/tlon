@@ -58,6 +58,15 @@ defmodule Server.BranchReview.HeadlessTest do
     assert %{verdict: "approve", sha: ^sha, by: @opus, body: "reads right"} = BranchReview.latest("feat")
   end
 
+  test "an opinion is the review alone: nothing recorded, nothing queued", ctx do
+    cmd = cli(ctx.dir, ~s(printf 'reads right\\nVERDICT: approve\\n'))
+
+    assert Headless.opinion(ctx.repo, "feat", cmd: cmd, models: [@opus]) ==
+             {:ok, %{verdict: "approve", sha: ctx.head, by: @opus, body: "reads right"}}
+
+    assert BranchReview.latest("feat") == nil
+  end
+
   test "an approval hands the branch's PR to the merge queue", ctx do
     cmd = cli(ctx.dir, "echo 'VERDICT: approve'")
     land = fn repo, "feat" when repo == ctx.repo -> {:ok, %{args: %{"pr" => 7}}} end

@@ -74,6 +74,8 @@
 #   review <branch>                review a branch headless, on a model that wrote none of it, and
 #                                  print the review (`mise run review`); an approval queues the
 #                                  branch's open PR in the merge queue, requested changes exit 1
+#     review <branch> <repo>       …a branch of another repo's checkout: the review alone, nothing
+#                                  recorded or queued
 #   land-pr <pr> <branch> [author] queue a reviewed PR in the merge queue (`mise run land`); refused
 #                                  unless the branch's review on tlon, by neither its author nor a
 #                                  builder of it, approves its head
@@ -619,7 +621,11 @@ case "$cmd" in
 
   review)
     branch="${1:-}"
-    [ -n "$branch" ] || { echo 'usage: tlon-cli.sh review <branch>' >&2; exit 2; }
+    [ -n "$branch" ] || { echo 'usage: tlon-cli.sh review <branch> [<repo>]' >&2; exit 2; }
+    if [ -n "${2:-}" ]; then
+      repo="$(cd "$2" && pwd)" || exit 2
+      exec "$SERVER" rpc "Server.CLI.review(\"$(esc "$branch")\", \"$(esc "$repo")\") |> Server.CLI.out()"
+    fi
     exec "$SERVER" rpc "Server.CLI.review(\"$(esc "$branch")\") |> Server.CLI.out()"
     ;;
 

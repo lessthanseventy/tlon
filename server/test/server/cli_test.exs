@@ -219,6 +219,10 @@ defmodule Server.CLITest do
                {:error, "not reviewed: main is never reviewed as a branch — review the branch that lands on it"}
     end
 
+    test "review of another repo's branch says why it could not be read" do
+      assert {:error, "not reviewed: can't read feat: " <> _} = CLI.review("feat", System.tmp_dir!())
+    end
+
     test "land_pr refuses a branch no review approves" do
       assert {:error, "refused: " <> _} = CLI.land_pr(1, "no-such-branch", "")
     end
