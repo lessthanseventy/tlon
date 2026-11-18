@@ -68,6 +68,9 @@ var temp_c: Variant = null
 var reply_text := ""
 var reply_left := 0.0
 var ring_ids: Array = []
+var _rang: Array = []
+var _watching := false
+var _night_next := 120.0
 var open: Array = []
 var coming: Array = []
 var notes: Array = []
@@ -75,6 +78,7 @@ var weather := "clear"
 var forced_weather := ""
 var fake_hour := -1.0
 var say_who := ""
+var say_occasion := "pet"
 var force_bat := false
 var jot_open := false
 var show_note := -1
@@ -96,6 +100,7 @@ var _had_open := false
 var _seen_data := false
 var _scripted := {}
 var _say_done := false
+var _arg_duo := false
 var _deep := 0.0
 var _arg_jar := -1
 var _arg_drop := false
@@ -129,6 +134,10 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				forced_weather = next
 			"--say":
 				say_who = next
+			"--occasion":
+				say_occasion = next
+			"--duo":
+				_arg_duo = true
 			"--nina":
 				nina_at = next
 			"--argos":
@@ -226,6 +235,10 @@ func set_voices(v: Dictionary) -> void:
 	pets.set_voices(v)
 
 
+func has_voices() -> bool:
+	return pets.voices.has_any()
+
+
 func set_weather(w: Variant) -> void:
 	if w is Dictionary and w.get("kind") is String:
 		weather = w["kind"]
@@ -253,6 +266,11 @@ func set_data(d: Dictionary) -> void:
 	if knock.id >= 0 and not ids.has(knock.id):
 		knock.clear()
 	_assign_slots(ids)
+	_rang = _rang.filter(func(r): return ring_ids.has(r))
+	for item in open:
+		if ring_ids.has(int(item["id"])) and not _rang.has(int(item["id"])):
+			_rang.append(int(item["id"]))
+			pets.nudge("desk", "ring", str(item["text"]))
 	pets.has_open = not open.is_empty()
 	_feed_person()
 	jar.set_count(_arg_jar if _arg_jar >= 0 else done_week, Jar.week_key(_now_local()), 0.9)
@@ -316,6 +334,7 @@ func _feed_person() -> void:
 func show_reply(text: String) -> void:
 	reply_text = text
 	reply_left = 7.0
+	pets.nudge("desk", "jot")
 
 
 func take_attention() -> bool:
@@ -399,7 +418,6 @@ func process(dt: float) -> void:
 	_t += dt
 	_env = _env_now()
 	pets.is_night = _env["day"] < 0.15
-	pets.bubble_cap = 4.5
 	pets.jot_open = jot_open
 	var nina: Pets.Critter = pets.critter("nina")
 	if jot_open and nina.spot == "pad":
@@ -417,6 +435,14 @@ func process(dt: float) -> void:
 		pets.settle_near(deep)
 	tv.process(dt, person.watching(), _deep > 0.5)
 	pets.tv_on = tv.on
+	if person.watching() and not _watching and not pets.freeze:
+		pets.nudge("tv", "tv")
+	_watching = person.watching()
+	_night_next -= dt
+	if _night_next <= 0.0:
+		_night_next = pets.rng.randf_range(600.0, 1200.0)
+		if pets.is_night and not deep and not pets.freeze:
+			pets.nudge("desk", "night")
 	jar.process(dt)
 	door.process(dt)
 	room.door_ajar = door.ajar() or person.arrive_left > 3.0
@@ -452,7 +478,10 @@ func process(dt: float) -> void:
 		_say_done = true
 		var c: Pets.Critter = pets.critter(say_who.to_lower())
 		if c != null:
-			pets.say(c, pets.line(c.title, "pet" if c.id == "nina" else "pat"))
+			pets.speak(c, say_occasion, "buy milk" if say_occasion in ["done", "old", "ring"] else "")
+	if _arg_duo and _t > 0.3:
+		_arg_duo = false
+		pets.play_duo(pets.voices.duo())
 	for cr in _crumples.duplicate():
 		cr["t"] += dt
 		if cr["t"] >= cr["life"]:
@@ -507,7 +536,13 @@ func tick_off(id: int) -> void:
 	_slots.erase(id)
 	if id == knock.id:
 		knock.clear()
-	_cheer_argos()
+	pets.cheer(
+		pets.critter("argos"),
+		"desk_stand",
+		3,
+		"all_done" if open.size() == 1 else "done",
+		str(found["text"])
+	)
 	if found["text"].to_lower().contains("plant") and found["text"].to_lower().contains("water"):
 		perk_left = 600.0
 		water_left = 4.0
@@ -619,8 +654,6 @@ func _celebrate() -> void:
 				}
 			)
 		)
-	if pets.critter("nina").mode != "bat":
-		pets.say(pets.critter("nina"), pets.line("Nina", "done"))
 
 
 func _land(cr: Dictionary) -> void:
@@ -632,7 +665,6 @@ func _land(cr: Dictionary) -> void:
 	var toy: Dictionary = pets.drop_toy(_center(6, 1))
 	var nina: Pets.Critter = pets.critter("nina")
 	pets.chase(nina, toy, 2)
-	pets.say(nina, pets.line("Nina", "paper"))
 
 
 func _center(c: int, r: int) -> Vector2:
@@ -1254,7 +1286,7 @@ func click(pos: Vector2) -> bool:
 	var key := _topmost(pos)
 	if key.begins_with("pet:"):
 		var c: Pets.Critter = pets.critter(key.substr(4))
-		pets.pat(c, "pet" if c.id == "nina" else ("belly" if pets.rng.randf() < 0.25 else "pat"))
+		pets.pat(c, "pet")
 		return true
 	if key.begins_with("item:"):
 		open_item_menu(int(key.substr(5)))
@@ -1312,7 +1344,7 @@ func came_back() -> void:
 	if _deep_night():
 		return
 	person.arrive(false)
-	pets.cheer(pets.critter("argos"), "door", 3, "greet")
+	pets.cheer(pets.critter("argos"), "door", 3, "home")
 
 
 func _open_ids() -> Array:
@@ -1328,10 +1360,6 @@ func _anchor(id: int) -> Vector2:
 	if _slots.has(id):
 		return Props.center(_slot_quad(_slots[id]))
 	return _stack_top(open.size())
-
-
-func _cheer_argos() -> void:
-	pets.cheer(pets.critter("argos"), "desk_stand", 3, "cheer")
 
 
 func _day_key() -> String:
@@ -1355,10 +1383,11 @@ func _begin_beat(which: String) -> void:
 	_slip_kind = which
 	if which == "home":
 		person.arrive(true)
-		pets.cheer(pets.critter("argos"), "door", 3, "greet")
+		pets.cheer(pets.critter("argos"), "door", 3, "home")
 		_slip_delay = 3.2
 	else:
 		person.stretch("morning.")
+		pets.nudge("board", "morning")
 		_slip_delay = 1.2
 
 
@@ -1404,6 +1433,9 @@ func _knocking(dt: float) -> void:
 	var id := knock.due(dt, open, Time.get_unix_time_from_system(), _hour(), pets.is_night)
 	if id >= 0:
 		knock.pending = id
+		for item in open:
+			if int(item["id"]) == id:
+				pets.knock_thing = str(item["text"])
 		pets.knock(pets.critter("nina"))
 
 

@@ -9,6 +9,7 @@ const Door := preload("res://door.gd")
 const Rhythm := preload("res://rhythm.gd")
 const Hacks := preload("res://hacks.gd")
 const Tv := preload("res://tv.gd")
+const Voices := preload("res://voices.gd")
 
 var _srv := TCPServer.new()
 var _conns: Array = []
@@ -23,6 +24,7 @@ var _office := {
 	"threads": [{"id": 7, "title": "Review: door", "awaiting": "operator", "prompt": null}],
 	"landings": [{"ref": "pr/1", "subject": "first", "landed_at": "2026-11-09T23:05:14Z"}],
 }
+var _pets_batch: Dictionary = {}
 var _failures: Array = []
 var _state := {
 	"open":
@@ -87,12 +89,12 @@ func _soak() -> void:
 			person.has_notes = rng.randf() < 0.6
 			pets.tv_on = rng.randf() < 0.5
 			if rng.randf() < 0.15:
-				pets.cheer(pets.critter("argos"), "desk_stand", 3, "cheer")
+				pets.cheer(pets.critter("argos"), "desk_stand", 3, "done", "buy milk")
 			if rng.randf() < 0.1:
 				pets.knock(pets.critter("nina"))
 			if rng.randf() < 0.05:
 				person.arrive(rng.randf() < 0.5)
-				pets.cheer(pets.critter("argos"), "door", 3, "greet")
+				pets.cheer(pets.critter("argos"), "door", 3, "home")
 			pets.settle_near(rng.randf() < 0.15)
 			if rng.randf() < 0.1:
 				person.stretch()
@@ -194,14 +196,41 @@ func _routes() -> void:
 	_srv.listen(4999, "127.0.0.1")
 	OS.set_environment("TLON_URL", "http://127.0.0.1:4999")
 	var main: Control = load("res://main.gd").new()
+	main.pets_retry = 0.3
+	main.pets_window = 30.0
+	main.pets_every = 100.0
+	main.pets_nudge = 0.3
 	root.add_child(main)
 	await create_timer(1.5).timeout
 	_check(
 		main._data["open"].size() == 2,
 		"GET /api/home filled the room (%d open)" % main._data["open"].size()
 	)
+	var asks := _count("/api/home/pets")
+	_check(asks >= 3, "an empty batch is asked again at the short interval (%d asks)" % asks)
+	_check(not main._room.home.has_voices(), "{} leaves the pets with nothing served")
+	_pets_batch = {"Nina": {"muse": ["served line"]}, "duo": []}
+	await create_timer(0.8).timeout
+	_check(main._room.home.has_voices(), "the next ask picks the batch up")
+	asks = _count("/api/home/pets")
+	await create_timer(0.8).timeout
+	_check(_count("/api/home/pets") == asks, "a held batch is asked at the long interval")
+	_pets_batch = {}
+	main._pets_ask()
+	await create_timer(0.3).timeout
+	_check(main._room.home.has_voices(), "an empty answer keeps what is held")
+	main._room.home.set_voices({})
+	main._pets_since = Time.get_ticks_msec() / 1000.0
+	main._pets_later()
+	_check(is_equal_approx(main._pets_timer.time_left, 0.3), "empty and early: the short interval")
+	main._pets_since = Time.get_ticks_msec() / 1000.0 - 60.0
+	main._pets_later()
+	_check(main._pets_timer.time_left > 90.0, "empty past the window: backs off to the long one")
+	_pets_batch = {"Nina": {"muse": ["served line"]}}
+	asks = _count("/api/home/pets")
 	main._on_act(1, "done")
 	await create_timer(1.0).timeout
+	_check(_count("/api/home/pets") == asks + 1, "the open list changing asks once more")
 	_check(_seen("POST", "/api/home/1/done"), "done posted")
 	_check(main._data["open"].size() == 1, "done removed the thing")
 	main._on_act(2, "hour")
@@ -256,6 +285,89 @@ func _routes() -> void:
 	_srv.stop()
 
 
+func _count(path: String) -> int:
+	var n := 0
+	for l in _log:
+		if l[0] == "GET" and l[1] == path:
+			n += 1
+	return n
+
+
+func _voices_logic() -> void:
+	var v := Voices.new()
+	v.rng.seed = 7
+	v.set_batch({"Nina": {"done": ["a {thing}", "b {thing}", "c {thing}"]}})
+	var last := ""
+	var same := 0
+	var chunks_ok := true
+	for chunk in 6:
+		var seen := {}
+		for i in 3:
+			var l := v.line("Nina", "done", "buy milk")
+			seen[l] = true
+			same += 1 if l == last else 0
+			last = l
+		chunks_ok = chunks_ok and seen.size() == 3
+	_check(chunks_ok, "no line repeats until every other has been used")
+	_check(same == 0, "never the same line twice in a row")
+	_check(v.line("Nina", "done", "buy milk").ends_with("buy milk"), "{thing} is filled in")
+	v.set_batch({"Nina": {"done": ["a {thing}", "plain"]}})
+	var only_plain := true
+	for i in 12:
+		only_plain = only_plain and v.line("Nina", "done") == "plain"
+	_check(only_plain, "a line with {thing} and no thing to name is skipped")
+	v.set_batch({"Nina": {"done": ["a {thing}"]}})
+	_check(v.line("Nina", "done") == "", "all lines skipped: no bubble, not a built-in")
+	_check(
+		Voices.short("  a   very long thing that goes on and on and on  ").length()
+		<= Voices.THING_MAX,
+		"a thing is trimmed to fit a bubble"
+	)
+	v.set_batch({"Nina": {"pet": ["x"], "muse": ["x", "y"]}})
+	var first := v.line("Nina", "pet")
+	_check(first == "x" and v.line("Nina", "muse") == "y", "not twice in a row across occasions")
+	v.set_batch({})
+	_check(
+		v.line("Nina", "pet") in Voices.FALLBACK["Nina"]["pet"],
+		"nothing served: the built-in line"
+	)
+	_check(v.line("Nina", "tv") == "", "nothing served and no built-in: no bubble")
+	v.set_batch({"Nina": {"muse": ["served"]}})
+	_check(
+		v.line("Nina", "pet") in Voices.FALLBACK["Nina"]["pet"],
+		"the pet with nothing for an occasion falls back"
+	)
+	var mixed := false
+	for i in 40:
+		mixed = mixed or v.line("Nina", "muse") != "served"
+	_check(not mixed, "a served occasion never mixes in a built-in")
+	_check(Voices.bubble_time("hi") == 3.5, "a short line shows for the minimum")
+	_check(Voices.bubble_time("x".repeat(130)) >= 8.5, "a long line stays long enough to read")
+	_check(Voices.bubble_time("x".repeat(400)) == 9.0, "no bubble stays past the maximum")
+	v.set_batch({"duo": [["Bob: hi"], ["Nina: one", "Argos: two"]]})
+	_check(v.duo() == [["Nina", "one"], ["Argos", "two"]], "a malformed exchange is skipped")
+	var room := _room()
+	var pets = room.home.pets
+	pets.set_voices({"duo": [["Nina: one", "Argos: two", "Nina: three"]]})
+	pets.play_duo(pets.voices.duo())
+	var order: Array = []
+	var both := false
+	for i in 120:
+		pets.process(0.1)
+		var talking: Array = []
+		for id in ["nina", "argos"]:
+			var c = pets.critter(id)
+			if c.say_left > 0.0:
+				talking.append([id, c.say_text])
+		both = both or talking.size() > 1
+		if talking.size() == 1 and (order.is_empty() or order[-1] != talking[0]):
+			order.append(talking[0])
+	var want := [["nina", "one"], ["argos", "two"], ["nina", "three"]]
+	_check(order == want, "duo turns in order: " + str(order))
+	_check(not both, "never two bubbles at once in a duo")
+	room.queue_free()
+
+
 func _seen(method: String, path: String, body_has: String = "") -> bool:
 	for l in _log:
 		if l[0] == method and l[1] == path and (body_has == "" or body_has in str(l[2])):
@@ -300,6 +412,8 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 	var parsed: Variant = JSON.parse_string(body) if body != "" else {}
 	if method == "GET" and path == "/api/home":
 		out = _state
+	elif method == "GET" and path == "/api/home/pets":
+		out = _pets_batch
 	elif method == "GET" and path == "/api/office":
 		out = _office
 	elif method == "GET" and path == "/api/settings":
@@ -351,6 +465,7 @@ func _logic() -> void:
 	_rhythm_logic()
 	_door_logic()
 	_tv_logic()
+	_voices_logic()
 	_home_logic()
 	_night_logic()
 

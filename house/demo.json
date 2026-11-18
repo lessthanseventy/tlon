@@ -1,4 +1,125 @@
 {
+  "pets": {
+    "Nina": {
+      "pet": [
+        "You may continue. I'll say when to stop, peasant.",
+        "Careful, darling. The collar costs more than your sofa.",
+        "Adequate. Again."
+      ],
+      "wake": [
+        "I was not asleep, peasant. I was reviewing this room's many failings with my eyes closed, the only way to bear them.",
+        "Who woke the princess? Name them, so I can forgive no one."
+      ],
+      "muse": [
+        "I've read everything in this house. It took a minute.",
+        "Argos asked if I'm a small dog. I let him live.",
+        "A good collar does half the thinking. I do the rest.",
+        "Someone should say something clever. Fine. Me."
+      ],
+      "done": [
+        "{thing}? Done. I'd have finished it earlier, darling.",
+        "Congratulations, peasant. {thing} is no longer my problem."
+      ],
+      "all_done": [
+        "Nothing left. A rare victory, which I will take credit for.",
+        "Empty list. Now we can discuss my dinner."
+      ],
+      "old": [
+        "{thing} has sat there for days. I'm helping it leave.",
+        "Don't look at me. {thing} jumped."
+      ],
+      "jot": [
+        "Writing it down doesn't count as doing it, darling.",
+        "Noted. By me. The pad is decorative."
+      ],
+      "ring": [
+        "Your phone is shrieking about {thing}. Fetch it, peasant.",
+        "Answer it. The noise is beneath me."
+      ],
+      "home": [
+        "Oh, you're back. I barely noticed. The dog cried a little.",
+        "Home. Good. The dog was getting ideas."
+      ],
+      "morning": [
+        "Morning, peasant. Breakfast was due at dawn.",
+        "Another day. Try to keep up."
+      ],
+      "tv": [
+        "I'll watch, but only to see if the writers have improved.",
+        "Move over. The sofa is mine and so is the remote."
+      ],
+      "night": [
+        "Still up? How fortunate that one of us is clever and rested.",
+        "Even geniuses sleep. On their own schedule."
+      ]
+    },
+    "Argos": {
+      "pet": [
+        "Is this a pat? It's a pat! Do it again, I forgot.",
+        "I'm a good boy and I know because everyone says. Who is everyone?",
+        "Nina says pats are a tax. I'd pay it!"
+      ],
+      "wake": [
+        "I'm awake! What did I miss? Nothing? Great!",
+        "Was I snoring? Nina says I was a very small bear."
+      ],
+      "muse": [
+        "Nina says I'm a dog. Are you a dog? Are you sure?",
+        "I had a thought and now it's gone. It was a great one.",
+        "Nina is a small strange dog. She told me that. Wait, I told her.",
+        "Rain is the sky licking the window. I read that. Nobody told me."
+      ],
+      "done": [
+        "{thing}! Done! What is a {thing}?",
+        "You did {thing}! I helped by being here!"
+      ],
+      "all_done": [
+        "Nothing left! Is that bad? It feels good!",
+        "All done! So what are we doing now? Let's do the first one again!"
+      ],
+      "old": [
+        "Nina pushed {thing}! She says it was the wind!",
+        "{thing} fell down! Was that Nina? I didn't see!"
+      ],
+      "jot": [
+        "You wrote it down! Now it can't escape!",
+        "Was that a secret? I can't read!"
+      ],
+      "ring": [
+        "Phone! Phone! It's yelling about {thing}!",
+        "Somebody wants you! Is it me? It's {thing}!"
+      ],
+      "home": [
+        "You're back! You went out and came back! Is that allowed?",
+        "Who are you? Oh! It's you! My favourite!"
+      ],
+      "morning": [
+        "Morning! Is it breakfast time? It's always breakfast time!",
+        "Good morning! I slept like a rock! Are rocks good at it?"
+      ],
+      "tv": [
+        "TV! I love this show! What is it?",
+        "Are they stuck in the box? Should I get them?"
+      ],
+      "night": [
+        "It's dark! Is it still today?",
+        "Nobody sleeps?! I'll stay up too! ...zzz"
+      ]
+    },
+    "duo": [
+      [
+        "Nina: Argos, where do I end and you begin?",
+        "Argos: Are you the part with the collar?",
+        "Nina: Yes. Correct. Sit down, you've peaked."
+      ],
+      [
+        "Argos: Nina! The sky is doing it again!",
+        "Nina: It's raining, Argos. It's called rain.",
+        "Argos: I'll tell the sky you said hello!",
+        "Nina: Please don't."
+      ]
+    ]
+  },
   "done_week": 4,
   "open": [
     {

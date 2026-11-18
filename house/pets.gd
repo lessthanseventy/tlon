@@ -1,5 +1,6 @@
 extends RefCounted
 
+const Voices := preload("res://voices.gd")
 const COLS := 8
 const ROWS := 8
 const CHAIR := Vector2i(4, 1)
@@ -43,60 +44,9 @@ const SPOTS := {
 const BIN_TOP := Vector2(6.5, 0.5)
 const BIN_Z := 11.0
 
-const FALLBACK := {
-	"Nina":
-	{
-		"pet":
-		[
-			"Yes. Adore me. Continue.",
-			"Mind the collar. It's couture.",
-			"prrr... this changes nothing.",
-			"I permit this.",
-			"Again. With more reverence.",
-		],
-		"wake": ["I was NOT asleep. Resting regally.", "Who woke the princess?"],
-		"muse":
-		[
-			"Has anyone noticed my collar?",
-			"I am the main character here.",
-			"Sparkle check: still sparkling.",
-			"This floor is beneath me.",
-		],
-		"play": ["The yarn dares to run. Rude.", "Mine. All mine, darling."],
-		"paper": ["A paper ball. Mine. Obviously.", "Peasants throw. I chase. Magnificent."],
-		"done": ["All done? I'd have been quicker.", "Done! Nobody thank me. ...fine, do."],
-		"knock":
-		[
-			"It fell. By itself. I saw nothing.",
-			"Gravity did that. Not me.",
-			"Oh, a paper on the floor. How did that get there.",
-		],
-	},
-	"Argos":
-	{
-		"pat": ["Good boy? Me? Yes. ME!", "The head! The good head!"],
-		"belly": ["The belly! The WHOLE belly!"],
-		"muse":
-		[
-			"Rosy-fingered dawn means breakfast?",
-			"I once sang of Troy. Now: squirrels.",
-			"Wine-dark sea. Water-dark bowl.",
-		],
-		"bed": ["An epic nap, in twenty-four books."],
-		"done": ["Everything's done?! WALK?", "All done! Sing, O Muse!"],
-		"cheer": ["One down! ONE DOWN!", "Done! Done! Done!", "Yes! Good! Tail! Tail!"],
-		"greet":
-		[
-			"You're back! You're BACK!",
-			"Welcome home! Tell me everything!",
-			"Ninety seconds! I missed you!",
-		],
-	},
-}
-
 var toys: Array = []
 var critters: Array = []
-var voices := {}
+var voices := Voices.new()
 var rng := RandomNumberGenerator.new()
 var animals_dir := ""
 var chars_dir := ""
@@ -104,13 +54,15 @@ var freeze := false
 var is_night := false
 var has_open := false
 var tv_on := false
-var bubble_cap := 4.5
 var jot_open := false
 var settle := false
 var events: Array = []
+var knock_thing := ""
+var duo_turns: Array = []
+var duo_left := 0.0
+var duo_next := 90.0
 
 var _tex := {}
-var _last_line := {}
 
 
 class Critter:
@@ -152,6 +104,7 @@ func setup(art_dir: String, seed_value: int) -> void:
 		rng.seed = seed_value
 	else:
 		rng.randomize()
+	voices.rng.seed = rng.randi()
 	var nina := _make("nina", "Nina", "animals", "cat_black", 1.5, 18.0)
 	var argos := _make("argos", "Argos", "animals", "dog_golden", 1.25, 20.0)
 	var person := _make("person", "", "chars", "villager", 1.3, 46.0)
@@ -333,6 +286,7 @@ func _arrive(c: Critter) -> void:
 
 func process(dt: float) -> int:
 	var landed := 0
+	_duo(dt)
 	for c in critters:
 		_step(c, dt)
 	for t in toys.duplicate():
@@ -378,8 +332,8 @@ func _step(c: Critter, dt: float) -> void:
 		c.say_next -= dt
 		if c.say_next <= 0.0:
 			c.say_next = rng.randf_range(40.0, 90.0)
-			if c.mode != "sleep":
-				say(c, line(c.title, "muse"))
+			if c.mode != "sleep" and _quiet():
+				speak(c, "muse")
 	if c.wait <= 0.0:
 		_decide(c)
 
@@ -450,10 +404,10 @@ func _pick(options: Array, current: String) -> Array:
 	return options[0]
 
 
-func cheer(c: Critter, spot: String, hops: int, occasion: String) -> void:
+func cheer(c: Critter, spot: String, hops: int, occasion: String, thing: String = "") -> void:
 	c.run = true
 	c.hops = hops
-	say(c, line(c.title, occasion))
+	speak(c, occasion, thing)
 	go(c, spot, "cheer", 4.0)
 
 
@@ -479,7 +433,7 @@ func _step_swat(c: Critter, dt: float) -> void:
 		c.bat_t = -1.0
 		c.mode = "idle"
 		c.anim = "idle"
-		say(c, line(c.title, "knock"))
+		speak(c, "old", knock_thing)
 		go(c, "knocked", "sit", 30.0)
 		c.wait = 9999.0
 
@@ -529,10 +483,9 @@ func _decide_nina(c: Critter) -> void:
 		if toy.is_empty():
 			return _decide_nina(c)
 		chase(c, toy, 3)
-		say(c, line("Nina", "play"))
 		return
-	if c.mode == "sleep" and pick[2] != "sleep" and rng.randf() < 0.5:
-		say(c, line("Nina", "wake"))
+	if c.mode == "sleep" and pick[2] != "sleep" and rng.randf() < 0.5 and _quiet():
+		speak(c, "wake")
 	go(c, pick[0], pick[2], pick[3])
 	c.wait = 9999.0
 
@@ -550,8 +503,6 @@ func _decide_argos(c: Critter) -> void:
 		[wander[rng.randi() % wander.size()], 4.0, "sit", rng.randf_range(4, 9)],
 	]
 	var pick := _pick(options, c.spot)
-	if pick[0] == "bed" and rng.randf() < 0.5:
-		say(c, line("Argos", "bed"))
 	go(c, pick[0], pick[2], pick[3])
 	c.wait = 9999.0
 
@@ -719,37 +670,97 @@ func pat(c: Critter, occasion: String) -> void:
 		c.mode = "idle"
 		c.anim = "idle"
 		c.wait = 5.0
-		say(c, line(c.title, "wake"))
+		speak(c, "wake")
 	else:
 		c.wait = maxf(c.wait, 4.0)
-		say(c, line(c.title, occasion))
+		speak(c, occasion)
 
 
 func say(c: Critter, text: String) -> void:
+	if text == "":
+		return
 	c.say_text = text
-	c.say_left = bubble_cap
+	c.say_left = Voices.bubble_time(text)
 
 
 func set_voices(v: Dictionary) -> void:
-	voices = v
+	if v == voices.batch:
+		return
+	voices.set_batch(v)
+	duo_turns = []
 
 
-func line(who: String, occasion: String) -> String:
-	var pool: Array = []
-	var theirs: Variant = voices.get(who)
-	if theirs is Dictionary and theirs.get(occasion) is Array:
-		for l in theirs[occasion]:
-			if l is String and not "{" in l:
-				pool.append(l)
-	var fallback: Array = FALLBACK.get(who, {}).get(occasion, FALLBACK[who]["muse"])
-	if pool.is_empty() or rng.randf() < 0.25:
-		pool = fallback
-	var pick: String = pool[rng.randi() % pool.size()]
-	var key := who + occasion
-	if pool.size() > 1 and _last_line.get(key, "") == pick:
-		pick = pool[(pool.find(pick) + 1) % pool.size()]
-	_last_line[key] = pick
-	return pick
+func line(who: String, occasion: String, thing: String = "") -> String:
+	return voices.line(who, occasion, thing)
+
+
+func speak(c: Critter, occasion: String, thing: String = "") -> void:
+	say(c, line(c.title, occasion, thing))
+
+
+func nearest(spot: String) -> Critter:
+	var at := _center(SPOTS[spot]["cell"])
+	var best: Critter = null
+	for id in ["nina", "argos"]:
+		var c := critter(id)
+		if c.mode == "sleep" or c.say_left > 0.0 or not duo_turns.is_empty():
+			continue
+		if best == null or c.pos.distance_to(at) < best.pos.distance_to(at):
+			best = c
+	return best
+
+
+func nudge(spot: String, occasion: String, thing: String = "") -> void:
+	var c := nearest(spot)
+	if c != null:
+		speak(c, occasion, thing)
+
+
+func _quiet() -> bool:
+	return (
+		duo_turns.is_empty()
+		and critter("nina").say_left <= 0.0
+		and critter("argos").say_left <= 0.0
+	)
+
+
+func _duo(dt: float) -> void:
+	if not duo_turns.is_empty():
+		duo_left -= dt
+		if duo_left <= 0.0:
+			_duo_turn()
+		return
+	if freeze:
+		return
+	duo_next -= dt
+	if duo_next > 0.0:
+		return
+	duo_next = 10.0
+	for id in ["nina", "argos"]:
+		var c := critter(id)
+		if c.mode != "idle" or c.goal != "" or not c.jump.is_empty() or c.say_left > 0.0:
+			return
+	var turns := voices.duo()
+	if turns.is_empty():
+		return
+	duo_next = rng.randf_range(150.0, 300.0)
+	play_duo(turns)
+
+
+func play_duo(turns: Array) -> void:
+	duo_turns = turns.duplicate()
+	_duo_turn()
+
+
+func _duo_turn() -> void:
+	for id in ["nina", "argos"]:
+		critter(id).say_left = 0.0
+	if duo_turns.is_empty():
+		return
+	var turn: Array = duo_turns.pop_front()
+	var c := critter(str(turn[0]).to_lower())
+	say(c, turn[1])
+	duo_left = c.say_left
 
 
 func drop_toy(to: Vector2) -> Dictionary:
