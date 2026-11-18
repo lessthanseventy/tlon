@@ -7,6 +7,7 @@ extends RefCounted
 # art pack lists exactly what the loaders opened, and what the looks cost per frame.
 const Looks := preload("res://looks.gd")
 const Glow := preload("res://glow.gd")
+const Weather := preload("res://weather.gd")
 const View := preload("res://view.gd")
 const Settings := preload("res://settings.gd")
 const Home := preload("res://home.gd")
@@ -42,6 +43,7 @@ func run() -> void:
 	Looks.setup(art, h.settings)
 	_all(h, true)
 	_glow(h)
+	_weather(h)
 	_loaded()
 	_empty(h)
 	room.queue_free()
@@ -49,12 +51,17 @@ func run() -> void:
 
 func _tables(art: String) -> void:
 	Looks.setup(art, null)
-	var all: Array = Glow.files()
+	var all: Array = Glow.files() + Weather.files()
 	s._check(all.size() >= 12, "the four looks name their files (%d)" % all.size())
 	for rel in all:
 		s._check(FileAccess.file_exists(art.path_join(rel)), "look file exists: " + rel)
-	for rel in Glow.files():
+	for rel in Glow.files() + Weather.files():
 		s._check(Looks.tex(rel) != null, "look file loads: " + rel)
+	for name in Weather.LAYERS:
+		var l: Dictionary = Weather.LAYERS[name]
+		var size := Looks.tex(l["file"]).get_size()
+		var per: int = int(size.x / Weather.TILE) * int(size.y / Weather.TILE)
+		s._check(per == l["frames"], "%s has its %d frames in the sheet" % [name, l["frames"]])
 	s._check(Looks.tex("nope/not-there.png") == null, "a file that is not there is no texture")
 
 
@@ -129,10 +136,37 @@ func _again() -> Array:
 	return out
 
 
+func _weather(h) -> void:
+	var q := View.quad(Vector2(100, 100), 2)
+	var box := Rect2(q[0], Vector2.ZERO)
+	for p in q:
+		box = box.expand(p)
+	for w in ["rain", "storm", "snow", "fog"]:
+		var plan := Weather.plan(q, 2, w, 3.0, 1.0)
+		s._check(not plan.is_empty(), "%s is drawn from the pack" % w)
+		for g in plan:
+			for p in g["poly"]:
+				s._check(box.grow(0.01).has_point(p), "%s stays inside the glass" % w)
+	for w in ["clear", "partly", "cloudy"]:
+		s._check(Weather.plan(q, 2, w, 3.0, 1.0).is_empty(), "%s has no overlay" % w)
+	var plain := Weather.plan(q, 2, "storm", 3.0, 1.0).size()
+	for flash in [3, 6, 9]:
+		var t: float = flash * Weather.FLASH_EVERY - 4.2 + 0.05
+		var plan := Weather.plan(q, 2, "storm", t, 1.0)
+		s._check(plan.size() > plain, "a bolt strikes on flash %d" % flash)
+		for g in plan:
+			for p in g["poly"]:
+				s._check(box.grow(0.01).has_point(p), "a bolt stays inside the glass")
+	s._check(Weather.plan(q, 2, "storm", 1.5, 1.0).size() == plain, "and not between flashes")
+	h.settings.forced["weather_art"] = false
+	s._check(not Weather.shown("rain") and Weather.plan(q, 2, "rain", 1.0, 1.0).is_empty(), "off")
+	h.settings.forced["weather_art"] = true
+
+
 func _loaded() -> void:
 	var opened: Array = Looks.loaded()
 	opened.sort()
-	var listed: Array = Glow.files()
+	var listed: Array = Glow.files() + Weather.files()
 	var unique := {}
 	for rel in listed:
 		unique[rel] = true
@@ -148,6 +182,8 @@ func _empty(h) -> void:
 	_all(h, true)
 	_night(h, 21.0)
 	s._check(Glow.plan(h).is_empty() and not Glow.shown(), "no art: no glow")
+	var q := View.quad(Vector2(100, 100), 2)
+	s._check(Weather.plan(q, 2, "storm", 12.4, 1.0).is_empty(), "no art: no weather overlay")
 	Looks.setup(s._art(), h.settings)
 
 
@@ -164,6 +200,7 @@ func measure() -> void:
 	var ms := {}
 	for mode in ["plain", "all four on"]:
 		_all(h, mode != "plain")
+		h.settings.forced["weather_art"] = mode != "plain"
 		for i in 30:
 			await s.process_frame
 		var t0 := Time.get_ticks_usec()
