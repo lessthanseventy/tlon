@@ -17,6 +17,10 @@ const MONTHS := [
 	"October", "November", "December",
 ]
 const DAYS := [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+# the keys of `Looks.KEYS` and what their switch says
+const LOOKS := {
+	"glow": "a soft glow at the lights after dark",
+}
 
 var settings
 var home
@@ -37,6 +41,7 @@ var _sound: Button
 var _volume: HSlider
 var _widget: Button
 var _top: Button
+var _looks := {}
 var _found: Label
 var _forget: Button
 var _reset: Button
@@ -216,6 +221,12 @@ func _ready() -> void:
 	r = Paper.row(col)
 	_top = Paper.chip("widget stays on top", r, func() -> void: _put("on_top", _top.button_pressed), true)
 
+	_head(col, "looks")
+	for key in LOOKS:
+		r = Paper.row(col)
+		var put := func() -> void: _put(key, _looks[key].button_pressed)
+		_looks[key] = Paper.chip(LOOKS[key], r, put, true)
+
 	_head(col, "things to find")
 	r = Paper.row(col)
 	_found = Paper.label("", 14, Paper.INK)
@@ -279,6 +290,8 @@ func open() -> void:
 		_volume.set_value_no_signal(float(home.sound.volume))
 	_widget.set_pressed_no_signal(bool(settings.value("widget")))
 	_top.set_pressed_no_signal(bool(settings.value("on_top")))
+	for key in _looks:
+		_looks[key].set_pressed_no_signal(bool(settings.value(key)))
 	_url.text = str(settings.data.get("url", ""))
 	_tg_at.text = str(settings.value("telegram_list_at"))
 	_claude_cmd.text = str(settings.data.get("claude_command", ""))

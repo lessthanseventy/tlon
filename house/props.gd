@@ -312,10 +312,15 @@ static func sun_patch(
 	c.draw_line(qlerp(q, 0.5, 0.0), qlerp(q, 0.5, 1.0), bar, k)
 
 
-static func lamp_glow(c: CanvasItem, o: Vector2, k: int, strength: float) -> void:
+static func lamp_glow(
+	c: CanvasItem, o: Vector2, k: int, strength: float, halo: bool = true
+) -> void:
 	if strength < 0.03:
 		return
 	var bulb := floor_pt(o, k, 0.5, 6.5, 30)
+	if not halo:
+		c.draw_circle(bulb, 2.6 * k, Color(1.0, 0.95, 0.7, 0.9 * strength))
+		return
 	for i in 5:
 		c.draw_circle(bulb, (46 - i * 8) * k * 0.55, Color(1.0, 0.82, 0.45, 0.065 * strength))
 	var pool := PackedVector2Array()

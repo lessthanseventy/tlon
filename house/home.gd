@@ -28,6 +28,8 @@ const Things := preload("res://things.gd")
 const Sure := preload("res://sure.gd")
 const Settings := preload("res://settings.gd")
 const Chat := preload("res://chat.gd")
+const Looks := preload("res://looks.gd")
+const Glow := preload("res://glow.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -146,6 +148,7 @@ var knobs := {}
 var form_open := false
 var done: Variant = null
 var show_note := -1
+var window_frame := PackedVector2Array()
 
 var _t := 0.0
 var _o := Vector2.ZERO
@@ -245,6 +248,10 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				eggs.laser_on = true
 			"--widget":
 				settings.forced["widget"] = true
+			"--plain", "--looks":
+				var wanted := next.split(",") if args[i] == "--looks" else PackedStringArray()
+				for key in Looks.KEYS:
+					settings.forced[key] = key in wanted
 			"--local":
 				settings.forced["where"] = "local"
 			"--birthday":
@@ -286,6 +293,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 		seed_value = 7
 	staged = scripted or "--demo" in args or "--shot" in args or "--local" in args
 	settings.setup(not staged)
+	Looks.setup(art_dir, settings)
 	chat.setup(not staged)
 	pets.on_say = _pet_said
 	if "--demo" in args:
@@ -943,6 +951,7 @@ func _draw_window() -> void:
 	var frame := View.draw(
 		room, _o, _k, _env, _t, _hover == "window", outside.draw.bind(room, _k, _env)
 	)
+	window_frame = frame
 	_draw_season(frame)
 	_register("window", frame, Props.qlerp(frame, 0.5, 0.0))
 	outside.hits(room, frame)
@@ -1261,7 +1270,8 @@ func draw_over() -> void:
 	_geometry()
 	var hexp := Props.hex(_o, _k, COLS, ROWS, WALL_H)
 	Props.tint_room(room, hexp, _env)
-	Props.lamp_glow(room, _o, _k, _env["lamp"])
+	Props.lamp_glow(room, _o, _k, _env["lamp"], not Glow.shown())
+	Glow.draw(room, self)
 	_draw_knock_flight()
 	for cr in _crumples:
 		_draw_crumple(cr)

@@ -23,6 +23,7 @@ const DEFAULTS := {
 	"telegram_list_at": "17:30",
 	"claude": false,
 	"claude_command": "claude",
+	"glow": true,
 }
 
 # the names on display; Pets, Finds and the chat read these
