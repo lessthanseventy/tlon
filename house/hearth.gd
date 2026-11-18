@@ -10,7 +10,10 @@ const BARS := 22
 const BOX := Rect2(13.0, 38.0, 9.0, 13.0)
 const SCALE := [0, 2, 4, 7, 9, 12, 14]
 
-var h
+var _hw: WeakRef
+var h:
+	get:
+		return _hw.get_ref()
 var manual := -1
 var lit := false
 var sparks: Array = []
@@ -22,7 +25,7 @@ var _mark := 0.0
 
 
 func setup(home) -> void:
-	h = home
+	_hw = weakref(home)
 
 
 func auto_lit() -> bool:

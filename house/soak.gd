@@ -887,7 +887,10 @@ func _room(seed_value: int = 7) -> Control:
 	h.rhythm.persist = false
 	h.rhythm.days = {"home": "", "morning": ""}
 	h.pets.freeze = false
-	h.pets.rng.seed = seed_value
+	h.pets.setup(room.art_dir, seed_value)
+	h.pets.blocked_cells = h.layout.blocked()
+	h.person.setup(h.pets, h.look, seed_value + 1)
+	h.person.snap()
 	h.person.rng.seed = seed_value + 1
 	h.knock._rng.seed = seed_value + 2
 	h.tv.setup(seed_value + 3)
