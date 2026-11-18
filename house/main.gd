@@ -125,7 +125,7 @@ func _ready() -> void:
 	add_child(_closet)
 	_form = FormScript.new()
 	_form.submitted.connect(
-		func(req: Dictionary) -> void: _write(req["path"], req["body"], _form.finish)
+		func(req: Dictionary) -> void: _write(req["path"], req["body"], _form_saved)
 	)
 	_form.acted.connect(func(id: int, what: String) -> void: _act(id, what, _form.finish))
 	add_child(_form)
@@ -583,6 +583,11 @@ func _write(path: String, body: Dictionary, ok: Callable = Callable()) -> void:
 	)
 
 
+func _form_saved() -> void:
+	_room.home.sound.request("save")
+	_form.finish()
+
+
 static func _why(reached: bool, code: int, parsed: Variant) -> String:
 	if not reached:
 		return "couldn't reach tlon - nothing was changed"
@@ -595,6 +600,7 @@ static func _why(reached: bool, code: int, parsed: Variant) -> String:
 
 # one line where he is looking: the form, else the open card, else a slip
 func _trouble(line: String) -> void:
+	_room.home.sound.request("error")
 	if _form.visible:
 		_form.fail(line)
 	elif _room.home.card.is_open():
@@ -614,6 +620,7 @@ func _refresh() -> void:
 
 
 func _gone(id: int) -> void:
+	_room.home.sound.request("delete")
 	for key in ["open", "coming", "waiting", "someday", "projects"]:
 		_data[key] = _data[key].filter(func(t): return int(t["id"]) != id)
 	_data["note_rows"] = _data["note_rows"].filter(func(t): return int(t["id"]) != id)
