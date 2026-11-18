@@ -28,12 +28,15 @@ const SPOTS := {
 	"board": {"cell": Vector2i(3, 2), "face": 5},
 	"lounge": {"cell": Vector2i(5, 4), "face": 7},
 	"sofa":
-	{"cell": Vector2i(1, 4), "perch": Vector2(0.55, 5.45), "z": 10.0, "key": 5.5, "face": 7},
+	{"cell": Vector2i(1, 4), "perch": Vector2(0.55, 5.45), "z": 10.0, "key": 6.05, "face": 7},
 	"desk":
 	{"cell": Vector2i(3, 1), "perch": Vector2(4.95, 0.74), "z": 17.0, "key": 5.6, "face": 1},
 	"sill": {"cell": Vector2i(1, 5), "perch": Vector2(0.35, 5.2), "z": 23.5, "key": 6.2, "face": 3},
 	"tv": {"cell": Vector2i(1, 3), "face": 3},
 	"desk_stand": {"cell": Vector2i(4, 2), "face": 5},
+	"door_in": {"cell": Vector2i(2, 7), "face": 7},
+	"knocked": {"cell": Vector2i(6, 2), "face": 5},
+	"pad": {"cell": Vector2i(3, 1), "perch": Vector2(5.3, 0.85), "z": 17.0, "key": 5.6, "face": 1},
 	"sofa_stand": {"cell": Vector2i(1, 4), "face": 7},
 	"board_stand": {"cell": Vector2i(2, 1), "face": 5},
 }
@@ -62,6 +65,12 @@ const FALLBACK := {
 		"play": ["The yarn dares to run. Rude.", "Mine. All mine, darling."],
 		"paper": ["A paper ball. Mine. Obviously.", "Peasants throw. I chase. Magnificent."],
 		"done": ["All done? I'd have been quicker.", "Done! Nobody thank me. ...fine, do."],
+		"knock":
+		[
+			"It fell. By itself. I saw nothing.",
+			"Gravity did that. Not me.",
+			"Oh, a paper on the floor. How did that get there.",
+		],
 	},
 	"Argos":
 	{
@@ -75,6 +84,13 @@ const FALLBACK := {
 		],
 		"bed": ["An epic nap, in twenty-four books."],
 		"done": ["Everything's done?! WALK?", "All done! Sing, O Muse!"],
+		"cheer": ["One down! ONE DOWN!", "Done! Done! Done!", "Yes! Good! Tail! Tail!"],
+		"greet":
+		[
+			"You're back! You're BACK!",
+			"Welcome home! Tell me everything!",
+			"Ninety seconds! I missed you!",
+		],
 	},
 }
 
@@ -89,6 +105,9 @@ var is_night := false
 var has_open := false
 var tv_on := false
 var bubble_cap := 4.5
+var jot_open := false
+var settle := false
+var events: Array = []
 
 var _tex := {}
 var _last_line := {}
@@ -123,6 +142,7 @@ class Critter:
 	var say_next := 40.0
 	var hearts: Array = []
 	var run := false
+	var hops := 0
 
 
 func setup(art_dir: String, seed_value: int) -> void:
@@ -296,6 +316,14 @@ func _arrive(c: Critter) -> void:
 	elif mode == "chase":
 		_begin_bat(c)
 		return
+	elif mode == "knock":
+		_begin_swat(c)
+		return
+	elif mode == "cheer":
+		c.run = false
+		_settle(c, "idle")
+		c.pat_t = 0.0
+		c.hops -= 1
 	else:
 		_settle(c, "sleep" if mode == "sleep" else "idle")
 	c.wait = c.plan.get("dur", 6.0)
@@ -320,6 +348,9 @@ func _step(c: Critter, dt: float) -> void:
 		c.pat_t += dt
 		if c.pat_t > 0.42:
 			c.pat_t = -1.0
+	elif c.hops > 0 and c.mode == "idle" and c.jump.is_empty():
+		c.hops -= 1
+		c.pat_t = 0.0
 	for h in c.hearts:
 		h["t"] += dt
 	c.hearts = c.hearts.filter(func(h): return h["t"] < 1.4)
@@ -336,6 +367,9 @@ func _step(c: Critter, dt: float) -> void:
 		return
 	if c.mode == "stalk":
 		_step_stalk(c)
+		return
+	if c.mode == "swat":
+		_step_swat(c, dt)
 		return
 	if freeze:
 		return
@@ -416,9 +450,65 @@ func _pick(options: Array, current: String) -> Array:
 	return options[0]
 
 
+func cheer(c: Critter, spot: String, hops: int, occasion: String) -> void:
+	c.run = true
+	c.hops = hops
+	say(c, line(c.title, occasion))
+	go(c, spot, "cheer", 4.0)
+
+
+func knock(c: Critter) -> void:
+	c.run = false
+	go(c, "desk", "knock", 6.0)
+
+
+func _begin_swat(c: Critter) -> void:
+	c.dir = 5
+	c.mode = "swat"
+	c.anim = "attack"
+	c.anim_t = 0.0
+	c.bat_t = 0.0
+
+
+func _step_swat(c: Critter, dt: float) -> void:
+	var before: float = c.bat_t
+	c.bat_t += dt
+	if before < 0.25 and c.bat_t >= 0.25:
+		events.append("swat")
+	if c.bat_t >= 0.7:
+		c.bat_t = -1.0
+		c.mode = "idle"
+		c.anim = "idle"
+		say(c, line(c.title, "knock"))
+		go(c, "knocked", "sit", 30.0)
+		c.wait = 9999.0
+
+
+func settle_near(on: bool) -> void:
+	if on == settle:
+		return
+	settle = on
+	for id in ["nina", "argos"]:
+		var c := critter(id)
+		if c.mode in ["idle", "sleep"] and c.jump.is_empty() and c.goal == "":
+			c.wait = minf(c.wait, 0.5)
+
+
+func _settled(c: Critter, spot: String) -> bool:
+	if c.spot == spot and c.mode == "sleep":
+		c.wait = 40.0
+		return true
+	go(c, spot, "sleep", 40.0)
+	c.wait = 9999.0
+	return true
+
+
 func _decide_nina(c: Critter) -> void:
 	c.run = false
+	if settle and _settled(c, "sofa"):
+		return
 	var options: Array = [
+		["pad", 0.0 if jot_open or is_night else 0.9, "sit", rng.randf_range(15, 30)],
 		["sofa", 1.0 if is_night else 3.0, "sleep", rng.randf_range(25, 45)],
 		[
 			"desk",
@@ -449,6 +539,8 @@ func _decide_nina(c: Critter) -> void:
 
 func _decide_argos(c: Critter) -> void:
 	c.run = false
+	if settle and _settled(c, "rug"):
+		return
 	var wander := ["lamp", "door", "mid", "corner", "nook", "rug2"]
 	var options: Array = [
 		["bed", 3.0, "sleep", rng.randf_range(30, 60)],

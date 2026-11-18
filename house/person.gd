@@ -19,7 +19,7 @@ const ACTS := {
 		"stand": "sofa_stand",
 		"seat": Vector2(0.55, 4.55),
 		"z": 7.0,
-		"key": 5.45,
+		"key": 6.03,
 		"face": 7,
 		"anim": "sit",
 		"pri": 2.0
@@ -29,7 +29,7 @@ const ACTS := {
 		"stand": "sofa_stand",
 		"seat": Vector2(0.55, 4.55),
 		"z": 7.0,
-		"key": 5.45,
+		"key": 6.03,
 		"face": 5,
 		"anim": "sit",
 		"pri": 2.0
@@ -39,7 +39,7 @@ const ACTS := {
 		"stand": "sofa_stand",
 		"seat": Vector2(0.55, 4.55),
 		"z": 7.0,
-		"key": 5.45,
+		"key": 6.03,
 		"face": 7,
 		"anim": "eat",
 		"held": "cup_white",
@@ -50,7 +50,7 @@ const ACTS := {
 		"stand": "sofa_stand",
 		"seat": Vector2(0.55, 4.55),
 		"z": 7.0,
-		"key": 5.45,
+		"key": 6.03,
 		"face": 7,
 		"anim": "sit",
 		"still": true,
@@ -58,7 +58,10 @@ const ACTS := {
 	},
 	"board": {"stand": "board_stand", "face": 5, "anim": "idle", "pri": 2.0},
 	"stretch": {"stand": "mid", "face": 7, "anim": "cheer", "pri": 2.0},
+	"arrive": {"stand": "door_in", "face": 7, "anim": "pickup", "pri": 2.0},
 }
+const DOORWAY := Vector2(0.45, 7.5)
+const BAG_AT := Vector2(2.25, 7.95)
 const LINES := [
 	"hm?",
 	"still here.",
@@ -79,11 +82,13 @@ var seated := false
 var ring := false
 var open_n := 0
 var has_notes := false
-var tv := ""
 var hour := 12.0
 var calm := true
 var forced := ""
 var stretch_left := 0.0
+var arrive_left := 0.0
+var bag := ""
+var bag_left := 0.0
 var react_left := 0.0
 var t := 0.0
 
@@ -108,14 +113,14 @@ func base() -> String:
 		return "desk"
 	if stretch_left > 0.0:
 		return "stretch"
+	if arrive_left > 0.0:
+		return "arrive"
 	if forced != "":
 		return forced
 	if _exc != "":
 		return _exc
 	if (hour >= 23.0 or hour < 5.5) and calm:
 		return "sleep"
-	if tv == "playing":
-		return "tv"
 	if open_n > 0:
 		return "desk"
 	return "sofa"
@@ -149,6 +154,15 @@ func process(dt: float, freeze: bool) -> void:
 	t += dt
 	stretch_left = maxf(0.0, stretch_left - dt)
 	react_left = maxf(0.0, react_left - dt)
+	if phase == "idle" and act == "arrive" and bag == "carry":
+		bag = "down"
+		bag_left = 150.0
+	if bag == "down":
+		bag_left -= dt
+		if bag_left <= 0.0:
+			bag = ""
+	if arrive_left > 0.0 and phase == "idle" and act == "arrive":
+		arrive_left = maxf(0.0, arrive_left - dt)
 	if not freeze:
 		_excursions(dt)
 	var want := base()
@@ -240,7 +254,7 @@ func _excursions(dt: float) -> void:
 			_exc = ""
 			_exc_next = rng.randf_range(25.0, 50.0)
 		return
-	if ring or stretch_left > 0.0 or phase != "idle":
+	if ring or stretch_left > 0.0 or arrive_left > 0.0 or phase != "idle":
 		return
 	_exc_next -= dt
 	if _exc_next > 0.0:
@@ -251,15 +265,40 @@ func _excursions(dt: float) -> void:
 		picks.append("board")
 	if hour >= 6.0 and hour < 11.5:
 		picks.append("coffee")
+	if open_n == 0 and hour >= 10.0 and hour < 23.0 and rng.randf() < 0.6:
+		picks.append("tv")
 	if picks.is_empty():
 		return
 	_exc = picks[rng.randi() % picks.size()]
-	_exc_left = rng.randf_range(9.0, 15.0)
+	_exc_left = rng.randf_range(40.0, 80.0) if _exc == "tv" else rng.randf_range(9.0, 15.0)
 
 
-func stretch() -> void:
+func watching() -> bool:
+	return act == "tv" and phase == "idle" or (phase == "entering" and next == "tv")
+
+
+func stretch(line: String = "time. stand up, stretch a bit?") -> void:
 	stretch_left = 5.5
-	pets.say(c, "time. stand up, stretch a bit?")
+	pets.say(c, line)
+
+
+func arrive(with_bag: bool) -> void:
+	_exc = ""
+	arrive_left = 4.5
+	bag = "carry" if with_bag else ""
+	seated = false
+	c.jump = {}
+	c.path = []
+	c.pos = DOORWAY
+	c.z = 0.0
+	c.key = -1.0
+	c.dir = 7
+	c.mode = "idle"
+	c.anim = "idle"
+	c.spot = "door"
+	act = "board"
+	next = "arrive"
+	phase = "idle"
 
 
 func poke() -> void:
@@ -296,6 +335,8 @@ func draw(canvas: CanvasItem, o: Vector2, k: int) -> void:
 	else:
 		look.draw_flat(canvas, f, k, a in ["sit", "type", "eat"], t)
 	var font := ThemeDB.fallback_font
+	if bag == "carry":
+		draw_bag(canvas, f + Vector2(9, -13) * k, k)
 	if act == "sleep" and phase == "idle":
 		for i in 3:
 			var ph := fmod(t * 0.5 + i * 0.33, 1.0)
@@ -310,3 +351,11 @@ func draw(canvas: CanvasItem, o: Vector2, k: int) -> void:
 		canvas.draw_string(
 			font, m + Vector2(-3, 6), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("2a2530")
 		)
+
+
+static func draw_bag(canvas: CanvasItem, at: Vector2, k: int) -> void:
+	var r := Rect2(at - Vector2(4, 0) * k, Vector2(8, 9) * k)
+	canvas.draw_rect(Rect2(r.position + Vector2(1, 1) * k, r.size), Color(0, 0, 0, 0.2))
+	canvas.draw_rect(r, Color("c9a06a"))
+	canvas.draw_rect(Rect2(r.position, Vector2(r.size.x, 2 * k)), Color("a8804a"))
+	canvas.draw_arc(at + Vector2(0, 0.5 * k), 2.6 * k, PI, TAU, 8, Color("7a5a38"), maxf(1.0, 0.7 * k))
