@@ -1,5 +1,6 @@
 extends RefCounted
 
+const Settings := preload("res://settings.gd")
 const THING_MAX := 32
 const BUBBLE_MIN := 3.5
 const BUBBLE_MAX := 9.0
@@ -105,7 +106,9 @@ static func _turns(exchange: Variant) -> Array:
 
 
 func _pick(key: String, pool: Array, thing: String) -> String:
-	var usable := pool.filter(func(l): return thing != "" or not "{thing}" in l)
+	var usable := pool.filter(
+		func(l): return (thing != "" or not "{thing}" in l) and (Settings.person != "" or not "{name}" in l)
+	)
 	if usable.is_empty():
 		return ""
 	var used: Array = _used.get(key, [])
@@ -124,4 +127,4 @@ func _pick(key: String, pool: Array, thing: String) -> String:
 
 
 func _fill(text: String, thing: String) -> String:
-	return text.replace("{thing}", short(thing))
+	return text.replace("{thing}", short(thing)).replace("{name}", Settings.person)

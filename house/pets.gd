@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Voices := preload("res://voices.gd")
+const Settings := preload("res://settings.gd")
 const COLS := 10
 const ROWS := 10
 const CHAIR := Vector2i(4, 1)
@@ -49,6 +50,7 @@ var toys: Array = []
 var critters: Array = []
 var blocked_cells := {}
 var voices := Voices.new()
+var on_say := Callable()
 var rng := RandomNumberGenerator.new()
 var animals_dir := ""
 var chars_dir := ""
@@ -708,8 +710,10 @@ func pat(c: Critter, occasion: String) -> void:
 func say(c: Critter, text: String) -> void:
 	if text == "":
 		return
-	c.say_text = text
+	c.say_text = Settings.pets(text)
 	c.say_left = Voices.bubble_time(text)
+	if on_say.is_valid():
+		on_say.call(c.id, text)
 
 
 func set_voices(v: Dictionary) -> void:

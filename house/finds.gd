@@ -3,8 +3,8 @@ extends RefCounted
 # Small objects to find in the room: the birthday cake, the bookshelf's books, the snow globe, the
 # mouse and its hole (whose card counts the secrets he has found).
 const Props := preload("res://props.gd")
+const Settings := preload("res://settings.gd")
 
-const STORE := "user://house_settings.json"
 const TITLES := [
 	["Ficciones", "stories that fold into themselves"],
 	["The Aleph", "a point that holds every point"],
@@ -42,9 +42,10 @@ var _hw: WeakRef
 var h:
 	get:
 		return _hw.get_ref()
-var birthday := ""
+var birthday: String:
+	get:
+		return str(h.settings.value("birthday"))
 var birthday_forced := false
-var store := STORE
 var candles := true
 var book := {}
 var shake := 0.0
@@ -56,18 +57,11 @@ var line_text := ""
 
 var _mouse_next := 600.0
 var _t := 0.0
-var _persist := false
 
 
-func setup(home, persist_it: bool) -> void:
+func setup(home) -> void:
 	_hw = weakref(home)
-	_persist = persist_it
 	_mouse_next = h.eggs.rng.randf_range(300.0, 900.0)
-	birthday = ""
-	if persist_it and FileAccess.file_exists(store):
-		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(store))
-		if d is Dictionary:
-			birthday = str(d.get("birthday", ""))
 
 
 func today_key() -> String:
@@ -79,15 +73,10 @@ func is_birthday() -> bool:
 	return birthday_forced or (birthday != "" and birthday == today_key())
 
 
-# the calendar card's button: today is, or is no longer, his birthday ({"birthday": "MM-DD"} in
-# user://house_settings.json)
+# the calendar card's button: today is, or is no longer, his birthday
 func toggle_birthday() -> void:
-	birthday = "" if birthday == today_key() else today_key()
+	h.settings.put("birthday", "" if birthday == today_key() else today_key())
 	candles = true
-	if _persist:
-		var f := FileAccess.open(store, FileAccess.WRITE)
-		if f != null:
-			f.store_string(JSON.stringify({"birthday": birthday}))
 
 
 func touch() -> void:
@@ -178,14 +167,14 @@ func blocks(kind: String) -> Array:
 			{"t": "title", "text": str(book.get("title", ""))},
 			{"t": "dim", "text": "Jorge Luis Borges - " + str(book.get("about", ""))},
 			{"t": "gap"},
-			{"t": "text", "text": "%s: %s" % [book.get("who", ""), book.get("blurb", "")]},
+			{"t": "text", "text": Settings.pets("%s: %s" % [book.get("who", ""), book.get("blurb", "")])},
 		]
 	var out: Array = [{"t": "title", "text": "Found so far"}]
 	var n: int = h.eggs.found.size()
 	out.append({"t": "text", "text": "%d of %d" % [n, h.eggs.CATALOGUE.size()]})
 	for row in h.eggs.CATALOGUE:
 		if h.eggs.found.has(row[0]):
-			out.append({"t": "dim", "text": "- " + str(row[1])})
+			out.append({"t": "dim", "text": "- " + Settings.pets(str(row[1]))})
 	return out
 
 
