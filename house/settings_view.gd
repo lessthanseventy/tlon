@@ -22,6 +22,7 @@ const LOOKS := {
 	"glow": "a soft glow at the lights after dark",
 	"weather_art": "pixel weather in the window",
 	"spells": "spell effects",
+	"font": "a pixel font for headings",
 }
 
 var settings
@@ -161,7 +162,7 @@ func _ready() -> void:
 	var outer := VBoxContainer.new()
 	outer.add_theme_constant_override("separation", 6)
 	add_child(outer)
-	outer.add_child(Paper.label("Settings", 20, Paper.INK))
+	outer.add_child(Paper.heading("Settings", 20, Paper.INK))
 	_scroll = ScrollContainer.new()
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL

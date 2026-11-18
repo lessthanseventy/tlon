@@ -1,6 +1,7 @@
 extends RefCounted
 
 # The paper look the settings and the chat are built from.
+const Fonts := preload("res://fonts.gd")
 const INK := Color("2a2530")
 const PAPER := Color("f3ead6")
 const QUIET := Color(0.165, 0.145, 0.188, 0.6)
@@ -32,6 +33,12 @@ static func label(text: String, size: int, color: Color) -> Label:
 	l.text = text
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
+	return l
+
+
+static func heading(text: String, size: int, color: Color) -> Label:
+	var l := label(text, size, color)
+	l.theme_type_variation = Fonts.HEADING
 	return l
 
 

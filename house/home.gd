@@ -31,6 +31,7 @@ const Chat := preload("res://chat.gd")
 const Looks := preload("res://looks.gd")
 const Glow := preload("res://glow.gd")
 const Spells := preload("res://spells.gd")
+const Fonts := preload("res://fonts.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -296,6 +297,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	staged = scripted or "--demo" in args or "--shot" in args or "--local" in args
 	settings.setup(not staged)
 	Looks.setup(art_dir, settings)
+	Fonts.apply()
 	chat.setup(not staged)
 	pets.on_say = _pet_said
 	if "--demo" in args:
@@ -382,6 +384,8 @@ func _place_arg(id: String, spec: String) -> void:
 
 
 func _on_setting(key: String) -> void:
+	if key == "font":
+		Fonts.apply()
 	if key in ["pet1", "pet2"]:
 		var id := "nina" if key == "pet1" else "argos"
 		var c: Pets.Critter = pets.critter(id)

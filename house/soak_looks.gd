@@ -9,6 +9,7 @@ const Looks := preload("res://looks.gd")
 const Glow := preload("res://glow.gd")
 const Weather := preload("res://weather.gd")
 const Spells := preload("res://spells.gd")
+const Fonts := preload("res://fonts.gd")
 const View := preload("res://view.gd")
 const Settings := preload("res://settings.gd")
 const Home := preload("res://home.gd")
@@ -47,13 +48,14 @@ func run() -> void:
 	_weather(h)
 	_spells(h)
 	_loaded()
+	_fonts(art, h)
 	_empty(h)
 	room.queue_free()
 
 
 func _tables(art: String) -> void:
 	Looks.setup(art, null)
-	var all: Array = Glow.files() + Weather.files() + Spells.files()
+	var all: Array = Glow.files() + Weather.files() + Spells.files() + Fonts.files()
 	s._check(all.size() >= 12, "the four looks name their files (%d)" % all.size())
 	for rel in all:
 		s._check(FileAccess.file_exists(art.path_join(rel)), "look file exists: " + rel)
@@ -93,6 +95,15 @@ func _settings() -> void:
 	plain.setup(room, room.art_dir, ["--plain"])
 	for key in Looks.KEYS:
 		s._check(plain.settings.value(key) == false, "--plain turns %s off" % key)
+	var only = Home.new()
+	only.setup(room, room.art_dir, ["--looks", "glow,font"])
+	s._check(
+		only.settings.value("glow") and only.settings.value("font"), "--looks turns the named on"
+	)
+	s._check(
+		not only.settings.value("spells") and not only.settings.value("weather_art"),
+		"and the others off"
+	)
 	room.queue_free()
 
 
@@ -206,10 +217,52 @@ func _spells(h) -> void:
 		)
 
 
+func _fonts(art: String, h) -> void:
+	Looks.setup(art, h.settings)
+	var f := Fonts.heading()
+	s._check(f is FontFile, "the heading font is the pack's")
+	s._check(
+		f.fixed_size == Fonts.DESIGN_SIZE and f.antialiasing == TextServer.FONT_ANTIALIASING_NONE,
+		"drawn at its design size, unsmoothed"
+	)
+	s._check(f.fallbacks.size() == 1, "with the default font as the fallback")
+	var plain := ThemeDB.fallback_font
+	var lacking := ""
+	var wanted := _characters()
+	for c in wanted:
+		if not f.has_char(c.unicode_at(0)):
+			lacking += c
+			s._check(f.fallbacks[0] == plain, "%s falls back to the default font" % c.unicode_at(0))
+	print(
+		"font: %d characters in the house's strings, Round lacks: %s" % [wanted.length(), lacking]
+	)
+	for c in range(ASCII_FIRST, ASCII_LAST + 1):
+		s._check(f.has_char(c), "Round has " + char(c))
+	var theme := ThemeDB.get_default_theme()
+	Fonts.apply()
+	s._check(theme.get_font("font", Fonts.HEADING) == f, "a heading label takes it")
+
+
+# every character in the strings of the house's own scripts (the soak's own files left out)
+func _characters() -> String:
+	var seen := {}
+	for file in DirAccess.get_files_at("res://"):
+		if file.get_extension() != "gd" or file.begins_with("soak"):
+			continue
+		for c in FileAccess.get_file_as_string("res://" + file):
+			if c.unicode_at(0) > 31:
+				seen[c] = true
+	var out := ""
+	for c in seen:
+		out += c
+	return out
+
+
 func _loaded() -> void:
 	var opened: Array = Looks.loaded()
+	opened.append(Fonts.FILE)
 	opened.sort()
-	var listed: Array = Glow.files() + Weather.files() + Spells.files()
+	var listed: Array = Glow.files() + Weather.files() + Spells.files() + Fonts.files()
 	var unique := {}
 	for rel in listed:
 		unique[rel] = true
@@ -228,6 +281,7 @@ func _empty(h) -> void:
 	var q := View.quad(Vector2(100, 100), 2)
 	s._check(Weather.plan(q, 2, "storm", 12.4, 1.0).is_empty(), "no art: no weather overlay")
 	s._check(not h.spells.play("cast", Vector2.ZERO), "no art: no spell")
+	s._check(Fonts.heading() == ThemeDB.fallback_font, "no art: the default font")
 	Looks.setup(s._art(), h.settings)
 
 

@@ -7,6 +7,7 @@ signal acted(id: int, what: String)
 signal cancelled
 
 const Card := preload("res://card.gd")
+const Fonts := preload("res://fonts.gd")
 const Sure := preload("res://sure.gd")
 
 
@@ -152,6 +153,7 @@ func _ready() -> void:
 	col.add_theme_constant_override("separation", 6)
 	add_child(col)
 	_title = _label("", 20, INK)
+	_title.theme_type_variation = Fonts.HEADING
 	col.add_child(_title)
 	_kind_row = _row(col)
 	for k in KINDS:
