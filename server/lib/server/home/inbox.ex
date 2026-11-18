@@ -528,7 +528,7 @@ defmodule Server.Home.Inbox do
   defp tick(jot), do: {"✓ " <> String.slice(to_string(jot.text), 0, 30), "tick:#{jot.id}"}
 
   # a reminder that repeats and was never answered stands at its newest time that has come
-  defp current(%Jot{every: nil} = jot, _now), do: jot
+  defp current(%Jot{} = jot, _now) when is_nil(jot.every) or is_nil(jot.due_at), do: jot
 
   defp current(%Jot{every: every, due_at: due, every_day: anchor} = jot, now) do
     case Clock.latest(due, every, now, anchor) do

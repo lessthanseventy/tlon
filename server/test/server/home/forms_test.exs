@@ -194,6 +194,136 @@ defmodule Server.Home.FormsTest do
     end
   end
 
+  describe "the day a monthly repeat keeps" do
+    defp local(text), do: text |> NaiveDateTime.from_iso8601!() |> Clock.utc()
+
+    test "only a monthly repeat has one, and it is the day of its current time when the repeat becomes monthly" do
+      {:ok, %{id: id}} = add(kind: "reminder", text: "rent", at: "2026-11-03T09:00", every: "week")
+      assert %{every_day: nil} = fresh(id)
+
+      Jot.roll(fresh(id), local("2026-11-24 09:00:00"))
+      assert {:ok, %{every: "month"}} = edit(id, every: "month")
+      assert %{every_day: 24} = fresh(id)
+
+      done = Jot.done(fresh(id), now())
+      assert done.due_at == local("2026-12-24 09:00:00")
+
+      assert {:ok, %{every: "2 week"}} = edit(id, every: "2 week")
+      assert %{every_day: nil} = fresh(id)
+    end
+
+    test "moving a monthly reminder's time moves its day; the same time resent or a text edit does not" do
+      {:ok, %{id: id}} = add(kind: "reminder", text: "rent", at: "2026-11-03T09:00", every: "month")
+      assert %{every_day: 3} = fresh(id)
+
+      assert {:ok, _} = edit(id, text: "rent!", every: "month")
+      assert %{every_day: 3} = fresh(id)
+      assert {:ok, _} = edit(id, at: "2026-11-30T09:00")
+      assert %{every_day: 30} = fresh(id)
+    end
+
+    test "putting a monthly repeat off moves this time only: the next one is back on its day" do
+      {:ok, %{id: id}} = add(kind: "reminder", text: "rent", at: "2026-11-03T09:00", every: "month")
+
+      Inbox.later(fresh(id), "tomorrow", now())
+      assert %{every_day: 3} = fresh(id)
+
+      done = Jot.done(fresh(id), DateTime.add(now(), 86_400))
+      assert done.due_at == local("2026-12-03 09:00:00")
+    end
+  end
+
+  describe "what an edit does to a put-off thing" do
+    test "one that sets a time or a repeat brings it back, one that only changes the text leaves it put off" do
+      {:ok, %{id: id}} = add(kind: "reminder", text: "call", at: "2026-11-25T09:00:00Z")
+      Jot.someday(fresh(id), now())
+
+      assert {:ok, %{text: "call Sam"}} = edit(id, text: "call Sam")
+      assert %{someday_at: %DateTime{}} = fresh(id)
+
+      assert {:ok, %{due_at: ~U[2026-11-26 09:00:00Z]}} = edit(id, at: "2026-11-26T09:00:00Z")
+      assert %{someday_at: nil} = fresh(id)
+      assert %{coming: [%{id: ^id}], someday: []} = Home.status(now())
+
+      Jot.someday(fresh(id), now())
+      assert {:ok, %{every: "week"}} = edit(id, every: "week")
+      assert %{someday_at: nil} = fresh(id)
+
+      {:ok, %{id: todo}} = add(kind: "todo", text: "taxes")
+      Jot.someday(fresh(todo), now())
+      assert {:ok, %{kind: "reminder"}} = edit(todo, kind: "reminder", at: "2026-11-26T09:00:00Z")
+      assert %{someday_at: nil} = fresh(todo)
+    end
+  end
+
+  describe "at" do
+    defp expected_at(%NaiveDateTime{} = local), do: Clock.utc(local)
+    defp expected_at(%DateTime{} = utc), do: utc
+
+    @accepted [
+      {"2026-11-21T09:00", ~N[2026-11-21 09:00:00]},
+      {"2026-11-21T09:00:30", ~N[2026-11-21 09:00:30]},
+      {"2026-11-21T09:00Z", ~U[2026-11-21 09:00:00Z]},
+      {"2026-11-21T09:00:00Z", ~U[2026-11-21 09:00:00Z]},
+      {"2026-11-21T09:00+02:00", ~U[2026-11-21 07:00:00Z]},
+      {"2026-11-21T09:00:00+02:00", ~U[2026-11-21 07:00:00Z]},
+      {"2026-11-21T09:00:00.500Z", ~U[2026-11-21 09:00:00Z]}
+    ]
+
+    for {text, expected} <- @accepted do
+      test "#{text} is accepted" do
+        expected = expected_at(unquote(Macro.escape(expected)))
+
+        assert {:ok, %{due_at: ^expected}} = add(kind: "reminder", text: "x", at: unquote(text))
+      end
+    end
+
+    for text <- ["friday", "2026-11-21", "09:00", "2026-11-21T25:00", "2026-11-21T09:00:00+2", ""] do
+      test "#{inspect(text)} is refused with the one reason" do
+        assert {:error, "at is ISO 8601: " <> _} = add(kind: "reminder", text: "x", at: unquote(text))
+      end
+    end
+  end
+
+  describe "rows that are odd do not crash the routes" do
+    test "reviving a reminder with no time, repeating or not, brings it back as a to-do" do
+      for every <- ["week", nil] do
+        {:ok, %{id: id}} = add(kind: "todo", text: "odd #{every}")
+        set(fresh(id), kind: "reminder", every: every, due_at: nil)
+        Jot.someday(fresh(id), now())
+
+        assert {:ok, %{kind: "todo", due_at: nil, every: nil}} = Home.revive(id, now())
+        assert %{someday_at: nil} = fresh(id)
+      end
+    end
+
+    test "a repeating reminder with no time can be listed, edited and made monthly" do
+      {:ok, %{id: id}} = add(kind: "todo", text: "odd")
+      set(fresh(id), kind: "reminder", every: "week", due_at: nil)
+
+      assert %{open: rows} = Home.status(now())
+      assert Enum.any?(rows, &(&1.id == id))
+      assert {:ok, %{text: "odd!"}} = edit(id, text: "odd!")
+      assert {:error, "a reminder needs at"} = edit(id, every: "month")
+      assert {:ok, %{every: "month"}} = edit(id, every: "month", at: "2026-11-25T09:00")
+      assert %{every_day: 25} = fresh(id)
+    end
+
+    test "done on a repeating reminder with no time closes it, and a project with no steps can be planned and shown" do
+      {:ok, %{id: id}} = add(kind: "todo", text: "odd")
+      set(fresh(id), kind: "reminder", every: "week", due_at: nil)
+      assert {:ok, %{text: "odd"}} = Home.done(id, now())
+      assert %{done_at: %DateTime{}} = fresh(id)
+
+      {:ok, plan} = Jot.take("telegram", 900, "p")
+      project = Jot.file(plan, %{kind: "project", text: "bare", due_at: nil})
+      assert {:ok, %{kind: "project", plan: ["x"], next: nil}} = Home.plan(project.id, ["x"], now())
+      assert {:ok, %{text: "bare!"}} = edit(project.id, text: "bare!")
+      assert {:ok, %{kind: "todo", project: %{id: pid}}} = add(kind: "todo", text: "first", project: project.id)
+      assert pid == project.id
+    end
+  end
+
   describe "projects for a card" do
     test "a project row carries what is planned and what is done, and the plan is replaced" do
       %{id: pid} = project(["call", "write", "book"])

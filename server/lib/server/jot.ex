@@ -335,7 +335,7 @@ defmodule Server.Jot do
 
   @doc "Record that `jot` was done at `now`. A reminder that repeats stays open, put off to its next time."
   @spec done(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
-  def done(%__MODULE__{every: nil} = jot, now),
+  def done(%__MODULE__{} = jot, now) when is_nil(jot.every) or is_nil(jot.due_at),
     do: put(jot, [done_at: DateTime.truncate(now, :second), ask: nil, proposed: nil], now)
 
   def done(%__MODULE__{every: every} = jot, now),
@@ -401,9 +401,12 @@ defmodule Server.Jot do
   @spec cursor(String.t()) :: integer() | nil
   def cursor(via), do: Repo.one(from(j in __MODULE__, where: j.via == ^via, select: max(j.external_id)))
 
-  @doc "The day of the month a repeat by months started on, kept so a short month does not move it: nil when it does not repeat."
+  @doc "The day of the month a repeat by months is on, kept so a short month does not move it: nil for any other repeat."
   @spec anchor(String.t() | nil, DateTime.t() | nil) :: pos_integer() | nil
-  def anchor(every, %DateTime{} = due) when is_binary(every), do: Server.Home.Clock.local(due).day
+  def anchor(every, %DateTime{} = due) when is_binary(every) do
+    if every =~ ~r/(^|\s)month$/, do: Server.Home.Clock.local(due).day
+  end
+
   def anchor(_every, _due), do: nil
 
   @doc "The thing `id`, nil when there is none."

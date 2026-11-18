@@ -393,9 +393,13 @@ defmodule Server.Home.Organize do
 
   @doc """
   Bring the put-off thing `jot` back to the open list at `now`: a reminder that repeats comes back
-  at its next time, never in the past. The thing as it is open.
+  at its next time, never in the past; a reminder with no time comes back as a to-do. The thing as it is open.
   """
   @spec revive(Jot.t(), DateTime.t()) :: Jot.t()
+  def revive(%Jot{kind: "reminder", due_at: nil} = jot, now) do
+    reopened(Jot.file(jot, %{kind: "todo", text: jot.text, due_at: nil, every: nil, every_day: nil}, now), now)
+  end
+
   def revive(jot, now) do
     due =
       if jot.every && !DateTime.after?(jot.due_at, now),
@@ -421,9 +425,12 @@ defmodule Server.Home.Organize do
     every = Map.get(attrs, :every, jot.every)
     due = Map.get(attrs, :due_at, jot.due_at)
 
+    wanted? = Map.has_key?(changes, :due_at) or Map.has_key?(changes, :every)
+
     changed =
       Map.to_list(attrs) ++
         [every_day: anchor(jot, changes, every, due)] ++
+        if(wanted? and jot.someday_at, do: [someday_at: nil], else: []) ++
         if(moved?, do: [nudged_at: nil, nudges: 0], else: []) ++
         if(jot.kind in ["todo", "reminder"], do: [ask: nil, proposed: nil], else: [])
 
@@ -532,8 +539,8 @@ defmodule Server.Home.Organize do
   defp review_at(""), do: @review_at
   defp review_at(at), do: at
 
-  # the day a repeat started on stays while its time is not moved
-  defp anchor(%Jot{every_day: kept}, changes, every, due) do
-    if Map.has_key?(changes, :due_at) or is_nil(kept), do: Jot.anchor(every, due), else: every && kept
+  # the day a monthly repeat is on is worked out again when its time or its repeat changes, else it stays
+  defp anchor(%Jot{every_day: kept, every: was}, changes, every, due) do
+    if Map.has_key?(changes, :due_at) or every != was or is_nil(kept), do: Jot.anchor(every, due), else: kept
   end
 end
