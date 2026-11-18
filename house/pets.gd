@@ -1,8 +1,8 @@
 extends RefCounted
 
 const Voices := preload("res://voices.gd")
-const COLS := 8
-const ROWS := 8
+const COLS := 10
+const ROWS := 10
 const CHAIR := Vector2i(4, 1)
 const DIRS := {"se": 7, "nw": 3, "sw": 1, "ne": 5}
 const FPS := {"idle": 6.0, "walk": 10.0, "run": 14.0, "sleep": 3.0, "attack": 12.0, "eat": 4.0}
@@ -46,6 +46,7 @@ const BIN_Z := 11.0
 
 var toys: Array = []
 var critters: Array = []
+var blocked_cells := {}
 var voices := Voices.new()
 var rng := RandomNumberGenerator.new()
 var animals_dir := ""
@@ -153,7 +154,25 @@ func _center(cell: Vector2i) -> Vector2:
 
 
 func _blocked(cell: Vector2i) -> bool:
-	return cell.x < 1 or cell.y < 1 or cell.x >= COLS or cell.y >= ROWS or cell == CHAIR
+	return (
+		cell.x < 1
+		or cell.y < 1
+		or cell.x >= COLS
+		or cell.y >= ROWS
+		or cell == CHAIR
+		or blocked_cells.has(cell)
+	)
+
+
+# after the furniture changed: whoever is walking plans the rest of the way again
+func reroute() -> void:
+	for c in critters:
+		if c.mode != "walk" or c.path.is_empty() or not c.jump.is_empty():
+			continue
+		if not c.bat_toy.is_empty():
+			_walk_to_toy(c)
+		else:
+			c.path = route(_cell_of(c.pos), _cell_of(c.path[c.path.size() - 1]))
 
 
 func place(c: Critter, spot: String, mode: String) -> void:

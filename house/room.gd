@@ -11,28 +11,10 @@ const DESK_SLOTS := 8
 const DESK_COLS := 4
 const FACE_NE := 5
 
-# furniture: id, min col, min row, footprint (cols, rows), height at 1x, fallback colour
+# the home's furniture, floor and wall come from `home.layout`
 const HOME := {
-	"cols": 8,
-	"rows": 8,
-	"floor": "oak",
-	"wall": "wallpaper",
-	"furniture":
-	[
-		["plant_small", 0, 0, 1, 1, 14, Color("5f8a4f")],
-		["armchair_se", 0, 1, 1, 1, 17, Color("9a4f58")],
-		["wardrobe_sw", 1, 0, 1, 1, 44, Color("8a5a3c")],
-		["computer_desk_sw", 4, 0, 2, 1, 31, Color("b58a5a")],
-		["office_chair_ne", 4, 1, 1, 1, 26, Color("5a6f8a")],
-		["waste_bin", 6, 0, 1, 1, 11, Color("6f7480")],
-		["plant_large", 7, 0, 1, 1, 34, Color("5f8a4f")],
-		["tv_stand_se", 0, 2, 1, 2, 40, Color("6f5a48")],
-		["sofa_se", 0, 4, 1, 2, 17, Color("9a4f58")],
-		["floor_lamp", 0, 6, 1, 1, 33, Color("d9b86a")],
-	],
-	"rug": ["rug_blue_nwse", 1, 4, 3, 2, Color("4a6a9a")],
-	# what hangs on a wall: id, col, row of the cell whose back edge it is on
-	"decor": [["painting_ne", 0, 0], ["clock_ne", 7, 0], ["painting_nw", 0, 6]],
+	"cols": 10,
+	"rows": 10,
 	"windows": {"ne": [4], "nw": []},
 	"door": {"row": 7, "label": "to the office"},
 	"figures": [],
@@ -63,6 +45,7 @@ const HomeScript := preload("res://home.gd")
 var art_dir := ""
 var art_found := false
 var home := HomeScript.new()
+var decorate: Control
 
 var _desc := HOME
 var _caption := ""
@@ -110,7 +93,7 @@ func show_office(crew: Array, caption: String) -> void:
 		"floor": "carpet_blue",
 		"wall": "wallpaper",
 		"furniture": furniture,
-		"rug": ["rug_blue_nwse", 3, 2, 3, 2, Color("4a6a9a")],
+		"rugs": [["rug_blue_nwse", 3, 2, 3, 2, Color("4a6a9a")]],
 		"windows": {"ne": [2, 6], "nw": []},
 		"door": {"row": 3, "label": "to the home"},
 		"figures": figures,
@@ -190,6 +173,14 @@ func _sprite(id: String) -> Dictionary:
 	}
 
 
+# a sprite at 1x, whole, for the decorate catalogue
+func icon(id: String) -> Texture2D:
+	id = id % 1 if "%d" in id else id
+	if not _index.has(id):
+		return null
+	return _load_texture(_interiors() + str(_index[id]["file"]))
+
+
 func _pick_scale() -> int:
 	var span: int = _desc["cols"] + _desc["rows"]
 	if size.x >= span * 16 * 3 + 16 and size.y >= (span * 8 + WALL_H) * 3 + 16:
@@ -200,6 +191,9 @@ func _pick_scale() -> int:
 
 
 func _gui_input(event: InputEvent) -> void:
+	if decorate != null and decorate.active and _desc == HOME:
+		decorate.room_input(event)
+		return
 	if event is InputEventMouseMotion:
 		var at_home := _desc == HOME and home.hover(event.position)
 		var over := _door_hit(event.position)
@@ -231,7 +225,8 @@ func _draw() -> void:
 	_k = _pick_scale()
 	var cols: int = _desc["cols"]
 	var rows: int = _desc["rows"]
-	var floor_style: String = _desc["floor"]
+	var floor_style := _style("floor")
+	var plan := home.layout.rows() if _desc == HOME else _desc
 	_origin = Vector2(
 		size.x / 2.0, (size.y - (WALL_H + 8 * (cols + rows)) * _k) / 2.0 + WALL_H * _k
 	)
@@ -248,7 +243,8 @@ func _draw() -> void:
 			else:
 				draw_texture(d["tex"], (p - d["anchor"]).round())
 
-	_draw_rug(origin)
+	for rug in plan["rugs"]:
+		_draw_rug(origin, rug)
 	if _desc == HOME:
 		home.draw_floor()
 
@@ -257,12 +253,14 @@ func _draw() -> void:
 		items.append_array(home.items())
 	for w in _walls():
 		items.append({"key": w["c"] + w["r"], "pri": 0, "wall": w})
-	for d in _desc.get("decor", []):
+	for d in plan.get("decor", []):
 		items.append({"key": d[1] + d[2], "pri": 0.3, "furn": d})
-	for f in _desc["furniture"]:
+	for f in plan["furniture"]:
 		var pri := 1.8 if _desc == HOME and f[0] == "office_chair_ne" else 1.0
-		items.append({"key": f[1] + f[3] - 1 + f[2] + f[4] - 1, "pri": pri, "furn": f})
-		var s := _sprite(f[0])
+		items.append(
+			{"key": f[1] + f[3] - 1 + f[2] + f[4] - 1, "pri": pri, "row": f[2] + f[4], "furn": f}
+		)
+		var s := _sprite(_furn_id(f))
 		if not s.is_empty() and s["shadow"] != "":
 			var sh := _sprite(s["shadow"])
 			if not sh.is_empty():
@@ -271,9 +269,7 @@ func _draw() -> void:
 		items.append({"key": fig["col"] + fig["row"], "pri": 2, "fig": fig})
 		if not fig.get("away", false):
 			_draw_person_shadow(origin, fig)
-	items.sort_custom(
-		func(a, b): return a["key"] < b["key"] or (a["key"] == b["key"] and a["pri"] < b["pri"])
-	)
+	items.sort_custom(_before)
 
 	for it in items:
 		if it.has("wall"):
@@ -291,6 +287,29 @@ func _draw() -> void:
 	_draw_caption()
 	if _desc == HOME:
 		home.draw_over()
+		if decorate != null and decorate.active:
+			decorate.draw_ghost()
+
+
+# back to front; at one depth a wide piece's row decides, so a chair sits over the table behind it
+func _before(a: Dictionary, b: Dictionary) -> bool:
+	if a["key"] != b["key"]:
+		return a["key"] < b["key"]
+	if a["pri"] != b["pri"]:
+		return a["pri"] < b["pri"]
+	return a.get("row", 0) < b.get("row", 0)
+
+
+func _style(key: String) -> String:
+	if _desc == HOME:
+		return home.layout.wall if key == "wall" else home.layout.floor_style
+	return _desc[key]
+
+
+# a piece with frames names them "..._f%d": it is the same sprite, a few times a second
+func _furn_id(f: Array) -> String:
+	var id: String = f[0]
+	return id % (1 + int(_t * 8.0) % FRAMES) if "%d" in id else id
 
 
 func _p(origin: Vector2, c: float, r: float) -> Vector2:
@@ -306,7 +325,7 @@ func _diamond(p: Vector2) -> PackedVector2Array:
 
 func _walls() -> Array:
 	var out: Array = []
-	var wall: String = _desc["wall"]
+	var wall := _style("wall")
 	var windows: Dictionary = _desc["windows"]
 	for c in _desc["cols"]:
 		var kind := "corner" if c == 0 else ("ne_window" if c in windows["ne"] else "ne")
@@ -344,8 +363,7 @@ func _draw_wall(origin: Vector2, w: Dictionary) -> void:
 		draw_colored_polygon(PackedVector2Array([a, b, b - h, a - h]), col)
 
 
-func _draw_rug(origin: Vector2) -> void:
-	var rug: Array = _desc["rug"]
+func _draw_rug(origin: Vector2, rug: Array) -> void:
 	var s := _sprite(rug[0])
 	if not s.is_empty():
 		draw_texture(s["tex"], (_p(origin, rug[1], rug[2]) - s["anchor"]).round())
@@ -357,7 +375,7 @@ func _draw_furniture(origin: Vector2, f: Array) -> void:
 	if _desc == HOME and f[0] == "plant_large":
 		home.draw_plant(f)
 		return
-	var s := _sprite(f[0])
+	var s := _sprite(_furn_id(f))
 	if s.is_empty():
 		if f.size() > 3:
 			_flat_box(origin, f[1], f[2], f[3], f[4], f[5], f[6])
