@@ -396,12 +396,12 @@ runs on the local list.
 ## Law
 
 - **The art is bought and never enters the repo, nor a public place.** `art.gd` is the one place that says where it is read from:
-  `--art <folder|pack>`, else `house-art.zip|pck` beside the executable (a Mac app: its `Contents/Resources`), mounted at
-  `res://art`, else `TLON_ART_DIR` (default `~/projects/thatch/packs/x`: the Gridwright packs). Every loader takes the one
+  `--art <folder|pack>`, else art already inside the program (`res://art` in its pck: the Windows and Linux builds), else
+  `house-art.zip|pck` beside the executable (a Mac app: its `Contents/Resources`), mounted at `res://art`, else `TLON_ART_DIR` (default `~/projects/thatch/packs/x`: the Gridwright packs). Every loader takes the one
   `art_dir` string and opens files under it with FileAccess/DirAccess/Image, which read the mounted pack like a folder: a
   new loader takes `art_dir` and never a path of its own. `mise run house:art-pack` packs only what the loaders can open
   (`art_pack.gd` reads the loaders' own tables and folders; a loader that opens a new kind of file adds it there), and
-  `house:build` ships it beside the executable (`SHIPPING.md`). The licence allows shipping the art inside the finished app and
+  `house:build` ships it inside the executable, or in the Mac app's Resources (`SHIPPING.md`). The licence allows shipping the art inside the finished app and
   forbids redistributing it as assets: the pack and the builds are written only outside any git work tree
   (`~/.cache/tlon/house-dist/`, refused otherwise), never committed, pushed or linked publicly. The window asks for the
   "Art by Gridwright" credit and shows it.
@@ -436,7 +436,8 @@ runs on the local list.
   closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`.
 - `mise run house:art-pack` / `mise run house:build -- windows|mac|linux|all` — the art the house can open, packed to
   `~/.cache/tlon/house-dist/house-art.zip` (`-- --list` prints the files only), and a build of the house per platform
-  with it beside the executable, zipped as `the-house-<platform>.zip` there. Templates are Godot's own 4.7.2 export
+  with it inside (Windows and Linux: one file, the art raw in its pck; the Mac app: in Resources), zipped as
+  `the-house-<platform>.zip` there. Templates are Godot's own 4.7.2 export
   templates; presets in `export_presets.cfg`; what to hand over and the first run on each OS: `SHIPPING.md`. The soak's
   art section (`soak_art.gd`) holds the order the art is looked up in over packs generated from 1x1 PNGs.
 

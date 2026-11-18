@@ -17,13 +17,19 @@ Needs Godot's official export templates for the exact version (`godot --version`
 
 Output, in `~/.cache/tlon/house-dist/`:
 
-- `the-house-windows.zip`: `the-house/the-house.exe` (the code, one file) and `house-art.zip` beside it.
+- `the-house-windows.zip`: one file, `the-house.exe`, the code and the art together (the art is raw files in
+  the executable's embedded pck, so the file is large).
 - `the-house-mac.zip`: `the house.app` (universal, Intel and Apple silicon), with `house-art.zip` in
   `Contents/Resources`.
-- `the-house-linux.zip`: the same as Windows, for a Linux machine.
+- `the-house-linux.zip`: one file, `the-house`, the same as Windows, for a Linux machine.
 
-The house looks for its art in this order: `--art <folder or pack>`, a `house-art.zip` beside the program, the
-`TLON_ART_DIR` folder, none (flat shapes, and it says so). Keep `house-art.zip` next to the program.
+The build stages a throwaway copy of `house/` under the dist dir, puts the pack's files in its `art/` with a
+`keep` import each (so Godot neither imports them as textures nor drops them from the pck), and exports that.
+`TLON_HOUSE_DIST` moves the dist dir (still outside any git work tree).
+
+The house looks for its art in this order: `--art <folder or pack>`, the art inside the program, a
+`house-art.zip` beside the program (a Mac app: in Resources; also how a build made without art can be given
+some), the `TLON_ART_DIR` folder, none (flat shapes, and it says so).
 
 ## What to hand over
 
@@ -34,7 +40,7 @@ The one zip for that computer. Nothing else: the list lives on that computer.
 Neither build is signed: Windows and macOS warn about any program they do not know, and this build cannot be
 notarized from Linux (that takes an Apple developer account and a Mac).
 
-**Windows.** Unzip the folder anywhere it can stay (not the Downloads' temporary view of the zip: use "Extract
+**Windows.** Unzip it anywhere it can stay (not the Downloads' temporary view of the zip: use "Extract
 all"). Double-click `the-house.exe`. SmartScreen says "Windows protected your PC": click **More info**, then
 **Run anyway**. If the zip came by browser download, right-click the zip first, Properties, tick Unblock, and the
 warning does not come.
@@ -63,8 +69,8 @@ the smaller ones. A list saved by the house is only ever replaced whole, and a c
 
 ## Update
 
-Replace the program: delete the old `the-house` folder (Windows) or `the house.app` (Mac) and unzip the new
-one. The list and settings are in the folder above, not in the app, so they stay.
+Replace the program: delete the old `the-house.exe` / `the-house` (Windows, Linux) or `the house.app` (Mac)
+and unzip the new one. The list and settings are in the folder above, not in the app, so they stay.
 
 ## Move a list to a new computer
 
