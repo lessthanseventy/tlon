@@ -7,7 +7,10 @@ signal closed
 const Paper := preload("res://paper.gd")
 const Pets := preload("res://pets.gd")
 const Settings := preload("res://settings.gd")
-const ROLES := {"nina": {"kind": "pet1", "name": "cat"}, "argos": {"kind": "pet2", "name": "dog"}}
+const ROLES := {
+	"nina": {"kind": "pet1", "name": "cat", "way": "pet1_personality"},
+	"argos": {"kind": "pet2", "name": "dog", "way": "pet2_personality"},
+}
 const TILE := Vector2(54, 56)
 
 var settings
@@ -15,6 +18,7 @@ var home
 var role := "nina"
 
 var _name: LineEdit
+var _way: OptionButton
 var _kind_label: Label
 var _tiles := {}
 var _loading := false
@@ -77,6 +81,14 @@ func _ready() -> void:
 	_name = Paper.edit("", r)
 	_name.text_submitted.connect(func(t: String) -> void: _put("name", t.strip_edges()))
 	_name.focus_exited.connect(func() -> void: _put("name", _name.text.strip_edges()))
+	r = Paper.row(col)
+	r.add_child(Paper.label("way", 14, Paper.QUIET))
+	_way = OptionButton.new()
+	for p in Pets.PERSONALITIES:
+		_way.add_item(p)
+	Paper.skin(_way)
+	_way.item_selected.connect(func(i: int) -> void: _put("way", Pets.PERSONALITIES[i]))
+	r.add_child(_way)
 	var grid := GridContainer.new()
 	grid.columns = 8
 	grid.add_theme_constant_override("h_separation", 4)
@@ -142,10 +154,11 @@ func _refresh() -> void:
 	for kind in _tiles:
 		_tiles[kind].chosen = kind == _kind()
 	_say(_kind())
+	_way.select(Pets.PERSONALITIES.find(Pets.persona_of(settings.value(ROLES[role]["way"]), role)))
 
 
 func _put(what: String, v: Variant) -> void:
 	if _loading:
 		return
-	settings.put(ROLES[role]["kind" if what == "kind" else "name"], v)
+	settings.put(ROLES[role][what], v)
 	_refresh()

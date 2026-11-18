@@ -18,6 +18,11 @@ const MONTHS := [
 ]
 const DAYS := [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 # the keys of `Looks.KEYS` and what their switch says
+const THINGS := {
+	"litter_box": "a litter box for a cat",
+	"bowls": "food and water bowls",
+	"pet_things": "a post, a blanket, hay and a bone",
+}
 const LOOKS := {
 	"glow": "a soft glow at the lights after dark",
 	"weather_art": "pixel weather in the window",
@@ -27,6 +32,8 @@ const LOOKS := {
 
 var settings
 var home
+var _menus := {}
+var _things := {}
 var sure := Sure.new()
 # the reader that runs the claude program and the Telegram bot (`telegram.gd`); set by main.gd
 var claude: RefCounted
@@ -204,6 +211,28 @@ func _ready() -> void:
 	_dog = _field(r, Settings.DOG, "dog")
 	_dog.custom_minimum_size.x = 100
 	_kind2 =_kind_picker(r, "pet2")
+	r = Paper.row(col)
+	r.add_child(Paper.label("first pet's way", 14, Paper.QUIET))
+	_menu(r, "pet1_personality", Pets.PERSONALITIES)
+	r = Paper.row(col)
+	r.add_child(Paper.label("second pet's way", 14, Paper.QUIET))
+	_menu(r, "pet2_personality", Pets.PERSONALITIES)
+	r = Paper.row(col)
+	r.add_child(Paper.label("how much they talk", 14, Paper.QUIET))
+	_menu(r, "pet_chatter", Pets.CHATTER.keys())
+	for key in THINGS:
+		r = Paper.row(col)
+		var put := func() -> void: _put(key, _things[key].button_pressed)
+		_things[key] = Paper.chip(THINGS[key], r, put, true)
+
+	_head(col, "visitors")
+	r = Paper.row(col)
+	r.add_child(Paper.label("who comes", 14, Paper.QUIET))
+	_menu(r, "visitors", ["all", "calm", "none"])
+	r = Paper.row(col)
+	r.add_child(Paper.label("how often", 14, Paper.QUIET))
+	_menu(r, "visitors_rate", ["rare", "sometimes", "often"])
+
 
 	_head(col, "sound")
 	r = Paper.row(col)
@@ -288,6 +317,10 @@ func open() -> void:
 	_dog.text = settings.data.get("dog", "")
 	_kind1.show_kind(Pets.kind_of(settings.value("pet1"), "nina"))
 	_kind2.show_kind(Pets.kind_of(settings.value("pet2"), "argos"))
+	for key in _menus:
+		_menus[key][0].select(maxi(0, _menus[key][1].find(settings.value(key))))
+	for key in _things:
+		_things[key].set_pressed_no_signal(bool(settings.value(key)))
 	_sound.set_pressed_no_signal(not home.sound.muted)
 	if _volume != null:
 		_volume.set_value_no_signal(float(home.sound.volume))
@@ -484,6 +517,16 @@ func _field(parent: Control, hint: String, key: String) -> LineEdit:
 	e.text_submitted.connect(func(t: String) -> void: _put(key, t.strip_edges()))
 	e.focus_exited.connect(func() -> void: _put(key, e.text.strip_edges()))
 	return e
+
+
+func _menu(parent: Control, key: String, values: Array) -> void:
+	var o := OptionButton.new()
+	for v in values:
+		o.add_item(str(v))
+	Paper.skin(o)
+	o.item_selected.connect(func(i: int) -> void: _put(key, values[i]))
+	parent.add_child(o)
+	_menus[key] = [o, values]
 
 
 func _kind_picker(parent: Control, key: String) -> KindPicker:

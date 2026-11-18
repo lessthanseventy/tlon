@@ -313,15 +313,26 @@ func _director(dt: float) -> void:
 	if not calm() or not h._seen_data or laser_on or _flop > 0.0 or _sulk > 0.0:
 		next_big = 20.0
 		return
-	next_big = rng.randf_range(BIG_GAP.x, BIG_GAP.y)
+	next_big = rng.randf_range(BIG_GAP.x, BIG_GAP.y) * pace()
 	var hour: float = h._hour()
 	var picks: Array = []
 	if hour >= 8.0 and hour < 22.0:
 		picks.append_array(["push", "bring", "zoomies"])
+		for id in ["nina", "argos"]:
+			if h.pets.critter(id).persona == "mischievous":
+				picks.append_array([("push" if id == "nina" else "bring"), "zoomies"])
 	elif hour >= 22.0 or hour < 3.0:
 		picks.append("zoomies")
 	if not picks.is_empty():
 		start(picks[rng.randi() % picks.size()])
+
+
+# how soon the big things come: a mischievous pet hurries them, a lazy one slows them
+func pace() -> float:
+	var scale := 1.0
+	for id in ["nina", "argos"]:
+		scale *= {"mischievous": 0.75, "lazy": 1.4}.get(h.pets.critter(id).persona, 1.0)
+	return scale
 
 
 # a scene about a pet that is not in the room is not played

@@ -46,6 +46,22 @@ const BIN_TOP := Vector2(6.5, 0.5)
 const BIN_Z := 11.0
 const NONE := "none"
 const ROLE_KINDS := {"nina": "cat_black", "argos": "dog_golden"}
+const ROLE_SPEED := {"nina": 1.5, "argos": 1.25, "person": 1.3}
+const ROLE_PERSONALITY := {"nina": "sassy", "argos": "sweet", "person": "sweet"}
+# what a personality changes: `talk` the wait between remarks, `sleep` the weight of resting spots,
+# `speed` the walk, `run` the chance a trip is a run, `play` the weight of the yarn, `pat_delay` the
+# seconds before a shy pet answers a pat
+const PERSONALITIES := ["sassy", "sweet", "lazy", "mischievous", "shy", "bold"]
+const TRAITS := {
+	"sassy": {"talk": 1.0, "sleep": 1.0, "speed": 1.0, "run": 0.0, "play": 1.0, "pat_delay": 0.0},
+	"sweet": {"talk": 1.0, "sleep": 1.0, "speed": 1.0, "run": 0.0, "play": 1.0, "pat_delay": 0.0},
+	"lazy": {"talk": 1.8, "sleep": 2.5, "speed": 0.7, "run": 0.0, "play": 0.5, "pat_delay": 0.0},
+	"mischievous":
+	{"talk": 1.0, "sleep": 0.8, "speed": 1.1, "run": 0.15, "play": 3.0, "pat_delay": 0.0},
+	"shy": {"talk": 1.6, "sleep": 1.2, "speed": 0.9, "run": 0.0, "play": 0.5, "pat_delay": 1.2},
+	"bold": {"talk": 0.7, "sleep": 0.6, "speed": 1.2, "run": 0.35, "play": 1.5, "pat_delay": 0.0},
+}
+const CHATTER := {"quiet": 2.5, "normal": 1.0, "chatty": 0.45}
 # The animals either pet may be, in the order the settings offer them. Every one has all of
 # ANIMS in the pack, so each animation plays under its own name; `species` keys what a pet says
 # and sounds like (voices.gd `SPECIES`, `cry`), `shadow` is the pack's own for the animal.
@@ -118,6 +134,8 @@ var on_say := Callable()
 var life_options := Callable()
 var rng := RandomNumberGenerator.new()
 var kinds := ROLE_KINDS.duplicate()
+var personalities := ROLE_PERSONALITY.duplicate()
+var chatter := 1.0
 var animals_dir := ""
 var chars_dir := ""
 var freeze := false
@@ -172,6 +190,9 @@ class Critter:
 	var hold := false
 	var carry := ""
 	var use := ""
+	var persona := "sweet"
+	var pat_left := 0.0
+	var pat_occasion := ""
 
 
 func setup(art_dir: String, seed_value: int) -> void:
@@ -188,6 +209,8 @@ func setup(art_dir: String, seed_value: int) -> void:
 	critters = [nina, argos, person]
 	set_kind(nina, kinds["nina"])
 	set_kind(argos, kinds["argos"])
+	set_persona(nina, personalities["nina"])
+	set_persona(argos, personalities["argos"])
 	place(nina, "sofa", "sleep" if not is_night else "sit")
 	place(argos, "rug", "sit")
 	place(person, "board", "sit")
@@ -257,6 +280,7 @@ func change_kind(c: Critter, kind: String) -> void:
 	c.hops = 0
 	c.carry = ""
 	c.use = ""
+	c.pat_occasion = ""
 	c.hearts = []
 	c.bat_toy = {}
 	c.plan = {}
@@ -465,6 +489,12 @@ func _step(c: Critter, dt: float) -> void:
 	if c.away:
 		return
 	c.anim_t += dt
+	if c.pat_occasion != "":
+		c.pat_left -= dt
+		if c.pat_left <= 0.0:
+			var occasion := c.pat_occasion
+			c.pat_occasion = ""
+			_pat_now(c, occasion)
 	if c.pat_t >= 0.0:
 		c.pat_t += dt
 		if c.pat_t > 0.42:
@@ -498,7 +528,7 @@ func _step(c: Critter, dt: float) -> void:
 	if c.say_left <= 0.0 and c.id != "person":
 		c.say_next -= dt
 		if c.say_next <= 0.0:
-			c.say_next = rng.randf_range(40.0, 90.0)
+			c.say_next = rng.randf_range(40.0, 90.0) * talk_scale(c)
 			if c.mode != "sleep" and _quiet():
 				speak(c, "muse")
 	if c.wait <= 0.0:
@@ -648,8 +678,7 @@ func _decide_nina(c: Critter) -> void:
 		["tv", 7.0 if tv_on else 0.0, "sit", rng.randf_range(12, 25)],
 		["yarn", 2.5, "chase", 0.0],
 	]
-	options.append_array(_life(c))
-	var pick := _pick(options, c.spot)
+	var pick := _pick(_weigh(c, options), c.spot)
 	if pick[0] == "yarn":
 		var toy := _toy_of("yarn")
 		if toy.is_empty():
@@ -658,6 +687,7 @@ func _decide_nina(c: Critter) -> void:
 		return
 	if c.mode == "sleep" and pick[2] != "sleep" and rng.randf() < 0.5 and _quiet():
 		speak(c, "wake")
+	c.run = _runs(c, pick[2])
 	go(c, pick[0], pick[2], pick[3])
 	c.wait = 9999.0
 
@@ -673,10 +703,53 @@ func _decide_argos(c: Critter) -> void:
 		["board", 1.5, "sit", rng.randf_range(6, 10)],
 		[wander[rng.randi() % wander.size()], 4.0, "sit", rng.randf_range(4, 9)],
 	]
-	options.append_array(_life(c))
-	var pick := _pick(options, c.spot)
+	if c.persona == "mischievous":
+		options.append(["yarn", 2.0, "chase", 0.0])
+	var pick := _pick(_weigh(c, options), c.spot)
+	if pick[0] == "yarn":
+		var toy := _toy_of("yarn")
+		if toy.is_empty():
+			return _decide_argos(c)
+		chase(c, toy, 3)
+		return
+	c.run = _runs(c, pick[2])
 	go(c, pick[0], pick[2], pick[3])
 	c.wait = 9999.0
+
+
+# the pet's habits as options: the pet's things added, then its personality's weights
+func _weigh(c: Critter, options: Array) -> Array:
+	var out: Array = options + _life(c)
+	var t: Dictionary = TRAITS[c.persona]
+	for o in out:
+		if o[2] == "sleep":
+			o[1] = o[1] * t["sleep"]
+		elif o[0] == "yarn":
+			o[1] = o[1] * t["play"]
+	return out
+
+
+func _runs(c: Critter, mode: String) -> bool:
+	var chance: float = TRAITS[c.persona]["run"]
+	return mode != "sleep" and chance > 0.0 and rng.randf() < chance
+
+
+# how long the pet waits between remarks, relative to the default
+func talk_scale(c: Critter) -> float:
+	return float(TRAITS[c.persona]["talk"]) * chatter
+
+
+func set_persona(c: Critter, persona: String) -> void:
+	personalities[c.id] = persona
+	c.persona = persona
+	c.speed = ROLE_SPEED[c.id] * float(TRAITS[persona]["speed"])
+	voices.personality[c.title] = persona
+
+
+# the personality a settings value names for a pet, else that pet's own
+static func persona_of(value: Variant, id: String) -> String:
+	var p := str(value)
+	return p if p in PERSONALITIES else ROLE_PERSONALITY[id]
 
 
 # the pet is at the spot and doing what the spot is for
@@ -686,6 +759,8 @@ func arrive_at(c: Critter, spot: String) -> void:
 
 
 func _life(c: Critter) -> Array:
+	if c.away:
+		return []
 	return life_options.call(c) if life_options.is_valid() else []
 
 
@@ -849,6 +924,15 @@ func _step_toy(t: Dictionary, dt: float) -> bool:
 
 
 func pat(c: Critter, occasion: String) -> void:
+	var delay: float = TRAITS[c.persona]["pat_delay"]
+	if delay > 0.0 and c.pat_occasion == "":
+		c.pat_left = delay
+		c.pat_occasion = occasion
+		return
+	_pat_now(c, occasion)
+
+
+func _pat_now(c: Critter, occasion: String) -> void:
 	c.pat_t = 0.0
 	for i in 3:
 		c.hearts.append({"t": -0.18 * i, "dx": rng.randf_range(-8.0, 8.0)})
@@ -931,7 +1015,7 @@ func _duo(dt: float) -> void:
 	var turns := voices.duo()
 	if turns.is_empty():
 		return
-	duo_next = rng.randf_range(150.0, 300.0)
+	duo_next = rng.randf_range(150.0, 300.0) * chatter
 	play_duo(turns)
 
 
