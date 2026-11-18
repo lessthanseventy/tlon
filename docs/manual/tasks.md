@@ -69,8 +69,8 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | verb | does |
 |---|---|
 | `house:check` | house: every script loads clean in headless Godot (not in `check`: Godot is not a mise tool) |
-| `house:demo` | house: the window on made-up things, no server |
-| `house:run` | house: the window that keeps the home in sight — what the jots left open, what is coming, the notes — over the live server (TLON_URL; art from TLON_ART_DIR) |
+| `house:demo` | house: the window on made-up things, no server (both rooms; `-- --office` starts in the office) |
+| `house:run` | house: the window over the live server: the home (what the jots left open, what is coming, the notes) and the office (the crew, what waits on you); `-- --office` starts in the office (TLON_URL; art from TLON_ART_DIR) |
 
 ## manual
 

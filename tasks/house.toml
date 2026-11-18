@@ -2,11 +2,11 @@
 # ([task_config] includes); each top-level table is a task. Godot is the machine's, not mise's.
 
 ["house:run"]
-description = "house: the window that keeps the home in sight — what the jots left open, what is coming, the notes — over the live server (TLON_URL; art from TLON_ART_DIR)"
+description = "house: the window over the live server: the home (what the jots left open, what is coming, the notes) and the office (the crew, what waits on you); `-- --office` starts in the office (TLON_URL; art from TLON_ART_DIR)"
 run = "godot --path house"
 
 ["house:demo"]
-description = "house: the window on made-up things, no server"
+description = "house: the window on made-up things, no server (both rooms; `-- --office` starts in the office)"
 run = "godot --path house -- --demo"
 
 ["house:check"]

@@ -1,6 +1,7 @@
 extends PanelContainer
 
 signal ticked(id: int)
+signal door_pressed
 
 const INK := Color("f1e9dc")
 const QUIET := Color("a89fb0")
@@ -11,6 +12,10 @@ const MONTHS := [
 	"", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ]
 
+const GOOD := Color("8fd18a")
+
+var _title: Label
+var _door: Button
 var _box: VBoxContainer
 var _status: Label
 var _last := ""
@@ -26,8 +31,16 @@ func _ready() -> void:
 	outer.add_theme_constant_override("separation", 6)
 	add_child(outer)
 
-	var title := _label("the house", 24, ACCENT)
-	outer.add_child(title)
+	var head := HBoxContainer.new()
+	_title = _label("the home", 24, ACCENT)
+	head.add_child(_title)
+	_door = Button.new()
+	_door.focus_mode = Control.FOCUS_NONE
+	_door.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_door.add_theme_font_size_override("font_size", 13)
+	_door.pressed.connect(func(): door_pressed.emit())
+	head.add_child(_door)
+	outer.add_child(head)
 	_status = _label("can't reach tlon", 13, QUIET)
 	_status.visible = false
 	outer.add_child(_status)
@@ -40,6 +53,12 @@ func _ready() -> void:
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_box.add_theme_constant_override("separation", 6)
 	scroll.add_child(_box)
+
+
+func set_room(room: String, door_text: String) -> void:
+	_title.text = "the " + room
+	_door.text = door_text
+	_last = ""
 
 
 func set_reachable(ok: bool) -> void:
@@ -57,6 +76,55 @@ func show_data(data: Dictionary) -> void:
 	_section("Still open", data["open"], "Nothing waiting. Enjoy it.", true)
 	_section("Coming up", data["coming"], "Nothing coming up.", false)
 	_notes(data["notes"])
+
+
+# view: {crew: [{name, role, status, doing}], more, waiting: [{title, why}], waiting_count, paused}
+func show_office(view: Dictionary) -> void:
+	var key := JSON.stringify(view)
+	if key == _last:
+		return
+	_last = key
+	for child in _box.get_children():
+		child.queue_free()
+		_box.remove_child(child)
+	if view["paused"] != "":
+		_box.add_child(_label(view["paused"], 15, WARM))
+	_heading("Waiting on you")
+	if view["waiting"].is_empty() and view["waiting_count"] == 0:
+		_box.add_child(_label("Nothing needs you.", 15, QUIET))
+	for w in view["waiting"]:
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 0)
+		col.add_child(_label(str(w["title"]), 16, INK))
+		col.add_child(_label(str(w["why"]), 13, WARM))
+		_box.add_child(col)
+	if view["waiting_count"] > view["waiting"].size():
+		_box.add_child(_label("%d in all" % view["waiting_count"], 13, QUIET))
+	_heading("The crew")
+	if view["crew"].is_empty():
+		_box.add_child(_label("Nobody on the bench.", 15, QUIET))
+	for c in view["crew"]:
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 0)
+		var who := str(c["name"])
+		if c["role"] != "":
+			who += "  -  " + str(c["role"])
+		col.add_child(_label(who, 16, _status_color(c["status"])))
+		col.add_child(_label(str(c["doing"]), 13, QUIET))
+		_box.add_child(col)
+	if view["more"] > 0:
+		_box.add_child(_label("+%d more" % view["more"], 15, QUIET))
+
+
+func _status_color(status: String) -> Color:
+	match status:
+		"working":
+			return GOOD
+		"waiting":
+			return ACCENT
+		"idle":
+			return INK
+	return QUIET
 
 
 func _label(text: String, size: int, color: Color) -> Label:
