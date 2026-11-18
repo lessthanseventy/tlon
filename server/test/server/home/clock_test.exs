@@ -8,6 +8,41 @@ defmodule Server.Home.ClockTest do
 
   defp at(date, time), do: Clock.utc(NaiveDateTime.new!(Date.from_iso8601!(date), Time.from_iso8601!(time)))
 
+  describe "a repeat that started years ago is worked out, not stepped through" do
+    @now Clock.utc(~N[2026-11-20 12:00:00])
+
+    @repeats [
+      # {started, every, anchor, next after now, latest not after now}
+      {~N[2006-11-20 09:00:00], "day", nil, ~N[2026-11-21 09:00:00], ~N[2026-11-20 09:00:00]},
+      {~N[2006-11-20 09:00:00], "3 day", nil, ~N[2026-11-23 09:00:00], ~N[2026-11-20 09:00:00]},
+      {~N[2006-11-20 09:00:00], "week", nil, ~N[2026-11-23 09:00:00], ~N[2026-11-16 09:00:00]},
+      {~N[2006-01-31 09:00:00], "month", 31, ~N[2026-11-30 09:00:00], ~N[2026-10-31 09:00:00]},
+      {~N[2006-01-15 09:00:00], "3 month", nil, ~N[2027-01-15 09:00:00], ~N[2026-10-15 09:00:00]}
+    ]
+
+    for {started, every, anchor, next, latest} <- @repeats do
+      test "#{every} from #{started}" do
+        started = Clock.utc(unquote(Macro.escape(started)))
+
+        {micros, {next, latest}} =
+          :timer.tc(fn ->
+            {Clock.next(started, unquote(every), @now, unquote(anchor)),
+             Clock.latest(started, unquote(every), @now, unquote(anchor))}
+          end)
+
+        assert next == Clock.utc(unquote(Macro.escape(next)))
+        assert latest == Clock.utc(unquote(Macro.escape(latest)))
+        assert micros < 200_000
+      end
+    end
+
+    test "forward/4 leaves a time still to come and moves one that has passed to the next" do
+      future = Clock.utc(~N[2026-11-25 09:00:00])
+      assert Clock.forward(future, "week", @now) == future
+      assert Clock.forward(Clock.utc(~N[2026-11-10 09:00:00]), "week", @now) == Clock.utc(~N[2026-11-24 09:00:00])
+    end
+  end
+
   describe "due/4: the slot last said, the slot's time, now: say it (and record that slot) or wait" do
     @cases [
       # {last said, list time, weekday, now, answer}

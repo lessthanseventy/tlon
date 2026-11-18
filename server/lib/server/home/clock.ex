@@ -19,6 +19,8 @@ defmodule Server.Home.Clock do
   its first, one that never happens (clocks forward) is the hour after.
   """
   @spec utc(NaiveDateTime.t()) :: DateTime.t()
+  def utc(%NaiveDateTime{year: year} = local) when year < 1970, do: DateTime.from_naive!(local, "Etc/UTC")
+
   def utc(%NaiveDateTime{} = local) do
     case :calendar.local_time_to_universal_time_dst(NaiveDateTime.to_erl(local)) do
       [utc | _] -> utc |> NaiveDateTime.from_erl!() |> DateTime.from_naive!("Etc/UTC")
@@ -71,17 +73,19 @@ defmodule Server.Home.Clock do
 
   @doc "The first occurrence of `utc` repeating `every` that is after `now`."
   @spec next(DateTime.t(), String.t(), DateTime.t(), pos_integer() | nil) :: DateTime.t()
-  def next(%DateTime{} = utc, every, now, anchor \\ nil) do
-    stepped = step(utc, every, anchor)
-    if DateTime.after?(stepped, now), do: stepped, else: next(stepped, every, now, anchor)
+  def next(%DateTime{} = utc, every, now, anchor \\ nil),
+    do: walk_next(skip(utc, every, now, anchor), every, now, anchor)
+
+  @doc "`utc` when it is still to come after `now`, else its next occurrence repeating `every`."
+  @spec forward(DateTime.t(), String.t(), DateTime.t(), pos_integer() | nil) :: DateTime.t()
+  def forward(%DateTime{} = utc, every, now, anchor \\ nil) do
+    if DateTime.after?(utc, now), do: utc, else: next(utc, every, now, anchor)
   end
 
   @doc "The last occurrence of `utc` repeating `every` that is not after `now`: `utc` itself when its next one is."
   @spec latest(DateTime.t(), String.t(), DateTime.t(), pos_integer() | nil) :: DateTime.t()
-  def latest(%DateTime{} = utc, every, now, anchor \\ nil) do
-    stepped = step(utc, every, anchor)
-    if DateTime.after?(stepped, now), do: utc, else: latest(stepped, every, now, anchor)
-  end
+  def latest(%DateTime{} = utc, every, now, anchor \\ nil),
+    do: walk_latest(skip(utc, every, now, anchor), every, now, anchor)
 
   @doc "Whether the operator is up at `utc`: not between 22:00 and 08:00 local, when nothing unasked is said."
   @spec awake?(DateTime.t()) :: boolean()
@@ -138,6 +142,36 @@ defmodule Server.Home.Clock do
   defp on_day(date, on), do: Enum.find(for(back <- 0..6, do: Date.add(date, -back)), &(day_name(&1) == on))
 
   defp day_name(date), do: date |> Calendar.strftime("%a") |> String.downcase()
+
+  defp walk_next(utc, every, now, anchor) do
+    stepped = step(utc, every, anchor)
+    if DateTime.after?(stepped, now), do: stepped, else: walk_next(stepped, every, now, anchor)
+  end
+
+  defp walk_latest(utc, every, now, anchor) do
+    stepped = step(utc, every, anchor)
+    if DateTime.after?(stepped, now), do: utc, else: walk_latest(stepped, every, now, anchor)
+  end
+
+  # an occurrence a few repeats behind `now`, reached by arithmetic so a start years back is not stepped through
+  defp skip(utc, every, now, anchor) do
+    local = local(utc)
+    gone = local(now)
+    {n, unit} = parse(every)
+
+    case div(repeats(unit, local, gone), n) - 1 do
+      k when k < 1 -> utc
+      k -> utc(jump(unit, local, k * n, anchor))
+    end
+  end
+
+  defp repeats("day", local, gone), do: Date.diff(NaiveDateTime.to_date(gone), NaiveDateTime.to_date(local))
+  defp repeats("week", local, gone), do: div(repeats("day", local, gone), 7)
+  defp repeats("month", local, gone), do: (gone.year - local.year) * 12 + gone.month - local.month
+
+  defp jump("day", local, k, _anchor), do: NaiveDateTime.shift(local, day: k)
+  defp jump("week", local, k, _anchor), do: NaiveDateTime.shift(local, week: k)
+  defp jump("month", local, k, anchor), do: month(local, k, anchor)
 
   defp parse(every) do
     case String.split(every) do

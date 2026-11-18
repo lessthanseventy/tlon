@@ -167,7 +167,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
       POST   /api/home/add               {kind: todo|reminder|note|waiting|project, text, at?, every?, who?, project?, steps?} →
                                          Server.Home.add; the row as GET /api/home shows it, no model: at is ISO 8601, with a zone that
-                                         instant, without the machine's local time; every is day|week|month or "N day|week|month";
+                                         instant, without the machine's local time, a year back to 20 ahead; every is day|week|month or "N day|week|month";
                                          400 {error} (one line) on a bad body, 404 when project is not an open project
       POST   /api/home/:id/edit          {text?, at?, every? (null stops it), kind? (todo|reminder only)} → Server.Home.edit; the row,
                                          a touch; 400 {error}, 404 when the thing is not live

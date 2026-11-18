@@ -1030,11 +1030,11 @@ defmodule Server.MCP.GatewayTest do
 
       assert {400, %{"error" => "a reminder needs at"}} = post_json("/api/home/add", %{kind: "reminder", text: "x"})
 
-      assert {200, %{"id" => id, "kind" => "reminder", "due_at" => "2099-01-01T09:00:00Z", "every" => "6 week"}} =
+      assert {200, %{"id" => id, "kind" => "reminder", "due_at" => "2040-01-01T09:00:00Z", "every" => "6 week"}} =
                post_json("/api/home/add", %{
                  kind: "reminder",
                  text: "haircut",
-                 at: "2099-01-01T09:00:00Z",
+                 at: "2040-01-01T09:00:00Z",
                  every: "6 week"
                })
 

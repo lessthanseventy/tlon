@@ -182,7 +182,7 @@ defmodule Server.Home do
   end
 
   @doc """
-  Put a thing in from a form (`Server.Home.Form.add/1`: `kind`, `text`, `at`, `every`, `who`, `steps`,
+  Put a thing in from a form (`Server.Home.Form.add/2`: `kind`, `text`, `at`, `every`, `who`, `steps`,
   `project`), at `now`, filed as a reading is (`Server.Home.Organize.file/3`) with no model call:
   `{:ok, row}` as `status/1` shows it, `{:error, reason}` for a bad body, `:not_found` when `project`
   is not an open project. A to-do for a project is its open step when it has none, else the end of
@@ -190,18 +190,18 @@ defmodule Server.Home do
   """
   @spec add(map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
   def add(params, now) do
-    with {:ok, reading} <- Server.Home.Form.add(params), do: file(reading, now)
+    with {:ok, reading} <- Server.Home.Form.add(params, now), do: reading |> started(now) |> file(now)
   end
 
   @doc """
-  Change the thing `id` as the operator says (`Server.Home.Form.edit/2`: `text`, `at`, `every` or null,
+  Change the thing `id` as the operator says (`Server.Home.Form.edit/3`: `text`, `at`, `every` or null,
   `kind` only to-do or reminder; `Server.Home.Organize.edit/3`): `{:ok, row}`, `{:error, reason}`, or
   `:not_found` when it is none, is done or is deleted.
   """
   @spec edit(integer(), map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
   def edit(id, params, now) do
     with %Jot{} = jot <- Jot.live(via(), id) || :not_found,
-         {:ok, changes} <- Server.Home.Form.edit(jot, params) do
+         {:ok, changes} <- Server.Home.Form.edit(jot, params, now) do
       {:ok, view(Server.Home.Organize.edit(jot, changes, now))}
     end
   end
@@ -325,4 +325,12 @@ defmodule Server.Home do
 
   defp plan_error(:error), do: {:error, "plan is a list of texts"}
   defp plan_error(ok), do: ok
+
+  # a repeat started in the past starts from its next time after now, on the day it started on
+  defp started(%{every: every, due_at: %DateTime{} = due} = reading, now) when is_binary(every) do
+    anchor = Jot.anchor(every, due)
+    Map.merge(reading, %{due_at: Server.Home.Clock.forward(due, every, now, anchor), every_day: anchor})
+  end
+
+  defp started(reading, _now), do: reading
 end
