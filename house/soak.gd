@@ -27,6 +27,7 @@ const ArtSoak := preload("res://soak_art.gd")
 const PackLooksSoak := preload("res://soak_looks.gd")
 const TalkSoak := preload("res://soak_talk.gd")
 const TelegramSoak := preload("res://soak_telegram.gd")
+const WeatherSoak := preload("res://soak_weather.gd")
 const DEADLINE_MS := 540000
 
 var _srv := TCPServer.new()
@@ -109,6 +110,8 @@ func _run() -> void:
 	await _cards()
 	_where = "routes"
 	await _routes()
+	_where = "weather"
+	await WeatherSoak.new(self).run()
 	_where = "pack looks"
 	var packs := PackLooksSoak.new(self)
 	packs.run()
