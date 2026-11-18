@@ -994,6 +994,42 @@ defmodule Server.MCP.GatewayTest do
   end
 
   describe "/api/home — what the operator's jots have left open (Server.MCP.OperatorAPI)" do
+    test "the forecast is [] with the weather off, else the days the report held" do
+      Server.TestDB.clean!()
+      assert {200, %{"forecast" => []}} = get_json("/api/home")
+
+      report =
+        JSON.encode!(%{
+          "current_condition" => [%{"weatherCode" => "338", "temp_C" => "-1", "weatherDesc" => [%{"value" => "Snow"}]}],
+          "weather" => [
+            %{
+              "date" => "2026-11-18",
+              "maxtempC" => "12",
+              "mintempC" => "-1",
+              "hourly" => [
+                %{"time" => "900", "weatherCode" => "338", "chanceofrain" => "0", "chanceofsnow" => "60"}
+              ]
+            }
+          ]
+        })
+
+      start_supervised!({Server.Office.Weather, fetch: fn -> {:ok, report} end})
+      {200, _} = get_json("/api/home")
+
+      home =
+        Enum.find_value(1..20, fn _ ->
+          Process.sleep(20)
+          {200, home} = get_json("/api/home")
+          home["forecast"] != [] && home
+        end)
+
+      assert home["forecast"] == [
+               %{"date" => "2026-11-18", "high_c" => 12, "low_c" => -1, "kind" => "snow", "wet" => 60}
+             ]
+
+      refute Map.has_key?(home, "weather")
+    end
+
     test "open things, what is coming and the notes; a thing is done once" do
       Server.TestDB.clean!()
       {:ok, milk} = Server.Jot.take("telegram", 1, "buy milk")
