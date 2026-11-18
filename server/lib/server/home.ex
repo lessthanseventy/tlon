@@ -52,6 +52,33 @@ defmodule Server.Home do
 
   def later(_id, _until, _now), do: :error
 
+  @doc "The reminders the operator has been told and has not done: what a desktop keeps up."
+  @spec told() :: [Jot.t()]
+  def told, do: via() |> Jot.opens() |> Enum.filter(&(&1.kind == "reminder" and &1.nudged_at != nil))
+
+  @doc """
+  The daily list for a desktop: `%{id, created_at, thread_id, body}` for the ten minutes after
+  `home_list_at` (local) on a day something is open, nil otherwise.
+  """
+  @spec listing(DateTime.t()) :: map() | nil
+  def listing(now) do
+    local = Server.Home.Clock.local(now)
+    {_coming, open} = board(via(), now)
+
+    with {:ok, at} <- Time.from_iso8601(Server.OperatorConfig.setting("home_list_at") <> ":00"),
+         since when since in 0..599 <- Time.diff(NaiveDateTime.to_time(local), at),
+         [_ | _] <- open do
+      %{
+        id: Date.to_iso8601(NaiveDateTime.to_date(local)),
+        created_at: DateTime.add(now, -since),
+        thread_id: nil,
+        body: "Still open: " <> Enum.map_join(open, " · ", & &1.text)
+      }
+    else
+      _ -> nil
+    end
+  end
+
   @doc "What is open from `via` at `now`, as `{coming, open}`: the reminders to come, and everything else still open."
   @spec board(String.t(), DateTime.t()) :: {[Jot.t()], [Jot.t()]}
   def board(via, now),

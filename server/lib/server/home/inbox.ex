@@ -30,6 +30,7 @@ defmodule Server.Home.Inbox do
   require Logger
 
   @retry_ms 5_000
+  @tick_ms 30_000
   @nudges 6
   @done ["done", "did it", "did that"]
 
@@ -51,16 +52,15 @@ defmodule Server.Home.Inbox do
 
   @doc """
   Say in `chat` each reminder from `via` that is due at `now` and whose turn it is, with its choices
-  under it. One whose message did not go out is said at the next poll.
+  under it. One whose message did not go out is said at the next poll. With no chat (`""`) it is
+  only recorded as told, which is what the desktop raises (`Server.Home.told/1`).
   """
   @spec nudge(String.t(), String.t(), (String.t(), String.t(), keyword() -> term()), DateTime.t()) :: :ok
-  def nudge(_via, "", _say, _now), do: :ok
-
   def nudge(via, chat, say, now) do
     for jot <- Jot.due(via, now),
         jot = current(jot, now),
         turn?(jot, now),
-        say.(chat, "reminder: #{jot.text}", choices: [choices(jot)]) == :ok do
+        chat == "" or say.(chat, "reminder: #{jot.text}", choices: [choices(jot)]) == :ok do
       Jot.nudged(jot, now)
     end
 
@@ -144,11 +144,19 @@ defmodule Server.Home.Inbox do
       send(self(), :poll)
       {:ok, %{messenger: messenger, offset: (Jot.cursor(messenger.name()) || -1) + 1, listed: :boot}}
     else
-      :ignore
+      send(self(), :tick)
+      {:ok, %{messenger: messenger}}
     end
   end
 
+  # no messenger: the reminders are still told on time, to the desktop
   @impl true
+  def handle_info(:tick, %{messenger: messenger} = state) do
+    nudge(messenger.name(), "", nil, DateTime.utc_now())
+    Process.send_after(self(), :tick, @tick_ms)
+    {:noreply, state}
+  end
+
   def handle_info(:poll, %{messenger: messenger, offset: offset} = state) do
     chat = Server.OperatorConfig.setting("home_chat")
     now = DateTime.utc_now()

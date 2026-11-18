@@ -185,6 +185,32 @@ defmodule Server.Home.InboxTest do
     assert done == "done:#{jot.id}"
   end
 
+  test "with no chat, a due reminder is told all the same, and is what the desktop keeps up", %{say: say} do
+    jot = reminded(say)
+    assert Server.Home.told() == []
+
+    Inbox.nudge("telegram", "", nil, friday())
+
+    assert [%{id: id, nudges: 1}] = Server.Home.told()
+    assert id == jot.id
+
+    assert [%{key: key, kind: "reminder", title: "call the dentist"}] =
+             Enum.filter(Server.Alerts.list(), &(&1.kind == "reminder"))
+
+    assert key == "reminder:#{jot.id}:1"
+  end
+
+  test "the daily list is a desktop's for ten minutes after its time, when something is open", %{say: say} do
+    at = fn time -> Server.Home.Clock.utc(NaiveDateTime.new!(~D[2026-11-21], time)) end
+    assert Server.Home.listing(at.(~T[17:35:00])) == nil
+
+    reminded(say)
+
+    assert %{id: "2026-11-21", body: "Still open: call the dentist"} = Server.Home.listing(at.(~T[17:35:00]))
+    assert Server.Home.listing(at.(~T[17:29:00])) == nil
+    assert Server.Home.listing(at.(~T[17:41:00])) == nil
+  end
+
   test "a reminder left unanswered is said again after half an hour, then an hour after that", %{say: say} do
     reminded(say)
     Inbox.nudge("telegram", "42", say, friday())

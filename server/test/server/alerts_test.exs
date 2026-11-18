@@ -231,6 +231,17 @@ defmodule Server.AlertsTest do
   test "a release going live is info: one toast per boot onto a new release" do
     live = %{id: 92, thread_id: 1, body: "release 7b54006 is live — 3 changes", created_at: @now}
 
+    told = %Server.Jot{id: 7, text: "bins", nudges: 2, nudged_at: @now}
+    list = %{id: "2026-11-17", created_at: @now, thread_id: nil, body: "Still open: milk"}
+
+    assert [
+             %{key: "reminder:7:2", level: "sticky", kind: "reminder", title: "bins", actions: [done, hour, _]},
+             %{key: "home_list:2026-11-17", level: "info", title: "Still open: milk"}
+           ] = Alerts.build([], [], @now, told: [told], home_list: [list])
+
+    assert done == %{label: "Done", method: "POST", path: "/api/home/7/done", body: nil}
+    assert hour.body == %{until: "hour"}
+
     assert [info] = Alerts.build([], [], @now, live: [live])
     assert %{key: "live:92", level: "info", kind: "live", title: "release 7b54006 is live — 3 changes"} = info
     assert info.actions == []

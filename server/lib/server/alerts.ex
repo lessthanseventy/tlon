@@ -8,7 +8,9 @@ defmodule Server.Alerts do
     * **decision** — work has stopped on a choice (a gate, a prompt, a question, a coworker's
       ask): a banner with its answers;
     * **sticky** — wants the operator, nothing waits on it (a red verify, stuck work): stays until
-      dismissed or resolved. A rollout note raises nothing here: the office's inbox has it;
+      dismissed or resolved. A rollout note raises nothing here: the office's inbox has it. A
+      reminder the operator was told and has not done (`Server.Home.told/0`) is one, with the
+      chat's three choices;
     * **info** — something the operator set going took effect where they can't see it: a toast
       that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
       minutes after. Kinds: `seated`, a thread parked on the leaf cap got its coworker
@@ -16,7 +18,8 @@ defmodule Server.Alerts do
       (`Server.Workline.landed_since/1`; one row per landing, keyed by its event, worded by
       `landed_title/1` — the desktop's toast and the Claude Code plugin's read this row); `fixing`, an issue a ticket
       took, saying who has it (`Server.Dossier.own_issue/3`); `live`, the service booted
-      on a new release (`Server.Release.PM.note_live/1`). A `mention` of the operator is info too: a
+      on a new release (`Server.Release.PM.note_live/1`); `home_list`, the home's daily list, for the
+      ten minutes after its time (`Server.Home.listing/1`). A `mention` of the operator is info too: a
       coworker's report goes by, and the office's inbox keeps it; what they must decide is an ask.
 
   Each alert is `%{key, level, kind, title, body, at, thread_id, link, actions}`; an action is a
@@ -43,14 +46,17 @@ defmodule Server.Alerts do
       seated: Server.Sweep.seated_since(since),
       landed: Server.Workline.landed_since(since),
       fixing: Server.Dossier.fixing_since(since),
-      live: Server.Release.PM.live_since(since)
+      live: Server.Release.PM.live_since(since),
+      told: Server.Home.told(),
+      home_list: List.wrap(Server.Home.listing(now))
     )
   end
 
   @doc """
   The alerts for these needs and meetings at `now` — `list/0` without the reads. Raised as info:
   `seated:` the seating notices, `landed:` the landings, `fixing:` the issues a ticket took,
-  `live:` the live-release notices.
+  `live:` the live-release notices, `home_list:` the home's daily list. `told:` the reminders
+  told and not done, raised sticky.
   """
   def build(needs, meetings, now, opts \\ []) do
     lead = Keyword.get(opts, :alarm_minutes, @alarm_minutes) * 60
@@ -66,11 +72,13 @@ defmodule Server.Alerts do
     Enum.sort_by(alarms, & &1.at, DateTime) ++
       Enum.filter(from_needs, &(&1.level == "decision")) ++
       Enum.filter(from_needs, &(&1.level == "sticky")) ++
+      Enum.map(Keyword.get(opts, :told, []), &reminder/1) ++
       Enum.filter(from_needs, &(&1.level == "info")) ++
       Enum.map(Keyword.get(opts, :seated, []), &info("seated", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :landed, []), &info("landed", &1, landed_title(&1))) ++
       Enum.map(Keyword.get(opts, :fixing, []), &info("fixing", &1, &1.body)) ++
-      Enum.map(Keyword.get(opts, :live, []), &info("live", &1, &1.body))
+      Enum.map(Keyword.get(opts, :live, []), &info("live", &1, &1.body)) ++
+      Enum.map(Keyword.get(opts, :home_list, []), &info("home_list", &1, &1.body))
   end
 
   @doc "The one wording of a landing, for every surface that toasts it: `#185 landed — <title>`."
@@ -264,4 +272,27 @@ defmodule Server.Alerts do
   defp other(t), do: "Other…" |> call("/messages", t) |> Map.put(:input, "body")
 
   defp send_back(stage, t), do: "Back to #{stage}…" |> call("/send_back", t, %{stage: stage}) |> Map.put(:input, "why")
+
+  # keyed by the telling, so one dismissed on the desktop comes back when it is told again
+  defp reminder(jot) do
+    later = fn label, until ->
+      %{label: label, method: "POST", path: "/api/home/#{jot.id}/later", body: %{until: until}}
+    end
+
+    %{
+      key: "reminder:#{jot.id}:#{jot.nudges}",
+      level: "sticky",
+      kind: "reminder",
+      title: jot.text,
+      body: nil,
+      at: jot.nudged_at,
+      thread_id: nil,
+      link: nil,
+      actions: [
+        %{label: "Done", method: "POST", path: "/api/home/#{jot.id}/done", body: nil},
+        later.("In an hour", "hour"),
+        later.("Tomorrow", "tomorrow")
+      ]
+    }
+  end
 end
