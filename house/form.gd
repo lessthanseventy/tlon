@@ -329,6 +329,8 @@ func _set_mode(m: String) -> void:
 	_mode = m
 	for key in _every_chips:
 		(_every_chips[key] as Button).set_pressed_no_signal(key == m)
+	for key in _unit_chips:
+		(_unit_chips[key] as Button).set_pressed_no_signal(m == "custom" and key == _unit)
 
 
 func _set_unit(u: String) -> void:
