@@ -1118,7 +1118,7 @@ func furn(id: String, tex: Texture2D, at: Vector2) -> void:
 			if name == "bookshelf" and finds.glow > 0.0:
 				room.draw_texture(tex, at, Color(1.8, 1.5, 0.7, 0.45 * minf(1.0, finds.glow)))
 			if name == "fireplace":
-				hearth.dress(room, at, _k)
+				hearth.dress(room, at, _k, id)
 
 
 func register_sprite(key: String, tex: Texture2D, at: Vector2) -> void:
