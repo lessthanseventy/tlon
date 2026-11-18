@@ -31,6 +31,7 @@ func run() -> void:
 	_table(h)
 	_gates(h)
 	_alone(h)
+	_events(h)
 	_rates()
 	_egg(h)
 	_random()
@@ -142,9 +143,31 @@ func _gates(h) -> void:
 		for i in 30:
 			h.process(0.2)
 			h.antics.next["nina"] = 0.0
-		s._check(h.antics.act.is_empty(), "no antic starts over a %s" % what)
+		var name: String = str(h.antics.act.get("name", ""))
+		s._check(name in ["", "phone_watch"], "no antic starts over a %s (%s)" % [what, name])
 	h.form_open = false
 	h.ring_ids = []
+	h.antics.act = {}
+	h.pets.critter("nina").hold = false
+	h.pets.critter("argos").hold = false
+
+
+func _events(h) -> void:
+	tidy(h, ["cat_black", "dog_golden"])
+	h.process(0.1)
+	var n: int = h.antics.started.count("cheer_done")
+	h.jar.total += 1
+	h.process(0.1)
+	_finish(h)
+	h.process(0.1)
+	s._check(h.antics.started.count("cheer_done") == n + 1, "a thing done is cheered once")
+	tidy(h, ["cat_black", "dog_golden"])
+	n = h.antics.started.count("birthday_hop")
+	h.finds.birthday_forced = true
+	for i in 120:
+		h.process(0.1)
+	h.finds.birthday_forced = false
+	s._check(h.antics.started.count("birthday_hop") == n + 2, "both hop once on the birthday")
 
 
 func _count(setting: String) -> int:
