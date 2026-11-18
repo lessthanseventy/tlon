@@ -160,6 +160,10 @@ func set_room(room: String, door_text: String) -> void:
 	_last = ""
 
 
+func set_door_visible(on: bool) -> void:
+	_door.visible = on
+
+
 func set_reachable(ok: bool) -> void:
 	_status.visible = not ok
 

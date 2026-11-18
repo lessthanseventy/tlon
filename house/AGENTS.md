@@ -16,6 +16,11 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 `rhythm.gd` (the day's two beats and their slips), `layout.gd` (the furniture and the rules of placing it),
 `decorate.gd` (the catalogue and the pointer work of decorating). `soak.gd` is the scripted check.
 
+Where the list lives is one `Backend` (`backend.gd`): `backend_http.gd` is the tlon server, `backend_local.gd`
+the house's own file (`local_list.gd` the list, `reader_rules.gd` the loose-line reader). `main.gd` holds one and
+never asks which. The sections below describe the server's list; with `where` = `local` (below) the same room
+runs on the local list.
+
 - Notes are slips pinned to the corkboard (four shown, "+N" for the rest); hover shows the
   whole note, a click opens the board card. Open things are stickies on and around the monitor and a stack of paper on the desk
   whose height and small badge follow the count. A reminder's next due time is the wall calendar
@@ -195,11 +200,12 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   no name is skipped), `birthday` (`"MM-DD"`, `""`), `cat` and `dog` (default Nina and Argos: shown everywhere the
   house prints them, the server's pet lines too, by `Settings.pets`; the server and `voices.gd` still key on Nina and
   Argos), `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
-  `http://127.0.0.1:4040`). **Precedence: a command-line arg beats the settings file beats the default** (`--widget`
+  `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server).
+  **Precedence: a command-line arg beats the settings file beats the default** (`--widget`
   is the arg of `widget`; `Settings.forced`). The screen also shows sound (`sound.gd`'s own file keeps it), "N of M
   found" with "forget them all", "reset the room to how it came" (`layout.reset`) and "clear" for the chat, each
-  asking for a second click (`sure.gd`), the address with a "check" (`GET /api/home`), "this computer" greyed out
-  (coming soon: the local list is not built), the art folder, and the daily list time and weekly review day only
+  asking for a second click (`sure.gd`), "where the list lives" (`where`: "a tlon server" with its address and a
+  "check" (`GET /api/home`), or "this computer" with one quiet line of where the file is kept), the art folder, and the daily list time and weekly review day only
   when `GET /api/settings` already returned them (`home_list_at`, `home_review_on`). Quiet hours are the server's and
   no existing route returns them, so they are not shown. `--settings "name=Sam;cat=Mimi;scroll;armed=reset"` stages it.
 - **Chat** (`chat.gd` the history, `chat_view.gd` the panel): the desk phone, clicked while it is not ringing, or
@@ -213,9 +219,56 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   last 300 are kept in `user://house_chat.json` (`{"messages": [{t, who: me|home|cat|dog, text, done?}]}`, a
   reminder also `id` and `told_at`), never in a scripted or staged run. A question the server holds for him is not
   shown: the house has no route that lists them. `--chat "talk,reminder,acted,pet,reading,fail|empty"` and `--unread` stage it.
-- **One place for the server's calls**: `main.gd` `_post`, `_write`, `_act`, `_tell` and `_refresh` carry every
-  write and the notepad/chat line; the polls (`_poll`, `_slow_poll`, `_pets_ask`, `_watch_door`, `_ask_now`) and the
-  address check are plain GETs there too. A later local-file or other backend goes behind those.
+- **One place for the list's calls**: `main.gd` `_post`, `_write`, `_act`, `_tell` and `_refresh` carry every
+  write and the notepad/chat line; the polls (`_poll`, `_slow_poll`, `_pets_ask`, `_watch_door`, `_ask_now`) are plain
+  GETs there too. All of them are `Backend.fetch(route, cb, timeout)` and `Backend.send(route, body, cb, timeout)`,
+  which answer `cb(reached, code, parsed)` on a later frame, never inside the call; `Backend.check(url, cb)` is the
+  address check. `main.gd` `_make_backend` picks the server's (`backend_http.gd`, at `base`) or the house's own
+  (`backend_local.gd`) from the `where` setting and swaps it at once when that changes.
+- **The house's own list** (`where`: `"server"` by default, `"local"` for "this computer"; the cog's screen chooses,
+  `--local FILE|starters` stages it, nothing saved). The same room runs on `backend_local.gd`: every route of the
+  server's list answered on the next frame by `local_list.gd`, a Dictionary kept in `user://house_list.json`
+  `{"v": 1, "next_id": N, "things": [...]}` (a thing: `id kind text state since due_at every every_day told_at nudges
+  project_id who plan done_at hidden_until`; unknown keys, top level or on a thing, are kept; `due_at` is UTC `Z` as
+  the server's rows). Saved after every change, written to a temp file and renamed over the old one, which stays as
+  `house_list.bak.json`; a file that cannot be read is moved aside as `house_list.broken-N.json` and the house starts
+  empty, saying so once. The clock is injected (`clock` is the house's `_now_local`), so the soak moves time.
+  Done history is the last 200 (`done_at`); `done_week` is the last seven days. Errors are the server's lines:
+  `text is required`, `kind is todo, reminder, note, waiting or project`, `a reminder needs at`, `at is for a
+  reminder`, the `at` format and `at is no more than a year back or 20 years ahead`, `every is for a reminder`, `every
+  is day, week or month, or a number then one of them: 6 week`, `who is required for a waiting-on`, `steps is a list
+  of texts, at least one`, `project is a project's id`, `project is for a to-do`, `kind is only todo or reminder`,
+  `a to-do has no time: send kind reminder with at`, `a to-do has no time and no repeat`, `plan is a list of texts`;
+  and the house's own `until is hour or tomorrow`, `only a to-do or a reminder can be put off`, `choice is nottoday`;
+  404 for an id that is not live. What now is overdue reminders (most overdue first), the to-do that has sat longest,
+  then a project's open step; "not today" hides a thing until 06:00 tomorrow.
+  **Reminders**: once a second the backend marks due reminders told (`told_at`, `nudges`), and the room rings from it
+  as it does for the server's; a told one not acted on is told again after 30 min, 1 h, 2 h, then every 4 h, six times
+  in all, never between 22:00 and 08:00 (it waits for 08:00); a repeating one missed for days stands at its newest time;
+  one that came due while the house was closed is told at the next start. A re-ring changes `told_at`, and the room
+  rings once per `(id, told_at)`: the phone, a new chat message, the sound.
+  **The loose line** (the notepad, the chat) has no model: `reader_rules.gd` reads it, case-insensitively, and the
+  reply says what it understood. A plain line is a to-do ("To do: buy milk."); with a time, a reminder ("Reminder set:
+  call the plumber, tomorrow 09:00 (no hour given: 09:00)."): `remind me (to|about) X`, `at 3pm|15:00|3:30pm|at 9`,
+  `tomorrow`, `tonight` (19:00), `today`, a weekday (`thursday`, `on thursday`, `next thursday`: the next such day,
+  never today), `in N minutes|hours|days|weeks|in an hour`, `on 21 nov|nov 21|11/21`, combined; no hour is 09:00, a time
+  already gone today is tomorrow's; `every day|week|month|N days|weeks|months|other week|monday` repeats ("then every
+  week"); `note: X` ("Noted: X."), `waiting on WHO for X` or `WHO owes me X` ("Waiting on Dana for the lease. I'll ask
+  in 3 days."), `done|did|finished X` and `delete|forget X` ("Done: buy milk.", "Deleted: ..."; the one whose words
+  overlap most, a tie is listed and nothing changes, a repeating reminder or a project is left to its card),
+  `what's left|list|today` (what is open and today's reminders). A line it cannot read a time from stays a to-do with
+  the whole line as its text: nothing is dropped.
+  **Seams for what comes later** (a Telegram bot, a model reader): the reader is `read(text, context) -> reading`
+  (`context`: `now`, `bias`, `status`; `reading`: `action` add|done|delete|say, `say`, and `body` or `id`), set as
+  `backend_local.gd` `reader`, so a model can stand in front with these rules as its fallback; and `Backend` announces
+  `told(row)` (a reminder was just told) and `replied(said, reply)` (a loose line and the answer), and `changed` (the
+  list moved by itself). Nothing listens yet.
+  **First start**: no settings file, no `TLON_URL`, and nothing answering at the default address starts the house on
+  its own list with a to-do "say hello to the cat", a weekly reminder "water the plant" and a note, once and only then.
+  **Not shown over the local list**: the office (the door in the room and its label, the panel's "to the office"
+  button, Tab, the visitor, `--office`), the server's polls (`/api/office`, `/api/settings`: the daily list time stays
+  17:30), the "couldn't reach tlon" states, and the address row of the settings. Choosing the other side applies at
+  once and deletes neither side's data; the settings screen says where the file is kept.
 - **Jotting** (the notepad on the desk, `N`, `/` or Enter): a paper field; Enter sends the text to
   the server (a model reads it, so a pencil scribbles while it waits) and the reply shows as a slip
   for a few seconds. A server that does not answer says "couldn't reach tlon — not kept" and keeps
@@ -274,7 +327,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   `POST /api/home/:id/done`, `.../later` (`{"until": "hour"|"tomorrow"}`), `.../drop`, `.../revive`,
   `.../edit`, `.../plan`, `.../answer`, `POST /api/home/add`, asks `GET /api/home/now?skip=`, and
   `POST /api/home` (`{"text"}` → `{"reply"}`, slow: a model reads it). The home also asks
-  `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). The house has no local reads: it talks only to the server. A server that does not answer leaves the
+  `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above). A server that does not answer leaves the
   last data on screen and a quiet line saying so; a post that fails moves nothing.
 - **Rooms.** The window starts in the home, or the office with `--office`. The door in each room, its
   panel button and Tab go between them. A coworker's state is the roster row's `status`

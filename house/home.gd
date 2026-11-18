@@ -89,6 +89,9 @@ const NOTE_TILT := [-0.1, 0.07, 0.05, -0.07]
 # a scripted run (the soak) keeps nothing in user://, whatever its arguments
 static var scripted := false
 
+# set by `setup`: nothing is read from or kept in user://
+var staged := false
+
 var room: Control
 var pets := Pets.new()
 var look := Look.new()
@@ -118,7 +121,8 @@ var temp_c: Variant = null
 var reply_text := ""
 var reply_left := 0.0
 var ring_ids: Array = []
-var _rang: Array = []
+var _rang := {}
+var _rang_new := false
 var _watching := false
 var _night_next := 120.0
 var open: Array = []
@@ -238,6 +242,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				eggs.laser_on = true
 			"--widget":
 				settings.forced["widget"] = true
+			"--local":
+				settings.forced["where"] = "local"
 			"--birthday":
 				finds.birthday_forced = true
 			"--plane":
@@ -275,7 +281,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 					)
 	if "--shot" in args and seed_value < 0:
 		seed_value = 7
-	var staged := scripted or "--demo" in args or "--shot" in args
+	staged = scripted or "--demo" in args or "--shot" in args or "--local" in args
 	settings.setup(not staged)
 	chat.setup(not staged)
 	pets.on_say = _pet_said
@@ -391,10 +397,14 @@ func set_data(d: Dictionary) -> void:
 	if knock.id >= 0 and not ids.has(knock.id):
 		knock.clear()
 	_assign_slots(ids)
-	_rang = _rang.filter(func(r): return ring_ids.has(r))
+	for rang_id in _rang.keys():
+		if not ring_ids.has(rang_id):
+			_rang.erase(rang_id)
 	for item in open:
-		if ring_ids.has(int(item["id"])) and not _rang.has(int(item["id"])):
-			_rang.append(int(item["id"]))
+		var item_id := int(item["id"])
+		if ring_ids.has(item_id) and _rang.get(item_id, "none") != item.get("told_at"):
+			_rang[item_id] = item.get("told_at")
+			_rang_new = true
 			pets.nudge("desk", "ring", str(item["text"]))
 			chat.told(int(item["id"]), str(item.get("told_at")), str(item["text"]))
 	pets.has_open = not open.is_empty()
@@ -589,8 +599,9 @@ func process(dt: float) -> void:
 	sound.loop("rain", _env["weather"] in ["rain", "storm"])
 	if jar.clinks.any(func(cl): return cl["t"] < dt + 0.001):
 		sound.request("clink")
-	if ring_ids.size() > _ringing:
+	if ring_ids.size() > _ringing or _rang_new:
 		sound.request("ring")
+	_rang_new = false
 	_ringing = ring_ids.size()
 	if card.is_open() and _cards_blocked():
 		card.close()

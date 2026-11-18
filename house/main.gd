@@ -16,6 +16,9 @@ const WIDGET_STORE := "user://house_widget.json"
 const FormScript := preload("res://form.gd")
 const SettingsView := preload("res://settings_view.gd")
 const ChatView := preload("res://chat_view.gd")
+const BackendHttp := preload("res://backend_http.gd")
+const BackendLocal := preload("res://backend_local.gd")
+const LocalList := preload("res://local_list.gd")
 
 var pets_retry := 20.0
 var pets_every := 300.0
@@ -24,7 +27,10 @@ var pets_window := 180.0
 
 var _demo := false
 var _shot := ""
-var _base := "http://127.0.0.1:4040"
+var _backend: Node
+var _fixture := ""
+var _probing := false
+var _starters := false
 
 var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": null}
 var _form: PanelContainer
@@ -48,20 +54,18 @@ var _at := "home"
 var _inflight := ""
 var _reach := {}
 var _busy := false
-var _slow: HTTPRequest
 var _slow_step := ""
-var _pets_req: HTTPRequest
+var _pets_busy := false
 var _pets_timer: Timer
 var _pets_nudged: Timer
 var _pets_since := 0.0
 var _ids: Array = []
 var _ids_known := false
-var _watch: HTTPRequest
+var _watch_busy := false
 var _away_at := 0.0
 
 var _room: Control
 var _panel: PanelContainer
-var _http: HTTPRequest
 
 
 func _ready() -> void:
@@ -88,7 +92,6 @@ func _ready() -> void:
 	_room.art_dir = _art_dir()
 	_room.door_clicked.connect(_toggle)
 	add_child(_room)
-	_base = _room.home.settings.server_url()
 
 	_panel = preload("res://panel.gd").new()
 	_panel.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
@@ -103,6 +106,7 @@ func _ready() -> void:
 	_panel.add_pressed.connect(_add_thing)
 	_panel.now_pressed.connect(_what_now)
 	add_child(_panel)
+	_use_backend(args)
 	_decorate = DecorateScript.new()
 	_decorate.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
 	_decorate.offset_left = -PANEL_WIDTH
@@ -167,20 +171,11 @@ func _ready() -> void:
 				get_tree().create_timer(1.1).timeout.connect(func(): _on_ticked(2))
 				get_tree().create_timer(1.4).timeout.connect(func(): _on_ticked(3))
 	else:
-		_slow = HTTPRequest.new()
-		_slow.timeout = 8.0
-		_slow.request_completed.connect(_on_slow)
-		add_child(_slow)
 		var slow_timer := Timer.new()
 		slow_timer.wait_time = SLOW_SECONDS
 		slow_timer.timeout.connect(_slow_poll)
 		add_child(slow_timer)
 		slow_timer.start()
-		_slow_poll()
-		_pets_req = HTTPRequest.new()
-		_pets_req.timeout = 8.0
-		_pets_req.request_completed.connect(_on_pets)
-		add_child(_pets_req)
 		_pets_timer = Timer.new()
 		_pets_timer.one_shot = true
 		_pets_timer.timeout.connect(_pets_ask)
@@ -189,27 +184,22 @@ func _ready() -> void:
 		_pets_nudged.one_shot = true
 		_pets_nudged.timeout.connect(_pets_ask)
 		add_child(_pets_nudged)
-		_pets_ask()
-		_watch = HTTPRequest.new()
-		_watch.timeout = 6.0
-		_watch.request_completed.connect(_on_watch)
-		add_child(_watch)
 		var watch_timer := Timer.new()
 		watch_timer.wait_time = WATCH_SECONDS
 		watch_timer.timeout.connect(_watch_door)
 		add_child(watch_timer)
 		watch_timer.start()
-		_watch_door()
-		_http = HTTPRequest.new()
-		_http.timeout = 4.0
-		_http.request_completed.connect(_on_polled)
-		add_child(_http)
-		_poll()
 		var timer := Timer.new()
 		timer.wait_time = POLL_SECONDS
 		timer.timeout.connect(_poll)
 		add_child(timer)
 		timer.start()
+		if _probing:
+			_first_start()
+		else:
+			_slow_poll()
+			_pets_ask()
+			_watch_door()
 	_enter(_at)
 	if _room.home.settings.value("widget"):
 		_set_widget(true)
@@ -255,6 +245,86 @@ func _ready() -> void:
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(_shot)
 		get_tree().quit()
+
+
+func _use_backend(args: Array) -> void:
+	var settings = _room.home.settings
+	var at := args.find("--local") + 1
+	_fixture = args[at] if at > 0 and at < args.size() else ""
+	_probing = settings.fresh and not OS.has_environment("TLON_URL")
+	if settings.is_local():
+		_at = "home"
+	_make_backend()
+
+
+# the list's home: a tlon server, or the house's own file; what was in flight to the old one is lost
+func _make_backend() -> void:
+	var home = _room.home
+	var node: Node
+	if home.settings.is_local():
+		var local := BackendLocal.new()
+		var keep: bool = not home.staged
+		var path := LocalList.STORE if keep else ""
+		if _fixture not in ["", "starters"]:
+			path = _fixture
+			keep = false
+		local.setup(path, Callable(home, "_now_local"), home._bias(), keep)
+		if (_fixture == "starters" or _starters) and local.list.fresh:
+			local.list.starters()
+		if local.list.notice != "":
+			home.show_reply(local.list.notice)
+		node = local
+	else:
+		node = BackendHttp.new()
+		node.base = home.settings.server_url()
+	_install(node)
+
+
+func _install(node: Node) -> void:
+	if _backend != null:
+		remove_child(_backend)
+		_backend.queue_free()
+	_busy = false
+	_again = false
+	_pets_busy = false
+	_watch_busy = false
+	_slow_step = ""
+	_reach = {}
+	_backend = node
+	_backend.changed.connect(_refresh)
+	add_child(_backend)
+	_apply_where()
+
+
+# what only means something with a server is not shown over the house's own list
+func _apply_where() -> void:
+	var served: bool = not _backend.local
+	_room.office_door = served
+	_panel.set_door_visible(served)
+	_panel.set_reachable(true)
+	if not served and _at == "office":
+		_enter("home")
+
+
+# the first start of a house with no settings yet: the default address is asked once; with nobody
+# there the house keeps its own list, with a few gentle things on it
+func _first_start() -> void:
+	var probe := BackendHttp.new()
+	add_child(probe)
+	probe.check(
+		_backend.base,
+		func(ok: bool) -> void:
+			probe.queue_free()
+			_probing = false
+			if not ok:
+				_starters = true
+				_room.home.settings.put("where", "local")
+				_starters = false
+			_slow_poll()
+			_pets_ask()
+			_watch_door()
+			_poll()
+	)
 
 
 func _art_dir() -> String:
@@ -313,6 +383,8 @@ func _apply(data: Dictionary) -> void:
 
 
 func _toggle() -> void:
+	if _backend.local:
+		return
 	_enter("office" if _at == "home" else "home")
 
 
@@ -491,22 +563,16 @@ func _ask_now() -> void:
 			pick["why"] = "it has sat the longest"
 		_show_pick(pick, "nothing open")
 		return
-	var req := HTTPRequest.new()
-	req.timeout = 8.0
-	add_child(req)
 	var query := "" if _skip.is_empty() else "?skip=" + ",".join(_skip.map(str))
-	req.request_completed.connect(
-		func(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
-			req.queue_free()
-			var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
-			if result == HTTPRequest.RESULT_SUCCESS and code == 200 and parsed is Dictionary:
+	_backend.fetch(
+		"/api/home/now" + query,
+		func(reached: bool, code: int, parsed: Variant) -> void:
+			if reached and code == 200 and parsed is Dictionary:
 				_show_pick(parsed.get("pick"), str(parsed.get("say", "")))
 			else:
-				_trouble(_why(result == HTTPRequest.RESULT_SUCCESS, code, parsed))
+				_trouble(_why(reached, code, parsed)),
+		8.0
 	)
-	if req.request(_base + "/api/home/now" + query) != OK:
-		req.queue_free()
-		_trouble(_why(false, 0, null))
 
 
 func _show_pick(pick: Variant, say: String) -> void:
@@ -734,29 +800,7 @@ func _on_timer(what: String) -> void:
 
 
 func _post(path: String, payload: Dictionary, done: Callable, timeout: float = 6.0) -> void:
-	var req := HTTPRequest.new()
-	req.timeout = timeout
-	add_child(req)
-	req.request_completed.connect(
-		func(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
-			req.queue_free()
-			done.call(
-				result == HTTPRequest.RESULT_SUCCESS,
-				code,
-				JSON.parse_string(body.get_string_from_utf8())
-			)
-	)
-	if (
-		req.request(
-			_base + path,
-			["Content-Type: application/json"],
-			HTTPClient.METHOD_POST,
-			JSON.stringify(payload)
-		)
-		!= OK
-	):
-		req.queue_free()
-		done.call(false, 0, null)
+	_backend.send(path, payload, done, timeout)
 
 
 func _later(id: int, until: String, ok: Callable = Callable()) -> void:
@@ -868,23 +912,27 @@ func _check_server(url: String) -> void:
 	if _demo:
 		_settings_view.url_result(true)
 		return
-	var req := HTTPRequest.new()
-	req.timeout = 4.0
-	add_child(req)
-	req.request_completed.connect(
-		func(result: int, code: int, _h: PackedStringArray, _body: PackedByteArray) -> void:
-			req.queue_free()
-			_settings_view.url_result(result == HTTPRequest.RESULT_SUCCESS and code == 200)
+	var probe := BackendHttp.new()
+	add_child(probe)
+	probe.check(
+		url,
+		func(ok: bool) -> void:
+			probe.queue_free()
+			_settings_view.url_result(ok)
 	)
-	if req.request(url + "/api/home") != OK:
-		req.queue_free()
-		_settings_view.url_result(false)
 
 
 func _on_setting(key: String) -> void:
 	match key:
 		"url":
-			_base = _room.home.settings.server_url()
+			if not _backend.local:
+				_backend.base = _room.home.settings.server_url()
+			_refresh()
+		"where":
+			_make_backend()
+			_room.home.set_voices({})
+			if _backend.local:
+				_room.home.set_office({})
 			_refresh()
 		"on_top":
 			if _widget:
@@ -892,13 +940,15 @@ func _on_setting(key: String) -> void:
 
 
 func _enter(where: String) -> void:
+	if where == "office" and _backend.local:
+		return
 	_room.home.close_card()
 	if where == "home" and _at == "office" and _away_at > 0.0:
 		if Time.get_ticks_msec() / 1000.0 - _away_at >= AWAY_FOR_GREETING:
 			_room.home.came_back()
 	if where == "office":
 		_away_at = Time.get_ticks_msec() / 1000.0
-	if where == "home" and _watch != null:
+	if where == "home" and not _demo:
 		_watch_door()
 	_set_decorate(false)
 	_at = where
@@ -915,24 +965,21 @@ func _enter(where: String) -> void:
 
 
 func _poll() -> void:
-	if _busy:
+	if _busy or _probing:
 		return
 	_busy = true
 	_inflight = _at
-	if _http.request(_base + ("/api/home" if _at == "home" else "/api/office")) != OK:
-		_busy = false
-		_reach[_inflight] = false
-		_panel.set_reachable(false)
+	_backend.fetch("/api/home" if _at == "home" else "/api/office", _on_polled, 4.0)
 
 
-func _on_polled(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_polled(reached: bool, code: int, body: Variant) -> void:
 	_busy = false
 	if _again:
 		_again = false
 		_poll.call_deferred()
 	var polled := _inflight
-	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if code == 200 else null
-	var ok: bool = result == HTTPRequest.RESULT_SUCCESS and parsed is Dictionary
+	var parsed: Variant = body if code == 200 else null
+	var ok: bool = reached and parsed is Dictionary
 	_reach[polled] = ok
 	if ok:
 		if polled == "home":
@@ -1062,49 +1109,48 @@ func _on_ticked(id: int) -> void:
 
 
 func _slow_poll() -> void:
-	if _slow_step != "":
+	if _slow_step != "" or _probing or _backend.local:
 		return
 	_slow_step = "settings"
-	if _slow.request(_base + "/api/settings") != OK:
-		_slow_step = ""
+	_backend.fetch("/api/settings", _on_slow, 8.0)
 
 
 func _slow_office() -> void:
 	_slow_step = "office"
-	if _slow.request(_base + "/api/office") != OK:
-		_slow_step = ""
+	_backend.fetch("/api/office", _on_slow, 8.0)
 
 
-func _on_slow(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_slow(reached: bool, code: int, body: Variant) -> void:
 	var step := _slow_step
 	_slow_step = ""
-	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if code == 200 else null
+	var parsed: Variant = body if code == 200 else null
 	if step == "settings":
-		if result == HTTPRequest.RESULT_SUCCESS and parsed is Dictionary:
+		if reached and parsed is Dictionary:
 			for knob in parsed.get("knobs", []):
 				_room.home.knobs[str(knob.get("key"))] = knob.get("value")
 				if knob.get("key") == "home_list_at":
 					_room.home.set_list_at(str(knob.get("value", "")))
 		_slow_office()
 		return
-	if result != HTTPRequest.RESULT_SUCCESS or not parsed is Dictionary:
+	if not reached or not parsed is Dictionary:
 		return
 	if step == "office":
 		_room.home.set_weather(parsed.get("weather"))
 
 
 func _pets_ask() -> void:
-	if _pets_req.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+	if _pets_busy or _probing:
 		return
 	if not _room.home.has_voices() and _pets_since == 0.0:
 		_pets_since = Time.get_ticks_msec() / 1000.0
-	if _pets_req.request(_base + "/api/home/pets") != OK:
-		_pets_later()
+	_pets_busy = true
+	_backend.fetch("/api/home/pets", _on_pets, 8.0)
 
 
-func _on_pets(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
-	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if code == 200 else null
-	if result == HTTPRequest.RESULT_SUCCESS and parsed is Dictionary and not parsed.is_empty():
+func _on_pets(reached: bool, code: int, body: Variant) -> void:
+	_pets_busy = false
+	var parsed: Variant = body if code == 200 else null
+	if reached and parsed is Dictionary and not parsed.is_empty():
 		_room.home.set_voices(parsed)
 	_pets_later()
 
@@ -1119,14 +1165,16 @@ func _pets_later() -> void:
 
 
 func _watch_door() -> void:
-	if _at != "home" or _watch.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+	if _at != "home" or _watch_busy or _probing or _backend.local:
 		return
-	_watch.request(_base + "/api/office")
+	_watch_busy = true
+	_backend.fetch("/api/office", _on_watch, 6.0)
 
 
-func _on_watch(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
-	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if code == 200 else null
-	if result == HTTPRequest.RESULT_SUCCESS and parsed is Dictionary:
+func _on_watch(reached: bool, code: int, body: Variant) -> void:
+	_watch_busy = false
+	var parsed: Variant = body if code == 200 else null
+	if reached and parsed is Dictionary:
 		_room.home.set_weather(parsed.get("weather"))
 		_room.home.set_office(parsed)
 
