@@ -17,6 +17,10 @@ const DEFAULTS := {
 	"on_top": true,
 	"url": "",
 	"where": "server",
+	"telegram": false,
+	"telegram_list_at": "17:30",
+	"claude": false,
+	"claude_command": "claude",
 }
 
 # the names on display; Pets, Finds and the chat read these

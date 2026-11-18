@@ -1,8 +1,9 @@
 extends RefCounted
 
 # The conversation on the phone: what he said, what the home said, the reminders it was told of
-# and now and then a pet. Each message is {t (unix), who ("me"|"home"|"cat"|"dog"), text, done?};
-# a reminder also carries its `id` and `told_at`. The last 300 are kept in user://house_chat.json.
+# and now and then a pet. Each message is {t (unix), who ("me"|"home"|"cat"|"dog"), text, done?,
+# via? ("phone": a line that came over Telegram, and its reply)}; a reminder also carries its `id`
+# and `told_at`. The last 300 are kept in user://house_chat.json.
 signal changed
 
 const STORE := "user://house_chat.json"

@@ -313,7 +313,7 @@ func _paint_message(c: Control, it: Dictionary, sy: float) -> void:
 	c.draw_multiline_string(font, Vector2(tx, ty), it["text"], HORIZONTAL_ALIGNMENT_LEFT, it["inner"], SIZE, -1, Paper.INK)
 	if it["bell"]:
 		_actions(c, m, box)
-	var stamp := _stamp(float(m["t"]))
+	var stamp := _stamp(float(m["t"])) + (" · from the phone" if m.get("via") == "phone" else "")
 	var sw := font.get_string_size(stamp, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL).x
 	var sx := box.end.x - sw if mine else box.position.x
 	c.draw_string(font, Vector2(sx, box.end.y + 12.0), stamp, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL, Paper.QUIET)
