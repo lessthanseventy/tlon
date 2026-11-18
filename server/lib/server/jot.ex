@@ -57,11 +57,13 @@ defmodule Server.Jot do
   Put a reading on `jot`, in place of any it had: a reminder so changed is open again and told
   again. `every` (`"day"`, `"week"`, `"month"`) is a reminder that repeats. A reading may also carry
   `mins`, `project` (the project a step belongs to), `steps` (a project's: all but the first are its
-  plan) and `who` (a waiting-on's); what it leaves out stays as it was. Filing is a touch, and
-  brings a thing back from someday.
+  plan) and `who` (a waiting-on's); what it leaves out stays as it was. Filing is a touch at `now`,
+  and brings a thing back from someday. Only what the operator does touches a thing: filing,
+  amending, putting off, keeping, hiding, done; the home's own nudges and questions do not.
   """
-  @spec file(%__MODULE__{}, %{kind: String.t(), text: String.t() | nil, due_at: DateTime.t() | nil}) :: %__MODULE__{}
-  def file(%__MODULE__{} = jot, %{kind: kind, text: text, due_at: due_at} = reading) do
+  @spec file(%__MODULE__{}, %{kind: String.t(), text: String.t() | nil, due_at: DateTime.t() | nil}, DateTime.t()) ::
+          %__MODULE__{}
+  def file(%__MODULE__{} = jot, %{kind: kind, text: text, due_at: due_at} = reading, now \\ DateTime.utc_now()) do
     optional =
       for {from, to} <- [mins: :mins, project: :project_id, who: :waiting_on, steps: :plan],
           Map.has_key?(reading, from),
@@ -80,7 +82,8 @@ defmodule Server.Jot do
         someday_at: nil,
         ask: nil,
         proposed: nil
-      ] ++ optional
+      ] ++ optional,
+      now
     )
   end
 
@@ -247,9 +250,9 @@ defmodule Server.Jot do
   def ask(%__MODULE__{} = jot, ask, proposed, now),
     do: put(jot, [ask: ask, proposed: proposed, asked_at: DateTime.truncate(now, :second)], false)
 
-  @doc "The question about `jot` was answered, and that is a touch."
-  @spec touch(%__MODULE__{}) :: %__MODULE__{}
-  def touch(%__MODULE__{} = jot), do: put(jot, ask: nil, proposed: nil)
+  @doc "The question about `jot` was answered at `now`, and that is a touch."
+  @spec touch(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
+  def touch(%__MODULE__{} = jot, now \\ DateTime.utc_now()), do: put(jot, [ask: nil, proposed: nil], now)
 
   @doc "Set what is left of a project's plan to `plan`."
   @spec plan(%__MODULE__{}, [String.t()]) :: %__MODULE__{}
@@ -258,20 +261,22 @@ defmodule Server.Jot do
   @doc "Move `jot` to someday at `now`."
   @spec someday(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
   def someday(%__MODULE__{} = jot, now),
-    do: put(jot, someday_at: DateTime.truncate(now, :second), ask: nil, proposed: nil)
+    do: put(jot, [someday_at: DateTime.truncate(now, :second), ask: nil, proposed: nil], now)
 
   @doc "Close `jot` as dropped at `now`: not done, so not counted as done."
   @spec drop(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
-  def drop(%__MODULE__{} = jot, now), do: put(jot, dropped_at: DateTime.truncate(now, :second), ask: nil, proposed: nil)
+  def drop(%__MODULE__{} = jot, now),
+    do: put(jot, [dropped_at: DateTime.truncate(now, :second), ask: nil, proposed: nil], now)
 
-  @doc "Hide `jot` from what-now picks until `until`."
-  @spec hide(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
-  def hide(%__MODULE__{} = jot, until), do: put(jot, hidden_until: DateTime.truncate(until, :second))
+  @doc "Hide `jot` from what-now picks until `until`, the operator having said so at `now`."
+  @spec hide(%__MODULE__{}, DateTime.t(), DateTime.t()) :: %__MODULE__{}
+  def hide(%__MODULE__{} = jot, until, now \\ DateTime.utc_now()),
+    do: put(jot, [hidden_until: DateTime.truncate(until, :second)], now)
 
   @doc "Turn the to-do `jot` into a project with `start` as its first step, kept at `now`: the step."
   @spec shrink(%__MODULE__{}, String.t(), DateTime.t()) :: %__MODULE__{}
   def shrink(%__MODULE__{} = jot, start, now) do
-    jot |> put(kind: "project", ask: nil, proposed: nil) |> step(start, now, 2)
+    jot |> put([kind: "project", ask: nil, proposed: nil], now) |> step(start, now, 2)
   end
 
   @doc "Record that a smaller start was offered for `jot` at `now`."
@@ -283,25 +288,32 @@ defmodule Server.Jot do
   def touched(%__MODULE__{touched_at: nil, received_at: at}), do: at
   def touched(%__MODULE__{touched_at: at}), do: at
 
-  @doc "Record that the operator was told `jot` at `now`."
+  @doc "Record that the operator was told `jot` at `now`. Being told is not a touch."
   @spec nudged(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
-  def nudged(%__MODULE__{} = jot, now), do: put(jot, nudged_at: DateTime.truncate(now, :second), nudges: jot.nudges + 1)
+  def nudged(%__MODULE__{} = jot, now),
+    do: put(jot, [nudged_at: DateTime.truncate(now, :second), nudges: jot.nudges + 1], false)
 
   @doc "Record that `jot` was done at `now`. A reminder that repeats stays open, put off to its next time."
   @spec done(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
   def done(%__MODULE__{every: nil} = jot, now),
-    do: put(jot, done_at: DateTime.truncate(now, :second), ask: nil, proposed: nil)
+    do: put(jot, [done_at: DateTime.truncate(now, :second), ask: nil, proposed: nil], now)
 
-  def done(%__MODULE__{every: every} = jot, now), do: put_off(jot, Server.Home.Clock.next(jot.due_at, every, now))
+  def done(%__MODULE__{every: every} = jot, now), do: put_off(jot, Server.Home.Clock.next(jot.due_at, every, now), now)
 
-  @doc "Put `jot` off to `due_at`: a reminder from then on (a to-do too), told afresh at that time."
-  @spec put_off(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
-  def put_off(%__MODULE__{} = jot, due_at),
-    do: put(jot, kind: "reminder", due_at: DateTime.truncate(due_at, :second), nudged_at: nil, nudges: 0)
+  @doc "Put `jot` off to `due_at` at the operator's word at `now`: a reminder from then on (a to-do too), told afresh then."
+  @spec put_off(%__MODULE__{}, DateTime.t(), DateTime.t()) :: %__MODULE__{}
+  def put_off(%__MODULE__{} = jot, due_at, now \\ DateTime.utc_now()),
+    do: put(jot, [kind: "reminder", due_at: DateTime.truncate(due_at, :second), nudged_at: nil, nudges: 0], now)
 
-  @doc "Ask about the waiting-on `jot` again at `due_at`."
-  @spec ask_again(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
-  def ask_again(%__MODULE__{} = jot, due_at), do: put(jot, due_at: DateTime.truncate(due_at, :second), ask: nil)
+  @doc "Move the reminder `jot` that repeats on to its time `due_at` by itself: not a touch."
+  @spec roll(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
+  def roll(%__MODULE__{} = jot, due_at),
+    do: put(jot, [due_at: DateTime.truncate(due_at, :second), nudged_at: nil, nudges: 0], false)
+
+  @doc "Ask about the waiting-on `jot` again at `due_at`, the operator having said so at `now`."
+  @spec ask_again(%__MODULE__{}, DateTime.t(), DateTime.t()) :: %__MODULE__{}
+  def ask_again(%__MODULE__{} = jot, due_at, now \\ DateTime.utc_now()),
+    do: put(jot, [due_at: DateTime.truncate(due_at, :second), ask: nil], now)
 
   @doc "The things from `via` done since `since`, the newest first."
   @spec done_since(String.t(), DateTime.t()) :: [%__MODULE__{}]
@@ -340,8 +352,8 @@ defmodule Server.Jot do
     dynamic([j], is_nil(j.done_at) and is_nil(j.dropped_at) and is_nil(j.someday_at))
   end
 
-  defp put(jot, changes, touch? \\ true) do
-    changes = if touch?, do: [touched_at: DateTime.truncate(DateTime.utc_now(), :second)] ++ changes, else: changes
-    jot |> Ecto.Changeset.change(changes) |> Repo.update!()
-  end
+  defp put(jot, changes, false), do: jot |> Ecto.Changeset.change(changes) |> Repo.update!()
+
+  defp put(jot, changes, %DateTime{} = now),
+    do: put(jot, [touched_at: DateTime.truncate(now, :second)] ++ changes, false)
 end

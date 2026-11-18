@@ -4,7 +4,7 @@ defmodule Server.Home.Organize do
 
     * **Projects.** A project (`kind: "project"`) always has one open next step or a question about
       it. Finishing a step (`advance/2`) proposes the next: one the reader planned, else one the
-      model writes (`Server.Home.Helper.next_step/3`), under Add it / Project's finished; a typed
+      model writes (`Server.Home.Helper.next_step/3`, off the caller, in a task), under Add it / Project's finished; a typed
       reply is the step instead.
     * **Waiting on.** Three days after it was said, a waiting-on is asked about (`waiting/4`): Got it,
       Chased (asked again in three days) or Tomorrow.
@@ -41,68 +41,63 @@ defmodule Server.Home.Organize do
   """
   @spec file(Jot.t(), map(), DateTime.t()) :: String.t()
   def file(%Jot{via: via} = jot, reading, now) do
-    reply = place(jot, reading, now)
+    reply = jot |> retire(reading, now) |> place(reading, now)
 
     back =
       for id <- Map.get(reading, :revive, []),
-          someday <- [Enum.find(Jot.somedays(via), &(&1.id == id))],
-          do: revive(someday)
+          %Jot{} = someday <- [Enum.find(Jot.somedays(via), &(&1.id == id))],
+          do: revive(someday, now)
 
     Enum.join([reply | Enum.map(back, &"back on the list: #{&1.text}")], "\n")
   end
 
   defp place(jot, %{kind: "project", steps: [first | _]} = reading, now) do
-    jot |> Jot.file(reading) |> Jot.step(first, now)
+    project = Jot.file(jot, reading, now)
+    if Jot.steps(project.id) == [], do: Jot.step(project, first, now)
     Reader.reply(reading)
   end
 
   defp place(jot, %{kind: "waiting"} = reading, now) do
-    Jot.file(jot, %{reading | due_at: now |> DateTime.add(@wait_days, :day) |> DateTime.truncate(:second)})
+    Jot.file(jot, %{reading | due_at: now |> DateTime.add(@wait_days, :day) |> DateTime.truncate(:second)}, now)
     Reader.reply(reading)
   end
 
-  defp place(jot, %{kind: "todo", project: id} = reading, _now) do
+  defp place(jot, %{kind: "todo", project: id} = reading, now) do
     case Jot.project(jot.via, id) do
       %Jot{ask: "next", text: name} = project ->
-        Jot.file(jot, reading)
-        Jot.touch(project)
+        Jot.file(jot, reading, now)
+        Jot.touch(project, now)
         "next step of #{name}: #{reading.text}"
 
       _ ->
-        place(jot, Map.delete(reading, :project), nil)
+        place(jot, Map.delete(reading, :project), now)
     end
   end
 
-  defp place(jot, reading, _now) do
-    Jot.file(jot, reading)
+  defp place(jot, reading, now) do
+    Jot.file(jot, reading, now)
     Reader.reply(reading)
   end
 
-  defp revive(jot), do: Jot.file(jot, %{kind: jot.kind, text: jot.text, due_at: jot.due_at, every: jot.every})
-
   @doc """
   What follows a step of a project being done or put away: the next step proposed under its
-  buttons, `nil` when it is no project's step or the project still has one open or is waiting on an
-  answer already.
+  buttons when the reader had planned one, `nil` when it is no project's step or the project still
+  has one open or is waiting on an answer already. With no plan left the next step takes a model
+  call, which is made off the caller (a task under `Server.TaskSupervisor`): this answers `nil`
+  at once, and the question is put on the project when the model has answered and said in the chat
+  (`Server.Home.Inbox.asked_now/1`); the desktop raises it from the row.
   """
   @spec advance(Jot.t(), DateTime.t()) :: reply() | nil
   def advance(%Jot{project_id: nil}, _now), do: nil
 
   def advance(%Jot{via: via, project_id: id}, now) do
     with %Jot{ask: nil} = project <- Jot.project(via, id), [] <- Jot.steps(id) do
-      {proposed, plan} = next(project)
-      project |> Jot.plan(plan) |> Jot.ask("next", proposed, now) |> prompt_reply()
+      case project.plan do
+        [step | rest] -> project |> Jot.plan(rest) |> Jot.ask("next", step, now) |> prompt_reply()
+        [] -> start_next(project, now)
+      end
     else
       _ -> nil
-    end
-  end
-
-  defp next(%Jot{plan: [step | rest]}), do: {step, rest}
-
-  defp next(%Jot{via: via, id: id} = project) do
-    case Helper.next_step(project, Jot.finished(id), Jot.notes(via, 20)) do
-      {:ok, step} -> {step, []}
-      :error -> {nil, []}
     end
   end
 
@@ -149,7 +144,9 @@ defmodule Server.Home.Organize do
     end
   end
 
-  defp prompt_reply(%Jot{id: id} = jot) do
+  @doc "The question on `jot` as a reply: its text, and its choices as buttons answered through `\"a:<id>:<choice>\"`."
+  @spec prompt_reply(Jot.t()) :: reply()
+  def prompt_reply(%Jot{id: id} = jot) do
     %{text: text, choices: choices} = prompt(jot)
     {text, choices: [for({label, choice} <- choices, do: {label, "a:#{id}:#{choice}"})]}
   end
@@ -167,7 +164,7 @@ defmodule Server.Home.Organize do
 
       jot ->
         tomorrow = now |> Clock.local() |> NaiveDateTime.to_date() |> Date.add(1) |> NaiveDateTime.new!(~T[00:00:00])
-        Jot.hide(jot, Clock.utc(tomorrow))
+        Jot.hide(jot, Clock.utc(tomorrow), now)
         {:ok, {"not today: #{jot.text}. It'll wait until tomorrow.", []}}
     end
   end
@@ -183,7 +180,7 @@ defmodule Server.Home.Organize do
 
   defp resolve("next", "add", %Jot{proposed: step} = project, _text, now) when is_binary(step) do
     Jot.step(project, step, now)
-    Jot.touch(project)
+    Jot.touch(project, now)
     {:ok, {"added: #{step}", []}}
   end
 
@@ -194,7 +191,7 @@ defmodule Server.Home.Organize do
 
       step ->
         Jot.step(project, step, now)
-        Jot.touch(project)
+        Jot.touch(project, now)
         {:ok, {"added: #{step}", []}}
     end
   end
@@ -204,8 +201,8 @@ defmodule Server.Home.Organize do
     {:ok, {"done: #{project.text}. That's the project finished.", []}}
   end
 
-  defp resolve("review", "keep", jot, _text, _now) do
-    Jot.touch(jot)
+  defp resolve("review", "keep", jot, _text, now) do
+    Jot.touch(jot, now)
     {:ok, {"kept: #{jot.text}", []}}
   end
 
@@ -218,12 +215,12 @@ defmodule Server.Home.Organize do
   end
 
   defp resolve("waiting", "chased", jot, _text, now) do
-    Jot.ask_again(jot, DateTime.add(now, @wait_days, :day))
+    Jot.ask_again(jot, DateTime.add(now, @wait_days, :day), now)
     {:ok, {"I'll ask again in #{@wait_days} days.", []}}
   end
 
   defp resolve("waiting", "tomorrow", jot, _text, now) do
-    Jot.ask_again(jot, morning(now))
+    Jot.ask_again(jot, morning(now), now)
     {:ok, {"I'll ask again tomorrow.", []}}
   end
 
@@ -232,8 +229,8 @@ defmodule Server.Home.Organize do
     {:ok, {"#{jot.text} is a project now. First step: #{start}", []}}
   end
 
-  defp resolve("shrink", "no", jot, _text, _now) do
-    Jot.touch(jot)
+  defp resolve("shrink", "no", jot, _text, now) do
+    Jot.touch(jot, now)
     {:ok, {"ok, leaving it.", []}}
   end
 
@@ -257,9 +254,8 @@ defmodule Server.Home.Organize do
   @spec waiting(String.t(), String.t(), say() | nil, DateTime.t()) :: :ok
   def waiting(via, chat, say, now) do
     if Clock.awake?(now) do
-      for jot <- Jot.waiting(via),
-          is_nil(jot.ask),
-          DateTime.compare(jot.due_at, now) != :gt,
+      for %Jot{ask: nil, due_at: %DateTime{} = due} = jot <- Jot.waiting(via),
+          DateTime.compare(due, now) != :gt,
           do: put(jot, "waiting", nil, chat, say, now)
     end
 
@@ -346,5 +342,32 @@ defmodule Server.Home.Organize do
     else
       _ -> nil
     end
+  end
+
+  # a project made into anything else loses its steps and its plan: nothing is left to follow
+  defp retire(%Jot{kind: "project"} = jot, %{kind: kind}, now) when kind != "project" do
+    for step <- Jot.steps(jot.id), do: Jot.drop(step, now)
+    Jot.plan(jot, [])
+  end
+
+  defp retire(jot, _reading, _now), do: jot
+
+  defp revive(jot, now), do: Jot.file(jot, %{kind: jot.kind, text: jot.text, due_at: jot.due_at, every: jot.every}, now)
+
+  defp start_next(%Jot{via: via, id: id} = project, now) do
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+      proposed =
+        case Helper.next_step(project, Jot.finished(id), Jot.notes(via, 20)) do
+          {:ok, step} -> step
+          :error -> nil
+        end
+
+      with %Jot{ask: nil} = project <- Jot.project(via, id), [] <- Jot.steps(id) do
+        Jot.ask(project, "next", proposed, now)
+        Server.Home.Inbox.asked_now(id)
+      end
+    end)
+
+    nil
   end
 end

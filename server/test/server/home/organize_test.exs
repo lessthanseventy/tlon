@@ -52,6 +52,8 @@ defmodule Server.Home.OrganizeTest do
     Inbox.hear([%{id: id, chat: "42", text: text}], "telegram", "42", say)
   end
 
+  defp await, do: Server.TestDB.await_background()
+
   defp press(data, ref \\ 90), do: %{id: 20, chat: "42", text: nil, tap: data, tap_id: "q", ref: ref}
 
   defp tapped(say, data), do: Inbox.hear([press(data)], "telegram", "42", say)
@@ -105,11 +107,16 @@ defmodule Server.Home.OrganizeTest do
       end)
 
       tapped(say, "done:#{third.id}")
+      assert_received {:said, "42", "done: order a cake"}
+      await()
 
       assert_received {:helped, prompt}
       assert prompt =~ "PROJECT: plan mom's birthday"
       assert prompt =~ "- book a table\n- ask dad\n- order a cake"
-      assert_received {:said, "42", "done: order a cake\n\nNext for plan mom's birthday: Pick up the cake?"}
+      assert [%{text: "Next for plan mom's birthday: Pick up the cake?"}] = Home.asked()
+      Inbox.tell_ask("telegram", "42", say, pid)
+      assert_received {:said, "42", "Next for plan mom's birthday: Pick up the cake?"}
+      assert_received {:with, choices: [[{"Add it", ^add}, {"Project's finished", ^finish}]]}
 
       tapped(say, finish)
 
@@ -125,11 +132,17 @@ defmodule Server.Home.OrganizeTest do
       [step] = Jot.steps(pid)
       helps(fn _prompt -> {:error, :down} end)
 
-      ExUnit.CaptureLog.capture_log(fn -> tapped(say, "done:#{step.id}") end)
+      ExUnit.CaptureLog.capture_log(fn ->
+        tapped(say, "done:#{step.id}")
+        await()
+      end)
 
       assert_received {:said, "42", "project:" <> _}
-      assert_received {:said, "42", "done: call the florist\n\nWhat's the next step for plan mom's birthday?"}
-      assert_received {:with, replace: 90, choices: [[{"Project's finished", _}]]}
+      assert_received {:said, "42", "done: call the florist"}
+      assert [%{text: "What's the next step for plan mom's birthday?"}] = Home.asked()
+      Inbox.tell_ask("telegram", "42", say, pid)
+      assert_received {:said, "42", "What's the next step for plan mom's birthday?"}
+      assert_received {:with, choices: [[{"Project's finished", _}]]}
 
       reads(fn "ask dad about venues", %{projects: [%Jot{id: ^pid, ask: "next"}]} ->
         {:ok, %{kind: "todo", text: "ask dad about venues", due_at: nil, project: pid}}
@@ -179,7 +192,8 @@ defmodule Server.Home.OrganizeTest do
       [step] = Jot.steps(pid)
 
       helps(fn _prompt -> {:ok, "DONE"} end)
-      Home.done(step.id, DateTime.utc_now())
+      assert {:ok, _} = Home.done(step.id, DateTime.utc_now())
+      await()
 
       assert [%{text: "What's the next step for plan mom's birthday?"}] = Home.asked()
       assert :error = Home.answer(pid, "step", "  ", DateTime.utc_now())
@@ -200,6 +214,264 @@ defmodule Server.Home.OrganizeTest do
 
   defp listing do
     Home.listing(Clock.utc(NaiveDateTime.new!(Date.utc_today(), ~T[17:35:00])))
+  end
+
+  describe "an amend is placed like a new reading" do
+    defp amend_to(say, reading, id \\ 2) do
+      reads(fn _body, _context -> {:ok, Map.merge(%{due_at: nil, every: nil, ids: [], amends: true}, reading)} end)
+      hear(say, id, "no, " <> reading.text)
+    end
+
+    test "a to-do amended into a waiting-on gets its due time, and the upkeep copes", %{say: say} do
+      reads(fn _body, _context -> {:ok, %{kind: "todo", text: "Sam", due_at: nil}} end)
+      hear(say, 1, "waiting on Sam")
+
+      amend_to(say, %{kind: "waiting", text: "the photos", who: "Sam Lee"})
+
+      assert_received {:said, "42", "changed: waiting on Sam Lee for the photos" <> _}
+      assert [%{waiting_on: "Sam Lee", due_at: %DateTime{} = due}] = Jot.waiting("telegram")
+      assert_in_delta DateTime.diff(due, DateTime.utc_now()), 3 * 86_400, 5
+      assert :ok = Organize.waiting("telegram", "42", say, DateTime.add(due, 3600))
+    end
+
+    test "the upkeep skips a waiting-on with no due time instead of crashing", %{say: say} do
+      {:ok, jot} = Jot.take("telegram", 5, "x")
+      Jot.file(jot, %{kind: "waiting", text: "x", due_at: nil, who: "Sam"})
+
+      assert :ok = Organize.waiting("telegram", "42", say, friday())
+      refute_received {:said, _, _}
+    end
+
+    test "a to-do amended into a project opens its first step and keeps the rest planned", %{say: say} do
+      reads(fn _body, _context -> {:ok, %{kind: "todo", text: "party", due_at: nil}} end)
+      hear(say, 1, "party")
+
+      amend_to(say, %{kind: "project", text: "plan the party", steps: ["book", "invite", "cake"]})
+
+      assert_received {:said, "42", "changed: project: plan the party" <> _}
+      assert [%{id: id, plan: ["invite", "cake"], kind: "project"}] = Jot.projects("telegram")
+      assert [%{text: "book"}] = Jot.steps(id)
+      assert Home.asked() == []
+    end
+
+    test "a project amended into a to-do drops its steps and plan, and one amended to a project keeps its step", %{
+      say: say
+    } do
+      reads(fn _body, _context -> project_reading(["call", "write", "send"]) end)
+      hear(say, 1, "plan mom's birthday")
+      [%{id: pid}] = Jot.projects("telegram")
+
+      amend_to(say, %{kind: "project", text: "plan mom's party", steps: ["call", "x"]})
+      assert [%{text: "call"}] = Jot.steps(pid)
+      assert [%{plan: ["x"], text: "plan mom's party"}] = Jot.projects("telegram")
+
+      amend_to(say, %{kind: "todo", text: "mom's party"}, 3)
+
+      assert Jot.projects("telegram") == []
+      assert Jot.steps(pid) == []
+      assert %{kind: "todo", plan: [], text: "mom's party"} = fresh(%Jot{id: pid})
+      assert [%{text: "mom's party"}] = Jot.opens("telegram")
+      assert %{done_week: 0} = Home.status(DateTime.utc_now())
+    end
+
+    test "an amend that is no kept kind is not an amend", %{say: say} do
+      reads(fn _body, _context -> {:ok, %{kind: "todo", text: "milk", due_at: nil}} end)
+      hear(say, 1, "milk")
+      reads(fn _body, _context -> {:ok, %{kind: "list", text: "", due_at: nil, ids: [], amends: true}} end)
+
+      hear(say, 2, "what's open")
+
+      assert_received {:said, "42", "Still open:\n• milk"}
+      assert [%{text: "milk", kind: "todo"}] = Jot.opens("telegram")
+    end
+  end
+
+  describe "ids and shapes from outside" do
+    test "a revive id that is not on someday is skipped", %{say: say} do
+      milk = todo(1, "milk")
+
+      reads(fn _body, _context ->
+        {:ok, %{kind: "todo", text: "bread", due_at: nil, revive: [999, milk.id]}}
+      end)
+
+      hear(say, 2, "bread")
+
+      assert_received {:said, "42", "to do: bread"}
+      assert length(Jot.opens("telegram")) == 2
+    end
+
+    test "a project id that is no project files a to-do of its own", %{say: say} do
+      reads(fn _body, _context -> {:ok, %{kind: "todo", text: "bread", due_at: nil, project: 999}} end)
+      hear(say, 1, "bread")
+      assert_received {:said, "42", "to do: bread"}
+    end
+
+    test "a reminder with no time is listed and picked as a to-do, and breaks nothing", %{say: say} do
+      {:ok, jot} = Jot.take("telegram", 1, "x")
+      Jot.file(jot, %{kind: "reminder", text: "odd", due_at: nil})
+
+      assert {"Still open:\n• odd", _} = Inbox.digest("telegram", friday())
+      assert %{pick: %{text: "odd"}} = Home.now([], nil, friday())
+      assert %{open: [%{text: "odd"}]} = Home.status(friday())
+      assert :ok = Inbox.nudge("telegram", "42", say, friday())
+      assert Inbox.daily("telegram", "42", say, friday(), "17:30", ~D[2026-11-19]) == ~D[2026-11-20]
+    end
+  end
+
+  describe "the Something else button" do
+    test "its data stays within 64 bytes whatever has been skipped, keeping the newest ids" do
+      assert Inbox.else_data(10, [3, 7]) == "n:10:3-7"
+      assert Inbox.else_data(0, []) == "n:0:"
+
+      ids = Enum.to_list(1_234_567..1_234_600)
+      data = Inbox.else_data(30, ids)
+
+      assert byte_size(data) <= 64
+      assert String.starts_with?(data, "n:30:1234567-1234568-")
+      assert length(String.split(String.trim_leading(data, "n:30:"), "-")) > 3
+    end
+
+    test "tapping it again and again always offers a button that fits", %{say: say} do
+      for n <- 1..30, do: todo(1_000_000 + n, "thing #{n}")
+      reads(fn _body, _context -> {:ok, %{kind: "now", text: "", due_at: nil, ids: [], amends: false}} end)
+      hear(say, 1, "what now")
+      assert_received {:said, "42", _}
+      assert_received {:with, choices: [[_, {"Something else", data}, _]]}
+
+      last =
+        Enum.reduce(1..28, data, fn _, data ->
+          tapped(say, data)
+          assert_received {:said, "42", _}
+          assert_received {:with, replace: 90, choices: [[_, {"Something else", next}, _]]}
+          assert byte_size(next) <= 64
+          next
+        end)
+
+      assert byte_size(last) <= 64
+    end
+  end
+
+  describe "the done answers at once" do
+    test "a step done from the desktop returns before the model has answered, and the question comes when it has", %{
+      say: say
+    } do
+      reads(fn _body, _context -> project_reading(["only step"]) end)
+      hear(say, 1, "plan mom's birthday")
+      [%{id: pid}] = Jot.projects("telegram")
+      [step] = Jot.steps(pid)
+      me = self()
+
+      helps(fn _prompt ->
+        send(me, {:in_helper, self()})
+
+        receive do
+          :go -> {:ok, "Write the card"}
+        end
+      end)
+
+      assert {:ok, _} = Home.done(step.id, DateTime.utc_now())
+      assert_receive {:in_helper, task}
+      assert Home.asked() == []
+
+      send(task, :go)
+      await()
+
+      assert [%{id: ^pid, text: "Next for plan mom's birthday: Write the card?"}] = Home.asked()
+      Inbox.tell_ask("telegram", "42", say, pid)
+      assert_received {:said, "42", "Next for plan mom's birthday: Write the card?"}
+    end
+
+    test "a question answered while the model was thinking is not asked again", %{say: say} do
+      reads(fn _body, _context -> project_reading(["only step"]) end)
+      hear(say, 1, "plan")
+      [%{id: pid}] = Jot.projects("telegram")
+      [step] = Jot.steps(pid)
+      me = self()
+
+      helps(fn _prompt ->
+        send(me, {:in_helper, self()})
+
+        receive do
+          :go -> {:ok, "Write the card"}
+        end
+      end)
+
+      Home.done(step.id, DateTime.utc_now())
+      assert_receive {:in_helper, task}
+      Jot.step(Jot.project("telegram", pid), "typed meanwhile", DateTime.utc_now())
+      send(task, :go)
+      await()
+
+      assert Home.asked() == []
+      assert :ok = Inbox.tell_ask("telegram", "42", say, pid)
+      refute_received {:said, _, "Next for" <> _}
+    end
+  end
+
+  describe "only the operator touches a thing" do
+    test "being nudged leaves its staleness alone, and a repeating reminder rolled on by itself too", %{say: say} do
+      old = DateTime.add(friday(), -20, :day)
+      {:ok, jot} = Jot.take("telegram", 1, "bins")
+      jot = jot |> Jot.file(%{kind: "reminder", text: "bins", due_at: friday()}) |> set(touched_at: old)
+
+      Inbox.nudge("telegram", "42", say, friday())
+
+      assert %{nudges: 1} = fresh(jot)
+      assert Jot.touched(fresh(jot)) == old
+
+      {:ok, again} = Jot.take("telegram", 2, "daily")
+
+      again =
+        again
+        |> Jot.file(%{kind: "reminder", text: "daily", due_at: friday(), every: "day"})
+        |> set(touched_at: old)
+
+      Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 49, :hour))
+      assert Jot.touched(fresh(again)) == old
+    end
+
+    test "the operator's acts touch it at the time they were done" do
+      jot = todo(1, "milk", touched_at: DateTime.add(friday(), -20, :day))
+
+      Inbox.later(jot, "hour", friday())
+      assert Jot.touched(fresh(jot)) == friday()
+
+      other = todo(2, "bread", touched_at: DateTime.add(friday(), -20, :day))
+      Organize.answer("telegram", other.id, "nottoday", nil, friday())
+      assert Jot.touched(fresh(other)) == friday()
+
+      kept = stale(3, "eggs", 15)
+      Organize.weekly("telegram", "", nil, friday(), "fri", "17:30", ~D[2026-11-13])
+      Organize.answer("telegram", kept.id, "keep", nil, friday())
+      assert Jot.touched(fresh(kept)) == friday()
+    end
+  end
+
+  describe "several projects done in one message" do
+    test "each project's next step is its own message with its own buttons", %{say: say} do
+      reads(fn _body, _context -> project_reading(["a1", "a2"]) end)
+      hear(say, 1, "plan a")
+      reads(fn _body, _context -> project_reading(["b1", "b2"]) end)
+      hear(say, 2, "plan b")
+      assert_received {:said, "42", "project:" <> _}
+      assert_received {:said, "42", "project:" <> _}
+      [a, b] = Jot.projects("telegram")
+      [step_a] = Jot.steps(a.id)
+      [step_b] = Jot.steps(b.id)
+
+      reads(fn _body, _context ->
+        {:ok, %{kind: "done", text: "", due_at: nil, ids: [step_a.id, step_b.id], amends: false}}
+      end)
+
+      hear(say, 3, "did both")
+
+      assert_received {:said, "42", "done: a1\ndone: b1"}
+      assert_received {:said, "42", "Next for plan mom's birthday: a2?"}
+      assert_received {:with, choices: [[{"Add it", add_a}, _]]}
+      assert_received {:said, "42", "Next for plan mom's birthday: b2?"}
+      assert_received {:with, choices: [[{"Add it", add_b}, _]]}
+      assert {add_a, add_b} == {"a:#{a.id}:add", "a:#{b.id}:add"}
+    end
   end
 
   describe "vague things" do
@@ -361,9 +633,10 @@ defmodule Server.Home.OrganizeTest do
       helps(fn _prompt -> {:ok, "Call the venue"} end)
 
       review(say)
+      await()
 
       assert_received {:said, "42", "moved to someday: call"}
-      assert_received {:said, "42", "Next for plan mom's birthday: Call the venue?"}
+      assert [%{text: "Next for plan mom's birthday: Call the venue?"}] = Home.asked()
     end
 
     test "it runs once on its weekday after its time, never on another day, and not on the day the inbox starts late",

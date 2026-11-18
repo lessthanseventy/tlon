@@ -104,7 +104,7 @@ defmodule Server.Home do
   """
   @spec say(String.t(), DateTime.t()) :: String.t()
   def say(text, now) do
-    {reply, _opts} =
+    {reply, opts} =
       Server.Home.Inbox.keep(
         via(),
         -System.unique_integer([:positive, :monotonic]) - System.os_time(:second),
@@ -112,7 +112,7 @@ defmodule Server.Home do
         now
       )
 
-    reply
+    Enum.join([reply | for({text, _opts} <- Keyword.get(opts, :then, []), do: text)], "\n\n")
   end
 
   @doc ~s|Put the open thing `id` off `until` (`"hour"`, `"tomorrow"`) from `now`: `{:ok, jot}`, `:error` when it is none or is done.|
@@ -156,8 +156,7 @@ defmodule Server.Home do
 
   @doc "What is open from `via` at `now`, as `{coming, open}`: the reminders to come, and everything else still open."
   @spec board(String.t(), DateTime.t()) :: {[Jot.t()], [Jot.t()]}
-  def board(via, now),
-    do: via |> Jot.opens() |> Enum.split_with(&(&1.kind == "reminder" and DateTime.after?(&1.due_at, now)))
+  def board(via, now), do: via |> Jot.opens() |> Enum.split_with(&coming?(&1, now))
 
   @doc """
   Mark the open thing `id` done at `now`: `{:ok, jot}`, `:error` when it is none or is done. The last
@@ -204,4 +203,7 @@ defmodule Server.Home do
   end
 
   defp waiting(jot), do: %{id: jot.id, text: jot.text, who: jot.waiting_on, since: jot.received_at, due_at: jot.due_at}
+
+  defp coming?(%Jot{kind: "reminder", due_at: %DateTime{} = due}, now), do: DateTime.after?(due, now)
+  defp coming?(_jot, _now), do: false
 end
