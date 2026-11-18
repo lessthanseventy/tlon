@@ -123,13 +123,107 @@ const ANTICS := {
 	"horse_trot":
 	{"who": {"horse": 2.0}, "go": ["mid", "lounge"], "run": true, "dur": [1.6, 2.2], "e": "hi"},
 	"deer_freeze":
-	{"who": {"deer": 2.0}, "go": ["lamp"], "dur": [4.5, 5.5], "pers": {"shy": 2.0, "bold": 0.5}},
+	{
+		"moves": true,
+		"who": {"deer": 2.0},
+		"go": ["lamp"],
+		"dur": [4.5, 5.5],
+		"pers": {"shy": 2.0, "bold": 0.5}
+	},
 	"nose_lick": {"who": {"cow": 1.5, "sheep": 0.6}, "dur": [2.4, 3.2]},
 	"back_scratch": {"who": {"bear": 2.0}, "go": ["@shelf"], "dur": [4.5, 6.0]},
 	"sit_like_person": {"who": {"bear": 1.5}, "dur": [5.0, 7.0], "e": "lo"},
 	"big_yawn": {"who": {"bear": 1.2}, "dur": [3.2, 4.0], "e": "lo"},
 	"pat_jar": {"who": {"bear": 1.0}, "go": ["nook"], "dur": [4.5, 5.5], "pers": {"sweet": 1.6}},
+	"greet": {"pair": true, "who": {"*": 1.5}, "go": ["@p"], "dur": [3.6, 4.6]},
+	"chase_game":
+	{
+		"pair": true,
+		"who": {"*": 1.0},
+		"dur": [9.0, 12.0],
+		"moves": true,
+		"e": "hi",
+		"pers": {"mischievous": 2.0, "bold": 2.0, "sweet": 1.5, "lazy": 0.3}
+	},
+	"nap_pile":
+	{
+		"pair": true,
+		"who": {"*": 1.0},
+		"go": ["rug"],
+		"pgo": ["@i"],
+		"dur": [16.0, 24.0],
+		"keep": true,
+		"psleep": true,
+		"e": "lo",
+		"pers": {"lazy": 2.5, "sweet": 1.3}
+	},
+	"boop":
+	{
+		"pair": true,
+		"who": {"cat": 1.5},
+		"go": ["@p"],
+		"dur": [3.0, 3.8],
+		"pers": {"sassy": 2.0, "mischievous": 2.0}
+	},
+	"groom":
+	{
+		"pair": true,
+		"who": {"*": 0.8},
+		"go": ["@p"],
+		"dur": [6.0, 8.0],
+		"e": "lo",
+		"pers": {"sweet": 2.0}
+	},
+	"steal_spot":
+	{
+		"pair": true,
+		"who": {"*": 0.8},
+		"need": "pspot",
+		"go": ["@pspot"],
+		"pgo": ["corner"],
+		"psleep": true,
+		"dur": [10.0, 13.0],
+		"pers": {"mischievous": 3.0, "bold": 2.0, "sassy": 1.5, "sweet": 0.2, "shy": 0.1}
+	},
+	"copy_cat":
+	{
+		"pair": true,
+		"who": {"*": 0.8},
+		"go": ["mid"],
+		"pgo": ["@i"],
+		"dur": [5.0, 6.5],
+		"pers": {"mischievous": 2.0}
+	},
+	"standoff":
+	{
+		"pair": true,
+		"who": {"*": 1.0},
+		"need": "toy",
+		"go": ["@toy"],
+		"pgo": ["@toy2"],
+		"dur": [6.0, 7.5]
+	},
+	"herd":
+	{
+		"pair": true,
+		"who": {"*": 1.0},
+		"only": true,
+		"pers": {"bold": 3.0, "mischievous": 1.0},
+		"bpers": ["shy"],
+		"go": ["@p"],
+		"dur": [8.0, 9.0],
+		"moves": true
+	},
+	"follow_around":
+	{
+		"pair": true,
+		"pfree": true,
+		"who": {"sheep": 2.0, "deer": 0.5, "pig": 0.6, "cow": 0.6},
+		"dur": [12.0, 18.0],
+		"moves": true
+	},
 }
+const RANK := {"bold": 5, "mischievous": 4, "sassy": 3, "sweet": 2, "lazy": 1, "shy": 0}
 const LINES := {
 	"loaf": {"cat": ["loaf mode. do not unfold me.", "{me} is a bread now."], "*": ["tucked."]},
 	"slow_blink":
@@ -185,6 +279,30 @@ const LINES := {
 	"sit_like_person": {"bear": ["hello. I sit like you now.", "this is how people do it?"]},
 	"big_yawn": {"bear": ["HAAAAH. sorry. hibernation.", "that one took a while."]},
 	"pat_jar": {"bear": ["careful. careful. honey colour.", "pat pat. don't tell."]},
+	"greet":
+	{
+		"sassy": ["hello. don't make it a thing."],
+		"sweet": ["HI! hi! it's you!"],
+		"*": ["a nose. hello."]
+	},
+	"greet_b": {"sassy": ["hm. hello."], "sweet": ["hello hello hello!"], "*": ["oh. hi."]},
+	"chase_game": {"*": ["tag! you're it!", "can't catch me!"]},
+	"chase_game_b": {"*": ["I'm coming!", "wait! rules!"]},
+	"nap_pile": {"*": ["scoot. there.", "warm. fine. stay."]},
+	"nap_pile_b": {"*": ["mm. toasty.", "a pile. the best shape."]},
+	"boop": {"cat": ["boop. you're welcome.", "{me} has booped."]},
+	"boop_b": {"*": ["!?", "what was that for?"]},
+	"groom": {"*": ["hold still. you're a mess.", "there. presentable."]},
+	"groom_b": {"*": ["aww. thanks.", "mm. a little left."]},
+	"steal_spot": {"*": ["this is my spot now.", "thank you for warming it."]},
+	"steal_spot_b": {"*": ["...that was MINE.", "I'll be over here. judging."]},
+	"copy_cat": {"*": ["watch this.", "hop. hop. hop."]},
+	"copy_cat_b": {"*": ["watch ME. hop.", "I'm not copying. I'm also hopping."]},
+	"standoff": {"*": ["the yarn is mine.", "step back."]},
+	"standoff_b": {"*": ["no, mine.", "we'll see."]},
+	"herd": {"bold": ["out you come. the world is big.", "come along. I'll protect you."]},
+	"herd_b": {"shy": ["...okay.", "I was fine in there."]},
+	"follow_around": {"sheep": ["baa. where you go, I go.", "I'm in your flock now."]},
 }
 
 var h:
@@ -254,6 +372,7 @@ func process(dt: float) -> void:
 		var name := _pick(c)
 		if name != "" and begin(name, c, false):
 			return
+		next[id] = rng.randf_range(6.0, 15.0)
 
 
 func _gate() -> bool:
@@ -261,6 +380,10 @@ func _gate() -> bool:
 
 
 func _stage(st: Array) -> void:
+	if ANTICS.get(str(st[0]), {}).get("pair", false):
+		var mate = other(h.pets.critter(str(st[1]) if st[1] != "" else "nina"))
+		if not mate.away and (mate.mode == "sleep" or mate.z > 0.0):
+			h.pets.place(mate, "lounge", "idle")
 	_force(str(st[0]), str(st[1]))
 	var secs: float = float(st[2])
 	var n := int(secs / 0.05)
@@ -310,6 +433,10 @@ func _need(need: String, c) -> bool:
 			return h.outside.act.has("bird")
 		"bone":
 			return h.petlife.has_mat() and c.species in ["dog", "wolf", "fox"]
+		"toy":
+			return not h.pets._toy_of("yarn").is_empty()
+		"pspot":
+			return _resolve("@pspot", c, other(c), Vector2i.ZERO) != ""
 	return false
 
 
@@ -318,7 +445,9 @@ func _weight(name: String, c) -> float:
 	var w: float = _ok_species(e, c) * float(e.get("w", 1.0))
 	if w <= 0.0 or e.has("trig") or not _hour_ok(e) or not _need(str(e.get("need", "")), c):
 		return 0.0
-	w *= float(e.get("pers", {}).get(c.persona, 1.0))
+	if e.get("pair", false) and not _pair_ok(e, c, other(c)):
+		return 0.0
+	w *= float(e.get("pers", {}).get(c.persona, 0.0 if e.get("only", false) else 1.0))
 	var hr: float = h._hour()
 	if hr >= 13.0 and hr < 16.5:
 		w *= {"hi": 0.5, "lo": 1.8}.get(str(e.get("e", "")), 1.0)
@@ -362,31 +491,81 @@ func begin(name: String, c, forced_run: bool) -> bool:
 	if e.has("scene"):
 		started.append(name)
 		return h.eggs.start(e["scene"], c.id)
-	var legs: Array = []
-	for tok in e.get("go", []):
-		var spot := _resolve(tok, c)
-		if spot == "" or not _reach(c, spot):
+	var p = null
+	if e.get("pair", false):
+		p = other(c)
+		if not _pair_ok(e, c, p):
 			return false
-		legs.append(spot)
+	var ilegs = null
+	var plegs = null
+	var ptoks: Array = e.get("pgo", [])
+	if "@i" in ptoks:
+		ilegs = _legs(e.get("go", []), c, p, h.pets._cell_of(p.pos) if p != null else Vector2i.ZERO)
+		plegs = _legs(ptoks, p, c, _fin(c, ilegs)) if ilegs != null else null
+	else:
+		plegs = _legs(ptoks, p, c, h.pets._cell_of(c.pos)) if p != null else []
+		ilegs = _legs(e.get("go", []), c, p, _fin(p, plegs)) if plegs != null else null
+	if ilegs == null or plegs == null:
+		return false
 	act = {
 		"name": name,
 		"id": c.id,
+		"pid": p.id if p != null else "",
 		"t": 0.0,
 		"st": "go",
 		"gi": 0,
-		"legs": legs,
+		"pgi": 0,
+		"legs": ilegs,
+		"plegs": plegs,
 		"fx": [],
 		"dur": rng.randf_range(e["dur"][0], e["dur"][1]),
 		"species": c.species,
 		"said": false,
 		"base": c.pos,
+		"pbase": p.pos if p != null else Vector2.ZERO,
+		"leg_t": 0.0,
 		"d0": c.dir,
 	}
 	c.hold = true
 	c.run = bool(e.get("run", false))
+	if p != null:
+		p.hold = not e.get("pfree", false)
+		if p.mode == "sleep" and not e.get("keep", false):
+			p.mode = "idle"
+			p.anim = "idle"
 	started.append(name)
-	_leg(c)
+	_start_leg(c, "gi", "legs")
+	if p != null:
+		_start_leg(p, "pgi", "plegs")
 	return true
+
+
+func _pair_ok(e: Dictionary, c, p) -> bool:
+	if p.away or p.species == "" or c.away:
+		return false
+	if e.has("bwho") and p.species not in e["bwho"]:
+		return false
+	if e.has("bpers") and p.persona not in e["bpers"]:
+		return false
+	var e2: Dictionary = e.duplicate()
+	e2["wakes"] = bool(e.get("psleep", false))
+	return p.hold == false and (e.get("pfree", false) or _free(p, e2))
+
+
+func _fin(c, legs: Variant) -> Vector2i:
+	if c == null or legs == null or (legs as Array).is_empty():
+		return h.pets._cell_of(c.pos) if c != null else Vector2i.ZERO
+	return h.pets.spots[(legs as Array)[-1]]["cell"]
+
+
+func _legs(toks: Array, who, mate, mate_cell: Vector2i) -> Variant:
+	var out: Array = []
+	for tok in toks:
+		var spot := _resolve(tok, who, mate, mate_cell)
+		if spot == "" or not _reach(who, spot):
+			return null
+		out.append(spot)
+	return out
 
 
 func _reach(c, spot: String) -> bool:
@@ -395,33 +574,79 @@ func _reach(c, spot: String) -> bool:
 	return not h.pets._blocked(cell) and (cell == from or not h.pets.route(from, cell).is_empty())
 
 
-func _resolve(tok: String, _c) -> String:
-	if tok == "@shelf":
-		var p: Dictionary = h.eggs.piece("bookshelf")
-		var cell: Vector2i = h.eggs.front_cell(p) if not p.is_empty() else Vector2i(-1, -1)
-		return h.eggs.spot("ant_shelf", {"cell": cell, "face": 3}) if cell.x >= 0 else "board"
+func _resolve(tok: String, c, mate, mate_cell: Vector2i) -> String:
+	match tok:
+		"@shelf":
+			var p: Dictionary = h.eggs.piece("bookshelf")
+			var cell: Vector2i = h.eggs.front_cell(p) if not p.is_empty() else Vector2i(-1, -1)
+			return h.eggs.spot("ant_shelf", {"cell": cell, "face": 3}) if cell.x >= 0 else "board"
+		"@p", "@i":
+			return next_to(mate_cell, c, 0)
+		"@toy", "@toy2":
+			var toy: Dictionary = h.pets._toy_of("yarn")
+			return (
+				""
+				if toy.is_empty()
+				else next_to(h.pets._cell_of(toy["pos"]), c, int(tok == "@toy2"))
+			)
+		"@pspot":
+			var s: String = mate.spot if mate != null else ""
+			return s if h.pets.spots.has(s) and s not in ["bowl", "water", ""] else ""
+		"@sun":
+			var f := clampf((h._hour() - 8.0) / 9.0, 0.0, 1.0)
+			var cell := Vector2i(clampi(int(lerpf(0.4, 2.2, f) + 1.3), 1, 9), 6)
+			return (
+				h.eggs.spot("ant_sun", {"cell": cell, "face": 7})
+				if not h.pets._blocked(cell)
+				else ""
+			)
 	return tok if h.pets.spots.has(tok) else ""
 
 
-func _leg(c) -> void:
-	var legs: Array = act["legs"]
-	if act["gi"] >= legs.size():
-		_enter(c)
-		return
-	h.pets.go(c, legs[act["gi"]], "sit", 0.1)
-	act["leg_t"] = 0.0
+# a spot beside `cell` that `c` can reach, the `skip`th nearest to it
+func next_to(cell: Vector2i, c, skip: int) -> String:
+	var from: Vector2i = h.pets._cell_of(c.pos)
+	var opts: Array = []
+	for d in GROUND:
+		var n: Vector2i = cell + d
+		if h.pets._blocked(n) or (n != from and h.pets.route(from, n).is_empty()):
+			continue
+		opts.append(n)
+	opts.sort_custom(func(a, b): return Vector2(a - from).length() < Vector2(b - from).length())
+	if opts.size() <= skip:
+		return ""
+	var at: Vector2i = opts[skip]
+	var face: int = h.pets._face(Vector2(cell - at), 7)
+	return h.eggs.spot("ant_nx_%s_%d" % [c.id, skip], {"cell": at, "face": face})
+
+
+func _start_leg(c, gk: String, lk: String) -> void:
+	var legs: Array = act[lk]
+	if act[gk] < legs.size():
+		h.pets.go(c, legs[act[gk]], "sit", 0.1)
+
+
+func _advance(c, gk: String, lk: String) -> bool:
+	var legs: Array = act[lk]
+	if act[gk] < legs.size() and _arrived(c):
+		act[gk] += 1
+		_start_leg(c, gk, lk)
+	return act[gk] >= legs.size()
 
 
 func _arrived(c) -> bool:
 	return c.goal == "" and c.jump.is_empty() and c.mode in ["idle", "sleep"] and c.path.is_empty()
 
 
-func _enter(c) -> void:
+func _enter(c, p) -> void:
 	var e: Dictionary = ANTICS[act["name"]]
 	act["st"] = "play"
 	act["t"] = 0.0
 	act["base"] = c.pos
 	act["d0"] = c.dir
+	if p != null:
+		act["pbase"] = p.pos
+		p.run = false
 	c.run = false
 	if e.has("carry"):
 		c.carry = e["carry"]
@@ -450,49 +675,74 @@ func vec(d: int) -> Vector2:
 
 func _run(dt: float) -> void:
 	var c = h.pets.critter(act["id"])
-	if c.away or not c.hold or c.species != act["species"] or not h.eggs.calm():
+	var p = h.pets.critter(act["pid"]) if act["pid"] != "" else null
+	var e: Dictionary = ANTICS[act["name"]]
+	var lost: bool = c.away or not c.hold or c.species != act["species"] or not h.eggs.calm()
+	if p != null and (p.away or (not p.hold and not e.get("pfree", false))):
+		lost = true
+	if lost:
 		_end(c, false)
 		return
 	if not act.get("pin", false):
 		act["t"] += dt
 	if act["st"] == "go":
 		act["leg_t"] += dt
-		if _arrived(c):
-			act["gi"] += 1
-			_leg(c)
+		var a_done := _advance(c, "gi", "legs")
+		var p_done := p == null or _advance(p, "pgi", "plegs")
+		if a_done and p_done:
+			_enter(c, p)
 		elif act["leg_t"] > LEG_MAX:
 			_end(c, false)
 		return
 	c.lift = 0.0
+	if p != null:
+		p.lift = 0.0
+		if p.mode != "walk" and not e.get("pfree", false):
+			p.anim = "sleep" if p.mode == "sleep" else "idle"
 	act["fx"] = []
-	_pose(act["name"], c, float(act["t"]), float(act["dur"]))
+	_pose(act["name"], c, float(act["t"]), float(act["dur"]), p)
 	if act["t"] >= act["dur"] and (c.mode != "walk" or act["t"] > act["dur"] + LEG_MAX):
 		_end(c, true)
 
 
 func _end(c, done: bool) -> void:
 	var e: Dictionary = ANTICS[act["name"]]
+	var p = h.pets.critter(act["pid"]) if act["pid"] != "" else null
+	_release(c, e, act["base"])
+	if p != null:
+		_release(p, e, act["pbase"])
+	if done:
+		_after(act["name"], c, p)
+	act = {}
+
+
+func _release(c, e: Dictionary, base: Vector2) -> void:
 	c.hold = false
 	c.run = false
 	c.lift = 0.0
 	c.flip = false
 	if c.carry == e.get("carry", "-"):
 		c.carry = ""
-	if not c.away and c.mode != "walk":
-		c.pos = act["base"] if act["st"] == "play" and c.jump.is_empty() else c.pos
+	var posed: bool = act["st"] == "play" and not e.get("moves", false) and not e.get("pair", false)
+	if posed and not c.away and c.mode != "walk" and c.jump.is_empty():
+		c.pos = base
 	if bool(e.get("keep", false)) and c.mode == "sleep":
 		c.wait = rng.randf_range(15.0, 28.0)
 	else:
-		c.mode = "idle"
+		if c.mode == "walk" and c.jump.is_empty():
+			c.path = []
+			c.goal = ""
+		c.mode = "idle" if c.jump.is_empty() else c.mode
 		c.anim = "idle"
 		c.wait = rng.randf_range(2.0, 5.0)
-	if done:
-		_after(act["name"], c)
-	act = {}
 
 
-func _after(name: String, c) -> void:
+func _after(name: String, c, p) -> void:
 	match name:
+		"standoff":
+			var toy: Dictionary = h.pets._toy_of("yarn")
+			if not toy.is_empty() and p != null:
+				h.pets.chase(c if _rank(c) >= _rank(p) else p, toy, 2)
 		"lay_egg":
 			var n: int = h.eggs.things.filter(func(t): return t["kind"] == "egg").size()
 			if n < 3:
@@ -535,17 +785,47 @@ func _pulse(t: float, on: float, period: float) -> bool:
 	return fmod(t, period) < on
 
 
-func _pose(name: String, c, t: float, dur: float) -> void:
+func _toward(a, b) -> int:
+	return h.pets._face(b.pos - a.pos, a.dir)
+
+
+func _rank(c) -> int:
+	return RANK.get(c.persona, 0)
+
+
+func _chase_step(lead, fol) -> void:
+	var cells: Array = h.eggs.ZOOM_CELLS.filter(
+		func(x):
+			return (
+				not h.pets._blocked(x) and not h.pets.route(h.pets._cell_of(lead.pos), x).is_empty()
+			)
+	)
+	if cells.is_empty():
+		return
+	var cell: Vector2i = cells[rng.randi() % cells.size()]
+	lead.run = true
+	h.pets.go(lead, h.eggs.spot("ant_ch_l", {"cell": cell}), "sit", 0.1)
+	var s := next_to(h.pets._cell_of(lead.pos), fol, 0)
+	if s != "":
+		fol.run = true
+		h.pets.go(fol, s, "sit", 0.1)
+
+
+func _pose(name: String, c, t: float, dur: float, p) -> void:
 	var u := t / dur
 	var base: Vector2 = act["base"]
 	var d0: int = act["d0"]
 	var fwd: Vector2 = act["fwd"]
 	var e: Dictionary = ANTICS[name]
-	c.anim = "idle"
+	if c.mode != "walk":
+		c.anim = "idle"
 	if not act["said"] and t > 0.5 and name in LINES:
 		act["said"] = true
 		_say(c, name)
 		_cue(c, e)
+	if p != null and not act.get("said_b", false) and t > 1.6 and (name + "_b") in LINES:
+		act["said_b"] = true
+		_say(p, name + "_b")
 	match name:
 		"loaf":
 			c.anim = "sleep"
@@ -766,6 +1046,83 @@ func _pose(name: String, c, t: float, dur: float) -> void:
 			c.anim = "attack" if _pulse(t, 0.4, 1.3) else "idle"
 			if u > 0.7:
 				_hearts(c, 2)
+		"greet":
+			c.dir = _toward(c, p)
+			p.dir = _toward(p, c)
+			if t > 0.7 and t < 1.7:
+				c.lift = 1.0
+				p.lift = 1.0
+			if t > 1.0 and c.persona in ["sassy", "shy"]:
+				_fx(c, "bang")
+				_fx(p, "sweat", t)
+			elif t > 1.0:
+				_hearts(c, 2)
+				_hearts(p, 2)
+		"chase_game":
+			var half: bool = t > dur * 0.5
+			if t >= act.get("nxt", 0.0):
+				act["nxt"] = t + 1.3
+				_chase_step(p if half else c, c if half else p)
+		"nap_pile":
+			for x in [c, p]:
+				x.mode = "sleep"
+				x.anim = "sleep"
+			c.dir = Pets.DIRS["se"]
+			p.dir = Pets.DIRS["se"]
+		"boop":
+			c.dir = _toward(c, p)
+			p.dir = _toward(p, c)
+			c.anim = "attack" if t > 0.7 and t < 1.2 else "idle"
+			if t > 0.9 and t < 1.9:
+				p.lift = 2.5
+				_fx(p, "bang")
+			if t > 1.9:
+				_hearts(p, 2)
+		"groom":
+			c.dir = _toward(c, p)
+			p.dir = _toward(p, c)
+			c.anim = "eat" if int(t * 2.0) % 2 == 0 else "idle"
+			p.anim = "sleep"
+			if t > 1.0:
+				_hearts(p, 2)
+		"steal_spot":
+			c.mode = "sleep"
+			c.anim = "sleep"
+			p.dir = _toward(p, c)
+			_fx(p, "bang" if t < 1.5 else "sweat", t)
+		"copy_cat":
+			c.dir = Pets.DIRS["se"]
+			p.dir = Pets.DIRS["se"]
+			c.lift = 6.0 * absf(sin(t * 3.5))
+			if t > 0.5:
+				p.lift = 6.0 * absf(sin((t - 0.5) * 3.5))
+		"standoff":
+			var toy: Dictionary = h.pets._toy_of("yarn")
+			if not toy.is_empty():
+				c.dir = h.pets._face(toy["pos"] - c.pos, c.dir)
+				p.dir = h.pets._face(toy["pos"] - p.pos, p.dir)
+			c.anim = "attack" if _pulse(t, 0.45, 1.2) else "idle"
+			p.anim = "attack" if _pulse(t + 0.6, 0.45, 1.2) else "idle"
+			if u > 0.85:
+				_fx(c if _rank(c) < _rank(p) else p, "sweat", t)
+		"herd":
+			if t < 1.2:
+				c.dir = _toward(c, p)
+				_fx(c, "bang")
+			elif not act.get("sent", false):
+				act["sent"] = true
+				h.pets.go(p, "rug", "sit", 0.1)
+				var s := next_to(h.pets.spots["rug"]["cell"], c, 0)
+				if s != "":
+					h.pets.go(c, s, "sit", 0.1)
+			if t > 1.2:
+				_fx(p, "sweat", t)
+		"follow_around":
+			if t >= act.get("nxt", 0.0):
+				act["nxt"] = t + 1.4
+				var s := next_to(h.pets._cell_of(p.pos), c, 0)
+				if s != "":
+					h.pets.go(c, s, "sit", 0.1)
 
 
 func dust(c, u: float) -> void:
