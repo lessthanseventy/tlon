@@ -41,6 +41,7 @@ var problem := ""
 var reached_at := 0.0
 var backoff := 0.0
 var poll_gap := 1.0
+var grace := 3.0
 var list_at := "17:30"
 var clock := Callable()
 var status := Callable()
@@ -353,8 +354,10 @@ func on_told(row: Dictionary) -> void:
 		return
 	var id := int(row["id"])
 	if _msgs.has(id):
-		_edit_markup(int(_msgs[id]["mid"]), {"inline_keyboard": []})
+		_after_sent(_msgs[id], func(mid: int) -> void: _edit_markup(mid, {"inline_keyboard": []}))
 	var text := BELL + str(row["text"])
+	var entry := {"mid": 0, "text": text, "at": Time.get_ticks_msec(), "then": Callable()}
+	_msgs[id] = entry
 	_call(
 		"sendMessage",
 		{
@@ -363,9 +366,22 @@ func on_told(row: Dictionary) -> void:
 			"reply_markup": keyboard(id, row.get("every") != null)
 		},
 		func(ok: bool, result: Variant, _why: String, _http: int) -> void:
-			if ok and result is Dictionary:
-				_msgs[id] = {"mid": int(result["message_id"]), "text": text}
+			if not (ok and result is Dictionary):
+				if is_same(_msgs.get(id), entry):
+					_msgs.erase(id)
+				return
+			entry["mid"] = int(result["message_id"])
+			if entry["then"].is_valid():
+				entry["then"].call(entry["mid"])
 	)
+
+
+# `fn(message id)` once the message exists: now, or when Telegram has answered the send
+func _after_sent(entry: Dictionary, fn: Callable) -> void:
+	if int(entry["mid"]) != 0:
+		fn.call(int(entry["mid"]))
+	else:
+		entry["then"] = fn
 
 
 # the reminder was dealt with in the house (`what`: done hour tomorrow delete, or gone)
@@ -374,17 +390,16 @@ func handled(id: int, what: String) -> void:
 		return
 	var m: Dictionary = _msgs[id]
 	_msgs.erase(id)
-	_edit(
-		int(m["mid"]),
-		str(m["text"]) + "\n" + OUTCOME.get(what, OUTCOME["gone"]),
-		{"inline_keyboard": []}
-	)
+	var said := str(m["text"]) + "\n" + OUTCOME.get(what, OUTCOME["gone"])
+	_after_sent(m, func(mid: int) -> void: _edit(mid, said, {"inline_keyboard": []}))
 
 
-# what the house still rings: a message whose reminder is no longer among them was dealt with
+# What the house still rings: a message whose reminder is no longer among them was dealt with. A
+# message younger than `grace` is left alone: the list that said so may have been read before the tell.
 func sync(ringing: Array) -> void:
 	for id in _msgs.keys():
-		if not ringing.has(int(id)):
+		var age: float = (Time.get_ticks_msec() - int(_msgs[id]["at"])) / 1000.0
+		if not ringing.has(int(id)) and age >= grace:
 			handled(int(id), "gone")
 
 
