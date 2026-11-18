@@ -1012,7 +1012,7 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"id" => ^id, "text" => "buy milk"}} = post_json("/api/home/#{id}/done", %{})
       assert {404, _} = post_json("/api/home/#{id}/done", %{})
       assert {404, _} = post_json("/api/home/nope/done", %{})
-      assert {200, %{"open" => [], "done_week" => 1}} = get_json("/api/home")
+      assert {200, %{"open" => [], "done_week" => 1, "done" => [%{"text" => "buy milk"}]}} = get_json("/api/home")
     end
 
     test "projects, what others owe, the one thing to do now, and the answer to a question the home put" do

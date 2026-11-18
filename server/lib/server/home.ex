@@ -10,7 +10,8 @@ defmodule Server.Home do
   @doc """
   The home at `now`: `open` the to-dos and the reminders whose time has passed, `coming` the
   reminders to come, soonest first, `notes` the newest twenty, `projects` the open projects with their
-  `next` step and how many are `done`, `waiting` what others owe the operator, and `done_week` how many
+  `next` step and how many are `done`, `waiting` what others owe the operator, `done` what was done in
+  the last seven days by name (`text`, `done_at`, the newest first), and `done_week` how many
   things were done in the last seven days. A row's `since` is when it was said, its `told_at` when the
   operator was last told a reminder that is due (nil before that), its `project` the project it is a step
   of (nil when none). Things put off to someday or dropped are in none of these.
@@ -21,12 +22,14 @@ defmodule Server.Home do
           notes: [String.t()],
           projects: [map()],
           waiting: [map()],
+          done: [map()],
           done_week: non_neg_integer()
         }
   def status(now) do
     {coming, open} = board(via(), now)
     projects = Jot.projects(via())
     named = Map.new(projects, &{&1.id, &1})
+    done = Jot.done_since(via(), DateTime.add(now, -7, :day))
 
     %{
       open: Enum.map(open, &row(&1, named)),
@@ -34,7 +37,8 @@ defmodule Server.Home do
       notes: Jot.notes(via(), 20),
       projects: Enum.map(projects, &project/1),
       waiting: Enum.map(Jot.waiting(via()), &waiting/1),
-      done_week: Jot.done_since(via(), DateTime.add(now, -7, :day))
+      done: Enum.map(done, &%{text: &1.text, done_at: &1.done_at}),
+      done_week: length(done)
     }
   end
 

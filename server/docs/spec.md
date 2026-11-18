@@ -513,7 +513,7 @@ same question is raised on the desktop (`Server.Alerts`, kind `home_ask`).
 
 | Route | Request | Reply |
 |---|---|---|
-| `GET /api/home` | | `{open, coming, notes, projects, waiting, done_week}`; a row has `project` `{id, text}` or nil; a project `{id, text, next: {id, text} or nil, done}`; a waiting-on `{id, text, who, since, due_at}` |
+| `GET /api/home` | | `{open, coming, notes, projects, waiting, done, done_week}`; `done` is the last seven days' `{text, done_at}`, newest first; a row has `project` `{id, text}` or nil; a project `{id, text, next: {id, text} or nil, done}`; a waiting-on `{id, text, who, since, due_at}` |
 | `GET /api/home/now` | `?skip=3,7&minutes=10` | `{pick: {id, text, kind, due_at, project, why} or nil, say}`; 400 when `skip` or `minutes` are not numbers |
 | `POST /api/home/:id/answer` | `{choice, text?}` | `{reply}`; `choice` by question: `next` add / finish / step (with `text`), `review` keep / later / drop, `waiting` got / chased / tomorrow, `shrink` add / no; `nottoday` on any open thing; 400 with no `choice`, 404 when the id has no such question |
 | `POST /api/home/:id/done`, `/later` | as before | as before; the last step of a project done puts the project's next step as a `next` question |
