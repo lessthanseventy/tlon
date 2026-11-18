@@ -108,9 +108,23 @@ static func pt(q: PackedVector2Array, u: float, v: float) -> Vector2:
 static func box(
 	c: CanvasItem, q: PackedVector2Array, u0: float, v0: float, u1: float, v1: float, col: Color
 ) -> void:
+	u0 = clampf(u0, 0.0, 1.0)
+	u1 = clampf(u1, 0.0, 1.0)
+	v0 = clampf(v0, 0.0, 1.0)
+	v1 = clampf(v1, 0.0, 1.0)
+	if u0 == u1 or v0 == v1:
+		return
 	c.draw_colored_polygon(
 		PackedVector2Array([pt(q, u0, v0), pt(q, u1, v0), pt(q, u1, v1), pt(q, u0, v1)]), col
 	)
+
+
+static func shape(
+	c: CanvasItem, q: PackedVector2Array, points: PackedVector2Array, col: Color
+) -> void:
+	for part in Geometry2D.intersect_polygons(points, q):
+		if part.size() >= 3:
+			c.draw_colored_polygon(part, col)
 
 
 static func clip(a: Vector2, b: Vector2) -> Array:
@@ -169,6 +183,8 @@ static func seg(
 
 
 static func dot(c: CanvasItem, q: PackedVector2Array, u: float, v: float, r: float, col: Color) -> void:
+	if u < 0.0 or u > 1.0 or v < 0.0 or v > 1.0:
+		return
 	c.draw_circle(pt(q, u, v), maxf(0.8, r * (q[1] - q[0]).length()), col)
 
 
@@ -410,4 +426,4 @@ func _toasters(c: CanvasItem, q: PackedVector2Array, time: float) -> void:
 		var wing := PackedVector2Array(
 			[pt(q, u + 0.04, v), pt(q, u + 0.14, v), pt(q, u + 0.22, v - 0.12 + flap)]
 		)
-		c.draw_colored_polygon(wing, Color("f2f2ff"))
+		shape(c, q, wing, Color("f2f2ff"))
