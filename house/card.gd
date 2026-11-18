@@ -4,10 +4,13 @@ extends RefCounted
 # {"t": "title"|"text"|"dim", "text"}, {"t": "gap"}, {"t": "month", "year", "month", "today",
 # "marks": {day: true}, "pick": bool, "sel": day} (arrows and the name act "mprev" "mnext" "mtoday",
 # a day "day:N"), {"t": "buttons", "items": [{"label", "act", "on"}]} (they wrap), {"t": "row",
-# "text", "act", "dim", "marks": [{"label", "act"}]}, {"t": "foot", "text", "act"}.
+# "text", "act", "dim", "marks": [{"label", "act"}]}, {"t": "foot", "text", "act"}, {"t": "day",
+# "name", "kind", "temps", "wet"} (a forecast row with its icon).
 const Props := preload("res://props.gd")
 const Fonts := preload("res://fonts.gd")
+const Forecast := preload("res://forecast.gd")
 const WIDTH := 330.0
+const DAY_HEIGHT := 28.0
 const PAD := 16.0
 const CELL := Vector2(40.0, 26.0)
 const MONTHS := [
@@ -175,6 +178,8 @@ static func _height(font: Font, b: Dictionary, wrap: float) -> float:
 			return _text_size(font, b["text"], 16, wrap).y + 6.0
 		"dim":
 			return _text_size(font, b["text"], 13, wrap).y + 6.0
+		"day":
+			return DAY_HEIGHT
 		"month":
 			var info := month_info(b["year"], b["month"])
 			var rows := ceili((info["first"] + info["days"]) / 7.0)
@@ -262,6 +267,8 @@ func draw(c: CanvasItem, bounds: Rect2, anchor: Vector2, blocks: Array) -> void:
 					-1,
 					col
 				)
+			"day":
+				_draw_day(c, font, Vector2(x, y), inner, b)
 			"month":
 				_draw_month(c, font, Vector2(x, y), inner, b)
 			"buttons":
@@ -315,6 +322,20 @@ func draw(c: CanvasItem, bounds: Rect2, anchor: Vector2, blocks: Array) -> void:
 					Color(Props.INK, 0.9 if lit else 0.5)
 				)
 		y += _height(font, b, inner)
+
+
+func _draw_day(c: CanvasItem, font: Font, at: Vector2, inner: float, b: Dictionary) -> void:
+	var base := at.y + 3.0 + font.get_ascent(15)
+	c.draw_string(font, Vector2(at.x, base), b["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Props.INK)
+	Forecast.draw_icon(c, b["kind"], at + Vector2(106.0, DAY_HEIGHT / 2.0 - 1.0), 26.0)
+	c.draw_string(
+		font, Vector2(at.x + 134.0, base), b["temps"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Props.INK
+	)
+	var wet: String = b["wet"]
+	if wet != "":
+		var w := font.get_string_size(wet, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		var col := Color(Props.INK, 0.6)
+		c.draw_string(font, Vector2(at.x + inner - w, base), wet, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col)
 
 
 func _button(
