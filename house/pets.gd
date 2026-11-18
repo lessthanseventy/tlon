@@ -49,6 +49,18 @@ const ROLE_KINDS := {"nina": "cat_black", "argos": "dog_golden"}
 # The animals either pet may be, in the order the settings offer them. Every one has all of
 # ANIMS in the pack, so each animation plays under its own name; `species` keys what a pet says
 # and sounds like (voices.gd `SPECIES`, `cry`), `shadow` is the pack's own for the animal.
+const CRIES := {
+	"cat": "purr",
+	"dog": "bark",
+	"cow": "moo",
+	"horse": "neigh",
+	"sheep": "baa",
+	"pig": "oink",
+	"boar": "oink",
+	"wolf": "howl",
+	"bear": "growl",
+	"chicken": "cluck",
+}
 const ANIMS := ["idle", "walk", "run", "sleep", "attack", "eat"]
 const KINDS := {
 	"cat_black": {"label": "black cat", "species": "cat", "head": 18.0, "shadow": "shadow_small"},
@@ -74,6 +86,27 @@ const KINDS := {
 	{"label": "spotted pig", "species": "pig", "head": 16.0, "shadow": "shadow_medium"},
 	"sheep_white":
 	{"label": "white sheep", "species": "sheep", "head": 19.0, "shadow": "shadow_medium"},
+	"sheep_black":
+	{"label": "black sheep", "species": "sheep", "head": 19.0, "shadow": "shadow_medium"},
+	"wolf_grey": {"label": "grey wolf", "species": "wolf", "head": 18.0, "shadow": "shadow_medium"},
+	"wolf_black":
+	{"label": "black wolf", "species": "wolf", "head": 18.0, "shadow": "shadow_medium"},
+	"boar": {"label": "boar", "species": "boar", "head": 16.0, "shadow": "shadow_medium"},
+	"deer_doe": {"label": "doe", "species": "deer", "head": 20.0, "shadow": "shadow_medium"},
+	"deer_stag": {"label": "stag", "species": "deer", "head": 24.0, "shadow": "shadow_medium"},
+	"bear_brown":
+	{"label": "brown bear", "species": "bear", "head": 21.0, "shadow": "shadow_large"},
+	"bear_black":
+	{"label": "black bear", "species": "bear", "head": 21.0, "shadow": "shadow_large"},
+	"bear_polar":
+	{"label": "polar bear", "species": "bear", "head": 21.0, "shadow": "shadow_large"},
+	"cow_holstein": {"label": "cow", "species": "cow", "head": 20.0, "shadow": "shadow_large"},
+	"cow_brown": {"label": "brown cow", "species": "cow", "head": 20.0, "shadow": "shadow_large"},
+	"horse_bay": {"label": "bay horse", "species": "horse", "head": 24.0, "shadow": "shadow_large"},
+	"horse_black":
+	{"label": "black horse", "species": "horse", "head": 24.0, "shadow": "shadow_large"},
+	"horse_grey":
+	{"label": "grey horse", "species": "horse", "head": 24.0, "shadow": "shadow_large"},
 }
 
 var spots := SPOTS.duplicate(true)
@@ -232,9 +265,9 @@ func change_kind(c: Critter, kind: String) -> void:
 		place(c, "sofa" if c.id == "nina" else "rug", "sit")
 
 
-# the pet's own voice: a cat purrs and a dog barks, nothing else makes either sound
+# the pet's own voice: only a cat purrs and only a dog barks; a species with none is quiet
 func cry(c: Critter) -> String:
-	return {"cat": "purr", "dog": "bark"}.get(c.species, "")
+	return CRIES.get(c.species, "")
 
 
 func species_here() -> Array:

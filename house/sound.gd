@@ -24,7 +24,14 @@ const EVENTS := [
 	"ring",
 	"wish",
 	"meow",
-	"squeak"
+	"squeak",
+	"moo",
+	"neigh",
+	"baa",
+	"oink",
+	"howl",
+	"growl",
+	"cluck"
 ]
 # f: files, a repeat takes the next; v: dB; p: pitch jitter (+-fraction); gap: seconds before the
 # same cue may sound again. `egg_<id>` is what `eggs.find(id)` requests.
@@ -356,6 +363,20 @@ static func _synth(name: String, arg: float) -> PackedFloat32Array:
 			return _sweep(520.0, 760.0, 0.35, rng)
 		"squeak":
 			return _sweep(3200.0, 4200.0, 0.07, rng)
+		"moo":
+			return _sweep(190.0, 130.0, 0.7, rng)
+		"neigh":
+			return _sweep(700.0, 350.0, 0.5, rng)
+		"baa":
+			return _sweep(330.0, 300.0, 0.45, rng)
+		"oink":
+			return _sweep(240.0, 150.0, 0.16, rng)
+		"howl":
+			return _sweep(300.0, 620.0, 0.9, rng)
+		"growl":
+			return _noise(0.5, 0.45, 40.0, rng, 0.0)
+		"cluck":
+			return _sweep(900.0, 600.0, 0.06, rng)
 		"purr":
 			return _noise(1.6, 0.22, 25.0, rng, 0.0)
 		"rustle":

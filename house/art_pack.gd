@@ -106,7 +106,7 @@ func _pets() -> void:
 		if c.pack == "chars":
 			for anim in ["idle", "walk"]:
 				_scaled("%sSheets/1x/%s/%s_%s.png" % [chars, c.sheet, c.sheet, anim])
-	for name in ["shadow_small", "shadow_medium"]:
+	for name in ["shadow_small", "shadow_medium", "shadow_large"]:
 		_scaled("%sEffects/1x/%s.png" % [animals, name])
 	_scaled(chars + "Effects/1x/shadow.png")
 	for name in Room.SKINS:

@@ -29,6 +29,76 @@ const FALLBACK := {
 	},
 }
 
+# what a species says when the server has said nothing, beside the pet's own fallback
+const OWN := {
+	"rabbit":
+	{
+		"pet": ["thump. yes.", "soft paws. thank you."],
+		"wake": ["twitch. I'm up."],
+		"muse": ["carrot thoughts."],
+	},
+	"fox":
+	{
+		"pet": ["hehe. clever hands.", "I knew you'd come."],
+		"wake": ["one ear was awake."],
+		"muse": ["I have a plan. it is a nap."],
+	},
+	"chicken":
+	{
+		"pet": ["bwak. acceptable.", "cluck. again."],
+		"wake": ["bawk? is it seeds?"],
+		"muse": ["I may lay something. no hurry."],
+	},
+	"pig":
+	{
+		"pet": ["oink. more belly.", "snuffle. yes."],
+		"wake": ["mmph. breakfast?"],
+		"muse": ["mud would be nice. the rug will do."],
+	},
+	"sheep":
+	{
+		"pet": ["baa. soft hands.", "baa. you smell of tea."],
+		"wake": ["baa? I counted myself."],
+		"muse": ["I am a cloud with legs."],
+	},
+	"cow":
+	{
+		"pet": ["moo. thank you.", "a good scratch. moo."],
+		"wake": ["mm? is it grass?"],
+		"muse": ["chewing. thinking. chewing."],
+	},
+	"horse":
+	{
+		"pet": ["yes. there. my mane thanks you.", "hm. noble of you."],
+		"wake": ["hay? is it hay?"],
+		"muse": ["I could gallop. I won't."],
+	},
+	"deer":
+	{
+		"pet": ["...ah. okay.", "gentle. keep going."],
+		"wake": ["who is there? oh. you."],
+		"muse": ["quiet is a skill."],
+	},
+	"bear":
+	{
+		"pet": ["grr. that is a yes.", "mm. paw there."],
+		"wake": ["I am hibernating. nicely."],
+		"muse": ["snack?"],
+	},
+	"wolf":
+	{
+		"pet": ["awoo, quietly.", "pack. you are pack."],
+		"wake": ["I heard it first."],
+		"muse": ["someone should howl."],
+	},
+	"boar":
+	{
+		"pet": ["snort. fine.", "hrm. more."],
+		"wake": ["snrk. what."],
+		"muse": ["I root. there is nothing to root. I root anyway."],
+	},
+}
+
 var batch := {}
 var rng := RandomNumberGenerator.new()
 # each pet's species by name, kept by `Pets.set_kind`
@@ -61,8 +131,14 @@ func line(who: String, occasion: String, thing: String = "") -> String:
 			if l is String and l.strip_edges() != "":
 				served.append(l)
 	if served.is_empty():
-		return _pick("fb|" + who + "|" + occasion, FALLBACK.get(who, {}).get(occasion, []), thing, who)
+		return _pick("fb|" + who + "|" + occasion, _offline(who, occasion), thing, who)
 	return _pick(who + "|" + occasion, served, thing, who)
+
+
+func _offline(who: String, occasion: String) -> Array:
+	var pool: Array = FALLBACK.get(who, {}).get(occasion, []).duplicate()
+	pool.append_array(OWN.get(species.get(who, ""), {}).get(occasion, []))
+	return pool
 
 
 # whether a line of the house's own suits one of these species

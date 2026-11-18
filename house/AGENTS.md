@@ -374,10 +374,11 @@ runs on the local list.
   window of 656x432, exactly the room at scale 2 so it stays crisp; drag the room to move it, the
   spot is kept in `user://house_widget.json`.
 - The pets are roles, not animals: `nina` (naps on furniture, pushes things off the desk, walks the piano) and
-  `argos` (brings gifts, flops), each any animal of `Pets.KINDS` (cats, dogs, rabbits, foxes, chickens, pigs, a
-  sheep: the small ones that read at pet size; every sheet has all of `Pets.ANIMS`, so each animation plays under
-  its own name) or `none` (`Critter.away`: not stepped, drawn, hit, heard or counted). Species keys the voice:
-  `Pets.cry` (only a cat purrs, only a dog barks) and `Voices.SPECIES` (house lines that suit one species).
+  `argos` (brings gifts, flops), each any animal of `Pets.KINDS` (all 29 of the animals pack, horses and bears
+  included: every sheet has all of `Pets.ANIMS`, so each animation plays under its own name) or `none`
+  (`Critter.away`: not stepped, drawn, hit, heard or counted). Species keys the voice: `Pets.CRIES` (the
+  sound a species makes, none for a rabbit, fox or deer; only a cat purrs, only a dog barks), `Voices.SPECIES`
+  (house lines that suit one species) and `Voices.OWN` (what a species says offline).
   A new kind is a row in `KINDS`, and its sheets are in the art pack at once (`art_pack.gd`).
 - Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
   (sweet, not bright). Clicking one pets it. Their lines are `voices.gd`: `GET /api/home/pets`, a batch a
