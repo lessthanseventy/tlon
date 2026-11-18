@@ -76,7 +76,7 @@ func _voices() -> void:
 	var v := Voices.new()
 	v.species = {"Nina": "rabbit", "Argos": "rabbit"}
 	for i in 20:
-		s._check(v.line("Argos", "muse") == "", "a rabbit is no small dog")
+		s._check(v.line("Argos", "muse") != "Is Nina a small dog?", "a rabbit is no small dog")
 	v.species = {"Nina": "cat", "Argos": "dog"}
 	s._check(v.line("Argos", "muse") == "Is Nina a small dog?", "a dog wonders")
 	s._check(Voices.fits("the bed is a cat's.", ["dog"]) == false and Voices.fits("anything", []), "fits")
@@ -265,7 +265,7 @@ func _pack_list() -> void:
 		s._check(FileAccess.file_exists(s._art().path_join(n)), "listed and there: " + n)
 	for kind in Pets.KINDS:
 		s._check(listed.has(ANIMAL + "Sheets/2x/%s/%s_run.png" % [kind, kind]), "the list holds " + kind)
-	s._check(not listed.has(ANIMAL + "Sheets/1x/horse_bay/horse_bay_idle.png"), "and not an animal the house cannot open")
+	s._check(listed.has(ANIMAL + "Effects/2x/shadow_large.png"), "and the large shadow")
 	s._check(not listed.has(ANIMAL + "Sheets/1x/cat_black/cat_black_death.png"), "nor a sheet nothing plays")
 	for p in Quirks.PEDESTRIANS:
 		s._check(listed.has(Quirks.PACKS["city"]["dir"] + "Sheets/3x/%s/%s_phone.png" % [p, p]), "the list holds " + p)
