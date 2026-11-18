@@ -1,6 +1,7 @@
 extends Control
 
 const POLL_SECONDS := 5.0
+const SLOW_SECONDS := 300.0
 const PANEL_WIDTH := 300
 const BACKDROP := Color("1f1b24")
 const RoomScript := preload("res://room.gd")
@@ -18,6 +19,9 @@ var _at := "home"
 var _inflight := ""
 var _reach := {}
 var _busy := false
+var _slow: HTTPRequest
+var _slow_step := ""
+var _pets_retried := false
 
 var _room: Control
 var _panel: PanelContainer
@@ -60,8 +64,26 @@ func _ready() -> void:
 	if _demo:
 		var demo: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://demo.json"))
 		_office = demo.get("office", {})
+		if "--empty" in args:
+			demo.merge({"open": [], "coming": [], "notes": []}, true)
+		_room.home.set_weather(demo.get("weather"))
 		_apply(demo)
+		if "--tick-demo" in args:
+			get_tree().create_timer(0.75).timeout.connect(func(): _on_ticked(1))
+			if "--tick-all" in args:
+				get_tree().create_timer(1.1).timeout.connect(func(): _on_ticked(2))
+				get_tree().create_timer(1.4).timeout.connect(func(): _on_ticked(3))
 	else:
+		_slow = HTTPRequest.new()
+		_slow.timeout = 8.0
+		_slow.request_completed.connect(_on_slow)
+		add_child(_slow)
+		var slow_timer := Timer.new()
+		slow_timer.wait_time = SLOW_SECONDS
+		slow_timer.timeout.connect(_slow_poll)
+		add_child(slow_timer)
+		slow_timer.start()
+		_slow_poll()
 		_http = HTTPRequest.new()
 		_http.timeout = 4.0
 		_http.request_completed.connect(_on_polled)
@@ -75,7 +97,8 @@ func _ready() -> void:
 	_enter(_at)
 
 	if _shot != "":
-		await get_tree().create_timer(1.5).timeout
+		var wait := float(args[args.find("--wait") + 1]) if "--wait" in args else 1.5
+		await get_tree().create_timer(wait).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(_shot)
 		get_tree().quit()
@@ -110,7 +133,7 @@ func _apply(data: Dictionary) -> void:
 		"coming": data.get("coming", []),
 		"notes": data.get("notes", []),
 	}
-	_room.open_count = _data["open"].size()
+	_room.home.set_data(_data)
 	if _at == "home":
 		_room.show_home()
 		_panel.show_data(_data)
@@ -166,6 +189,7 @@ func _on_polled(result: int, code: int, _headers: PackedStringArray, body: Packe
 			}
 		else:
 			_office = parsed
+			_room.home.set_weather(parsed.get("weather"))
 	if polled == _at:
 		_panel.set_reachable(ok)
 		if ok:
@@ -305,7 +329,36 @@ func _on_ticked(id: int) -> void:
 	)
 
 
+func _slow_poll() -> void:
+	if _slow_step != "":
+		return
+	_slow_step = "office"
+	if _slow.request(_base + "/api/office") != OK:
+		_slow_step = ""
+
+
+func _on_slow(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	var step := _slow_step
+	_slow_step = ""
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if code == 200 else null
+	if result != HTTPRequest.RESULT_SUCCESS or not parsed is Dictionary:
+		return
+	if step == "office":
+		_room.home.set_weather(parsed.get("weather"))
+		for w in parsed.get("workspaces", []):
+			if w.get("name") == "Home":
+				_slow_step = "pets"
+				if _slow.request(_base + "/api/office/pets/%d" % int(w["id"])) != OK:
+					_slow_step = ""
+	elif step == "pets":
+		_room.home.set_voices(parsed)
+		if parsed.is_empty() and not _pets_retried:
+			_pets_retried = true
+			get_tree().create_timer(45.0).timeout.connect(_slow_poll)
+
+
 func _remove(id: int) -> void:
+	_room.home.tick_off(id)
 	var kept: Array = _data["open"].filter(func(t): return int(t["id"]) != id)
 	_data["open"] = kept
 	_apply(_data)
