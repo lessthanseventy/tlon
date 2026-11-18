@@ -46,19 +46,27 @@ defmodule Server.Home.Organize do
   A fresh jot (no kind yet) whose to-do or reminder reading revives a put-off thing is about that
   thing: the thing is the one it is, brought back as the reading has it (its text, its time when the
   reading has one), and the jot is kept as the raw capture of an amend. A reading of any other kind
-  files as it is, and what it revives comes back beside it. The reply the helper says.
+  files as it is, and what it revives comes back beside it.
+
+  A fresh jot whose to-do or reminder reading `updates` an open thing is that thing, said more
+  exactly: its text, and its time when the reading has one, are the reading's, and the jot is kept
+  as the raw capture of an amend. An `updates` that is not open is ignored. The reply the helper says.
   """
   @spec file(Jot.t(), map(), DateTime.t()) :: String.t()
   def file(%Jot{via: via, kind: kind} = jot, reading, now) do
     back = if is_nil(kind), do: revivable(via, reading), else: []
 
-    case {back, reading} do
-      {[thing | rest], %{kind: kind}} when kind in ["todo", "reminder"] ->
+    case {if(is_nil(kind), do: updated(via, reading)), back, reading} do
+      {%Jot{} = thing, _back, _reading} ->
+        Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
+        Enum.join([update(thing, reading, now) | Enum.map(back, &back(&1, now))], "\n")
+
+      {nil, [thing | rest], %{kind: kind}} when kind in ["todo", "reminder"] ->
         Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
         merge(thing, reading, now)
         Enum.join([Reader.reply(reading) | Enum.map(rest, &back(&1, now))], "\n")
 
-      _ ->
+      _none ->
         reply = jot |> retire(reading, now) |> place(reading, now)
         Enum.join([reply | Enum.map(back, &back(&1, now))], "\n")
     end
@@ -383,11 +391,56 @@ defmodule Server.Home.Organize do
   defp retire(%Jot{kind: "project"} = jot, %{kind: kind}, now) when kind != "project", do: unplan(jot, now)
   defp retire(jot, _reading, _now), do: jot
 
-  defp revive(jot, now) do
+  @doc """
+  Bring the put-off thing `jot` back to the open list at `now`: a reminder that repeats comes back
+  at its next time, never in the past. The thing as it is open.
+  """
+  @spec revive(Jot.t(), DateTime.t()) :: Jot.t()
+  def revive(jot, now) do
     due =
-      if jot.every && !DateTime.after?(jot.due_at, now), do: Clock.next(jot.due_at, jot.every, now), else: jot.due_at
+      if jot.every && !DateTime.after?(jot.due_at, now),
+        do: Clock.next(jot.due_at, jot.every, now, jot.every_day),
+        else: jot.due_at
 
-    reopened(Jot.file(jot, %{kind: jot.kind, text: jot.text, due_at: due, every: jot.every}, now), now)
+    reopened(
+      Jot.file(jot, %{kind: jot.kind, text: jot.text, due_at: due, every: jot.every, every_day: jot.every_day}, now),
+      now
+    )
+  end
+
+  @doc """
+  The operator's change to the thing `jot` at `now`, from `Server.Home.Form.edit/2`'s `changes`
+  (`text`, `kind` only to-do or reminder, `due_at`, `every`): a touch. A reminder given a time is
+  told afresh then. A question on a to-do or a reminder (a review, a smaller start) no longer
+  applies. The thing as it is.
+  """
+  @spec edit(Jot.t(), map(), DateTime.t()) :: Jot.t()
+  def edit(%Jot{} = jot, changes, now) do
+    attrs = Map.take(changes, [:text, :kind, :due_at, :every])
+    moved? = Map.has_key?(changes, :due_at) or Map.has_key?(changes, :kind)
+    every = Map.get(attrs, :every, jot.every)
+    due = Map.get(attrs, :due_at, jot.due_at)
+
+    changed =
+      Map.to_list(attrs) ++
+        [every_day: anchor(jot, changes, every, due)] ++
+        if(moved?, do: [nudged_at: nil, nudges: 0], else: []) ++
+        if(jot.kind in ["todo", "reminder"], do: [ask: nil, proposed: nil], else: [])
+
+    Jot.edit(jot, changed, now)
+  end
+
+  @doc """
+  A step for the project `project` from the operator at `now`: the open step when it has none (and
+  the question it asked for one is answered), else the end of its plan. `{:step, jot}` or
+  `{:plan, project}`.
+  """
+  @spec add_step(Jot.t(), String.t(), DateTime.t()) :: {:step, Jot.t()} | {:plan, Jot.t()}
+  def add_step(%Jot{} = project, text, now) do
+    case Jot.steps(project.id) do
+      [] -> {:step, project |> Jot.step(text, now) |> reopened(now)}
+      _open -> {:plan, Jot.plan(project, project.plan ++ [text], now)}
+    end
   end
 
   @doc """
@@ -442,6 +495,24 @@ defmodule Server.Home.Organize do
     "back on the list: #{thing.text}"
   end
 
+  defp updated(via, %{kind: kind, updates: id}) when kind in ["todo", "reminder"], do: Jot.open(via, id)
+  defp updated(_via, _reading), do: nil
+
+  defp update(thing, %{due_at: %DateTime{}} = reading, now),
+    do: thing |> Jot.file(Map.drop(reading, [:project, :steps, :who]), now) |> updated_line()
+
+  defp update(thing, %{text: text}, now),
+    do:
+      thing
+      |> Jot.file(
+        %{kind: thing.kind, text: text, due_at: thing.due_at, every: thing.every, every_day: thing.every_day},
+        now
+      )
+      |> updated_line()
+
+  defp updated_line(%Jot{text: text, due_at: nil}), do: "updated: #{text}"
+  defp updated_line(%Jot{text: text, due_at: due}), do: "updated: #{text} — #{Clock.say(due)}"
+
   defp merge(thing, %{due_at: %DateTime{}} = reading, now), do: reopened(Jot.file(thing, reading, now), now)
   defp merge(thing, %{text: text}, now), do: revive(%{thing | text: text}, now)
 
@@ -460,4 +531,9 @@ defmodule Server.Home.Organize do
 
   defp review_at(""), do: @review_at
   defp review_at(at), do: at
+
+  # the day a repeat started on stays while its time is not moved
+  defp anchor(%Jot{every_day: kept}, changes, every, due) do
+    if Map.has_key?(changes, :due_at) or is_nil(kept), do: Jot.anchor(every, due), else: every && kept
+  end
 end

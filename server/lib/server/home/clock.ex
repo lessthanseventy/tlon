@@ -27,34 +27,60 @@ defmodule Server.Home.Clock do
   end
 
   @doc """
-  The occurrence of a time that repeats `every` (`"day"`, `"week"`, `"month"`) after `utc`, at the
-  same wall-clock time.
+  A repeat as it is kept: `"day"`, `"week"` or `"month"` (every one), or a number then one of them
+  (`"6 week"`, `"3 month"`; up to 99). Plurals and `"1 week"` are read; nil when it is none of those.
   """
-  @spec step(DateTime.t(), String.t()) :: DateTime.t()
-  def step(%DateTime{} = utc, every) do
+  @spec every(term()) :: String.t() | nil
+  def every(value) when is_binary(value) do
+    with [_, n, unit] <- Regex.run(~r/^(?:(\d+)\s+)?(day|week|month)s?$/, String.trim(value)),
+         n when n in 1..99 <- if(n == "", do: 1, else: String.to_integer(n)) do
+      if n == 1, do: unit, else: "#{n} #{unit}"
+    else
+      _ -> nil
+    end
+  end
+
+  def every(_value), do: nil
+
+  @doc "A repeat as the helper says it: `week`, `6 weeks`."
+  @spec say_every(String.t()) :: String.t()
+  def say_every(every) do
+    case String.split(every) do
+      [_unit] -> every
+      [_n, _unit] -> every <> "s"
+    end
+  end
+
+  @doc """
+  The occurrence of a time that repeats `every` (`every/1`) after `utc`, at the same wall-clock time.
+  A month's `anchor` is the day of the month it started on, kept where the month has it and clamped
+  where it does not (nil: the day `utc` is on), so Jan 31, Feb 28, Mar 31 does not drift.
+  """
+  @spec step(DateTime.t(), String.t(), pos_integer() | nil) :: DateTime.t()
+  def step(%DateTime{} = utc, every, anchor \\ nil) do
     local = local(utc)
 
     utc(
-      case every do
-        "day" -> NaiveDateTime.shift(local, day: 1)
-        "week" -> NaiveDateTime.shift(local, week: 1)
-        "month" -> NaiveDateTime.shift(local, month: 1)
+      case parse(every) do
+        {n, "day"} -> NaiveDateTime.shift(local, day: n)
+        {n, "week"} -> NaiveDateTime.shift(local, week: n)
+        {n, "month"} -> month(local, n, anchor)
       end
     )
   end
 
   @doc "The first occurrence of `utc` repeating `every` that is after `now`."
-  @spec next(DateTime.t(), String.t(), DateTime.t()) :: DateTime.t()
-  def next(%DateTime{} = utc, every, now) do
-    stepped = step(utc, every)
-    if DateTime.after?(stepped, now), do: stepped, else: next(stepped, every, now)
+  @spec next(DateTime.t(), String.t(), DateTime.t(), pos_integer() | nil) :: DateTime.t()
+  def next(%DateTime{} = utc, every, now, anchor \\ nil) do
+    stepped = step(utc, every, anchor)
+    if DateTime.after?(stepped, now), do: stepped, else: next(stepped, every, now, anchor)
   end
 
   @doc "The last occurrence of `utc` repeating `every` that is not after `now`: `utc` itself when its next one is."
-  @spec latest(DateTime.t(), String.t(), DateTime.t()) :: DateTime.t()
-  def latest(%DateTime{} = utc, every, now) do
-    stepped = step(utc, every)
-    if DateTime.after?(stepped, now), do: utc, else: latest(stepped, every, now)
+  @spec latest(DateTime.t(), String.t(), DateTime.t(), pos_integer() | nil) :: DateTime.t()
+  def latest(%DateTime{} = utc, every, now, anchor \\ nil) do
+    stepped = step(utc, every, anchor)
+    if DateTime.after?(stepped, now), do: utc, else: latest(stepped, every, now, anchor)
   end
 
   @doc "Whether the operator is up at `utc`: not between 22:00 and 08:00 local, when nothing unasked is said."
@@ -112,4 +138,17 @@ defmodule Server.Home.Clock do
   defp on_day(date, on), do: Enum.find(for(back <- 0..6, do: Date.add(date, -back)), &(day_name(&1) == on))
 
   defp day_name(date), do: date |> Calendar.strftime("%a") |> String.downcase()
+
+  defp parse(every) do
+    case String.split(every) do
+      [unit] -> {1, unit}
+      [n, unit] -> {String.to_integer(n), unit}
+    end
+  end
+
+  defp month(local, n, anchor) do
+    date = local |> NaiveDateTime.to_date() |> Date.shift(month: n)
+    day = min(anchor || local.day, Date.days_in_month(date))
+    NaiveDateTime.new!(Date.new!(date.year, date.month, day), NaiveDateTime.to_time(local))
+  end
 end

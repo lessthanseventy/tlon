@@ -477,7 +477,12 @@ defmodule Server.Home.Inbox do
         Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
         {"changed: " <> reply, []}
 
-      {:ok, %{kind: kind} = reading} when kind in ["done", "delete", "list", "answer", "now", "someday"] ->
+      {:ok, %{kind: "answer", text: text} = reading} ->
+        Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
+        named = Reader.unnumber(text, context.open ++ context.someday ++ context.projects)
+        asked(%{reading | text: named}, via, now)
+
+      {:ok, %{kind: kind} = reading} when kind in ["done", "delete", "list", "now", "someday"] ->
         Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
         asked(reading, via, now)
 
@@ -525,8 +530,8 @@ defmodule Server.Home.Inbox do
   # a reminder that repeats and was never answered stands at its newest time that has come
   defp current(%Jot{every: nil} = jot, _now), do: jot
 
-  defp current(%Jot{every: every, due_at: due} = jot, now) do
-    case Clock.latest(due, every, now) do
+  defp current(%Jot{every: every, due_at: due, every_day: anchor} = jot, now) do
+    case Clock.latest(due, every, now, anchor) do
       ^due -> jot
       latest -> Jot.roll(jot, latest)
     end

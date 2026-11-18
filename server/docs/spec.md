@@ -514,16 +514,24 @@ went by asleep or with the node down or across a restart; `home_slot` keeps the 
 settings it was kept under, and nothing kept, or kept under other settings, counts the newest slot as said) and
 the offer of a smaller start (offered again at the next daily list); the review runs at the daily list's time,
 17:30 when the list is off; with no messenger the same question is raised on the desktop (`Server.Alerts`, kind
-`home_ask`). A message about a put-off thing revives that row and is kept as an amend: one open thing, not two.
+`home_ask`). A message about a put-off thing revives that row and is kept as an amend: one open thing, not two;
+so does one that is a more specific version of an open thing (the reader's `updates`). A form puts things in
+and changes them through the routes below with no model call (`Server.Home.Form`). `every` is `day`, `week`,
+`month` or `N day|week|month`, in the same string column (the three old values stay as stored; no migration of
+rows); a monthly repeat keeps the day it started on (`jot.every_day`: Jan 31, Feb 28, Mar 31).
 Delete drops any open thing (a repeating reminder stops for good; a project takes its steps and plan; the only
 open step of a project proposes the next): Delete under a told reminder and a what-now pick, on the reminder's
 desktop alert, typed ("forget the bins"), and `POST /api/home/:id/drop`.
 
 | Route | Request | Reply |
 |---|---|---|
-| `GET /api/home` | | `{open, coming, notes, note_rows, projects, waiting, done, done_week}`; `note_rows` is `notes` as `{id, text}`; `done` is the last seven days' `{text, done_at}`, newest first; a row has `project` `{id, text}` or nil; a project `{id, text, next: {id, text} or nil, done}`; a waiting-on `{id, text, who, since, due_at}` |
+| `GET /api/home` | | `{open, coming, notes, note_rows, projects, waiting, someday, done, done_week}`; `open`, `coming`, `waiting` and `someday` rows each carry `id, kind, text, due_at, every, since, told_at, project` (a waiting-on also `who`); `someday` are the put-off things; a project row carries `id, kind, text, since, next, done, plan, steps_done` (`plan` the texts still to come, `steps_done` the texts done); `note_rows` is `notes` as `{id, text}`; `done` is the last seven days' `{text, done_at}`, newest first; a row has `project` `{id, text}` or nil; a project `{id, text, next: {id, text} or nil, done}`; a waiting-on `{id, text, who, since, due_at}` |
 | `GET /api/home/now` | `?skip=3,7&minutes=10` | `{pick: {id, text, kind, due_at, project, why} or nil, say}`; 400 when `skip` or `minutes` are not numbers |
 | `POST /api/home/:id/answer` | `{choice, text?}` | `{reply}`; `choice` by question: `next` add / finish / step (with `text`), `review` keep / later / drop, `waiting` got / chased / tomorrow, `shrink` add / no; `nottoday` on any open thing; 400 with no `choice`, 404 when the id has no such question |
+| `POST /api/home/add` | `{kind: "todo"\|"reminder"\|"note"\|"waiting"\|"project", text, at?, every?, who?, project?, steps?}` | the row as `GET /api/home` shows it; no reader, no model. `at` (a reminder's, required) is ISO 8601: with a zone (`Z`, `+02:00`) that instant, without one (`2026-11-21T09:00`) the machine's local wall time; `GET` answers UTC with `Z`. `every` (reminder): `day`, `week`, `month` or `N day`/`N week`/`N month` (N 1..99, `"6 week"`; `"1 week"` is `week`). `who` is required for `waiting` (asked after three days), `steps` (at least one) for `project` (the first is open, the rest planned), `project` (an open project's id) for a `todo`: its open step when the project has none, else the end of its plan (the project's row is answered). 400 `{error}` with a one-line reason for a bad body, 404 when `project` is not an open project |
+| `POST /api/home/:id/edit` | `{text?, at?, every?, kind?}` | the row; a touch. `at` moves a reminder (told afresh, nudges reset), `every` sets the repeat and `null` stops it, `kind` only `todo`↔`reminder` (to a reminder needs `at`; to a to-do drops its time and repeat). A pending review or smaller-start question on a to-do or reminder is cleared. A note, a waiting-on and a project take `text` only. 400 `{error}`, 404 when the id is not live (none, done or deleted) |
+| `POST /api/home/:id/plan` | `{plan: [text]}` | the project's row with its new `plan` (the steps still to come, in order: reorder, remove, add); 400 when not a list of texts, 404 when not an open project |
+| `POST /api/home/:id/revive` | | the row of the put-off thing, open again (a repeating reminder at its next time, never in the past); 404 when it is not on someday |
 | `POST /api/home/:id/drop` | | `{id, text, dropped_at, due_at}` of the thing deleted (a to-do, reminder, step, project, waiting-on or note: not done, so not in `done_week`); 404 when it is none, done or deleted |
 | `POST /api/home/:id/done`, `/later` | as before | as before; the last step of a project done answers at once and puts the project's next step as a `next` question (a planned one at once, else when a background model call has answered) |
 

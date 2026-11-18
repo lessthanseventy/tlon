@@ -1083,6 +1083,67 @@ defmodule Server.Home.OrganizeTest do
     end
   end
 
+  describe "a message that is a more specific version of an open thing updates it" do
+    test "its text is the reading's, it stays one open thing, and the message is kept as an amend", %{say: say} do
+      mover = todo(1, "get mover quotes for the Delta storage unit")
+      todo(2, "buy milk")
+
+      reads(fn _body, %{open: open} ->
+        assert Enum.any?(open, &(&1.id == mover.id))
+        {:ok, %{kind: "todo", text: "get mover quotes from three companies", due_at: nil, updates: mover.id}}
+      end)
+
+      hear(say, 3, "get mover quotes from three companies by friday")
+
+      assert_received {:said, "42", "updated: get mover quotes from three companies"}
+      refute_received {:said, _, _}
+      assert [%{id: id, text: "get mover quotes from three companies"}, %{text: "buy milk"}] = Jot.opens("telegram")
+      assert id == mover.id
+      assert %{kind: "amend", body: "get mover quotes from three companies by friday"} = hd(Jot.recent("telegram", 1))
+    end
+
+    test "a time in the reading is the thing's time, and the reply says it", %{say: say} do
+      mover = todo(1, "get mover quotes")
+      due = Clock.utc(~N[2026-11-20 09:00:00])
+
+      reads(fn _body, _context ->
+        {:ok,
+         %{kind: "reminder", text: "get mover quotes, three companies", due_at: due, every: nil, updates: mover.id}}
+      end)
+
+      hear(say, 2, "get quotes from three companies by friday")
+
+      assert_received {:said, "42", "updated: get mover quotes, three companies — Fri 20 Nov 09:00"}
+      assert [%{id: id, kind: "reminder", due_at: ^due, nudges: 0}] = Jot.opens("telegram")
+      assert id == mover.id
+    end
+
+    test "an id that is not open is ignored and the message files as new", %{say: say} do
+      done = todo(1, "old thing")
+      Jot.done(done, friday())
+
+      for {n, id} <- [{2, done.id}, {3, 9999}] do
+        reads(fn _body, _context -> {:ok, %{kind: "todo", text: "new thing #{n}", due_at: nil, updates: id}} end)
+        hear(say, n, "new thing #{n}")
+        assert_received {:said, "42", "to do: new thing " <> _}
+      end
+
+      assert [%{text: "new thing 2"}, %{text: "new thing 3"}] = Jot.opens("telegram")
+    end
+
+    test "an answer names the thing in words, not by a number the model let out", %{say: say} do
+      mover = todo(1, "get mover quotes")
+
+      reads(fn _body, _context ->
+        {:ok, %{kind: "answer", text: "item #{mover.id} is still open, #{mover.id} is old"}}
+      end)
+
+      hear(say, 2, "what about the movers")
+      expected = "get mover quotes is still open, #{mover.id} is old"
+      assert_received {:said, "42", ^expected}
+    end
+  end
+
   describe "the project's next step is asked once" do
     test "calls that overlap for one project put the question and say it once", %{say: _say} do
       Process.register(self(), Server.Home.Inbox)

@@ -1022,6 +1022,42 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"open" => [], "done_week" => 1, "done" => [%{"text" => "buy milk"}]}} = get_json("/api/home")
     end
 
+    test "forms: add, edit, plan and revive over HTTP, with a reason on a bad body and 404 on a thing not live" do
+      Server.TestDB.clean!()
+
+      assert {400, %{"error" => "kind is todo, reminder, note, waiting or project"}} =
+               post_json("/api/home/add", %{kind: "idea", text: "x"})
+
+      assert {400, %{"error" => "a reminder needs at"}} = post_json("/api/home/add", %{kind: "reminder", text: "x"})
+
+      assert {200, %{"id" => id, "kind" => "reminder", "due_at" => "2099-01-01T09:00:00Z", "every" => "6 week"}} =
+               post_json("/api/home/add", %{
+                 kind: "reminder",
+                 text: "haircut",
+                 at: "2099-01-01T09:00:00Z",
+                 every: "6 week"
+               })
+
+      assert {200, %{"text" => "haircut!", "every" => nil}} =
+               post_json("/api/home/#{id}/edit", %{text: "haircut!", every: nil})
+
+      assert {400, %{"error" => "every is" <> _}} = post_json("/api/home/#{id}/edit", %{every: "often"})
+      assert {404, _} = post_json("/api/home/9999/edit", %{text: "x"})
+      assert {404, _} = post_json("/api/home/nope/edit", %{text: "x"})
+
+      assert {200, %{"id" => pid, "kind" => "project", "plan" => ["b"]}} =
+               post_json("/api/home/add", %{kind: "project", text: "plan", steps: ["a", "b"]})
+
+      assert {200, %{"plan" => ["c", "b"]}} = post_json("/api/home/#{pid}/plan", %{plan: ["c", "b"]})
+      assert {400, %{"error" => "plan is a list of texts"}} = post_json("/api/home/#{pid}/plan", %{plan: "c"})
+      assert {404, _} = post_json("/api/home/#{id}/plan", %{plan: []})
+
+      Server.Jot.someday(Server.Repo.get!(Server.Jot, id), DateTime.utc_now())
+      assert {200, %{"someday" => [%{"id" => ^id, "text" => "haircut!", "kind" => "reminder"}]}} = get_json("/api/home")
+      assert {200, %{"id" => ^id}} = post_json("/api/home/#{id}/revive", %{})
+      assert {404, _} = post_json("/api/home/#{id}/revive", %{})
+    end
+
     test "projects, what others owe, the one thing to do now, and the answer to a question the home put" do
       Server.TestDB.clean!()
       {:ok, plan} = Server.Jot.take("telegram", 1, "plan")

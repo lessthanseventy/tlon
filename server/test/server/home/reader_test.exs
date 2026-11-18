@@ -29,6 +29,36 @@ defmodule Server.Home.ReaderTest do
     assert {:ok, %{every: nil}} = Reader.parse(String.replace(reply, "week", "fortnight"))
   end
 
+  test "a repeat is every N days, weeks or months, and says so back" do
+    reply = ~s({"kind":"reminder","text":"haircut","at":"2026-11-19T19:00","every":"6 week"})
+
+    assert {:ok, %{every: "6 week"} = reading} = Reader.parse(reply)
+    assert Reader.say(reading) == "I'll remind you Thu 19 Nov 19:00, then every 6 weeks: haircut"
+    assert {:ok, %{every: "3 month"}} = Reader.parse(String.replace(reply, "6 week", "3 months"))
+    assert {:ok, %{every: "week"}} = Reader.parse(String.replace(reply, "6 week", "1 week"))
+    assert {:ok, %{every: nil}} = Reader.parse(String.replace(reply, "6 week", "0 week"))
+  end
+
+  test "a kept reading may name the open thing it updates, and only a to-do or a reminder can" do
+    todo = ~s({"kind":"todo","text":"get quotes by friday","updates":7})
+    assert {:ok, %{kind: "todo", updates: 7}} = Reader.parse(todo)
+    assert {:ok, %{updates: 7}} = Reader.parse(~s({"kind":"reminder","text":"x","at":"2026-11-19T19:00","updates":7}))
+    refute Map.has_key?(elem(Reader.parse(~s({"kind":"note","text":"x","updates":7})), 1), :updates)
+    refute Map.has_key?(elem(Reader.parse(~s({"kind":"todo","text":"x","updates":"7"})), 1), :updates)
+  end
+
+  test "an answer names the things in words: a number the model let out is put right" do
+    open = [
+      %Server.Jot{id: 7, text: "get mover quotes", kind: "todo"},
+      %Server.Jot{id: 9, text: "buy milk", kind: "todo"}
+    ]
+
+    assert Reader.unnumber("item 7 is due, and #9 too", open) == "get mover quotes is due, and buy milk too"
+    assert Reader.unnumber("Item #7?", open) == "get mover quotes?"
+    assert Reader.unnumber("PR #901 landed; item 5 is odd", open) == "PR #901 landed; item 5 is odd"
+    assert Reader.unnumber("nothing to fix", open) == "nothing to fix"
+  end
+
   test "what the operator wants of the helper needs no text, but an answer does" do
     assert {:ok, %{kind: "done", ids: [3, 4]}} = Reader.parse(~s({"kind":"done","ids":[3,"x",4]}))
     assert {:ok, %{kind: "delete", ids: [3], text: ""}} = Reader.parse(~s({"kind":"delete","ids":[3,"x"]}))

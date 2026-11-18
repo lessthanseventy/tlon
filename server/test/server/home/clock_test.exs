@@ -50,6 +50,63 @@ defmodule Server.Home.ClockTest do
     end
   end
 
+  describe "every" do
+    test "every/1 reads a repeat, the three old words stay as they are" do
+      assert Clock.every("day") == "day"
+      assert Clock.every("week") == "week"
+      assert Clock.every("month") == "month"
+      assert Clock.every("6 week") == "6 week"
+      assert Clock.every("3 months") == "3 month"
+      assert Clock.every("1 week") == "week"
+      assert Clock.every("0 week") == nil
+      assert Clock.every("100 week") == nil
+      assert Clock.every("2 years") == nil
+      assert Clock.every("fortnight") == nil
+      assert Clock.every(nil) == nil
+      assert Clock.every(6) == nil
+    end
+
+    test "say_every/1 says it" do
+      assert Clock.say_every("week") == "week"
+      assert Clock.say_every("6 week") == "6 weeks"
+      assert Clock.say_every("3 month") == "3 months"
+    end
+
+    @steps [
+      # {from (local), every, anchor day, now (local), next (local)}
+      {"2026-11-20 09:00:00", "day", nil, "2026-11-20 09:00:00", "2026-11-21 09:00:00"},
+      {"2026-11-20 09:00:00", "week", nil, "2026-11-20 09:00:00", "2026-11-27 09:00:00"},
+      {"2026-11-20 09:00:00", "6 week", nil, "2026-11-20 09:00:00", "2027-01-01 09:00:00"},
+      {"2026-11-20 09:00:00", "2 week", nil, "2026-11-20 09:00:00", "2026-12-04 09:00:00"},
+      {"2026-11-20 09:00:00", "3 day", nil, "2026-11-20 09:00:00", "2026-11-23 09:00:00"},
+      {"2026-11-20 09:00:00", "3 month", nil, "2026-11-20 09:00:00", "2027-02-20 09:00:00"},
+      {"2026-11-20 09:00:00", "month", nil, "2026-11-20 09:00:00", "2026-12-20 09:00:00"},
+      {"2027-01-31 09:00:00", "month", 31, "2027-01-31 09:00:00", "2027-02-28 09:00:00"},
+      {"2027-02-28 09:00:00", "month", 31, "2027-02-28 09:00:00", "2027-03-31 09:00:00"},
+      {"2027-03-31 09:00:00", "month", 31, "2027-03-31 09:00:00", "2027-04-30 09:00:00"},
+      {"2027-04-30 09:00:00", "month", 31, "2027-04-30 09:00:00", "2027-05-31 09:00:00"},
+      {"2028-01-31 09:00:00", "month", 31, "2028-01-31 09:00:00", "2028-02-29 09:00:00"},
+      {"2027-01-31 09:00:00", "2 month", 31, "2027-01-31 09:00:00", "2027-03-31 09:00:00"},
+      {"2027-02-28 09:00:00", "month", nil, "2027-02-28 09:00:00", "2027-03-28 09:00:00"},
+      {"2026-11-20 09:00:00", "day", nil, "2026-11-25 12:00:00", "2026-11-26 09:00:00"}
+    ]
+
+    for {from, every, anchor, now, expected} <- @steps do
+      test "#{from} every #{every} (anchor #{anchor || "none"}) after #{now} is #{expected}" do
+        local = fn text -> text |> NaiveDateTime.from_iso8601!() |> Clock.utc() end
+
+        assert Clock.next(local.(unquote(from)), unquote(every), local.(unquote(now)), unquote(anchor)) ==
+                 local.(unquote(expected))
+      end
+    end
+
+    test "latest/4 is the newest occurrence that has come" do
+      from = Clock.utc(~N[2026-11-20 09:00:00])
+      assert Clock.latest(from, "3 day", Clock.utc(~N[2026-11-30 00:00:00]), nil) == Clock.utc(~N[2026-11-29 09:00:00])
+      assert Clock.latest(from, "3 day", Clock.utc(~N[2026-11-21 00:00:00]), nil) == from
+    end
+  end
+
   test "resume/2 trusts a kept slot only under the setting it was kept for" do
     assert Clock.resume({~D[2026-11-20], "17:30"}, "17:30") == ~D[2026-11-20]
     assert Clock.resume({~D[2026-11-20], "17:30"}, "22:30") == :boot

@@ -39,6 +39,7 @@ defmodule Server.Jot do
     field :nudges, :integer, default: 0
     field :done_at, :utc_datetime
     field :every, :string
+    field :every_day, :integer
     field :project_id, :integer
     field :plan, {:array, :string}, default: []
     field :proposed, :string
@@ -55,7 +56,8 @@ defmodule Server.Jot do
 
   @doc """
   Put a reading on `jot`, in place of any it had: a reminder so changed is open again and told
-  again. `every` (`"day"`, `"week"`, `"month"`) is a reminder that repeats. A reading may also carry
+  again. `every` (`"day"`, `"week"`, `"month"`, or a number then one: `"6 week"`) is a reminder that
+  repeats, `every_day` the day of the month it started on so a short month does not move it. A reading may also carry
   `mins`, `project` (the project a step belongs to), `steps` (a project's: all but the first are its
   plan) and `who` (a waiting-on's); what it leaves out stays as it was. Filing is a touch at `now`,
   and makes it plainly open again: not done, put off, dropped or hidden. Only what the operator does touches a thing: filing,
@@ -76,6 +78,7 @@ defmodule Server.Jot do
         text: text,
         due_at: due_at,
         every: Map.get(reading, :every),
+        every_day: Map.get_lazy(reading, :every_day, fn -> anchor(Map.get(reading, :every), due_at) end),
         nudged_at: nil,
         nudges: 0,
         done_at: nil,
@@ -291,9 +294,9 @@ defmodule Server.Jot do
   @spec touch(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
   def touch(%__MODULE__{} = jot, now \\ DateTime.utc_now()), do: put(jot, [ask: nil, proposed: nil], now)
 
-  @doc "Set what is left of a project's plan to `plan`."
-  @spec plan(%__MODULE__{}, [String.t()]) :: %__MODULE__{}
-  def plan(%__MODULE__{} = jot, plan), do: put(jot, [plan: plan], false)
+  @doc "Set what is left of a project's plan to `plan`: a touch at `now` when the operator did it."
+  @spec plan(%__MODULE__{}, [String.t()], DateTime.t() | false) :: %__MODULE__{}
+  def plan(%__MODULE__{} = jot, plan, now \\ false), do: put(jot, [plan: plan], now)
 
   @doc "Move `jot` to someday at `now`."
   @spec someday(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
@@ -335,7 +338,8 @@ defmodule Server.Jot do
   def done(%__MODULE__{every: nil} = jot, now),
     do: put(jot, [done_at: DateTime.truncate(now, :second), ask: nil, proposed: nil], now)
 
-  def done(%__MODULE__{every: every} = jot, now), do: put_off(jot, Server.Home.Clock.next(jot.due_at, every, now), now)
+  def done(%__MODULE__{every: every} = jot, now),
+    do: put_off(jot, Server.Home.Clock.next(jot.due_at, every, now, jot.every_day), now)
 
   @doc "Put `jot` off to `due_at` at the operator's word at `now`: a reminder from then on (a to-do too), told afresh then."
   @spec put_off(%__MODULE__{}, DateTime.t(), DateTime.t()) :: %__MODULE__{}
@@ -396,6 +400,19 @@ defmodule Server.Jot do
   @doc "The highest `external_id` kept from `via`, nil when it has delivered nothing."
   @spec cursor(String.t()) :: integer() | nil
   def cursor(via), do: Repo.one(from(j in __MODULE__, where: j.via == ^via, select: max(j.external_id)))
+
+  @doc "The day of the month a repeat by months started on, kept so a short month does not move it: nil when it does not repeat."
+  @spec anchor(String.t() | nil, DateTime.t() | nil) :: pos_integer() | nil
+  def anchor(every, %DateTime{} = due) when is_binary(every), do: Server.Home.Clock.local(due).day
+  def anchor(_every, _due), do: nil
+
+  @doc "The thing `id`, nil when there is none."
+  @spec get(integer()) :: %__MODULE__{} | nil
+  def get(id), do: Repo.get(__MODULE__, id)
+
+  @doc "Change `jot` as the operator edits it: `changes` are its fields, and it is a touch at `now`."
+  @spec edit(%__MODULE__{}, keyword(), DateTime.t()) :: %__MODULE__{}
+  def edit(%__MODULE__{} = jot, changes, now), do: put(jot, changes, now)
 
   defp open_now do
     dynamic([j], is_nil(j.done_at) and is_nil(j.dropped_at) and is_nil(j.someday_at))
