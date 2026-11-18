@@ -5,6 +5,8 @@ extends RefCounted
 const Pets := preload("res://pets.gd")
 const Voices := preload("res://voices.gd")
 const Sound := preload("res://sound.gd")
+const Settings := preload("res://settings.gd")
+const PetView := preload("res://pet_view.gd")
 
 var s
 
@@ -15,6 +17,54 @@ func _init(soak) -> void:
 
 func run() -> void:
 	_kinds()
+	_picker()
+
+
+# the card writes the settings the settings screen writes, and the room follows at once
+func _picker() -> void:
+	var room: Control = s._room(41)
+	var h = room.home
+	var view: PanelContainer = PetView.new()
+	view.setup(h.settings, h)
+	s.root.add_child(view)
+	view.open("nina")
+	s._check(view.visible, "the card opens")
+	s._check(view._tiles.size() == Pets.KINDS.size() + 1, "a tile for every kind and for none")
+	view._put("kind", "bear_polar")
+	s._check(h.settings.value("pet1") == "bear_polar", "the card writes pet1")
+	s._check(
+		h.pets.kinds["nina"] == "bear_polar" and h.pets.critter("nina").species == "bear",
+		"the pet changes at once"
+	)
+	s._check(
+		view._tiles["bear_polar"].chosen and not view._tiles["cat_black"].chosen,
+		"the chosen tile is lit"
+	)
+	view._name.text = "Bruno"
+	view._put("name", "Bruno")
+	s._check(
+		h.settings.value("cat") == "Bruno" and Settings.pets("Nina sits") == "Bruno sits",
+		"the name is used in lines"
+	)
+	s._check(h.pets.critter("nina").title == "Nina", "the role keeps its key")
+	view.open("argos")
+	view._put("kind", Pets.NONE)
+	s._check(
+		h.pets.critter("argos").away and h.settings.value("pet2") == Pets.NONE,
+		"none takes the pet away"
+	)
+	view._put("kind", "horse_bay")
+	s._check(
+		not h.pets.critter("argos").away and h.pets.critter("argos").species == "horse",
+		"and a kind brings it back"
+	)
+	view.open("nina")
+	s._check(view._name.text == "Bruno", "the card shows the kept name")
+	view.close()
+	s._check(not view.visible, "the card closes")
+	h.settings.put("cat", "")
+	view.queue_free()
+	room.queue_free()
 
 
 func _kinds() -> void:

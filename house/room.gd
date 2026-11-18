@@ -2,6 +2,7 @@ extends Control
 
 signal door_clicked
 signal pressed_empty
+signal pet_menu(id: String)
 
 const WALL_H := 48
 const FRAME_FPS := 6.0
@@ -213,6 +214,14 @@ func _gui_input(event: InputEvent) -> void:
 		mouse_default_cursor_shape = (
 			Control.CURSOR_POINTING_HAND if over or at_home else Control.CURSOR_ARROW
 		)
+	elif (
+		event is InputEventMouseButton
+		and event.pressed
+		and event.button_index == MOUSE_BUTTON_RIGHT
+	):
+		var pet: String = home.pet_at(event.position) if _desc == HOME else ""
+		if pet != "":
+			pet_menu.emit(pet)
 	elif (
 		event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT
 	):

@@ -1382,7 +1382,7 @@ func _draw_extras(c: Pets.Critter, bounds: Rect2) -> void:
 		var lift := 7 if c.pat_t >= 0.0 or not c.hearts.is_empty() else 3
 		Props.bubble(room, f + Vector2(0, -(c.head + lift) * _k), c.say_text, bounds, fade)
 	elif _hover == "pet:" + c.id and c.id != "person":
-		Props.tag(room, f + Vector2(0, 6), [Settings.pets(c.title)], bounds)
+		Props.tag(room, f + Vector2(0, 6), [Settings.pets(c.title), "right click: who is this?"], bounds)
 
 
 func _draw_crumple(cr: Dictionary) -> void:
@@ -1672,6 +1672,12 @@ func _tv_blocks() -> Array:
 		{"t": "text", "text": "Playing: " + tv.hacks.current if tv.on else "It is off."},
 		{"t": "buttons", "items": [{"label": "Next" if tv.on else "Turn on", "act": "tv_next"}]},
 	]
+
+
+# the pet under the pointer, "" when none
+func pet_at(pos: Vector2) -> String:
+	var key := _topmost(pos)
+	return key.substr(4) if key.begins_with("pet:") else ""
 
 
 func _topmost(pos: Vector2) -> String:

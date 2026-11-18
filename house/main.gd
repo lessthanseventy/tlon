@@ -15,6 +15,7 @@ const WIDGET_SIZE := Vector2i(656, 432)
 const WIDGET_STORE := "user://house_widget.json"
 const FormScript := preload("res://form.gd")
 const SettingsView := preload("res://settings_view.gd")
+const PetView := preload("res://pet_view.gd")
 const ChatView := preload("res://chat_view.gd")
 const BackendHttp := preload("res://backend_http.gd")
 const BackendLocal := preload("res://backend_local.gd")
@@ -41,6 +42,7 @@ var _starters := false
 var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": null}
 var _form: PanelContainer
 var _settings_view: PanelContainer
+var _pet_view: PanelContainer
 var _chat_view: PanelContainer
 var _cog: Control
 var _skip: Array = []
@@ -154,6 +156,10 @@ func _ready() -> void:
 	_settings_view.phone = _phone
 	_settings_view.check_requested.connect(_check_server)
 	add_child(_settings_view)
+	_pet_view = PetView.new()
+	_pet_view.setup(_room.home.settings, _room.home)
+	add_child(_pet_view)
+	_room.pet_menu.connect(_open_pet_view)
 	_room.home.settings.changed.connect(_on_setting)
 	_chat_view = ChatView.new()
 	_chat_view.setup(_room.home.chat, _room.home)
@@ -215,6 +221,9 @@ func _ready() -> void:
 		_set_widget(true)
 	if "--unread" in args:
 		_room.home.chat.unread = true
+	if "--pet-card" in args:
+		var who: String = args[args.find("--pet-card") + 1]
+		get_tree().create_timer(0.4).timeout.connect(func() -> void: _open_pet_view(who))
 	if "--settings" in args:
 		var spec: String = args[args.find("--settings") + 1]
 		get_tree().create_timer(0.4).timeout.connect(func() -> void: _stage_settings(spec))
@@ -526,14 +535,15 @@ func _process(_dt: float) -> void:
 	if _overlay() and _form_blocked():
 		_form.close()
 		_settings_view.close()
+		_pet_view.close()
 		_chat_view.close()
 	_room.home.form_open = _overlay()
 	var room_w := size.x - (0 if _widget else PANEL_WIDTH)
 	_cog.visible = _at == "home" and not _decorate.active and not _closet.visible
 	_cog.position = Vector2(room_w - 34.0, 8.0)
-	for v in [_form, _settings_view, _chat_view]:
+	for v in [_form, _settings_view, _pet_view, _chat_view]:
 		if v.visible:
-			if v != _form:
+			if v == _settings_view or v == _chat_view:
 				v.fit(size)
 			v.size = v.get_combined_minimum_size()
 			v.position = ((Vector2(room_w, size.y) - v.size) / 2.0).round()
@@ -581,7 +591,15 @@ func _form_blocked() -> bool:
 
 
 func _overlay() -> bool:
-	return _form.visible or _settings_view.visible or _chat_view.visible
+	return _form.visible or _settings_view.visible or _pet_view.visible or _chat_view.visible
+
+
+func _open_pet_view(id: String) -> bool:
+	if _at != "home" or _form_blocked() or _overlay():
+		return false
+	_room.home.close_card()
+	_pet_view.open(id)
+	return true
 
 
 func _open_settings() -> bool:
@@ -609,7 +627,7 @@ func _open_chat() -> bool:
 
 # mode "new" (a preset for the form) or "edit" ({row, due}); false when something else is up
 func _open_form(mode: String, spec: Dictionary) -> bool:
-	if _at != "home" or _widget or _form_blocked() or _settings_view.visible or _chat_view.visible:
+	if _at != "home" or _widget or _form_blocked() or _overlay():
 		return false
 	var home = _room.home
 	home.close_card()
