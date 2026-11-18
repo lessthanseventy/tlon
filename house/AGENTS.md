@@ -13,7 +13,8 @@ corkboard, calendar, phone, notepad, bubbles, light and weather). One file per t
 saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (the window's scene),
 `closet.gd`, `jot.gd`, `menus.gd` (the paper menu), `focus.gd` (the now card and its timer), `jar.gd`
 (the done jar), `knock.gd` (Nina's one nag), `door.gd` (what comes through the office door),
-`rhythm.gd` (the day's two beats and their slips). `soak.gd` is the scripted check.
+`rhythm.gd` (the day's two beats and their slips), `layout.gd` (the furniture and the rules of placing it),
+`decorate.gd` (the catalogue and the pointer work of decorating). `soak.gd` is the scripted check.
 
 - Notes are slips pinned to the corkboard (four shown, "+N" for the rest); hover or click shows the
   whole note. Open things are stickies on and around the monitor and a stack of paper on the desk
@@ -70,6 +71,31 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 - Small things: a "water the plant" thing done perks the plant up for 10 min with a can and drops;
   a note, open thing or reminder due today that says birthday or anniversary hangs bunting; the
   window gets lights in December, a pumpkin from 25 Oct, hearts 10-14 Feb.
+- **The room** is 10x10 cells and, in the 1100x700 window beside the panel, drawn at scale 2 (scale 3
+  needs 976 px). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
+  (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
+  board, calendar, jar and the pets' corner, none of them movable) and the plain ones (the rest of
+  the default room: armchair, plants, paintings, clock, rugs, fireplace with its fire, bookshelf,
+  piano, dining set, mirror...), plus the wall and floor style. `room.gd` draws what it hands over.
+- **Decorate** (`D`, or `--decorate`; the home only, not the widget): the side panel becomes the
+  catalogue (`decorate.gd`): wall and floor styles, `reset`, and every placeable piece of the pack's
+  index grouped and scrolled, a piece's four sides (or a rug's two, a wall piece's two) one entry. Click a piece, a ghost follows the pointer
+  snapped to the cell (red where it cannot go), click places it and keeps it chosen, `R` turns it
+  (right click with nothing under the pointer lets go). Click a placed piece to pick it up and
+  click to put it down; `X`, Delete or right click on a placed piece removes it; `Esc` or `D`
+  leaves. A fixed piece says "that one stays". Furniture on the floor blocks its cells for Nina,
+  Argos and the person (`pets.blocked_cells`, from `layout.blocked`; they route around it, rugs
+  and wall pieces block nothing); a placement is refused on a cell someone stands on, on any pet or
+  person spot, on a fixed piece, and when it would cut a spot (or someone) off from the door
+  (flood fill). A fireplace and wall pieces go on the wall their side names (ne: top row, nw: left
+  column), not on the segments the board, window, calendar, jar and door use.
+  The layout is saved on every change to `user://house_layout.json`
+  (`{"v": 1, "wall": "brick", "floor": "oak", "pieces": [{"p": "bookshelf", "f": "se", "c": 9, "r": 0}]}`:
+  `p` the catalogue name, `f` the side or `""`, `c`/`r` the back cell; the fixed pieces are not
+  saved) and read at start; a missing or unparsable file, an unknown name or side, or a piece that can no longer
+  stand is skipped and the rest kept. `--demo` and `--shot` neither read nor write it unless
+  `--layout PATH` names a file (read and written). With no art there is no decorating (one line
+  says so) and the default room is boxes.
 - **The closet** (wardrobe, or `C`) picks who the person is. With the character-creator pack it
   composes `Layers/<build>/<group>/…png` from `layers.json`'s layer order in GDScript (alpha-stacked,
   scaled nearest) and offers build, skin, hair and colour, beard, top and colour, trousers and
@@ -89,7 +115,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   timer you start there (click the length for 10 / 25 / 45 min), a progress ring, no sound. Kept in
   `user://house_now.json`; cleared when the thing is done or leaves `open`.
 - **Widget** (`--widget`, `W`, `mise run house:widget`): the room alone in a borderless always-on-top
-  window of 528x368, exactly the room at scale 2 so it stays crisp; drag the room to move it, the
+  window of 656x432, exactly the room at scale 2 so it stays crisp; drag the room to move it, the
   spot is kept in `user://house_widget.json`.
 - Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
   (sweet, not bright). Clicking one pets it. Their lines are `voices.gd`: `GET /api/home/pets`, a batch a
@@ -137,7 +163,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   this is not part of `mise run check`.
 - `mise run house:soak` — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, the jar, the knock rules, the day's rhythm, the door and the TV hacks, and the POST and GET routes against a local stub. Stdout ends `SOAK OK`.
+  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the knock rules, the day's rhythm, the door and the TV hacks, and the POST and GET routes against a local stub. Stdout ends `SOAK OK`.
 
 ## Verify
 
@@ -161,7 +187,9 @@ and seeds their dice (`--seed N` to pick another):
   desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet; `--typing
   "text"` opens the jot field (`--sending` shows the scribble); `--reply "text"` the reply slip;
   `--menu ID` the paper menu on thing ID; `--ring ID` rings the phone for thing ID; `--now
-  ID[:MINUTES[:DONE_FRACTION]]` pins thing ID with a running timer (nothing saved); `--widget`.
-  For `--widget` give gamescope `-W 528 -H 368`. `TLON_ART_DIR=/none` for no art.
+  ID[:MINUTES[:DONE_FRACTION]]` pins thing ID with a running timer (nothing saved); `--widget`;
+  `--layout PATH` a layout file; `--decorate` opens decorate mode, `--pick NAME[:SIDE]` chooses a piece
+  and `--cell COL,ROW` puts the ghost there.
+  For `--widget` give gamescope `-W 656 -H 432`. `TLON_ART_DIR=/none` for no art.
 - Not covered by any picture or script: a real pointer (drag, hover feel), the compositor's
   always-on-top and attention request, the real hour of the beats.

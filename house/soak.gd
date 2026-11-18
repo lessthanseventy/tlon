@@ -10,6 +10,8 @@ const Rhythm := preload("res://rhythm.gd")
 const Hacks := preload("res://hacks.gd")
 const Tv := preload("res://tv.gd")
 const Voices := preload("res://voices.gd")
+const Layout := preload("res://layout.gd")
+const Decorate := preload("res://decorate.gd")
 
 var _srv := TCPServer.new()
 var _conns: Array = []
@@ -56,6 +58,7 @@ func _check(ok: bool, what: String) -> void:
 func _run() -> void:
 	_logic()
 	_soak()
+	_decorate_logic()
 	_looks()
 	await _hacks_draw()
 	await _routes()
@@ -68,6 +71,7 @@ func _soak() -> void:
 	var look := Look.new()
 	var person := Person.new()
 	pets.setup("", 11)
+	pets.blocked_cells = _layout().blocked()
 	person.setup(pets, look, 5)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 99
@@ -118,7 +122,7 @@ func _soak() -> void:
 			if on_floor and not seat_ok:
 				if cell == Pets.CHAIR:
 					chair_cells += 1
-				if cell.x < 1 or cell.y < 1 or cell.x >= Pets.COLS or cell.y >= Pets.ROWS:
+				if cell.x < 1 or cell.y < 1 or cell.x >= Pets.COLS or cell.y >= Pets.ROWS or pets.blocked_cells.has(cell):
 					_check(false, "%s on a blocked cell %s at step %d" % [c.id, cell, steps])
 					return
 			var p: Vector2 = c.pos
@@ -658,6 +662,8 @@ func _room() -> Control:
 	h.rhythm.persist = false
 	h.rhythm.days = {"home": "", "morning": ""}
 	h.pets.freeze = false
+	h.layout.setup(room._index, room.art_found, "", false)
+	h.apply_layout()
 	return room
 
 
@@ -787,3 +793,326 @@ func _hacks_draw() -> void:
 	await process_frame
 	_check(drawn.size() >= Hacks.NAMES.size(), "every hack draws (%d)" % drawn.size())
 	canvas.queue_free()
+
+
+func _layout() -> RefCounted:
+	var dir := _art().path_join("isometric-interiors/Gridwright Isometric Interiors/")
+	var sprites: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(dir + "isometric.json"))[
+		"sprites"
+	]
+	var l := Layout.new()
+	l.setup(sprites, true, "", false)
+	return l
+
+
+func _random_piece(l: RefCounted, rng: RandomNumberGenerator) -> Dictionary:
+	var e: Dictionary = l.catalogue[rng.randi() % l.catalogue.size()]
+	var faces: Array = e["faces"]
+	var p := {
+		"p": e["key"],
+		"f": faces[rng.randi() % faces.size()] if not faces.is_empty() else "",
+		"c": rng.randi_range(0, 9),
+		"r": rng.randi_range(0, 9)
+	}
+	if l.kind(p) in ["wall", "hug"]:
+		p["r" if p["f"] == "ne" else "c"] = 0
+	return p
+
+
+func _walkers_ok(h) -> String:
+	for c in h.pets.critters:
+		if c.z > 0.0 or not c.jump.is_empty():
+			continue
+		var cell := Vector2i(int(floor(c.pos.x)), int(floor(c.pos.y)))
+		var p = h.person
+		var seat_ok: bool = (
+			c.id == "person"
+			and (
+				p.seated
+				or p.phase in ["leaving", "entering"]
+				or (p.arrive_left > 3.0 and cell == Vector2i(0, 7))
+			)
+		)
+		var off: bool = cell.x < 1 or cell.y < 1 or cell.x >= Pets.COLS or cell.y >= Pets.ROWS
+		if not seat_ok and (off or h.pets.blocked_cells.has(cell)):
+			return "%s on the blocked cell %s" % [c.id, cell]
+	return ""
+
+
+func _decorate_logic() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2024
+	var l := _layout()
+	_check(Pets.COLS == 10 and Pets.ROWS == 10, "the home is 10x10")
+	_check(
+		l.pieces.size() == Layout.DEFAULTS.size(), "every default piece stands (%d)" % l.pieces.size()
+	)
+	_check(l.reaches(l.blocked(), []), "the default layout reaches every spot from the door")
+	var pets := Pets.new()
+	pets.setup("", 3)
+	pets.blocked_cells = l.blocked()
+	_check(
+		not pets.route(Vector2i(1, 7), Vector2i(9, 8)).is_empty(), "a path from the door to the far end"
+	)
+
+	var covered := {}
+	for e in l.catalogue:
+		for f in (e["faces"] if not e["faces"].is_empty() else [""]):
+			covered[l.sprite_id({"p": e["key"], "f": f}).replace("%d", "1")] = true
+	var missing: Array = []
+	for key in l.index:
+		var file: String = l.index[key]["file"]
+		var skip := false
+		for dir in ["/floors/", "/walls/", "/doors/", "/shadows/"]:
+			skip = skip or dir in file
+		if not skip and not covered.has(key):
+			if not (key.ends_with("_f2") or key.ends_with("_f3") or key.ends_with("_f4")):
+				missing.append(key)
+	_check(missing.is_empty(), "every placeable sprite is in the catalogue: %s" % [missing])
+	_check(l.walls.size() == 6 and l.floors.size() == 10, "6 wall styles and 10 floor styles")
+
+	_check(l.check({"p": "bookshelf", "f": "se", "c": 4, "r": 4}, null, []) == l.BUSY, "not on a spot")
+	_check(
+		l.check({"p": "side_table", "f": "", "c": 4, "r": 0}, null, []) == l.STAYS,
+		"not on the desk"
+	)
+	_check(
+		l.check({"p": "fireplace", "f": "ne", "c": 3, "r": 0}, null, []) == l.STAYS,
+		"not over the board"
+	)
+	_check(
+		l.check({"p": "painting", "f": "nw", "c": 0, "r": 4}, null, []) == l.STAYS,
+		"not over the window"
+	)
+	_check(l.check({"p": "crate", "f": "", "c": 6, "r": 6}, null, []) == l.STAYS, "not on the bed")
+	_check(
+		l.check({"p": "crate", "f": "", "c": 0, "r": 7}, null, []) == l.STAYS, "not in the doorway"
+	)
+	_check(
+		l.check({"p": "crate", "f": "", "c": 8, "r": 4}, null, [Vector2i(8, 4)]) == l.BUSY,
+		"not where someone stands"
+	)
+	_check(
+		l.check({"p": "rug_red", "f": "nesw", "c": 4, "r": 4}, null, []) == "",
+		"a rug may lie on a spot"
+	)
+	_check(
+		l.check({"p": "crate", "f": "", "c": 9, "r": 9}, null, []) == l.NO_ROOM,
+		"not on another piece"
+	)
+	_check(
+		l.check({"p": "dining_table", "f": "nwse", "c": 9, "r": 8}, null, []) == l.NO_ROOM,
+		"not out of the room"
+	)
+	for c in [Vector2i(7, 2), Vector2i(8, 3), Vector2i(7, 4)]:
+		l.place({"p": "crate", "f": "", "c": c.x, "r": c.y}, null, [])
+	_check(
+		l.check({"p": "crate", "f": "", "c": 6, "r": 3}, null, []) == l.SHUTS,
+		"a spot is not shut off from the door"
+	)
+	l.reset([])
+	_check(l.pieces.size() == Layout.DEFAULTS.size(), "reset brings the default back")
+
+	for n in 30:
+		var built := _layout()
+		var accepted := 0
+		for i in 80:
+			var p := _random_piece(built, rng)
+			if built.place(p, null, []) == "":
+				accepted += 1
+				_check(built.reaches(built.blocked(), []), "layout %d reaches every spot" % n)
+		_check(accepted > 0, "random layout %d took some pieces" % n)
+
+	_decorate_files(rng)
+	_decorate_walk(rng)
+	_decorate_pointer()
+
+
+func _decorate_files(rng: RandomNumberGenerator) -> void:
+	var path := "user://soak_layout.json"
+	var l := _layout()
+	l.path = path
+	l.persist = true
+	for i in 60:
+		l.place(_random_piece(l, rng), null, [])
+	l.set_style("wall", "brick")
+	l.set_style("floor", "marble")
+	var back := _layout()
+	back.path = path
+	_check(back.load_file(), "a saved layout loads")
+	_check(
+		back.pieces == l.pieces and back.wall == "brick" and back.floor_style == "marble",
+		"save and load round-trip (%d pieces)" % l.pieces.size()
+	)
+	var mine := FileAccess.open(path, FileAccess.WRITE)
+	mine.store_string(
+		JSON.stringify(
+			{
+				"v": 1,
+				"wall": "plaster",
+				"floor": "nope",
+				"pieces":
+				[
+					{"p": "no_such_thing", "f": "", "c": 2, "r": 2},
+					{"p": "round_table", "f": "", "c": 3, "r": 3},
+					{"p": "sofa", "f": "up", "c": 4, "r": 3},
+					{"p": "bookshelf", "f": "se", "c": 4, "r": 4},
+					"junk",
+				]
+			}
+		)
+	)
+	mine.close()
+	var odd := _layout()
+	odd.path = path
+	_check(odd.load_file(), "a file with strangers in it still loads")
+	_check(
+		odd.pieces.size() == 1,
+		"unknown, malformed and misplaced pieces are skipped, the rest kept (%d)" % odd.pieces.size()
+	)
+	_check(odd.wall == "plaster" and odd.floor_style == "oak", "a known style is kept, an unknown one is not")
+	var junk := FileAccess.open(path, FileAccess.WRITE)
+	junk.store_string("{not json")
+	junk.close()
+	var bad := _layout()
+	bad.path = path
+	_check(not bad.load_file() and bad.pieces.size() == Layout.DEFAULTS.size(), "unparsable: default")
+	DirAccess.remove_absolute(path)
+	var none := _layout()
+	none.path = path
+	_check(not none.load_file() and none.pieces.size() == Layout.DEFAULTS.size(), "missing: default")
+	var quiet := _layout()
+	quiet.path = path
+	quiet.place({"p": "crate", "f": "", "c": 9, "r": 5}, null, [])
+	_check(not FileAccess.file_exists(path), "a layout that is not kept writes nothing")
+
+	var room := _room()
+	var staged = load("res://home.gd").new()
+	staged.setup(room, _art(), ["--demo"])
+	_check(staged.layout.path == "" and not staged.layout.persist, "--demo keeps no layout")
+	var told = load("res://home.gd").new()
+	told.setup(room, _art(), ["--demo", "--layout", path])
+	_check(told.layout.path == path and told.layout.persist, "--layout names the file")
+	room.queue_free()
+
+
+func _decorate_walk(rng: RandomNumberGenerator) -> void:
+	var room := _room()
+	var h = room.home
+	var adds := 0
+	var moves := 0
+	var removes := 0
+	var refused := 0
+	var steps := 0
+	while steps < 24000:
+		steps += 1
+		if steps % 600 == 1:
+			var items: Array = []
+			for i in rng.randi_range(0, 4):
+				items.append(_thing(i + 1, 1.0))
+			h.set_data(_data(items))
+			h.fake_hour = rng.randf_range(0.0, 24.0)
+		if steps % 150 == 0:
+			var l = h.layout
+			var movable: Array = l.pieces
+			var roll := rng.randf()
+			var busy: Array = h.busy_cells()
+			if roll < 0.55 or movable.is_empty():
+				if l.place(_random_piece(l, rng), null, busy) == "":
+					adds += 1
+				else:
+					refused += 1
+			elif roll < 0.8:
+				var pick: Dictionary = movable[rng.randi() % movable.size()]
+				var to := _random_piece(l, rng)
+				to["p"] = pick["p"]
+				to["f"] = pick["f"]
+				if l.kind(to) in ["wall", "hug"]:
+					to["r" if to["f"] == "ne" else "c"] = 0
+				if l.place(to, pick, busy) == "":
+					moves += 1
+				else:
+					refused += 1
+			else:
+				l.remove(movable[rng.randi() % movable.size()])
+				removes += 1
+			h.apply_layout()
+			_check(
+				l.reaches(h.pets.blocked_cells, h.busy_cells()),
+				"every spot stays reachable at step %d" % steps
+			)
+		h.process(0.1)
+		var why := _walkers_ok(h)
+		if why != "":
+			_check(false, "%s at step %d" % [why, steps])
+			break
+	_check(adds > 20 and moves > 5 and removes > 5, "decorating happened: %d added, %d moved, %d removed, %d refused" % [adds, moves, removes, refused])
+	print("decorate: %d steps, %d added, %d moved, %d removed, %d refused" % [steps, adds, moves, removes, refused])
+	room.queue_free()
+
+
+func _click_at(deco: Control, at: Vector2, button: int = MOUSE_BUTTON_LEFT) -> void:
+	var move := InputEventMouseMotion.new()
+	move.position = at
+	deco.room_input(move)
+	var press := InputEventMouseButton.new()
+	press.position = at
+	press.button_index = button
+	press.pressed = true
+	deco.room_input(press)
+
+
+func _decorate_pointer() -> void:
+	var room := _room()
+	room.size = Vector2(800, 700)
+	room._k = 2
+	room._origin = Vector2(400, 150)
+	var h = room.home
+	var deco: Control = Decorate.new()
+	deco.room = room
+	deco.home = h
+	var left := [false]
+	deco.done.connect(func() -> void: left[0] = true)
+	deco.enter()
+	var cell := func(c: float, r: float) -> Vector2: return room._p(room._origin, c + 0.5, r + 0.5)
+	var has := func(id: String, c: int, r: int, f: String = "") -> bool:
+		return h.layout.pieces.any(func(p): return p["p"] == id and p["c"] == c and p["r"] == r and p["f"] == f)
+
+	deco.pick("bookshelf:se")
+	_click_at(deco, cell.call(2, 8))
+	_check(has.call("bookshelf", 2, 8, "se"), "a click puts the chosen piece under the pointer")
+	_check(deco.sel == "bookshelf", "the piece stays chosen for the next one")
+	deco.key(KEY_R)
+	_check(deco.face == "ne", "R turns the piece to the next side")
+	_click_at(deco, cell.call(6, 3), MOUSE_BUTTON_RIGHT)
+	_check(deco.sel == "", "a right click on the floor lets go of the piece")
+
+	var s: Dictionary = room._sprite("bookshelf_se")
+	var body: Vector2 = room._p(room._origin, 2, 8) - s["anchor"] + s["tex"].get_size() / 2.0
+	_click_at(deco, body)
+	_check(deco.held != null and deco.sel == "bookshelf", "a click on a placed piece picks it up")
+	_click_at(deco, cell.call(6, 9))
+	_check(has.call("bookshelf", 6, 9, "se") and deco.held == null, "a click moves it")
+	_check(not has.call("bookshelf", 2, 8, "se"), "the old place is empty")
+
+	var moved: Vector2 = room._p(room._origin, 6, 9) - s["anchor"] + s["tex"].get_size() / 2.0
+	_click_at(deco, moved)
+	deco.key(KEY_X)
+	_check(not has.call("bookshelf", 6, 9, "se") and deco.held == null, "X removes the held piece")
+	deco.pick("crate")
+	_click_at(deco, cell.call(4, 4))
+	_check(deco._message == "someone is there", "a refused click says why: %s" % deco._message)
+	_check(not has.call("crate", 4, 4), "and puts nothing down")
+	deco.sel = ""
+
+	var desk: Dictionary = room._sprite("computer_desk_sw")
+	_click_at(deco, room._p(room._origin, 4, 0) - desk["anchor"] + desk["tex"].get_size() / 2.0)
+	_check(deco._message == "that one stays", "a fixed piece says it stays")
+
+	deco.pick("painting:nw")
+	_click_at(deco, cell.call(0, 3))
+	_check(has.call("painting", 0, 3, "nw"), "a wall piece goes on the wall under the pointer")
+	_click_at(deco, cell.call(8, 6), MOUSE_BUTTON_RIGHT)
+	_check(deco.sel == "", "right click with a piece chosen only lets go of it")
+	_check(deco.key(KEY_ESCAPE) and left[0], "Esc leaves the mode")
+	room.queue_free()
