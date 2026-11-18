@@ -156,7 +156,7 @@ defmodule Server.MCP.OperatorAPI do
       PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe; the page it replaces is kept
       GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
-      GET    /api/home                   Server.Home.status; {open, coming, notes, projects, waiting, done_week}: what the operator's
+      GET    /api/home                   Server.Home.status; {open, coming, notes, projects, waiting, done, done_week}: what the operator's
                                          jots have left open; a row has its project {id, text} or nil, a project its next step
                                          and how many are done, a waiting-on its who/since/due_at
       GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open

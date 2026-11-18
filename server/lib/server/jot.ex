@@ -303,10 +303,13 @@ defmodule Server.Jot do
   @spec ask_again(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
   def ask_again(%__MODULE__{} = jot, due_at), do: put(jot, due_at: DateTime.truncate(due_at, :second), ask: nil)
 
-  @doc "How many things from `via` were done since `since`."
-  @spec done_since(String.t(), DateTime.t()) :: non_neg_integer()
+  @doc "The things from `via` done since `since`, the newest first."
+  @spec done_since(String.t(), DateTime.t()) :: [%__MODULE__{}]
   def done_since(via, since),
-    do: Repo.aggregate(from(j in __MODULE__, where: j.via == ^via and j.done_at >= ^since), :count)
+    do:
+      Repo.all(
+        from(j in __MODULE__, where: j.via == ^via and j.done_at >= ^since, order_by: [desc: j.done_at, desc: j.id])
+      )
 
   @doc "Keep `body`: `{:ok, jot}`, or `:seen` when `via` already delivered `external_id`."
   @spec take(String.t(), integer(), String.t()) :: {:ok, %__MODULE__{}} | :seen
