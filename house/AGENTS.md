@@ -200,14 +200,16 @@ runs on the local list.
   no name is skipped), `birthday` (`"MM-DD"`, `""`), `cat` and `dog` (default Nina and Argos: shown everywhere the
   house prints them, the server's pet lines too, by `Settings.pets`; the server and `voices.gd` still key on Nina and
   Argos), `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
-  `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server).
+  `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server), and over the
+  house's own list only `telegram` (off), `telegram_list_at` (`"17:30"`), `claude` (off) and `claude_command`
+  (`"claude"`): the two helpers below (the bot's token is not here but in its own file).
   **Precedence: a command-line arg beats the settings file beats the default** (`--widget`
   is the arg of `widget`; `Settings.forced`). The screen also shows sound (`sound.gd`'s own file keeps it), "N of M
   found" with "forget them all", "reset the room to how it came" (`layout.reset`) and "clear" for the chat, each
   asking for a second click (`sure.gd`), "where the list lives" (`where`: "a tlon server" with its address and a
   "check" (`GET /api/home`), or "this computer" with one quiet line of where the file is kept), the art folder, and the daily list time and weekly review day only
   when `GET /api/settings` already returned them (`home_list_at`, `home_review_on`). Quiet hours are the server's and
-  no existing route returns them, so they are not shown. `--settings "name=Sam;cat=Mimi;scroll;armed=reset"` stages it.
+  no existing route returns them, so they are not shown. `--settings "name=Sam;cat=Mimi;scroll;armed=reset"` stages it (`scroll=PIXELS` too); it also takes `telegram=on`, `claude=on`, `claude_command=PATH` and `phone=pairing|paired` (a made-up bot state, no request).
 - **Chat** (`chat.gd` the history, `chat_view.gd` the panel): the desk phone, clicked while it is not ringing, or
   `K`, opens a paper chat: his lines on the right, the home's on the left, newest at the bottom, the wheel and
   PageUp/PageDown scroll, Enter sends (`POST /api/home`, the notepad's request: both go through `main.gd` `_tell`),
@@ -216,9 +218,9 @@ runs on the local list.
   Done / In an hour / Tomorrow / Delete (the paper menu's routes through `_act`; a repeating one asks twice) that
   become a quiet line once used, the day's slips, and now and then a pet's bubble (not twice in ten minutes), marked
   with the pet's name. A message that arrives while it is closed puts a small dot on the phone until it opens. The
-  last 300 are kept in `user://house_chat.json` (`{"messages": [{t, who: me|home|cat|dog, text, done?}]}`, a
+  last 300 are kept in `user://house_chat.json` (`{"messages": [{t, who: me|home|cat|dog, text, done?, via?}]}`, `via` "phone" on a line from Telegram and its reply, a
   reminder also `id` and `told_at`), never in a scripted or staged run. A question the server holds for him is not
-  shown: the house has no route that lists them. `--chat "talk,reminder,acted,pet,reading,fail|empty"` and `--unread` stage it.
+  shown: the house has no route that lists them. `--chat "talk,reminder,acted,pet,phone,reading,fail|empty"` and `--unread` stage it.
 - **One place for the list's calls**: `main.gd` `_post`, `_write`, `_act`, `_tell` and `_refresh` carry every
   write and the notepad/chat line; the polls (`_poll`, `_slow_poll`, `_pets_ask`, `_watch_door`, `_ask_now`) are plain
   GETs there too. All of them are `Backend.fetch(route, cb, timeout)` and `Backend.send(route, body, cb, timeout)`,
@@ -258,11 +260,49 @@ runs on the local list.
   overlap most, a tie is listed and nothing changes, a repeating reminder or a project is left to its card),
   `what's left|list|today` (what is open and today's reminders). A line it cannot read a time from stays a to-do with
   the whole line as its text: nothing is dropped.
-  **Seams for what comes later** (a Telegram bot, a model reader): the reader is `read(text, context) -> reading`
-  (`context`: `now`, `bias`, `status`; `reading`: `action` add|done|delete|say, `say`, and `body` or `id`), set as
-  `backend_local.gd` `reader`, so a model can stand in front with these rules as its fallback; and `Backend` announces
-  `told(row)` (a reminder was just told) and `replied(said, reply)` (a loose line and the answer), and `changed` (the
-  list moved by itself). Nothing listens yet.
+  **Seams** (what the two helpers below use): the reader is `read(text, context) -> reading` (`context`: `now`,
+  `bias`, `status`; `reading`: `action` add|done|delete|say, `say`, and `body` or `id`), set as `backend_local.gd`
+  `reader`; `backend_local.gd` `claude` is an asynchronous reader in front of it, asked first (`ask(text, context,
+  cb(reading))`, `{}` meaning "read it with the rules"); and `Backend` announces `told(row)` (a reminder was just
+  told), `replied(said, reply)` (a loose line and the answer; nothing listens) and `changed` (the list moved by itself).
+  **Two helpers, over the house's own list only** (the server's house has neither, is offered neither, and runs
+  exactly as before). Each is off until switched on in the settings screen (the keys below), is never started in a
+  staged or scripted run (`main.gd` `talk_live`), and fails quietly: nothing nags.
+  **Telegram** (`telegram.gd`, a node `main.gd` holds): a bot of his own. The settings: "a Telegram bot in the
+  house", three lines of setup (message @BotFather, `/newbot`, paste the token), the token field (masked, emptied once
+  saved, then shown by its last four) and "connect" (`getMe`: the bot's @name or Telegram's own one-line reason),
+  the pairing code (four digits, shown until a chat sends exactly it; five wrong messages change it), "last reached",
+  the day's list time (`telegram_list_at`, `HH:MM` or `off`, default 17:30) and "disconnect" (second click; forgets
+  token, chat and offset). The token, the paired chat id, the `getUpdates` offset and the day the list was last said
+  live in `user://house_telegram.json` `{"token", "chat", "offset", "listed"}` and nowhere else (never in the settings
+  file, and never in a line printed or shown: the URL carries it, so `_call` is the one place it is built). Methods
+  called: `getMe`, `getUpdates` (long poll 25 s, `allowed_updates` message and callback_query, the offset kept before
+  the batch is handled so nothing is filed twice; a backlog is read oldest first at start), `sendMessage`,
+  `editMessageText`, `editMessageReplyMarkup`, `answerCallbackQuery`. Only the paired private chat is ever heard or
+  answered; every other message, before pairing or after, is ignored. A text goes through `main.gd` `_tell` (so the
+  reader reads it, the chat keeps it marked `via: phone`, and the reply goes back); `/start` is greeted; a voice
+  note, photo or sticker is answered "I can only read text here." and filed nowhere. A told reminder (`told(row)`)
+  is "⏰ text" with Done / In an hour / Tomorrow / Delete (`callback_data` `verb:id`; a repeating one's Delete is
+  `ask:id`, which edits the message to "Delete for good?" with yes / no), a press goes through `_act` and edits the
+  message to what was done; a re-ring sends a new message and takes the old one's buttons off; a thing done in the
+  house (`_act`) or no longer ringing (`sync`) edits its message too (the message ids are kept in memory only, so a
+  message from before a restart is followed only by its own buttons). Once a day at `telegram_list_at` by the house
+  clock, or at the next start that day, "Still open: ...; tomorrow: ..." (nothing to say, nothing sent). A network
+  failure backs off 5 s doubling to 5 min and shows nothing in the room; a refused token stops it and says so in the
+  settings. It works while this computer is on and the house is open, as the settings say.
+  **Claude reading** (`reader_claude.gd`, `claude` and `claude_command` in the settings): "read my messages with
+  Claude", the command (default `claude`, resolved on PATH, with the Windows extensions; the screen says whether it
+  was found), a "test" button (one tiny reading: "works" or the reason), the last reading's outcome and "your messages
+  are sent to your own Claude account". A loose line runs `<command> -p <prompt> --model haiku --output-format json`
+  with stdin closed, in a thread (`/bin/sh -c 'exec "$0" "$@" </dev/null'` on Unix, the prompt still one argument
+  of the array; on Windows the array goes straight to `execute_with_pipe`, and a `.cmd` gets a prompt stripped of what
+  `cmd.exe` reads), killed at 45 s (`limit`). The prompt holds the local date-time and weekday, up to 40 open things
+  as `id: text`, the line and the JSON shape asked for. The envelope's `result` (bare, fenced or after a line of
+  talk) is checked strictly (`check`: known action and kind, a reminder and only a reminder has an `at` that
+  `LocalList` accepts, a repeat `every_of` accepts, a project has 1-10 steps, `done`/`delete` an id that is live) and
+  becomes the rules' reading shape (`list` and `answer` are `say`). Any failure (not found, exit, timeout,
+  `is_error`, unreadable, invalid) answers `{}`: the rules read the line, once, and the settings say "last Claude
+  reading: failed (reason), used the simple reader". The chat's "reading..." covers the wait.
   **First start**: no settings file, no `TLON_URL`, and nothing answering at the default address starts the house on
   its own list with a to-do "say hello to the cat", a weekly reminder "water the plant" and a note, once and only then.
   **Not shown over the local list**: the office (the door in the room and its label, the panel's "to the office"
@@ -333,7 +373,7 @@ runs on the local list.
   `POST /api/home/:id/done`, `.../later` (`{"until": "hour"|"tomorrow"}`), `.../drop`, `.../revive`,
   `.../edit`, `.../plan`, `.../answer`, `POST /api/home/add`, asks `GET /api/home/now?skip=`, and
   `POST /api/home` (`{"text"}` → `{"reply"}`, slow: a model reads it). The home also asks
-  `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above). A server that does not answer leaves the
+  `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above), and only when he has switched them on to Telegram (`api.telegram.org`) and to the `claude` program (his own account). A server that does not answer leaves the
   last data on screen and a quiet line saying so; a post that fails moves nothing.
 - **Rooms.** The window starts in the home, or the office with `--office`. The door in each room, its
   panel button and Tab go between them. A coworker's state is the roster row's `status`
@@ -352,7 +392,7 @@ runs on the local list.
   this is not part of `mise run check`.
 - `mise run house:soak` — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers). Stdout ends `SOAK OK`.
+
 - `mise run house:art-pack` / `mise run house:build -- windows|mac|linux|all` — the art the house can open, packed to
   `~/.cache/tlon/house-dist/house-art.zip` (`-- --list` prints the files only), and a build of the house per platform
   with it beside the executable, zipped as `the-house-<platform>.zip` there. Templates are Godot's own 4.7.2 export
