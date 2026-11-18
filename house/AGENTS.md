@@ -89,6 +89,21 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   board, calendar, jar and the pets' corner, none of them movable) and the plain ones (the rest of
   the default room: armchair, plants, paintings, clock, rugs, fireplace with its fire, bookshelf,
   piano, dining set, mirror...), plus the wall and floor style. `room.gd` draws what it hands over.
+- **Surprises** (`eggs.gd` the director and the pets' scenes, `hearth.gd`, `sound.gd`; more files below as
+  they land). One big thing at a time, minutes apart (7-20 min, seeded), never while a card, menu, notepad,
+  closet, decorate mode or the phone's ring is up; `--egg a,b` forces them for a picture (`push bring zoomies
+  flop sulk box piano fire`). Nina pushes the pen or mug off the desk and looks at you (it returns after a
+  minute or on a click); Argos brings the yarn, a slipper or a crumple from the bin and sits proud; one of
+  them tears a lap (`zoomies`) while the other watches; with a crate or barrel in the room Nina ends up on it
+  within a minute; 20 pats in a row flop Argos belly up, 14 on Nina and she sulks in the corner for a minute.
+  `P` held is a laser dot at the pointer (`--laser X,Y`): Nina chases it, Argos chases Nina, never onto a
+  blocked cell. A lit fireplace (snow, under 8 C, or a Nov-Feb evening; a click toggles it) draws them in
+  front of it now and then, and the item menu offers "Into the fire". A bed draws a nap; a click on the piano
+  has the person play a few bars (a hero stands and plays badly); the soak pins both.
+- **Sound** (`sound.gd`): every sound is synthesized, no files, and it starts muted. `M` toggles, the choice
+  is `user://house_sound.json` (`{"muted": bool}`), a speaker mark shows a moment. Events: `piano`, `bad_piano`,
+  `crackle` and `rain` (loops), `clink`, `purr`, `bark`, `rustle`, `ring`, `wish`; each is requested through
+  `sound.request(name)` (kept in `requested`, which the soak reads) and none peaks above 0.4.
 - **Decorate** (`D`, or `--decorate`; the home only, not the widget): the side panel becomes the
   catalogue (`decorate.gd`): wall and floor styles, `reset`, and every placeable piece of the pack's
   index grouped and scrolled, a piece's four sides (or a rug's two, a wall piece's two) one entry. Click a piece, a ghost follows the pointer
@@ -172,7 +187,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   panel button and Tab go between them. A coworker's state is the roster row's `status`
   (`working`, `waiting` on the operator, `idle`, `cold`, `off`; no row is `off`), as `office/kit/crew.ts`
   says it; the crew is `bench`, live seats first. `pause` closes the office.
-- **Nothing nags.** No scores, streaks, warnings, sound or settings; the only timer is the one you
+- **Nothing nags.** No scores, streaks, warnings or settings (sound starts muted and is his to turn on); the only timer is the one you
   start on a now card. A bubble fades by itself and stays inside the room, never over the panel.
 
 ## Dev loop

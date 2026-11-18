@@ -269,6 +269,9 @@ func _input(event: InputEvent) -> void:
 	if _decorate.active and _decorate.key(event.keycode):
 		get_viewport().set_input_as_handled()
 		return
+	if _at == "home" and not _decorate.active and _room.home.key(event.keycode):
+		get_viewport().set_input_as_handled()
+		return
 	match event.keycode:
 		KEY_D:
 			if _at == "home":
@@ -295,6 +298,16 @@ func _process(_dt: float) -> void:
 	_room.home.jot_open = _jot.visible
 	_room.home.closet_open = _closet.visible
 	_room.home.decorating = _decorate.active
+	var at_mouse := _room.get_local_mouse_position()
+	_room.home.eggs.set_laser(
+		_at == "home"
+		and Input.is_key_pressed(KEY_P)
+		and not _jot.visible
+		and not _closet.visible
+		and not _decorate.active
+		and Rect2(Vector2.ZERO, _room.size).has_point(at_mouse),
+		at_mouse
+	)
 	if _jot.visible:
 		var w := size.x - (0 if _widget else PANEL_WIDTH)
 		_jot.size = _jot.get_combined_minimum_size()

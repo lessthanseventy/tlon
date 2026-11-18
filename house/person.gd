@@ -71,6 +71,7 @@ const LINES := [
 	"nice room, this.",
 ]
 
+var acts := ACTS.duplicate(true)
 var pets
 var look
 var c
@@ -135,7 +136,7 @@ func base() -> String:
 
 func snap() -> void:
 	var want := base()
-	var a: Dictionary = ACTS[want]
+	var a: Dictionary = acts[want]
 	c.jump = {}
 	c.path = []
 	c.mode = "idle"
@@ -146,7 +147,7 @@ func snap() -> void:
 		c.key = a["key"]
 		seated = true
 	else:
-		c.pos = pets._center(Pets.SPOTS[a["stand"]]["cell"])
+		c.pos = pets._center(pets.spots[a["stand"]]["cell"])
 		c.z = 0.0
 		c.key = -1.0
 		seated = false
@@ -182,7 +183,7 @@ func process(dt: float, freeze: bool) -> void:
 				_switch(want)
 		"leaving":
 			_tw += dt / 0.4
-			var to: Vector2 = pets._center(Pets.SPOTS[ACTS[act]["stand"]]["cell"])
+			var to: Vector2 = pets._center(pets.spots[acts[act]["stand"]]["cell"])
 			var e := minf(_tw, 1.0)
 			c.pos = _from.lerp(to, e)
 			c.z = lerpf(_from_z, 0.0, e) + 3.0 * sin(PI * e)
@@ -199,7 +200,7 @@ func process(dt: float, freeze: bool) -> void:
 				_arrived()
 		"entering":
 			_tw += dt / 0.45
-			var a: Dictionary = ACTS[next]
+			var a: Dictionary = acts[next]
 			var e := minf(_tw, 1.0)
 			c.pos = _from.lerp(a["seat"], e)
 			c.z = lerpf(0.0, a["z"], e) + 3.0 * sin(PI * e)
@@ -211,8 +212,8 @@ func process(dt: float, freeze: bool) -> void:
 
 
 func _switch(want: String) -> void:
-	var a: Dictionary = ACTS[want]
-	var cur: Dictionary = ACTS[act]
+	var a: Dictionary = acts[want]
+	var cur: Dictionary = acts[act]
 	next = want
 	if seated and a.has("seat") and cur.get("seat") == a["seat"]:
 		_settle(want)
@@ -229,12 +230,12 @@ func _switch(want: String) -> void:
 func _go() -> void:
 	c.z = 0.0
 	c.key = -1.0
-	pets.go(c, ACTS[next]["stand"], "sit", 9999.0)
+	pets.go(c, acts[next]["stand"], "sit", 9999.0)
 	phase = "walking"
 
 
 func _arrived() -> void:
-	var a: Dictionary = ACTS[next]
+	var a: Dictionary = acts[next]
 	c.dir = a["face"]
 	if _sits(a):
 		phase = "entering"
@@ -247,14 +248,14 @@ func _arrived() -> void:
 func _settle(name: String) -> void:
 	act = name
 	phase = "idle"
-	c.dir = ACTS[name]["face"]
+	c.dir = acts[name]["face"]
 	c.mode = "idle"
 	c.anim = "idle"
 	if not seated:
 		c.key = -1.0
 	else:
-		c.key = ACTS[name]["key"]
-		c.pos = ACTS[name]["seat"]
+		c.key = acts[name]["key"]
+		c.pos = acts[name]["seat"]
 
 
 func _excursions(dt: float) -> void:
@@ -319,7 +320,7 @@ func poke() -> void:
 
 func pri() -> float:
 	if phase == "idle" or phase == "entering":
-		return ACTS[next if phase == "entering" else act].get("pri", 2.0)
+		return acts[next if phase == "entering" else act].get("pri", 2.0)
 	return 2.0
 
 
@@ -331,13 +332,13 @@ func anim() -> String:
 			return "sit"
 	if react_left > 0.0 and not seated:
 		return "wave"
-	return ACTS[act]["anim"]
+	return acts[act]["anim"]
 
 
 func draw(canvas: CanvasItem, o: Vector2, k: int) -> void:
 	var f: Vector2 = pets.feet(c, o, k)
 	var a := anim()
-	var cur: Dictionary = ACTS[act]
+	var cur: Dictionary = acts[act]
 	if look.layered or look.hero():
 		var held: String = cur.get("held", "") if a == "eat" and not look.hero() else ""
 		var tex: Texture2D = look.sheet(look.current(), k, held)

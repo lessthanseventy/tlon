@@ -44,6 +44,7 @@ const SPOTS := {
 const BIN_TOP := Vector2(6.5, 0.5)
 const BIN_Z := 11.0
 
+var spots := SPOTS.duplicate(true)
 var toys: Array = []
 var critters: Array = []
 var blocked_cells := {}
@@ -96,6 +97,9 @@ class Critter:
 	var hearts: Array = []
 	var run := false
 	var hops := 0
+	var flip := false
+	var hold := false
+	var carry := ""
 
 
 func setup(art_dir: String, seed_value: int) -> void:
@@ -113,7 +117,7 @@ func setup(art_dir: String, seed_value: int) -> void:
 	place(nina, "sofa", "sleep" if not is_night else "sit")
 	place(argos, "rug", "sit")
 	place(person, "board", "sit")
-	person.pos = _center(SPOTS["board"]["cell"])
+	person.pos = _center(spots["board"]["cell"])
 	person.dir = 5
 	toys = [
 		{
@@ -176,7 +180,7 @@ func reroute() -> void:
 
 
 func place(c: Critter, spot: String, mode: String) -> void:
-	var s: Dictionary = SPOTS[spot]
+	var s: Dictionary = spots[spot]
 	c.spot = spot
 	c.path = []
 	c.jump = {}
@@ -231,13 +235,13 @@ func _cell_of(p: Vector2) -> Vector2i:
 
 
 func go(c: Critter, spot: String, mode: String, dur: float) -> void:
-	var s: Dictionary = SPOTS[spot]
+	var s: Dictionary = spots[spot]
 	c.plan = {"spot": spot, "mode": mode, "dur": dur}
 	c.goal = spot
 	if not c.jump.is_empty():
 		return
 	if c.z > 0.0:
-		var from_cell: Vector2i = SPOTS[c.spot]["cell"]
+		var from_cell: Vector2i = spots[c.spot]["cell"]
 		_start_jump(c, _center(from_cell), 0.0, -1.0, true)
 		return
 	_walk(c, s["cell"])
@@ -271,7 +275,7 @@ func _face(d: Vector2, fallback: int) -> int:
 
 func _arrive(c: Critter) -> void:
 	var spot: String = c.plan.get("spot", c.goal)
-	var s: Dictionary = SPOTS.get(spot, {})
+	var s: Dictionary = spots.get(spot, {})
 	if s.has("perch") and c.z <= 0.0:
 		_start_jump(c, s["perch"], s["z"], s["key"], false)
 		return
@@ -288,7 +292,7 @@ func _arrive(c: Critter) -> void:
 	elif mode == "chase":
 		_begin_bat(c)
 		return
-	elif mode == "knock":
+	elif mode == "knock" or mode == "push":
 		_begin_swat(c)
 		return
 	elif mode == "cheer":
@@ -344,7 +348,7 @@ func _step(c: Critter, dt: float) -> void:
 	if c.mode == "swat":
 		_step_swat(c, dt)
 		return
-	if freeze:
+	if freeze or c.hold:
 		return
 	c.wait -= dt
 	if c.say_left <= 0.0 and c.id != "person":
@@ -392,7 +396,7 @@ func _step_jump(c: Critter, dt: float) -> void:
 		if c.plan.get("mode") == "chase":
 			_walk_to_toy(c)
 		elif again:
-			_walk(c, SPOTS[c.plan["spot"]]["cell"])
+			_walk(c, spots[c.plan["spot"]]["cell"])
 		else:
 			c.mode = "idle"
 			_arrive(c)
@@ -452,6 +456,10 @@ func _step_swat(c: Critter, dt: float) -> void:
 		c.bat_t = -1.0
 		c.mode = "idle"
 		c.anim = "idle"
+		if c.plan.get("mode") == "push":
+			c.dir = 7
+			c.wait = 5.0
+			return
 		speak(c, "old", knock_thing)
 		go(c, "knocked", "sit", 30.0)
 		c.wait = 9999.0
@@ -541,7 +549,7 @@ func chase(c: Critter, toy: Dictionary, hits: int) -> void:
 	if not c.jump.is_empty():
 		return
 	if c.z > 0.0:
-		_start_jump(c, _center(SPOTS[c.spot]["cell"]), 0.0, -1.0, false)
+		_start_jump(c, _center(spots[c.spot]["cell"]), 0.0, -1.0, false)
 		return
 	_walk_to_toy(c)
 
@@ -720,7 +728,7 @@ func speak(c: Critter, occasion: String, thing: String = "") -> void:
 
 
 func nearest(spot: String) -> Critter:
-	var at := _center(SPOTS[spot]["cell"])
+	var at := _center(spots[spot]["cell"])
 	var best: Critter = null
 	for id in ["nina", "argos"]:
 		var c := critter(id)
@@ -844,11 +852,17 @@ func draw(canvas: CanvasItem, c: Critter, o: Vector2, k: int) -> void:
 	var cell := 64 * k
 	var frames := maxi(1, tex.get_width() / cell)
 	var frame := int(c.anim_t * FPS.get(anim, 6.0)) % frames
+	if c.flip:
+		canvas.draw_set_transform(f + Vector2(0, -8 * k), PI, Vector2.ONE)
+		f = Vector2(0, 8 * k)
 	canvas.draw_texture_rect_region(
 		tex,
 		Rect2((f - Vector2(32, 46) * k).round(), Vector2(cell, cell)),
 		Rect2(frame * cell, c.dir * cell, cell, cell)
 	)
+	if c.flip:
+		canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
 	if c.id == "nina":
 		_draw_collar(canvas, c, f, k)
 

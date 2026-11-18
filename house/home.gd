@@ -16,6 +16,9 @@ const Door := preload("res://door.gd")
 const Rhythm := preload("res://rhythm.gd")
 const Layout := preload("res://layout.gd")
 const Card := preload("res://card.gd")
+const Sound := preload("res://sound.gd")
+const Eggs := preload("res://eggs.gd")
+const Hearth := preload("res://hearth.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -33,6 +36,7 @@ const CARD_KEYS := {
 	"board": "board",
 	"more": "board",
 }
+const FURN_KEYS := ["piano", "fireplace", "bookshelf"]
 const NOTES_PER_PAGE := 5
 const SKY_WORDS := {
 	"clear": "a clear sky",
@@ -81,6 +85,9 @@ var menu := Menus.new()
 var focus := Focus.new()
 var jar := Jar.new()
 var knock := Knock.new()
+var sound := Sound.new()
+var eggs := Eggs.new()
+var hearth := Hearth.new()
 var door := Door.new()
 var rhythm := Rhythm.new()
 var layout := Layout.new()
@@ -132,6 +139,7 @@ var _scripted := {}
 var _say_done := false
 var _arg_duo := false
 var _deep := 0.0
+var _ringing := 0
 var _arg_jar := -1
 var _arg_drop := false
 var _arg_knocked := -1
@@ -198,6 +206,12 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				_arg_knocked = int(next)
 			"--wave":
 				_arg_wave = next
+			"--egg":
+				eggs.forced = Array(next.split(",", false))
+			"--laser":
+				eggs.laser_at = _point(next)
+				eggs.laser_pin = true
+				eggs.laser_on = true
 			"--plane":
 				_arg_plane = next
 			"--homecoming":
@@ -252,6 +266,9 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	person.setup(pets, look, seed_value)
 	tv.setup(seed_value)
 	knock.setup(seed_value)
+	sound.setup(room, not staged)
+	eggs.setup(self, seed_value, not staged)
+	hearth.setup(self)
 	person.snap()
 	if "--shot" in args:
 		pets.freeze = true
@@ -521,6 +538,15 @@ func process(dt: float) -> void:
 	water_left = maxf(0.0, water_left - dt)
 	_beats(dt)
 	_knocking(dt)
+	sound.process(dt)
+	eggs.process(dt)
+	hearth.process(dt)
+	sound.loop("rain", _env["weather"] in ["rain", "storm"])
+	if jar.clinks.any(func(cl): return cl["t"] < dt + 0.001):
+		sound.request("clink")
+	if ring_ids.size() > _ringing:
+		sound.request("ring")
+	_ringing = ring_ids.size()
 	if card.is_open() and _cards_blocked():
 		card.close()
 	if _t > 0.45 and _arg_card != "":
@@ -624,7 +650,10 @@ func tick_off(id: int) -> void:
 	if found["text"].to_lower().contains("plant") and found["text"].to_lower().contains("water"):
 		perk_left = 600.0
 		water_left = 4.0
-	var miss: bool = force_bat or pets.rng.randf() < 0.4
+	sound.request("rustle")
+	var fire := eggs.toss_ids.has(id) and hearth.lit
+	eggs.toss_ids.erase(id)
+	var miss: bool = not fire and (force_bat or pets.rng.randf() < 0.4)
 	(
 		_crumples
 		. append(
@@ -635,6 +664,7 @@ func tick_off(id: int) -> void:
 				"slot": slot,
 				"color": _item_color(found),
 				"miss": miss,
+				"fire": fire,
 			}
 		)
 	)
@@ -682,23 +712,18 @@ func open_item_menu(id: int) -> void:
 	if id == knock.id:
 		knock.clear()
 		_assign_slots(_open_ids())
-	(
-		menu
-		. show_at(
-			id,
-			at,
-			_cap(str(found["text"]), 30),
-			[
-				{"label": "Done", "act": "done"},
-				{"label": "In an hour", "act": "hour"},
-				{"label": "Tomorrow", "act": "tomorrow"},
-				{
-					"label": "Not now" if focus.id == id else "Now",
-					"act": "unnow" if focus.id == id else "now"
-				},
-			]
-		)
-	)
+	var rows: Array = [
+		{"label": "Done", "act": "done"},
+		{"label": "In an hour", "act": "hour"},
+		{"label": "Tomorrow", "act": "tomorrow"},
+		{
+			"label": "Not now" if focus.id == id else "Now",
+			"act": "unnow" if focus.id == id else "now"
+		},
+	]
+	if hearth.lit:
+		rows.insert(1, {"label": "Into the fire", "act": "fire"})
+	menu.show_at(id, at, _cap(str(found["text"]), 30), rows)
 
 
 func _open_pick() -> void:
@@ -736,6 +761,9 @@ func _celebrate() -> void:
 
 func _land(cr: Dictionary) -> void:
 	if cr.get("fly", false):
+		return
+	if cr.get("fire", false):
+		hearth.puff()
 		return
 	if not cr["miss"]:
 		_bin_balls += 1
@@ -775,6 +803,7 @@ func items() -> Array:
 		)
 	if person.bag == "down":
 		out.append({"key": Person.BAG_AT.x + Person.BAG_AT.y - 1.0, "pri": 1.7, "fn": _draw_bag})
+	out.append_array(eggs.items())
 	for t in pets.toys:
 		out.append({"key": t["pos"].x + t["pos"].y - 1.0, "pri": 1.8, "fn": _draw_toy.bind(t)})
 	for c in pets.critters:
@@ -788,6 +817,9 @@ func _draw_critter(c: Pets.Critter) -> void:
 		person.draw(room, _o, _k)
 	else:
 		pets.draw(room, c, _o, _k)
+		if c.carry != "":
+			var at: Vector2 = pets.feet(c, _o, _k) + Pets.NECK[c.dir] * _k + Vector2(0, 3 * _k)
+			Eggs.draw_thing(room, c.carry, at, _k, _t)
 
 
 func _px(base: Vector2, pts: Array) -> PackedVector2Array:
@@ -959,6 +991,19 @@ func _register(key: String, poly: PackedVector2Array, below: Vector2) -> void:
 
 
 # a thing drawn from a sprite (the clock, the plant) is hit where the sprite has pixels
+func fire_on() -> bool:
+	return hearth.lit
+
+
+# a piece the room reacts to: hit where its sprite has pixels
+func furn(id: String, tex: Texture2D, at: Vector2) -> void:
+	for name in FURN_KEYS:
+		if id.begins_with(name):
+			register_sprite("furn:" + name, tex, at)
+			if name == "fireplace":
+				hearth.dress(room, at, _k)
+
+
 func register_sprite(key: String, tex: Texture2D, at: Vector2) -> void:
 	if not _used.has(tex):
 		_used[tex] = Rect2(tex.get_image().get_used_rect())
@@ -1041,8 +1086,9 @@ func _draw_calendar() -> void:
 
 func _draw_desk_things() -> void:
 	var hour := _hour()
-	if hour >= 5.5 and hour < 11.5:
+	if hour >= 5.5 and hour < 11.5 and not eggs.mug_off:
 		Props.steam(room, _p(MUG.x, MUG.y, MUG.z), _k, _t)
+	eggs.draw_desk()
 	for item in open:
 		var id := int(item["id"])
 		if not _slots.has(id):
@@ -1131,6 +1177,9 @@ func draw_over() -> void:
 	if plane_hit.size() > 0:
 		_register("plane", plane_hit, plane_hit[2])
 	_draw_water()
+	hearth.draw_over(room)
+	eggs.draw_over(bounds)
+	sound.draw_mark(room, Vector2(14, 14), 2)
 	rhythm.draw(room, bounds)
 	_draw_now(bounds)
 	if reply_left > 0.0 and reply_text != "":
@@ -1238,6 +1287,8 @@ func _draw_crumple(cr: Dictionary) -> void:
 		return
 	var u: float = (t - 0.3) / (float(cr["life"]) - 0.3)
 	var target := _p(6.5, 1.5, 0.0) if cr["miss"] else _bin_rim()
+	if cr.get("fire", false):
+		target = hearth.mouth()
 	for i in range(3, 0, -1):
 		var back := maxf(0.0, u - 0.06 * i)
 		room.draw_circle(_arc(from, target, back), (3.0 - i * 0.6) * _k, Color(Props.PAPER, 0.35))
@@ -1577,6 +1628,9 @@ func click(pos: Vector2) -> bool:
 		if act != "outside":
 			var id := menu.id
 			menu.close()
+			if act == "fire":
+				eggs.toss_ids.append(id)
+				act = "done"
 			acted.emit(id, act)
 			return true
 		menu.close()
@@ -1597,7 +1651,14 @@ func click(pos: Vector2) -> bool:
 		return true
 	if key.begins_with("pet:"):
 		var c: Pets.Critter = pets.critter(key.substr(4))
-		pets.pat(c, "pet")
+		if not eggs.pet_click(c):
+			pets.pat(c, "pet")
+		return true
+	if key.begins_with("thing:"):
+		eggs.take(int(key.substr(6)))
+		return true
+	if key.begins_with("furn:") and not blocked:
+		eggs.furn_click(key.substr(5))
 		return true
 	if key.begins_with("item:"):
 		open_item_menu(int(key.substr(5)))
@@ -1642,6 +1703,10 @@ func _card_kind(key: String) -> String:
 
 func close_card() -> void:
 	card.close()
+
+
+func key(code: int) -> bool:
+	return eggs.key(code)
 
 
 # `name` is a card kind: calendar jar weather clock plant tv board
@@ -1749,7 +1814,10 @@ func _show_slip(which: String) -> void:
 func _knocking(dt: float) -> void:
 	for ev in pets.events:
 		if ev == "swat":
-			_swat()
+			if eggs.scene.get("k") == "push":
+				eggs.pushed()
+			else:
+				_swat()
 	pets.events = []
 	if not knock.flying.is_empty():
 		knock.flying["t"] += dt
