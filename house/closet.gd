@@ -6,12 +6,16 @@ signal closed
 const INK := Color("2a2530")
 const PAPER := Color("f3ead6")
 const ACCENT := Color("e8b86d")
-const PANEL := Vector2(700, 520)
-const ROW_H := 22.0
+const PANEL := Vector2(700, 600)
+const ROW_H := 21.0
 
 var look
 
 var _work := {}
+var _works := {}
+var _tab := "everyday"
+var _tabs: Array = []
+var _tab_rects: Array = []
 var _rows: Array = []
 var _sel := 0
 var _preset := 0
@@ -33,9 +37,32 @@ func _ready() -> void:
 
 func open(l) -> void:
 	look = l
-	_work = look.cfg.duplicate()
+	_works = {"everyday": look.cfg.duplicate()}
+	_tabs = ["everyday"]
+	if look.hero_ready:
+		_works["hero"] = look.hero_cfg.duplicate()
+		_tabs.append("hero")
+	_tab = look.wear if _works.has(look.wear) else "everyday"
+	_show_tab()
+	visible = true
+	grab_focus()
+	queue_redraw()
+
+
+func _show_tab() -> void:
+	_work = _works[_tab]
 	_rows = []
-	if look.layered:
+	if _tab == "hero":
+		var names: Array = []
+		for r in look.hero_recipes:
+			names.append(r["name"])
+		_rows.append({"key": "preset", "label": "Ready-made", "opts": names})
+		_rows.append({"key": "build", "label": "Build", "opts": look.hero_opts["build"]})
+		_rows.append({"key": "skin", "label": "Skin", "opts": look.hero_opts["skin"]})
+		for r in look.HERO_ROWS:
+			_rows.append({"key": r[0], "label": r[1], "opts": look.hero_opts[r[0]]})
+			_rows.append({"key": r[0] + "_c", "label": r[1] + " colour", "dep": r[0], "opts": []})
+	elif look.layered:
 		var names: Array = []
 		for r in look.recipes:
 			names.append(r["name"])
@@ -53,9 +80,29 @@ func open(l) -> void:
 	_sel = 0
 	_preset = -1
 	_preview_key = ""
-	visible = true
-	grab_focus()
-	queue_redraw()
+
+
+func pick_tab(name: String) -> void:
+	if _tabs.has(name):
+		_tab = name
+		_show_tab()
+
+
+func _switch_tab() -> void:
+	if _tabs.size() > 1:
+		_tab = _tabs[(_tabs.find(_tab) + 1) % _tabs.size()]
+		_show_tab()
+
+
+func _options(row: Dictionary) -> Array:
+	if row.has("dep"):
+		return look.hero_colours(row["dep"], _work[row["dep"]])
+	return row["opts"]
+
+
+func _set_work(c: Dictionary) -> void:
+	_work = c
+	_works[_tab] = c
 
 
 func close() -> void:
@@ -68,6 +115,8 @@ func _value(row: Dictionary) -> String:
 	if key == "preset":
 		return str(row["opts"][_preset]) if _preset >= 0 else "pick one"
 	var v: Variant = _work[key]
+	if row.has("dep") and _work[row["dep"]] == "":
+		return "-"
 	if key.begins_with("flat_"):
 		match key:
 			"flat_hat":
@@ -82,29 +131,37 @@ func _value(row: Dictionary) -> String:
 
 func _step(i: int, dir: int) -> void:
 	var row: Dictionary = _rows[i]
-	var list: Array = row["opts"]
+	var list: Array = _options(row)
 	var key: String = row["key"]
+	if list.is_empty():
+		return
 	if key == "preset":
 		_preset = (
 			(0 if dir > 0 else list.size() - 1)
 			if _preset < 0
 			else (_preset + dir + list.size()) % list.size()
 		)
-		_work = look.recipes[_preset]["cfg"].duplicate()
+		var made: Array = look.hero_recipes if _tab == "hero" else look.recipes
+		_set_work(made[_preset]["cfg"].duplicate())
 	else:
 		var at := list.find(_work[key])
 		_work[key] = list[(at + dir + list.size()) % list.size()]
+		if _tab == "hero":
+			look.sane_hero(_work)
 	_sel = i
 	queue_redraw()
 
 
 func _random() -> void:
-	_work = look.random_cfg()
+	_set_work(look.random_hero() if _tab == "hero" else look.random_cfg())
 	queue_redraw()
 
 
 func _apply() -> void:
-	look.cfg = _work.duplicate()
+	look.cfg = _works["everyday"].duplicate()
+	if _works.has("hero"):
+		look.hero_cfg = _works["hero"].duplicate()
+	look.wear = _tab
 	look.save()
 	applied.emit()
 	close()
@@ -123,6 +180,8 @@ func _gui_input(event: InputEvent) -> void:
 				_step(_sel, 1)
 			KEY_R:
 				_random()
+			KEY_TAB:
+				_switch_tab()
 			KEY_ENTER, KEY_KP_ENTER:
 				_apply()
 			KEY_ESCAPE:
@@ -147,6 +206,9 @@ func _gui_input(event: InputEvent) -> void:
 				elif event.position.x < mid - 40:
 					_step(i, -1)
 				_sel = i
+		for j in _tab_rects.size():
+			if (_tab_rects[j] as Rect2).has_point(event.position) and _tabs[j] != _tab:
+				_switch_tab()
 		for b in _buttons:
 			if (b["rect"] as Rect2).has_point(event.position):
 				match b["act"]:
@@ -187,12 +249,35 @@ func _draw() -> void:
 	draw_string(
 		font,
 		_panel.position + Vector2(24, 58),
-		"up/down: pick   left/right: change   R: random   Enter: keep   Esc: leave",
+		(
+			"up/down: pick   left/right: change   R: random   Enter: keep   Esc: leave"
+			+ ("   Tab: everyday / hero" if _tabs.size() > 1 else "")
+		),
 		HORIZONTAL_ALIGNMENT_LEFT,
 		-1,
 		12,
 		Color(INK, 0.6)
 	)
+	_tab_rects = []
+	if _tabs.size() > 1:
+		for j in _tabs.size():
+			var tr := Rect2(
+				Vector2(_panel.end.x - 24 - (_tabs.size() - j) * 96, _panel.position.y + 14),
+				Vector2(90, 26)
+			)
+			_tab_rects.append(tr)
+			draw_rect(tr, INK)
+			draw_rect(tr.grow(-2), ACCENT if _tabs[j] == _tab else Color("e4d8bd"))
+			var tw := font.get_string_size(_tabs[j], HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+			draw_string(
+				font,
+				tr.position + Vector2((90 - tw) / 2.0, 18),
+				_tabs[j],
+				HORIZONTAL_ALIGNMENT_LEFT,
+				-1,
+				15,
+				INK
+			)
 	var pv := Rect2(_panel.position + Vector2(24, 76), Vector2(280, 300))
 	draw_rect(pv, Color("d9cdb4"))
 	draw_rect(pv, Color(INK, 0.4), false, 2.0)
@@ -263,7 +348,7 @@ func _draw() -> void:
 
 
 func _draw_preview(pv: Rect2) -> void:
-	if look.layered:
+	if look.layered or _tab == "hero":
 		var key := JSON.stringify(_work)
 		if key != _preview_key:
 			_preview_key = key

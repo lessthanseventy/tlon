@@ -1,8 +1,35 @@
 extends RefCounted
 
 const CREATOR := "isometric-character-creator"
+const HERO := "isometric-hero-creator"
 const SHEET := Vector2i(3456, 512)
 const STORE := "user://house_person.json"
+# the hero pack has no sit, type, eat, wave, cheer, pickup or talk: each everyday action is
+# stood as one of its animations
+const HERO_ACT := {
+	"idle": "idle",
+	"walk": "walk",
+	"run": "run",
+	"type": "ready",
+	"sit": "idle",
+	"eat": "idle",
+	"talk": "idle",
+	"wave": "block",
+	"cheer": "cast",
+	"pickup": "thrust",
+}
+const HERO_ROWS := [
+	["cape", "Cape", true],
+	["chest", "Chest", false],
+	["gloves", "Gloves", true],
+	["facial", "Beard", true],
+	["hair", "Hair", true],
+	["helmet", "Helmet", true],
+	["legs", "Legs", false],
+	["shoes", "Shoes", false],
+	["shoulders", "Shoulders", true],
+	["weapon", "Weapon", true],
+]
 const ANIMS := {
 	"idle": [0, 4, 6.0],
 	"walk": [4, 8, 10.0],
@@ -86,6 +113,16 @@ var layered := false
 var cfg := DEFAULT.duplicate()
 var opts := {}
 var recipes: Array = []
+var hero_root := ""
+var hero_ready := false
+var wear := "everyday"
+var hero_cfg := {}
+var hero_opts := {}
+var hero_cols := {}
+var hero_anims := {}
+var hero_order: Array = []
+var hero_sheet := Vector2i.ZERO
+var hero_recipes: Array = []
 
 var _sheets := {}
 var _imgs := {}
@@ -102,7 +139,152 @@ func setup(art_dir: String) -> void:
 	if layered:
 		_scan()
 		_recipes()
+	_hero_setup(art_dir)
 	_load()
+
+
+func hero() -> bool:
+	return wear == "hero" and hero_ready
+
+
+func current() -> Dictionary:
+	return hero_cfg if hero() else cfg
+
+
+func anim_for(action: String) -> String:
+	return HERO_ACT.get(action, "idle") if hero() else action
+
+
+func _hero_setup(art_dir: String) -> void:
+	var base := art_dir.path_join(HERO)
+	var subs := PackedStringArray()
+	if DirAccess.dir_exists_absolute(base):
+		subs = DirAccess.get_directories_at(base)
+	if subs.size() != 1:
+		return
+	var dir := base.path_join(subs[0])
+	var parsed: Variant = JSON.parse_string(
+		FileAccess.get_file_as_string(dir.path_join("layers.json"))
+	)
+	if not (
+		parsed is Dictionary and parsed.get("animations") is Array and parsed.get("order") is Array
+	):
+		return
+	if not DirAccess.dir_exists_absolute(dir.path_join("Layers/broad")):
+		return
+	for a in parsed["animations"]:
+		hero_anims[str(a["name"])] = [int(a["column"]), int(a["frames"]), float(a["fps"])]
+	for needed in HERO_ACT.values():
+		if not hero_anims.has(needed):
+			hero_anims = {}
+			return
+	hero_root = dir
+	hero_order = parsed["order"]
+	hero_sheet = Vector2i(int(parsed["sheet"]["columns"]) * 64, 8 * 64)
+	hero_opts = {"build": ["broad", "slim"]}
+	for g in hero_order:
+		var styles: Array = []
+		hero_cols[g] = {}
+		for f in DirAccess.get_files_at(dir.path_join("Layers/broad/" + g)):
+			if not f.ends_with(".png"):
+				continue
+			var rest := f.trim_suffix(".png").trim_prefix("broad_" + g + "_")
+			var i := rest.rfind("_")
+			var style := rest.substr(0, i) if i >= 0 else "body"
+			var colour := rest.substr(i + 1) if i >= 0 else rest
+			if not styles.has(style):
+				styles.append(style)
+			(hero_cols[g].get_or_add(style, []) as Array).append(colour)
+		styles.sort()
+		for style in hero_cols[g]:
+			(hero_cols[g][style] as Array).sort()
+		if g == "body":
+			hero_opts["skin"] = hero_cols[g].get("body", [])
+		else:
+			hero_opts[g] = ([""] if _hero_optional(g) else []) + styles
+	hero_ready = not (hero_opts["skin"] as Array).is_empty()
+	if hero_ready:
+		_hero_recipes()
+		hero_cfg = _hero_default()
+
+
+func _hero_optional(group: String) -> bool:
+	for r in HERO_ROWS:
+		if r[0] == group:
+			return r[2]
+	return false
+
+
+func hero_colours(group: String, style: String) -> Array:
+	return hero_cols.get(group, {}).get(style, [])
+
+
+func _hero_recipes() -> void:
+	hero_recipes = []
+	var names: Array = []
+	for f in DirAccess.get_files_at(hero_root.path_join("Recipes")):
+		if f.ends_with(".json"):
+			names.append(f)
+	names.sort()
+	for f in names:
+		var parsed: Variant = JSON.parse_string(
+			FileAccess.get_file_as_string(hero_root.path_join("Recipes").path_join(f))
+		)
+		if parsed is Dictionary and parsed.get("layers") is Array:
+			var c := {"kind": "hero", "build": str(parsed.get("build", "broad")), "skin": ""}
+			for r in HERO_ROWS:
+				c[r[0]] = ""
+				c[r[0] + "_c"] = ""
+			for l in parsed["layers"]:
+				var key: String = l[0]
+				if key == "body":
+					c["skin"] = l[1]
+					continue
+				var group := key.get_slice("_", 0)
+				if c.has(group):
+					c[group] = key.substr(group.length() + 1)
+					c[group + "_c"] = l[1]
+			hero_recipes.append({"name": str(parsed.get("name", f)), "cfg": sane_hero(c)})
+
+
+func _hero_default() -> Dictionary:
+	for r in hero_recipes:
+		if r["name"] == "knight":
+			return (r["cfg"] as Dictionary).duplicate()
+	if not hero_recipes.is_empty():
+		return (hero_recipes[0]["cfg"] as Dictionary).duplicate()
+	return sane_hero({"kind": "hero"})
+
+
+# every value one the pack has, and a colour the chosen style comes in
+func sane_hero(c: Dictionary) -> Dictionary:
+	if c.get("build") not in hero_opts["build"]:
+		c["build"] = "broad"
+	if c.get("skin") not in hero_opts["skin"]:
+		c["skin"] = hero_opts["skin"][0]
+	for r in HERO_ROWS:
+		var g: String = r[0]
+		if c.get(g) not in hero_opts[g]:
+			c[g] = "" if r[2] else hero_opts[g][0]
+		var cols := hero_colours(g, c[g])
+		if c[g] == "" or cols.is_empty():
+			c[g + "_c"] = ""
+		elif c.get(g + "_c") not in cols:
+			c[g + "_c"] = cols[0]
+	c["kind"] = "hero"
+	return c
+
+
+func random_hero() -> Dictionary:
+	var c := hero_cfg.duplicate()
+	c["build"] = hero_opts["build"][randi() % 2]
+	c["skin"] = hero_opts["skin"][randi() % hero_opts["skin"].size()]
+	for r in HERO_ROWS:
+		var list: Array = hero_opts[r[0]]
+		c[r[0]] = "" if r[2] and randf() < 0.4 else list[randi() % list.size()]
+		var cols := hero_colours(r[0], c[r[0]])
+		c[r[0] + "_c"] = cols[randi() % cols.size()] if not cols.is_empty() else ""
+	return sane_hero(c)
 
 
 func _scan() -> void:
@@ -223,6 +405,17 @@ func _load() -> void:
 			var slot := slot_of(parsed["extra"])
 			if slot != "":
 				base[slot] = parsed["extra"]
+		if hero_ready:
+			if parsed.get("hero") is Dictionary:
+				for key in hero_cfg:
+					if (
+						parsed["hero"].has(key)
+						and typeof(parsed["hero"][key]) == typeof(hero_cfg[key])
+					):
+						hero_cfg[key] = parsed["hero"][key]
+				hero_cfg = sane_hero(hero_cfg)
+			if parsed.get("wear") == "hero":
+				wear = "hero"
 	cfg = _sane(base)
 
 
@@ -243,16 +436,31 @@ func _sane(c: Dictionary) -> Dictionary:
 
 # `--look key=value,...`: a look for a picture, not kept
 func stage(spec: String) -> void:
-	for pair in spec.split(",", false):
+	var pairs := spec.split(",", false)
+	if "wear=hero" in pairs and hero_ready:
+		wear = "hero"
+	for pair in pairs:
 		var kv := pair.split("=")
-		cfg[kv[0]] = kv[1] if kv.size() > 1 else ""
+		var value := kv[1] if kv.size() > 1 else ""
+		if kv[0] == "recipe" and hero():
+			for r in hero_recipes:
+				if r["name"] == value:
+					hero_cfg = (r["cfg"] as Dictionary).duplicate()
+		elif kv[0] != "wear":
+			current()[kv[0]] = value
 	cfg = _sane(cfg)
+	if hero_ready:
+		hero_cfg = sane_hero(hero_cfg)
 
 
 func save() -> void:
 	var f := FileAccess.open(store, FileAccess.WRITE)
 	if f != null:
-		f.store_string(JSON.stringify(cfg))
+		var out := cfg.duplicate()
+		out["wear"] = wear
+		if hero_ready:
+			out["hero"] = hero_cfg
+		f.store_string(JSON.stringify(out))
 
 
 func random_cfg() -> Dictionary:
@@ -279,6 +487,16 @@ func _file(b: String, group: String, name: String) -> String:
 
 func layer_paths(c: Dictionary, held: String = "") -> Array:
 	var b: String = c["build"]
+	if c.get("kind") == "hero":
+		var hero_paths: Array = []
+		for g in hero_order:
+			var name := "body_" + str(c["skin"])
+			if g != "body":
+				if c[g] == "":
+					continue
+				name = "%s_%s_%s" % [g, c[g], c[g + "_c"]]
+			hero_paths.append(hero_root.path_join("Layers/%s/%s/%s_%s.png" % [b, g, b, name]))
+		return hero_paths
 	var out: Array = [
 		_file(b, "body", "body_" + str(c["skin"])),
 		_file(b, "shoes", "shoes_%s_%s" % [c["shoes"], c["shoes_c"]]),
@@ -312,7 +530,8 @@ func _layer(path: String) -> Image:
 
 
 func _compose(c: Dictionary, held: String) -> Image:
-	var img := Image.create(SHEET.x, SHEET.y, false, Image.FORMAT_RGBA8)
+	var size := hero_sheet if c.get("kind") == "hero" else SHEET
+	var img := Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
 	for p in layer_paths(c, held):
 		var l := _layer(p)
 		if l != null:
@@ -328,7 +547,7 @@ func sheet(c: Dictionary, k: int, held: String = "") -> Texture2D:
 		_sheets.clear()
 	var img := _compose(c, held)
 	if k > 1:
-		img.resize(SHEET.x * k, SHEET.y * k, Image.INTERPOLATE_NEAREST)
+		img.resize(img.get_width() * k, img.get_height() * k, Image.INTERPOLATE_NEAREST)
 	var tex := ImageTexture.create_from_image(img)
 	_sheets[key] = tex
 	return tex
@@ -350,7 +569,7 @@ func draw_frame(
 	k: int,
 	frozen: bool = false
 ) -> void:
-	var a: Array = ANIMS[anim]
+	var a: Array = (hero_anims if hero() else ANIMS)[anim]
 	var frame := 0 if frozen else int(t * a[2]) % int(a[1])
 	var cell := 64 * k
 	canvas.draw_texture_rect_region(

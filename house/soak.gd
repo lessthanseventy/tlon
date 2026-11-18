@@ -12,6 +12,7 @@ const Tv := preload("res://tv.gd")
 const Voices := preload("res://voices.gd")
 const Layout := preload("res://layout.gd")
 const Decorate := preload("res://decorate.gd")
+const Closet := preload("res://closet.gd")
 
 var _srv := TCPServer.new()
 var _conns: Array = []
@@ -166,6 +167,7 @@ func _looks() -> void:
 	if art == "":
 		art = OS.get_environment("HOME").path_join("projects/thatch/packs/x")
 	var look := Look.new()
+	look.store = "user://soak_none.json"
 	look.setup(art)
 	if not look.layered:
 		print("looks: creator pack not found, composition not tested")
@@ -179,7 +181,7 @@ func _looks() -> void:
 				if img.get_pixel(x, y).a > 0.5:
 					seen = true
 		_check(seen, "recipe %s composes to an empty sheet" % r["name"])
-	var closet: Control = load("res://closet.gd").new()
+	var closet: Control = Closet.new()
 	root.add_child(closet)
 	closet.open(look)
 	for i in closet._rows.size():
@@ -191,6 +193,141 @@ func _looks() -> void:
 	closet.queue_free()
 	_reach_everyday(look)
 	_saved_looks(art)
+	_hero_looks(art)
+	_hero_standing(art)
+
+
+func _hero_looks(art: String) -> void:
+	var path := "user://soak_hero.json"
+	var gone := Look.new()
+	gone.store = path
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"build": "slim", "wear": "hero", "hero": {"weapon": "bow"}}))
+	f.close()
+	gone.setup("/none")
+	_check(not gone.hero() and gone.wear == "everyday", "no hero pack: everyday")
+	var closet: Control = Closet.new()
+	root.add_child(closet)
+	closet.open(gone)
+	_check(closet._tabs == ["everyday"], "no hero pack: no hero tab")
+	closet.queue_free()
+	var look := Look.new()
+	look.store = path
+	look.setup(art)
+	if not look.hero_ready:
+		print("looks: hero pack not found, hero not tested")
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+		return
+	_check(look.hero() and look.cfg["build"] == "slim", "a saved hero look loads and is worn")
+	_check(look.anim_for("type") == "ready", "typing is ready")
+	_check(look.anim_for("wave") == "block", "waving is block")
+	for action in Look.HERO_ACT:
+		_check(look.hero_anims.has(look.anim_for(action)), "hero animation for %s exists" % action)
+	_check(look.hero_anims["walk"] == [8, 8, 10.0], "hero walk is read from layers.json")
+	_check(look.hero_anims["cast"][0] == 42, "hero cast is read from layers.json")
+	_check(look.hero_recipes.size() > 0, "hero ready-mades are read (%d)" % look.hero_recipes.size())
+	for r in look.hero_recipes:
+		var img := look._compose(r["cfg"], "")
+		var seen := false
+		for x in range(0, 256, 4):
+			for y in range(0, 64, 2):
+				seen = seen or img.get_pixel(x, y).a > 0.5
+		_check(seen and img.get_width() == look.hero_sheet.x, "hero recipe %s composes" % r["name"])
+	var made := {}
+	for b in ["broad", "slim"]:
+		var base: Dictionary = look.hero_cfg.duplicate()
+		base["build"] = b
+		for r in Look.HERO_ROWS:
+			base[r[0]] = ""
+			base[r[0] + "_c"] = ""
+		for skin in look.hero_opts["skin"]:
+			var c: Dictionary = base.duplicate()
+			c["skin"] = skin
+			for p in look.layer_paths(c):
+				made[p] = true
+		for r in Look.HERO_ROWS:
+			for style in look.hero_opts[r[0]]:
+				var c: Dictionary = base.duplicate()
+				c[r[0]] = style
+				if style == "":
+					continue
+				for colour in look.hero_colours(r[0], style):
+					c[r[0] + "_c"] = colour
+					for p in look.layer_paths(c):
+						made[p] = true
+	var unreachable: Array = []
+	for b in ["broad", "slim"]:
+		for g in DirAccess.get_directories_at(look.hero_root.path_join("Layers/" + b)):
+			var dir: String = look.hero_root.path_join("Layers/%s/%s" % [b, g])
+			for file in DirAccess.get_files_at(dir):
+				if file.ends_with(".png") and not made.has(dir.path_join(file)):
+					unreachable.append(b + "/" + g + "/" + file)
+	for p in made:
+		_check(FileAccess.file_exists(p), "hero closet offers a missing file %s" % p.get_file())
+	_check(unreachable.is_empty(), "hero closet cannot reach: %s" % str(unreachable.slice(0, 8)))
+	print("looks: %d hero layer files reached from the closet" % made.size())
+	closet = Closet.new()
+	root.add_child(closet)
+	closet.open(look)
+	_check(closet._tabs == ["everyday", "hero"], "the closet has both tabs")
+	_check(closet._tab == "hero", "the closet opens on the worn tab")
+	for i in closet._rows.size():
+		for d in [1, 1, -1]:
+			closet._step(i, d)
+			var c: Dictionary = closet._work
+			var ok := true
+			for r in Look.HERO_ROWS:
+				ok = ok and (c[r[0]] == "" or c[r[0] + "_c"] in look.hero_colours(r[0], c[r[0]]))
+			_check(ok and look.preview(c, 4) != null, "hero row %d keeps a style's colour valid" % i)
+	closet._random()
+	_check(closet._work["kind"] == "hero" and look.preview(closet._work, 2) != null, "hero random")
+	closet._switch_tab()
+	_check(closet._tab == "everyday" and not closet._work.has("kind"), "Tab goes to everyday")
+	closet._switch_tab()
+	closet._apply()
+	var back := Look.new()
+	back.store = path
+	back.setup(art)
+	_check(back.hero() and back.hero_cfg == look.hero_cfg, "a kept hero look is saved and read back")
+	closet.queue_free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+# a hero stands where he would walk to: no seat offset
+func _hero_standing(art: String) -> void:
+	var look := Look.new()
+	look.store = "user://soak_none.json"
+	look.setup(art)
+	if not look.hero_ready:
+		return
+	look.wear = "hero"
+	var pets := Pets.new()
+	pets.setup("", 11)
+	pets.blocked_cells = _layout().blocked()
+	var person := Person.new()
+	person.setup(pets, look, 5)
+	for want in ["desk", "sofa", "tv", "coffee", "sleep"]:
+		person.forced = want
+		person.snap()
+		var cell: Vector2i = Pets.SPOTS[Person.ACTS[want]["stand"]]["cell"]
+		_check(not person.seated, "hero does not sit for %s" % want)
+		_check(person.c.pos == pets._center(cell), "hero stands on the floor for %s" % want)
+	person.forced = "sofa"
+	person.snap()
+	person.forced = "desk"
+	for i in 3000:
+		person.process(0.1, false)
+		pets.process(0.1)
+		pets.events = []
+	var cell: Vector2i = Pets.SPOTS["desk_stand"]["cell"]
+	_check(person.act == "desk" and person.phase == "idle", "hero settles at the desk")
+	_check(not person.seated, "hero at the desk stands")
+	_check(look.anim_for(person.anim()) == "ready", "and is drawn in ready")
+	look.wear = "everyday"
+	person.setup(pets, look, 5)
+	person.forced = "sofa"
+	person.snap()
+	_check(person.seated, "an everyday person still sits")
 
 
 func _saved_looks(art: String) -> void:

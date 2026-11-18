@@ -174,7 +174,12 @@ func _ready() -> void:
 	if "--widget" in args:
 		_set_widget(true)
 	if "--closet" in args:
-		get_tree().create_timer(0.3).timeout.connect(_open_closet)
+		get_tree().create_timer(0.3).timeout.connect(
+			func() -> void:
+				_open_closet()
+				if "--tab" in args:
+					_closet.pick_tab(args[args.find("--tab") + 1])
+		)
 	if "--decorate" in args:
 		_set_decorate(true)
 		if "--pick" in args:

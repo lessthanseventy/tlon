@@ -98,6 +98,7 @@ var _from_z := 0.0
 var _exc := ""
 var _exc_left := 0.0
 var _exc_next := 30.0
+var _was_hero := false
 
 
 func setup(p, l, seed_value: int) -> void:
@@ -106,6 +107,12 @@ func setup(p, l, seed_value: int) -> void:
 	c = pets.critter("person")
 	rng.seed = seed_value if seed_value >= 0 else randi()
 	_exc_next = rng.randf_range(15.0, 30.0)
+	_was_hero = look.hero()
+
+
+# a hero has no sitting: he stands on the floor cell he would walk to
+func _sits(a: Dictionary) -> bool:
+	return a.has("seat") and not look.hero()
 
 
 func base() -> String:
@@ -133,7 +140,7 @@ func snap() -> void:
 	c.path = []
 	c.mode = "idle"
 	c.anim = "idle"
-	if a.has("seat"):
+	if _sits(a):
 		c.pos = a["seat"]
 		c.z = a["z"]
 		c.key = a["key"]
@@ -151,6 +158,9 @@ func snap() -> void:
 
 
 func process(dt: float, freeze: bool) -> void:
+	if look.hero() != _was_hero:
+		_was_hero = look.hero()
+		snap()
 	t += dt
 	stretch_left = maxf(0.0, stretch_left - dt)
 	react_left = maxf(0.0, react_left - dt)
@@ -226,7 +236,7 @@ func _go() -> void:
 func _arrived() -> void:
 	var a: Dictionary = ACTS[next]
 	c.dir = a["face"]
-	if a.has("seat"):
+	if _sits(a):
 		phase = "entering"
 		_tw = 0.0
 		_from = c.pos
@@ -328,10 +338,11 @@ func draw(canvas: CanvasItem, o: Vector2, k: int) -> void:
 	var f: Vector2 = pets.feet(c, o, k)
 	var a := anim()
 	var cur: Dictionary = ACTS[act]
-	if look.layered:
-		var held: String = cur.get("held", "") if a == "eat" else ""
-		var tex: Texture2D = look.sheet(look.cfg, k, held)
-		look.draw_frame(canvas, tex, a, c.dir, t, f, k, a == "sit" and cur.get("still", false))
+	if look.layered or look.hero():
+		var held: String = cur.get("held", "") if a == "eat" and not look.hero() else ""
+		var tex: Texture2D = look.sheet(look.current(), k, held)
+		var still: bool = a == "sit" and cur.get("still", false)
+		look.draw_frame(canvas, tex, look.anim_for(a), c.dir, t, f, k, still)
 	else:
 		look.draw_flat(canvas, f, k, a in ["sit", "type", "eat"], t)
 	var font := ThemeDB.fallback_font
