@@ -8,12 +8,22 @@ const RoomScript := preload("res://room.gd")
 const ORDER := ["waiting", "working", "idle", "cold", "off"]
 const LIVE := ["waiting", "working", "idle"]
 const WAITING_SHOWN := 5
+const WIDGET_SIZE := Vector2i(400, 290)
+const WIDGET_STORE := "user://house_widget.json"
 
 var _demo := false
 var _shot := ""
 var _base := "http://127.0.0.1:4040"
 
-var _data := {"open": [], "coming": [], "notes": []}
+var _data := {"open": [], "coming": [], "notes": [], "done_week": 0}
+var _jot: PanelContainer
+var _closet: Control
+var _widget := false
+var _drag := false
+var _drag_mouse := Vector2i.ZERO
+var _drag_win := Vector2i.ZERO
+var _prev_size := Vector2i(1100, 700)
+var _jot_seq := 0
 var _office := {}
 var _at := "home"
 var _inflight := ""
@@ -55,11 +65,25 @@ func _ready() -> void:
 	_panel.offset_right = 0
 	_panel.ticked.connect(_on_ticked)
 	_panel.door_pressed.connect(_toggle)
+	_panel.focus = _room.home.focus
+	_panel.opened.connect(func(id: int) -> void: _room.home.open_item_menu(id))
+	_panel.now_cleared.connect(func() -> void: _room.home.focus.clear())
+	_panel.timer_pressed.connect(_on_timer)
 	add_child(_panel)
+	_room.home.acted.connect(_on_act)
+	_room.pressed_empty.connect(_begin_drag)
 
 	_add_note(Control.PRESET_BOTTOM_LEFT, "Art by Gridwright")
 	if not _room.art_found:
 		_add_note(Control.PRESET_TOP_LEFT, "art not found")
+
+	_jot = preload("res://jot.gd").new()
+	_jot.submitted.connect(_send_jot)
+	_jot.cancelled.connect(func() -> void: _jot_seq += 1)
+	add_child(_jot)
+	_closet = preload("res://closet.gd").new()
+	_closet.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_closet)
 
 	if _demo:
 		var demo: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://demo.json"))
@@ -95,6 +119,18 @@ func _ready() -> void:
 		add_child(timer)
 		timer.start()
 	_enter(_at)
+	if "--widget" in args:
+		_set_widget(true)
+	if "--closet" in args:
+		get_tree().create_timer(0.3).timeout.connect(_open_closet)
+	if "--typing" in args:
+		var text: String = args[args.find("--typing") + 1]
+		get_tree().create_timer(0.3).timeout.connect(
+			func() -> void:
+				_jot.open(text)
+				if "--sending" in args:
+					_jot.sending(true)
+		)
 
 	if _shot != "":
 		var wait := float(args[args.find("--wait") + 1]) if "--wait" in args else 1.5
@@ -132,11 +168,14 @@ func _apply(data: Dictionary) -> void:
 		"open": data.get("open", []),
 		"coming": data.get("coming", []),
 		"notes": data.get("notes", []),
+		"done_week": data.get("done_week", 0),
 	}
 	_room.home.set_data(_data)
 	if _at == "home":
 		_room.show_home()
 		_panel.show_data(_data)
+	if _room.home.take_attention() and _shot == "":
+		DisplayServer.window_request_attention()
 
 
 func _toggle() -> void:
@@ -144,9 +183,210 @@ func _toggle() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_TAB:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	if _closet.visible or _jot.visible or event.ctrl_pressed or event.alt_pressed:
+		return
+	if event.keycode == KEY_TAB:
 		get_viewport().set_input_as_handled()
 		_toggle()
+		return
+	if get_viewport().gui_get_focus_owner() != null:
+		return
+	match event.keycode:
+		KEY_N, KEY_SLASH, KEY_ENTER, KEY_KP_ENTER:
+			if _at == "home":
+				get_viewport().set_input_as_handled()
+				_jot.open()
+		KEY_C:
+			if _at == "home":
+				get_viewport().set_input_as_handled()
+				_open_closet()
+		KEY_W:
+			get_viewport().set_input_as_handled()
+			_set_widget(not _widget)
+		KEY_ESCAPE:
+			_room.home.menu.close()
+
+
+func _process(_dt: float) -> void:
+	if _jot.visible:
+		var w := size.x - (0 if _widget else PANEL_WIDTH)
+		_jot.size = _jot.get_combined_minimum_size()
+		_jot.position = Vector2((w - _jot.size.x) / 2.0, size.y - _jot.size.y - 56).round()
+	if _drag:
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			get_window().position = _drag_win + (DisplayServer.mouse_get_position() - _drag_mouse)
+		else:
+			_drag = false
+			_save_widget()
+
+
+func _exit_tree() -> void:
+	_room.home.exit()
+
+
+func _open_closet() -> void:
+	if not _widget:
+		_closet.open(_room.home.look)
+
+
+func _begin_drag() -> void:
+	if _widget:
+		_drag = true
+		_drag_mouse = DisplayServer.mouse_get_position()
+		_drag_win = get_window().position
+
+
+func _save_widget() -> void:
+	var f := FileAccess.open(WIDGET_STORE, FileAccess.WRITE)
+	if f != null:
+		var p := get_window().position
+		f.store_string(JSON.stringify({"x": p.x, "y": p.y}))
+
+
+func _set_widget(on: bool) -> void:
+	if on == _widget:
+		return
+	var w := get_window()
+	if on:
+		_prev_size = w.size
+	else:
+		_save_widget()
+	_widget = on
+	_panel.visible = not on
+	_room.offset_right = 0 if on else -PANEL_WIDTH
+	w.borderless = on
+	w.always_on_top = on
+	w.size = WIDGET_SIZE if on else _prev_size
+	if on and FileAccess.file_exists(WIDGET_STORE):
+		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(WIDGET_STORE))
+		if d is Dictionary:
+			w.position = Vector2i(int(d.get("x", 0)), int(d.get("y", 0)))
+
+
+func _on_act(id: int, what: String) -> void:
+	match what:
+		"done":
+			_on_ticked(id)
+		"hour", "tomorrow":
+			_later(id, what)
+		"now":
+			for item in _data["open"]:
+				if int(item["id"]) == id:
+					_room.home.focus.set_now(id, str(item["text"]))
+		"unnow":
+			_room.home.focus.clear()
+		"closet":
+			_open_closet()
+		"jot":
+			_jot.open()
+
+
+func _on_timer(what: String) -> void:
+	var f: RefCounted = _room.home.focus
+	match what:
+		"cycle":
+			f.cycle()
+		"toggle":
+			if f.running():
+				f.stop()
+			else:
+				f.start()
+
+
+func _post(path: String, payload: Dictionary, done: Callable, timeout: float = 6.0) -> void:
+	var req := HTTPRequest.new()
+	req.timeout = timeout
+	add_child(req)
+	req.request_completed.connect(
+		func(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+			req.queue_free()
+			done.call(
+				result == HTTPRequest.RESULT_SUCCESS,
+				code,
+				JSON.parse_string(body.get_string_from_utf8())
+			)
+	)
+	if (
+		req.request(
+			_base + path,
+			["Content-Type: application/json"],
+			HTTPClient.METHOD_POST,
+			JSON.stringify(payload)
+		)
+		!= OK
+	):
+		req.queue_free()
+		done.call(false, 0, null)
+
+
+func _later(id: int, until: String) -> void:
+	var hours := 1.0 if until == "hour" else 24.0
+	var moved := func(_ok: bool, code: int, body: Variant) -> void:
+		if code == 200:
+			var due := Time.get_datetime_string_from_unix_time(
+				int(Time.get_unix_time_from_system() + hours * 3600.0)
+			)
+			if body is Dictionary and body.get("due_at") != null:
+				due = str(body["due_at"]).trim_suffix("Z")
+			_moved(id, due + "Z")
+		else:
+			_panel.set_reachable(code > 0)
+			_apply(_data)
+	if _demo:
+		moved.call(true, 200, null)
+	else:
+		_post("/api/home/%d/later" % id, {"until": until}, moved)
+
+
+func _moved(id: int, due_at: String) -> void:
+	var row := {}
+	for item in _data["open"]:
+		if int(item["id"]) == id:
+			row = item.duplicate()
+	if row.is_empty():
+		return
+	_room.home.send_later(id)
+	row["kind"] = "reminder"
+	row["due_at"] = due_at
+	row["told_at"] = null
+	_data["open"] = _data["open"].filter(func(t): return int(t["id"]) != id)
+	_data["coming"] = _data["coming"] + [row]
+	_apply(_data)
+	if not _demo:
+		_poll()
+
+
+func _send_jot(text: String) -> void:
+	_jot.sending(true)
+	_jot_seq += 1
+	var seq := _jot_seq
+	var finished := func(ok: bool, code: int, body: Variant) -> void:
+		if seq != _jot_seq:
+			return
+		if ok and code == 200:
+			_jot.finish()
+			var reply := "kept"
+			if body is Dictionary and body.get("reply") is String:
+				reply = body["reply"]
+			_room.home.show_reply(reply)
+			if _demo:
+				var id: int = 100 + _data["open"].size()
+				_data["open"] = _data["open"] + [
+					{"id": id, "kind": "todo", "text": text, "due_at": null, "every": null}
+				]
+				_apply(_data)
+			else:
+				_poll()
+		else:
+			_jot.fail("couldn't reach tlon — not kept")
+	if _demo:
+		get_tree().create_timer(1.4).timeout.connect(
+			func() -> void: finished.call(true, 200, {"reply": "to do: " + text})
+		)
+	else:
+		_post("/api/home", {"text": text}, finished, 40.0)
 
 
 func _enter(where: String) -> void:
@@ -186,6 +426,7 @@ func _on_polled(result: int, code: int, _headers: PackedStringArray, body: Packe
 				"open": parsed.get("open", []),
 				"coming": parsed.get("coming", []),
 				"notes": parsed.get("notes", []),
+				"done_week": parsed.get("done_week", 0),
 			}
 		else:
 			_office = parsed
@@ -361,4 +602,5 @@ func _remove(id: int) -> void:
 	_room.home.tick_off(id)
 	var kept: Array = _data["open"].filter(func(t): return int(t["id"]) != id)
 	_data["open"] = kept
+	_data["done_week"] = int(_data.get("done_week", 0)) + 1
 	_apply(_data)

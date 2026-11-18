@@ -9,6 +9,14 @@ run = "godot --path house"
 description = "house: the window on made-up things, no server (both rooms; `-- --office` starts in the office)"
 run = "godot --path house -- --demo"
 
+["house:widget"]
+description = "house: the room alone in a small borderless always-on-top window over the live server (W toggles it in the full window; drag the room to move it, the spot is remembered)"
+run = "godot --path house -- --widget"
+
+["house:soak"]
+description = "house: a simulated ten hours of the person and the pets on the grid, the closet's composition over every ready-made, and the POST routes against a local stub (needs Godot; reads playerctl once)"
+run = "godot --headless --path house --script res://soak.gd 2>&1 | { tee /dev/stderr | grep -q '^SOAK OK'; }"
+
 ["house:check"]
 description = "house: every script loads clean in headless Godot (not in `check`: Godot is not a mise tool)"
 run = "godot --headless --path house --quit 2>&1 | { ! grep -E 'ERROR|SCRIPT ERROR|Parse Error'; }"
