@@ -19,12 +19,15 @@ const Card := preload("res://card.gd")
 const EggSoak := preload("res://soak_eggs.gd")
 const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
+const LocalSoak := preload("res://soak_local.gd")
 const DEADLINE_MS := 540000
 
 var _srv := TCPServer.new()
 var _conns: Array = []
 var _log: Array = []
 var _fail_jot := false
+var served := true
+var _local
 var _mode := ""
 var _where := "start"
 var _office := {
@@ -75,6 +78,8 @@ func _run() -> void:
 	_logic()
 	_where = "soak"
 	_soak()
+	_where = "local list"
+	LocalSoak.new(self).run()
 	_where = "decorate"
 	_decorate_logic()
 	_where = "packs"
@@ -452,6 +457,8 @@ func _routes() -> void:
 	main.pets_every = 100.0
 	main.pets_nudge = 0.3
 	root.add_child(main)
+	# the morning slip, up after 05:30, would hold the forms shut
+	main._room.home.fake_hour = 15.0
 	await create_timer(1.5).timeout
 	_check(
 		main._data["open"].size() == 2,
@@ -537,7 +544,29 @@ func _routes() -> void:
 	await FormSoak.new(self, main).run()
 	_where = "settings and chat"
 	await ChatSoak.new(self, main).run()
+	_where = "local routes, forms and chat"
+	await LocalSoak.new(self).over(main)
 	_srv.stop()
+
+
+# the stub's state as the forms and the chat set it; the local pass puts it in the list too
+func seed(open: Array, coming: Array = [], extra: Dictionary = {}) -> void:
+	_state["open"] = open
+	_state["coming"] = coming
+	_state.merge(extra, true)
+	if not served:
+		_local.push_state()
+
+
+func add_open(row: Dictionary) -> void:
+	_state["open"].append(row)
+	if not served:
+		_local.push_state()
+
+
+# what the notepad and the chat expect back for a loose line that became a to-do
+func reply_for(text: String) -> String:
+	return "to do: " + text if served else "To do: %s." % text
 
 
 func _count(path: String) -> int:

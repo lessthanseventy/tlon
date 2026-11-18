@@ -58,7 +58,8 @@ func run() -> void:
 	_names()
 	_chat_file()
 	await _settings_view()
-	await _address()
+	if s.served:
+		await _address()
 	await _conversation()
 	await _blockers()
 	s._check(_stamp() == _before, "the user's own files were not touched")
@@ -298,11 +299,11 @@ func _address() -> void:
 	s._check("http" in v._url_say.text, "an address must start with http")
 	v._url.text = "http://127.0.0.1:4998/"
 	v._check()
-	s._check(main._base == "http://127.0.0.1:4998", "the address applies at once: %s" % main._base)
+	s._check(main._backend.base == "http://127.0.0.1:4998", "the address applies at once: %s" % main._backend.base)
 	await _wait()
 	v._url.text = ""
 	v._check()
-	s._check(main._base == Settings.default_url(), "empty is the default again: %s" % main._base)
+	s._check(main._backend.base == Settings.default_url(), "empty is the default again: %s" % main._backend.base)
 	await _wait()
 	v.close()
 
@@ -318,7 +319,7 @@ func _conversation() -> void:
 	v._submit("hello house")
 	s._check(v.reading and chat.messages[-1]["who"] == "me", "sending shows his line and a reading state")
 	await _wait(1.0)
-	s._check(not v.reading and chat.messages[-1]["text"] == "to do: hello house" and chat.messages[-1]["who"] == "home", "the reply replaces reading")
+	s._check(not v.reading and chat.messages[-1]["text"] == s.reply_for("hello house") and chat.messages[-1]["who"] == "home", "the reply replaces reading")
 	s._check(s._seen("POST", "/api/home", "hello house"), "the line is posted to /api/home")
 	s._check(s._count("/api/home") > before, "the status is read again at once")
 	s._fail_jot = true
@@ -338,7 +339,7 @@ func _conversation() -> void:
 	main._send_jot("from the pad")
 	await _wait(1.0)
 	var texts: Array = chat.messages.map(func(m): return m["text"])
-	s._check(texts.has("from the pad") and texts.has("to do: from the pad"), "a notepad line and its reply are in the history")
+	s._check(texts.has("from the pad") and texts.has(s.reply_for("from the pad")), "a notepad line and its reply are in the history")
 	main._jot.finish()
 	for row in [
 		{"id": 7, "kind": "reminder", "text": "stretch", "due_at": null, "every": null, "told_at": "2026-11-18T10:00:00Z"},
@@ -346,7 +347,7 @@ func _conversation() -> void:
 		{"id": 9, "kind": "reminder", "text": "mail", "due_at": null, "every": null, "told_at": "2026-11-18T10:00:00Z"},
 		{"id": 10, "kind": "reminder", "text": "bins", "due_at": null, "every": "week", "told_at": "2026-11-18T10:00:00Z"},
 	]:
-		s._state["open"].append(row)
+		s.add_open(row)
 	chat.unread = false
 	main._poll()
 	await _wait()
