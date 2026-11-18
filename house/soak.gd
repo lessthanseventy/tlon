@@ -189,6 +189,88 @@ func _looks() -> void:
 	closet._random()
 	_check(look.preview(closet._work, 2) != null, "preview after random")
 	closet.queue_free()
+	_reach_everyday(look)
+	_saved_looks(art)
+
+
+func _saved_looks(art: String) -> void:
+	var path := "user://soak_person.json"
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"build": "slim", "top": "tee", "extra": "scarf_red"}))
+	f.close()
+	var old := Look.new()
+	old.store = path
+	old.setup(art)
+	_check(
+		old.cfg["scarf"] == "scarf_red" and old.cfg["build"] == "slim",
+		"an old `extra` loads into its slot"
+	)
+	_check(
+		old.cfg["eyewear"] == "" and old.cfg["apron"] == "",
+		"an old `extra` clears the other slots"
+	)
+	old.cfg["eyewear"] = "sunglasses_black"
+	old.cfg["backpack"] = "backpack_red"
+	old.save()
+	var back := Look.new()
+	back.store = path
+	back.setup(art)
+	_check(
+		(
+			back.cfg["scarf"] == "scarf_red"
+			and back.cfg["eyewear"] == "sunglasses_black"
+			and back.cfg["backpack"] == "backpack_red"
+		),
+		"eyewear, scarf and backpack are worn together and kept"
+	)
+	var acc: Array = back.layer_paths(back.cfg).filter(
+		func(p: String) -> bool: return "/accessory/" in p
+	)
+	_check(acc.size() == 3, "three accessory layers compose (%d)" % acc.size())
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _reach_everyday(look) -> void:
+	var made := {}
+	for b in ["broad", "slim"]:
+		var base: Dictionary = look.cfg.duplicate()
+		base["build"] = b
+		for key in Look.OPTIONAL:
+			base[key] = ""
+		var variants: Array = []
+		for skin in look.opts["skin"]:
+			variants.append({"skin": skin})
+		for hair in look.opts["hair"]:
+			for colour in look.opts["hair_c"]:
+				variants.append({"hair": hair, "hair_c": colour})
+		for group in ["top", "bottom", "shoes"]:
+			for style in look.opts[group]:
+				for colour in look.opts[group + "_c"]:
+					variants.append({group: style, group + "_c": colour})
+		for key in ["beard", "hat", "eyewear", "scarf", "backpack", "apron"]:
+			for value in look.opts[key]:
+				variants.append({key: value})
+		for v in variants:
+			var c: Dictionary = base.duplicate()
+			c.merge(v, true)
+			for p in look.layer_paths(c):
+				made[p] = true
+	var unreachable: Array = []
+	var absent: Array = []
+	for b in ["broad", "slim"]:
+		for g in DirAccess.get_directories_at(look.root.path_join("Layers/" + b)):
+			if g == "held":
+				continue
+			var dir: String = look.root.path_join("Layers/%s/%s" % [b, g])
+			for f in DirAccess.get_files_at(dir):
+				if f.ends_with(".png") and not made.has(dir.path_join(f)):
+					unreachable.append(b + "/" + g + "/" + f)
+	for p in made:
+		if not FileAccess.file_exists(p):
+			absent.append(p.get_file())
+	_check(unreachable.is_empty(), "closet cannot reach: %s" % str(unreachable.slice(0, 8)))
+	_check(absent.is_empty(), "closet offers files that do not exist: %s" % str(absent.slice(0, 8)))
+	print("looks: %d everyday layer files reached from the closet" % made.size())
 
 
 func _routes() -> void:

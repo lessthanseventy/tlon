@@ -99,9 +99,9 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 - **The closet** (wardrobe, or `C`) picks who the person is. With the character-creator pack it
   composes `Layers/<build>/<group>/…png` from `layers.json`'s layer order in GDScript (alpha-stacked,
   scaled nearest) and offers build, skin, hair and colour, beard, top and colour, trousers and
-  colour, shoes and colour, hat, extra, the 20 ready-made recipes and a random button; keys up/down,
+  colour, shoes and colour, hat, eyewear, scarf, backpack and apron (worn together, each with none), the 20 ready-made recipes and a random button; keys up/down,
   left/right, `R`, Enter keeps, Esc leaves. Without the pack: skin, shirt, hat, glasses, scarf drawn
-  in code. The choice is saved to `user://house_person.json`.
+  in code. The choice is saved to `user://house_person.json` (an old `extra` loads into its slot).
 - **Jotting** (the notepad on the desk, `N`, `/` or Enter): a paper field; Enter sends the text to
   the server (a model reads it, so a pencil scribbles while it waits) and the reply shows as a slip
   for a few seconds. A server that does not answer says "couldn't reach tlon — not kept" and keeps
@@ -184,7 +184,7 @@ and seeds their dice (`--seed N` to pick another):
 - `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a card, a
   name tag or a pat can be photographed without a pointer.
 - `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--wave "text"` a coworker at the door; `--plane "title"` a landed plane; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--visitor` feed the demo office to the door; `--person
-  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet; `--typing
+  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet; `--look k=v,...` sets look keys for the picture (not kept); `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
   "text"` opens the jot field (`--sending` shows the scribble); `--reply "text"` the reply slip;
   `--menu ID` the paper menu on thing ID; `--ring ID` rings the phone for thing ID; `--now
   ID[:MINUTES[:DONE_FRACTION]]` pins thing ID with a running timer (nothing saved); `--widget`;

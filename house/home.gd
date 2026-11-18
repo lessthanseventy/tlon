@@ -116,6 +116,7 @@ var _slip_kind := ""
 var _t_args := 0.0
 var _cal := PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
 var _arg_menu := -1
+var _arg_then := ""
 var _arg_reply := ""
 var _arg_ring := -1
 var _rung: Array = []
@@ -128,6 +129,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	var nina_at := ""
 	var argos_at := ""
 	var layout_file := ""
+	var look_spec := ""
 	for i in args.size():
 		var next: String = args[i + 1] if i + 1 < args.size() else ""
 		match args[i]:
@@ -178,6 +180,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				fake_day = next
 			"--person":
 				person.forced = next
+			"--then":
+				_arg_then = next
 			"--menu":
 				_arg_menu = int(next)
 			"--reply":
@@ -186,6 +190,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				_arg_ring = int(next)
 			"--layout":
 				layout_file = next
+			"--look":
+				look_spec = next
 			"--now":
 				var parts := next.split(":")
 				focus.persist = false
@@ -212,6 +218,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	pets.is_night = _env_now()["day"] < 0.15
 	pets.setup(art_dir, seed_value)
 	look.setup(art_dir)
+	look.stage(look_spec)
 	person.setup(pets, look, seed_value)
 	tv.setup(seed_value)
 	knock.setup(seed_value)
@@ -494,6 +501,9 @@ func process(dt: float) -> void:
 		if _arg_reply != "":
 			show_reply(_arg_reply)
 			_arg_reply = ""
+	if _t > 0.3 and _arg_then != "":
+		person.forced = _arg_then
+		_arg_then = ""
 	if _t > 0.3 and _arg_drop:
 		_arg_drop = false
 		jar.set_count(jar.total + 1, jar.week, 0.0)
