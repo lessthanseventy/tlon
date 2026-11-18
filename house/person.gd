@@ -315,7 +315,9 @@ func arrive(with_bag: bool) -> void:
 
 func poke() -> void:
 	react_left = 1.8
-	pets.say(c, LINES[rng.randi() % LINES.size()])
+	var here: Array = pets.species_here()
+	var lines := LINES.filter(func(l): return pets.voices.fits(l, here))
+	pets.say(c, lines[rng.randi() % lines.size()])
 	c.pat_t = 0.0
 
 

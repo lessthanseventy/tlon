@@ -86,7 +86,8 @@ func word(w: String) -> void:
 			a.hops = 5
 			a.wait = maxf(a.wait, 6.0)
 			h.pets.say(a, LINES["argos"][h.eggs.rng.randi() % 2])
-			h.sound.request("bark")
+			if h.pets.cry(a) == "bark":
+				h.sound.request("bark")
 
 
 func start_disco() -> void:

@@ -1284,7 +1284,7 @@ func _stage_settings(spec: String) -> void:
 	for p in spec.split(";", false):
 		var key := p.get_slice("=", 0)
 		var val := p.substr(p.find("=") + 1) if "=" in p else ""
-		if key in ["name", "cat", "dog", "birthday", "claude_command"]:
+		if key in ["name", "cat", "dog", "pet1", "pet2", "birthday", "claude_command"]:
 			settings.put(key, val)
 		elif key in ["claude", "telegram"]:
 			settings.put(key, val == "on")

@@ -10,6 +10,7 @@ const Pets := preload("res://pets.gd")
 const Sound := preload("res://sound.gd")
 const Guests := preload("res://guests.gd")
 const Room := preload("res://room.gd")
+const Quirks := preload("res://quirks.gd")
 const SCALES := [1, 2, 3]
 const INTERIORS := "isometric-interiors/Gridwright Isometric Interiors/"
 
@@ -26,6 +27,7 @@ func _init() -> void:
 	_look()
 	_pets()
 	_guests()
+	_visitors()
 	_sound()
 	_licences()
 	var names: Array = _files.keys()
@@ -92,11 +94,11 @@ func _pets() -> void:
 	pets.setup(_art, 1)
 	var animals: String = pets.animals_dir.trim_prefix(_art + "/")
 	var chars: String = pets.chars_dir.trim_prefix(_art + "/")
+	for kind in Pets.KINDS:
+		for anim in Pets.ANIMS:
+			_scaled("%sSheets/1x/%s/%s_%s.png" % [animals, kind, kind, anim])
 	for c in pets.critters:
-		if c.pack == "animals":
-			for k in SCALES:
-				_under("%sSheets/%dx/%s" % [animals, k, c.sheet], "png")
-		else:
+		if c.pack == "chars":
 			for anim in ["idle", "walk"]:
 				_scaled("%sSheets/1x/%s/%s_%s.png" % [chars, c.sheet, c.sheet, anim])
 	for name in ["shadow_small", "shadow_medium"]:
@@ -104,6 +106,20 @@ func _pets() -> void:
 	_scaled(chars + "Effects/1x/shadow.png")
 	for name in Room.SKINS:
 		_scaled("%sSheets/1x/%s/%s_idle.png" % [chars, name, name])
+
+
+func _visitors() -> void:
+	var city: String = Quirks.PACKS["city"]["dir"]
+	for name in Quirks.PEDESTRIANS:
+		for anim in ["idle", "walk", "phone"]:
+			_scaled("%sSheets/1x/%s/%s_%s.png" % [city, name, name, anim])
+	_scaled(city + "Effects/1x/shadow_small.png")
+	var monsters: String = Quirks.PACKS["monster"]["dir"]
+	for name in Quirks.MONSTERS:
+		for anim in ["idle", Quirks.MONSTERS[name][0]]:
+			_scaled("%sSheets/1x/%s/%s_%s.png" % [monsters, name, name, anim])
+	for shadow in ["shadow_small", "shadow_medium"]:
+		_scaled("%sEffects/1x/%s.png" % [monsters, shadow])
 
 
 func _guests() -> void:

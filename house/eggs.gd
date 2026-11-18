@@ -29,10 +29,18 @@ const MUG_AT := Vector2(4.27, 0.33)
 const QUICK := [
 	"flop", "sulk", "box", "piano", "fire", "bird", "balloon", "nightcat", "star", "plane", "fireworks",
 	"mouse", "book", "globe", "found", "disco", "tlon", "uqbar", "argos", "borges",
-	"spin", "pencil", "stretch", "nod", "cast", "bow", "salute", "visitor",
+	"spin", "pencil", "stretch", "nod", "cast", "bow", "salute",
 	"moth", "rainwatch", "storm", "jarfull", "newlook"
 ]
 const BRING := ["slipper", "yarn", "crumple"]
+const NEEDS := {
+	"push": ["nina"],
+	"keys": ["nina"],
+	"box": ["nina"],
+	"sulk": ["nina"],
+	"bring": ["argos"],
+	"flop": ["argos"],
+}
 const LINES := {
 	"push": {"Nina": ["gravity is a theory.", "it was in my way.", "I regret nothing."]},
 	"zoom": {"Nina": ["3 a.m. in the afternoon.", "ignore that."], "Argos": ["WHEEE", "I ran!"]},
@@ -83,7 +91,9 @@ const CATALOGUE := [
 	["cast", "a spell at the hearth"],
 	["salute", "a salute at the door"],
 	["bow", "an arrow in the wall"],
-	["visitor", "a visitor"],
+	["visitor", "a hero at the door"],
+	["visitor_city", "a passer-by"],
+	["visitor_monster", "a monster at the door"],
 	["konami", "the old code"],
 	["tlon", "Tlon"],
 	["uqbar", "Uqbar"],
@@ -179,13 +189,21 @@ func calm() -> bool:
 
 
 func line(c, key: String) -> void:
-	var opts: Array = LINES.get(key, {}).get(c.title, [])
+	var opts: Array = LINES.get(key, {}).get(c.title, []).filter(
+		func(l): return h.pets.voices.fits(l, [c.species])
+	)
 	if not opts.is_empty() and c.say_left <= 0.0:
 		h.pets.say(c, opts[rng.randi() % opts.size()])
 
 
 func loose(c) -> bool:
-	return c.mode in ["idle", "sleep"] and c.jump.is_empty() and c.goal == "" and not c.hold
+	return (
+		not c.away
+		and c.mode in ["idle", "sleep"]
+		and c.jump.is_empty()
+		and c.goal == ""
+		and not c.hold
+	)
 
 
 func spot(name: String, def: Dictionary) -> String:
@@ -304,8 +322,16 @@ func _director(dt: float) -> void:
 		start(picks[rng.randi() % picks.size()])
 
 
+# a scene about a pet that is not in the room is not played
+func unstaffed(name: String) -> bool:
+	for id in NEEDS.get(name, []):
+		if h.pets.critter(id).away:
+			return true
+	return name == "zoomies" and h.pets.species_here().is_empty()
+
+
 func start(name: String) -> bool:
-	if not scene.is_empty():
+	if not scene.is_empty() or unstaffed(name):
 		return false
 	var nina = h.pets.critter("nina")
 	var argos = h.pets.critter("argos")
@@ -363,6 +389,8 @@ func start(name: String) -> bool:
 			scene = {"k": "keys", "st": 0, "t": 0.0, "a": mid - along * 0.35, "b": mid + along * 0.35, "n": 0.0}
 		"zoomies":
 			var runner = nina if rng.randf() < 0.5 else argos
+			if runner.away:
+				runner = argos if runner == nina else nina
 			var seen = argos if runner == nina else nina
 			var cells: Array = []
 			var from: Vector2i = h.pets._cell_of(runner.pos)
@@ -395,6 +423,14 @@ func _arrived(c) -> bool:
 	return c.goal == "" and c.jump.is_empty() and c.mode in ["idle", "sleep"] and c.path.is_empty()
 
 
+func release_scene() -> void:
+	scene = {}
+	for id in ["nina", "argos"]:
+		var c = h.pets.critter(id)
+		c.carry = ""
+		_release(c)
+
+
 func _release(c, wait: float = 1.0) -> void:
 	c.hold = false
 	c.run = false
@@ -403,7 +439,9 @@ func _release(c, wait: float = 1.0) -> void:
 
 func _scene(dt: float) -> void:
 	if not forced.is_empty():
-		if forced[0] in QUICK:
+		if forced[0].begins_with("visitor"):
+			h.quirks.force(forced.pop_front())
+		elif forced[0] in QUICK:
 			_quick(forced.pop_front())
 		elif scene.is_empty():
 			start(forced.pop_front())
@@ -563,7 +601,7 @@ func _laser(dt: float) -> void:
 	if _laser_t > 0.0:
 		return
 	_laser_t = 0.35
-	if not scene.is_empty():
+	if not scene.is_empty() or h.pets.species_here().is_empty():
 		return
 	find("laser")
 	for c in [nina, argos]:
@@ -625,10 +663,8 @@ func pet_click(c) -> bool:
 		_pet_run["n"] = 0
 		_do_sulk(c)
 		return true
-	if c.id == "nina":
-		h.sound.request("purr")
-	elif c.id == "argos":
-		h.sound.request("bark")
+	if h.pets.cry(c) != "":
+		h.sound.request(h.pets.cry(c))
 	return false
 
 
@@ -881,6 +917,8 @@ func key(code: int) -> bool:
 
 # staged on demand: things that need no scene of their own
 func _quick(name: String) -> void:
+	if unstaffed(name):
+		return
 	match name:
 		"flop":
 			_do_flop(h.pets.critter("argos"))
@@ -908,7 +946,7 @@ func _quick(name: String) -> void:
 			h.secrets.start_disco()
 		"tlon", "uqbar", "argos", "borges":
 			h.secrets.word(name)
-		"spin", "pencil", "stretch", "nod", "cast", "bow", "salute", "visitor":
+		"spin", "pencil", "stretch", "nod", "cast", "bow", "salute":
 			h.quirks.force(name)
 		"moth":
 			h.delights.start_moth()

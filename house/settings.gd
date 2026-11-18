@@ -13,6 +13,8 @@ const DEFAULTS := {
 	"birthday": "",
 	"cat": CAT,
 	"dog": DOG,
+	"pet1": "cat_black",
+	"pet2": "dog_golden",
 	"widget": false,
 	"on_top": true,
 	"url": "",
