@@ -18,6 +18,7 @@ const Layout := preload("res://layout.gd")
 const Card := preload("res://card.gd")
 const Sound := preload("res://sound.gd")
 const Eggs := preload("res://eggs.gd")
+const Petlife := preload("res://petlife.gd")
 const Hearth := preload("res://hearth.gd")
 const Outside := preload("res://outside.gd")
 const Finds := preload("res://finds.gd")
@@ -107,6 +108,7 @@ var jar := Jar.new()
 var knock := Knock.new()
 var sound := Sound.new()
 var eggs := Eggs.new()
+var petlife := Petlife.new()
 var hearth := Hearth.new()
 var outside := Outside.new()
 var spells := Spells.new()
@@ -324,6 +326,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	knock.setup(seed_value)
 	sound.setup(room, not staged, art_dir)
 	eggs.setup(self, seed_value, not staged)
+	petlife.setup(self)
+	pets.life_options = petlife.options
 	hearth.setup(self)
 	outside.setup(self)
 	finds.setup(self)
@@ -376,11 +380,13 @@ func _place_arg(id: String, spec: String) -> void:
 	var mode: String = (
 		parts[1] if parts.size() > 1 else ("sleep" if parts[0] in ["sofa", "bed"] else "sit")
 	)
-	if Pets.SPOTS.has(parts[0]):
+	if pets.spots.has(parts[0]):
 		var c: Pets.Critter = pets.critter(id)
 		pets.place(c, parts[0], "sit" if mode in ["walk", "run"] else mode)
 		if mode in ["walk", "run"]:
 			c.anim = mode
+		elif pets.spots[parts[0]].has("use") and mode == "sit":
+			pets.arrive_at(c, parts[0])
 
 
 func _on_setting(key: String) -> void:
@@ -629,6 +635,7 @@ func process(dt: float) -> void:
 	_knocking(dt)
 	sound.process(dt, self)
 	eggs.process(dt)
+	petlife.process(dt)
 	hearth.process(dt)
 	spells.process(dt)
 	outside.process(dt)
@@ -905,6 +912,7 @@ func items() -> Array:
 	if person.bag == "down":
 		out.append({"key": Person.BAG_AT.x + Person.BAG_AT.y - 1.0, "pri": 1.7, "fn": _draw_bag})
 	out.append_array(eggs.items())
+	out.append_array(petlife.items())
 	out.append_array(finds.items())
 	out.append_array(quirks.items())
 	out.append_array(delights.items())
@@ -1032,6 +1040,7 @@ func draw_floor() -> void:
 		room, _o, _k, lerpf(0.4, 2.2, clampf((hour - 8.0) / 9.0, 0.0, 1.0)), 5.05, _env["sun"]
 	)
 	_draw_bed()
+	petlife.draw_floor()
 	for c in pets.critters:
 		if c.id != "person":
 			pets.draw_shadow(room, c, _o, _k)
@@ -1053,9 +1062,6 @@ func _draw_bed() -> void:
 	room.draw_colored_polygon(_ellipse(6.5, 6.5, 17.0, 8.5), Color("5e3a36"))
 	room.draw_colored_polygon(_ellipse(6.5, 6.5, 14.5, 7.2, 1.0), Color("a8605a"))
 	room.draw_colored_polygon(_ellipse(6.5, 6.5, 10.0, 5.0, 1.0), Color("c98577"))
-	room.draw_colored_polygon(_ellipse(7.5, 7.5, 6.0, 3.0), Color("4a5a78"))
-	room.draw_colored_polygon(_ellipse(7.5, 7.5, 4.6, 2.2, 1.0), Color("8aa0c8"))
-	room.draw_colored_polygon(_ellipse(7.5, 7.5, 3.6, 1.7, 1.5), Color("c9a86a"))
 
 
 func draw_plant(f: Array) -> void:
@@ -1770,6 +1776,8 @@ func click(pos: Vector2) -> bool:
 		return true
 	if key.begins_with("thing:"):
 		eggs.take(int(key.substr(6)))
+		return true
+	if petlife.click(key):
 		return true
 	if key == "star":
 		outside.wish()

@@ -380,6 +380,14 @@ runs on the local list.
   sound a species makes, none for a rabbit, fox or deer; only a cat purrs, only a dog barks), `Voices.SPECIES`
   (house lines that suit one species) and `Voices.OWN` (what a species says offline).
   A new kind is a row in `KINDS`, and its sheets are in the art pack at once (`art_pack.gd`).
+- **The pets' things** (`petlife.gd`; the settings `litter_box`, `bowls`, `pet_things`, all on): in the pets' corner, a
+  food and a water bowl for both pets (a click fills one: a toy, nothing is ever empty-and-sad, the level only shows;
+  `bowl` and `water` spots, the `eat` animation), a litter box (code-drawn, two items so the pet stands inside it; only when a
+  cat-species pet lives here, every 7-15 minutes, a sand flick) and a scratching post for a cat, a blanket for a pig, boar or
+  bear (a bone on it for a dog, wolf or fox), and a hay bale for the farm animals (the farm pack's sprite, lent through
+  `layout.guests` so it blocks its cell; a chicken sleeps on it, the rest eat from it). The pets reach them through
+  `Pets.life_options` (extra rows for `_decide_*`) and a spot's `use` key. A thing is not there when the owner's furniture
+  stands on its cell; none of it is saved or movable in decorate mode.
 - Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
   (sweet, not bright). Clicking one pets it; a right click opens its card, "who is this?" (`pet_view.gd`: the animal as a grid of idling sprites and `none`, and the name; the same `pet1`/`pet2`, `cat`/`dog` the settings screen writes; `--pet-card nina|argos` stages it). Their lines are `voices.gd`: `GET /api/home/pets`, a batch a
   model wrote for the home as it is now, `{Nina: {occasion: [lines]}, Argos: {...}, duo: [[

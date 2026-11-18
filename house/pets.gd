@@ -115,6 +115,7 @@ var critters: Array = []
 var blocked_cells := {}
 var voices := Voices.new()
 var on_say := Callable()
+var life_options := Callable()
 var rng := RandomNumberGenerator.new()
 var kinds := ROLE_KINDS.duplicate()
 var animals_dir := ""
@@ -170,6 +171,7 @@ class Critter:
 	var flip := false
 	var hold := false
 	var carry := ""
+	var use := ""
 
 
 func setup(art_dir: String, seed_value: int) -> void:
@@ -254,6 +256,7 @@ func change_kind(c: Critter, kind: String) -> void:
 	c.flip = false
 	c.hops = 0
 	c.carry = ""
+	c.use = ""
 	c.hearts = []
 	c.bat_toy = {}
 	c.plan = {}
@@ -315,6 +318,7 @@ func place(c: Critter, spot: String, mode: String) -> void:
 	c.path = []
 	c.jump = {}
 	c.goal = ""
+	c.use = ""
 	if s.has("perch"):
 		c.pos = s["perch"]
 		c.z = s["z"]
@@ -370,6 +374,7 @@ func go(c: Critter, spot: String, mode: String, dur: float) -> void:
 	var s: Dictionary = spots[spot]
 	c.plan = {"spot": spot, "mode": mode, "dur": dur}
 	c.goal = spot
+	c.use = ""
 	if not c.jump.is_empty():
 		return
 	if c.z > 0.0:
@@ -421,6 +426,11 @@ func _arrive(c: Critter) -> void:
 		c.mode = "idle"
 		c.anim = "eat"
 		c.anim_t = 0.0
+	elif s.has("use") and mode == "sit":
+		c.mode = "idle"
+		c.anim = "eat" if s["use"] == "bone" else "attack"
+		c.anim_t = 0.0
+		c.use = s["use"]
 	elif mode == "chase":
 		_begin_bat(c)
 		return
@@ -638,6 +648,7 @@ func _decide_nina(c: Critter) -> void:
 		["tv", 7.0 if tv_on else 0.0, "sit", rng.randf_range(12, 25)],
 		["yarn", 2.5, "chase", 0.0],
 	]
+	options.append_array(_life(c))
 	var pick := _pick(options, c.spot)
 	if pick[0] == "yarn":
 		var toy := _toy_of("yarn")
@@ -659,13 +670,23 @@ func _decide_argos(c: Critter) -> void:
 	var options: Array = [
 		["bed", 3.0, "sleep", rng.randf_range(30, 60)],
 		["rug", 2.0, "sit", rng.randf_range(8, 14)],
-		["bowl", 1.0, "sit", rng.randf_range(5, 8)],
 		["board", 1.5, "sit", rng.randf_range(6, 10)],
 		[wander[rng.randi() % wander.size()], 4.0, "sit", rng.randf_range(4, 9)],
 	]
+	options.append_array(_life(c))
 	var pick := _pick(options, c.spot)
 	go(c, pick[0], pick[2], pick[3])
 	c.wait = 9999.0
+
+
+# the pet is at the spot and doing what the spot is for
+func arrive_at(c: Critter, spot: String) -> void:
+	c.plan = {"spot": spot, "mode": "sit", "dur": 6.0}
+	_arrive(c)
+
+
+func _life(c: Critter) -> Array:
+	return life_options.call(c) if life_options.is_valid() else []
 
 
 func _toy_of(kind: String) -> Dictionary:
