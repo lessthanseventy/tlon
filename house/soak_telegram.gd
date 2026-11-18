@@ -454,14 +454,15 @@ func _telegram() -> void:
 	tg3.grace = 5.0
 	tg3.on_told({"id": 14, "text": "fresh", "every": null})
 	await _until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ fresh")
+	var others: Array = tg3._msgs.keys().filter(func(k): return int(k) != 14)
 	edits = bot.named("editMessageText").size()
-	tg3.sync([])
+	tg3.sync(others)
 	await _settle(0.15)
 	_eq(
 		bot.named("editMessageText").size(), edits, "a message younger than the grace is left alone"
 	)
 	tg3.grace = 0.0
-	tg3.sync([])
+	tg3.sync(others)
 	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
 	_eq(
 		bot.named("editMessageText").back()["text"],
