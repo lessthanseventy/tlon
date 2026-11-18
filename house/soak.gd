@@ -897,6 +897,7 @@ func _room(seed_value: int = 7) -> Control:
 	h.sound.persist = false
 	h.sound.muted = true
 	h.eggs.setup(h, seed_value + 4, false)
+	h.outside.setup(h)
 	h.fake_day = "06-15"
 	h.layout.setup(room._index, room.art_found, "", false)
 	h.apply_layout()

@@ -25,6 +25,7 @@ func run() -> void:
 	_hearth()
 	_calm()
 	keys()
+	outside()
 
 
 func _sound() -> void:
@@ -295,3 +296,50 @@ func _day(seed_value: int) -> Array:
 		was = on
 	made[0].queue_free()
 	return out
+
+
+func outside() -> void:
+	var made := _home(61)
+	var h = made[1]
+	var o = h.outside
+	h.fake_hour = 14.0
+	h.process(0.1)
+	s._check(o.eligible("bird") and o.eligible("balloon") and o.eligible("plane"), "day things by day")
+	s._check(not o.eligible("nightcat") and not o.eligible("star"), "night things not by day")
+	h.forced_weather = "rain"
+	h.process(0.1)
+	s._check(not o.eligible("bird") and not o.eligible("balloon"), "nothing flies in the rain")
+	h.forced_weather = "clear"
+	h.fake_hour = 21.5
+	h.process(0.1)
+	s._check(o.eligible("nightcat") and o.eligible("star") and not o.eligible("bird"), "night things by night")
+	h.eggs.next_big = 1.0e9
+	o.start("nightcat")
+	s._run_home(h, 20.0)
+	var nn = h.pets.critter("nina")
+	s._check(nn.spot == "sill", "Nina stares at the cat on the fence %s %s %s %s" % [nn.spot, nn.mode, nn.goal, nn.hold])
+	o.start("star")
+	o.wish()
+	s._check(h.reply_text != "" and h.sound.requested.has("wish") and h.eggs.found.has("star"), "a wish gets a line and a chime")
+	for name in ["bird", "balloon", "plane", "nightcat", "star"]:
+		o.start(name)
+		s._run_home(h, o.LONG[name] + 1.0)
+		s._check(not o.act.has(name), "%s goes by" % name)
+	h.fake_day = "12-31"
+	h.fake_hour = 23.5
+	s._run_home(h, 10.0)
+	s._check(h.eggs.found.has("fireworks"), "fireworks at New Year")
+	h.fake_day = "06-15"
+	h.fake_hour = 14.0
+	o.bursts = []
+	s._run_home(h, 10.0)
+	s._check(o.bursts.is_empty() and not o.winter(), "and not in June")
+	h.fake_day = "01-10"
+	s._check(o.winter(), "snow settles on the sill in winter")
+	var days := {}
+	for i in 36000:
+		h.process(0.1)
+		for k in o.act:
+			days[k] = true
+	s._check(days.size() >= 1 and days.size() <= 5, "outside things come by themselves, rarely")
+	made[0].queue_free()

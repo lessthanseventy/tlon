@@ -53,7 +53,7 @@ static func _shade(col: Color, day: float, overcast: float) -> Color:
 
 
 static func draw(
-	c: CanvasItem, o: Vector2, k: int, env: Dictionary, t: float, hover: bool
+	c: CanvasItem, o: Vector2, k: int, env: Dictionary, t: float, hover: bool, extra: Callable = Callable()
 ) -> PackedVector2Array:
 	var q := quad(o, k)
 	var w: String = env["weather"]
@@ -68,6 +68,8 @@ static func draw(
 	_sky(c, q, k, env, t, w, day, hour, overcast)
 	_ground(c, q, k, w, day, overcast, t)
 	_clouds(c, q, k, w, day, t)
+	if extra.is_valid():
+		extra.call(q)
 	_glass(c, q, k, w, t)
 	var bar := FRAME.darkened(0.04)
 	c.draw_colored_polygon(
