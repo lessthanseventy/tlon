@@ -162,7 +162,7 @@ defmodule Server.MCP.OperatorAPI do
                                          a waiting-on its who; someday are the put-off things; note_rows is notes as {id, text}
       GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open
                                          thing to do now; skip is ids joined by commas, minutes the time there is; 400 on either not numbers
-      GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion
+      GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion; ?nina_|argos_ + name|species|personality (sassy sweet lazy mischievous shy bold) choose the cast
                                          (asking may write the next batch); {} before the first
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
       POST   /api/home/add               {kind: todo|reminder|note|waiting|project, text, at?, every?, who?, project?, steps?} →
@@ -587,7 +587,10 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "GET", "home", []), do: json(conn, 200, Server.Home.status(DateTime.utc_now()))
 
-  defp route(conn, "GET", "home", ["pets"]), do: json(conn, 200, Server.Home.Pets.voices(DateTime.utc_now()))
+  defp route(conn, "GET", "home", ["pets"]) do
+    cast = Server.Home.Pets.cast(fetch_query_params(conn).query_params)
+    json(conn, 200, Server.Home.Pets.voices(DateTime.utc_now(), cast))
+  end
 
   defp route(conn, "GET", "home", ["now"]) do
     q = fetch_query_params(conn).query_params
