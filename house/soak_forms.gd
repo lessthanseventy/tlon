@@ -49,9 +49,7 @@ func _date(y: int, m: int, d: int) -> Dictionary:
 
 
 func _refresh_state(open: Array, coming: Array = [], extra: Dictionary = {}) -> void:
-	s._state["open"] = open
-	s._state["coming"] = coming
-	s._state.merge(extra, true)
+	s.seed(open, coming, extra)
 	main._poll()
 	await _wait()
 
@@ -208,14 +206,15 @@ func _errors() -> void:
 	f.submit()
 	await _wait()
 	s._check(f.visible and "not there" in f._err.text, "404: %s" % f._err.text)
-	main._base = "http://127.0.0.1:1"
-	f.submit()
-	await _wait()
-	s._check(
-		f.visible and "couldn't reach" in f._err.text and f._text.text == "keep me",
-		"a dead server is said and nothing is lost: '%s' visible %s text '%s'" % [f._err.text, f.visible, f._text.text]
-	)
-	main._base = "http://127.0.0.1:%d" % s._srv.get_local_port()
+	if s.served:
+		main._backend.base = "http://127.0.0.1:1"
+		f.submit()
+		await _wait()
+		s._check(
+			f.visible and "couldn't reach" in f._err.text and f._text.text == "keep me",
+			"a dead server is said and nothing is lost: '%s' visible %s text '%s'" % [f._err.text, f.visible, f._text.text]
+		)
+		main._backend.base = "http://127.0.0.1:%d" % s._srv.get_local_port()
 	s._mode = ""
 	f.submit()
 	await _wait()
