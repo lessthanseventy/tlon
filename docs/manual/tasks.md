@@ -71,8 +71,8 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `house:check` | house: every script loads clean in headless Godot (not in `check`: Godot is not a mise tool) |
 | `house:demo` | house: the window on made-up things, no server (both rooms; `-- --office` starts in the office) |
 | `house:run` | house: the window over the live server: the home (what the jots left open, what is coming, the notes) and the office (the crew, what waits on you); `-- --office` starts in the office (TLON_URL; art from TLON_ART_DIR) |
-| `house:soak` | house: a simulated ten hours of the person and the pets on the grid, the closet's composition over every ready-made, and the POST routes against a local stub (needs Godot; reads playerctl once) |
-| `house:widget` | house: the room alone in a small borderless always-on-top window over the live server (W toggles it in the full window; drag the room to move it, the spot is remembered) |
+| `house:soak` | house: a simulated ten hours of the person and the pets on the grid, the closet's composition over every ready-made, the jar, knock rules, rhythm, door and TV hacks, and the POST and GET routes against a local stub (needs Godot) |
+| `house:widget` | house: the room alone in a borderless always-on-top window (528x368) over the live server (W toggles it in the full window; drag the room to move it, the spot is remembered) |
 
 ## manual
 

@@ -2,13 +2,15 @@ extends Control
 
 const POLL_SECONDS := 5.0
 const SLOW_SECONDS := 300.0
+const WATCH_SECONDS := 60.0
+const AWAY_FOR_GREETING := 20.0
 const PANEL_WIDTH := 300
 const BACKDROP := Color("1f1b24")
 const RoomScript := preload("res://room.gd")
 const ORDER := ["waiting", "working", "idle", "cold", "off"]
 const LIVE := ["waiting", "working", "idle"]
 const WAITING_SHOWN := 5
-const WIDGET_SIZE := Vector2i(400, 290)
+const WIDGET_SIZE := Vector2i(528, 368)
 const WIDGET_STORE := "user://house_widget.json"
 
 var _demo := false
@@ -32,6 +34,8 @@ var _busy := false
 var _slow: HTTPRequest
 var _slow_step := ""
 var _pets_retried := false
+var _watch: HTTPRequest
+var _away_at := 0.0
 
 var _room: Control
 var _panel: PanelContainer
@@ -91,6 +95,8 @@ func _ready() -> void:
 		if "--empty" in args:
 			demo.merge({"open": [], "coming": [], "notes": []}, true)
 		_room.home.set_weather(demo.get("weather"))
+		if "--visitor" in args:
+			_room.home.set_office(_office)
 		_apply(demo)
 		if "--tick-demo" in args:
 			get_tree().create_timer(0.75).timeout.connect(func(): _on_ticked(1))
@@ -108,6 +114,16 @@ func _ready() -> void:
 		add_child(slow_timer)
 		slow_timer.start()
 		_slow_poll()
+		_watch = HTTPRequest.new()
+		_watch.timeout = 6.0
+		_watch.request_completed.connect(_on_watch)
+		add_child(_watch)
+		var watch_timer := Timer.new()
+		watch_timer.wait_time = WATCH_SECONDS
+		watch_timer.timeout.connect(_watch_door)
+		add_child(watch_timer)
+		watch_timer.start()
+		_watch_door()
 		_http = HTTPRequest.new()
 		_http.timeout = 4.0
 		_http.request_completed.connect(_on_polled)
@@ -207,9 +223,11 @@ func _input(event: InputEvent) -> void:
 			_set_widget(not _widget)
 		KEY_ESCAPE:
 			_room.home.menu.close()
+			_room.home.dismiss_slip()
 
 
 func _process(_dt: float) -> void:
+	_room.home.jot_open = _jot.visible
 	if _jot.visible:
 		var w := size.x - (0 if _widget else PANEL_WIDTH)
 		_jot.size = _jot.get_combined_minimum_size()
@@ -220,10 +238,6 @@ func _process(_dt: float) -> void:
 		else:
 			_drag = false
 			_save_widget()
-
-
-func _exit_tree() -> void:
-	_room.home.exit()
 
 
 func _open_closet() -> void:
@@ -277,6 +291,8 @@ func _on_act(id: int, what: String) -> void:
 					_room.home.focus.set_now(id, str(item["text"]))
 		"unnow":
 			_room.home.focus.clear()
+		"office":
+			_enter("office")
 		"closet":
 			_open_closet()
 		"jot":
@@ -390,6 +406,13 @@ func _send_jot(text: String) -> void:
 
 
 func _enter(where: String) -> void:
+	if where == "home" and _at == "office" and _away_at > 0.0:
+		if Time.get_ticks_msec() / 1000.0 - _away_at >= AWAY_FOR_GREETING:
+			_room.home.came_back()
+	if where == "office":
+		_away_at = Time.get_ticks_msec() / 1000.0
+	if where == "home" and _watch != null:
+		_watch_door()
 	_at = where
 	var other := "office" if where == "home" else "home"
 	get_window().title = "the house - the " + where
@@ -573,6 +596,12 @@ func _on_ticked(id: int) -> void:
 func _slow_poll() -> void:
 	if _slow_step != "":
 		return
+	_slow_step = "settings"
+	if _slow.request(_base + "/api/settings") != OK:
+		_slow_step = ""
+
+
+func _slow_office() -> void:
 	_slow_step = "office"
 	if _slow.request(_base + "/api/office") != OK:
 		_slow_step = ""
@@ -582,6 +611,13 @@ func _on_slow(result: int, code: int, _headers: PackedStringArray, body: PackedB
 	var step := _slow_step
 	_slow_step = ""
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if code == 200 else null
+	if step == "settings":
+		if result == HTTPRequest.RESULT_SUCCESS and parsed is Dictionary:
+			for knob in parsed.get("knobs", []):
+				if knob.get("key") == "home_list_at":
+					_room.home.set_list_at(str(knob.get("value", "")))
+		_slow_office()
+		return
 	if result != HTTPRequest.RESULT_SUCCESS or not parsed is Dictionary:
 		return
 	if step == "office":
@@ -596,6 +632,19 @@ func _on_slow(result: int, code: int, _headers: PackedStringArray, body: PackedB
 		if parsed.is_empty() and not _pets_retried:
 			_pets_retried = true
 			get_tree().create_timer(45.0).timeout.connect(_slow_poll)
+
+
+func _watch_door() -> void:
+	if _at != "home" or _watch.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return
+	_watch.request(_base + "/api/office")
+
+
+func _on_watch(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8()) if code == 200 else null
+	if result == HTTPRequest.RESULT_SUCCESS and parsed is Dictionary:
+		_room.home.set_weather(parsed.get("weather"))
+		_room.home.set_office(parsed)
 
 
 func _remove(id: int) -> void:

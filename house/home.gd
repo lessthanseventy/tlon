@@ -10,6 +10,10 @@ const Tv := preload("res://tv.gd")
 const View := preload("res://view.gd")
 const Menus := preload("res://menus.gd")
 const Focus := preload("res://focus.gd")
+const Jar := preload("res://jar.gd")
+const Knock := preload("res://knock.gd")
+const Door := preload("res://door.gd")
+const Rhythm := preload("res://rhythm.gd")
 
 const WALL_H := 48
 const COLS := 8
@@ -51,6 +55,13 @@ var person := Person.new()
 var tv := Tv.new()
 var menu := Menus.new()
 var focus := Focus.new()
+var jar := Jar.new()
+var knock := Knock.new()
+var door := Door.new()
+var rhythm := Rhythm.new()
+var perk_left := 0.0
+var water_left := 0.0
+var fake_day := ""
 var done_week := 0
 var weather_desc := ""
 var temp_c: Variant = null
@@ -65,6 +76,7 @@ var forced_weather := ""
 var fake_hour := -1.0
 var say_who := ""
 var force_bat := false
+var jot_open := false
 var show_note := -1
 
 var _t := 0.0
@@ -84,8 +96,16 @@ var _had_open := false
 var _seen_data := false
 var _scripted := {}
 var _say_done := false
-var _tv_t := 4.9
-var _real_tv := true
+var _deep := 0.0
+var _arg_jar := -1
+var _arg_drop := false
+var _arg_knocked := -1
+var _arg_wave := ""
+var _arg_plane := ""
+var _arg_beat := ""
+var _slip_delay := -1.0
+var _slip_kind := ""
+var _t_args := 0.0
 var _cal := PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
 var _arg_menu := -1
 var _arg_reply := ""
@@ -123,12 +143,26 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				_scripted["hover"] = _point(next)
 			"--click":
 				_scripted["click"] = _point(next)
-			"--playing":
-				tv.force("playing", next)
-				_real_tv = false
-			"--paused":
-				tv.force("paused", next)
-				_real_tv = false
+			"--hack":
+				tv.hacks.force(next)
+			"--tv":
+				tv.force_on(next == "on")
+			"--jar":
+				_arg_jar = int(next)
+			"--jar-drop":
+				_arg_drop = true
+			"--knocked":
+				_arg_knocked = int(next)
+			"--wave":
+				_arg_wave = next
+			"--plane":
+				_arg_plane = next
+			"--homecoming":
+				_arg_beat = "home"
+			"--morning":
+				_arg_beat = "morning"
+			"--date":
+				fake_day = next
 			"--person":
 				person.forced = next
 			"--menu":
@@ -148,15 +182,20 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 					)
 	if "--shot" in args and seed_value < 0:
 		seed_value = 7
+	var staged := "--demo" in args or "--shot" in args
 	if "--demo" in args:
-		_real_tv = false
 		focus.persist = false
 	elif focus.persist:
 		focus.load_saved()
+	knock.persist = not staged
+	rhythm.persist = not staged
+	rhythm.load_days()
 	pets.is_night = _env_now()["day"] < 0.15
 	pets.setup(art_dir, seed_value)
 	look.setup(art_dir)
 	person.setup(pets, look, seed_value)
+	tv.setup(seed_value)
+	knock.setup(seed_value)
 	person.snap()
 	if "--shot" in args:
 		pets.freeze = true
@@ -211,28 +250,61 @@ func set_data(d: Dictionary) -> void:
 			focus.text = str(item["text"])
 	if focus.active() and not ids.has(focus.id):
 		focus.clear()
+	if knock.id >= 0 and not ids.has(knock.id):
+		knock.clear()
+	_assign_slots(ids)
+	pets.has_open = not open.is_empty()
+	_feed_person()
+	jar.set_count(_arg_jar if _arg_jar >= 0 else done_week, Jar.week_key(_now_local()), 0.9)
+	if not _seen_data:
+		person.snap()
+		_first_data(ids)
+	_had_open = pets.has_open
+	_seen_data = true
+
+
+func _assign_slots(ids: Array) -> void:
 	for id in _slots.keys():
 		if not ids.has(id):
 			_slots.erase(id)
 	for id in ids:
-		if _slots.has(id):
+		if _slots.has(id) or _off_desk(id):
 			continue
 		for s in SLOTS.size():
 			if not _slots.values().has(s):
 				_slots[id] = s
 				break
-	pets.has_open = not open.is_empty()
-	_feed_person()
-	if not _seen_data:
-		person.snap()
-	_had_open = pets.has_open
-	_seen_data = true
+
+
+func _off_desk(id: int) -> bool:
+	return id == knock.id or id == int(knock.flying.get("id", -1))
+
+
+func _first_data(ids: Array) -> void:
+	if _deep_night():
+		_deep = 1.0
+		pets.place(pets.critter("nina"), "sofa", "sleep")
+		pets.place(pets.critter("argos"), "rug", "sleep")
+		pets.settle = true
+	if _arg_knocked >= 0 and ids.has(_arg_knocked):
+		knock.id = _arg_knocked
+		_slots.erase(_arg_knocked)
+		pets.place(pets.critter("nina"), "knocked", "sit")
+	if _arg_wave != "":
+		door.show_visitor("hronir", _arg_wave)
+	if _arg_plane != "":
+		door.fly(_arg_plane)
+		door.plane["t"] = Door.FLIGHT + 1.0
+
+
+func _deep_night() -> bool:
+	var hour := _hour()
+	return (hour >= 23.0 or hour < 5.5) and person.calm
 
 
 func _feed_person() -> void:
 	person.open_n = open.size()
 	person.has_notes = not notes.is_empty()
-	person.tv = tv.state
 	person.hour = _hour()
 	person.ring = not ring_ids.is_empty()
 	person.calm = true
@@ -256,16 +328,25 @@ func take_attention() -> bool:
 	return ask
 
 
-func exit() -> void:
-	tv.exit()
-
-
 func _bias() -> float:
 	return float(Time.get_time_zone_from_system()["bias"]) * 60.0
 
 
 func _now_local() -> float:
 	var n := Time.get_unix_time_from_system() + _bias()
+	if fake_day != "":
+		var year: int = Time.get_datetime_dict_from_unix_time(int(n))["year"]
+		var md := fake_day.split("-")
+		n = Time.get_unix_time_from_datetime_dict(
+			{
+				"year": year,
+				"month": int(md[0]),
+				"day": int(md[1]),
+				"hour": 12,
+				"minute": 0,
+				"second": 0
+			}
+		)
 	if fake_hour >= 0.0:
 		n = floorf(n / 86400.0) * 86400.0 + fake_hour * 3600.0
 	return n
@@ -319,19 +400,35 @@ func process(dt: float) -> void:
 	_env = _env_now()
 	pets.is_night = _env["day"] < 0.15
 	pets.bubble_cap = 4.5
+	pets.jot_open = jot_open
+	var nina: Pets.Critter = pets.critter("nina")
+	if jot_open and nina.spot == "pad":
+		nina.wait = minf(nina.wait, 0.5)
 	_bin_balls += pets.process(dt)
 	_feed_person()
 	person.process(dt, pets.freeze)
-	if _real_tv:
-		_tv_t += dt
-		if _tv_t >= 5.0:
-			_tv_t = 0.0
-			tv.poll()
-		tv.collect()
-	pets.tv_on = tv.state == "playing"
+	var deep := _seen_data and _deep_night()
+	_deep = move_toward(_deep, 1.0 if deep else 0.0, dt / 4.0)
+	if _deep > 0.0:
+		var tint: Color = _env["tint"]
+		_env["tint"] = Color(tint.r, tint.g, tint.b * 0.8, minf(0.8, tint.a + 0.22 * _deep))
+		_env["lamp"] = float(_env["lamp"]) * (1.0 - 0.75 * _deep)
+	if _seen_data:
+		pets.settle_near(deep)
+	tv.process(dt, person.watching(), _deep > 0.5)
+	pets.tv_on = tv.on
+	jar.process(dt)
+	door.process(dt)
+	room.door_ajar = door.ajar() or person.arrive_left > 3.0
+	rhythm.process(dt)
+	perk_left = maxf(0.0, perk_left - dt)
+	water_left = maxf(0.0, water_left - dt)
+	_beats(dt)
+	_knocking(dt)
 	if focus.finished():
 		person.stretch()
 	reply_left = maxf(0.0, reply_left - dt)
+	_t_args += dt
 	if _t > 0.3 and (_arg_menu >= 0 or _arg_reply != ""):
 		if _arg_menu >= 0:
 			open_item_menu(_arg_menu)
@@ -339,6 +436,12 @@ func process(dt: float) -> void:
 		if _arg_reply != "":
 			show_reply(_arg_reply)
 			_arg_reply = ""
+	if _t > 0.3 and _arg_drop:
+		_arg_drop = false
+		jar.set_count(jar.total + 1, jar.week, 0.0)
+	if _t > 0.3 and _arg_beat != "":
+		_begin_beat(_arg_beat)
+		_arg_beat = ""
 	if _t > 0.4 and not _scripted.is_empty():
 		if _scripted.has("hover"):
 			hover(_scripted["hover"])
@@ -399,12 +502,15 @@ func tick_off(id: int) -> void:
 			found = item
 	if found.is_empty():
 		return
-	var from := _stack_top(open.size())
-	var slot := -1
-	if _slots.has(id):
-		slot = _slots[id]
-		from = Props.center(_slot_quad(slot))
+	var from := _anchor(id)
+	var slot: int = _slots.get(id, -1)
 	_slots.erase(id)
+	if id == knock.id:
+		knock.clear()
+	_cheer_argos()
+	if found["text"].to_lower().contains("plant") and found["text"].to_lower().contains("water"):
+		perk_left = 600.0
+		water_left = 4.0
 	var miss: bool = force_bat or pets.rng.randf() < 0.4
 	(
 		_crumples
@@ -431,10 +537,10 @@ func send_later(id: int) -> void:
 			found = item
 	if found.is_empty():
 		return
-	var from := _stack_top(open.size())
-	if _slots.has(id):
-		from = Props.center(_slot_quad(_slots[id]))
+	var from := _anchor(id)
 	_slots.erase(id)
+	if id == knock.id:
+		knock.clear()
 	(
 		_crumples
 		. append(
@@ -459,9 +565,10 @@ func open_item_menu(id: int) -> void:
 			found = item
 	if found.is_empty():
 		return
-	var at := _stack_top(open.size())
-	if _slots.has(id):
-		at = Props.center(_slot_quad(_slots[id]))
+	var at := _anchor(id)
+	if id == knock.id:
+		knock.clear()
+		_assign_slots(_open_ids())
 	(
 		menu
 		. show_at(
@@ -512,9 +619,6 @@ func _celebrate() -> void:
 				}
 			)
 		)
-	var argos: Pets.Critter = pets.critter("argos")
-	pets.pat(argos, "done")
-	pets.say(argos, pets.line("Argos", "done"))
 	if pets.critter("nina").mode != "bat":
 		pets.say(pets.critter("nina"), pets.line("Nina", "done"))
 
@@ -551,7 +655,16 @@ func items() -> Array:
 		{"key": 5.0, "pri": 1.5, "fn": _draw_desk_things},
 		{"key": 5.0, "pri": 1.55, "fn": _draw_pad_phone},
 		{"key": 6.0, "pri": 1.5, "fn": _draw_bin_balls},
+		{"key": 6.0, "pri": 1.6, "fn": _draw_jar},
+		{"key": 3.0, "pri": 0.6, "fn": _draw_bunting},
+		{"key": 7.2, "pri": 2.4, "fn": _draw_visitor},
 	]
+	if knock.id >= 0:
+		out.append(
+			{"key": Knock.LANDS_AT.x + Knock.LANDS_AT.y - 1.0, "pri": 1.7, "fn": _draw_knocked}
+		)
+	if person.bag == "down":
+		out.append({"key": Person.BAG_AT.x + Person.BAG_AT.y - 1.0, "pri": 1.7, "fn": _draw_bag})
 	for t in pets.toys:
 		out.append({"key": t["pos"].x + t["pos"].y - 1.0, "pri": 1.8, "fn": _draw_toy.bind(t)})
 	for c in pets.critters:
@@ -594,6 +707,7 @@ func _monitor_quad() -> PackedVector2Array:
 
 func _draw_window() -> void:
 	var frame := View.draw(room, _o, _k, _env, _t, _hover == "window")
+	_draw_season(frame)
 	_register("window", frame, Props.qlerp(frame, 0.5, 0.0))
 
 
@@ -613,7 +727,7 @@ func _draw_wardrobe() -> void:
 
 func _draw_tv() -> void:
 	var q := _tv_quad()
-	tv.screen(room, q, _t)
+	tv.screen(room, q)
 	_register("tv", q, Props.qlerp(q, 0.5, 1.0))
 
 
@@ -692,7 +806,7 @@ func draw_plant(f: Array) -> void:
 	if s.is_empty():
 		room._flat_box(_o, f[1], f[2], f[3], f[4], f[5], f[6])
 		return
-	var stage := 0 if open.size() <= 2 else (1 if open.size() <= 5 else 2)
+	var stage := 0 if open.size() <= 2 or perk_left > 0.0 else (1 if open.size() <= 5 else 2)
 	var tex: Texture2D = s["tex"]
 	var top: Vector2 = (room._p(_o, f[1], f[2]) - s["anchor"]).round()
 	var split := 27 * _k
@@ -877,6 +991,7 @@ func draw_over() -> void:
 	var hexp := Props.hex(_o, _k, COLS, ROWS, WALL_H)
 	Props.tint_room(room, hexp, _env)
 	Props.lamp_glow(room, _o, _k, _env["lamp"])
+	_draw_knock_flight()
 	for cr in _crumples:
 		_draw_crumple(cr)
 	for p in _confetti:
@@ -886,7 +1001,13 @@ func draw_over() -> void:
 	for c in pets.critters:
 		_draw_extras(c, bounds)
 	Props.caption(room, Vector2(room.size.x / 2.0, 30), _next_text)
-	tv.over(room, _tv_quad(), _k, _t, bounds)
+	if _hover == "tv" and tv.on and not menu.is_open:
+		tv.big(room, _tv_quad(), bounds)
+	var plane_hit := door.draw_plane(room, _o, _k, bounds)
+	if plane_hit.size() > 0:
+		_register("plane", plane_hit, plane_hit[2])
+	_draw_water()
+	rhythm.draw(room, bounds)
 	_draw_now(bounds)
 	if reply_left > 0.0 and reply_text != "":
 		Props.card(room, Vector2(room.size.x / 2.0, 36), reply_text, bounds)
@@ -1053,16 +1174,10 @@ func _draw_card(bounds: Rect2) -> void:
 		text = "the closet  (C)"
 	elif key == "pad":
 		text = "jot something  (N)"
-	elif key == "tv":
-		text = (
-			"nothing playing"
-			if tv.state == ""
-			else (
-				("playing: " if tv.state == "playing" else "paused: ")
-				+ tv.caption
-				+ "\nclick: play / pause"
-			)
-		)
+	elif key == "jar":
+		text = jar.hover_text()
+	elif key == "plane":
+		text = "click: put it away"
 	elif key == "phone":
 		text = "the phone"
 		for item in open:
@@ -1104,6 +1219,9 @@ func _topmost(pos: Vector2) -> String:
 
 
 func hover(pos: Vector2) -> bool:
+	if rhythm.hover(pos):
+		_hover = ""
+		return true
 	if menu.is_open and menu.hover(pos):
 		_hover = ""
 		return true
@@ -1113,6 +1231,13 @@ func hover(pos: Vector2) -> bool:
 
 
 func click(pos: Vector2) -> bool:
+	if not menu.is_open:
+		var slip := rhythm.click(pos)
+		if slip.has("id"):
+			open_item_menu(int(slip["id"]))
+			return true
+		if slip.has("body"):
+			return true
 	if menu.is_open:
 		var act := menu.click(pos)
 		if act == "inside":
@@ -1142,7 +1267,13 @@ func click(pos: Vector2) -> bool:
 			person.poke()
 			return true
 		"tv":
-			tv.toggle()
+			tv.click()
+			return true
+		"visitor":
+			acted.emit(0, "office")
+			return true
+		"plane":
+			door.dismiss_plane()
 			return true
 		"wardrobe":
 			acted.emit(0, "closet")
@@ -1163,3 +1294,253 @@ func click(pos: Vector2) -> bool:
 
 func leave() -> void:
 	_hover = ""
+
+
+func set_office(d: Dictionary) -> void:
+	door.update_office(d)
+
+
+func set_list_at(text: String) -> void:
+	rhythm.list_at = Rhythm.parse_time(text)
+
+
+func dismiss_slip() -> void:
+	rhythm.dismiss()
+
+
+func came_back() -> void:
+	if _deep_night():
+		return
+	person.arrive(false)
+	pets.cheer(pets.critter("argos"), "door", 3, "greet")
+
+
+func _open_ids() -> Array:
+	var ids: Array = []
+	for item in open:
+		ids.append(int(item["id"]))
+	return ids
+
+
+func _anchor(id: int) -> Vector2:
+	if id == knock.id:
+		return _p(Knock.LANDS_AT.x, Knock.LANDS_AT.y, 2.0)
+	if _slots.has(id):
+		return Props.center(_slot_quad(_slots[id]))
+	return _stack_top(open.size())
+
+
+func _cheer_argos() -> void:
+	pets.cheer(pets.critter("argos"), "desk_stand", 3, "cheer")
+
+
+func _day_key() -> String:
+	var d := Time.get_datetime_dict_from_unix_time(int(_now_local()))
+	return "%04d-%02d-%02d" % [d["year"], d["month"], d["day"]]
+
+
+func _beats(dt: float) -> void:
+	if _slip_delay >= 0.0:
+		_slip_delay -= dt
+		if _slip_delay < 0.0:
+			_show_slip(_slip_kind)
+	if pets.freeze or not _seen_data:
+		return
+	var which := rhythm.due(_hour(), _day_key())
+	if which != "":
+		_begin_beat(which)
+
+
+func _begin_beat(which: String) -> void:
+	_slip_kind = which
+	if which == "home":
+		person.arrive(true)
+		pets.cheer(pets.critter("argos"), "door", 3, "greet")
+		_slip_delay = 3.2
+	else:
+		person.stretch("morning.")
+		_slip_delay = 1.2
+
+
+func _show_slip(which: String) -> void:
+	_geometry()
+	var rows: Array = []
+	if which == "home":
+		for item in open:
+			rows.append(
+				{"id": int(item["id"]), "label": _cap(str(item["text"]), 36), "color": _item_color(item)}
+			)
+		rhythm.show_slip("home", "Still open", rows)
+		return
+	var today := int(_now_local() / 86400.0)
+	for item in coming:
+		if item.get("due_at") != null and int(_due(item) / 86400.0) == today:
+			rows.append(
+				{
+					"id": -1,
+					"label": _clock(_due(item)).trim_prefix("today ") + "  " + _cap(str(item["text"]), 28),
+					"color": REMINDER_COLOR
+				}
+			)
+	if rows.is_empty():
+		rows = [{"id": -1, "label": "nothing on the list today", "color": Color("5fb37a")}]
+	rhythm.show_slip("morning", "Today", rows)
+
+
+func _knocking(dt: float) -> void:
+	for ev in pets.events:
+		if ev == "swat":
+			_swat()
+	pets.events = []
+	if not knock.flying.is_empty():
+		knock.flying["t"] += dt
+		if knock.flying["t"] >= 0.7:
+			var id := int(knock.flying["id"])
+			knock.flying = {}
+			if _open_ids().has(id):
+				knock.id = id
+	if pets.freeze or not _seen_data:
+		return
+	var id := knock.due(dt, open, Time.get_unix_time_from_system(), _hour(), pets.is_night)
+	if id >= 0:
+		knock.pending = id
+		pets.knock(pets.critter("nina"))
+
+
+func _swat() -> void:
+	var id := knock.pending
+	knock.pending = -1
+	if id < 0 or not _open_ids().has(id):
+		return
+	_geometry()
+	var from := _anchor(id)
+	var color := REMINDER_COLOR
+	for item in open:
+		if int(item["id"]) == id:
+			color = _item_color(item)
+	knock.fell(id, Time.get_unix_time_from_system())
+	knock.flying["from"] = (from - _o) / _k
+	knock.flying["color"] = color
+	_slots.erase(id)
+
+
+func _draw_knock_flight() -> void:
+	if knock.flying.is_empty():
+		return
+	var u: float = minf(knock.flying["t"] / 0.7, 1.0)
+	var from: Vector2 = _o + (knock.flying["from"] as Vector2) * _k
+	var to := _p(Knock.LANDS_AT.x, Knock.LANDS_AT.y, 0.5)
+	var at := _arc(from, to, u)
+	var pts := PackedVector2Array()
+	for corner in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+		pts.append(at + (corner as Vector2).rotated(u * 9.0) * 3.4 * _k)
+	room.draw_colored_polygon(Props.shifted(pts, Vector2(1, 2) * _k), Color(0, 0, 0, 0.2))
+	room.draw_colored_polygon(pts, knock.flying["color"])
+
+
+func _draw_knocked() -> void:
+	var q := Props.floor_quad(_o, _k, Knock.LANDS_AT.x, Knock.LANDS_AT.y, 0.3, 0.27, 0.27, 0.5)
+	var hot: bool = _hover == "item:%d" % knock.id or _locked == "item:%d" % knock.id
+	var color := TODO_COLOR
+	for item in open:
+		if int(item["id"]) == knock.id:
+			color = _item_color(item)
+	Props.slip(room, _k, q, color, 2, Color(0, 0, 0, 0), hot)
+	_register("item:%d" % knock.id, q, Props.qlerp(q, 0.5, 0.0))
+
+
+func _draw_bag() -> void:
+	Person.draw_bag(room, _p(Person.BAG_AT.x, Person.BAG_AT.y), _k)
+
+
+func _draw_jar() -> void:
+	var poly := jar.draw(room, _o, _k)
+	_register("jar", poly, (poly[2] + poly[3]) / 2.0)
+
+
+func _draw_visitor() -> void:
+	var poly := door.draw_visitor(room, room, _o, _k, Rect2(Vector2.ZERO, room.size))
+	if poly.size() > 0:
+		_register("visitor", poly, poly[2])
+
+
+func _draw_water() -> void:
+	if water_left <= 0.0:
+		return
+	var top := _p(7.5, 0.4, 44.0)
+	var tilt := -0.5 * minf(1.0, water_left)
+	room.draw_set_transform(top + Vector2(-14, -4) * _k, tilt, Vector2.ONE)
+	room.draw_rect(Rect2(Vector2(-6, -3) * _k, Vector2(9, 6) * _k), Color("7a8fa8"))
+	room.draw_rect(Rect2(Vector2(3, -2) * _k, Vector2(6, 1.2) * _k), Color("7a8fa8"))
+	room.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	for i in 8:
+		var ph := fposmod(_t * 1.5 + i * 0.125, 1.0)
+		var at := top + Vector2(-4 + (i % 4) * 2.5, -2 + ph * 20) * _k
+		room.draw_circle(at, 1.1 * _k, Color("8fc8ff", 1.0 - ph * 0.7))
+
+
+func _season() -> String:
+	var d := Time.get_datetime_dict_from_unix_time(int(_now_local()))
+	var m: int = d["month"]
+	var day: int = d["day"]
+	if m == 12 or (m == 1 and day <= 6):
+		return "lights"
+	if m == 10 and day >= 25:
+		return "pumpkin"
+	if m == 2 and day >= 10 and day <= 14:
+		return "hearts"
+	return ""
+
+
+func _celebrating() -> bool:
+	var today := int(_now_local() / 86400.0)
+	var texts: Array = notes.duplicate()
+	for item in open:
+		texts.append(str(item["text"]))
+	for item in coming:
+		if item.get("due_at") != null and int(_due(item) / 86400.0) == today:
+			texts.append(str(item["text"]))
+	for t in texts:
+		var low := str(t).to_lower()
+		for word in ["birthday", "bday", "anniversary"]:
+			if low.contains(word):
+				return true
+	return false
+
+
+func _draw_season(frame: PackedVector2Array) -> void:
+	match _season():
+		"lights":
+			for i in 11:
+				var u := i / 10.0
+				var at := Props.qlerp(frame, u, 0.0) + Vector2(0, sin(u * PI) * 3.0 * _k + 2.0)
+				var col := Color.from_hsv(fposmod(i * 0.17, 1.0), 0.6, 1.0)
+				var tw := 0.55 + 0.45 * sin(_t * 3.0 + i * 1.7)
+				room.draw_circle(at, 2.6 * _k, Color(col, 0.25 * tw))
+				room.draw_circle(at, 1.0 * _k, Color(col, 0.6 + 0.4 * tw))
+		"pumpkin":
+			var at := Props.qlerp(frame, 0.82, 1.0) + Vector2(0, -3 * _k)
+			room.draw_circle(at, 3.4 * _k, Color("e8842c"))
+			room.draw_circle(at + Vector2(-1.6, 0) * _k, 2.2 * _k, Color("f0963c"))
+			room.draw_rect(Rect2(at + Vector2(-0.4, -4.6) * _k, Vector2(1, 1.8) * _k), Color("4a6a2a"))
+		"hearts":
+			Props.heart(room, Props.qlerp(frame, 0.82, 0.96), maxi(1, _k - 1), Color("e8576b"))
+
+
+func _draw_bunting() -> void:
+	if not _celebrating():
+		return
+	var n := 12
+	var prev := Vector2.ZERO
+	for i in n + 1:
+		var s := 36.0 + i * (66.0 / n)
+		var sag := sin(float(i) / n * PI) * 3.0
+		var at := Props.wall_pt(_o, _k, 1, s, 46.0 - sag)
+		if i > 0:
+			room.draw_line(prev, at, Color(Props.INK, 0.6), 1.0)
+			var mid := (prev + at) / 2.0
+			var col: Color = CONFETTI[i % CONFETTI.size()]
+			room.draw_colored_polygon(
+				PackedVector2Array([prev, at, mid + Vector2(0, 5 * _k)]), col
+			)
+		prev = at

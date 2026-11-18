@@ -70,6 +70,7 @@ var _person_shadow: Texture2D
 var _k := 2
 var _origin := Vector2.ZERO
 var _hover_door := false
+var door_ajar := false
 
 
 func _ready() -> void:
@@ -318,7 +319,7 @@ func _draw_wall(origin: Vector2, w: Dictionary) -> void:
 	if not s.is_empty():
 		draw_texture(s["tex"], (p - s["anchor"]).round())
 		if door:
-			var leaf := _sprite("door_panel_nw_f%d" % (3 if _hover_door else 1))
+			var leaf := _sprite("door_panel_nw_f%d" % (3 if _hover_door or door_ajar else 1))
 			if not leaf.is_empty():
 				draw_texture(leaf["tex"], (p - leaf["anchor"]).round())
 		return
@@ -333,7 +334,7 @@ func _draw_wall(origin: Vector2, w: Dictionary) -> void:
 		var a := p.lerp(west, 0.2)
 		var b := p.lerp(west, 0.8)
 		var h := Vector2(0, 38 * _k)
-		var col := Color("a8744a") if _hover_door else Color("7a5238")
+		var col := Color("a8744a") if _hover_door or door_ajar else Color("7a5238")
 		draw_colored_polygon(PackedVector2Array([a, b, b - h, a - h]), col)
 
 

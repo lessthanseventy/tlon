@@ -160,11 +160,6 @@ func show_data(data: Dictionary) -> void:
 	_section("Still open", data["open"], "Nothing waiting. Enjoy it.", true)
 	_section("Coming up", data["coming"], "Nothing coming up.", false)
 	_notes(data["notes"])
-	if int(data.get("done_week", 0)) > 0:
-		var spacer := Control.new()
-		spacer.custom_minimum_size.y = 10
-		_box.add_child(spacer)
-		_box.add_child(_label("%d done this week" % int(data["done_week"]), 13, QUIET))
 
 
 # view: {crew: [{name, role, status, doing}], more, waiting: [{title, why}], waiting_count, paused}
