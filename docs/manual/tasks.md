@@ -69,7 +69,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | verb | does |
 |---|---|
 | `house:art-pack` | house: pack the art the house can open (derived from its loaders, with each pack's LICENSE.txt) into ~/.cache/tlon/house-dist/house-art.zip, outside the repo, and print files and size per pack; `-- --list` prints the files and builds nothing (art from TLON_ART_DIR) |
-| `house:build` | house: `-- windows\|mac\|linux\|all` — export the house with the art pack beside it into ~/.cache/tlon/house-dist/<platform>/ and the-house-<platform>.zip (never inside a repo: the art's licence forbids redistributing it; hand the zips over privately; needs Godot's 4.7.2 export templates; the Mac build is unsigned, see house/SHIPPING.md) |
+| `house:build` | house: `-- windows\|mac\|linux\|all` — export the house with the art inside it (Windows and Linux: one file; the Mac app carries the pack in Resources) into ~/.cache/tlon/house-dist/<platform>/ and the-house-<platform>.zip (never inside a repo: the art's licence forbids redistributing it; hand the zips over privately; needs Godot's 4.7.2 export templates; the Mac build is unsigned, see house/SHIPPING.md) |
 | `house:check` | house: every script loads clean in headless Godot (not in `check`: Godot is not a mise tool) |
 | `house:demo` | house: the window on made-up things, no server (both rooms; `-- --office` starts in the office) |
 | `house:run` | house: the window over the live server: the home (what the jots left open, what is coming, the notes) and the office (the crew, what waits on you); `-- --office` starts in the office (TLON_URL; art from TLON_ART_DIR) |
