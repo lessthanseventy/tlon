@@ -14,6 +14,8 @@ const DecorateScript := preload("res://decorate.gd")
 const WIDGET_SIZE := Vector2i(656, 432)
 const WIDGET_STORE := "user://house_widget.json"
 const FormScript := preload("res://form.gd")
+const SettingsView := preload("res://settings_view.gd")
+const ChatView := preload("res://chat_view.gd")
 
 var pets_retry := 20.0
 var pets_every := 300.0
@@ -26,6 +28,9 @@ var _base := "http://127.0.0.1:4040"
 
 var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": null}
 var _form: PanelContainer
+var _settings_view: PanelContainer
+var _chat_view: PanelContainer
+var _cog: Control
 var _skip: Array = []
 var _again := false
 var _demo_ids := 1000
@@ -71,7 +76,6 @@ func _ready() -> void:
 		_at = "office"
 	if "--shot" in args:
 		_shot = args[args.find("--shot") + 1]
-	_base = OS.get_environment("TLON_URL") if OS.has_environment("TLON_URL") else _base
 
 	var bg := ColorRect.new()
 	bg.color = BACKDROP
@@ -84,6 +88,7 @@ func _ready() -> void:
 	_room.art_dir = _art_dir()
 	_room.door_clicked.connect(_toggle)
 	add_child(_room)
+	_base = _room.home.settings.server_url()
 
 	_panel = preload("res://panel.gd").new()
 	_panel.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
@@ -131,6 +136,19 @@ func _ready() -> void:
 	add_child(_form)
 	_room.home.things.form_wanted.connect(_open_form)
 	_room.home.things.post.connect(func(path: String, body: Dictionary) -> void: _write(path, body))
+	_settings_view = SettingsView.new()
+	_settings_view.setup(_room.home.settings, _room.home)
+	_settings_view.check_requested.connect(_check_server)
+	add_child(_settings_view)
+	_room.home.settings.changed.connect(_on_setting)
+	_chat_view = ChatView.new()
+	_chat_view.setup(_room.home.chat, _room.home)
+	_chat_view.sent.connect(_send_chat)
+	_chat_view.acted.connect(_chat_act)
+	add_child(_chat_view)
+	_cog = SettingsView.Cog.new()
+	_cog.pressed.connect(func() -> void: _toggle_settings())
+	add_child(_cog)
 
 	if _demo:
 		var demo: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://demo.json"))
@@ -193,8 +211,16 @@ func _ready() -> void:
 		add_child(timer)
 		timer.start()
 	_enter(_at)
-	if "--widget" in args:
+	if _room.home.settings.value("widget"):
 		_set_widget(true)
+	if "--unread" in args:
+		_room.home.chat.unread = true
+	if "--settings" in args:
+		var spec: String = args[args.find("--settings") + 1]
+		get_tree().create_timer(0.4).timeout.connect(func() -> void: _stage_settings(spec))
+	if "--chat" in args:
+		var spec: String = args[args.find("--chat") + 1]
+		get_tree().create_timer(0.4).timeout.connect(func() -> void: _stage_chat(spec))
 	if "--closet" in args:
 		get_tree().create_timer(0.3).timeout.connect(
 			func() -> void:
@@ -293,7 +319,7 @@ func _toggle() -> void:
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
-	if _closet.visible or _jot.visible or _form.visible or event.ctrl_pressed or event.alt_pressed:
+	if _closet.visible or _jot.visible or _overlay() or event.ctrl_pressed or event.alt_pressed:
 		return
 	if event.keycode == KEY_TAB:
 		get_viewport().set_input_as_handled()
@@ -324,6 +350,14 @@ func _input(event: InputEvent) -> void:
 			if _at == "home":
 				get_viewport().set_input_as_handled()
 				_add_thing()
+		KEY_COMMA:
+			if _at == "home":
+				get_viewport().set_input_as_handled()
+				_open_settings()
+		KEY_K:
+			if _at == "home":
+				get_viewport().set_input_as_handled()
+				_open_chat()
 		KEY_H:
 			if _at == "home":
 				get_viewport().set_input_as_handled()
@@ -341,13 +375,20 @@ func _process(_dt: float) -> void:
 	_room.home.jot_open = _jot.visible
 	_room.home.closet_open = _closet.visible
 	_room.home.decorating = _decorate.active
-	if _form.visible and _form_blocked():
+	if _overlay() and _form_blocked():
 		_form.close()
-	_room.home.form_open = _form.visible
-	if _form.visible:
-		var room_w := size.x - (0 if _widget else PANEL_WIDTH)
-		_form.size = _form.get_combined_minimum_size()
-		_form.position = ((Vector2(room_w, size.y) - _form.size) / 2.0).round()
+		_settings_view.close()
+		_chat_view.close()
+	_room.home.form_open = _overlay()
+	var room_w := size.x - (0 if _widget else PANEL_WIDTH)
+	_cog.visible = _at == "home" and not _decorate.active and not _closet.visible
+	_cog.position = Vector2(room_w - 34.0, 8.0)
+	for v in [_form, _settings_view, _chat_view]:
+		if v.visible:
+			if v != _form:
+				v.fit(size)
+			v.size = v.get_combined_minimum_size()
+			v.position = ((Vector2(room_w, size.y) - v.size) / 2.0).round()
 	var at_mouse := _room.get_local_mouse_position()
 	_room.home.eggs.set_laser(
 		_at == "home"
@@ -391,9 +432,36 @@ func _form_blocked() -> bool:
 	return _jot.visible or _closet.visible or _decorate.active or h.menu.is_open or h.rhythm.kind != ""
 
 
+func _overlay() -> bool:
+	return _form.visible or _settings_view.visible or _chat_view.visible
+
+
+func _open_settings() -> bool:
+	if _at != "home" or _form_blocked() or _overlay():
+		return false
+	_room.home.close_card()
+	_settings_view.open()
+	return true
+
+
+func _toggle_settings() -> void:
+	if _settings_view.visible:
+		_settings_view.close()
+	else:
+		_open_settings()
+
+
+func _open_chat() -> bool:
+	if _at != "home" or _form_blocked() or _overlay():
+		return false
+	_room.home.close_card()
+	_chat_view.open()
+	return true
+
+
 # mode "new" (a preset for the form) or "edit" ({row, due}); false when something else is up
 func _open_form(mode: String, spec: Dictionary) -> bool:
-	if _at != "home" or _widget or _form_blocked():
+	if _at != "home" or _widget or _form_blocked() or _settings_view.visible or _chat_view.visible:
 		return false
 	var home = _room.home
 	home.close_card()
@@ -510,7 +578,7 @@ func _set_widget(on: bool) -> void:
 	_panel.visible = not on
 	_room.offset_right = 0 if on else -PANEL_WIDTH
 	w.borderless = on
-	w.always_on_top = on
+	w.always_on_top = on and _room.home.settings.value("on_top")
 	w.size = WIDGET_SIZE if on else _prev_size
 	if on and FileAccess.file_exists(WIDGET_STORE):
 		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(WIDGET_STORE))
@@ -538,7 +606,7 @@ func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 			_skip.append(id)
 			_ask_now()
 		"hour", "tomorrow":
-			_later(id, what)
+			_later(id, what, ok)
 		"now":
 			for item in _data["open"]:
 				if int(item["id"]) == id:
@@ -551,6 +619,8 @@ func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 			_open_closet()
 		"jot":
 			_jot.open()
+		"chat":
+			_open_chat()
 
 
 func _then(first: Callable, second: Callable) -> Callable:
@@ -603,6 +673,8 @@ func _trouble(line: String) -> void:
 	_room.home.sound.request("error")
 	if _form.visible:
 		_form.fail(line)
+	elif _chat_view.visible:
+		_chat_view.flash(line)
 	elif _room.home.card.is_open():
 		_room.home.things.flash = line
 	else:
@@ -687,10 +759,12 @@ func _post(path: String, payload: Dictionary, done: Callable, timeout: float = 6
 		done.call(false, 0, null)
 
 
-func _later(id: int, until: String) -> void:
+func _later(id: int, until: String, ok: Callable = Callable()) -> void:
 	var hours := 1.0 if until == "hour" else 24.0
 	var moved := func(_ok: bool, code: int, body: Variant) -> void:
 		if code == 200:
+			if ok.is_valid():
+				ok.call()
 			var due := Time.get_datetime_string_from_unix_time(
 				int(Time.get_unix_time_from_system() + hours * 3600.0)
 			)
@@ -729,16 +803,33 @@ func _send_jot(text: String) -> void:
 	_jot.sending(true)
 	_jot_seq += 1
 	var seq := _jot_seq
+	_tell(
+		text,
+		func(ok: bool, reply: String) -> void:
+			if seq != _jot_seq:
+				return
+			if ok:
+				_jot.finish()
+				_room.home.sound.request("save")
+				_room.home.show_reply(reply)
+			else:
+				_jot.fail("couldn't reach tlon — not kept")
+				_room.home.sound.request("error")
+	)
+
+
+# A line to the home, from the notepad or the chat: both are kept in the chat's history. `done`
+# gets (reached, the reply); the room is read again at once.
+func _tell(text: String, done: Callable) -> void:
+	var chat = _room.home.chat
+	chat.add("me", text)
 	var finished := func(ok: bool, code: int, body: Variant) -> void:
-		if seq != _jot_seq:
-			return
-		if ok and code == 200:
-			_jot.finish()
-			_room.home.sound.request("save")
-			var reply := "kept"
-			if body is Dictionary and body.get("reply") is String:
-				reply = body["reply"]
-			_room.home.show_reply(reply)
+		var reached: bool = ok and code == 200
+		var reply := "kept"
+		if reached and body is Dictionary and body.get("reply") is String:
+			reply = body["reply"]
+		if reached:
+			chat.add("home", reply)
 			if _demo:
 				var id: int = 100 + _data["open"].size()
 				_data["open"] = _data["open"] + [
@@ -746,16 +837,58 @@ func _send_jot(text: String) -> void:
 				]
 				_apply(_data)
 			else:
-				_poll()
+				_refresh()
 		else:
-			_jot.fail("couldn't reach tlon — not kept")
-			_room.home.sound.request("error")
+			chat.retract(text)
+		done.call(reached, reply)
 	if _demo:
 		get_tree().create_timer(1.4).timeout.connect(
 			func() -> void: finished.call(true, 200, {"reply": "to do: " + text})
 		)
 	else:
 		_post("/api/home", {"text": text}, finished, 40.0)
+
+
+func _send_chat(text: String) -> void:
+	_tell(text, func(ok: bool, _reply: String) -> void: _chat_view.finish(ok, text))
+
+
+# a button under a told reminder: the same routes the paper menu calls
+func _chat_act(id: int, what: String) -> void:
+	_act(
+		id,
+		what,
+		func() -> void:
+			_room.home.chat.resolve(id, what)
+			_chat_view.acting = -1
+	)
+
+
+func _check_server(url: String) -> void:
+	if _demo:
+		_settings_view.url_result(true)
+		return
+	var req := HTTPRequest.new()
+	req.timeout = 4.0
+	add_child(req)
+	req.request_completed.connect(
+		func(result: int, code: int, _h: PackedStringArray, _body: PackedByteArray) -> void:
+			req.queue_free()
+			_settings_view.url_result(result == HTTPRequest.RESULT_SUCCESS and code == 200)
+	)
+	if req.request(url + "/api/home") != OK:
+		req.queue_free()
+		_settings_view.url_result(false)
+
+
+func _on_setting(key: String) -> void:
+	match key:
+		"url":
+			_base = _room.home.settings.server_url()
+			_refresh()
+		"on_top":
+			if _widget:
+				get_window().always_on_top = _room.home.settings.value("on_top")
 
 
 func _enter(where: String) -> void:
@@ -804,6 +937,7 @@ func _on_polled(result: int, code: int, _headers: PackedStringArray, body: Packe
 	if ok:
 		if polled == "home":
 			_data = _home_data(parsed)
+			_room.home.sync_chat(_data)
 		else:
 			_office = parsed
 			_room.home.set_weather(parsed.get("weather"))
@@ -948,6 +1082,7 @@ func _on_slow(result: int, code: int, _headers: PackedStringArray, body: PackedB
 	if step == "settings":
 		if result == HTTPRequest.RESULT_SUCCESS and parsed is Dictionary:
 			for knob in parsed.get("knobs", []):
+				_room.home.knobs[str(knob.get("key"))] = knob.get("value")
 				if knob.get("key") == "home_list_at":
 					_room.home.set_list_at(str(knob.get("value", "")))
 		_slow_office()
@@ -1006,3 +1141,47 @@ func _remove(id: int) -> void:
 	_data["open"] = kept
 	_data["done_week"] = int(_data.get("done_week", 0)) + 1
 	_apply(_data)
+
+
+# `--settings "key=value;scroll;armed=reset"` (keys name cat dog birthday widget), for a picture
+func _stage_settings(spec: String) -> void:
+	var settings = _room.home.settings
+	for p in spec.split(";", false):
+		var key := p.get_slice("=", 0)
+		var val := p.substr(p.find("=") + 1) if "=" in p else ""
+		if key in ["name", "cat", "dog", "birthday"]:
+			settings.put(key, val)
+	_open_settings()
+	for p in spec.split(";", false):
+		match p.get_slice("=", 0):
+			"scroll":
+				_settings_view._scroll.scroll_vertical = 100000
+			"armed":
+				_settings_view.sure.ask(p.get_slice("=", 1))
+
+
+# `--chat "empty|talk,reminder,acted,pet,reading,fail"`, for a picture: a made-up conversation
+func _stage_chat(spec: String) -> void:
+	var chat = _room.home.chat
+	var kinds := spec.split(",", false)
+	var now := Time.get_unix_time_from_system()
+	if "empty" not in kinds:
+		chat.messages = [
+			{"t": now - 7200, "who": "me", "text": "remind me to call the plumber tomorrow"},
+			{"t": now - 7190, "who": "home", "text": "Reminder set: call the plumber, tomorrow 09:00."},
+			{"t": now - 3000, "who": "me", "text": "what is left today?"},
+			{"t": now - 2990, "who": "home", "text": "Still open: buy milk, send photos, water the plant."},
+		]
+		if "pet" in kinds:
+			chat.messages.append({"t": now - 900, "who": "cat", "text": "I was not asleep, peasant."})
+		if "reminder" in kinds or "acted" in kinds:
+			var m := {"t": now - 120, "who": "home", "text": chat.BELL + "stretch and drink water", "id": 1, "told_at": "x"}
+			if "acted" in kinds:
+				m["done"] = "hour"
+			chat.messages.append(m)
+	if "reading" in kinds:
+		chat.messages.append({"t": now - 5, "who": "me", "text": "move the dentist to friday"})
+		_chat_view.reading = true
+	_open_chat()
+	if "fail" in kinds:
+		_chat_view.finish(false, "buy stamps")

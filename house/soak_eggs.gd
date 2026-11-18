@@ -453,26 +453,27 @@ func finds() -> void:
 	var made := _home(71)
 	var h = made[1]
 	var f = h.finds
-	f.store = "user://soak_settings.json"
-	DirAccess.remove_absolute(f.store)
-	f._persist = true
+	h.settings.store = "user://soak_settings.json"
+	DirAccess.remove_absolute(h.settings.store)
+	h.settings.persist = true
 	h.fake_day = "03-15"
 	s._check(not f.is_birthday(), "no cake on an ordinary day")
 	f.toggle_birthday()
 	s._check(f.is_birthday() and f.birthday == "03-15", "the calendar button says today is the birthday")
 	s._check(not f.table().is_empty(), "there is a table for the cake")
-	var g = load("res://finds.gd").new()
-	g.store = f.store
-	g.setup(h, true)
-	s._check(g.birthday == "03-15", "the birthday is kept in user://")
+	var g = load("res://settings.gd").new()
+	g.store = h.settings.store
+	g.setup(true)
+	s._check(g.value("birthday") == "03-15", "the birthday is kept in user://")
 	h.fake_day = "03-16"
 	s._check(not f.is_birthday(), "and is only on its day")
 	h.fake_day = "03-15"
 	f.toggle_birthday()
 	s._check(not f.is_birthday(), "the button takes it back")
-	DirAccess.remove_absolute(f.store)
+	DirAccess.remove_absolute(h.settings.store)
 	h.fake_day = "03-15"
-	f._persist = false
+	h.settings.persist = false
+	h.settings.data = {}
 
 	h.pets.set_voices({"Nina": {"muse": ["a Nina line"]}, "Argos": {"muse": ["an Argos line"]}})
 	var titles: Array = f.TITLES.map(func(t): return t[0])

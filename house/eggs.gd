@@ -157,6 +157,14 @@ func find(id: String) -> void:
 			f.store_string(JSON.stringify({"found": found.keys()}))
 
 
+func forget() -> void:
+	found = {}
+	if persist:
+		var f := FileAccess.open(STORE, FileAccess.WRITE)
+		if f != null:
+			f.store_string(JSON.stringify({"found": []}))
+
+
 func calm() -> bool:
 	return not (
 		h._cards_blocked()

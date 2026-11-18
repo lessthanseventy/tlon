@@ -115,7 +115,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   reply and a chime), snow on the sill Dec-Feb, fireworks 31 Dec 23:00 to 1 Jan 01:00. Each comes minutes
   apart on the seeded dice, only in the weather and hour that suit it; `--egg bird|balloon|plane|nightcat|star|fireworks`
   (use `--at 23:00` for the night ones).
-- **Finds** (`finds.gd`): a birthday (`user://house_settings.json` `{"birthday":"MM-DD"}`, set by the calendar
+- **Finds** (`finds.gd`): a birthday (the settings' `birthday`, `"MM-DD"`, set by the calendar
   card's quiet line while none is set; `--birthday` forces it) puts a cake on the table; a click on a book gives a Borges card in
   Nina's or Argos's voice (the `muse` lines, built-in fallback); a mouse leaves its hole on a quiet night
   (`--egg mouse`) and flees a pet or a click; the snow globe shakes on a click. The "found" card (`--egg found`,
@@ -187,6 +187,35 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   stands on the floor cell he would walk to (no seat offset) and the action maps to `HERO_ACT` in
   `look.gd` (desk typing: `ready`; sofa, TV, coffee, sleep, talk: `idle`; wave: `block`; cheer: `cast`;
   pickup: `thrust`; walk: `walk`). Changing between the two re-places the person.
+- **Settings** (`settings.gd` the store, `settings_view.gd` the paper screen and its cog): a small cog in the
+  room's top-right corner (also in the widget) or `,` opens it at home; Esc closes. Never over the notepad, closet,
+  decorate mode, a form, a menu or the day's slip, and those close it (`main.gd` `_form_blocked`, the form's rule).
+  One flat object in `user://house_settings.json`, written on a change only, other keys kept as found, never in a
+  scripted or staged run: `name` (used in the birthday line and a server line's `{name}`; a line with `{name}` and
+  no name is skipped), `birthday` (`"MM-DD"`, `""`), `cat` and `dog` (default Nina and Argos: shown everywhere the
+  house prints them, the server's pet lines too, by `Settings.pets`; the server and `voices.gd` still key on Nina and
+  Argos), `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
+  `http://127.0.0.1:4040`). **Precedence: a command-line arg beats the settings file beats the default** (`--widget`
+  is the arg of `widget`; `Settings.forced`). The screen also shows sound (`sound.gd`'s own file keeps it), "N of M
+  found" with "forget them all", "reset the room to how it came" (`layout.reset`) and "clear" for the chat, each
+  asking for a second click (`sure.gd`), the address with a "check" (`GET /api/home`), "this computer" greyed out
+  (coming soon: the local list is not built), the art folder, and the daily list time and weekly review day only
+  when `GET /api/settings` already returned them (`home_list_at`, `home_review_on`). Quiet hours are the server's and
+  no existing route returns them, so they are not shown. `--settings "name=Sam;cat=Mimi;scroll;armed=reset"` stages it.
+- **Chat** (`chat.gd` the history, `chat_view.gd` the panel): the desk phone, clicked while it is not ringing, or
+  `K`, opens a paper chat: his lines on the right, the home's on the left, newest at the bottom, the wheel and
+  PageUp/PageDown scroll, Enter sends (`POST /api/home`, the notepad's request: both go through `main.gd` `_tell`),
+  Up recalls his last line, Esc closes. A failure says "couldn't reach tlon - not sent" and puts the text back. It
+  holds his lines and the replies (the notepad's too), each reminder the house is told of (the ring's moment) with
+  Done / In an hour / Tomorrow / Delete (the paper menu's routes through `_act`; a repeating one asks twice) that
+  become a quiet line once used, the day's slips, and now and then a pet's bubble (not twice in ten minutes), marked
+  with the pet's name. A message that arrives while it is closed puts a small dot on the phone until it opens. The
+  last 300 are kept in `user://house_chat.json` (`{"messages": [{t, who: me|home|cat|dog, text, done?}]}`, a
+  reminder also `id` and `told_at`), never in a scripted or staged run. A question the server holds for him is not
+  shown: the house has no route that lists them. `--chat "talk,reminder,acted,pet,reading,fail|empty"` and `--unread` stage it.
+- **One place for the server's calls**: `main.gd` `_post`, `_write`, `_act`, `_tell` and `_refresh` carry every
+  write and the notepad/chat line; the polls (`_poll`, `_slow_poll`, `_pets_ask`, `_watch_door`, `_ask_now`) and the
+  address check are plain GETs there too. A later local-file or other backend goes behind those.
 - **Jotting** (the notepad on the desk, `N`, `/` or Enter): a paper field; Enter sends the text to
   the server (a model reads it, so a pencil scribbles while it waits) and the reply shows as a slip
   for a few seconds. A server that does not answer says "couldn't reach tlon — not kept" and keeps
@@ -209,7 +238,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   (`POST /api/home/:id/answer` `nottoday`), Delete. In `--demo` nothing is sent: adds and deletes only
   change what is on screen.
 - **The phone** on the desk buzzes with a ring mark while an open reminder has `told_at` (the server
-  has nudged it); the window asks for attention once per reminder; click it for that reminder's menu.
+  has nudged it); the window asks for attention once per reminder; click it for that reminder's menu, or for the chat when it is quiet.
 - **Now** pins one open thing: large above the monitor and as a card on top of the panel, with a
   timer you start there (click the length for 10 / 25 / 45 min), a progress ring, no sound. Kept in
   `user://house_now.json`; cleared when the thing is done or leaves `open`.
@@ -251,7 +280,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   panel button and Tab go between them. A coworker's state is the roster row's `status`
   (`working`, `waiting` on the operator, `idle`, `cold`, `off`; no row is `off`), as `office/kit/crew.ts`
   says it; the crew is `bench`, live seats first. `pause` closes the office.
-- **Nothing nags.** No scores, streaks, warnings or settings (sound starts muted and is his to turn on); the only timer is the one you
+- **Nothing nags.** No scores, streaks or warnings; the only settings are the ones on the cog's screen (sound starts muted and is his to turn on); the only timer is the one you
   start on a now card. A bubble fades by itself and stays inside the room, never over the panel.
 
 ## Dev loop
@@ -264,7 +293,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   this is not part of `mise run check`.
 - `mise run house:soak` — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats). Stdout ends `SOAK OK`.
+  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers). Stdout ends `SOAK OK`.
 
 ## Verify
 

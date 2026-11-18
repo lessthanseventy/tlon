@@ -26,6 +26,8 @@ const Quirks := preload("res://quirks.gd")
 const Delights := preload("res://delights.gd")
 const Things := preload("res://things.gd")
 const Sure := preload("res://sure.gd")
+const Settings := preload("res://settings.gd")
+const Chat := preload("res://chat.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -134,6 +136,9 @@ var decorating := false
 var card := Card.new()
 var things := Things.new()
 var sure := Sure.new()
+var settings := Settings.new()
+var chat := Chat.new()
+var knobs := {}
 var form_open := false
 var done: Variant = null
 var show_note := -1
@@ -231,6 +236,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				eggs.laser_at = _point(next)
 				eggs.laser_pin = true
 				eggs.laser_on = true
+			"--widget":
+				settings.forced["widget"] = true
 			"--birthday":
 				finds.birthday_forced = true
 			"--plane":
@@ -269,6 +276,9 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	if "--shot" in args and seed_value < 0:
 		seed_value = 7
 	var staged := scripted or "--demo" in args or "--shot" in args
+	settings.setup(not staged)
+	chat.setup(not staged)
+	pets.on_say = _pet_said
 	if "--demo" in args:
 		focus.persist = false
 	elif focus.persist:
@@ -292,7 +302,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	eggs.setup(self, seed_value, not staged)
 	hearth.setup(self)
 	outside.setup(self)
-	finds.setup(self, not staged)
+	finds.setup(self)
 	secrets.setup(self)
 	quirks.setup(self)
 	delights.setup(self)
@@ -386,6 +396,7 @@ func set_data(d: Dictionary) -> void:
 		if ring_ids.has(int(item["id"])) and not _rang.has(int(item["id"])):
 			_rang.append(int(item["id"]))
 			pets.nudge("desk", "ring", str(item["text"]))
+			chat.told(int(item["id"]), str(item.get("told_at")), str(item["text"]))
 	pets.has_open = not open.is_empty()
 	_feed_person()
 	jar.set_count(_arg_jar if _arg_jar >= 0 else done_week, Jar.week_key(_now_local()), 0.9)
@@ -902,6 +913,10 @@ func _draw_pad_phone() -> void:
 	_register("pad", pad, Props.qlerp(pad, 0.5, 1.0))
 	var ph := Props.phone(room, _o, _k, PHONE.x, PHONE.y, PHONE.z, not ring_ids.is_empty(), _t)
 	_register("phone", ph, Props.qlerp(ph, 0.5, 1.0))
+	if chat.unread:
+		var dot := Props.center(ph) + Vector2(3.0, -3.0) * _k
+		room.draw_circle(dot, 2.4 * _k, Color("f3ead6"))
+		room.draw_circle(dot, 1.7 * _k, Color("d9534f"))
 
 
 func _draw_wardrobe() -> void:
@@ -1308,7 +1323,7 @@ func _draw_extras(c: Pets.Critter, bounds: Rect2) -> void:
 		var lift := 7 if c.pat_t >= 0.0 or not c.hearts.is_empty() else 3
 		Props.bubble(room, f + Vector2(0, -(c.head + lift) * _k), c.say_text, bounds, fade)
 	elif _hover == "pet:" + c.id and c.id != "person":
-		Props.tag(room, f + Vector2(0, 6), [c.title], bounds)
+		Props.tag(room, f + Vector2(0, 6), [Settings.pets(c.title)], bounds)
 
 
 func _draw_crumple(cr: Dictionary) -> void:
@@ -1404,7 +1419,7 @@ func _draw_card(bounds: Rect2) -> void:
 	elif key == "plane":
 		text = "click: put it away"
 	elif key == "phone":
-		text = "the phone"
+		text = "the phone: chat  (K)"
 		for item in open:
 			if ring_ids.has(int(item["id"])):
 				text = str(item["text"])
@@ -1734,7 +1749,9 @@ func click(pos: Vector2) -> bool:
 			acted.emit(0, "jot")
 			return true
 		"phone":
-			if not ring_ids.is_empty():
+			if ring_ids.is_empty():
+				acted.emit(0, "chat")
+			else:
 				open_item_menu(ring_ids[0])
 			return true
 	if key != "":
@@ -1798,6 +1815,20 @@ func leave() -> void:
 
 func set_office(d: Dictionary) -> void:
 	door.update_office(d)
+
+
+func _pet_said(id: String, text: String) -> void:
+	if id in ["nina", "argos"] and not pets.freeze:
+		chat.pet_said("cat" if id == "nina" else "dog", text)
+
+
+# what the server now says is ringing: a told reminder dealt with elsewhere loses its buttons
+func sync_chat(d: Dictionary) -> void:
+	var ringing: Array = []
+	for item in d.get("open", []):
+		if item.get("told_at") != null:
+			ringing.append(int(item["id"]))
+	chat.sync(ringing)
 
 
 func set_list_at(text: String) -> void:
@@ -1868,6 +1899,7 @@ func _show_slip(which: String) -> void:
 				{"id": int(item["id"]), "label": _cap(str(item["text"]), 36), "color": _item_color(item)}
 			)
 		rhythm.show_slip("home", "Still open", rows)
+		chat.slip("Still open", rows.map(func(r: Dictionary) -> String: return r["label"]))
 		return
 	var today := int(_now_local() / 86400.0)
 	for item in coming:
@@ -1882,6 +1914,7 @@ func _show_slip(which: String) -> void:
 	if rows.is_empty():
 		rows = [{"id": -1, "label": "nothing on the list today", "color": Color("5fb37a")}]
 	rhythm.show_slip("morning", "Today", rows)
+	chat.slip("Today", rows.map(func(r: Dictionary) -> String: return r["label"]))
 
 
 func _knocking(dt: float) -> void:

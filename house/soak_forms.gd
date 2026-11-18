@@ -530,7 +530,7 @@ func _card_things() -> void:
 		if b["t"] == "month":
 			s._check(b["today"] == 0, "no today mark in another month")
 	h.things.reset()
-	h.finds.birthday = ""
+	h.settings.put("birthday", "")
 	var feet: Array = h.card_blocks().filter(func(b): return b["t"] == "foot")
 	s._check(
 		feet.size() == 1 and feet[0].get("act") == "birthday", "no birthday set: one quiet line"
@@ -540,17 +540,17 @@ func _card_things() -> void:
 			return b["t"] == "buttons" and b["items"].any(func(i): return i["act"] == "birthday")
 	)
 	s._check(buttons.is_empty(), "and no birthday button")
-	h.finds.birthday = "01-01" if h.finds.today_key() != "01-01" else "01-02"
+	h.settings.put("birthday", "01-01" if h.finds.today_key() != "01-01" else "01-02")
 	s._check(
 		h.card_blocks().filter(func(b): return b["t"] == "foot").is_empty(),
 		"a birthday set: no line, no button"
 	)
-	h.finds.birthday = h.finds.today_key()
+	h.settings.put("birthday", h.finds.today_key())
 	feet = h.card_blocks().filter(func(b): return b["t"] == "foot")
 	s._check(
 		feet.size() == 1 and feet[0].get("act", "") == "", "on the day the card says so in a line"
 	)
-	h.finds.birthday = ""
+	h.settings.put("birthday", "")
 	h.card.close()
 
 

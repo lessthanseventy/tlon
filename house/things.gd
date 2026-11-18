@@ -9,6 +9,7 @@ signal post(path: String, body: Dictionary)
 
 const Card := preload("res://card.gd")
 const Sure := preload("res://sure.gd")
+const Settings := preload("res://settings.gd")
 const TABS := {"notes": "Notes", "projects": "Projects", "waiting": "Waiting", "someday": "Someday"}
 const SHOWN := 6
 
@@ -151,7 +152,7 @@ func calendar_blocks() -> Array:
 			blocks.append({"t": "text", "text": "Nothing coming up."})
 		blocks.append({"t": "buttons", "items": [{"label": "add", "act": "add_day"}]})
 	if h.finds.is_birthday():
-		blocks.append({"t": "foot", "text": "happy birthday."})
+		blocks.append({"t": "foot", "text": "happy birthday" + ("." if Settings.person == "" else ", " + Settings.person + ".")})
 	elif h.finds.birthday == "":
 		blocks.append({"t": "foot", "text": "today is my birthday", "act": "birthday"})
 	return blocks

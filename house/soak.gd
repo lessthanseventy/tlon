@@ -18,6 +18,7 @@ const Closet := preload("res://closet.gd")
 const Card := preload("res://card.gd")
 const EggSoak := preload("res://soak_eggs.gd")
 const FormSoak := preload("res://soak_forms.gd")
+const ChatSoak := preload("res://soak_chat.gd")
 const DEADLINE_MS := 540000
 
 var _srv := TCPServer.new()
@@ -534,6 +535,8 @@ func _routes() -> void:
 	)
 	_where = "forms"
 	await FormSoak.new(self, main).run()
+	_where = "settings and chat"
+	await ChatSoak.new(self, main).run()
 	_srv.stop()
 
 
@@ -939,7 +942,7 @@ func _room(seed_value: int = 7) -> Control:
 	h.sound.muted = true
 	h.eggs.setup(h, seed_value + 4, false)
 	h.outside.setup(h)
-	h.finds.setup(h, false)
+	h.finds.setup(h)
 	h.quirks.setup(h)
 	h.delights.setup(h)
 	h.fake_day = "06-15"
