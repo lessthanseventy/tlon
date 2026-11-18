@@ -166,7 +166,7 @@ defmodule Server.OperatorConfig do
       type: "string",
       default: "sun",
       doc:
-        "the weekday the home's helper reviews what has gone stale, as mon..sun, at the daily list's time; empty for never"
+        "the weekday the home's helper reviews what has gone stale, as mon..sun, at the daily list's time (17:30 when that is empty); empty for never"
     },
     %{
       key: "intake_every_minutes",

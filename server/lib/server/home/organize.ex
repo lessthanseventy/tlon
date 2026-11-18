@@ -36,6 +36,7 @@ defmodule Server.Home.Organize do
   @drift_days 28
   @sat_days 7
   @review_max 5
+  @review_at "17:30"
 
   @doc """
   File a fresh `reading` of `jot` as the operator's, at `now`: a project is filed with its first
@@ -275,8 +276,8 @@ defmodule Server.Home.Organize do
   end
 
   @doc """
-  The weekly review: once `now` is past `at` (`"17:30"`, local) on the weekday `on` (`"sun"`; `""` is
-  never) and the day has not been reviewed, what has gone stale is put to the operator in `chat`.
+  The weekly review: once `now` is past `at` (`"17:30"`, local; `""` is 17:30) on the weekday `on`
+  (`"sun"`; `""` is never) and the day has not been reviewed, what has gone stale is put to the operator in `chat`.
   `reviewed` is the day it was last done, `:boot` when the inbox has just started; the day it now
   stands at is answered.
   """
@@ -343,11 +344,11 @@ defmodule Server.Home.Organize do
   end
 
   @doc """
-  A smaller start for the oldest to-do from `via` that has sat a week and was never offered one.
+  A smaller start for the oldest to-do from `via` that has sat a week and was never offered or tried.
   The model is asked off the caller, in a task; when it has answered, the offer is put through the
-  inbox (`Server.Home.Inbox.shrink_offered/3`), as `offer_shrink/6` does. Nothing when there is no
-  such to-do, the model gave no start, or it is quiet hours: the to-do is tried again at the next
-  daily list.
+  inbox (`Server.Home.Inbox.shrink_offered/3`), as `offer_shrink/6` does. A to-do the model had no
+  start for is marked tried, so the next one has its turn at the next daily list; one the model did
+  not answer for is asked again then. Nothing when there is no such to-do or it is quiet hours.
   """
   @spec shrink(String.t(), DateTime.t()) :: :ok
   def shrink(via, now) do
@@ -423,8 +424,9 @@ defmodule Server.Home.Organize do
           :error -> nil
         end
 
-      with %Jot{ask: nil} = project <- Jot.project(via, id), [] <- Jot.steps(id) do
-        Jot.ask(project, "next", proposed, now)
+      with %Jot{ask: nil} = project <- Jot.project(via, id),
+           [] <- Jot.steps(id),
+           true <- Jot.ask_free(project, "next", proposed, now) do
         Server.Home.Inbox.asked_now(id)
       end
     end)
@@ -433,8 +435,10 @@ defmodule Server.Home.Organize do
   end
 
   defp write_start(%Jot{via: via} = jot, now) do
-    with {:ok, start} <- Helper.start(jot, Jot.notes(via, 20)) do
-      Server.Home.Inbox.shrink_offered(jot.id, start, now)
+    case Helper.start(jot, Jot.notes(via, 20)) do
+      {:ok, start} -> Server.Home.Inbox.shrink_offered(jot.id, start, now)
+      :none -> Jot.shrunk(jot, now)
+      :error -> :ok
     end
   end
 
@@ -463,6 +467,8 @@ defmodule Server.Home.Organize do
   end
 
   defp reopened(jot, _now), do: jot
+
+  defp due?(now, on, ""), do: due?(now, on, @review_at)
 
   defp due?(now, on, at) do
     local = Clock.local(now)

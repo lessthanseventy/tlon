@@ -17,7 +17,7 @@ defmodule Server.Jot do
   `"review"`, `"waiting"`, `"shrink"`), `asked_at` when it was put. `mins` is a to-do's rough size
   (2, 10, 30, 60), `touched_at` the last time the operator did anything with it, `hidden_until` the
   moment a "not today" ends, `someday_at` and `dropped_at` when it left the open list, and
-  `shrunk_at` when a smaller start was offered for it.
+  `shrunk_at` when a smaller start was offered for it or the model had none.
   """
   use Ecto.Schema
 
@@ -276,6 +276,17 @@ defmodule Server.Jot do
   def ask(%__MODULE__{} = jot, ask, proposed, now),
     do: put(jot, [ask: ask, proposed: proposed, asked_at: DateTime.truncate(now, :second)], false)
 
+  @doc "Put the question `ask` on `jot` only if it has none: `true` when this call put it. Not a touch."
+  @spec ask_free(%__MODULE__{}, String.t(), String.t() | nil, DateTime.t()) :: boolean()
+  def ask_free(%__MODULE__{id: id}, ask, proposed, now) do
+    {changed, _} =
+      Repo.update_all(from(j in __MODULE__, where: j.id == ^id and is_nil(j.ask)),
+        set: [ask: ask, proposed: proposed, asked_at: DateTime.truncate(now, :second)]
+      )
+
+    changed == 1
+  end
+
   @doc "The question about `jot` was answered at `now`, and that is a touch."
   @spec touch(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
   def touch(%__MODULE__{} = jot, now \\ DateTime.utc_now()), do: put(jot, [ask: nil, proposed: nil], now)
@@ -305,7 +316,7 @@ defmodule Server.Jot do
     jot |> put([kind: "project", ask: nil, proposed: nil], now) |> step(start, now, 2)
   end
 
-  @doc "Record that a smaller start was offered for `jot` at `now`."
+  @doc "Record that a smaller start was offered for `jot` at `now`, or that the model had none: not asked again."
   @spec shrunk(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
   def shrunk(%__MODULE__{} = jot, now), do: put(jot, [shrunk_at: DateTime.truncate(now, :second)], false)
 

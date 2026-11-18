@@ -508,9 +508,10 @@ awaiting a yes), a waiting-on is kind `waiting` (`waiting_on`, asked about at `d
 home has put to him is the row's `ask` (`next`, `review`, `waiting`, `shrink`) until it is answered. A thing
 leaves the open list by `done_at`, `someday_at` or `dropped_at` (dropped is not done: it is not in `done_week`);
 `touched_at` is the staleness clock, `hidden_until` a "not today", `shrunk_at` that a smaller start was
-offered, `mins` a to-do's size. Quiet hours (22:00-08:00) hold the unasked: a waiting-on's question, the weekly
-review (said the next morning when its day went by asleep) and the offer of a smaller start (offered again at
-the next daily list); with no messenger the same question is raised on the desktop (`Server.Alerts`, kind
+offered or the model had none, `mins` a to-do's size. Quiet hours (22:00-08:00) hold the unasked: a waiting-on's
+question, the daily list and the weekly review (each said the next morning when its time went by asleep) and
+the offer of a smaller start (offered again at the next daily list); the review runs at the daily list's time,
+17:30 when the list is off; with no messenger the same question is raised on the desktop (`Server.Alerts`, kind
 `home_ask`). A message about a put-off thing revives that row and is kept as an amend: one open thing, not two.
 Delete drops any open thing (a repeating reminder stops for good; a project takes its steps and plan; the only
 open step of a project proposes the next): Delete under a told reminder and a what-now pick, on the reminder's
