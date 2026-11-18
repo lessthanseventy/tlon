@@ -5,7 +5,8 @@ defmodule Server.Home.Reader do
   be told, `due_at` in UTC, `every` when it repeats), `"todo"`, `"note"`, `"project"` (an outcome of
   several steps: `steps`, up to five in order) or `"waiting"` (`who` owes `text`), each a thing to
   keep; or what the operator wants of the helper: `"done"` (the open things numbered `ids` are
-  done), `"list"` (what is open), `"now"` (what to do now, in `minutes` when they say), `"someday"`
+  done), `"delete"` (the open things numbered `ids` are not wanted at all), `"list"` (what is open),
+  `"now"` (what to do now, in `minutes` when they say), `"someday"`
   (what is put off) or `"answer"` (`text` answers their question from their notes and open things).
   `amends` says the message corrects the jot before it, and the reading is then that jot's, corrected.
   A reading may also carry `mins` (a to-do's size: 2, 10, 30 or 60), `project` (the project a to-do is
@@ -38,8 +39,8 @@ defmodule Server.Home.Reader do
         }
 
   @kept ["reminder", "todo", "note", "project", "waiting"]
-  @asked ["done", "list", "answer", "now", "someday"]
-  @bare ["done", "list", "now", "someday"]
+  @asked ["done", "delete", "list", "answer", "now", "someday"]
+  @bare ["done", "delete", "list", "now", "someday"]
   @sizes [2, 10, 30, 60]
   @steps 5
 
@@ -218,6 +219,8 @@ defmodule Server.Home.Reader do
     - "note": a thing to remember, and anything else worth keeping.
     - "done": they say one or more of the OPEN things are done or no longer needed. "ids" are the
       numbers of those things.
+    - "delete": they want one or more of the OPEN things or PROJECTS gone for good ("delete the milk",
+      "never mind the dentist", "forget the bins"). "ids" are the numbers of those things.
     - "list": they ask what is open, due, or on their list.
     - "now": they ask what to do now ("what now", "what should I do", "I have ten minutes").
       "minutes" is the time they say they have, else null.
@@ -235,7 +238,9 @@ defmodule Server.Home.Reader do
     question, and never refuse to file. Their next message answers it: "amends" is then true.
     PROJECTS are the open projects. When one is marked as waiting for its next step and the message
     is that step, answer "todo" with "project" set to that project's number; otherwise "project" is null.
-    SOMEDAY are things they put off. When the message mentions one of them, put its number in "revive".
+    SOMEDAY are things they put off. Put a number in "revive" only for the thing the message is itself
+    about ("do the fence tomorrow" is about the fence: "kind" is the fence's own, with the new time,
+    and "revive" holds its number). A message that only passes by one of them is not a reason to revive it.
 
     OPEN:
     #{open(context.open)}

@@ -156,14 +156,17 @@ defmodule Server.MCP.OperatorAPI do
       PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe; the page it replaces is kept
       GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
-      GET    /api/home                   Server.Home.status; {open, coming, notes, projects, waiting, done, done_week}: what the operator's
-                                         jots have left open; a row has its project {id, text} or nil, a project its next step
-                                         and how many are done, a waiting-on its who/since/due_at
+      GET    /api/home                   Server.Home.status; {open, coming, notes, note_rows, projects, waiting, done, done_week}: what the
+                                         operator's jots have left open; a row has its project {id, text} or nil, a project its next step
+                                         and how many are done, a waiting-on its who/since/due_at; note_rows is notes as {id, text}
       GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open
                                          thing to do now; skip is ids joined by commas, minutes the time there is; 400 on either not numbers
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion
                                          (asking may write the next batch); {} before the first
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
+      POST   /api/home/:id/drop          Server.Home.drop; the jot as /done answers (dropped_at for done_at), or 404 when it is not open:
+                                         any to-do, reminder (a repeating one stops for good), step, project (with its steps),
+                                         waiting-on or note, deleted, not done
       POST   /api/home/:id/later         {until: "hour"|"tomorrow"} → Server.Home.later; the jot, or 404
       POST   /api/home/:id/answer        {choice, text?} → Server.Home.answer; {reply}: a question the home put (the alerts'
                                          home_ask) answered: next: add|finish|step (text), review: keep|later|drop,
@@ -619,6 +622,15 @@ defmodule Server.MCP.OperatorAPI do
     with {id, ""} <- Integer.parse(id),
          {:ok, jot} <- Server.Home.later(id, b["until"], DateTime.utc_now()) do
       json(conn, 200, %{id: jot.id, text: jot.text, due_at: jot.due_at})
+    else
+      _ -> no_route(conn)
+    end
+  end
+
+  defp route(conn, "POST", "home", [id, "drop"]) do
+    with {id, ""} <- Integer.parse(id),
+         {:ok, jot} <- Server.Home.drop(id, DateTime.utc_now()) do
+      json(conn, 200, %{id: jot.id, text: jot.text, dropped_at: jot.dropped_at, due_at: jot.due_at})
     else
       _ -> no_route(conn)
     end

@@ -181,7 +181,7 @@ defmodule Server.Home.InboxTest do
 
     Inbox.nudge("telegram", "42", say, friday())
     assert_received {:said, "42", "reminder: call the dentist"}
-    assert_received {:with, choices: [[{"Done", done}, {"In an hour", _}, {"Tomorrow", _}]]}
+    assert_received {:with, choices: [[{"Done", done}, {"In an hour", _}, {"Tomorrow", _}], [{"Delete", "drop:" <> _}]]}
     assert done == "done:#{jot.id}"
   end
 

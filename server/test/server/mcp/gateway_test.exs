@@ -1008,6 +1008,13 @@ defmodule Server.MCP.GatewayTest do
       assert [%{"id" => id, "kind" => "todo", "text" => "buy milk"}] = home["open"]
       assert [%{"text" => "bins", "every" => "week", "due_at" => "2099-01-01T09:00:00Z"}] = home["coming"]
       assert home["notes"] == ["wifi is on the fridge"]
+      assert [%{"id" => note, "text" => "wifi is on the fridge"}] = home["note_rows"]
+
+      assert {200, %{"id" => ^note, "dropped_at" => dropped}} = post_json("/api/home/#{note}/drop", %{})
+      assert is_binary(dropped)
+      assert {404, _} = post_json("/api/home/#{note}/drop", %{})
+      assert {404, _} = post_json("/api/home/nope/drop", %{})
+      assert {200, %{"notes" => [], "note_rows" => []}} = get_json("/api/home")
 
       assert {200, %{"id" => ^id, "text" => "buy milk"}} = post_json("/api/home/#{id}/done", %{})
       assert {404, _} = post_json("/api/home/#{id}/done", %{})

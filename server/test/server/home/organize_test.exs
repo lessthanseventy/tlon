@@ -336,13 +336,13 @@ defmodule Server.Home.OrganizeTest do
       reads(fn _body, _context -> {:ok, %{kind: "now", text: "", due_at: nil, ids: [], amends: false}} end)
       hear(say, 1, "what now")
       assert_received {:said, "42", _}
-      assert_received {:with, choices: [[_, {"Something else", data}, _]]}
+      assert_received {:with, choices: [[_, {"Something else", data}, _], _]}
 
       last =
         Enum.reduce(1..28, data, fn _, data ->
           tapped(say, data)
           assert_received {:said, "42", _}
-          assert_received {:with, replace: 90, choices: [[_, {"Something else", next}, _]]}
+          assert_received {:with, replace: 90, choices: [[_, {"Something else", next}, _], _]}
           assert byte_size(next) <= 64
           next
         end)
@@ -544,9 +544,30 @@ defmodule Server.Home.OrganizeTest do
 
       hear(say, 4, "do the fence tomorrow")
 
-      assert_received {:said, "42", "to do: paint the fence\nback on the list: paint the fence"}
+      assert_received {:said, "42", "to do: paint the fence"}
+      refute_received {:said, _, _}
       assert Jot.somedays("telegram") == []
-      assert [_, _, _] = Jot.opens("telegram")
+      assert [%{id: id, text: "paint the fence"}, %{text: "buy milk"}] = Jot.opens("telegram")
+      assert id == fence.id
+      assert %{kind: "amend", body: "do the fence tomorrow"} = hd(Jot.recent("telegram", 1))
+    end
+
+    test "a revived thing takes the reading: its text, its time and its kind", %{say: say} do
+      fence = todo(1, "paint the fence", someday_at: friday())
+      due = ~U[2026-12-01 09:00:00Z]
+
+      reads(fn _body, %{someday: [%Jot{id: id}]} ->
+        {:ok, %{kind: "reminder", text: "paint the old fence", due_at: due, revive: [id]}}
+      end)
+
+      hear(say, 2, "paint the fence on the first")
+
+      assert_received {:said, "42", "I'll remind you " <> _}
+
+      assert [%{id: id, kind: "reminder", text: "paint the old fence", due_at: ^due, someday_at: nil}] =
+               Jot.opens("telegram")
+
+      assert id == fence.id
     end
 
     test "nothing on someday is said so", %{say: say} do
@@ -646,7 +667,7 @@ defmodule Server.Home.OrganizeTest do
       week = fn now, on, reviewed -> Organize.weekly("telegram", "42", say, now, on, "17:30", reviewed) end
 
       assert week.(at.(~D[2026-11-20], ~T[17:29:00]), "fri", ~D[2026-11-13]) == ~D[2026-11-13]
-      assert week.(at.(~D[2026-11-21], ~T[17:35:00]), "fri", ~D[2026-11-13]) == ~D[2026-11-13]
+      assert week.(at.(~D[2026-11-22], ~T[17:35:00]), "fri", ~D[2026-11-13]) == ~D[2026-11-13]
       assert week.(at.(~D[2026-11-20], ~T[17:35:00]), "", ~D[2026-11-13]) == ~D[2026-11-13]
       refute_received {:said, _, _}
 
@@ -860,14 +881,15 @@ defmodule Server.Home.OrganizeTest do
 
       assert_received {:said, "42", "reply to Sam — fits 10 minutes"}
 
-      assert_received {:with, choices: [[{"Done", done}, {"Something else", other}, {"Not today", nottoday}]]}
+      assert_received {:with,
+                       choices: [[{"Done", done}, {"Something else", other}, {"Not today", nottoday}], [{"Delete", _}]]}
 
       assert {done, other, nottoday} ==
                {"done:#{reply.id}", "n:10:#{reply.id}", "a:#{reply.id}:nottoday"}
 
       tapped(say, other)
       assert_received {:said, "42", "do the taxes — longer than 10 minutes, but it is what is open"}
-      assert_received {:with, replace: 90, choices: [[_, {"Something else", other_again}, _]]}
+      assert_received {:with, replace: 90, choices: [[_, {"Something else", other_again}, _], _]}
       assert other_again == "n:10:#{taxes.id}-#{reply.id}"
 
       tapped(say, other_again)
@@ -899,6 +921,203 @@ defmodule Server.Home.OrganizeTest do
       assert DateTime.diff(until, DateTime.utc_now()) in 1..86_400
 
       assert :error = Organize.answer("telegram", jot.id + 1, "nottoday", nil, DateTime.utc_now())
+    end
+  end
+
+  describe "quiet hours hold every unasked message" do
+    test "the weekly review waits for the morning and is not lost", %{say: say} do
+      stale(1, "old", 15)
+      at = fn date, time -> Clock.utc(NaiveDateTime.new!(date, time)) end
+      week = fn now -> Organize.weekly("telegram", "42", say, now, "fri", "17:30", ~D[2026-11-13]) end
+
+      assert week.(at.(~D[2026-11-20], ~T[22:30:00])) == ~D[2026-11-13]
+      refute_received {:said, _, _}
+
+      assert week.(at.(~D[2026-11-21], ~T[08:05:00])) == ~D[2026-11-21]
+      assert_received {:said, "42", "Still want this? old"}
+    end
+
+    test "the smaller start waits too, and is offered when it is morning", %{say: say} do
+      taxes = todo(1, "do the taxes", received_at: DateTime.add(friday(), -8, :day))
+      night = Clock.utc(~N[2026-11-20 22:30:00])
+
+      Organize.offer_shrink("telegram", taxes.id, "Find the return", "42", say, night)
+      refute_received {:said, _, _}
+      assert Jot.asked("telegram") == []
+
+      Organize.offer_shrink("telegram", taxes.id, "Find the return", "42", say, Clock.utc(~N[2026-11-21 08:05:00]))
+      assert_received {:said, "42", "'do the taxes'" <> _}
+    end
+  end
+
+  describe "a project step put off is still the project's step" do
+    test "the project keeps showing it as next, and done on it proposes the next one", %{say: say} do
+      reads(fn _body, _context -> project_reading(["call", "write"]) end)
+      hear(say, 1, "plan mom's birthday")
+      [%{id: pid}] = Jot.projects("telegram")
+      [step] = Jot.steps(pid)
+
+      Inbox.later(step, "tomorrow", friday())
+
+      assert %{projects: [%{next: %{id: id}}]} = Home.status(DateTime.utc_now())
+      assert id == step.id
+      assert [%{kind: "reminder"}] = Jot.steps(pid)
+
+      assert {:ok, _} = Home.done(step.id, DateTime.utc_now())
+      assert [%{text: "Next for plan mom's birthday: write?"}] = Home.asked()
+      assert Jot.finished(pid) == ["call"]
+    end
+  end
+
+  describe "states one path reaches and another does not expect" do
+    test "a deleted thing is not the one an amend corrects", %{say: say} do
+      reads(fn _body, _context -> {:ok, %{kind: "todo", text: "buy milk", due_at: nil, ids: [], amends: false}} end)
+      hear(say, 1, "buy milk")
+      [milk] = Jot.opens("telegram")
+      Home.drop(milk.id, friday())
+
+      assert Jot.last_filed("telegram") == nil
+    end
+
+    test "putting a thing off answers the review question it had", %{say: say} do
+      stale(1, "old", 15)
+      Organize.weekly("telegram", "42", say, friday(), "fri", "17:30", ~D[2026-11-13])
+      [jot] = Jot.asked("telegram")
+
+      Inbox.later(jot, "hour", friday())
+
+      assert Jot.asked("telegram") == []
+    end
+
+    test "bringing a put-off step back clears the question its project asked meanwhile", %{say: say} do
+      reads(fn _body, _context -> project_reading(["call", "write"]) end)
+      hear(say, 1, "plan mom's birthday")
+      [%{id: pid}] = Jot.projects("telegram")
+      [step] = Jot.steps(pid)
+      Jot.someday(step, friday())
+      Organize.advance(step, friday())
+      assert [%{ask: "next"}] = Jot.asked("telegram")
+
+      reads(fn _body, %{someday: [%Jot{id: id}]} ->
+        {:ok, %{kind: "todo", text: "call", due_at: nil, revive: [id]}}
+      end)
+
+      hear(say, 2, "call them")
+
+      assert Jot.asked("telegram") == []
+      assert [%{text: "call"}] = Jot.steps(pid)
+    end
+  end
+
+  describe "delete" do
+    defp told_routine(say, id \\ 1) do
+      routine(id)
+      Inbox.nudge("telegram", "42", say, friday())
+      assert_received {:said, "42", "reminder: bins"}
+      [jot] = Jot.opens("telegram")
+      jot
+    end
+
+    test "a told reminder has a Delete button, which drops it for good: silent at its next two times", %{say: say} do
+      jot = told_routine(say)
+      assert_received {:with, choices: [[_, _, _], [{"Delete", delete}]]}
+      assert delete == "drop:#{jot.id}"
+
+      tapped(say, delete)
+
+      assert_received {:said, "42", "deleted: bins"}
+      assert %{dropped_at: %DateTime{}, done_at: nil} = fresh(jot)
+      Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 1, :day))
+      Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 2, :day))
+      refute_received {:said, _, _}
+      assert %{done_week: 0} = Home.status(DateTime.utc_now())
+
+      tapped(say, delete)
+      assert_received {:said, "42", "That one is already done."}
+    end
+
+    test "the what-now pick has a Delete button", %{say: say} do
+      todo(1, "buy milk")
+      reads(fn _body, _context -> {:ok, %{kind: "now", text: "", due_at: nil, ids: [], amends: false}} end)
+      hear(say, 2, "what now")
+      assert_received {:said, "42", "buy milk" <> _}
+      assert_received {:with, choices: [[_, _, _], [{"Delete", delete}]]}
+
+      tapped(say, delete)
+
+      assert_received {:said, "42", "deleted: buy milk"}
+      assert Jot.opens("telegram") == []
+    end
+
+    test "a typed delete is read as a new ask with ids, and an id that is not open is skipped", %{say: say} do
+      milk = todo(1, "buy milk")
+      bins = routine(2)
+
+      reads(fn "forget the milk and the bins", _context ->
+        {:ok, %{kind: "delete", text: "", due_at: nil, ids: [milk.id, bins.id, 999], amends: false}}
+      end)
+
+      hear(say, 3, "forget the milk and the bins")
+
+      assert_received {:said, "42", "deleted: buy milk\ndeleted: bins"}
+      assert Jot.opens("telegram") == []
+      assert [%{kind: "talk"} | _] = Jot.recent("telegram", 1)
+
+      hear(say, 4, "forget the milk and the bins")
+      assert_received {:said, "42", "I couldn't tell which one you meant." <> _}
+    end
+
+    test "a project deleted drops its open steps and plan, and none counts as done", %{say: say} do
+      reads(fn _body, _context -> project_reading(["call", "write"]) end)
+      hear(say, 1, "plan mom's birthday")
+      [%{id: pid}] = Jot.projects("telegram")
+
+      assert {:ok, %{text: "plan mom's birthday"}} = Home.drop(pid, friday())
+
+      assert Jot.projects("telegram") == []
+      assert Jot.steps(pid) == []
+      assert %{plan: []} = fresh(%Jot{id: pid})
+      assert %{open: [], projects: [], done_week: 0} = Home.status(DateTime.utc_now())
+      assert Home.asked() == []
+    end
+
+    test "a project's only open step deleted proposes the next one", %{say: say} do
+      reads(fn _body, _context -> project_reading(["call", "write"]) end)
+      hear(say, 1, "plan mom's birthday")
+      [%{id: pid}] = Jot.projects("telegram")
+      [step] = Jot.steps(pid)
+
+      assert {:ok, _} = Home.drop(step.id, friday())
+
+      assert [%{text: "Next for plan mom's birthday: write?"}] = Home.asked()
+      assert %{done_week: 0} = Home.status(DateTime.utc_now())
+    end
+
+    test "a waiting-on and a note can be deleted, and a note leaves the notes", %{say: say} do
+      {:ok, wait} = Jot.take("telegram", 1, "w")
+      Jot.file(wait, %{kind: "waiting", text: "the photos", due_at: friday(), who: "Sam"})
+      {:ok, note} = Jot.take("telegram", 2, "wifi")
+      Jot.file(note, %{kind: "note", text: "wifi is on the fridge", due_at: nil})
+
+      assert %{notes: ["wifi is on the fridge"], note_rows: [%{id: id, text: "wifi is on the fridge"}]} =
+               Home.status(friday())
+
+      assert id == note.id
+
+      assert {:ok, _} = Home.drop(note.id, friday())
+      assert {:ok, _} = Home.drop(wait.id, friday())
+      assert :error = Home.drop(note.id, friday())
+
+      assert %{notes: [], note_rows: [], waiting: []} = Home.status(friday())
+      assert Organize.waiting("telegram", "42", say, DateTime.add(friday(), 3, :day)) == :ok
+      refute_received {:said, _, _}
+    end
+
+    test "a thing already done or never there is not deletable" do
+      milk = todo(1, "buy milk")
+      Jot.done(milk, friday())
+      assert :error = Home.drop(milk.id, friday())
+      assert :error = Home.drop(999, friday())
     end
   end
 
@@ -935,7 +1154,7 @@ defmodule Server.Home.OrganizeTest do
 
       hear(say, 5, "the bins")
 
-      assert_received {:said, "42", "to do: bins\nback on the list: bins"}
+      assert_received {:said, "42", "to do: bins"}
       assert %{someday_at: nil, due_at: due} = fresh(jot)
       assert DateTime.after?(due, DateTime.utc_now())
     end
