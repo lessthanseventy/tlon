@@ -238,6 +238,9 @@ defmodule Server.Home.Reader do
     question, and never refuse to file. Their next message answers it: "amends" is then true.
     PROJECTS are the open projects. When one is marked as waiting for its next step and the message
     is that step, answer "todo" with "project" set to that project's number; otherwise "project" is null.
+    When the message only points at one of the OPEN things and says nothing new about it ("the
+    storage unit thing"), file no copy of it: answer "answer", and "text" names that thing and asks
+    what they want done with it.
     SOMEDAY are things they put off. Put a number in "revive" only for the thing the message is itself
     about ("do the fence tomorrow" is about the fence: "kind" is the fence's own, with the new time,
     and "revive" holds its number). A message that only passes by one of them is not a reason to revive it.
