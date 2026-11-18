@@ -4,6 +4,7 @@ extends RefCounted
 # star that can be wished on, a plane, snow on the sill in winter, fireworks at New Year.
 const View := preload("res://view.gd")
 const Props := preload("res://props.gd")
+const Pets := preload("res://pets.gd")
 
 const EVERY := {
 	"bird": Vector2(150.0, 420.0),
@@ -12,7 +13,9 @@ const EVERY := {
 	"star": Vector2(400.0, 1000.0),
 	"plane": Vector2(700.0, 1800.0),
 }
-const LONG := {"bird": 22.0, "balloon": 70.0, "nightcat": 50.0, "star": 3.2, "plane": 16.0}
+const LONG := {
+	"bird": 22.0, "balloon": 70.0, "nightcat": 50.0, "star": 3.2, "plane": 16.0, "wild": 18.0
+}
 const WISHES := [
 	"wish heard. no promises.",
 	"it will probably come true.",
@@ -51,6 +54,12 @@ func start(name: String) -> void:
 		var r: RandomNumberGenerator = h.eggs.rng
 		act[name] = {"t": 0.0, "v": r.randf(), "w": r.randf()}
 		h.eggs.find(name)
+
+
+# an animal of the animals pack walks across the ground outside the glass (`quirks.gd` decides when)
+func start_wild(name: String) -> void:
+	var r: RandomNumberGenerator = h.eggs.rng
+	act["wild"] = {"t": 0.0, "name": name, "v": r.randf(), "ltr": r.randf() < 0.5}
 
 
 func eligible(name: String) -> bool:
@@ -181,6 +190,8 @@ func draw(q: PackedVector2Array, c: CanvasItem, k: int, env: Dictionary) -> void
 		var gl := Color("f2d34a", fade * (0.7 + 0.3 * sin(h._t * 2.0)))
 		c.draw_rect(Rect2(p + Vector2(-1.6, -7) * k, Vector2(k, k)), gl)
 		c.draw_rect(Rect2(p + Vector2(0.8, -7) * k, Vector2(k, k)), gl)
+	if act.has("wild"):
+		_draw_wild(q, c, k, env)
 	if act.has("star"):
 		var p := star_at(q)
 		var f: float = act["star"]["t"] / LONG["star"]
@@ -198,6 +209,34 @@ func draw(q: PackedVector2Array, c: CanvasItem, k: int, env: Dictionary) -> void
 			var ang := TAU * i / 14.0
 			var at := p + Vector2(cos(ang), sin(ang) + u * 0.6) * (3.0 + u * 11.0) * k
 			c.draw_rect(Rect2(at, Vector2(k, k) * 1.2), Color(b["c"], (1.0 - u) * 0.95))
+
+
+# walks in from one side, stops to look at the room, walks on; fades at the edges of the pane
+func _draw_wild(q: PackedVector2Array, c: CanvasItem, k: int, env: Dictionary) -> void:
+	var a: Dictionary = act["wild"]
+	var f: float = a["t"] / LONG["wild"]
+	var along: float = clampf(f / 0.38, 0.0, 1.0) * 0.5 + clampf((f - 0.62) / 0.38, 0.0, 1.0) * 0.5
+	var u: float = lerpf(0.18, 0.82, along if a["ltr"] else 1.0 - along)
+	var look: bool = f >= 0.38 and f < 0.62
+	var feet := Props.qlerp(q, u, 0.1 + 0.12 * a["v"])
+	var name: String = a["name"]
+	var anim := "idle" if look else "walk"
+	var tex: Texture2D = h.pets._load(
+		h.pets.animals_dir + "Sheets/%dx/%s/%s_%s.png" % [k, name, name, anim]
+	)
+	if tex == null:
+		return
+	var cell := 64 * k
+	var frame := int(a["t"] * Pets.FPS[anim]) % maxi(1, tex.get_width() / cell)
+	var fade := clampf(minf(f, 1.0 - f) / 0.08, 0.0, 1.0)
+	var dim := Color.WHITE.lerp(Color(0.72, 0.76, 0.95), 1.0 - float(env["day"]))
+	var dir: int = Pets.DIRS["se"] if a["ltr"] else Pets.DIRS["nw"]
+	c.draw_texture_rect_region(
+		tex,
+		Rect2((feet - Vector2(32, 46) * k * 0.5).round(), Vector2(cell, cell) * 0.5),
+		Rect2(frame * cell, dir * cell, cell, cell),
+		Color(dim, fade)
+	)
 
 
 # over the sill: snow in winter, the bird; and the star's hit area

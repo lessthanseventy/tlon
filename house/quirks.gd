@@ -17,7 +17,52 @@ const ARROW_STAYS := 150.0
 const VISIT := {"in": 2.6, "stay": 2.8, "out": 2.6}
 const DOORWAY := Vector2(0.45, 7.5)
 const INSIDE := Vector2(2.6, 7.0)
-const KIND_ID := {"hero": "visitor", "city": "visitor_city", "monster": "visitor_monster"}
+const KIND_ID := {
+	"hero": "visitor",
+	"city": "visitor_city",
+	"monster": "visitor_monster",
+	"farm": "visitor_farm",
+	"wild": "visitor_wild",
+}
+# farm animals that wander through the door (their shadow), and the wild ones outside the window
+# (when: any hour, by day, or at night)
+const FARM := {
+	"cow_holstein": "shadow_large",
+	"cow_brown": "shadow_large",
+	"sheep_white": "shadow_medium",
+	"sheep_black": "shadow_medium",
+	"pig_pink": "shadow_medium",
+	"pig_spotted": "shadow_medium",
+	"chicken_white": "shadow_small",
+	"chicken_brown": "shadow_small",
+	"horse_bay": "shadow_large",
+}
+const WILD := {
+	"deer_doe": "day",
+	"deer_stag": "day",
+	"fox_red": "any",
+	"fox_arctic": "any",
+	"boar": "any",
+	"wolf_grey": "night",
+	"wolf_black": "night",
+	"bear_brown": "night",
+	"bear_black": "night",
+}
+# the hours each kind comes by on its own (house clock); a forced visit ignores them
+const HOURS := {
+	"hero": Vector2(9.0, 21.0),
+	"city": Vector2(9.0, 21.0),
+	"farm": Vector2(9.0, 21.0),
+	"wild": Vector2(7.0, 23.0),
+	"monster": Vector2(6.0, 22.0),
+}
+# seconds between visits by `visitors_rate`, and the running time between rare night monsters
+const GAPS := {
+	"rare": Vector2(2400.0, 5400.0),
+	"sometimes": Vector2(900.0, 2100.0),
+	"often": Vector2(420.0, 900.0),
+}
+const WEEK := 604800.0
 # the pedestrians of the city pack (not its workers), and the monsters that are only comic: the
 # animation each moves with and its shadow
 const PEDESTRIANS := [
@@ -60,6 +105,20 @@ const PACKS := {
 		"anchor": Vector2(32, 46),
 		"weight": 2.0
 	},
+	"farm":
+	{
+		"dir": "isometric-animals/Gridwright Isometric Animals/",
+		"cell": 64,
+		"anchor": Vector2(32, 46),
+		"weight": 1.0
+	},
+	"wild":
+	{
+		"dir": "isometric-animals/Gridwright Isometric Animals/",
+		"cell": 64,
+		"anchor": Vector2(32, 46),
+		"weight": 2.0
+	},
 }
 const LOOK_DIRS := [1, 0, 7]
 const REACTION := {
@@ -77,12 +136,16 @@ var arrow := {}
 var stuck := 0.0
 var visitor := {}
 var forced: Array = []
+var last_kind := ""
+var started := 0
 
 var _t := 0.0
 var _fx_t := 0.0
 var _next_fx := 120.0
 var _next_perk := 600.0
 var _next_visit := 1500.0
+var _night_t := WEEK
+var _night_due := false
 var _door_was := false
 var _vlook: Look
 var _vcrit: Pets.Critter
@@ -93,15 +156,22 @@ func setup(home) -> void:
 	var r: RandomNumberGenerator = h.eggs.rng
 	_next_fx = r.randf_range(60.0, 180.0)
 	_next_perk = r.randf_range(400.0, 900.0)
-	_next_visit = r.randf_range(1200.0, 3000.0)
+	_next_visit = gap().x * r.randf_range(0.6, 1.4)
+	_night_t = WEEK * r.randf_range(0.5, 1.5)
 
 
 func force(name: String) -> void:
 	forced.append(name)
 
 
+# someone is here: at the door or at the window
 func visiting() -> bool:
-	return not visitor.is_empty()
+	return not visitor.is_empty() or h.outside.act.has("wild")
+
+
+# seconds between two visits, by how often he asked for them
+func gap() -> Vector2:
+	return GAPS[str(h.settings.value("visitors_rate"))]
 
 
 func process(dt: float) -> void:
@@ -126,7 +196,7 @@ func _start(name: String) -> void:
 			h.eggs.find("salute")
 		"visitor":
 			start_visit()
-		"visitor_city", "visitor_monster":
+		"visitor_city", "visitor_monster", "visitor_farm", "visitor_wild":
 			start_visit(name.get_slice("_", 1).get_slice(":", 0), name.get_slice(":", 1))
 
 
@@ -338,18 +408,26 @@ func draw_over(c: CanvasItem) -> void:
 		)
 
 
-# which kinds of visitor may come on this date and hour: the hero and a pedestrian any day, a
-# monster only 25-31 October and never at night
-static func allowed(hour: float, october_week: bool) -> Array:
-	var out := ["hero", "city"]
-	if october_week and hour >= 6.0 and hour < 22.0:
+# which kinds of visitor may come on this date and hour: everyone but a monster any day; a monster
+# in the last week of October by day, and, when `rare_night` (about once a week of running), at
+# night on any date. `mode` is the `visitors` setting: "calm" has no monster, "none" nobody.
+static func allowed(
+	hour: float, october_week: bool, mode: String = "all", rare_night: bool = false
+) -> Array:
+	if mode == "none":
+		return []
+	var out := ["hero", "city", "farm", "wild"]
+	var night := hour >= 21.5 or hour < 5.0
+	if mode == "all" and (october_week and hour >= 6.0 and hour < 22.0 or rare_night and night):
 		out.append("monster")
 	return out
 
 
 # the sheets of a pack's visitors that exist under the art folder, in the pack's own order
 func guest_names(kind: String) -> Array:
-	var pool: Array = PEDESTRIANS if kind == "city" else MONSTERS.keys()
+	var pool: Array = {
+		"city": PEDESTRIANS, "monster": MONSTERS.keys(), "farm": FARM.keys(), "wild": WILD.keys()
+	}[kind]
 	var dir: String = h.room.art_dir.path_join(PACKS[kind]["dir"])
 	return pool.filter(
 		func(n):
@@ -365,7 +443,9 @@ static func _sheet_path(dir: String, name: String, anim: String, k: int) -> Stri
 
 
 func _sheets(kind: String, name: String) -> Array:
-	return ["idle", "walk", "phone"] if kind == "city" else ["idle", MONSTERS[name][0]]
+	if kind == "city":
+		return ["idle", "walk", "phone"]
+	return ["idle", "walk"] if kind in ["farm", "wild"] else ["idle", MONSTERS[name][0]]
 
 
 func _hero_ready() -> bool:
@@ -381,7 +461,8 @@ func _hero_ready() -> bool:
 func kinds_now() -> Array:
 	var day: float = h._now_local()
 	var out: Array = []
-	for kind in allowed(h._hour(), Guests.last_week_of_october(day)):
+	var mode := str(h.settings.value("visitors"))
+	for kind in allowed(h._hour(), Guests.last_week_of_october(day), mode, _night_due):
 		if _hero_ready() if kind == "hero" else not guest_names(kind).is_empty():
 			out.append(kind)
 	return out
@@ -403,6 +484,15 @@ func _pick_kind(kinds: Array) -> String:
 func start_visit(kind: String = "hero", who: String = "") -> bool:
 	if visiting() or kind not in kinds_now():
 		return false
+	last_kind = kind
+	started += 1
+	if kind == "wild":
+		var pool := guest_names("wild")
+		var name: String = who if who in pool else _wild_pick(pool)
+		h.outside.start_wild(name)
+		h.eggs.find(KIND_ID[kind])
+		_react(kind, name)
+		return true
 	_vcrit.pos = DOORWAY
 	_vcrit.dir = 7
 	_vcrit.z = 0.0
@@ -418,38 +508,64 @@ func start_visit(kind: String = "hero", who: String = "") -> bool:
 		var stay := "phone" if kind == "city" and h.eggs.rng.randf() < 0.35 else "idle"
 		visitor = {"t": 0.0, "kind": kind, "name": name, "stay": stay}
 		h.sound.request("egg_visitor")
+		if kind == "farm":
+			h.sound.request(Pets.CRIES.get(Pets.KINDS[name]["species"], ""))
 	h.eggs.find(KIND_ID[kind])
 	if kind == "monster":
-		_react()
+		_night_due = false
+	_react(kind, str(visitor.get("name", "")))
 	return true
 
 
-# the dog-role pet hops or hides, the cat-role pet is unimpressed
-func _react() -> void:
+# a wild animal fits the hour: by day deer and the like, at night wolves and bears
+func _wild_pick(pool: Array) -> String:
+	var hour: float = h._hour()
+	var night := hour >= 20.0 or hour < 6.0
+	var fit: Array = pool.filter(
+		func(n): return WILD[n] == "any" or WILD[n] == ("night" if night else "day")
+	)
+	var from: Array = fit if not fit.is_empty() else pool
+	return from[h.eggs.rng.randi() % from.size()]
+
+
+# the cat-species pet watches from the sill, the dog-species pet barks once and hops; a monster
+# gets its own lines
+func _react(kind: String, _name: String) -> void:
 	var r: RandomNumberGenerator = h.eggs.rng
-	var argos = h.pets.critter("argos")
-	var nina = h.pets.critter("nina")
-	if h.eggs.loose(argos):
-		if r.randf() < 0.5:
-			argos.hops = 3
-		else:
-			h.pets.go(argos, "nook", "sit", 15.0)
-			argos.wait = 9999.0
-		h.pets.say(argos, REACTION["Argos"][r.randi() % 2])
-	if h.eggs.loose(nina):
-		h.pets.say(nina, REACTION["Nina"][r.randi() % 2])
+	for id in ["argos", "nina"]:
+		var c = h.pets.critter(id)
+		if not h.eggs.loose(c):
+			continue
+		match c.species:
+			"cat":
+				h.pets.go(c, "sill", "sit", 14.0)
+				c.wait = 9999.0
+			"dog":
+				c.hops = 2
+				h.sound.request(h.pets.cry(c))
+		if kind == "monster":
+			if id == "argos" and c.species == "dog" and r.randf() < 0.5:
+				h.pets.go(c, "nook", "sit", 15.0)
+				c.wait = 9999.0
+			h.pets.say(c, REACTION[c.title][r.randi() % 2])
 
 
 func _visit(dt: float) -> void:
 	if visitor.is_empty():
 		if h.pets.freeze:
 			return
+		_night_t -= dt
+		if _night_t <= 0.0:
+			_night_t = WEEK * h.eggs.rng.randf_range(0.5, 1.5)
+			_night_due = true
+		if visiting():
+			return
 		_next_visit -= dt
 		if _next_visit <= 0.0:
-			_next_visit = h.eggs.rng.randf_range(1500.0, 4000.0)
-			var hour: float = h._hour()
-			if hour >= 9.0 and hour < 21.0 and h.eggs.calm() and h.eggs.scene.is_empty():
-				var kinds := kinds_now()
+			_next_visit = h.eggs.rng.randf_range(gap().x, gap().y)
+			if h.eggs.calm() and h.eggs.scene.is_empty():
+				var hour: float = h._hour()
+				var kinds := kinds_now().filter(func(k): return _hour_ok(k, hour))
 				if not kinds.is_empty():
 					start_visit(_pick_kind(kinds))
 		return
@@ -475,6 +591,13 @@ func _visit(dt: float) -> void:
 			if h.eggs.loose(c):
 				h.eggs.line(c, "visitor")
 				break
+
+
+func _hour_ok(kind: String, hour: float) -> bool:
+	if kind == "monster" and _night_due and (hour >= 21.5 or hour < 5.0):
+		return true
+	var window: Vector2 = HOURS[kind]
+	return hour >= window.x and hour < window.y
 
 
 func _moving() -> bool:
@@ -514,9 +637,11 @@ func _draw_guest(f: Vector2, k: int) -> void:
 	var name: String = visitor["name"]
 	var pack: Dictionary = PACKS[kind]
 	var dir: String = h.room.art_dir.path_join(pack["dir"])
-	var move: String = "walk" if kind == "city" else MONSTERS[name][0]
+	var move: String = "walk" if kind in ["city", "farm"] else MONSTERS[name][0]
 	var anim: String = move if _moving() else str(visitor.get("stay", "idle"))
-	var shadow: String = "shadow_small" if kind == "city" else MONSTERS[name][1]
+	var shadow: String = (
+		"shadow_small" if kind == "city" else (FARM[name] if kind == "farm" else MONSTERS[name][1])
+	)
 	var sh: Texture2D = h.pets._load(dir + "Effects/%dx/%s.png" % [k, shadow])
 	if sh != null:
 		h.room.draw_texture(

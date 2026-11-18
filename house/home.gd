@@ -627,7 +627,7 @@ func process(dt: float) -> void:
 			pets.nudge("desk", "night")
 	jar.process(dt)
 	door.process(dt)
-	room.door_ajar = door.ajar() or person.arrive_left > 3.0 or quirks.visiting()
+	room.door_ajar = door.ajar() or person.arrive_left > 3.0 or not quirks.visitor.is_empty()
 	rhythm.process(dt)
 	perk_left = maxf(0.0, perk_left - dt)
 	water_left = maxf(0.0, water_left - dt)

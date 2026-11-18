@@ -192,7 +192,7 @@ func _homes() -> void:
 
 
 func _visitors() -> void:
-	s._check(Quirks.allowed(14.0, false) == ["hero", "city"], "no monster outside 25-31 October")
+	s._check(Quirks.allowed(14.0, false) == ["hero", "city", "farm", "wild"], "no monster outside 25-31 October")
 	s._check(Quirks.allowed(14.0, true).has("monster"), "a monster in its week")
 	s._check(not Quirks.allowed(22.5, true).has("monster") and not Quirks.allowed(3.0, true).has("monster"), "never a monster at night")
 	var room: Control = s._room(33)
@@ -213,33 +213,38 @@ func _visitors() -> void:
 	var seen := {}
 	for i in 40:
 		q.visitor = {}
+		h.outside.act.erase("wild")
 		q.start_visit(q._pick_kind(q.kinds_now()))
-		seen[q.visitor["kind"]] = true
+		seen[q.last_kind] = true
 	s._check(seen.has("monster") and seen.has("city"), "the dice give each kind in the week")
 	q.visitor = {}
+	h.outside.act.erase("wild")
 	h.fake_hour = 23.0
 	s._check(not q.start_visit("monster"), "no monster at 23:00")
 	h.fake_hour = 14.0
 	s._check(q.start_visit("monster", "ghost") and q.visitor["name"] == "ghost" and h.eggs.found.has("visitor_monster"), "a monster in its week, found")
 	var saved := FileAccess.file_exists("user://house_visitor_never_written.json")
 	s._check(not saved, "a visitor is never saved")
-	# spacing: a trigger that comes while one is here starts nobody, and the gap after is 25-66 minutes
+	# spacing: a trigger that comes while one is here starts nobody, and the gap after is 15-35 minutes
 	q.visitor = {}
+	h.outside.act.erase("wild")
 	var gaps := 0
 	for i in 200:
 		q._next_visit = 0.0
 		h.fake_hour = 14.0
 		q._visit(0.1)
-		if q._next_visit < 1500.0 or q._next_visit > 4000.0:
+		if q._next_visit < 900.0 or q._next_visit > 2100.0:
 			gaps += 1
 		q.visitor = {}
-	s._check(gaps == 0, "visitors are 25-66 minutes apart")
+		h.outside.act.erase("wild")
+	s._check(gaps == 0, "visitors are 15-35 minutes apart")
 	h.fake_hour = 22.0
 	q.visitor = {}
 	q._next_visit = 0.0
 	q._visit(0.1)
-	s._check(q.visitor.is_empty(), "nobody after 21:00 by the dice")
+	s._check(q.visitor.is_empty(), "nobody comes to the door after 21:00 by the dice")
 	q.visitor = {}
+	h.outside.act.erase("wild")
 	h.fake_day = "06-15"
 	var art: String = room.art_dir
 	room.art_dir = "/nonexistent"

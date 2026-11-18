@@ -130,12 +130,18 @@ runs on the local list.
   (not in the notepad): `borges` (shelf glows, a Babel line), `tlon` (colours drift), `uqbar` (a second
   moon), `argos` (he hops). `quirks.gd`: desk fidgets (`spin pencil stretch nod`, `--egg ...`), hero perks
   (staff: `cast` lights the fire; blade: salutes a visitor at the door; bow: an arrow stays in the wall), and a
-  rare visitor who walks in at the door, stands, looks around and leaves, one at a time, 25-66 min apart
-  between 09:00 and 21:00 whatever the kind: a hero (`--egg visitor`), a seeded pedestrian of the city-people
-  pack, any day (`--egg visitor_city[:punk]`), and on 25-31 October (house clock, never after 22:00) a friendly
-  monster of the monsters pack (`--egg visitor_monster[:ghost]`; the dog-role pet hops or hides, the cat-role
-  pet is unimpressed). Each kind met is one "found" entry; a missing pack removes its kind. `Quirks.allowed`
-  is the date/hour rule, `Quirks.PEDESTRIANS`/`MONSTERS` the casts. `delights.gd`: a moth at the lamp at night, an umbrella by the door in
+  visitor, one at a time (never over a card, form, menu or ringing reminder), `visitors_rate` apart (`rare` 40-90
+  min, `sometimes` 15-35, `often` 7-15; default sometimes) and, by `Quirks.HOURS`, between 09:00 and 21:00 for the
+  people and the farm, 07:00-23:00 for the wild: a hero (`--egg visitor`), a seeded pedestrian of the city-people
+  pack (`--egg visitor_city[:punk]`), a farm animal that walks in at the door, looks around and leaves
+  (`--egg visitor_farm[:cow_brown]`, its cry once), a wild animal that crosses the ground outside the window
+  and stops to look (`--egg visitor_wild[:deer_stag]`, `outside.gd`; deer by day, wolves and bears at night), and
+  a friendly monster of the monsters pack on 25-31 October by day (`--egg visitor_monster[:ghost]`) or, about once a
+  week of running time (`Quirks._night_t`), at night on any date. The setting `visitors`: `all`, `calm` (no monster)
+  or `none` (nobody, a forced visit refused too). The cat-species pet goes to the sill to watch, the dog-species
+  pet barks once and hops (the sound only if not muted); a monster also draws a line from each pet. Each kind met
+  is one "found" entry; a missing pack removes its kind. `Quirks.allowed` is the date/hour rule,
+  `Quirks.PEDESTRIANS`/`MONSTERS`/`FARM`/`WILD` the casts. `delights.gd`: a moth at the lamp at night, an umbrella by the door in
   rain, Nina at the sill in rain, Argos hiding in a storm, TV remarks, a greeting for a new look, sparks when
   the jar fills; a snowman on the sill in snow and a lit pumpkin after dark (`outside.gd`, `home.gd`).
 - **Sound** (`sound.gd`): a cue plays a file of the Gridwright UI and Retro packs found under the art dir

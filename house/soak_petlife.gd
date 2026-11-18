@@ -7,6 +7,7 @@ const Voices := preload("res://voices.gd")
 const Sound := preload("res://sound.gd")
 const Settings := preload("res://settings.gd")
 const PetView := preload("res://pet_view.gd")
+const Quirks := preload("res://quirks.gd")
 
 var s
 
@@ -19,6 +20,193 @@ func run() -> void:
 	_kinds()
 	_picker()
 	_things()
+	_visits()
+
+
+func _clear(h) -> void:
+	h.quirks.visitor = {}
+	h.outside.act.erase("wild")
+
+
+# every kind of visitor can be forced, one at a time, and the settings are obeyed
+func _visits() -> void:
+	var room := _home(45, "cat_grey", "dog_golden")
+	var h = room.home
+	var q = h.quirks
+	h.pets.freeze = false
+	for kind in ["hero", "city", "farm", "wild", "monster"]:
+		_clear(h)
+		h.fake_day = "10-28" if kind == "monster" else "06-15"
+		h.fake_hour = 14.0
+		s._check(q.start_visit(kind), "a %s can be forced" % kind)
+		s._check(q.visiting() and q.last_kind == kind, "and is here")
+		for other in ["hero", "city", "farm", "wild"]:
+			s._check(not q.start_visit(other), "never two at once (%s over %s)" % [other, kind])
+		s._check(h.eggs.found.has(Quirks.KIND_ID[kind]), "%s is a find" % kind)
+		for i in 400:
+			h.process(0.1)
+			if not q.visiting():
+				break
+		s._check(not q.visiting(), "and a %s leaves" % kind)
+	_clear(h)
+	h.fake_day = "06-15"
+	var wild_seen := {}
+	for i in 60:
+		_clear(h)
+		h.fake_hour = 2.0 if i % 2 == 0 else 13.0
+		q.start_visit("wild")
+		var name: String = h.outside.act["wild"]["name"]
+		wild_seen[name] = true
+		var when: String = Quirks.WILD[name]
+		s._check(
+			when == "any" or when == ("night" if i % 2 == 0 else "day"), "%s fits its hour" % name
+		)
+	s._check(wild_seen.size() >= 5, "wild animals vary (%d)" % wild_seen.size())
+	_clear(h)
+	s._check(
+		(
+			q.guest_names("farm").size() == Quirks.FARM.size()
+			and q.guest_names("wild").size() == Quirks.WILD.size()
+		),
+		"every farm and wild animal has its sheets"
+	)
+	h.fake_hour = 14.0
+	var nina = h.pets.critter("nina")
+	var argos = h.pets.critter("argos")
+	h.sound.requested.clear()
+	_clear(h)
+	h.pets.place(nina, "rug", "idle")
+	h.pets.place(argos, "rug2", "idle")
+	q.start_visit("wild")
+	q.start_visit("wild")
+	s._check(nina.goal == "sill" or nina.spot == "sill", "the cat watches from the sill")
+	s._check(argos.hops > 0 and h.sound.requested.has("bark"), "the dog barks once and hops")
+	h.sound.requested.clear()
+	_clear(h)
+	h.settings.put("pet2", "rabbit_white")
+	q.start_visit("wild")
+	s._check(not h.sound.requested.has("bark"), "a rabbit does not bark")
+	_clear(h)
+	h.settings.put("pet2", "dog_golden")
+	# the setting: calm has no monster, none has nobody
+	h.fake_day = "10-28"
+	h.fake_hour = 14.0
+	q._night_due = true
+	s._check(q.kinds_now().has("monster"), "all: a monster in its week")
+	h.settings.put("visitors", "calm")
+	s._check(
+		not q.kinds_now().has("monster") and q.kinds_now().has("city"),
+		"calm: people and animals only"
+	)
+	s._check(not q.start_visit("monster"), "calm: no monster even when forced")
+	h.settings.put("visitors", "none")
+	s._check(q.kinds_now().is_empty(), "none: nobody")
+	for kind in ["hero", "city", "farm", "wild", "monster"]:
+		s._check(not q.start_visit(kind), "none: %s is refused" % kind)
+	h.settings.put("visitors", "all")
+	# the rare night monster: any date, only at night, once due
+	h.fake_day = "06-15"
+	h.fake_hour = 23.0
+	q._night_due = false
+	s._check(not q.kinds_now().has("monster"), "no monster at night when none is due")
+	q._night_due = true
+	s._check(q.kinds_now().has("monster"), "a due monster may come at night on any date")
+	h.fake_hour = 14.0
+	s._check(not q.kinds_now().has("monster"), "but not by day")
+	h.fake_hour = 23.0
+	h.settings.put("visitors", "calm")
+	s._check(not q.kinds_now().has("monster"), "and not in calm")
+	h.settings.put("visitors", "all")
+	s._check(q.start_visit("monster") and not q._night_due, "it comes once")
+	s._check(q._night_t >= Quirks.WEEK * 0.5, "the next is about a week of running time away")
+	_clear(h)
+	room.queue_free()
+	_cadence()
+	_deterministic()
+
+
+# visits per hour by rate, with the clock held: rare < sometimes < often, and calm
+func _cadence() -> void:
+	var counts := {}
+	for rate in ["rare", "sometimes", "often"]:
+		var room := _home(46, "cat_grey", "dog_golden")
+		var h = room.home
+		h.settings.put("visitors_rate", rate)
+		h.quirks._next_visit = 0.0
+		h.pets.freeze = false
+		h.fake_hour = 14.0
+		for i in 4320:
+			h.quirks._visit(5.0)
+			h.outside.process(5.0)
+		counts[rate] = h.quirks.started / 6.0
+		room.queue_free()
+	s._check(
+		counts["rare"] < counts["sometimes"] and counts["sometimes"] < counts["often"],
+		"rate: rare < sometimes < often (%s)" % [counts]
+	)
+	s._check(
+		counts["sometimes"] >= 1.5 and counts["sometimes"] <= 4.5,
+		"a few visits an hour by default (%s)" % counts["sometimes"]
+	)
+	var room := _home(47, "cat_grey", "dog_golden")
+	var h = room.home
+	h.settings.put("visitors", "none")
+	h.settings.put("visitors_rate", "often")
+	h.pets.freeze = false
+	h.fake_hour = 14.0
+	for i in 4320:
+		h.quirks._visit(5.0)
+		h.outside.process(5.0)
+	s._check(h.quirks.started == 0, "none: no visit in six hours")
+	# never during a form, a card or a ringing reminder
+	h.settings.put("visitors", "all")
+	h.form_open = true
+	for i in 1440:
+		h.quirks._visit(5.0)
+		h.outside.process(5.0)
+	s._check(h.quirks.started == 0, "none started under an open form")
+	h.form_open = false
+	h.ring_ids = [1]
+	for i in 1440:
+		h.quirks._visit(5.0)
+		h.outside.process(5.0)
+	s._check(h.quirks.started == 0, "none started under a ringing reminder")
+	h.ring_ids = []
+	h.card.open("clock", "clock")
+	for i in 1440:
+		h.quirks._visit(5.0)
+		h.outside.process(5.0)
+	s._check(h.quirks.started == 0, "none started under an open card")
+	h.card.close()
+	for i in 1440:
+		h.quirks._visit(5.0)
+		h.outside.process(5.0)
+	s._check(h.quirks.started > 0, "and they come when it is calm again")
+	room.queue_free()
+
+
+# the same seed, the same visitors
+func _deterministic() -> void:
+	var runs: Array = []
+	for n in 2:
+		var room := _home(48, "cat_grey", "dog_golden")
+		var h = room.home
+		h.settings.put("visitors_rate", "often")
+		h.pets.freeze = false
+		h.fake_hour = 14.0
+		var kinds: Array = []
+		for i in 4320:
+			var before: int = h.quirks.started
+			h.quirks._visit(5.0)
+			h.outside.process(5.0)
+			if h.quirks.started > before:
+				kinds.append(h.quirks.last_kind)
+		runs.append(kinds)
+		room.queue_free()
+	s._check(
+		runs[0] == runs[1] and not runs[0].is_empty(),
+		"a seeded run has the same visitors (%d)" % runs[0].size()
+	)
 
 
 func _home(seed_value: int, pet1: String, pet2: String) -> Control:
@@ -27,6 +215,7 @@ func _home(seed_value: int, pet1: String, pet2: String) -> Control:
 	h.fake_hour = 14.0
 	h.fake_day = "06-15"
 	h.set_data(s._data([s._thing(1, 1.0)], 0))
+	h._env = h._env_now()
 	h.settings.put("pet1", pet1)
 	h.settings.put("pet2", pet2)
 	return room
