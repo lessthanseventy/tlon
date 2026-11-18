@@ -22,6 +22,7 @@ const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
 const LocalSoak := preload("res://soak_local.gd")
 const ArtSoak := preload("res://soak_art.gd")
+const PackLooksSoak := preload("res://soak_looks.gd")
 const TalkSoak := preload("res://soak_talk.gd")
 const TelegramSoak := preload("res://soak_telegram.gd")
 const DEADLINE_MS := 540000
@@ -104,6 +105,10 @@ func _run() -> void:
 	await _cards()
 	_where = "routes"
 	await _routes()
+	_where = "pack looks"
+	var packs := PackLooksSoak.new(self)
+	packs.run()
+	await packs.measure()
 	_where = "art"
 	ArtSoak.new(self).run()
 	print("SOAK %s (%d failures)" % ["OK" if _failures.is_empty() else "FAILED", _failures.size()])

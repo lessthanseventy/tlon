@@ -11,6 +11,7 @@ const Sound := preload("res://sound.gd")
 const Guests := preload("res://guests.gd")
 const Room := preload("res://room.gd")
 const Quirks := preload("res://quirks.gd")
+const Glow := preload("res://glow.gd")
 const SCALES := [1, 2, 3]
 const INTERIORS := "isometric-interiors/Gridwright Isometric Interiors/"
 
@@ -29,6 +30,7 @@ func _init() -> void:
 	_guests()
 	_visitors()
 	_sound()
+	_looks()
 	_licences()
 	var names: Array = _files.keys()
 	names.sort()
@@ -132,6 +134,11 @@ func _sound() -> void:
 	for cue in Sound.CUES.values():
 		for f in cue["f"]:
 			_add(f)
+
+
+func _looks() -> void:
+	for rel in Glow.files():
+		_add(rel)
 
 
 func _licences() -> void:

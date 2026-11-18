@@ -149,6 +149,18 @@ runs on the local list.
   in `requested`, which the soak reads; a name with no cue is ignored), from `sound.process(dt, home)`
   watching the card, menu, note, closet, decorate, door and timer open and close, and from `eggs.find(id)` as
   `egg_<id>`. `--sounds` prints every cue with the file it resolved to (or `synth`/`none`) and quits.
+- **Looks** (`looks.gd` the switches and the one loader of their textures, from the art dir, cached;
+  `glow.gd`): what the light-textures, weather-effects, spell-vfx and
+  pixel-fonts-2 packs add on top of the code-drawn room, each falling back to the code-drawn look, silently,
+  when its pack or file is missing. Each has a switch under "looks" in the settings screen, applied at once
+  (`glow`; on by default). `--plain` forces them all off and `--looks glow,font` exactly the named
+  ones on, for pictures and comparing. Each module's `files()` names what it opens, which is the art pack's
+  list (`art_pack.gd`); the soak holds that list to the files the looks really opened.
+  *Glow*: after dark (the clock's `day` under 0.5; the lamp follows its own `lamp` value) a soft radial or
+  pool texture is drawn at the lamp, a lit fire (flickering on a seeded table, stepped ten times a second), a
+  TV that is on, the moon in the window, any candle piece and the pumpkin, in `Glow.SOURCES`, the one table
+  (texture, colour, width, strength, lift). Each is cut to the room's outline (the moon to the glass) so none
+  spills onto the desktop; with it on, the lamp's code-drawn halo gives way. By day nothing is drawn.
 - **Decorate** (`D`, or `--decorate`; the home only, not the widget): the side panel becomes the
   catalogue (`decorate.gd`): wall and floor styles, `reset`, and every placeable piece of the pack's
   index grouped and scrolled, a piece's four sides (or a rug's two, a wall piece's two) one entry. Click a piece, a ghost follows the pointer
@@ -209,7 +221,8 @@ runs on the local list.
   every scene, line, sound and card that needs it is skipped; `--pets cat=KIND,dog=KIND` stages them), `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
   `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server), and over the
   house's own list only `telegram` (off), `telegram_list_at` (`"17:30"`), `claude` (off) and `claude_command`
-  (`"claude"`): the two helpers below (the bot's token is not here but in its own file).
+  (`"claude"`): the two helpers below (the bot's token is not here but in its own file); and the four
+  looks, `glow` (above, "Looks").
   **Precedence: a command-line arg beats the settings file beats the default** (`--widget`
   is the arg of `widget`; `Settings.forced`). The screen also shows sound (`sound.gd`'s own file keeps it), "N of M
   found" with "forget them all", "reset the room to how it came" (`layout.reset`) and "clear" for the chat, each
@@ -405,7 +418,7 @@ runs on the local list.
   this is not part of `mise run check`.
 - `mise run house:soak` — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached). Stdout ends `SOAK OK`.
+  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`.
 - `mise run house:art-pack` / `mise run house:build -- windows|mac|linux|all` — the art the house can open, packed to
   `~/.cache/tlon/house-dist/house-art.zip` (`-- --list` prints the files only), and a build of the house per platform
   with it beside the executable, zipped as `the-house-<platform>.zip` there. Templates are Godot's own 4.7.2 export
@@ -430,7 +443,7 @@ and seeds their dice (`--seed N` to pick another):
   at a spot (`pets.gd` `SPOTS`: `sofa`, `desk`, `rug`, `bed`, ...); `--wait SECONDS` when to shoot.
 - `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a card, a
   name tag or a pat can be photographed without a pointer.
-- `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--wave "text"` a coworker at the door; `--plane "title"` a landed plane; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--visitor` feed the demo office to the door; `--person
+- `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--wave "text"` a coworker at the door; `--plane "title"` a landed plane; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--plain` / `--looks glow,weather_art,spells,font` the looks all off / only the named on; `--visitor` feed the demo office to the door; `--person
   desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--card calendar|jar|weather|clock|board|plant|tv` opens that card at 0.45 s (`calendar:DAY[:MONTHS_AHEAD]`, `board:projects|waiting|someday[:PROJECT_ID]`); `--form "KIND;key=value;..."` opens a form at 0.4 s (`todo reminder note waiting project`, or `edit:ID`; keys `kinds text who steps date time every error`, `date` as `MM-DD` or `YYYY-MM-DD`, `steps` lines split by `\n`); `--what-now` the slip; `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
   "text"` opens the jot field (`--sending` shows the scribble); `--reply "text"` the reply slip;
   `--menu ID` the paper menu on thing ID; `--ring ID` rings the phone for thing ID; `--now
