@@ -67,10 +67,12 @@ func _shuffle() -> void:
 
 
 func advance() -> void:
-	_at += 1
-	if _at >= _order.size():
-		_shuffle()
-	current = _order[_at]
+	var before := current
+	while current == before:
+		_at += 1
+		if _at >= _order.size():
+			_shuffle()
+		current = _order[_at]
 	_left = _rng.randf_range(SWITCH_MIN, SWITCH_MAX)
 	_flicker = FLICKER
 

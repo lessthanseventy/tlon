@@ -58,6 +58,7 @@ func _check(ok: bool, what: String) -> void:
 
 
 func _run() -> void:
+	seed(7)
 	_logic()
 	_soak()
 	_decorate_logic()
@@ -887,6 +888,7 @@ func _room(seed_value: int = 7) -> Control:
 	h.pets.rng.seed = seed_value
 	h.person.rng.seed = seed_value + 1
 	h.knock._rng.seed = seed_value + 2
+	h.tv.setup(seed_value + 3)
 	h.layout.setup(room._index, room.art_found, "", false)
 	h.apply_layout()
 	return room
@@ -1039,8 +1041,9 @@ func _cards() -> void:
 	room.size = Vector2(1100, 700)
 	var h = room.home
 	h.fake_hour = 8.0
+	h.fake_day = "03-15"
 	h.pets.freeze = true
-	var day := Time.get_datetime_dict_from_system()
+	var day := Time.get_datetime_dict_from_unix_time(int(h._now_local()))
 	var bias: float = h._bias()
 	var iso := func(d: int, hour: int, minute: int) -> String:
 		var at := Card.unix(day["year"], day["month"], d, hour, minute) - bias
@@ -1171,8 +1174,13 @@ func _cards() -> void:
 	await process_frame
 	await process_frame
 	var button: Rect2 = h.card._buttons[0]["rect"]
-	h.click(button.get_center())
-	_check(h.tv.hacks.current != "plasma" and h.card.kind == "tv", "Next changes the TV's picture")
+	var last: String = h.tv.hacks.current
+	var always := true
+	for i in 40:
+		h.click(button.get_center())
+		always = always and h.tv.hacks.current != last
+		last = h.tv.hacks.current
+	_check(always and h.card.kind == "tv", "Next always shows a different picture")
 	room.queue_free()
 
 
