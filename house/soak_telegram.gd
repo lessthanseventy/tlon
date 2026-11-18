@@ -124,6 +124,7 @@ func _tg(base: String, heard: Array, taps: Array) -> Telegram:
 	tg.store = STORE
 	tg.persist = true
 	tg.poll_gap = 0.03
+	tg.grace = 0.0
 	tg.rng.seed = 5
 	tg.clock = Callable(self, "_clock")
 	tg.heard.connect(
@@ -438,6 +439,35 @@ func _telegram() -> void:
 	held[0].call()
 	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
 	_eq(bot.named("editMessageText").back()["text"], "⏰ post\n✓ done", "which says it, once")
+	# acted on before Telegram has even answered the send: said once the message exists
+	tg3.on_told({"id": 13, "text": "quick", "every": null})
+	tg3.handled(13, "done")
+	await _until(
+		func() -> bool:
+			return (
+				bot.named("editMessageText").size() > 0
+				and bot.named("editMessageText").back()["text"] == "⏰ quick\n✓ done"
+			)
+	)
+	_eq(bot.named("editMessageText").back()["text"], "⏰ quick\n✓ done", "a quick act is still said")
+	# a list read before the tell does not close the new message
+	tg3.grace = 5.0
+	tg3.on_told({"id": 14, "text": "fresh", "every": null})
+	await _until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ fresh")
+	edits = bot.named("editMessageText").size()
+	tg3.sync([])
+	await _settle(0.15)
+	_eq(
+		bot.named("editMessageText").size(), edits, "a message younger than the grace is left alone"
+	)
+	tg3.grace = 0.0
+	tg3.sync([])
+	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	_eq(
+		bot.named("editMessageText").back()["text"],
+		"⏰ fresh\ndealt with in the house",
+		"and closed after it"
+	)
 	tg3.stop()
 
 	await _daily(base, bot)
@@ -597,6 +627,7 @@ func _in_the_house(main) -> void:
 	var ph = main._phone
 	ph.base = base
 	ph.poll_gap = 0.03
+	ph.grace = 0.0
 	ph.token = TOKEN
 	ph.chat = 777
 	ph.me = "@house_stub_bot"
@@ -735,6 +766,10 @@ func _in_the_house(main) -> void:
 			)
 	)
 	_eq(_things(b).has("water"), false, "yes deletes it from the list")
+	await _until(
+		func() -> bool: return bot.named("editMessageText").back()["text"] == "⏰ water\ndeleted"
+	)
+	_eq(bot.named("editMessageText").back()["text"], "⏰ water\ndeleted", "and says so")
 	# dealt with another way: the message loses its buttons
 	var bins: int = (
 		b.list.add({"kind": "reminder", "text": "bins", "at": "2026-11-18T16:00"})["body"]["id"]
