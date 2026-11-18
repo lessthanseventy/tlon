@@ -226,7 +226,7 @@ runs on the local list.
   address check. `main.gd` `_make_backend` picks the server's (`backend_http.gd`, at `base`) or the house's own
   (`backend_local.gd`) from the `where` setting and swaps it at once when that changes.
 - **The house's own list** (`where`: `"server"` by default, `"local"` for "this computer"; the cog's screen chooses,
-  `--local FILE|starters` stages it, nothing saved). The same room runs on `backend_local.gd`: every route of the
+  `--local FILE|starters` stages it, nothing saved; `--tell "line;line"` sends loose lines and opens the chat). The same room runs on `backend_local.gd`: every route of the
   server's list answered on the next frame by `local_list.gd`, a Dictionary kept in `user://house_list.json`
   `{"v": 1, "next_id": N, "things": [...]}` (a thing: `id kind text state since due_at every every_day told_at nudges
   project_id who plan done_at hidden_until`; unknown keys, top level or on a thing, are kept; `due_at` is UTC `Z` as

@@ -211,6 +211,14 @@ func _ready() -> void:
 	if "--chat" in args:
 		var spec: String = args[args.find("--chat") + 1]
 		get_tree().create_timer(0.4).timeout.connect(func() -> void: _stage_chat(spec))
+	if "--tell" in args:
+		var lines := args[args.find("--tell") + 1].split(";", false)
+		get_tree().create_timer(0.4).timeout.connect(
+			func() -> void:
+				for line in lines:
+					_tell(line, func(_ok: bool, _reply: String) -> void: pass)
+				_open_chat()
+		)
 	if "--closet" in args:
 		get_tree().create_timer(0.3).timeout.connect(
 			func() -> void:
