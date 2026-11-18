@@ -38,7 +38,10 @@ defmodule Server.Home.Inbox do
   @retry_ms 5_000
   @tick_ms 30_000
   @nudges 6
+  @kept ["reminder", "todo", "note", "project", "waiting"]
   @done ["done", "did it", "did that"]
+
+  @callback_limit 64
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
@@ -138,11 +141,50 @@ defmodule Server.Home.Inbox do
 
   @doc ~s(Put the open thing `jot` off, `until` an `"hour"` from `now` or `"tomorrow"` at 09:00 local: the jot.)
   @spec later(Jot.t(), String.t(), DateTime.t()) :: Jot.t()
-  def later(jot, "hour", now), do: Jot.put_off(jot, DateTime.add(now, 3600))
+  def later(jot, "hour", now), do: Jot.put_off(jot, DateTime.add(now, 3600), now)
 
   def later(jot, "tomorrow", now) do
     morning = now |> Clock.local() |> NaiveDateTime.to_date() |> Date.add(1) |> NaiveDateTime.new!(~T[09:00:00])
-    Jot.put_off(jot, Clock.utc(morning))
+    Jot.put_off(jot, Clock.utc(morning), now)
+  end
+
+  @doc """
+  Say the question put on the project `id` (a next step that took a model call) in the paired chat,
+  if the inbox is running with a messenger. The desktop raises it from the row either way.
+  """
+  @spec asked_now(integer()) :: :ok
+  def asked_now(id) do
+    if GenServer.whereis(__MODULE__), do: GenServer.cast(__MODULE__, {:asked, id})
+    :ok
+  end
+
+  @doc "Say the next-step question on project `id` from `via` in `chat` through `say`; nothing when there is none or no chat."
+  @spec tell_ask(String.t(), String.t(), (String.t(), String.t(), keyword() -> term()), integer()) :: :ok
+  def tell_ask(via, chat, say, id) do
+    with true <- chat != "",
+         %Jot{ask: "next"} = project <- Jot.asked(via, id) do
+      {text, opts} = Organize.prompt_reply(project)
+      say.(chat, text, opts)
+    end
+
+    :ok
+  end
+
+  @doc """
+  The data of the "Something else" button for a pick made with `minutes` (0 for none) that has left
+  out `ids`, newest first: as many of the newest as fit in Telegram's #{@callback_limit} bytes.
+  """
+  @spec else_data(non_neg_integer(), [integer()]) :: String.t()
+  def else_data(minutes, ids) do
+    head = "n:#{minutes}:"
+
+    kept =
+      Enum.reduce_while(ids, [], fn id, kept ->
+        fits = kept ++ [id]
+        if byte_size(head <> Enum.join(fits, "-")) <= @callback_limit, do: {:cont, fits}, else: {:halt, kept}
+      end)
+
+    head <> Enum.join(kept, "-")
   end
 
   @impl true
@@ -163,7 +205,7 @@ defmodule Server.Home.Inbox do
   @impl true
   def handle_info(:tick, %{messenger: messenger} = state) do
     now = DateTime.utc_now()
-    nudge(messenger.name(), "", nil, now)
+    guarded(:ok, fn -> nudge(messenger.name(), "", nil, now) end)
     Process.send_after(self(), :tick, @tick_ms)
     {:noreply, tend(state, "", nil, now)}
   end
@@ -171,7 +213,7 @@ defmodule Server.Home.Inbox do
   def handle_info(:poll, %{messenger: messenger, offset: offset} = state) do
     chat = Server.OperatorConfig.setting("home_chat")
     now = DateTime.utc_now()
-    nudge(messenger.name(), chat, &messenger.say/3, now)
+    guarded(:ok, fn -> nudge(messenger.name(), chat, &messenger.say/3, now) end)
     state = tend(state, chat, &messenger.say/3, now)
 
     case messenger.updates(offset) do
@@ -187,12 +229,41 @@ defmodule Server.Home.Inbox do
     end
   end
 
+  @impl true
+  def handle_cast({:asked, id}, %{messenger: messenger} = state) do
+    if Map.has_key?(state, :offset) do
+      guarded(:ok, fn ->
+        tell_ask(messenger.name(), Server.OperatorConfig.setting("home_chat"), &messenger.say/3, id)
+      end)
+    end
+
+    {:noreply, state}
+  end
+
+  # one odd row must not take the inbox, and so the reminders and the chat, down: each piece of upkeep
+  # fails alone and is tried again at the next poll
   defp tend(%{messenger: messenger} = state, chat, say, now) do
     via = messenger.name()
     at = Server.OperatorConfig.setting("home_list_at")
-    Organize.waiting(via, chat, say, now)
-    reviewed = Organize.weekly(via, chat, say, now, Server.OperatorConfig.setting("home_review_on"), at, state.reviewed)
-    %{state | reviewed: reviewed, listed: daily(via, chat, say, now, at, state.listed)}
+    guarded(:ok, fn -> Organize.waiting(via, chat, say, now) end)
+    on = Server.OperatorConfig.setting("home_review_on")
+    reviewed = guarded(state.reviewed, fn -> Organize.weekly(via, chat, say, now, on, at, state.reviewed) end)
+    listed = guarded(state.listed, fn -> daily(via, chat, say, now, at, state.listed) end)
+    %{state | reviewed: reviewed, listed: listed}
+  end
+
+  defp guarded(default, fun) do
+    fun.()
+  rescue
+    error ->
+      Logger.error("home inbox: upkeep failed: #{Exception.message(error)}")
+      default
+  end
+
+  defp speak(chat, say, {text, opts}, prefix \\ "") do
+    {later, opts} = Keyword.pop(opts, :then, [])
+    say.(chat, prefix <> text, opts)
+    Enum.each(later, fn {text, opts} -> say.(chat, text, opts) end)
   end
 
   defp take(%{chat: nil}, _via, _chat, _say), do: :ok
@@ -216,15 +287,14 @@ defmodule Server.Home.Inbox do
     do: say.(chat, "Text me anything and I'll keep it.", [])
 
   defp take(%{chat: chat, text: text, id: id}, via, chat, say) when is_binary(text) do
-    with {text, opts} <- keep(via, id, text, DateTime.utc_now()), do: say.(chat, text, opts)
+    with {_text, _opts} = reply <- keep(via, id, text, DateTime.utc_now()), do: speak(chat, say, reply)
   end
 
   defp take(%{chat: chat, voice: file, id: id}, via, chat, say) do
     case Application.get_env(:server, :home_ear, &Server.Home.Ear.hear/1).(file) do
       {:ok, heard} ->
         with {:ok, jot} <- Jot.take(via, id, heard) do
-          {text, opts} = filed(jot, via, DateTime.utc_now())
-          say.(chat, "heard: “#{heard}”\n" <> text, opts)
+          speak(chat, say, filed(jot, via, DateTime.utc_now()), "heard: “#{heard}”\n")
         end
 
       {:error, why} ->
@@ -281,7 +351,7 @@ defmodule Server.Home.Inbox do
          choices: [
            [
              {"Done", "done:#{id}"},
-             {"Something else", "n:#{minutes}:#{Enum.join([id | skip], "-")}"},
+             {"Something else", else_data(minutes, [id | skip])},
              {"Not today", "a:#{id}:nottoday"}
            ]
          ]}
@@ -327,13 +397,13 @@ defmodule Server.Home.Inbox do
     reader = Application.get_env(:server, :home_reader, &Reader.read/2)
 
     case reader.(jot.body, context) do
-      {:ok, %{amends: true} = reading} when context.previous != nil ->
-        Jot.file(context.previous, reading)
-        Jot.file(jot, %{kind: "amend", text: nil, due_at: nil})
-        {"changed: " <> Reader.say(reading), []}
+      {:ok, %{amends: true, kind: kind} = reading} when context.previous != nil and kind in @kept ->
+        reply = Organize.file(context.previous, reading, now)
+        Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
+        {"changed: " <> reply, []}
 
       {:ok, %{kind: kind} = reading} when kind in ["done", "list", "answer", "now", "someday"] ->
-        Jot.file(jot, %{kind: "talk", text: nil, due_at: nil})
+        Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
         asked(reading, via, now)
 
       {:ok, reading} ->
@@ -356,20 +426,21 @@ defmodule Server.Home.Inbox do
   end
 
   defp asked(%{kind: "done", ids: ids}, via, now) do
-    case for id <- ids, jot = Jot.open(via, id), do: finished(jot, now) do
+    case for id <- ids, jot = Jot.open(via, id), do: {closed(jot, now), Organize.advance(jot, now)} do
       [] ->
         {text, opts} = listed(via, now)
         {"I couldn't tell which one you meant.\n\n" <> text, opts}
 
       done ->
-        {Enum.map_join(done, "\n", &elem(&1, 0)), done |> Enum.map(&elem(&1, 1)) |> Enum.find([], &(&1 != []))}
+        asks = for {_closed, {_text, _opts} = ask} <- done, do: ask
+        {Enum.map_join(done, "\n", &elem(&1, 0)), if(asks == [], do: [], else: [then: asks])}
     end
   end
 
   defp section(_title, [], _line), do: nil
   defp section(title, jots, line), do: Enum.join([title | Enum.map(jots, line)], "\n")
 
-  defp tick(jot), do: {"✓ " <> String.slice(jot.text, 0, 30), "tick:#{jot.id}"}
+  defp tick(jot), do: {"✓ " <> String.slice(to_string(jot.text), 0, 30), "tick:#{jot.id}"}
 
   # a reminder that repeats and was never answered stands at its newest time that has come
   defp current(%Jot{every: nil} = jot, _now), do: jot
@@ -377,7 +448,7 @@ defmodule Server.Home.Inbox do
   defp current(%Jot{every: every, due_at: due} = jot, now) do
     case Clock.latest(due, every, now) do
       ^due -> jot
-      latest -> Jot.put_off(jot, latest)
+      latest -> Jot.roll(jot, latest)
     end
   end
 

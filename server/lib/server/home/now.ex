@@ -24,7 +24,7 @@ defmodule Server.Home.Now do
     minutes = Keyword.get(opts, :minutes)
     projects = Keyword.get(opts, :projects, %{})
     live = Enum.filter(things, &candidate?(&1, now, skip))
-    {overdue, todos} = Enum.split_with(live, &(&1.kind == "reminder"))
+    {overdue, todos} = Enum.split_with(live, &match?(%Jot{kind: "reminder", due_at: %DateTime{}}, &1))
 
     case {Enum.sort_by(overdue, &{DateTime.to_unix(&1.due_at), &1.id}), todos} do
       {[jot | _], _} -> {:ok, jot, "due " <> ago(DateTime.diff(now, jot.due_at))}
@@ -41,7 +41,7 @@ defmodule Server.Home.Now do
   defp hidden?(%Jot{hidden_until: nil}, _now), do: false
   defp hidden?(%Jot{hidden_until: until}, now), do: DateTime.after?(until, now)
 
-  defp coming?(%Jot{kind: "reminder", due_at: due}, now), do: DateTime.after?(due, now)
+  defp coming?(%Jot{kind: "reminder", due_at: %DateTime{} = due}, now), do: DateTime.after?(due, now)
   defp coming?(_jot, _now), do: false
 
   defp todo(todos, now, minutes, projects) do

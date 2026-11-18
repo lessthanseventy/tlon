@@ -93,6 +93,7 @@ defmodule Server.Home.Reader do
     end
   end
 
+  def say(%{kind: "reminder", text: text}), do: "to do: #{text}"
   def say(%{kind: "todo", text: text}), do: "to do: #{text}"
   def say(%{kind: "note", text: text}), do: "noted: #{text}"
 
