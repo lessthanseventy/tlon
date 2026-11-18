@@ -61,7 +61,46 @@ defmodule Server.Home.Clock do
   @spec awake?(DateTime.t()) :: boolean()
   def awake?(%DateTime{} = utc), do: local(utc).hour in 8..21
 
+  @doc """
+  The date of the newest slot not after `now`: a slot is a day (or, with a weekday `on` as `"sun"`, that
+  weekday) at `at` (`"17:30"`, local). nil when there is no such time (`at` or `on` is empty or not
+  one).
+  """
+  @spec slot(DateTime.t(), String.t(), String.t() | nil) :: Date.t() | nil
+  def slot(%DateTime{} = now, at, on \\ nil) do
+    case Time.from_iso8601(at <> ":00") do
+      {:ok, time} ->
+        local = local(now)
+        today = NaiveDateTime.to_date(local)
+        newest = if Time.compare(NaiveDateTime.to_time(local), time) == :lt, do: Date.add(today, -1), else: today
+        on_day(newest, on)
+
+      _never ->
+        nil
+    end
+  end
+
+  @doc """
+  What to do with a slot that comes round (the daily list, the weekly review): `{:say, slot}` when the
+  newest slot (`slot/3`) is newer than `last`, the date of the last slot said, and the operator is up
+  at `now`; the slot is then what is recorded. `:wait` otherwise, so a slot that went by asleep, or
+  with the node down, is said at the first waking moment after it, once.
+  """
+  @spec due(Date.t(), DateTime.t(), String.t(), String.t() | nil) :: {:say, Date.t()} | :wait
+  def due(%Date{} = last, %DateTime{} = now, at, on \\ nil) do
+    case slot(now, at, on) do
+      %Date{} = slot -> if Date.after?(slot, last) and awake?(now), do: {:say, slot}, else: :wait
+      nil -> :wait
+    end
+  end
+
   @doc "A UTC instant as the helper says it: `Fri 20 Nov 09:00`, local."
   @spec say(DateTime.t()) :: String.t()
   def say(%DateTime{} = utc), do: Calendar.strftime(local(utc), "%a %-d %b %H:%M")
+
+  defp on_day(date, nil), do: date
+
+  defp on_day(date, on), do: Enum.find(for(back <- 0..6, do: Date.add(date, -back)), &(day_name(&1) == on))
+
+  defp day_name(date), do: date |> Calendar.strftime("%a") |> String.downcase()
 end

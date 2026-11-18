@@ -107,11 +107,13 @@ defmodule Server.Home.Inbox do
   end
 
   @doc """
-  The daily list: once `now` is past `at` (`"17:30"`, local; `""` is never) on a day it has not been
-  said, in waking hours (one set for a sleeping hour is said the next morning), what is open is said in `chat`, with an offer of a smaller start for a to-do that has sat
-  (`Server.Home.Organize.shrink/2`, in waking hours); with no chat the offer is still put, for the desktop.
-  `listed` is the day it was last said, `:boot` when the inbox
-  has just started; the day it now stands at is answered.
+  The daily list: when a day's slot at `at` (`"17:30"`, local; `""` is never) has come round and was
+  not said (`Server.Home.Clock.due/4`), what is open is said in `chat`, with an offer of a smaller
+  start for a to-do that has sat (`Server.Home.Organize.shrink/2`); with no chat the offer is still
+  put, for the desktop. Only in waking hours: a slot that went by asleep, or with the node down, is
+  said at the first waking moment after it, once. `listed` is the date of the last slot said (a list
+  said this morning for last night's 22:30 is last night's date), `:boot` when the inbox has just
+  started, which counts the newest slot as said; the date of the slot now said is answered.
   """
   @spec daily(
           String.t(),
@@ -122,17 +124,17 @@ defmodule Server.Home.Inbox do
           Date.t() | :boot
         ) ::
           Date.t()
-  def daily(via, chat, say, now, at, listed) do
-    local = Clock.local(now)
-    today = NaiveDateTime.to_date(local)
-    past? = past?(NaiveDateTime.to_time(local), Time.from_iso8601(at <> ":00"))
+  def daily(_via, _chat, _say, now, at, :boot),
+    do: Clock.slot(now, at) || now |> Clock.local() |> NaiveDateTime.to_date() |> Date.add(-1)
 
-    cond do
-      listed == :boot and past? -> today
-      listed == :boot -> Date.add(today, -1)
-      not Clock.awake?(now) or listed == today -> listed
-      past? or held?(at, today, listed) -> said(via, chat, say, now, today)
-      true -> listed
+  def daily(via, chat, say, now, at, %Date{} = listed) do
+    case Clock.due(listed, now, at) do
+      {:say, slot} ->
+        said(via, chat, say, now)
+        slot
+
+      :wait ->
+        listed
     end
   end
 
@@ -503,10 +505,7 @@ defmodule Server.Home.Inbox do
   defp turn?(%Jot{nudges: n, nudged_at: last}, now),
     do: DateTime.diff(now, last, :minute) >= min(30 * 2 ** (n - 1), 240) and Clock.awake?(now)
 
-  defp past?(time, {:ok, at}), do: Time.compare(time, at) != :lt
-  defp past?(_time, _never), do: false
-
-  defp said(via, chat, say, now, today) do
+  defp said(via, chat, say, now) do
     Organize.shrink(via, now)
 
     with true <- chat != "",
@@ -514,18 +513,8 @@ defmodule Server.Home.Inbox do
       say.(chat, "Before you clock out:\n\n" <> text, opts)
     end
 
-    today
+    :ok
   end
 
   # the list's time is a sleeping hour and yesterday's slot went by: it is said when the morning comes
-  defp held?(at, today, listed) do
-    case Time.from_iso8601(at <> ":00") do
-      {:ok, time} ->
-        yesterday = Date.add(today, -1)
-        not Clock.awake?(Clock.utc(NaiveDateTime.new!(yesterday, time))) and Date.compare(listed, yesterday) == :lt
-
-      _never ->
-        false
-    end
-  end
 end
