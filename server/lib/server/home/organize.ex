@@ -10,7 +10,9 @@ defmodule Server.Home.Organize do
       Chased (asked again in three days) or Tomorrow.
     * **The weekly review** (`weekly/7`): up to five open things untouched for 14 days, each with Keep,
       Later or Drop; anything untouched for 28 days is moved to someday on its own and said in a line.
-      A reminder that repeats is a routine: never reviewed, never moved.
+      A reminder that repeats is a routine: never reviewed, never moved. The day it falls on asleep
+      it is said the next morning.
+    * **Deleting** (`delete/2`): the operator's no to a thing, which is dropped and never told again.
     * **Shrinking** (`shrink/2`): a to-do that has sat a week is offered a two-minute start, once, as
       its own message once the model has written it after the daily list (`offer_shrink/6`). Add that
       makes it a project whose next step the start is.
@@ -38,19 +40,27 @@ defmodule Server.Home.Organize do
   @doc """
   File a fresh `reading` of `jot` as the operator's, at `now`: a project is filed with its first
   step, a waiting-on is set to be asked about in three days, a to-do that answers a project's
-  question is that project's next step, and any put-off thing the message mentions is brought back.
-  The reply the helper says.
+  question is that project's next step.
+
+  A fresh jot (no kind yet) whose to-do or reminder reading revives a put-off thing is about that
+  thing: the thing is the one it is, brought back as the reading has it (its text, its time when the
+  reading has one), and the jot is kept as the raw capture of an amend. A reading of any other kind
+  files as it is, and what it revives comes back beside it. The reply the helper says.
   """
   @spec file(Jot.t(), map(), DateTime.t()) :: String.t()
-  def file(%Jot{via: via} = jot, reading, now) do
-    reply = jot |> retire(reading, now) |> place(reading, now)
+  def file(%Jot{via: via, kind: kind} = jot, reading, now) do
+    back = if is_nil(kind), do: revivable(via, reading), else: []
 
-    back =
-      for id <- Map.get(reading, :revive, []),
-          %Jot{} = someday <- [Enum.find(Jot.somedays(via), &(&1.id == id))],
-          do: revive(someday, now)
+    case {back, reading} do
+      {[thing | rest], %{kind: kind}} when kind in ["todo", "reminder"] ->
+        Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
+        merge(thing, reading, now)
+        Enum.join([Reader.reply(reading) | Enum.map(rest, &back(&1, now))], "\n")
 
-    Enum.join([reply | Enum.map(back, &"back on the list: #{&1.text}")], "\n")
+      _ ->
+        reply = jot |> retire(reading, now) |> place(reading, now)
+        Enum.join([reply | Enum.map(back, &back(&1, now))], "\n")
+    end
   end
 
   defp place(jot, %{kind: "project", steps: [first | _]} = reading, now) do
@@ -271,17 +281,25 @@ defmodule Server.Home.Organize do
   stands at is answered.
   """
   @spec weekly(String.t(), String.t(), say() | nil, DateTime.t(), String.t(), String.t(), Date.t() | :boot) :: Date.t()
-  def weekly(via, chat, say, now, on, at, reviewed) do
-    local = Clock.local(now)
-    today = NaiveDateTime.to_date(local)
-    due? = on != "" and weekday(today) == on and past?(NaiveDateTime.to_time(local), Time.from_iso8601(at <> ":00"))
+  def weekly(_via, _chat, _say, now, on, at, :boot) do
+    today = now |> Clock.local() |> NaiveDateTime.to_date()
+    if due?(now, on, at), do: today, else: Date.add(today, -1)
+  end
+
+  def weekly(via, chat, say, now, on, at, %Date{} = reviewed) do
+    today = now |> Clock.local() |> NaiveDateTime.to_date()
 
     cond do
-      reviewed == :boot and due? -> today
-      reviewed == :boot -> Date.add(today, -1)
-      not due? or reviewed == today -> reviewed
-      true -> review(via, chat, say, now)
+      not Clock.awake?(now) or reviewed == today -> reviewed
+      due?(now, on, at) or held?(on, today, reviewed) -> review(via, chat, say, now)
+      true -> reviewed
     end
+  end
+
+  # yesterday was the day and was slept through: the review is said when the morning comes
+  defp held?(on, today, reviewed) do
+    yesterday = Date.add(today, -1)
+    on != "" and weekday(yesterday) == on and Date.compare(reviewed, yesterday) == :lt
   end
 
   defp weekday(date), do: date |> Calendar.strftime("%a") |> String.downcase()
@@ -327,8 +345,9 @@ defmodule Server.Home.Organize do
   @doc """
   A smaller start for the oldest to-do from `via` that has sat a week and was never offered one.
   The model is asked off the caller, in a task; when it has answered, the offer is put through the
-  inbox (`Server.Home.Inbox.shrink_offered/3`), as `offer_shrink/5` does. Nothing when there is no
-  such to-do or the model gave no start (it is tried again at the next daily list).
+  inbox (`Server.Home.Inbox.shrink_offered/3`), as `offer_shrink/6` does. Nothing when there is no
+  such to-do, the model gave no start, or it is quiet hours: the to-do is tried again at the next
+  daily list.
   """
   @spec shrink(String.t(), DateTime.t()) :: :ok
   def shrink(via, now) do
@@ -339,7 +358,8 @@ defmodule Server.Home.Organize do
           DateTime.diff(now, jot.received_at) >= @sat_days * 86_400,
           do: jot
 
-    with [jot | _] <- Enum.sort_by(sat, &{DateTime.to_unix(&1.received_at), &1.id}),
+    with true <- Clock.awake?(now),
+         [jot | _] <- Enum.sort_by(sat, &{DateTime.to_unix(&1.received_at), &1.id}),
          do: Task.Supervisor.start_child(Server.TaskSupervisor, fn -> write_start(jot, now) end)
 
     :ok
@@ -348,11 +368,12 @@ defmodule Server.Home.Organize do
   @doc """
   Offer `start` for the to-do `id` from `via` in `chat` through `say`: said first, and put on the
   to-do only when it went out (`""` for the desktop alone, which raises it from the row). Nothing
-  when the to-do is no longer open or has a question already.
+  when the to-do is no longer open or has a question already, or it is quiet hours.
   """
   @spec offer_shrink(String.t(), integer(), String.t(), String.t(), say() | nil, DateTime.t()) :: :ok
   def offer_shrink(via, id, start, chat, say, now) do
-    with %Jot{kind: "todo", ask: nil, shrunk_at: nil} = jot <- Jot.open(via, id),
+    with true <- Clock.awake?(now),
+         %Jot{kind: "todo", ask: nil, shrunk_at: nil} = jot <- Jot.open(via, id),
          do: put_offer(jot, start, chat, say, now)
 
     :ok
@@ -368,18 +389,30 @@ defmodule Server.Home.Organize do
   end
 
   # a project made into anything else loses its steps and its plan: nothing is left to follow
-  defp retire(%Jot{kind: "project"} = jot, %{kind: kind}, now) when kind != "project" do
-    for step <- Jot.steps(jot.id), do: Jot.drop(step, now)
-    Jot.plan(jot, [])
-  end
-
+  defp retire(%Jot{kind: "project"} = jot, %{kind: kind}, now) when kind != "project", do: unplan(jot, now)
   defp retire(jot, _reading, _now), do: jot
 
   defp revive(jot, now) do
     due =
       if jot.every && !DateTime.after?(jot.due_at, now), do: Clock.next(jot.due_at, jot.every, now), else: jot.due_at
 
-    Jot.file(jot, %{kind: jot.kind, text: jot.text, due_at: due, every: jot.every}, now)
+    reopened(Jot.file(jot, %{kind: jot.kind, text: jot.text, due_at: due, every: jot.every}, now), now)
+  end
+
+  @doc """
+  Delete the open thing `jot` at `now`: dropped, so not done and never told again (a reminder that
+  repeats stops for good). A project takes its open steps and its plan with it; the only open step
+  of a project does what putting it away does and proposes the next (`advance/2`). The thing
+  dropped, and that follow-up when there is one.
+  """
+  @spec delete(Jot.t(), DateTime.t()) :: {Jot.t(), reply() | nil}
+  def delete(%Jot{kind: "project"} = jot, now) do
+    jot |> unplan(now) |> Jot.drop(now) |> then(&{&1, nil})
+  end
+
+  def delete(jot, now) do
+    gone = Jot.drop(jot, now)
+    {gone, advance(gone, now)}
   end
 
   defp start_next(%Jot{via: via, id: id} = project, now) do
@@ -403,5 +436,38 @@ defmodule Server.Home.Organize do
     with {:ok, start} <- Helper.start(jot, Jot.notes(via, 20)) do
       Server.Home.Inbox.shrink_offered(jot.id, start, now)
     end
+  end
+
+  defp revivable(via, reading) do
+    somedays = Jot.somedays(via)
+    for id <- Map.get(reading, :revive, []), thing <- Enum.filter(somedays, &(&1.id == id)), do: thing
+  end
+
+  defp back(thing, now) do
+    revive(thing, now)
+    "back on the list: #{thing.text}"
+  end
+
+  defp merge(thing, %{due_at: %DateTime{}} = reading, now), do: reopened(Jot.file(thing, reading, now), now)
+  defp merge(thing, %{text: text}, now), do: revive(%{thing | text: text}, now)
+
+  defp unplan(project, now) do
+    for step <- Jot.steps(project.id), do: Jot.drop(step, now)
+    Jot.plan(project, [])
+  end
+
+  # a project that asked for its next step has it back
+  defp reopened(%Jot{project_id: id, via: via} = jot, now) when is_integer(id) do
+    with %Jot{ask: "next"} = project <- Jot.project(via, id), do: Jot.touch(project, now)
+    jot
+  end
+
+  defp reopened(jot, _now), do: jot
+
+  defp due?(now, on, at) do
+    local = Clock.local(now)
+
+    on != "" and weekday(NaiveDateTime.to_date(local)) == on and
+      past?(NaiveDateTime.to_time(local), Time.from_iso8601(at <> ":00"))
   end
 end

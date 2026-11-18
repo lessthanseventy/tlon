@@ -194,18 +194,19 @@ and every layer the spine design's re-laid §9 asked for
   steps, or a waiting-on) and the reading said back, with what it assumed and the one question it may have
   (its answer amends the jot). A
   message can also ask the helper for something and is then kept as nothing: that things are done,
-  what is open, what to do now (`Server.Home.Now`), what is on someday, or a question its notes answer.
+  what is open, what to do now (`Server.Home.Now`), what is on someday, that a thing is to be deleted, or a question its notes answer.
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
   open next step or a question about it, a waiting-on is asked about after three days, a weekly review
   (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28
-  days to someday, and a to-do that sat a week is offered a two-minute start after the daily list (written in the background). Each
+  days to someday (said the next morning when its day went by asleep), and a to-do that sat a week is offered a two-minute
+  start after the daily list (written in the background; never at night). Each
   question is a `jot` row with an `ask`, said in the chat and raised on the desktop
   (`Server.Home.asked/0`, a sticky `home_ask` alert whose buttons call `POST /api/home/:id/answer`), so it
   works with no messenger. Its two model calls (next step, a start) go through the reader's provider
   and `:home_helper`. What is open is also said once a day at the
   `home_list_at` setting, each thing with a button that ticks it off. A message that corrects the jot before it
   changes that jot's reading, and a reminder is said in the chat when it comes due, with done / in an
-  hour / tomorrow under it, and again if left unanswered (never at night, six times at most). No
+  hour / tomorrow / delete under it, and again if left unanswered (never at night, six times at most). No
   reading, and the answer is "got it". Times are the machine's zone (`Server.Home.Clock`). The
   messenger is a module (`Server.Home.Telegram`: outbound long polling, so no port is opened; its token
   is the machine's, `TELEGRAM_BOT_TOKEN` or agenix `telegram-bot-token`). Only the `home_chat` setting's

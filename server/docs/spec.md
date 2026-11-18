@@ -508,14 +508,20 @@ awaiting a yes), a waiting-on is kind `waiting` (`waiting_on`, asked about at `d
 home has put to him is the row's `ask` (`next`, `review`, `waiting`, `shrink`) until it is answered. A thing
 leaves the open list by `done_at`, `someday_at` or `dropped_at` (dropped is not done: it is not in `done_week`);
 `touched_at` is the staleness clock, `hidden_until` a "not today", `shrunk_at` that a smaller start was
-offered, `mins` a to-do's size. Quiet hours (22:00-08:00) hold every unasked question; with no messenger the
-same question is raised on the desktop (`Server.Alerts`, kind `home_ask`).
+offered, `mins` a to-do's size. Quiet hours (22:00-08:00) hold the unasked: a waiting-on's question, the weekly
+review (said the next morning when its day went by asleep) and the offer of a smaller start (offered again at
+the next daily list); with no messenger the same question is raised on the desktop (`Server.Alerts`, kind
+`home_ask`). A message about a put-off thing revives that row and is kept as an amend: one open thing, not two.
+Delete drops any open thing (a repeating reminder stops for good; a project takes its steps and plan; the only
+open step of a project proposes the next): Delete under a told reminder and a what-now pick, on the reminder's
+desktop alert, typed ("forget the bins"), and `POST /api/home/:id/drop`.
 
 | Route | Request | Reply |
 |---|---|---|
-| `GET /api/home` | | `{open, coming, notes, projects, waiting, done, done_week}`; `done` is the last seven days' `{text, done_at}`, newest first; a row has `project` `{id, text}` or nil; a project `{id, text, next: {id, text} or nil, done}`; a waiting-on `{id, text, who, since, due_at}` |
+| `GET /api/home` | | `{open, coming, notes, note_rows, projects, waiting, done, done_week}`; `note_rows` is `notes` as `{id, text}`; `done` is the last seven days' `{text, done_at}`, newest first; a row has `project` `{id, text}` or nil; a project `{id, text, next: {id, text} or nil, done}`; a waiting-on `{id, text, who, since, due_at}` |
 | `GET /api/home/now` | `?skip=3,7&minutes=10` | `{pick: {id, text, kind, due_at, project, why} or nil, say}`; 400 when `skip` or `minutes` are not numbers |
 | `POST /api/home/:id/answer` | `{choice, text?}` | `{reply}`; `choice` by question: `next` add / finish / step (with `text`), `review` keep / later / drop, `waiting` got / chased / tomorrow, `shrink` add / no; `nottoday` on any open thing; 400 with no `choice`, 404 when the id has no such question |
+| `POST /api/home/:id/drop` | | `{id, text, dropped_at, due_at}` of the thing deleted (a to-do, reminder, step, project, waiting-on or note: not done, so not in `done_week`); 404 when it is none, done or deleted |
 | `POST /api/home/:id/done`, `/later` | as before | as before; the last step of a project done answers at once and puts the project's next step as a `next` question (a planned one at once, else when a background model call has answered) |
 
 What now is a pure pick (`Server.Home.Now`): overdue reminders first, then to-dos by age, a project's next step

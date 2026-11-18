@@ -101,25 +101,30 @@ defmodule Server.Jot do
     )
   end
 
-  @doc "The text of the newest `limit` notes from `via`, newest first."
+  @doc "The text of the newest `limit` notes from `via` not deleted, newest first."
   @spec notes(String.t(), pos_integer()) :: [String.t()]
-  def notes(via, limit) do
+  def notes(via, limit), do: via |> note_rows(limit) |> Enum.map(& &1.text)
+
+  @doc "The newest `limit` notes from `via` not deleted as `%{id, text}`, newest first."
+  @spec note_rows(String.t(), pos_integer()) :: [%{id: integer(), text: String.t()}]
+  def note_rows(via, limit) do
     Repo.all(
       from(j in __MODULE__,
-        where: j.via == ^via and j.kind == "note",
+        where: j.via == ^via and j.kind == "note" and is_nil(j.dropped_at),
         order_by: [desc: j.id],
         limit: ^limit,
-        select: j.text
+        select: %{id: j.id, text: j.text}
       )
     )
   end
 
-  @doc "The newest jot from `via` read as a reminder, a to-do, a note, a project or a waiting-on, nil when none is."
+  @doc "The newest jot from `via` read as a reminder, a to-do, a note, a project or a waiting-on and not deleted, nil when none is."
   @spec last_filed(String.t()) :: %__MODULE__{} | nil
   def last_filed(via) do
     Repo.one(
       from(j in __MODULE__,
         where: j.via == ^via and j.kind in ["reminder", "todo", "note", "project", "waiting"],
+        where: is_nil(j.dropped_at),
         order_by: [desc: j.external_id],
         limit: 1
       )
@@ -162,6 +167,17 @@ defmodule Server.Jot do
     )
   end
 
+  @doc "The thing `id` from `via` that can be deleted, nil when it is none, is done or is deleted: any kind but a talk."
+  @spec live(String.t(), integer()) :: %__MODULE__{} | nil
+  def live(via, id) do
+    Repo.one(
+      from(j in __MODULE__,
+        where: j.via == ^via and j.id == ^id and j.kind in ["reminder", "todo", "note", "project", "waiting"],
+        where: is_nil(j.done_at) and is_nil(j.dropped_at)
+      )
+    )
+  end
+
   @doc "The open projects from `via`, oldest first."
   @spec projects(String.t()) :: [%__MODULE__{}]
   def projects(via) do
@@ -177,10 +193,16 @@ defmodule Server.Jot do
   @spec project(String.t(), integer()) :: %__MODULE__{} | nil
   def project(via, id), do: Enum.find(projects(via), &(&1.id == id))
 
-  @doc "The steps of project `id` still open, oldest first."
+  @doc "The steps of project `id` still open, oldest first: a step put off to a time is a reminder and still one."
   @spec steps(integer()) :: [%__MODULE__{}]
   def steps(id) do
-    Repo.all(from(j in __MODULE__, where: j.project_id == ^id and j.kind == "todo", where: ^open_now(), order_by: j.id))
+    Repo.all(
+      from(j in __MODULE__,
+        where: j.project_id == ^id and j.kind in ["todo", "reminder"],
+        where: ^open_now(),
+        order_by: j.id
+      )
+    )
   end
 
   @doc "The text of the steps of project `id` that were done, oldest first."
@@ -188,7 +210,7 @@ defmodule Server.Jot do
   def finished(id) do
     Repo.all(
       from(j in __MODULE__,
-        where: j.project_id == ^id and j.kind == "todo" and not is_nil(j.done_at),
+        where: j.project_id == ^id and j.kind in ["todo", "reminder"] and not is_nil(j.done_at),
         order_by: [j.done_at, j.id],
         select: j.text
       )
@@ -307,7 +329,19 @@ defmodule Server.Jot do
   @doc "Put `jot` off to `due_at` at the operator's word at `now`: a reminder from then on (a to-do too), told afresh then."
   @spec put_off(%__MODULE__{}, DateTime.t(), DateTime.t()) :: %__MODULE__{}
   def put_off(%__MODULE__{} = jot, due_at, now \\ DateTime.utc_now()),
-    do: put(jot, [kind: "reminder", due_at: DateTime.truncate(due_at, :second), nudged_at: nil, nudges: 0], now)
+    do:
+      put(
+        jot,
+        [
+          kind: "reminder",
+          due_at: DateTime.truncate(due_at, :second),
+          nudged_at: nil,
+          nudges: 0,
+          ask: nil,
+          proposed: nil
+        ],
+        now
+      )
 
   @doc "Move the reminder `jot` that repeats on to its time `due_at` by itself: not a touch."
   @spec roll(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}

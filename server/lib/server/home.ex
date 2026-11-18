@@ -9,7 +9,8 @@ defmodule Server.Home do
 
   @doc """
   The home at `now`: `open` the to-dos and the reminders whose time has passed, `coming` the
-  reminders to come, soonest first, `notes` the newest twenty, `projects` the open projects with their
+  reminders to come, soonest first, `notes` the newest twenty (`note_rows` the same as `%{id, text}`,
+  for naming one to delete), `projects` the open projects with their
   `next` step and how many are `done`, `waiting` what others owe the operator, `done` what was done in
   the last seven days by name (`text`, `done_at`, the newest first), and `done_week` how many
   things were done in the last seven days. A row's `since` is when it was said, its `told_at` when the
@@ -20,6 +21,7 @@ defmodule Server.Home do
           open: [map()],
           coming: [map()],
           notes: [String.t()],
+          note_rows: [map()],
           projects: [map()],
           waiting: [map()],
           done: [map()],
@@ -35,6 +37,7 @@ defmodule Server.Home do
       open: Enum.map(open, &row(&1, named)),
       coming: Enum.map(coming, &row(&1, named)),
       notes: Jot.notes(via(), 20),
+      note_rows: Jot.note_rows(via(), 20),
       projects: Enum.map(projects, &project/1),
       waiting: Enum.map(Jot.waiting(via()), &waiting/1),
       done: Enum.map(done, &%{text: &1.text, done_at: &1.done_at}),
@@ -172,6 +175,23 @@ defmodule Server.Home do
         done = Jot.done(jot, now)
         Server.Home.Organize.advance(done, now)
         {:ok, done}
+    end
+  end
+
+  @doc """
+  Delete the thing `id` at `now` (`Server.Home.Organize.delete/2`): any open to-do, reminder, step,
+  project, waiting-on or note. `{:ok, jot}` the thing dropped, `:error` when it is none or is done or
+  deleted. The only step of a project deleted puts the project's next step to the operator (`asked/0`).
+  """
+  @spec drop(integer(), DateTime.t()) :: {:ok, Jot.t()} | :error
+  def drop(id, now) do
+    case Jot.live(via(), id) do
+      nil ->
+        :error
+
+      jot ->
+        {gone, _more} = Server.Home.Organize.delete(jot, now)
+        {:ok, gone}
     end
   end
 

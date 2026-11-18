@@ -10,7 +10,7 @@ defmodule Server.Alerts do
     * **sticky** — wants the operator, nothing waits on it (a red verify, stuck work): stays until
       dismissed or resolved. A rollout note raises nothing here: the office's inbox has it. A
       reminder the operator was told and has not done (`Server.Home.told/0`) is one, with the
-      chat's three choices;
+      chat's choices, delete among them;
     * **info** — something the operator set going took effect where they can't see it: a toast
       that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
       minutes after. Kinds: `seated`, a thread parked on the leaf cap got its coworker
@@ -321,7 +321,8 @@ defmodule Server.Alerts do
       actions: [
         %{label: "Done", method: "POST", path: "/api/home/#{jot.id}/done", body: nil},
         later.("In an hour", "hour"),
-        later.("Tomorrow", "tomorrow")
+        later.("Tomorrow", "tomorrow"),
+        %{label: "Delete", method: "POST", path: "/api/home/#{jot.id}/drop", body: nil}
       ]
     }
   end

@@ -235,12 +235,13 @@ defmodule Server.AlertsTest do
     list = %{id: "2026-11-17", created_at: @now, thread_id: nil, body: "Still open: milk"}
 
     assert [
-             %{key: "reminder:7:2", level: "sticky", kind: "reminder", title: "bins", actions: [done, hour, _]},
+             %{key: "reminder:7:2", level: "sticky", kind: "reminder", title: "bins", actions: [done, hour, _, delete]},
              %{key: "home_list:2026-11-17", level: "info", title: "Still open: milk"}
            ] = Alerts.build([], [], @now, told: [told], home_list: [list])
 
     assert done == %{label: "Done", method: "POST", path: "/api/home/7/done", body: nil}
     assert hour.body == %{until: "hour"}
+    assert delete == %{label: "Delete", method: "POST", path: "/api/home/7/drop", body: nil}
 
     asked = %{
       id: 9,

@@ -14,14 +14,15 @@ defmodule Server.Home.Inbox do
   (`digest/2`, each open thing with a button that ticks it off), or a question its notes answer.
   Once a day, at the `home_list_at` setting, what is open is said unasked (`daily/6`). Before each poll the
   reminders that have come due are said in the chat (`nudge/4`) with three choices under each: done,
-  in an hour, tomorrow. One left unanswered is said again, after 30 minutes and then at doubling
+  in an hour, tomorrow, and delete under them. One left unanswered is said again, after 30 minutes and then at doubling
   gaps up to four hours, never between 22:00 and 08:00, six times in all. "done" typed in the chat
   is the reminder said last. A reminder that repeats is put off to its next time when done, and
   moves on to it by itself when it was never answered. What the home organizes by itself
   (`Server.Home.Organize`: a project's next step, waiting-ons, the weekly review at `home_review_on`
   and the offer of a smaller start after the daily list) is said in the same chat with its choices under it, and
   is answered by a tap or, for a project's next step, by typing it. "What now" is answered with one
-  open thing and Done, Something else and Not today under it (`Server.Home.Now`). Off unless `TLON_START_HOME_INBOX=1` (`:start_home_inbox`), which the service alone
+  open thing and Done, Something else, Not today and Delete under it (`Server.Home.Now`). "Delete the
+  milk" typed is the same as the button. Off unless `TLON_START_HOME_INBOX=1` (`:start_home_inbox`), which the service alone
   sets: a second node polling the same bot would take the operator's messages from it. With no token
   on the machine it does not start.
   """
@@ -76,7 +77,7 @@ defmodule Server.Home.Inbox do
     for jot <- Jot.due(via, now),
         jot = current(jot, now),
         turn?(jot, now),
-        chat == "" or say.(chat, "reminder: #{jot.text}", choices: [choices(jot)]) == :ok do
+        chat == "" or say.(chat, "reminder: #{jot.text}", choices: choices(jot)) == :ok do
       Jot.nudged(jot, now)
     end
 
@@ -108,7 +109,7 @@ defmodule Server.Home.Inbox do
   @doc """
   The daily list: once `now` is past `at` (`"17:30"`, local; `""` is never) on a day it has not been
   said, what is open is said in `chat`, with an offer of a smaller start for a to-do that has sat
-  (`Server.Home.Organize.shrink/2`); with no chat the offer is still put, for the desktop.
+  (`Server.Home.Organize.shrink/2`, in waking hours); with no chat the offer is still put, for the desktop.
   `listed` is the day it was last said, `:boot` when the inbox
   has just started; the day it now stands at is answered.
   """
@@ -373,12 +374,14 @@ defmodule Server.Home.Inbox do
              {"Done", "done:#{id}"},
              {"Something else", else_data(minutes, [id | skip])},
              {"Not today", "a:#{id}:nottoday"}
-           ]
+           ],
+           [{"Delete", "drop:#{id}"}]
          ]}
     end
   end
 
   defp tapped("done", jot, _via, now), do: finished(jot, now)
+  defp tapped("drop", jot, _via, now), do: deleted(jot, now)
   defp tapped(until, jot, _via, now) when until in ["hour", "tomorrow"], do: {Reader.say(later(jot, until, now)), []}
 
   defp tapped("tick", jot, via, now) do
@@ -397,6 +400,16 @@ defmodule Server.Home.Inbox do
   end
 
   defp finished(jot, now), do: join({closed(jot, now), []}, Organize.advance(jot, now))
+
+  defp deleted(jot, now) do
+    {line, more} = dropping(jot, now)
+    join({line, []}, more)
+  end
+
+  defp dropping(jot, now) do
+    {gone, more} = Organize.delete(jot, now)
+    {"deleted: #{gone.text}", more}
+  end
 
   defp join(base, nil), do: base
 
@@ -422,7 +435,7 @@ defmodule Server.Home.Inbox do
         Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
         {"changed: " <> reply, []}
 
-      {:ok, %{kind: kind} = reading} when kind in ["done", "list", "answer", "now", "someday"] ->
+      {:ok, %{kind: kind} = reading} when kind in ["done", "delete", "list", "answer", "now", "someday"] ->
         Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
         asked(reading, via, now)
 
@@ -445,8 +458,13 @@ defmodule Server.Home.Inbox do
     end
   end
 
-  defp asked(%{kind: "done", ids: ids}, via, now) do
-    case for id <- ids, jot = Jot.open(via, id), do: {closed(jot, now), Organize.advance(jot, now)} do
+  defp asked(%{kind: "done", ids: ids}, via, now),
+    do: told(ids, via, now, &Jot.open/2, &{closed(&1, &2), Organize.advance(&1, &2)})
+
+  defp asked(%{kind: "delete", ids: ids}, via, now), do: told(ids, via, now, &Jot.live/2, &dropping/2)
+
+  defp told(ids, via, now, find, close) do
+    case for id <- ids, jot = find.(via, id), do: close.(jot, now) do
       [] ->
         {text, opts} = listed(via, now)
         {"I couldn't tell which one you meant.\n\n" <> text, opts}
@@ -473,7 +491,10 @@ defmodule Server.Home.Inbox do
   end
 
   defp choices(jot),
-    do: [{"Done", "done:#{jot.id}"}, {"In an hour", "hour:#{jot.id}"}, {"Tomorrow", "tomorrow:#{jot.id}"}]
+    do: [
+      [{"Done", "done:#{jot.id}"}, {"In an hour", "hour:#{jot.id}"}, {"Tomorrow", "tomorrow:#{jot.id}"}],
+      [{"Delete", "drop:#{jot.id}"}]
+    ]
 
   defp turn?(%Jot{nudges: 0}, _now), do: true
   defp turn?(%Jot{nudges: n}, _now) when n >= @nudges, do: false

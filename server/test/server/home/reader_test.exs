@@ -31,6 +31,7 @@ defmodule Server.Home.ReaderTest do
 
   test "what the operator wants of the helper needs no text, but an answer does" do
     assert {:ok, %{kind: "done", ids: [3, 4]}} = Reader.parse(~s({"kind":"done","ids":[3,"x",4]}))
+    assert {:ok, %{kind: "delete", ids: [3], text: ""}} = Reader.parse(~s({"kind":"delete","ids":[3,"x"]}))
     assert {:ok, %{kind: "list", ids: []}} = Reader.parse(~s({"kind":"list","text":""}))
 
     assert {:ok, %{kind: "answer", text: "On the fridge."}} =
