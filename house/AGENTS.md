@@ -16,8 +16,8 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 `rhythm.gd` (the day's two beats and their slips), `layout.gd` (the furniture and the rules of placing it),
 `decorate.gd` (the catalogue and the pointer work of decorating). `soak.gd` is the scripted check.
 
-- Notes are slips pinned to the corkboard (four shown, "+N" for the rest); hover or click shows the
-  whole note. Open things are stickies on and around the monitor and a stack of paper on the desk
+- Notes are slips pinned to the corkboard (four shown, "+N" for the rest); hover shows the
+  whole note, a click opens the board card. Open things are stickies on and around the monitor and a stack of paper on the desk
   whose height and small badge follow the count. A reminder's next due time is the wall calendar
   and the caption above the room, in local time.
 - Ticking a thing off (after the server says 200) crumples its paper into a ball that arcs into the
@@ -36,8 +36,8 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   cell; pets treat the person as air (they never route around or get stuck on him). Click him for a
   line. Seated on the sofa he sorts after the window, so head and shoulders show over the back.
 - **The TV** (`tv.gd`, `hacks.gd`) is just a TV: it knows nothing of the computer. It is on while
-  the person watches and off otherwise and in the deep night; a click turns it on for 90 s or
-  changes the channel. On, it runs one of the code-drawn screen hacks (`spectrum stars plasma logo
+  the person watches and off otherwise and in the deep night; its card's button turns it on for 90 s
+  or changes the channel. On, it runs one of the code-drawn screen hacks (`spectrum stars plasma logo
   rain life pipes moire scope sunset fireworks toasters note`), a new one every 2-4 minutes through
   a short static flicker, never the same twice in a row. Hover shows the same hack large, no text.
   Add a hack: a `_name(c, q, t)` drawer in `hacks.gd` and its name in `NAMES`. Nina sometimes sits
@@ -45,7 +45,19 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 - **The done jar** (`jar.gd`) is a glass jar on a shelf over the bin: one marble per thing done this
   week (`done_week`, drawn up to 27, colours stable per week). A thing done drops a marble with a
   bounce and a clink mark; a new week (Monday) starts it empty, quietly. Hover: "N done this week".
-  The count lives nowhere else.
+  The count is `done_week`; names come only from a `done` list in the status.
+- **Cards** (`card.gd`; blocks built in `home.gd` `card_blocks`): a click on the calendar, jar, window,
+  clock, board (cork, a note or the "+N" tag), large plant or TV opens one paper popup near it, at
+  readable size; hover keeps the small tooltip and the pointing hand. One at a time: Esc, a click
+  outside, or a click on another thing closes it (the same thing again too); none opens while a menu,
+  the notepad, the closet, decorate mode or the day's slip is up, and one open closes when they do.
+  Calendar: the month grid with a dot on each day a reminder falls (a repeating one on each of its days)
+  and the next five coming up (day, time, text, "every week"). Jar: the count, and the names newest
+  first when the status has `done` (`[{text, done_at}]`; ten shown). Window: the weather in words
+  and `°C (°F)`. Clock (a `clock` piece on a wall): the time and date, the next reminder and how long
+  ("in 2 h 10 min"). Board: every note, five a page with `<` `>`. Plant: when a repeating reminder
+  that mentions water or the plant is next due, else a plain line. TV: the screen hack playing and a
+  Next (or Turn on) button; no play state, no media titles. The pets' bowls and bed have none.
 - **Argos celebrates** every done thing: runs to the desk and hops, with a line. He greets the person
   at the door when he comes in. **Nina's one nag**: when the oldest open thing without a future
   `due_at` has sat over 3 days (`since`), she now and then (checks every 3-10 min, 4 h apart at
@@ -151,7 +163,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   is drawn in code; never add a bought image.
 - **It talks to the server only over the operator API**, on `TLON_URL` (default
   `http://127.0.0.1:4040`): the room in view is polled every 5 s — `GET /api/home` (rows carry
-  `since` and `told_at`; `done_week` fills the jar) or `GET /api/office` —
+  `since` and `told_at`; `done_week` fills the jar, an optional `done` list names what was done) or `GET /api/office` —
   and posts `POST /api/home/:id/done`, `POST /api/home/:id/later` (`{"until": "hour"|"tomorrow"}`)
   and `POST /api/home` (`{"text"}` → `{"reply"}`, slow: a model reads it). The home also asks
   `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). The house has no local reads: it talks only to the server. A server that does not answer leaves the
@@ -173,7 +185,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   this is not part of `mise run check`.
 - `mise run house:soak` — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the knock rules, the day's rhythm, the door and the TV hacks, and the POST and GET routes against a local stub. Stdout ends `SOAK OK`.
+  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, and the POST and GET routes against a local stub. Stdout ends `SOAK OK`.
 
 ## Verify
 
@@ -194,7 +206,7 @@ and seeds their dice (`--seed N` to pick another):
 - `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a card, a
   name tag or a pat can be photographed without a pointer.
 - `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--wave "text"` a coworker at the door; `--plane "title"` a landed plane; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--visitor` feed the demo office to the door; `--person
-  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
+  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--card calendar|jar|weather|clock|board|plant|tv` opens that card at 0.45 s; `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
   "text"` opens the jot field (`--sending` shows the scribble); `--reply "text"` the reply slip;
   `--menu ID` the paper menu on thing ID; `--ring ID` rings the phone for thing ID; `--now
   ID[:MINUTES[:DONE_FRACTION]]` pins thing ID with a running timer (nothing saved); `--widget`;

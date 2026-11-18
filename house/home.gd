@@ -15,12 +15,34 @@ const Knock := preload("res://knock.gd")
 const Door := preload("res://door.gd")
 const Rhythm := preload("res://rhythm.gd")
 const Layout := preload("res://layout.gd")
+const Card := preload("res://card.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
 const COLS := 10
 const ROWS := 10
 const DAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const DAYS_FULL := ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+const CARD_KEYS := {
+	"cal": "calendar",
+	"jar": "jar",
+	"window": "weather",
+	"clock": "clock",
+	"plant": "plant",
+	"tv": "tv",
+	"board": "board",
+	"more": "board",
+}
+const NOTES_PER_PAGE := 5
+const SKY_WORDS := {
+	"clear": "a clear sky",
+	"partly": "some cloud, some sun",
+	"cloudy": "overcast, the cloud low and grey",
+	"fog": "fog, the skyline gone",
+	"rain": "rain on the glass",
+	"storm": "a storm, rain and lightning",
+	"snow": "snow coming down",
+}
 const MONTH_DAYS := [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 const TODO_COLOR := Color("f6e27a")
 const REMINDER_COLOR := Color("f2a6b3")
@@ -84,6 +106,10 @@ var say_who := ""
 var say_occasion := "pet"
 var force_bat := false
 var jot_open := false
+var closet_open := false
+var decorating := false
+var card := Card.new()
+var done: Variant = null
 var show_note := -1
 
 var _t := 0.0
@@ -94,6 +120,7 @@ var _slots := {}
 var _crumples: Array = []
 var _confetti: Array = []
 var _hits: Array = []
+var _used := {}
 var _hover := ""
 var _hover_at := Vector2.ZERO
 var _locked := ""
@@ -117,6 +144,7 @@ var _t_args := 0.0
 var _cal := PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
 var _arg_menu := -1
 var _arg_then := ""
+var _arg_card := ""
 var _arg_reply := ""
 var _arg_ring := -1
 var _rung: Array = []
@@ -182,6 +210,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				person.forced = next
 			"--then":
 				_arg_then = next
+			"--card":
+				_arg_card = next
 			"--menu":
 				_arg_menu = int(next)
 			"--reply":
@@ -290,6 +320,7 @@ func set_data(d: Dictionary) -> void:
 	coming = d["coming"]
 	notes = d["notes"]
 	done_week = int(d.get("done_week", 0))
+	done = d["done"] if d.get("done") is Array else null
 	var ids: Array = []
 	ring_ids = []
 	for item in open:
@@ -490,6 +521,11 @@ func process(dt: float) -> void:
 	water_left = maxf(0.0, water_left - dt)
 	_beats(dt)
 	_knocking(dt)
+	if card.is_open() and _cards_blocked():
+		card.close()
+	if _t > 0.45 and _arg_card != "":
+		open_card(_arg_card)
+		_arg_card = ""
 	if focus.finished():
 		person.stretch()
 	reply_left = maxf(0.0, reply_left - dt)
@@ -889,6 +925,7 @@ func draw_plant(f: Array) -> void:
 		Rect2(top + Vector2(0, split), Vector2(tex.get_width(), tex.get_height() - split)),
 		Rect2(0, split, tex.get_width(), tex.get_height() - split)
 	)
+	register_sprite("plant", tex, top)
 	var pivot := top + Vector2(tex.get_width() / 2.0, split)
 	var lean: float = [0.0, 0.09, 0.2][stage]
 	var squash: float = [1.0, 0.94, 0.84][stage]
@@ -921,8 +958,21 @@ func _register(key: String, poly: PackedVector2Array, below: Vector2) -> void:
 	_hits.append({"key": key, "poly": poly, "below": below})
 
 
+# a thing drawn from a sprite (the clock, the plant) is hit where the sprite has pixels
+func register_sprite(key: String, tex: Texture2D, at: Vector2) -> void:
+	if not _used.has(tex):
+		_used[tex] = Rect2(tex.get_image().get_used_rect())
+	var r: Rect2 = _used[tex]
+	r.position += at
+	var poly := PackedVector2Array(
+		[r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]
+	)
+	_register(key, poly, Vector2(r.get_center().x, r.end.y))
+
+
 func _draw_board() -> void:
 	var cork := Props.corkboard(room, _o, _k, BOARD["s"], BOARD["h"], BOARD["w"], BOARD["hh"])
+	_register("board", cork, Props.qlerp(cork, 0.5, 1.0))
 	var n := mini(notes.size(), 4)
 	var spots: Array = NOTE_SPOTS.get(n, [])
 	for i in n:
@@ -1075,7 +1125,7 @@ func draw_over() -> void:
 	for c in pets.critters:
 		_draw_extras(c, bounds)
 	Props.caption(room, Vector2(room.size.x / 2.0, 30), _next_text)
-	if _hover == "tv" and tv.on and not menu.is_open:
+	if _hover == "tv" and tv.on and not menu.is_open and not card.is_open():
 		tv.big(room, _tv_quad(), bounds)
 	var plane_hit := door.draw_plane(room, _o, _k, bounds)
 	if plane_hit.size() > 0:
@@ -1086,6 +1136,7 @@ func draw_over() -> void:
 	if reply_left > 0.0 and reply_text != "":
 		Props.card(room, Vector2(room.size.x / 2.0, 36), reply_text, bounds)
 	_draw_card(bounds)
+	_draw_paper(bounds)
 	menu.draw(room, bounds)
 
 
@@ -1213,7 +1264,7 @@ func _ago(iso: String) -> String:
 
 
 func _draw_card(bounds: Rect2) -> void:
-	if menu.is_open:
+	if menu.is_open or card.is_open():
 		return
 	var key := _hover if _hover != "" else _locked
 	if show_note >= 0 and key == "":
@@ -1280,6 +1331,206 @@ func _draw_card(bounds: Rect2) -> void:
 			return
 
 
+func _draw_paper(bounds: Rect2) -> void:
+	if not card.is_open():
+		return
+	for h in _hits:
+		if h["key"] == card.key:
+			card.draw(room, bounds, h["below"], card_blocks())
+			return
+	card.close()
+
+
+func _every(item: Dictionary) -> String:
+	return "" if item.get("every") == null else str(item["every"])
+
+
+# the reminders with a time: the ones coming and the open ones with a due time
+func _timed() -> Array:
+	var out: Array = []
+	for item in coming + open:
+		if item.get("due_at") != null and item["kind"] == "reminder":
+			out.append(item)
+	return out
+
+
+func _stamp(unix: float) -> String:
+	var d := Time.get_datetime_dict_from_unix_time(int(unix))
+	return (
+		"%s %d %s  %02d:%02d"
+		% [DAYS[d["weekday"]], d["day"], Card.MONTHS[d["month"] - 1].substr(0, 3), d["hour"], d["minute"]]
+	)
+
+
+func _upcoming(items: Array, n: int) -> Array:
+	var now := _now_local()
+	var out := items.filter(func(i): return _due(i) >= now)
+	out.sort_custom(func(a, b): return _due(a) < _due(b))
+	return out.slice(0, n)
+
+
+func _repeats(item: Dictionary) -> String:
+	var every := _every(item)
+	return "" if every == "" else "every " + every
+
+
+# what the open card shows, built fresh each frame from what the home holds
+func card_blocks() -> Array:
+	match card.kind:
+		"calendar":
+			return _calendar_blocks()
+		"jar":
+			return _jar_blocks()
+		"weather":
+			return _weather_blocks()
+		"clock":
+			return _clock_blocks()
+		"board":
+			return _board_blocks()
+		"plant":
+			return _plant_blocks()
+		"tv":
+			return _tv_blocks()
+	return []
+
+
+func _calendar_blocks() -> Array:
+	var d := Time.get_datetime_dict_from_unix_time(int(_now_local()))
+	var from := Card.unix(d["year"], d["month"], 1)
+	var to := Card.unix(d["year"] + d["month"] / 12, d["month"] % 12 + 1, 1)
+	var marks := {}
+	for item in _timed():
+		for at in Card.occurrences(_due(item), _every(item), from, to):
+			marks[Time.get_datetime_dict_from_unix_time(int(at))["day"]] = true
+	var blocks: Array = [
+		{"t": "month", "year": d["year"], "month": d["month"], "today": d["day"], "marks": marks},
+		{"t": "title", "text": "Coming up"},
+	]
+	var next := _upcoming(coming.filter(func(i): return i.get("due_at") != null), 5)
+	for item in next:
+		blocks.append({"t": "text", "text": "%s  %s" % [_stamp(_due(item)), item["text"]]})
+		if _every(item) != "":
+			blocks.append({"t": "dim", "text": _repeats(item)})
+	if next.is_empty():
+		blocks.append({"t": "text", "text": "Nothing coming up."})
+	return blocks
+
+
+func _jar_blocks() -> Array:
+	var blocks: Array = [{"t": "title", "text": "Done this week"}]
+	if jar.total == 0:
+		blocks.append({"t": "text", "text": "a fresh week"})
+		return blocks
+	blocks.append({"t": "text", "text": "%d done" % jar.total})
+	if done is Array:
+		var names: Array = (done as Array).filter(func(i): return i is Dictionary and i.has("text"))
+		names.sort_custom(func(a, b): return str(a.get("done_at")) > str(b.get("done_at")))
+		for item in names.slice(0, 10):
+			var at := ""
+			if item.get("done_at") != null:
+				at = "  " + _clock(_local(str(item["done_at"])))
+			blocks.append({"t": "text", "text": "- %s%s" % [item["text"], at]})
+		if names.size() > 10:
+			blocks.append({"t": "dim", "text": "and %d more" % (names.size() - 10)})
+	return blocks
+
+
+func _local(iso: String) -> float:
+	return Time.get_unix_time_from_datetime_string(iso.trim_suffix("Z")) + _bias()
+
+
+func _weather_blocks() -> Array:
+	var sky: String = SKY_WORDS.get(weather, weather)
+	var blocks: Array = [
+		{"t": "title", "text": weather_desc if weather_desc != "" else weather.capitalize()},
+		{"t": "text", "text": "Outside there is %s." % sky},
+	]
+	if temp_c != null:
+		var c := float(temp_c)
+		blocks.append({"t": "text", "text": "%d°C (%d°F)" % [roundi(c), roundi(c * 9.0 / 5.0 + 32.0)]})
+	var hour := _hour()
+	var part := "night"
+	if hour >= 5.5 and hour < 12.0:
+		part = "morning"
+	elif hour >= 12.0 and hour < 17.0:
+		part = "afternoon"
+	elif hour >= 17.0 and hour < 21.0:
+		part = "evening"
+	blocks.append({"t": "dim", "text": "It is %s." % part})
+	return blocks
+
+
+func _clock_blocks() -> Array:
+	var now := _now_local()
+	var d := Time.get_datetime_dict_from_unix_time(int(now))
+	var blocks: Array = [
+		{"t": "title", "text": "%02d:%02d" % [d["hour"], d["minute"]]},
+		{
+			"t": "text",
+			"text": "%s %d %s" % [DAYS_FULL[d["weekday"]], d["day"], Card.MONTHS[d["month"] - 1]]
+		},
+		{"t": "gap"},
+	]
+	var next := _upcoming(_timed(), 1)
+	if next.is_empty():
+		blocks.append({"t": "text", "text": "Nothing coming up."})
+	else:
+		var at := _due(next[0])
+		blocks.append({"t": "dim", "text": "Next up"})
+		blocks.append({"t": "text", "text": str(next[0]["text"])})
+		blocks.append({"t": "text", "text": "%s, %s" % [_stamp(at), Card.until_text(at - now)]})
+	return blocks
+
+
+func _board_blocks() -> Array:
+	var pages := maxi(1, ceili(notes.size() / float(NOTES_PER_PAGE)))
+	card.page = clampi(card.page, 0, pages - 1)
+	var blocks: Array = [{"t": "title", "text": "On the board"}]
+	for note in notes.slice(card.page * NOTES_PER_PAGE, (card.page + 1) * NOTES_PER_PAGE):
+		blocks.append({"t": "text", "text": "- " + str(note)})
+	if notes.is_empty():
+		blocks.append({"t": "text", "text": "Nothing is pinned."})
+	if pages > 1:
+		blocks.append({"t": "dim", "text": "page %d of %d" % [card.page + 1, pages]})
+		blocks.append(
+			{"t": "buttons", "items": [{"label": "<", "act": "prev"}, {"label": ">", "act": "next"}]}
+		)
+	return blocks
+
+
+func _watering() -> Dictionary:
+	var found: Array = []
+	for item in _timed():
+		var low := str(item["text"]).to_lower()
+		if _every(item) != "" and (low.contains("water") or low.contains("plant")):
+			found.append(item)
+	var next := _upcoming(found, 1)
+	if not next.is_empty():
+		return next[0]
+	return found[0] if not found.is_empty() else {}
+
+
+func _plant_blocks() -> Array:
+	var blocks: Array = [{"t": "title", "text": "The plant"}]
+	var item := _watering()
+	if item.is_empty():
+		blocks.append({"t": "text", "text": "Nothing says it needs water."})
+		return blocks
+	var at := _due(item)
+	blocks.append({"t": "text", "text": "Next: " + str(item["text"])})
+	blocks.append({"t": "text", "text": "%s, %s" % [_stamp(at), Card.until_text(at - _now_local())]})
+	blocks.append({"t": "dim", "text": _repeats(item)})
+	return blocks
+
+
+func _tv_blocks() -> Array:
+	return [
+		{"t": "title", "text": "The TV"},
+		{"t": "text", "text": "Playing: " + tv.hacks.current if tv.on else "It is off."},
+		{"t": "buttons", "items": [{"label": "Next" if tv.on else "Turn on", "act": "tv_next"}]},
+	]
+
+
 func _topmost(pos: Vector2) -> String:
 	for c in pets.critters:
 		if c.id != "person" and pets.hit_rect(c, _o, _k).has_point(pos):
@@ -1299,12 +1550,16 @@ func hover(pos: Vector2) -> bool:
 	if menu.is_open and menu.hover(pos):
 		_hover = ""
 		return true
+	if card.hover(pos):
+		_hover = ""
+		return true
 	var key := _topmost(pos)
 	_hover = key
 	return key != ""
 
 
 func click(pos: Vector2) -> bool:
+	var blocked := _cards_blocked()
 	if not menu.is_open:
 		var slip := rhythm.click(pos)
 		if slip.has("id"):
@@ -1325,7 +1580,21 @@ func click(pos: Vector2) -> bool:
 			acted.emit(id, act)
 			return true
 		menu.close()
+	var shown := card.kind
+	if card.is_open():
+		var hit := card.click(pos)
+		if hit == "inside":
+			return true
+		if hit == "tv_next":
+			tv.click()
+			return true
+		card.close()
 	var key := _topmost(pos)
+	var wants := _card_kind(key)
+	if wants != "":
+		if not blocked and wants != shown:
+			card.open(wants, key)
+		return true
 	if key.begins_with("pet:"):
 		var c: Pets.Critter = pets.critter(key.substr(4))
 		pets.pat(c, "pet")
@@ -1339,9 +1608,6 @@ func click(pos: Vector2) -> bool:
 			return true
 		"person":
 			person.poke()
-			return true
-		"tv":
-			tv.click()
 			return true
 		"visitor":
 			acted.emit(0, "office")
@@ -1363,7 +1629,29 @@ func click(pos: Vector2) -> bool:
 		_locked = "" if _locked == key else key
 		return true
 	_locked = ""
-	return false
+	return shown != ""
+
+
+func _cards_blocked() -> bool:
+	return menu.is_open or jot_open or closet_open or decorating or rhythm.kind != ""
+
+
+func _card_kind(key: String) -> String:
+	return "board" if key.begins_with("note:") else CARD_KEYS.get(key, "")
+
+
+func close_card() -> void:
+	card.close()
+
+
+# `name` is a card kind: calendar jar weather clock plant tv board
+func open_card(name: String) -> void:
+	if _cards_blocked():
+		return
+	for key in _hits.map(func(h: Dictionary) -> String: return h["key"]):
+		if _card_kind(key) == name:
+			card.open(name, key)
+			return
 
 
 func leave() -> void:
