@@ -19,9 +19,9 @@ const HOME := {
 	"furniture":
 	[
 		["bookshelf_sw", 1, 0, 1, 1, 39, Color("8a5a3c")],
-		["bookshelf_sw", 2, 0, 1, 1, 39, Color("8a5a3c")],
 		["computer_desk_sw", 4, 0, 2, 1, 31, Color("b58a5a")],
 		["office_chair_ne", 4, 1, 1, 1, 26, Color("5a6f8a")],
+		["waste_bin", 6, 0, 1, 1, 11, Color("6f7480")],
 		["plant_large", 7, 0, 1, 1, 34, Color("5f8a4f")],
 		["bookshelf_se", 0, 2, 1, 1, 39, Color("8a5a3c")],
 		["side_table", 0, 3, 1, 1, 14, Color("b58a5a")],
@@ -31,7 +31,7 @@ const HOME := {
 	"rug": ["rug_blue_nwse", 1, 4, 3, 2, Color("4a6a9a")],
 	"windows": {"ne": [4], "nw": [5]},
 	"door": {"row": 7, "label": "to the office"},
-	"figures": [{"sheet": "villager", "col": 3, "row": 5, "dir": 0, "anim": true}],
+	"figures": [],
 }
 const OFFICE_FIXED := [
 	["filing_cabinet_se", 0, 1, 1, 1, 28, Color("7d8794")],
@@ -54,10 +54,11 @@ const SKIN_FALLBACK := [
 ]
 const MARK_COLOR := Color("e8b86d")
 const INK := Color("2a2530")
+const HomeScript := preload("res://home.gd")
 
 var art_dir := ""
-var open_count := 0
 var art_found := false
+var home := HomeScript.new()
 
 var _desc := HOME
 var _caption := ""
@@ -75,6 +76,8 @@ func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	clip_contents = true
 	_load_index()
+	home.setup(self, art_dir, OS.get_cmdline_user_args())
+	mouse_exited.connect(home.leave)
 
 
 func show_home() -> void:
@@ -149,7 +152,10 @@ func _person_dir() -> String:
 func _process(delta: float) -> void:
 	_t += delta
 	var f := int(_t * FRAME_FPS) % FRAMES
-	if f != _frame:
+	if _desc == HOME:
+		home.process(delta)
+		queue_redraw()
+	elif f != _frame:
 		_frame = f
 		queue_redraw()
 
@@ -188,16 +194,19 @@ func _pick_scale() -> int:
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
+		var at_home := _desc == HOME and home.hover(event.position)
 		var over := _door_hit(event.position)
 		if over != _hover_door:
 			_hover_door = over
-			mouse_default_cursor_shape = (
-				Control.CURSOR_POINTING_HAND if over else Control.CURSOR_ARROW
-			)
 			queue_redraw()
+		mouse_default_cursor_shape = (
+			Control.CURSOR_POINTING_HAND if over or at_home else Control.CURSOR_ARROW
+		)
 	elif (
 		event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT
 	):
+		if _desc == HOME and home.click(event.position):
+			return
 		if _door_hit(event.position):
 			door_clicked.emit()
 
@@ -231,8 +240,12 @@ func _draw() -> void:
 				draw_texture(d["tex"], (p - d["anchor"]).round())
 
 	_draw_rug(origin)
+	if _desc == HOME:
+		home.draw_floor()
 
 	var items: Array = []
+	if _desc == HOME:
+		items.append_array(home.items())
 	for w in _walls():
 		items.append({"key": w["c"] + w["r"], "pri": 0, "wall": w})
 	for f in _desc["furniture"]:
@@ -253,6 +266,8 @@ func _draw() -> void:
 	for it in items:
 		if it.has("wall"):
 			_draw_wall(origin, it["wall"])
+		elif it.has("fn"):
+			it["fn"].call()
 		elif it.has("furn"):
 			_draw_furniture(origin, it["furn"])
 		else:
@@ -262,7 +277,8 @@ func _draw() -> void:
 		_draw_tags(origin, fig)
 	_draw_door_label(origin)
 	_draw_caption()
-	_draw_badge(origin)
+	if _desc == HOME:
+		home.draw_over()
 
 
 func _p(origin: Vector2, c: float, r: float) -> Vector2:
@@ -326,6 +342,9 @@ func _draw_rug(origin: Vector2) -> void:
 
 
 func _draw_furniture(origin: Vector2, f: Array) -> void:
+	if _desc == HOME and f[0] == "plant_large":
+		home.draw_plant(f)
+		return
 	var s := _sprite(f[0])
 	if s.is_empty():
 		_flat_box(origin, f[1], f[2], f[3], f[4], f[5], f[6])
@@ -454,20 +473,4 @@ func _draw_caption() -> void:
 	draw_rect(Rect2(at + Vector2(-w / 2.0 - 10, -18), Vector2(w + 20, 28)), Color(INK, 0.85))
 	draw_string(
 		font, at + Vector2(-w / 2.0, 2), _caption, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, MARK_COLOR
-	)
-
-
-func _draw_badge(origin: Vector2) -> void:
-	if open_count <= 0 or _desc != HOME:
-		return
-	var desk := _p(origin, 5, 0) + Vector2(0, -52 * _k)
-	var font := ThemeDB.fallback_font
-	var radius := 13.0
-	draw_circle(desk, radius + 2, Color("2a2530"))
-	draw_circle(desk, radius, Color("e8b86d"))
-	var label := str(open_count)
-	var fs := 18
-	var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	draw_string(
-		font, desk + Vector2(-w / 2.0, 6), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("2a2530")
 	)

@@ -51,6 +51,11 @@
     "Sam prefers texts to calls",
     "library card number ends 4417"
   ],
+  "weather": {
+    "kind": "clear",
+    "desc": "Sunny",
+    "temp_c": 13
+  },
   "office": {
     "pause": null,
     "awaiting": 2,
