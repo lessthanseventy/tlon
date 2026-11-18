@@ -9,6 +9,7 @@ signal check_requested(url: String)
 const Paper := preload("res://paper.gd")
 const Settings := preload("res://settings.gd")
 const Sure := preload("res://sure.gd")
+const LocalList := preload("res://local_list.gd")
 const MONTHS := [
 	"January", "February", "March", "April", "May", "June", "July", "August", "September",
 	"October", "November", "December",
@@ -34,6 +35,10 @@ var _forget: Button
 var _reset: Button
 var _chat_n: Label
 var _clear: Button
+var _where_server: Button
+var _where_local: Button
+var _server_box: VBoxContainer
+var _local_say: Label
 var _url: LineEdit
 var _url_say: Label
 var _art: Label
@@ -160,19 +165,21 @@ func _ready() -> void:
 
 	_head(col, "where the list lives")
 	r = Paper.row(col)
-	var server := Paper.chip("a tlon server", r, func() -> void: pass, true)
-	server.set_pressed_no_signal(true)
-	server.disabled = true
-	var local := Paper.chip("this computer - coming soon", r, func() -> void: pass, true)
-	local.disabled = true
-	r = Paper.row(col)
+	_where_server = Paper.chip("a tlon server", r, func() -> void: _put("where", "server"), true)
+	_where_local = Paper.chip("this computer", r, func() -> void: _put("where", "local"), true)
+	_local_say = Paper.label("", 13, Paper.QUIET)
+	_local_say.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	col.add_child(_local_say)
+	_server_box = VBoxContainer.new()
+	col.add_child(_server_box)
+	r = Paper.row(_server_box)
 	_url = Paper.edit(Settings.default_url(), r)
 	_url.text_submitted.connect(func(_t: String) -> void: _check())
 	Paper.chip("check", r, _check)
 	_url_say = Paper.label("", 13, Paper.QUIET)
-	col.add_child(_url_say)
+	_server_box.add_child(_url_say)
 	_plan = VBoxContainer.new()
-	col.add_child(_plan)
+	_server_box.add_child(_plan)
 
 	_head(col, "the art")
 	_art = Paper.label("", 13, Paper.INK)
@@ -313,6 +320,12 @@ func _plan_rows() -> void:
 
 
 func _refresh() -> void:
+	var local: bool = settings.is_local()
+	_where_server.set_pressed_no_signal(not local)
+	_where_local.set_pressed_no_signal(local)
+	_server_box.visible = not local
+	_local_say.visible = local
+	_local_say.text = "kept in " + ProjectSettings.globalize_path(LocalList.STORE)
 	_found.text = "%d of %d found" % [home.eggs.found.size(), home.eggs.CATALOGUE.size()]
 	_chat_n.text = "%d messages" % home.chat.messages.size()
 	for pair in [[_forget, "forget", "forget them all"], [_reset, "reset", "reset the room to how it came"], [_clear, "clear", "clear"]]:

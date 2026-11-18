@@ -16,6 +16,7 @@ const DEFAULTS := {
 	"widget": false,
 	"on_top": true,
 	"url": "",
+	"where": "server",
 }
 
 # the names on display; Pets, Finds and the chat read these
@@ -27,6 +28,8 @@ var store := STORE
 var persist := false
 var data := {}
 var forced := {}
+# no settings file existed at start: the house has not been set up yet
+var fresh := false
 
 
 static func default_url() -> String:
@@ -49,6 +52,7 @@ static func pets(text: String) -> String:
 
 func setup(persist_it: bool) -> void:
 	persist = persist_it
+	fresh = persist and not FileAccess.file_exists(store)
 	data = _read() if persist else {}
 	_sync()
 
@@ -57,6 +61,10 @@ func value(key: String) -> Variant:
 	if forced.has(key):
 		return forced[key]
 	return data.get(key, DEFAULTS[key])
+
+
+func is_local() -> bool:
+	return value("where") == "local"
 
 
 func server_url() -> String:

@@ -61,6 +61,8 @@ var _k := 2
 var _origin := Vector2.ZERO
 var _hover_door := false
 var door_ajar := false
+# false when the home keeps its own list: there is no office to go to
+var office_door := true
 
 
 func _ready() -> void:
@@ -223,6 +225,8 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _door_hit(pos: Vector2) -> bool:
+	if not office_door:
+		return false
 	var p := _p(_origin, 0, _desc["door"]["row"])
 	var up := Vector2(0, WALL_H * _k)
 	var west := p + Vector2(-16, 8) * _k
@@ -489,6 +493,8 @@ func _draw_tags(origin: Vector2, fig: Dictionary) -> void:
 
 
 func _draw_door_label(origin: Vector2) -> void:
+	if not office_door:
+		return
 	var door: Dictionary = _desc["door"]
 	var font := ThemeDB.fallback_font
 	var fs := 13
