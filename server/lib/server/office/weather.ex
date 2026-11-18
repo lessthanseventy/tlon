@@ -2,15 +2,21 @@ defmodule Server.Office.Weather do
   @moduledoc """
   The weather outside, for the office's windows: current conditions from wttr.in (no key; it places
   the machine by its address unless the settings file names a place, `"weather_location"`), read
-  into the few kinds the room can draw (`kind/1`) with the temperature.
+  into the few kinds the room can draw (`kind/1`) with the temperature, and the next three days
+  (`forecast/0`) from the same report.
 
-  `now/0` answers from the cache at once — the office snapshot never waits on the network — and a
-  read when the report is older than `@every_s` (or missing) fetches a fresh one in the background.
+  `now/0` and `forecast/0` answer from the cache at once — the office snapshot never waits on the
+  network — and a read when the report is older than `@every_s` (or missing) fetches a fresh one in
+  the background.
   A failed fetch leaves the last report standing. On unless `TLON_WEATHER=0` (`:start_weather`).
   """
   use GenServer
 
   @every_s 900
+  @severity ~w(storm snow rain fog cloudy partly clear)
+  @daytime 900..1800//1
+
+  @type day :: %{date: String.t(), high_c: integer(), low_c: integer(), kind: String.t(), wet: 0..100}
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
@@ -18,6 +24,12 @@ defmodule Server.Office.Weather do
   @spec now() :: %{kind: String.t(), temp_c: integer() | nil, desc: String.t()} | nil
   def now do
     if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, :now)
+  end
+
+  @doc "The last report's days, today first, up to three (`parse_forecast/1`); `[]` when there is none."
+  @spec forecast() :: [day()]
+  def forecast do
+    if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, :forecast), else: []
   end
 
   @doc "A wttr.in weather code as the room draws it; nil for one it does not know."
@@ -48,28 +60,54 @@ defmodule Server.Office.Weather do
     end
   end
 
-  @impl true
-  def init(opts), do: {:ok, %{report: nil, at: 0, fetch: Keyword.get(opts, :fetch, &fetch/0)}}
-
-  @impl true
-  def handle_call(:now, _from, state) do
-    now = System.system_time(:second)
-
-    state =
-      if now - state.at >= @every_s do
-        me = self()
-        Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:fetched, state.fetch.()}) end)
-        %{state | at: now}
-      else
-        state
-      end
-
-    {:reply, state.report, state}
+  @doc """
+  The days of a `format=j1` report, today first, up to three, each `%{date, high_c, low_c, kind,
+  wet}`: `kind` the most severe the 09:00-18:00 entries show, `wet` their highest chance of rain
+  or snow. A day that does not read is left out; a body with no days is `[]`.
+  """
+  @spec parse_forecast(binary()) :: [day()]
+  def parse_forecast(body) do
+    case JSON.decode(body) do
+      {:ok, %{"weather" => days}} when is_list(days) -> days |> Enum.take(3) |> Enum.flat_map(&day/1)
+      _ -> []
+    end
   end
 
   @impl true
-  def handle_cast({:fetched, {:ok, body}}, state), do: {:noreply, %{state | report: parse(body) || state.report}}
+  def init(opts), do: {:ok, %{report: nil, forecast: [], at: 0, fetch: Keyword.get(opts, :fetch, &fetch/0)}}
+
+  @impl true
+  def handle_call(:now, _from, state) do
+    state = refresh(state)
+    {:reply, state.report, state}
+  end
+
+  def handle_call(:forecast, _from, state) do
+    state = refresh(state)
+    {:reply, state.forecast, state}
+  end
+
+  @impl true
+  def handle_cast({:fetched, {:ok, body}}, state) do
+    case parse(body) do
+      nil -> {:noreply, state}
+      report -> {:noreply, %{state | report: report, forecast: parse_forecast(body)}}
+    end
+  end
+
   def handle_cast({:fetched, _failed}, state), do: {:noreply, state}
+
+  defp refresh(state) do
+    now = System.system_time(:second)
+
+    if now - state.at >= @every_s do
+      me = self()
+      Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:fetched, state.fetch.()}) end)
+      %{state | at: now}
+    else
+      state
+    end
+  end
 
   defp fetch do
     _ = Application.ensure_all_started([:inets, :ssl])
@@ -96,4 +134,39 @@ defmodule Server.Office.Weather do
 
   defp desc([%{"value" => v} | _]) when is_binary(v), do: v
   defp desc(_), do: nil
+
+  defp day(%{"date" => date, "maxtempC" => max, "mintempC" => min, "hourly" => hourly}) when is_list(hourly) do
+    with {:ok, _} <- Date.from_iso8601(to_string(date)),
+         {high, ""} <- Integer.parse(to_string(max)),
+         {low, ""} <- Integer.parse(to_string(min)),
+         [_ | _] = hours <- Enum.flat_map(hourly, &daytime/1),
+         [_ | _] = kinds <- for({kind, _} when is_binary(kind) <- hours, do: kind) do
+      [
+        %{
+          date: date,
+          high_c: high,
+          low_c: low,
+          kind: Enum.find(@severity, &(&1 in kinds)),
+          wet: hours |> Enum.map(&elem(&1, 1)) |> Enum.max()
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  defp day(_), do: []
+
+  defp daytime(%{"time" => time, "weatherCode" => code, "chanceofrain" => rain, "chanceofsnow" => snow}) do
+    with {t, ""} when t in @daytime <- Integer.parse(to_string(time)),
+         {code, ""} <- Integer.parse(to_string(code)),
+         {rain, ""} <- Integer.parse(to_string(rain)),
+         {snow, ""} <- Integer.parse(to_string(snow)) do
+      [{kind(code), rain |> max(snow) |> min(100) |> max(0)}]
+    else
+      _ -> []
+    end
+  end
+
+  defp daytime(_), do: []
 end
