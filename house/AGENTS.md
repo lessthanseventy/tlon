@@ -285,7 +285,7 @@ runs on the local list.
   is "⏰ text" with Done / In an hour / Tomorrow / Delete (`callback_data` `verb:id`; a repeating one's Delete is
   `ask:id`, which edits the message to "Delete for good?" with yes / no), a press goes through `_act` and edits the
   message to what was done; a re-ring sends a new message and takes the old one's buttons off; a thing done in the
-  house (`_act`) or no longer ringing (`sync`) edits its message too (the message ids are kept in memory only, so a
+  house (`_act`) or no longer ringing (`sync`, not within `grace`, 3 s, of the message) edits its message too, even one acted on before Telegram has answered the send (the message ids are kept in memory only, so a
   message from before a restart is followed only by its own buttons). Once a day at `telegram_list_at` by the house
   clock, or at the next start that day, "Still open: ...; tomorrow: ..." (nothing to say, nothing sent). A network
   failure backs off 5 s doubling to 5 min and shows nothing in the room; a refused token stops it and says so in the
