@@ -3,8 +3,9 @@ extends Control
 const STAGED_TEXT := [
 	"name", "cat", "dog", "pet1", "pet2", "birthday", "claude_command", "pet1_personality",
 	"pet2_personality", "pet_chatter", "visitors", "visitors_rate", "degrees",
+	"weather_town",
 ]
-const STAGED_FLAGS := ["claude", "telegram", "litter_box", "bowls", "pet_things"]
+const STAGED_FLAGS := ["claude", "telegram", "litter_box", "bowls", "pet_things", "weather"]
 const POLL_SECONDS := 5.0
 const SLOW_SECONDS := 300.0
 const WATCH_SECONDS := 60.0
@@ -29,6 +30,7 @@ const BackendLocal := preload("res://backend_local.gd")
 const LocalList := preload("res://local_list.gd")
 const ReaderClaude := preload("res://reader_claude.gd")
 const Telegram := preload("res://telegram.gd")
+const Wttr := preload("res://wttr.gd")
 
 # false in a staged or scripted run: nothing is sent to Claude or anywhere else
 var talk_live := false
@@ -41,6 +43,7 @@ var _demo := false
 var _shot := ""
 var _backend: Node
 var _claude := ReaderClaude.new()
+var _wttr := Wttr.new()
 var _phone := Telegram.new()
 var _fixture := ""
 var _probing := false
@@ -124,6 +127,9 @@ func _ready() -> void:
 	_panel.now_pressed.connect(_what_now)
 	add_child(_panel)
 	talk_live = not _room.home.staged
+	_wttr.live = talk_live
+	_wttr.reported.connect(_on_wttr)
+	add_child(_wttr)
 	_set_up_phone()
 	_use_backend(args)
 	if "--forecast" in args:
@@ -338,6 +344,7 @@ func _install(node: Node) -> void:
 	)
 	add_child(_backend)
 	_apply_where()
+	_apply_weather()
 	_apply_talk()
 	if _backend.local and _phone_on():
 		for row in _backend.started:
@@ -365,6 +372,25 @@ func _set_up_phone() -> void:
 	_phone.heard.connect(_phone_heard)
 	_phone.tapped.connect(_phone_tapped)
 	add_child(_phone)
+
+
+# over the house's own list the weather comes from wttr.in, unless he has turned it off; over a
+# server it is the server's
+func _apply_weather() -> void:
+	var settings = _room.home.settings
+	var was := _wttr.on
+	_wttr.on = _backend.local and bool(settings.value("weather"))
+	_wttr.town = Wttr.town_of(str(settings.value("weather_town")))
+	if _wttr.on:
+		_wttr.poke()
+	elif was:
+		_wttr.clear()
+		_room.home.clear_weather()
+
+
+func _on_wttr() -> void:
+	_room.home.set_weather(_wttr.report)
+	_room.home.set_forecast(_wttr.days)
 
 
 # Claude and Telegram work only over the house's own list, and only while their setting is on
@@ -1067,7 +1093,10 @@ func _on_setting(key: String) -> void:
 			if not _backend.local:
 				_backend.base = _room.home.settings.server_url()
 			_refresh()
+		"weather", "weather_town":
+			_apply_weather()
 		"where":
+			_room.home.clear_weather()
 			_make_backend()
 			_room.home.set_voices({})
 			if _backend.local:

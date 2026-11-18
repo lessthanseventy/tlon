@@ -249,7 +249,7 @@ runs on the local list.
   `PERSONA` its offline lines; `quirks.gd` `_react` how it takes a visitor; `eggs.gd` `pace` how soon the big things
   come. Lines the server writes are not changed by it), `pet_chatter` (`quiet`, `normal`, `chatty`: stretches the
   waits between remarks), `visitors` and `visitors_rate`, `litter_box`, `bowls`, `pet_things` (the switches),
-  `degrees` (`"f"` or `"c"`; absent follows the system locale, `f` for a US one, else `c`: the server sends Celsius,
+  `weather` (on) and `weather_town` (`""`: the wttr.in weather of the local house, below), `degrees` (`"f"` or `"c"`; absent follows the system locale, `f` for a US one, else `c`: the server sends Celsius,
   `Settings.temp` words it everywhere a temperature is shown),
   `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
   `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server), and over the
@@ -262,7 +262,7 @@ runs on the local list.
   asking for a second click (`sure.gd`), "where the list lives" (`where`: "a tlon server" with its address and a
   "check" (`GET /api/home`), or "this computer" with one quiet line of where the file is kept), the art folder, and the daily list time and weekly review day only
   when `GET /api/settings` already returned them (`home_list_at`, `home_review_on`). Quiet hours are the server's and
-  no existing route returns them, so they are not shown. `--settings "name=Sam;cat=Mimi;scroll;armed=reset"` stages it (`scroll=PIXELS` too); it also takes `telegram=on`, `claude=on`, `claude_command=PATH` and `phone=pairing|paired` (a made-up bot state, no request).
+  no existing route returns them, so they are not shown. `--settings "name=Sam;cat=Mimi;scroll;armed=reset"` stages it (`scroll=PIXELS` too); it also takes `weather=on|off`, `weather_town=TOWN`, `degrees=f|c`, `telegram=on`, `claude=on`, `claude_command=PATH` and `phone=pairing|paired` (a made-up bot state, no request).
 - **Chat** (`chat.gd` the history, `chat_view.gd` the panel): the desk phone, clicked while it is not ringing, or
   `K`, opens a paper chat: his lines on the right, the home's on the left, newest at the bottom, the wheel and
   PageUp/PageDown scroll, Enter sends (`POST /api/home`, the notepad's request: both go through `main.gd` `_tell`),
@@ -356,6 +356,18 @@ runs on the local list.
   becomes the rules' reading shape (`list` and `answer` are `say`). Any failure (not found, exit, timeout,
   `is_error`, unreadable, invalid) answers `{}`: the rules read the line, once, and the settings say "last Claude
   reading: failed (reason), used the simple reader". The chat's "reading..." covers the wait.
+  **Weather over the local list** (`wttr.gd`, a node `main.gd` holds): the one outward call of the local house, on by
+  default. `GET https://wttr.in/<town>?format=j1` (no town: the service places the caller by internet address) at
+  start, once the settings are read, and every 30 min, never oftener, 15 s timeout, only the URL (no name, no list
+  text, the default user agent). `parse` reads it as the server's `weather.ex` does (`kind_of` the code table; a day's
+  kind the most severe of the 09:00-18:00 entries, `wet` their highest chance; a day that does not read is left out)
+  and feeds `home.set_weather` and `set_forecast`, so the window, the pets, the fire and the card act as with a server.
+  A failure keeps the last report and waits for the next turn: no retry. Settings `weather` (`true`; `false` makes no
+  request at all and clears what was held) and `weather_town` (letters, digits, spaces, `, . ' -`, up to 60; anything
+  else is no town); a change takes effect after one debounced (2 s) fetch. The "weather" section shows the switch and
+  the town only over the local list; `degrees` shows always. Never in a staged run (`live` is `not home.staged`: soak,
+  `--demo`, `--shot`, `--local`), so a picture or the soak never reaches wttr.in; `--forecast` stages the days. The soak
+  (`soak_weather.gd`) serves the stub of wttr.in from its own server (`base` is injectable); no check calls the real one.
   **First start**: no settings file, no `TLON_URL`, and nothing answering at the default address starts the house on
   its own list with a to-do "say hello to the cat", a weekly reminder "water the plant" and a note, once and only then.
   **Not shown over the local list**: the office (the door in the room and its label, the panel's "to the office"
@@ -441,7 +453,7 @@ runs on the local list.
   `POST /api/home/:id/done`, `.../later` (`{"until": "hour"|"tomorrow"}`), `.../drop`, `.../revive`,
   `.../edit`, `.../plan`, `.../answer`, `POST /api/home/add`, asks `GET /api/home/now?skip=`, and
   `POST /api/home` (`{"text"}` → `{"reply"}`, slow: a model reads it). The home also asks
-  `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above), and only when he has switched them on to Telegram (`api.telegram.org`) and to the `claude` program (his own account). A server that does not answer leaves the
+  `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above), apart from one outward call, the weather from wttr.in (below), and only when he has switched them on to Telegram (`api.telegram.org`) and to the `claude` program (his own account). A server that does not answer leaves the
   last data on screen and a quiet line saying so; a post that fails moves nothing.
 - **Rooms.** The window starts in the home, or the office with `--office`. The door in each room, its
   panel button and Tab go between them. A coworker's state is the roster row's `status`
@@ -460,7 +472,7 @@ runs on the local list.
   this is not part of `mise run check`.
 - `mise run house:soak` — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`.
+  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), the weather (`soak_weather.gd`: degrees, the card's days, the j1 reader, the address, the pace and the switch, against a stub of wttr.in), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`.
 - `mise run house:art-pack` / `mise run house:build -- windows|mac|linux|all` — the art the house can open, packed to
   `~/.cache/tlon/house-dist/house-art.zip` (`-- --list` prints the files only), and a build of the house per platform
   with it inside (Windows and Linux: one file, the art raw in its pck; the Mac app: in Resources), zipped as
