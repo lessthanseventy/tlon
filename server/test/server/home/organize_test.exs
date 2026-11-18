@@ -765,31 +765,38 @@ defmodule Server.Home.OrganizeTest do
     defp daily(say, now \\ friday(), listed \\ ~D[2026-11-19]),
       do: Inbox.daily("telegram", "42", say, now, "17:30", listed)
 
-    test "it is offered with the daily list, once, and Add that turns it into a project with that start", %{say: say} do
+    defp offer(say, taxes, start \\ "Find last year's return"),
+      do: Organize.offer_shrink("telegram", taxes.id, start, "42", say, friday())
+
+    test "the model is asked off the daily list, and the offer goes out as its own message, once", %{say: say} do
       taxes = sat_todo()
       me = self()
 
       helps(fn prompt ->
-        send(me, {:helped, prompt})
-        {:ok, "\"Find last year's return\""}
+        send(me, {:helped, prompt, self()})
+
+        receive do
+          :go -> {:ok, "\"Find last year's return\""}
+        end
       end)
 
       assert daily(say) == ~D[2026-11-20]
-
-      assert_received {:helped, prompt}
-      assert prompt =~ "TO DO: do the taxes"
-
-      assert_received {:said, "42", text}
-
-      assert text ==
-               "Before you clock out:\n\nStill open:\n• do the taxes\n\n'do the taxes' has sat a week. A two-minute start: Find last year's return?"
-
-      assert_received {:with, choices: [[{"✓ do the taxes", _}], [{"Add that", add}, {"No thanks", _}]]}
-      assert add == "a:#{taxes.id}:add"
-
-      daily(say, DateTime.add(friday(), 1, :day), ~D[2026-11-20])
       assert_received {:said, "42", "Before you clock out:\n\nStill open:\n• do the taxes"}
-      refute_received {:helped, _}
+      assert_receive {:helped, prompt, task}
+      assert prompt =~ "TO DO: do the taxes"
+      assert Jot.asked("telegram") == []
+      send(task, :go)
+      await()
+
+      offer(say, taxes)
+
+      assert_received {:said, "42", "'do the taxes' has sat a week. A two-minute start: Find last year's return?"}
+      assert_received {:with, choices: [[{"Add that", add}, {"No thanks", _}]]}
+      assert add == "a:#{taxes.id}:add"
+      assert %{shrunk_at: %DateTime{}, ask: "shrink"} = fresh(taxes)
+
+      offer(say, taxes)
+      refute_received {:said, _, _}
 
       tapped(say, add)
 
@@ -800,9 +807,8 @@ defmodule Server.Home.OrganizeTest do
 
     test "No thanks leaves it a to-do, never offered again", %{say: say} do
       taxes = sat_todo()
-      helps(fn _prompt -> {:ok, "Find the return"} end)
-      daily(say)
-      assert_received {:said, "42", "Before you clock out:" <> _}
+      offer(say, taxes, "Find the return")
+      assert_received {:said, "42", "'do the taxes'" <> _}
 
       tapped(say, "a:#{taxes.id}:no")
 
@@ -821,16 +827,16 @@ defmodule Server.Home.OrganizeTest do
       sat_todo()
       helps(fn _prompt -> {:ok, "DONE"} end)
       daily(say, DateTime.add(friday(), 1, :day), ~D[2026-11-20])
+      await()
       assert_received {:said, "42", text}
       refute text =~ "two-minute"
       assert Jot.asked("telegram") == []
     end
 
     test "with no messenger the offer is put all the same, for the desktop" do
-      sat_todo()
-      helps(fn _prompt -> {:ok, "Find the return"} end)
+      taxes = sat_todo()
 
-      assert Inbox.daily("telegram", "", nil, friday(), "17:30", ~D[2026-11-19]) == ~D[2026-11-20]
+      assert Organize.offer_shrink("telegram", taxes.id, "Find the return", "", nil, friday()) == :ok
 
       refute_received {:said, _, _}
 
@@ -896,16 +902,110 @@ defmodule Server.Home.OrganizeTest do
     end
   end
 
+  describe "a thing that left the open list stays out" do
+    defp routine(id, attrs \\ []) do
+      {:ok, jot} = Jot.take("telegram", id, "bins")
+
+      jot
+      |> Jot.file(%{kind: "reminder", text: "bins", due_at: friday(), every: "day"})
+      |> set(attrs)
+    end
+
+    test "a dropped repeating reminder is never told again", %{say: say} do
+      jot = routine(1)
+      Jot.drop(jot, friday())
+
+      Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 1, :day))
+      Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 2, :day))
+
+      refute_received {:said, _, _}
+      assert Server.Home.told() == []
+    end
+
+    test "a repeating reminder put on someday is never told, and comes back at its next time, not in the past",
+         %{say: say} do
+      jot = routine(1, due_at: DateTime.add(friday(), -30, :day))
+      Jot.someday(jot, friday())
+      Inbox.nudge("telegram", "42", say, DateTime.add(friday(), 1, :day))
+      refute_received {:said, _, _}
+
+      reads(fn _body, %{someday: [%Jot{id: id}]} ->
+        {:ok, %{kind: "todo", text: "bins", due_at: nil, revive: [id]}}
+      end)
+
+      hear(say, 5, "the bins")
+
+      assert_received {:said, "42", "to do: bins\nback on the list: bins"}
+      assert %{someday_at: nil, due_at: due} = fresh(jot)
+      assert DateTime.after?(due, DateTime.utc_now())
+    end
+
+    test "a repeating reminder is a routine: not reviewed and not moved to someday however long it sat", %{say: say} do
+      jot = routine(1, touched_at: DateTime.add(friday(), -30, :day))
+      once = stale(2, "one-off", 30)
+      set(once, kind: "reminder", due_at: DateTime.add(friday(), -40, :day))
+
+      Organize.weekly("telegram", "42", say, friday(), "fri", "17:30", ~D[2026-11-13])
+
+      assert_received {:said, "42", "moved to someday: one-off"}
+      assert %{someday_at: nil} = fresh(jot)
+      assert Jot.asked("telegram") == []
+    end
+
+    test "a dropped thing cannot be closed by a typed done", %{say: say} do
+      jot = routine(1)
+      Inbox.nudge("telegram", "42", say, friday())
+      assert_received {:said, "42", "reminder: bins"}
+      Jot.drop(fresh(jot), friday())
+
+      hear(say, 5, "done")
+
+      assert_received {:said, "42", "got it"}
+      assert %{done_at: nil, dropped_at: %DateTime{}} = fresh(jot)
+    end
+
+    test "filing a reading on a thing makes it plainly open again" do
+      jot = todo(1, "milk", dropped_at: friday(), hidden_until: DateTime.add(friday(), 1, :day), someday_at: friday())
+
+      Jot.file(jot, %{kind: "todo", text: "oat milk", due_at: nil})
+
+      assert %{dropped_at: nil, hidden_until: nil, someday_at: nil} = fresh(jot)
+      assert [%{text: "oat milk"}] = Jot.opens("telegram")
+    end
+
+    test "a shrink offer that did not go out is not recorded, so it is offered again" do
+      taxes = todo(1, "do the taxes", received_at: DateTime.add(friday(), -8, :day))
+      failing = fn _chat, _text, _opts -> {:error, :down} end
+
+      Organize.offer_shrink("telegram", taxes.id, "Find the return", "42", failing, friday())
+
+      assert Jot.asked("telegram") == []
+      assert %{shrunk_at: nil, ask: nil} = fresh(taxes)
+
+      me = self()
+
+      sent = fn _chat, text, _opts ->
+        send(me, {:sent, text})
+        :ok
+      end
+
+      Organize.offer_shrink("telegram", taxes.id, "Find the return", "42", sent, friday())
+
+      assert_received {:sent, "'do the taxes'" <> _}
+      assert [%{ask: "shrink"}] = Jot.asked("telegram")
+    end
+  end
+
   describe "the desktop" do
     test "every question is a sticky alert whose buttons are calls on the answer route" do
-      todo(1, "do the taxes", received_at: DateTime.add(friday(), -8, :day))
+      taxes = todo(1, "do the taxes", received_at: DateTime.add(friday(), -8, :day))
       stale(2, "old", 15)
       {:ok, wait} = Jot.take("telegram", 3, "x")
       Jot.file(wait, %{kind: "waiting", text: "the photos", due_at: Clock.utc(~N[2026-11-20 08:00:00]), who: "Sam"})
       helps(fn _prompt -> {:ok, "Find the return"} end)
       Organize.waiting("telegram", "", nil, friday())
       Organize.weekly("telegram", "", nil, friday(), "fri", "17:30", ~D[2026-11-13])
-      Inbox.daily("telegram", "", nil, friday(), "17:30", ~D[2026-11-19])
+      Organize.offer_shrink("telegram", taxes.id, "Find the return", "", nil, friday())
 
       {:ok, project} = Jot.take("telegram", 4, "plan")
       project = Jot.file(project, %{kind: "project", text: "plan mom's birthday", due_at: nil, steps: ["a", "b"]})

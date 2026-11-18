@@ -10,8 +10,10 @@ defmodule Server.Home.Organize do
       Chased (asked again in three days) or Tomorrow.
     * **The weekly review** (`weekly/7`): up to five open things untouched for 14 days, each with Keep,
       Later or Drop; anything untouched for 28 days is moved to someday on its own and said in a line.
-    * **Shrinking** (`shrink/2`): a to-do that has sat a week is offered a two-minute start, once,
-      with the daily list. Add that makes it a project whose next step the start is.
+      A reminder that repeats is a routine: never reviewed, never moved.
+    * **Shrinking** (`shrink/2`): a to-do that has sat a week is offered a two-minute start, once, as
+      its own message once the model has written it after the daily list (`offer_shrink/6`). Add that
+      makes it a project whose next step the start is.
 
   Each question is put on its jot (`Server.Jot.ask/4`), so the desktop raises it (`Server.Home.asked/0`)
   whether or not a messenger said it, and is answered by `answer/5` from either. Nothing unasked
@@ -289,7 +291,7 @@ defmodule Server.Home.Organize do
 
   defp review(via, chat, say, now) do
     {_coming, open} = Home.board(via, now)
-    {drift, rest} = Enum.split_with(open, &stale?(&1, now, @drift_days))
+    {drift, rest} = open |> Enum.filter(&is_nil(&1.every)) |> Enum.split_with(&stale?(&1, now, @drift_days))
     asks = Enum.filter(drift, &(&1.project_id != nil))
 
     Enum.each(drift, &Jot.someday(&1, now))
@@ -323,11 +325,12 @@ defmodule Server.Home.Organize do
   end
 
   @doc """
-  A smaller start offered for the oldest to-do from `via` that has sat a week and was never offered
-  one: its question, put on it, as a reply for the daily list to carry. `nil` when none is, or the
-  model gave no start.
+  A smaller start for the oldest to-do from `via` that has sat a week and was never offered one.
+  The model is asked off the caller, in a task; when it has answered, the offer is put through the
+  inbox (`Server.Home.Inbox.shrink_offered/3`), as `offer_shrink/5` does. Nothing when there is no
+  such to-do or the model gave no start (it is tried again at the next daily list).
   """
-  @spec shrink(String.t(), DateTime.t()) :: reply() | nil
+  @spec shrink(String.t(), DateTime.t()) :: :ok
   def shrink(via, now) do
     {_coming, open} = Home.board(via, now)
 
@@ -337,10 +340,30 @@ defmodule Server.Home.Organize do
           do: jot
 
     with [jot | _] <- Enum.sort_by(sat, &{DateTime.to_unix(&1.received_at), &1.id}),
-         {:ok, start} <- Helper.start(jot, Jot.notes(via, 20)) do
-      jot |> Jot.shrunk(now) |> Jot.ask("shrink", start, now) |> prompt_reply()
-    else
-      _ -> nil
+         do: Task.Supervisor.start_child(Server.TaskSupervisor, fn -> write_start(jot, now) end)
+
+    :ok
+  end
+
+  @doc """
+  Offer `start` for the to-do `id` from `via` in `chat` through `say`: said first, and put on the
+  to-do only when it went out (`""` for the desktop alone, which raises it from the row). Nothing
+  when the to-do is no longer open or has a question already.
+  """
+  @spec offer_shrink(String.t(), integer(), String.t(), String.t(), say() | nil, DateTime.t()) :: :ok
+  def offer_shrink(via, id, start, chat, say, now) do
+    with %Jot{kind: "todo", ask: nil, shrunk_at: nil} = jot <- Jot.open(via, id),
+         do: put_offer(jot, start, chat, say, now)
+
+    :ok
+  end
+
+  defp put_offer(jot, start, chat, say, now) do
+    asked = %{jot | ask: "shrink", proposed: start, asked_at: DateTime.truncate(now, :second)}
+    {text, opts} = prompt_reply(asked)
+
+    if chat == "" or say.(chat, text, opts) == :ok do
+      jot |> Jot.shrunk(now) |> Jot.ask("shrink", start, now)
     end
   end
 
@@ -352,7 +375,12 @@ defmodule Server.Home.Organize do
 
   defp retire(jot, _reading, _now), do: jot
 
-  defp revive(jot, now), do: Jot.file(jot, %{kind: jot.kind, text: jot.text, due_at: jot.due_at, every: jot.every}, now)
+  defp revive(jot, now) do
+    due =
+      if jot.every && !DateTime.after?(jot.due_at, now), do: Clock.next(jot.due_at, jot.every, now), else: jot.due_at
+
+    Jot.file(jot, %{kind: jot.kind, text: jot.text, due_at: due, every: jot.every}, now)
+  end
 
   defp start_next(%Jot{via: via, id: id} = project, now) do
     Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
@@ -369,5 +397,11 @@ defmodule Server.Home.Organize do
     end)
 
     nil
+  end
+
+  defp write_start(%Jot{via: via} = jot, now) do
+    with {:ok, start} <- Helper.start(jot, Jot.notes(via, 20)) do
+      Server.Home.Inbox.shrink_offered(jot.id, start, now)
+    end
   end
 end

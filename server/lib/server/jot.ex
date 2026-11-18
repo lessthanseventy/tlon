@@ -58,7 +58,7 @@ defmodule Server.Jot do
   again. `every` (`"day"`, `"week"`, `"month"`) is a reminder that repeats. A reading may also carry
   `mins`, `project` (the project a step belongs to), `steps` (a project's: all but the first are its
   plan) and `who` (a waiting-on's); what it leaves out stays as it was. Filing is a touch at `now`,
-  and brings a thing back from someday. Only what the operator does touches a thing: filing,
+  and makes it plainly open again: not done, put off, dropped or hidden. Only what the operator does touches a thing: filing,
   amending, putting off, keeping, hiding, done; the home's own nudges and questions do not.
   """
   @spec file(%__MODULE__{}, %{kind: String.t(), text: String.t() | nil, due_at: DateTime.t() | nil}, DateTime.t()) ::
@@ -80,6 +80,8 @@ defmodule Server.Jot do
         nudges: 0,
         done_at: nil,
         someday_at: nil,
+        dropped_at: nil,
+        hidden_until: nil,
         ask: nil,
         proposed: nil
       ] ++ optional,
@@ -124,23 +126,25 @@ defmodule Server.Jot do
     )
   end
 
-  @doc "The reminders from `via` due at `now` and not done, oldest first."
+  @doc "The open reminders from `via` due at `now`, oldest first: not one done, dropped or put off."
   @spec due(String.t(), DateTime.t()) :: [%__MODULE__{}]
   def due(via, now) do
     Repo.all(
       from(j in __MODULE__,
-        where: j.via == ^via and j.kind == "reminder" and is_nil(j.done_at) and j.due_at <= ^now,
+        where: j.via == ^via and j.kind == "reminder" and j.due_at <= ^now,
+        where: ^open_now(),
         order_by: j.due_at
       )
     )
   end
 
-  @doc "The reminder from `via` the operator was told last and has not done, nil when none is."
+  @doc "The open reminder from `via` the operator was told last, nil when none is."
   @spec last_nudged(String.t()) :: %__MODULE__{} | nil
   def last_nudged(via) do
     Repo.one(
       from(j in __MODULE__,
-        where: j.via == ^via and j.kind == "reminder" and is_nil(j.done_at) and not is_nil(j.nudged_at),
+        where: j.via == ^via and j.kind == "reminder" and not is_nil(j.nudged_at),
+        where: ^open_now(),
         order_by: [desc: j.nudged_at, desc: j.id],
         limit: 1
       )
