@@ -3,7 +3,7 @@ extends RefCounted
 # The four looks the bought packs add (light glow, weather in the window, spell effects, a pixel
 # font): which are on, and the one place their textures are read from. Each is on by default and
 # his to turn off; a pack that is missing leaves the code-drawn look as it was.
-const KEYS := ["glow"]
+const KEYS := ["glow", "weather_art"]
 
 static var art_dir := ""
 static var settings

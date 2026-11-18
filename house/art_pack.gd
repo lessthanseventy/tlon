@@ -12,6 +12,7 @@ const Guests := preload("res://guests.gd")
 const Room := preload("res://room.gd")
 const Quirks := preload("res://quirks.gd")
 const Glow := preload("res://glow.gd")
+const Weather := preload("res://weather.gd")
 const SCALES := [1, 2, 3]
 const INTERIORS := "isometric-interiors/Gridwright Isometric Interiors/"
 
@@ -137,7 +138,7 @@ func _sound() -> void:
 
 
 func _looks() -> void:
-	for rel in Glow.files():
+	for rel in Glow.files() + Weather.files():
 		_add(rel)
 
 

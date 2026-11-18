@@ -150,10 +150,11 @@ runs on the local list.
   watching the card, menu, note, closet, decorate, door and timer open and close, and from `eggs.find(id)` as
   `egg_<id>`. `--sounds` prints every cue with the file it resolved to (or `synth`/`none`) and quits.
 - **Looks** (`looks.gd` the switches and the one loader of their textures, from the art dir, cached;
-  `glow.gd`): what the light-textures, weather-effects, spell-vfx and
+  `glow.gd`, `weather.gd`): what the light-textures, weather-effects, spell-vfx and
   pixel-fonts-2 packs add on top of the code-drawn room, each falling back to the code-drawn look, silently,
   when its pack or file is missing. Each has a switch under "looks" in the settings screen, applied at once
-  (`glow`; on by default). `--plain` forces them all off and `--looks glow,font` exactly the named
+  (`glow`, `weather_art`; on by default but `weather_art`, which in the pictures was no
+  better than the code-drawn weather). `--plain` forces them all off and `--looks glow,font` exactly the named
   ones on, for pictures and comparing. Each module's `files()` names what it opens, which is the art pack's
   list (`art_pack.gd`); the soak holds that list to the files the looks really opened.
   *Glow*: after dark (the clock's `day` under 0.5; the lamp follows its own `lamp` value) a soft radial or
@@ -161,6 +162,11 @@ runs on the local list.
   TV that is on, the moon in the window, any candle piece and the pumpkin, in `Glow.SOURCES`, the one table
   (texture, colour, width, strength, lift). Each is cut to the room's outline (the moon to the glass) so none
   spills onto the desktop; with it on, the lamp's code-drawn halo gives way. By day nothing is drawn.
+  *Weather* (when on): the window's rain, snow and fog loops, clipped to the glass quad and nowhere else,
+  stepped at most ten times a second; a storm gets rain and every third flash a lightning bolt sprite inside
+  the pane. They replace the code-drawn drops, flakes and the fog haze there; the sill, the snowman and the wet
+  glass's drips stay. A loop tile is 128 px and the pane is smaller, so a few windows into the tile are stacked
+  to make it dense.
 - **Decorate** (`D`, or `--decorate`; the home only, not the widget): the side panel becomes the
   catalogue (`decorate.gd`): wall and floor styles, `reset`, and every placeable piece of the pack's
   index grouped and scrolled, a piece's four sides (or a rug's two, a wall piece's two) one entry. Click a piece, a ghost follows the pointer
@@ -222,7 +228,7 @@ runs on the local list.
   `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server), and over the
   house's own list only `telegram` (off), `telegram_list_at` (`"17:30"`), `claude` (off) and `claude_command`
   (`"claude"`): the two helpers below (the bot's token is not here but in its own file); and the four
-  looks, `glow` (above, "Looks").
+  looks, `glow`, `weather_art` (above, "Looks").
   **Precedence: a command-line arg beats the settings file beats the default** (`--widget`
   is the arg of `widget`; `Settings.forced`). The screen also shows sound (`sound.gd`'s own file keeps it), "N of M
   found" with "forget them all", "reset the room to how it came" (`layout.reset`) and "clear" for the chat, each

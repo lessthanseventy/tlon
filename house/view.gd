@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Props := preload("res://props.gd")
+const Weather := preload("res://weather.gd")
 
 const S0 := 66.0
 const S1 := 100.0
@@ -70,7 +71,7 @@ static func draw(
 	_clouds(c, q, k, w, day, t)
 	if extra.is_valid():
 		extra.call(q)
-	_glass(c, q, k, w, t)
+	_glass(c, q, k, w, t, day)
 	var bar := FRAME.darkened(0.04)
 	c.draw_colored_polygon(
 		Props.wall_quad(o, k, -1, (S0 + S1) / 2.0, (H0 + H1) / 2.0, 1.5, H1 - H0), bar
@@ -175,7 +176,7 @@ static func _ground(
 		c.draw_circle(base + d * k, 3.2 * k, crown.lerp(Color("e8eef6"), 0.7) if snow else crown)
 	if snow:
 		c.draw_circle(base + Vector2(0, -3.0) * k, 2.4 * k, Color("f4f8fc"))
-	if w in ["rain", "storm"]:
+	if w in ["rain", "storm"] and not Weather.shown(w):
 		for i in 4:
 			var u := 0.1 + 0.22 * i + 0.04 * sin(t * 0.8 + i)
 			var a := Props.qlerp(q, u, 0.03 + 0.025 * (i % 2))
@@ -185,7 +186,7 @@ static func _ground(
 				Color("c8d8ee", 0.4 + 0.2 * sin(t * 1.4 + i)),
 				maxf(1.0, 0.6 * k)
 			)
-	if w == "fog":
+	if w == "fog" and not Weather.shown(w):
 		c.draw_colored_polygon(q, Color("dfe3e6", 0.42))
 		c.draw_colored_polygon(_sub(q, 0, 0, 1, 0.45), Color("dfe3e6", 0.3))
 
@@ -213,10 +214,13 @@ static func _clouds(
 		c.draw_circle(p + Vector2(0, -r * 0.5), r * 0.7, cc)
 
 
-static func _glass(c: CanvasItem, q: PackedVector2Array, k: int, w: String, t: float) -> void:
+static func _glass(
+	c: CanvasItem, q: PackedVector2Array, k: int, w: String, t: float, day: float
+) -> void:
+	var art := Weather.draw(c, q, k, w, t, day)
 	var wet := w in ["rain", "storm"]
 	if wet:
-		for i in 22:
+		for i in 0 if art else 22:
 			var ph := fmod(t * 1.9 + i * 0.37, 1.0)
 			var u := 0.06 + 0.88 * fmod(i * 0.618, 1.0)
 			var top := Props.qlerp(q, u, 1.0 - ph * 0.9)
@@ -231,7 +235,7 @@ static func _glass(c: CanvasItem, q: PackedVector2Array, k: int, w: String, t: f
 			c.draw_circle(d, 0.8 * k, Color("e8f2fc", 0.65))
 		c.draw_colored_polygon(_sub(q, 0, 0, 1, 0.16), Color("c8d8ee", 0.16))
 	elif w == "snow":
-		for i in 26:
+		for i in 0 if art else 26:
 			var ph := fmod(t * 0.5 + i * 0.29, 1.0)
 			var u := 0.06 + 0.88 * fmod(i * 0.618, 1.0) + 0.03 * sin(t * 2.0 + i)
 			c.draw_rect(
@@ -253,7 +257,7 @@ static func _glass(c: CanvasItem, q: PackedVector2Array, k: int, w: String, t: f
 		),
 		Color(1, 1, 1, 0.09)
 	)
-	if w == "storm":
+	if w == "storm" and not art:
 		var ph := fmod(t + 4.2, 5.5)
 		var flash := 1.0 if ph < 0.1 else (0.6 if ph > 0.18 and ph < 0.3 else 0.0)
 		if flash > 0.0:
