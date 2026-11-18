@@ -94,6 +94,15 @@ defmodule Server.Home.Clock do
     end
   end
 
+  @doc """
+  The last slot said from what was kept (`{date, setting}`, `Server.Home.Slot`) when `setting` is
+  what is set now; `:boot` (count the newest slot as said, say nothing) when nothing was kept or it
+  was kept under another setting, so a change never fires a slot from before it.
+  """
+  @spec resume({Date.t() | :boot, String.t()} | nil, String.t()) :: Date.t() | :boot
+  def resume({last, setting}, setting), do: last
+  def resume(_kept, _setting), do: :boot
+
   @doc "A UTC instant as the helper says it: `Fri 20 Nov 09:00`, local."
   @spec say(DateTime.t()) :: String.t()
   def say(%DateTime{} = utc), do: Calendar.strftime(local(utc), "%a %-d %b %H:%M")

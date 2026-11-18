@@ -977,6 +977,112 @@ defmodule Server.Home.OrganizeTest do
     end
   end
 
+  describe "the daily list and the review keep their place across a restart and a changed setting" do
+    alias Server.Home.Slot
+
+    defp at(date, time), do: Clock.utc(NaiveDateTime.new!(date, time))
+
+    defp tick(say, state, date, time, list_at \\ "17:30", on \\ "sun") do
+      Inbox.slots(state, "telegram", "42", say, at(date, time), list_at, on)
+    end
+
+    defp lists(count) do
+      for _ <- 1..count//1 do
+        assert_received {:said, "42", "Before you clock out:" <> _}
+      end
+
+      refute_received {:said, "42", "Before you clock out:" <> _}
+    end
+
+    test "the first start ever counts the newest slot as said and keeps it", %{say: say} do
+      todo(1, "milk")
+      state = tick(say, Inbox.kept(), ~D[2026-11-20], ~T[17:35:00])
+
+      refute_received {:said, _, _}
+      assert Slot.get("daily") == {~D[2026-11-20], "17:30"}
+      assert Slot.get("weekly") == {~D[2026-11-15], "17:30|sun"}
+      assert %{listed: {~D[2026-11-20], "17:30"}} = state
+    end
+
+    test "said at 17:30 and restarted at 17:40: nothing more", %{say: say} do
+      todo(1, "milk")
+      Slot.put("daily", ~D[2026-11-19], "17:30")
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[17:35:00])
+      lists(1)
+
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[17:40:00])
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[23:30:00])
+      tick(say, Inbox.kept(), ~D[2026-11-21], ~T[09:00:00])
+      lists(0)
+    end
+
+    test "a list at 22:30 not yet said when the restart comes at 02:00 is said at 08:00, once", %{say: say} do
+      todo(1, "milk")
+      Slot.put("daily", ~D[2026-11-19], "22:30")
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[22:35:00], "22:30")
+      tick(say, Inbox.kept(), ~D[2026-11-21], ~T[02:00:00], "22:30")
+      lists(0)
+
+      tick(say, Inbox.kept(), ~D[2026-11-21], ~T[08:00:00], "22:30")
+      tick(say, Inbox.kept(), ~D[2026-11-21], ~T[08:30:00], "22:30")
+      lists(1)
+    end
+
+    test "a slot the node was down across is said at the first waking moment after it", %{say: say} do
+      todo(1, "milk")
+      Slot.put("daily", ~D[2026-11-19], "17:30")
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[23:00:00])
+      lists(0)
+      tick(say, Inbox.kept(), ~D[2026-11-21], ~T[08:00:00])
+      lists(1)
+    end
+
+    test "a review whose day the node was down is said on the next waking moment", %{say: say} do
+      stale(1, "old", 25)
+      Slot.put("weekly", ~D[2026-11-08], "17:30|sun")
+      Slot.put("daily", ~D[2026-11-15], "17:30")
+      tick(say, Inbox.kept(), ~D[2026-11-16], ~T[08:00:00])
+      assert_received {:said, "42", "Still want this? old"}
+      tick(say, Inbox.kept(), ~D[2026-11-16], ~T[09:00:00])
+      refute_received {:said, _, _}
+    end
+
+    test "turning the review on mid-week fires nothing until its day", %{say: say} do
+      stale(1, "old", 25)
+      Slot.put("weekly", ~D[2026-11-01], "17:30|")
+      Slot.put("daily", ~D[2026-11-17], "17:30")
+      tick(say, Inbox.kept(), ~D[2026-11-18], ~T[12:00:00])
+      tick(say, Inbox.kept(), ~D[2026-11-18], ~T[18:00:00])
+      refute_received {:said, "42", "Still want this?" <> _}
+
+      tick(say, Inbox.kept(), ~D[2026-11-22], ~T[17:35:00])
+      assert_received {:said, "42", "Still want this? old"}
+    end
+
+    test "moving the list from 17:30 to 22:30 after today's was said gives no second list beyond the rule", %{say: say} do
+      todo(1, "milk")
+      Slot.put("daily", ~D[2026-11-20], "17:30")
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[18:00:00], "22:30")
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[22:35:00], "22:30")
+      lists(0)
+
+      tick(say, Inbox.kept(), ~D[2026-11-21], ~T[08:05:00], "22:30")
+      tick(say, Inbox.kept(), ~D[2026-11-21], ~T[09:00:00], "22:30")
+      lists(1)
+    end
+
+    test "moving the list from 22:30 to 17:30 at noon says it at 17:30 today, once", %{say: say} do
+      todo(1, "milk")
+      Slot.put("daily", ~D[2026-11-19], "22:30")
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[12:00:00])
+      lists(0)
+
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[17:35:00])
+      tick(say, Inbox.kept(), ~D[2026-11-20], ~T[18:00:00])
+      lists(1)
+    end
+  end
+
   describe "the project's next step is asked once" do
     test "calls that overlap for one project put the question and say it once", %{say: _say} do
       Process.register(self(), Server.Home.Inbox)

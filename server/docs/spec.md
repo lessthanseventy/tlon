@@ -510,7 +510,8 @@ leaves the open list by `done_at`, `someday_at` or `dropped_at` (dropped is not 
 `touched_at` is the staleness clock, `hidden_until` a "not today", `shrunk_at` that a smaller start was
 offered or the model had none, `mins` a to-do's size. Quiet hours (22:00-08:00) hold the unasked: a waiting-on's
 question, the daily list and the weekly review (each said once at the first waking moment after its time when that
-went by asleep or with the node down; a restart counts the newest slot as said) and
+went by asleep or with the node down or across a restart; `home_slot` keeps the date of the last slot said and the
+settings it was kept under, and nothing kept, or kept under other settings, counts the newest slot as said) and
 the offer of a smaller start (offered again at the next daily list); the review runs at the daily list's time,
 17:30 when the list is off; with no messenger the same question is raised on the desktop (`Server.Alerts`, kind
 `home_ask`). A message about a put-off thing revives that row and is kept as an amend: one open thing, not two.
