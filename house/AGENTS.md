@@ -14,7 +14,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 `closet.gd`, `jot.gd`, `menus.gd` (the paper menu), `focus.gd` (the now card and its timer), `jar.gd`
 (the done jar), `knock.gd` (Nina's one nag), `door.gd` (what comes through the office door),
 `rhythm.gd` (the day's two beats and their slips), `layout.gd` (the furniture and the rules of placing it),
-`decorate.gd` (the catalogue and the pointer work of decorating). `soak.gd` is the scripted check.
+`decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet picker card). `soak.gd` is the scripted check.
 
 Where the list lives is one `Backend` (`backend.gd`): `backend_http.gd` is the tlon server, `backend_local.gd`
 the house's own file (`local_list.gd` the list, `reader_rules.gd` the loose-line reader). `main.gd` holds one and
@@ -381,7 +381,7 @@ runs on the local list.
   (house lines that suit one species) and `Voices.OWN` (what a species says offline).
   A new kind is a row in `KINDS`, and its sheets are in the art pack at once (`art_pack.gd`).
 - Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
-  (sweet, not bright). Clicking one pets it. Their lines are `voices.gd`: `GET /api/home/pets`, a batch a
+  (sweet, not bright). Clicking one pets it; a right click opens its card, "who is this?" (`pet_view.gd`: the animal as a grid of idling sprites and `none`, and the name; the same `pet1`/`pet2`, `cat`/`dog` the settings screen writes; `--pet-card nina|argos` stages it). Their lines are `voices.gd`: `GET /api/home/pets`, a batch a
   model wrote for the home as it is now, `{Nina: {occasion: [lines]}, Argos: {...}, duo: [[
   "Nina: ...", "Argos: ..."]]}` (`{}` until the first exists). Asked at start, every 20 s while empty
   (3 min, then every 5 min), else every 5 min, and once 60 s after the open list changes; a failure or
