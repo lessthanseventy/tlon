@@ -20,3 +20,11 @@ run = "godot --headless --path house --script res://soak.gd 2>&1 | { tee /dev/st
 ["house:check"]
 description = "house: every script loads clean in headless Godot (not in `check`: Godot is not a mise tool)"
 run = "godot --headless --path house --quit 2>&1 | { ! grep -E 'ERROR|SCRIPT ERROR|Parse Error'; }"
+
+["house:art-pack"]
+description = "house: pack the art the house can open (derived from its loaders, with each pack's LICENSE.txt) into ~/.cache/tlon/house-dist/house-art.zip, outside the repo, and print files and size per pack; `-- --list` prints the files and builds nothing (art from TLON_ART_DIR)"
+run = "scripts/house-art-pack.sh \"$@\""
+
+["house:build"]
+description = "house: `-- windows|mac|linux|all` — export the house with the art pack beside it into ~/.cache/tlon/house-dist/<platform>/ and the-house-<platform>.zip (never inside a repo: the art's licence forbids redistributing it; hand the zips over privately; needs Godot's 4.7.2 export templates; the Mac build is unsigned, see house/SHIPPING.md)"
+run = "scripts/house-build.sh \"$@\""

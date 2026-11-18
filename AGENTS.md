@@ -54,6 +54,7 @@ control loop, not two, and no second way to run anything:
   `release:smoke` goes through `scripts/run-from-root.sh`, which runs the shared root checkout's (main's) copy, so a
   seat on an old base that has the wrapper still smokes with current tooling; one too old to have it needs a rebase.
 - `mise run bench:*` — memory and role benchmarks that spend real quota: `docs/models.md`.
+- `mise run house:build -- windows|mac|linux|all` / `house:art-pack` — the house for another machine, with the bought art packed beside it: written only to `~/.cache/tlon/house-dist/` (refused inside a git work tree), because the art's licence allows shipping it inside the app and forbids redistributing it, and this repo is public. `house/SHIPPING.md`.
 
 On the home machine, installing and updating the service is ficciones' job (its `home:switch` and
 `machine:update`); here you build and restart the release. mise owns the dev runtimes. **If a command belongs in the loop, it becomes
