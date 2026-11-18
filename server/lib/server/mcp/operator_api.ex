@@ -157,6 +157,8 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
       GET    /api/home                   Server.Home.status; {open, coming, notes}: what the operator's jots have left open
+      GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion
+                                         (asking may write the next batch); {} before the first
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
       POST   /api/home/:id/later         {until: "hour"|"tomorrow"} → Server.Home.later; the jot, or 404
       POST   /api/home                   {text} → Server.Home.say; {reply}: kept and read as a text in the chat is
@@ -564,6 +566,8 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "POST", "life", ["quests", id, "done"]), do: with_row(conn, Server.Quest, id, &done_quest(conn, &1))
 
   defp route(conn, "GET", "home", []), do: json(conn, 200, Server.Home.status(DateTime.utc_now()))
+
+  defp route(conn, "GET", "home", ["pets"]), do: json(conn, 200, Server.Home.Pets.voices(DateTime.utc_now()))
 
   defp route(conn, "POST", "home", []) do
     case body(conn) do
