@@ -41,11 +41,14 @@ const SKIN_FALLBACK := [
 const MARK_COLOR := Color("e8b86d")
 const INK := Color("2a2530")
 const HomeScript := preload("res://home.gd")
+const Packs := preload("res://packs.gd")
+const Guests := preload("res://guests.gd")
 
 var art_dir := ""
 var art_found := false
 var home := HomeScript.new()
 var decorate: Control
+var guests := Guests.new()
 
 var _desc := HOME
 var _caption := ""
@@ -125,12 +128,16 @@ func _load_index() -> void:
 	var text := FileAccess.get_file_as_string(_interiors() + "isometric.json")
 	var parsed: Variant = JSON.parse_string(text)
 	if parsed is Dictionary and parsed.has("sprites"):
-		_index = parsed["sprites"]
+		_index = Packs.extend(parsed["sprites"], art_dir)
 		art_found = _person_dir() != "" and DirAccess.dir_exists_absolute(_interiors() + "PNG")
 
 
 func _interiors() -> String:
 	return art_dir.path_join("isometric-interiors/Gridwright Isometric Interiors/")
+
+
+func _dir(s: Dictionary) -> String:
+	return s.get("dir", _interiors())
 
 
 func _person_dir() -> String:
@@ -142,6 +149,7 @@ func _process(delta: float) -> void:
 	var f := int(_t * FRAME_FPS) % FRAMES
 	if _desc == HOME:
 		home.process(delta)
+		guests.update(home)
 		queue_redraw()
 	elif f != _frame:
 		_frame = f
@@ -163,7 +171,7 @@ func _sprite(id: String) -> Dictionary:
 	if not _index.has(id):
 		return {}
 	var s: Dictionary = _index[id]
-	var tex := _load_texture(_interiors() + str(s["file"]).replace("/1x/", "/%dx/" % _k))
+	var tex := _load_texture(_dir(s) + str(s["file"]).replace("/1x/", "/%dx/" % _k))
 	if tex == null:
 		return {}
 	return {
@@ -178,7 +186,7 @@ func icon(id: String) -> Texture2D:
 	id = id % 1 if "%d" in id else id
 	if not _index.has(id):
 		return null
-	return _load_texture(_interiors() + str(_index[id]["file"]))
+	return _load_texture(_dir(_index[id]) + str(_index[id]["file"]))
 
 
 func _pick_scale() -> int:
@@ -251,6 +259,7 @@ func _draw() -> void:
 	var items: Array = []
 	if _desc == HOME:
 		items.append_array(home.items())
+		items.append_array(guests.items(home))
 	for w in _walls():
 		items.append({"key": w["c"] + w["r"], "pri": 0, "wall": w})
 	for d in plan.get("decor", []):

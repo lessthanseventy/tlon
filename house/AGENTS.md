@@ -158,6 +158,19 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   stand is skipped and the rest kept. `--demo` and `--shot` neither read nor write it unless
   `--layout PATH` names a file (read and written). With no art there is no decorating (one line
   says so) and the default room is boxes.
+  **Packs** (`packs.gd`): the catalogue draws from the interiors plus the castle, haunted-mansion and
+  farm packs when they are under the art dir (a missing one adds nothing, silently): `Packs.PACKS` lists
+  the curated pieces, walls and floors of each, merged into `room._index` as `<pack>.<name>` ids
+  (`castle.throne`, wall style `castle.ashlar`); an id without a dot is the interiors', so old layout
+  files load as they were. The panel has tabs home / castle / mansion / garden (the farm pack); `--pick`
+  switches to the piece's tab. A saved piece of a pack that is missing is not placed but is kept in the
+  file when saving (until `reset`). All packs share the interiors' grid, anchors and footprints. Add a
+  piece: a row in `Packs.PACKS` (options `faces`, `still`, `as`).
+  `guests.gd` lends what is not the layout: at breakfast 07-09, lunch 12-13 and dinner 18-20 by the house
+  clock a dish and a drink from `food-icons` sit on a dining, round or tavern table (stable for the
+  meal, none with a cake or without the pack); on 25-31 October the mansion's cobwebs and candles stand
+  in free cells as `layout.guests` (fixed, blocking like furniture, never saved, chosen again when the
+  layout changes, `--date 10-28`).
 - **The closet** (wardrobe, or `C`) picks who the person is. With the character-creator pack it
   composes `Layers/<build>/<group>/…png` from `layers.json`'s layer order in GDScript (alpha-stacked,
   scaled nearest) and offers build, skin, hair and colour, beard, top and colour, trousers and
