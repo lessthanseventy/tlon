@@ -9,6 +9,10 @@ const ROW_H := 2.1
 const SHELF_S := Vector2(91.0, 109.0)
 const SHELF_H := 17.0
 const JAR_S := 100.0
+const R := 7.0
+const E := 2.2
+const TOP := -16.0
+const NECK := 5.5
 const FALL := 0.55
 const CLINK := 0.4
 const COLORS := [
@@ -99,13 +103,21 @@ func draw(c: CanvasItem, o: Vector2, k: int) -> PackedVector2Array:
 	c.draw_colored_polygon(
 		PackedVector2Array([a + dv, b + dv, b + dv + lip, a + dv + lip]), Color("8a5a3c")
 	)
-	var base := Props.wall_pt(o, k, 1, JAR_S, SHELF_H) + dv * 0.4
-	# the jar is drawn in the wall's plane (sheared like the shelf), so its foot lies along the board
-	var xf := Transform2D(Vector2(k, 0.5 * k), Vector2(0, k), base)
+	var base := Props.wall_pt(o, k, 1, JAR_S, SHELF_H) + dv * 0.7
+	var xf := Transform2D(Vector2(k, 0), Vector2(0, k), base)
 	var line := maxf(1.0, 0.6 * k) / k
-	var body := Rect2(Vector2(-7, -15), Vector2(14, 15))
+	var body := Rect2(Vector2(-R, TOP), Vector2(2.0 * R, -TOP))
+	var glass := Color(0.85, 0.96, 1.0, 0.75)
+	var foot := Vector2(0, -E)
+	var side := PackedVector2Array([Vector2(-R, TOP)])
+	side.append_array(_arc(foot, R, E, PI, 0.0))
+	side.append(Vector2(R, TOP))
 	c.draw_set_transform_matrix(xf)
-	c.draw_rect(body, Color(0.78, 0.92, 1.0, 0.18))
+	c.draw_colored_polygon(
+		_arc(foot + Vector2(1.5, 0.8), R + 1.5, E + 0.6, TAU, 0.0), Color(0, 0, 0, 0.22)
+	)
+	c.draw_colored_polygon(side, Color(0.78, 0.92, 1.0, 0.18))
+	c.draw_polyline(_arc(foot, R, E, PI, TAU), Color(0.85, 0.96, 1.0, 0.3), line)
 	for i in mini(shown, CAP):
 		var hop := 0.0
 		for cl in clinks:
@@ -133,12 +145,18 @@ func draw(c: CanvasItem, o: Vector2, k: int) -> PackedVector2Array:
 				Color(1, 1, 0.85, fade),
 				line
 			)
-	c.draw_rect(body, Color(0.85, 0.96, 1.0, 0.75), false, line)
-	c.draw_rect(Rect2(body.position + Vector2(1.5, 1.5), Vector2(1.4, 9)), Color(1, 1, 1, 0.35))
-	var neck := Rect2(body.position + Vector2(2, -3), Vector2(10, 3))
-	c.draw_rect(neck, Color(0.78, 0.92, 1.0, 0.25))
-	c.draw_rect(neck, Color(0.85, 0.96, 1.0, 0.75), false, line)
-	c.draw_rect(Rect2(neck.position + Vector2(-0.5, -2), Vector2(11, 2.4)), Color("c8483f"))
+	c.draw_polyline(side, glass, line)
+	var rim := Vector2(0, TOP)
+	c.draw_polyline(_arc(rim, R, E, 0.0, TAU), glass, line)
+	c.draw_rect(Rect2(Vector2(-R + 1.6, TOP + 3.0), Vector2(1.3, 8)), Color(1, 1, 1, 0.35))
+	var lid := Color("c8483f")
+	var cap := PackedVector2Array([Vector2(-NECK, TOP - 3.0)])
+	cap.append_array(_arc(rim, NECK, E * 0.75, PI, 0.0))
+	cap.append(Vector2(NECK, TOP - 3.0))
+	c.draw_colored_polygon(cap, lid.darkened(0.2))
+	c.draw_colored_polygon(
+		_arc(rim + Vector2(0, -3.0), NECK, E * 0.75, 0.0, TAU), lid.lightened(0.15)
+	)
 	c.draw_set_transform_matrix(Transform2D.IDENTITY)
 	return PackedVector2Array(
 		[
@@ -148,6 +166,15 @@ func draw(c: CanvasItem, o: Vector2, k: int) -> PackedVector2Array:
 			xf * (body.position + Vector2(0, body.size.y)),
 		]
 	)
+
+
+# points of an ellipse's arc; angles run clockwise on screen, 0 at the right, PI/2 at the bottom
+static func _arc(at: Vector2, rx: float, ry: float, from: float, to: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in 13:
+		var a := lerpf(from, to, i / 12.0)
+		pts.append(at + Vector2(cos(a) * rx, sin(a) * ry))
+	return pts
 
 
 func _marble(c: CanvasItem, at: Vector2, k: int, col: Color, alpha: float) -> void:
