@@ -80,20 +80,26 @@ defmodule Server.Home.Form do
   defp parse(_at), do: {:error, @at}
 
   defp zoned(at) do
-    case DateTime.from_iso8601(at) do
+    at
+    |> seconds()
+    |> DateTime.from_iso8601()
+    |> case do
       {:ok, at, _offset} -> {:ok, DateTime.truncate(at, :second)}
       _ -> :error
     end
   end
 
   defp local(at) do
-    at = if String.length(at) == 16, do: at <> ":00", else: at
-
-    case NaiveDateTime.from_iso8601(at) do
+    at
+    |> seconds()
+    |> NaiveDateTime.from_iso8601()
+    |> case do
       {:ok, naive} -> {:ok, naive |> Clock.utc() |> DateTime.truncate(:second)}
       _ -> :error
     end
   end
+
+  defp seconds(at), do: Regex.replace(~r/^(.*T\d\d:\d\d)(Z|[+-]\d\d:\d\d)?$/, at, "\\1:00\\2")
 
   defp repeat(nil, _kind), do: {:ok, nil}
   defp repeat(every, "reminder"), do: every(every)
