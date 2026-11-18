@@ -102,6 +102,16 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   colour, shoes and colour, hat, eyewear, scarf, backpack and apron (worn together, each with none), the 20 ready-made recipes and a random button; keys up/down,
   left/right, `R`, Enter keeps, Esc leaves. Without the pack: skin, shirt, hat, glasses, scarf drawn
   in code. The choice is saved to `user://house_person.json` (an old `extra` loads into its slot).
+  With the hero-creator pack there is a second tab, "hero" (Tab or a click switches; absent without the
+  pack): its ready-mades, build, skin and every group of `layers.json` (cape, chest, gloves, beard, hair,
+  helmet, legs, shoes, shoulders, weapon) as a style row and a colour row (the colours are the ones that
+  style comes in; "none" where a piece is optional), and random. Keep wears the tab it was kept on: the
+  file holds the everyday look at the top level, `"wear": "everyday"|"hero"` and `"hero": {...}` (a hero
+  look with the pack gone falls back to the everyday one). Animations, columns, fps and layer order are
+  read from the pack's `layers.json`. A hero has no sit, type, eat, wave, cheer, pickup or talk: he
+  stands on the floor cell he would walk to (no seat offset) and the action maps to `HERO_ACT` in
+  `look.gd` (desk typing: `ready`; sofa, TV, coffee, sleep, talk: `idle`; wave: `block`; cheer: `cast`;
+  pickup: `thrust`; walk: `walk`). Changing between the two re-places the person.
 - **Jotting** (the notepad on the desk, `N`, `/` or Enter): a paper field; Enter sends the text to
   the server (a model reads it, so a pencil scribbles while it waits) and the reply shows as a slip
   for a few seconds. A server that does not answer says "couldn't reach tlon — not kept" and keeps
@@ -184,7 +194,7 @@ and seeds their dice (`--seed N` to pick another):
 - `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a card, a
   name tag or a pat can be photographed without a pointer.
 - `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--wave "text"` a coworker at the door; `--plane "title"` a landed plane; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--visitor` feed the demo office to the door; `--person
-  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet; `--look k=v,...` sets look keys for the picture (not kept); `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
+  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
   "text"` opens the jot field (`--sending` shows the scribble); `--reply "text"` the reply slip;
   `--menu ID` the paper menu on thing ID; `--ring ID` rings the phone for thing ID; `--now
   ID[:MINUTES[:DONE_FRACTION]]` pins thing ID with a running timer (nothing saved); `--widget`;
