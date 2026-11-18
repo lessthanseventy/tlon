@@ -25,6 +25,7 @@ const DEFAULTS := {
 	"claude_command": "claude",
 	"glow": true,
 	"weather_art": false,
+	"spells": true,
 }
 
 # the names on display; Pets, Finds and the chat read these

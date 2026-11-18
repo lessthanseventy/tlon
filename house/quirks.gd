@@ -238,6 +238,7 @@ func _run_perk(dt: float) -> void:
 			elif perk["st"] == 2 and perk["t"] > 1.4:
 				h.hearth.manual = 1
 				h.hearth.puff()
+				h.spells.play("cast", h.hearth.mouth())
 				h.eggs.find("cast")
 				perk["st"] = 3
 				perk["t"] = 0.0
