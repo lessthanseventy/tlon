@@ -208,7 +208,7 @@ func _bowl(which: String, cell: Vector2i, fill_col: Color) -> void:
 	var lv: float = level[which]
 	if lv > 0.05:
 		room.draw_colored_polygon(h._ellipse(x, y, 1.0 + 2.6 * lv, 0.5 + 1.2 * lv, 1.5), fill_col)
-		if which == "water":
+		if which == "water" and lv > 0.4:
 			room.draw_colored_polygon(
 				h._ellipse(x - 0.5, y - 0.2, 1.0 * lv, 0.4 * lv, 1.7), Color(1, 1, 1, 0.5)
 			)
