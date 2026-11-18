@@ -127,10 +127,15 @@ defmodule Server.Jot do
   def done(%__MODULE__{every: nil} = jot, now), do: put(jot, done_at: DateTime.truncate(now, :second))
   def done(%__MODULE__{every: every} = jot, now), do: put_off(jot, Server.Home.Clock.next(jot.due_at, every, now))
 
-  @doc "Put the reminder `jot` off to `due_at`: told afresh then."
+  @doc "Put `jot` off to `due_at`: a reminder from then on (a to-do too), told afresh at that time."
   @spec put_off(%__MODULE__{}, DateTime.t()) :: %__MODULE__{}
   def put_off(%__MODULE__{} = jot, due_at),
-    do: put(jot, due_at: DateTime.truncate(due_at, :second), nudged_at: nil, nudges: 0)
+    do: put(jot, kind: "reminder", due_at: DateTime.truncate(due_at, :second), nudged_at: nil, nudges: 0)
+
+  @doc "How many things from `via` were done since `since`."
+  @spec done_since(String.t(), DateTime.t()) :: non_neg_integer()
+  def done_since(via, since),
+    do: Repo.aggregate(from(j in __MODULE__, where: j.via == ^via and j.done_at >= ^since), :count)
 
   @doc "Keep `body`: `{:ok, jot}`, or `:seen` when `via` already delivered `external_id`."
   @spec take(String.t(), integer(), String.t()) :: {:ok, %__MODULE__{}} | :seen
