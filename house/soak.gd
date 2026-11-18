@@ -443,8 +443,8 @@ func _routes() -> void:
 	# Waiting 30 frames lets it settle, so the routes pass in any order.
 	for _i in 30:
 		await process_frame
-	_srv.listen(4999, "127.0.0.1")
-	OS.set_environment("TLON_URL", "http://127.0.0.1:4999")
+	_srv.listen(0, "127.0.0.1")
+	OS.set_environment("TLON_URL", "http://127.0.0.1:%d" % _srv.get_local_port())
 	var main: Control = load("res://main.gd").new()
 	main.pets_retry = 0.3
 	main.pets_window = 30.0
