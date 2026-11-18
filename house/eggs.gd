@@ -310,7 +310,7 @@ func _director(dt: float) -> void:
 	next_big -= dt
 	if next_big > 0.0:
 		return
-	if not calm() or not h._seen_data or laser_on or _flop > 0.0 or _sulk > 0.0:
+	if not calm() or not h._seen_data or laser_on or _flop > 0.0 or _sulk > 0.0 or h.antics.busy():
 		next_big = 20.0
 		return
 	next_big = rng.randf_range(BIG_GAP.x, BIG_GAP.y) * pace()
@@ -343,8 +343,8 @@ func unstaffed(name: String) -> bool:
 	return name == "zoomies" and h.pets.species_here().is_empty()
 
 
-func start(name: String) -> bool:
-	if not scene.is_empty() or unstaffed(name):
+func start(name: String, only: String = "") -> bool:
+	if not scene.is_empty() or unstaffed(name) or h.antics.busy():
 		return false
 	var nina = h.pets.critter("nina")
 	var argos = h.pets.critter("argos")
@@ -402,6 +402,8 @@ func start(name: String) -> bool:
 			scene = {"k": "keys", "st": 0, "t": 0.0, "a": mid - along * 0.35, "b": mid + along * 0.35, "n": 0.0}
 		"zoomies":
 			var runner = nina if rng.randf() < 0.5 else argos
+			if only != "":
+				runner = h.pets.critter(only)
 			if runner.away:
 				runner = argos if runner == nina else nina
 			var seen = argos if runner == nina else nina
@@ -538,12 +540,24 @@ func _scene(dt: float) -> void:
 				seen.dir = h.pets._face(who.pos - seen.pos, seen.dir)
 			if scene["st"] == 0 and _arrived(who):
 				_zoom_next()
-			elif scene["st"] == 1 and scene["t"] > 1.0:
-				who.anim = "idle"
-				line(who, "zoom")
-				line(seen, "watch")
-				scene["st"] = 2
-				scene["t"] = 0.0
+			elif scene["st"] == 1:
+				var tt: float = scene["t"]
+				if not scene.has("sp"):
+					scene["sp"] = who.pos
+					scene["fwd"] = h.antics.vec(who.dir)
+				if tt < 0.45:
+					var slide: Vector2 = scene["sp"] + scene["fwd"] * 0.6 * sin(PI * 0.5 * tt / 0.45)
+					if not h.pets._blocked(h.pets._cell_of(slide)):
+						who.pos = slide
+					who.anim = "idle"
+					h.antics.dust(who, tt / 0.45)
+				else:
+					who.anim = "eat" if tt < 1.9 else "idle"
+				if tt > 1.9:
+					line(who, "zoom")
+					line(seen, "watch")
+					scene["st"] = 2
+					scene["t"] = 0.0
 			elif scene["st"] == 2 and scene["t"] > 3.0:
 				_release(who, 2.0)
 				_release(seen, 2.0)
@@ -706,7 +720,7 @@ func _do_sulk(c) -> void:
 
 
 func _ambient(dt: float) -> void:
-	if not scene.is_empty() or laser_on or not calm():
+	if not scene.is_empty() or laser_on or not calm() or h.antics.busy():
 		return
 	_box_next -= dt
 	if _box_next <= 0.0:
@@ -880,6 +894,14 @@ static func draw_thing(c: CanvasItem, kind: String, at: Vector2, k: int, spin: f
 			c.draw_rect(Rect2(at + Vector2(-5, 0) * k, Vector2(10, 1) * k), Color("6b3b36"))
 		"crumple":
 			Props.paper_ball(c, at + Vector2(0, -2 * k), k, 0.7, 1.1)
+		"egg":
+			c.draw_circle(at + Vector2(0, -2.5 * k), 2.6 * k, Color("f4ead6"))
+			c.draw_rect(Rect2(at + Vector2(-1.4, -4.4) * k, Vector2(k, k)), Color.WHITE)
+		"bone":
+			c.draw_line(at + Vector2(-3, -3) * k, at + Vector2(3, -3) * k, Color("f1e9dc"), 2.0 * k)
+			for end in [-3.0, 3.0]:
+				c.draw_circle(at + Vector2(end, -4.2) * k, 1.4 * k, Color("f1e9dc"))
+				c.draw_circle(at + Vector2(end, -1.8) * k, 1.4 * k, Color("f1e9dc"))
 
 
 # a click on a thing lying on the floor puts it away

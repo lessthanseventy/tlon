@@ -2,7 +2,7 @@ extends Control
 
 const STAGED_TEXT := [
 	"name", "cat", "dog", "pet1", "pet2", "birthday", "claude_command", "pet1_personality",
-	"pet2_personality", "pet_chatter", "visitors", "visitors_rate", "degrees",
+	"pet2_personality", "pet_chatter", "pet_antics", "visitors", "visitors_rate", "degrees",
 	"weather_town",
 ]
 const STAGED_FLAGS := ["claude", "telegram", "litter_box", "bowls", "pet_things", "weather"]

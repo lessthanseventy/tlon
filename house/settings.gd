@@ -18,6 +18,7 @@ const DEFAULTS := {
 	"pet1_personality": "sassy",
 	"pet2_personality": "sweet",
 	"pet_chatter": "normal",
+	"pet_antics": "some",
 	"litter_box": true,
 	"bowls": true,
 	"pet_things": true,
