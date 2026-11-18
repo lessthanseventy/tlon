@@ -136,6 +136,51 @@ const ANTICS := {
 	"big_yawn": {"who": {"bear": 1.2}, "dur": [3.2, 4.0], "e": "lo"},
 	"pat_jar": {"who": {"bear": 1.0}, "go": ["nook"], "dur": [4.5, 5.5], "pers": {"sweet": 1.6}},
 	"greet": {"pair": true, "who": {"*": 1.5}, "go": ["@p"], "dur": [3.6, 4.6]},
+	"meal_nap": {"who": {"*": 1.0}, "trig": true, "wakes": true, "keep": true, "dur": [14.0, 20.0]},
+	"birthday_hop":
+	{"who": {"*": 1.0}, "trig": true, "wakes": true, "perch_ok": true, "dur": [3.2, 3.8]},
+	"door_wait":
+	{"who": {"*": 1.0}, "trig": true, "wakes": true, "go": ["door_in"], "dur": [10.0, 14.0]},
+	"desk_beside":
+	{"who": {"*": 1.0}, "trig": true, "wakes": true, "go": ["desk_stand"], "dur": [10.0, 14.0]},
+	"lean_chair":
+	{
+		"who": {"*": 1.0},
+		"need": "person_desk",
+		"go": ["desk_stand"],
+		"dur": [7.0, 10.0],
+		"e": "lo",
+		"pers": {"sweet": 2.0, "shy": 0.4}
+	},
+	"feet_night":
+	{
+		"who": {"cat": 2.0, "dog": 1.5, "*": 1.0},
+		"need": "person_sleep",
+		"go": ["sofa_stand"],
+		"dur": [20.0, 30.0],
+		"keep": true,
+		"w": 3.0
+	},
+	"cheer_done":
+	{"who": {"*": 1.0}, "trig": true, "wakes": true, "perch_ok": true, "dur": [2.4, 3.0]},
+	"phone_watch":
+	{
+		"who": {"*": 1.0},
+		"trig": true,
+		"hot": true,
+		"wakes": true,
+		"perch_ok": true,
+		"dur": [3.4, 4.0]
+	},
+	"board_look":
+	{
+		"who": {"*": 1.0},
+		"trig": true,
+		"hot": true,
+		"wakes": true,
+		"go": ["board_stand"],
+		"dur": [6.0, 8.0]
+	},
 	"chase_game":
 	{
 		"pair": true,
@@ -303,6 +348,24 @@ const LINES := {
 	"herd": {"bold": ["out you come. the world is big.", "come along. I'll protect you."]},
 	"herd_b": {"shy": ["...okay.", "I was fine in there."]},
 	"follow_around": {"sheep": ["baa. where you go, I go.", "I'm in your flock now."]},
+	"door_wait": {"*": ["I'll wait here. no rush.", "door duty."], "sweet": ["come back soon!"]},
+	"desk_beside": {"*": ["I'm just sitting here. beside you.", "company. that's all."]},
+	"lean_chair": {"*": ["leaning on your chair. it's a good chair.", "lean."]},
+	"feet_night": {"*": ["feet. warm. goodnight.", "guarding the feet."]},
+	"cheer_done":
+	{
+		"sassy": ["adequate. well done.", "I noticed."],
+		"sweet": ["YOU DID IT!", "hooray hooray!"],
+		"lazy": ["nice. I'll nap in celebration."],
+		"mischievous": ["that deserves a mess. later."],
+		"shy": ["...good job.", "yay. quietly."],
+		"bold": ["VICTORY!", "another one falls!"],
+	},
+	"phone_watch": {"*": ["it's ringing. should I answer?", "the phone is doing a thing."]},
+	"board_look": {"*": ["looking at the board. no comment.", "the board. interesting."]},
+	"meal_nap": {"*": ["full. sleeping now.", "food, then sleep. the order."]},
+	"birthday_hop":
+	{"*": ["happy birthday!", "it's your day! hop hop!"], "sassy": ["happy birthday. I mean it."]},
 }
 
 var h:
@@ -317,6 +380,13 @@ var next := {}
 
 var _hw: WeakRef
 var _extra: Array = []
+var _jar := -1
+var _bday := ""
+var _bday_next := 0.0
+var _rings := 0
+var _slip := ""
+var _form_t := 0.0
+var _form_seen := false
 var _prev_mode := {}
 var _was_eat := {}
 
@@ -351,7 +421,55 @@ func other(c):
 	return h.pets.critter("argos" if c.id == "nina" else "nina")
 
 
+func trigger(name: String, id: String = "") -> bool:
+	if not act.is_empty() or not ANTICS.has(name):
+		return false
+	for who in [id] if id != "" else ["nina", "argos"]:
+		var c = h.pets.critter(who)
+		if not c.away and begin(name, c, true):
+			return true
+	return false
+
+
+func _events(dt: float) -> void:
+	var jar: int = h.jar.total
+	if _jar >= 0 and jar > _jar:
+		trigger("cheer_done", "nina" if not h.pets.critter("nina").away else "argos")
+	_jar = jar
+	var rings: int = h.ring_ids.size()
+	if rings > _rings:
+		trigger("phone_watch")
+	_rings = rings
+	var slip: String = h.rhythm.kind
+	if slip != "" and slip != _slip:
+		trigger("board_look")
+	_slip = slip
+	if _bday_next > 0.0:
+		_bday_next -= dt
+		if _bday_next <= 0.0:
+			trigger("birthday_hop", "argos")
+	elif h._seen_data and h.finds.is_birthday() and _bday != h.finds.today_key() and _gate():
+		_bday = h.finds.today_key()
+		_bday_next = 4.5 if trigger("birthday_hop", "nina") else 0.0
+	_form_t = _form_t + dt if h.form_open else 0.0
+	if _form_t > 75.0 and not _form_seen:
+		_form_seen = true
+		trigger("desk_beside")
+	_form_seen = _form_seen and h.form_open
+	for id in ["nina", "argos"]:
+		var c = h.pets.critter(id)
+		var eating: bool = c.anim == "eat" and c.mode == "idle" and c.spot in ["bowl", "water"]
+		if _was_eat.get(id, false) and not eating and not c.hold and rng.randf() < 0.6:
+			trigger("meal_nap", id)
+		_was_eat[id] = eating
+		if _prev_mode.get(id, "") == "sleep" and c.mode == "idle" and not c.hold:
+			if rng.randf() < 0.3 and _gate():
+				trigger("stretch", id)
+		_prev_mode[id] = c.mode
+
+
 func process(dt: float) -> void:
+	_events(dt)
 	if not staged.is_empty():
 		var st: Array = staged
 		staged = []
@@ -435,6 +553,10 @@ func _need(need: String, c) -> bool:
 			return h.petlife.has_mat() and c.species in ["dog", "wolf", "fox"]
 		"toy":
 			return not h.pets._toy_of("yarn").is_empty()
+		"person_desk":
+			return h.person.act == "desk" and h.person.phase == "idle" and h.person.seated
+		"person_sleep":
+			return h.person.act == "sleep" and h.person.phase == "idle"
 		"pspot":
 			return _resolve("@pspot", c, other(c), Vector2i.ZERO) != ""
 	return false
@@ -479,7 +601,7 @@ func _free(c, e: Dictionary) -> bool:
 		return (
 			bool(e.get("keep", false)) or bool(e.get("wakes", false)) or e.get("need") == "asleep"
 		)
-	return c.mode in ["idle", "sit"] and (c.z <= 0.0 or e.has("go"))
+	return c.mode in ["idle", "sit"] and (c.z <= 0.0 or e.has("go") or e.has("perch_ok"))
 
 
 func begin(name: String, c, forced_run: bool) -> bool:
@@ -677,7 +799,8 @@ func _run(dt: float) -> void:
 	var c = h.pets.critter(act["id"])
 	var p = h.pets.critter(act["pid"]) if act["pid"] != "" else null
 	var e: Dictionary = ANTICS[act["name"]]
-	var lost: bool = c.away or not c.hold or c.species != act["species"] or not h.eggs.calm()
+	var calm: bool = h.eggs.calm() or bool(e.get("hot", false))
+	var lost: bool = c.away or not c.hold or c.species != act["species"] or not calm
 	if p != null and (p.away or (not p.hold and not e.get("pfree", false))):
 		lost = true
 	if lost:
@@ -1046,6 +1169,30 @@ func _pose(name: String, c, t: float, dur: float, p) -> void:
 			c.anim = "attack" if _pulse(t, 0.4, 1.3) else "idle"
 			if u > 0.7:
 				_hearts(c, 2)
+		"door_wait":
+			c.dir = Pets.DIRS["nw"]
+			if u > 0.4:
+				_fx(c, "question")
+		"desk_beside":
+			c.dir = Pets.DIRS["ne"]
+		"lean_chair":
+			c.dir = Pets.DIRS["ne"]
+			c.pos = base + Vector2(0.0, -0.12) * clampf(t * 2.0, 0.0, 1.0)
+			if u > 0.5:
+				_hearts(c, 2)
+		"feet_night", "meal_nap":
+			c.mode = "sleep"
+			c.anim = "sleep"
+		"cheer_done", "birthday_hop":
+			c.lift = 7.0 * sin(PI * fmod(t, 0.6) / 0.6) if t < dur - 0.6 else 0.0
+			_hearts(c, 3)
+		"phone_watch":
+			c.dir = h.pets._face(Vector2(4.9, 0.8) - c.pos, c.dir)
+			_fx(c, "bang" if t < 1.0 else "question")
+		"board_look":
+			c.dir = Pets.DIRS["ne"]
+			if u > 0.5:
+				_fx(c, "question")
 		"greet":
 			c.dir = _toward(c, p)
 			p.dir = _toward(p, c)

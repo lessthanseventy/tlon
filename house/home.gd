@@ -1936,6 +1936,7 @@ func show_pick(row: Dictionary, say: String) -> void:
 
 func leave() -> void:
 	_hover = ""
+	antics.trigger("door_wait")
 
 
 func set_office(d: Dictionary) -> void:
