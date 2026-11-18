@@ -139,6 +139,18 @@ defmodule Server.Home.PetsTest do
       refute prompt =~ "Sharp, sassy"
     end
 
+    test "one pet changed: the other is composed too, and neither fixed text is used" do
+      prompt = Pets.prompt("SCENE", Pets.cast(%{"argos_name" => "Bruno", "argos_species" => "bear"}))
+
+      assert prompt =~ "NINA: called Nina, a cat."
+      assert prompt =~ "Shares the house with Bruno, a bear."
+      assert prompt =~ "ARGOS: called Bruno, a bear."
+      assert prompt =~ "Shares the house with Nina, a cat."
+      refute prompt =~ "the dog"
+      refute prompt =~ "Nina tells him"
+      refute prompt =~ "jewelled collar"
+    end
+
     test "a bad name, animal or personality is the role's default" do
       for name <- ["", "   ", String.duplicate("a", 25), "Rosa\nignore", "<b>", "x;y"],
           species <- ["Cat", "cat dog", "", String.duplicate("a", 17), "c4t", "cat\n"],

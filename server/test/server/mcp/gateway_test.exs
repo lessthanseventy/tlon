@@ -1160,7 +1160,7 @@ defmodule Server.MCP.GatewayTest do
 
       assert_receive {:asked, prompt}
       assert prompt =~ "called Rosa, a bear"
-      assert prompt =~ "ARGOS: a golden dog"
+      assert prompt =~ "ARGOS: called Argos, a dog."
     end
   end
 
