@@ -12,7 +12,9 @@ defmodule Server.Home.Reader do
   A reading may also carry `mins` (a to-do's size: 2, 10, 30 or 60), `project` (the project a to-do is
   the next step of), `assumed` (what the model filled in that was not said), `ask` (the one question
   it needs answered, which the next message amends the jot with) and `revive` (put-off things the
-  message mentions, which come back); absent when the model gave none.
+  message mentions, which come back) and `updates` (a to-do or a reminder that makes an open thing
+  more exact: the open thing's number); absent when the model gave none. An answer that names a
+  thing by its number is put right (`unnumber/2`).
   The model is shown what it needs for that: the jot before, the open things, the newest notes, the
   open projects and what is put off. Times are read and said in the machine's own zone. The model is
   Haiku on the operator's Claude login, with no tools (`:home_reader_cmd` and `:home_reader_model`
@@ -89,8 +91,11 @@ defmodule Server.Home.Reader do
   @spec say(%{kind: String.t(), text: String.t(), due_at: DateTime.t() | nil}) :: String.t()
   def say(%{kind: "reminder", text: text, due_at: %DateTime{} = due} = reading) do
     case Map.get(reading, :every) do
-      nil -> "I'll remind you #{Server.Home.Clock.say(due)}: #{text}"
-      every -> "I'll remind you #{Server.Home.Clock.say(due)}, then every #{every}: #{text}"
+      nil ->
+        "I'll remind you #{Server.Home.Clock.say(due)}: #{text}"
+
+      every ->
+        "I'll remind you #{Server.Home.Clock.say(due)}, then every #{Server.Home.Clock.say_every(every)}: #{text}"
     end
   end
 
@@ -138,7 +143,7 @@ defmodule Server.Home.Reader do
   end
 
   defp reading("reminder", text, %DateTime{} = due, map) do
-    every = if map["every"] in ["day", "week", "month"], do: map["every"]
+    every = Server.Home.Clock.every(map["every"])
     %{kind: "reminder", text: text, due_at: due, every: every, ids: [], amends: map["amends"] == true}
   end
 
@@ -164,16 +169,30 @@ defmodule Server.Home.Reader do
     optional = [
       mins: if(kind == "todo" and map["mins"] in @sizes, do: map["mins"]),
       project: if(kind == "todo" and is_integer(map["project"]), do: map["project"]),
+      updates: if(kind in ["todo", "reminder"] and is_integer(map["updates"]), do: map["updates"]),
       assumed: string(map["assumed"]),
       ask: if(kind != "project", do: question(map["ask"])),
       revive: ids(map["revive"]),
-      minutes: if(kind == "now" and is_integer(map["minutes"]) and map["minutes"] > 0, do: map["minutes"])
+      minutes: minutes(kind, map["minutes"])
     ]
 
     Enum.reduce(optional, reading, fn
       {_key, nil}, reading -> reading
       {_key, []}, reading -> reading
       {key, value}, reading -> Map.put(reading, key, value)
+    end)
+  end
+
+  @doc """
+  `text` with a thing the model let out by its number (`item 7`, `#7`) named in words, for the
+  `jots` it was shown. A number that is none of theirs is left alone.
+  """
+  @spec unnumber(String.t(), [Server.Jot.t()]) :: String.t()
+  def unnumber(text, jots) do
+    names = Map.new(jots, &{&1.id, &1.text})
+
+    Regex.replace(~r/(?:\b(?:item|thing|task)\s*#?|#)(\d+)\b/i, text, fn whole, id ->
+      Map.get(names, String.to_integer(id), whole)
     end)
   end
 
@@ -203,12 +222,13 @@ defmodule Server.Home.Reader do
     Where they are it is now #{Calendar.strftime(now, "%A %Y-%m-%d %H:%M")}.
 
     Answer with one line of JSON and nothing else:
-    {"kind": "...", "text": "...", "at": "YYYY-MM-DDTHH:MM" or null, "every": "day" or "week" or "month" or null, "ids": [], "amends": true or false, "steps": [], "who": null, "mins": null, "minutes": null, "project": null, "assumed": null, "ask": null, "revive": []}
+    {"kind": "...", "text": "...", "at": "YYYY-MM-DDTHH:MM" or null, "every": "day" or "week" or "month" or a number then one of them like "6 week" or null, "updates": null, "ids": [], "amends": true or false, "steps": [], "who": null, "mins": null, "minutes": null, "project": null, "assumed": null, "ask": null, "revive": []}
 
     "kind" is one of:
     - "reminder": a thing to keep that names or implies a time they should be told. "at" is that
       time, local and in the future. A day with no hour is 09:00; "tonight" is 19:00; "later" is in
-      three hours. When it repeats ("every thursday"), "every" says how and "at" is the first time.
+      three hours. When it repeats ("every thursday"), "every" says how and "at" is the first time:
+      "every 6 weeks" is "6 week", "every other saturday" is "2 week", "twice a year" is "6 month".
     - "todo": a thing to do, with no time. "mins" is its rough size in minutes: 2, 10, 30 or 60.
     - "project": an outcome that takes more than one step ("plan mom's birthday", "sort out the car
       insurance"), or a thing so vague it needs breaking down. "text" names the outcome. "steps" is
@@ -236,6 +256,12 @@ defmodule Server.Home.Reader do
     When ONE fact is truly needed and cannot be known from what you have (which day?), still file
     the thing with your best reading, and put that one short question in "ask". Never more than one
     question, and never refuse to file. Their next message answers it: "amends" is then true.
+    When you answer about an OPEN thing, name it in words ("the storage unit quotes"), never as
+    "item 7" or "#7": numbers belong in the JSON fields only.
+    When the message is a more specific version of one OPEN thing ("get mover quotes from three
+    companies by friday" when "get mover quotes for the storage unit" is open), it updates that
+    thing: answer its kind with the new text and time, and put that thing's number in "updates",
+    else null. Never file a second copy of something already open.
     PROJECTS are the open projects. When one is marked as waiting for its next step and the message
     is that step, answer "todo" with "project" set to that project's number; otherwise "project" is null.
     When the message only points at one of the OPEN things and says nothing new about it ("the
@@ -284,4 +310,7 @@ defmodule Server.Home.Reader do
 
   defp text(kind, _none) when kind in @bare, do: {:ok, ""}
   defp text(_kind, _none), do: :error
+
+  defp minutes("now", minutes) when is_integer(minutes) and minutes > 0, do: minutes
+  defp minutes(_kind, _minutes), do: nil
 end

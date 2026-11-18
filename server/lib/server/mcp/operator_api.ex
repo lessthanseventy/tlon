@@ -156,14 +156,23 @@ defmodule Server.MCP.OperatorAPI do
       PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe; the page it replaces is kept
       GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
-      GET    /api/home                   Server.Home.status; {open, coming, notes, note_rows, projects, waiting, done, done_week}: what the
-                                         operator's jots have left open; a row has its project {id, text} or nil, a project its next step
-                                         and how many are done, a waiting-on its who/since/due_at; note_rows is notes as {id, text}
+      GET    /api/home                   Server.Home.status; {open, coming, notes, note_rows, projects, waiting, someday, done, done_week}:
+                                         what the operator's jots have left open; a row has id/kind/text/due_at/every/since/told_at and its
+                                         project {id, text} or nil, a project its next step, how many are done, its plan and steps_done,
+                                         a waiting-on its who; someday are the put-off things; note_rows is notes as {id, text}
       GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open
                                          thing to do now; skip is ids joined by commas, minutes the time there is; 400 on either not numbers
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion
                                          (asking may write the next batch); {} before the first
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
+      POST   /api/home/add               {kind: todo|reminder|note|waiting|project, text, at?, every?, who?, project?, steps?} →
+                                         Server.Home.add; the row as GET /api/home shows it, no model: at is ISO 8601, with a zone that
+                                         instant, without the machine's local time; every is day|week|month or "N day|week|month";
+                                         400 {error} (one line) on a bad body, 404 when project is not an open project
+      POST   /api/home/:id/edit          {text?, at?, every? (null stops it), kind? (todo|reminder only)} → Server.Home.edit; the row,
+                                         a touch; 400 {error}, 404 when the thing is not live
+      POST   /api/home/:id/plan          {plan: [text]} → Server.Home.plan; the project's row, its planned steps replaced; 400, 404
+      POST   /api/home/:id/revive        Server.Home.revive; the put-off thing's row, open again; 404 when it is not on someday
       POST   /api/home/:id/drop          Server.Home.drop; the jot as /done answers (dropped_at for done_at), or 404 when it is not open:
                                          any to-do, reminder (a repeating one stops for good), step, project (with its steps),
                                          waiting-on or note, deleted, not done
@@ -627,6 +636,36 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
+  defp route(conn, "POST", "home", ["add"]) do
+    {b, conn} = body(conn)
+    home_form(conn, Server.Home.add(b, DateTime.utc_now()))
+  end
+
+  defp route(conn, "POST", "home", [id, "edit"]) do
+    {b, conn} = body(conn)
+
+    case Integer.parse(id) do
+      {id, ""} -> home_form(conn, Server.Home.edit(id, b, DateTime.utc_now()))
+      _ -> no_route(conn)
+    end
+  end
+
+  defp route(conn, "POST", "home", [id, "plan"]) do
+    {b, conn} = body(conn)
+
+    case Integer.parse(id) do
+      {id, ""} -> home_form(conn, Server.Home.plan(id, b["plan"], DateTime.utc_now()))
+      _ -> no_route(conn)
+    end
+  end
+
+  defp route(conn, "POST", "home", [id, "revive"]) do
+    case Integer.parse(id) do
+      {id, ""} -> home_form(conn, Server.Home.revive(id, DateTime.utc_now()))
+      _ -> no_route(conn)
+    end
+  end
+
   defp route(conn, "POST", "home", [id, "drop"]) do
     with {id, ""} <- Integer.parse(id),
          {:ok, jot} <- Server.Home.drop(id, DateTime.utc_now()) do
@@ -646,6 +685,10 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp route(conn, _, _, _), do: no_route(conn)
+
+  defp home_form(conn, {:ok, row}), do: json(conn, 200, row)
+  defp home_form(conn, {:error, reason}), do: json(conn, 400, %{error: reason})
+  defp home_form(conn, :not_found), do: no_route(conn)
 
   defp on_thread(conn, "GET", [], t), do: json(conn, 200, t |> Board.brief() |> Brief.scope())
   defp on_thread(conn, "GET", ["messages"], t), do: messages(conn, t)

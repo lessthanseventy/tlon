@@ -195,6 +195,7 @@ and every layer the spine design's re-laid §9 asked for
   (its answer amends the jot). A
   message can also ask the helper for something and is then kept as nothing: that things are done,
   what is open, what to do now (`Server.Home.Now`), what is on someday, that a thing is to be deleted, or a question its notes answer.
+  A form puts things in and changes them with no model call (`Server.Home.Form`, `POST /api/home/add|:id/edit|:id/plan|:id/revive`).
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
   open next step or a question about it, a waiting-on is asked about after three days, a weekly review
   (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28

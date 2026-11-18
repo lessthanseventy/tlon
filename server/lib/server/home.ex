@@ -2,7 +2,8 @@ defmodule Server.Home do
   @moduledoc """
   The home, as a surface other than the chat reads it: what the operator's jots have left open, what
   is coming, and the newest notes, what to do now, and the questions the home has put to the
-  operator. The jots are the home messenger's (`:home_messenger`).
+  operator, and what a form puts in or changes without a reader (`add/2`, `edit/3`, `plan/3`,
+  `revive/2`). The jots are the home messenger's (`:home_messenger`).
   """
 
   alias Server.Jot
@@ -24,6 +25,7 @@ defmodule Server.Home do
           note_rows: [map()],
           projects: [map()],
           waiting: [map()],
+          someday: [map()],
           done: [map()],
           done_week: non_neg_integer()
         }
@@ -40,6 +42,7 @@ defmodule Server.Home do
       note_rows: Jot.note_rows(via(), 20),
       projects: Enum.map(projects, &project/1),
       waiting: Enum.map(Jot.waiting(via()), &waiting/1),
+      someday: Enum.map(Jot.somedays(via()), &row(&1, named)),
       done: Enum.map(done, &%{text: &1.text, done_at: &1.done_at}),
       done_week: length(done)
     }
@@ -179,6 +182,52 @@ defmodule Server.Home do
   end
 
   @doc """
+  Put a thing in from a form (`Server.Home.Form.add/1`: `kind`, `text`, `at`, `every`, `who`, `steps`,
+  `project`), at `now`, filed as a reading is (`Server.Home.Organize.file/3`) with no model call:
+  `{:ok, row}` as `status/1` shows it, `{:error, reason}` for a bad body, `:not_found` when `project`
+  is not an open project. A to-do for a project is its open step when it has none, else the end of
+  its plan (the project's row is answered).
+  """
+  @spec add(map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
+  def add(params, now) do
+    with {:ok, reading} <- Server.Home.Form.add(params), do: file(reading, now)
+  end
+
+  @doc """
+  Change the thing `id` as the operator says (`Server.Home.Form.edit/2`: `text`, `at`, `every` or null,
+  `kind` only to-do or reminder; `Server.Home.Organize.edit/3`): `{:ok, row}`, `{:error, reason}`, or
+  `:not_found` when it is none, is done or is deleted.
+  """
+  @spec edit(integer(), map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
+  def edit(id, params, now) do
+    with %Jot{} = jot <- Jot.live(via(), id) || :not_found,
+         {:ok, changes} <- Server.Home.Form.edit(jot, params) do
+      {:ok, view(Server.Home.Organize.edit(jot, changes, now))}
+    end
+  end
+
+  @doc """
+  Replace the plan (the steps still to come) of the open project `id` with `plan`, a list of
+  texts, at `now`: `{:ok, project row}`, `{:error, reason}`, `:not_found`.
+  """
+  @spec plan(integer(), term(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
+  def plan(id, plan, now) do
+    with %Jot{} = project <- Jot.project(via(), id) || :not_found,
+         {:ok, texts} <- plan |> Server.Home.Form.texts() |> plan_error() do
+      {:ok, view(Jot.plan(project, texts, now))}
+    end
+  end
+
+  @doc "Bring the put-off thing `id` back (`Server.Home.Organize.revive/2`): `{:ok, row}`, `:not_found` when it is not on someday."
+  @spec revive(integer(), DateTime.t()) :: {:ok, map()} | :not_found
+  def revive(id, now) do
+    case Enum.find(Jot.somedays(via()), &(&1.id == id)) do
+      nil -> :not_found
+      jot -> {:ok, view(Server.Home.Organize.revive(jot, now))}
+    end
+  end
+
+  @doc """
   Delete the thing `id` at `now` (`Server.Home.Organize.delete/2`): any open to-do, reminder, step,
   project, waiting-on or note. `{:ok, jot}` the thing dropped, `:error` when it is none or is done or
   deleted. The only step of a project deleted puts the project's next step to the operator (`asked/0`).
@@ -218,12 +267,62 @@ defmodule Server.Home do
   end
 
   defp project(project) do
-    {done, next} = {length(Jot.finished(project.id)), List.first(Jot.steps(project.id))}
-    %{id: project.id, text: project.text, next: next && %{id: next.id, text: next.text}, done: done}
+    {finished, next} = {Jot.finished(project.id), List.first(Jot.steps(project.id))}
+
+    %{
+      id: project.id,
+      kind: "project",
+      text: project.text,
+      since: project.received_at,
+      next: next && %{id: next.id, text: next.text},
+      done: length(finished),
+      plan: project.plan,
+      steps_done: finished
+    }
   end
 
-  defp waiting(jot), do: %{id: jot.id, text: jot.text, who: jot.waiting_on, since: jot.received_at, due_at: jot.due_at}
+  defp waiting(jot) do
+    %{
+      id: jot.id,
+      kind: "waiting",
+      text: jot.text,
+      who: jot.waiting_on,
+      since: jot.received_at,
+      due_at: jot.due_at,
+      every: nil,
+      told_at: nil,
+      project: nil
+    }
+  end
+
+  defp view(%Jot{kind: "project"} = jot), do: project(jot)
+  defp view(%Jot{kind: "waiting"} = jot), do: waiting(jot)
+  defp view(jot), do: row(jot, projects(via()))
 
   defp coming?(%Jot{kind: "reminder", due_at: %DateTime{} = due}, now), do: DateTime.after?(due, now)
   defp coming?(_jot, _now), do: false
+
+  defp file(%{kind: "todo", project: id, text: text}, now) do
+    case Jot.project(via(), id) do
+      nil ->
+        :not_found
+
+      project ->
+        case Server.Home.Organize.add_step(project, text, now) do
+          {:step, step} -> {:ok, view(step)}
+          {:plan, project} -> {:ok, view(project)}
+        end
+    end
+  end
+
+  defp file(reading, now) do
+    {:ok, jot} =
+      Jot.take(via(), -System.unique_integer([:positive, :monotonic]) - System.os_time(:second), reading.text)
+
+    Server.Home.Organize.file(jot, reading, now)
+    {:ok, view(Jot.get(jot.id))}
+  end
+
+  defp plan_error(:error), do: {:error, "plan is a list of texts"}
+  defp plan_error(ok), do: ok
 end
