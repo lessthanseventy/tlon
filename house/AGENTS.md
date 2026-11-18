@@ -92,7 +92,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 - **Surprises** (`eggs.gd` the director and the pets' scenes, `hearth.gd`, `sound.gd`; more files below as
   they land). One big thing at a time, minutes apart (7-20 min, seeded), never while a card, menu, notepad,
   closet, decorate mode or the phone's ring is up; `--egg a,b` forces them for a picture (`push bring zoomies
-  flop sulk box piano fire`). Nina pushes the pen or mug off the desk and looks at you (it returns after a
+  flop sulk box piano fire`). Nina pushes the pen or mug off the desk (or walks the piano keys) and looks at you (it returns after a
   minute or on a click); Argos brings the yarn, a slipper or a crumple from the bin and sits proud; one of
   them tears a lap (`zoomies`) while the other watches; with a crate or barrel in the room Nina ends up on it
   within a minute; 20 pats in a row flop Argos belly up, 14 on Nina and she sulks in the corner for a minute.

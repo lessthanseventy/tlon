@@ -44,7 +44,10 @@ const LINES := {
 # every secret there is, by id: the found card counts these and names the ones he has met
 const CATALOGUE: Array = []
 
-var h
+var _hw: WeakRef
+var h:
+	get:
+		return _hw.get_ref()
 var rng := RandomNumberGenerator.new()
 var found := {}
 var persist := true
@@ -73,7 +76,7 @@ var _spot_n := 0
 
 
 func setup(home, seed_value: int, persist_it: bool) -> void:
-	h = home
+	_hw = weakref(home)
 	found = {}
 	persist = persist_it
 	rng.seed = seed_value if seed_value >= 0 else randi()
@@ -284,6 +287,17 @@ func start(name: String) -> bool:
 			argos.hold = true
 			argos.run = true
 			h.pets.go(argos, spot("bring_from", {"cell": from}), "sit", 0.1)
+		"keys":
+			var pn := piece("piano")
+			var pk := perch("piano_top", pn, 0.95) if not pn.is_empty() else ""
+			if pk == "":
+				return false
+			var r: Rect2i = h.layout.rect(pn)
+			var along := Vector2(0, 1) if r.size.y >= r.size.x else Vector2(1, 0)
+			var mid := Vector2(r.position.x + r.size.x / 2.0, r.position.y + r.size.y / 2.0)
+			h.pets.go(nina, pk, "sit", 1.0)
+			nina.hold = true
+			scene = {"k": "keys", "st": 0, "t": 0.0, "a": mid - along * 0.35, "b": mid + along * 0.35, "n": 0.0}
 		"zoomies":
 			var runner = nina if rng.randf() < 0.5 else argos
 			var seen = argos if runner == nina else nina
@@ -378,6 +392,28 @@ func _scene(dt: float) -> void:
 			elif scene["t"] > 90.0:
 				argos.carry = ""
 				_release(argos)
+				scene = {}
+		"keys":
+			if scene["st"] == 0 and _arrived(nina) and nina.z > 0.0:
+				scene["st"] = 1
+				scene["t"] = 0.0
+			elif scene["st"] == 1:
+				var u: float = 0.5 - 0.5 * cos(scene["t"] * 1.6)
+				nina.pos = (scene["a"] as Vector2).lerp(scene["b"], u)
+				nina.dir = h.pets._face(scene["b"] - scene["a"], nina.dir)
+				nina.mode = "idle"
+				nina.anim = "walk"
+				scene["n"] += dt
+				if scene["n"] > 0.5:
+					scene["n"] = 0.0
+					h.sound.request("piano", rng.randi_range(-5, 12))
+					h.hearth.notes.append({"t": 0.0, "dx": rng.randf_range(-6.0, 6.0)})
+				if scene["t"] > 6.0:
+					nina.anim = "idle"
+					_release(nina)
+					scene = {}
+			elif scene["t"] > 40.0:
+				_release(nina)
 				scene = {}
 		"zoomies":
 			var who = scene["who"]
@@ -569,12 +605,15 @@ func _ambient(dt: float) -> void:
 		_furn_next[k] -= dt
 		if _furn_next[k] > 0.0:
 			continue
-		_furn_next[k] = rng.randf_range(120.0, 320.0)
+		_furn_next[k] = rng.randf_range(600.0, 1500.0) if k == "piano" else rng.randf_range(120.0, 320.0)
 		match k:
 			"fire":
 				_hearth()
 			"bed":
 				_bed()
+			"piano":
+				if scene.is_empty() and not piece("piano").is_empty() and loose(h.pets.critter("nina")):
+					start("keys")
 
 
 # Nina into a crate or barrel that stands in the room; false when there is none

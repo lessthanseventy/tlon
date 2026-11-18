@@ -24,6 +24,7 @@ func run() -> void:
 	_pets()
 	_hearth()
 	_calm()
+	keys()
 
 
 func _sound() -> void:
@@ -264,38 +265,33 @@ func _calm() -> void:
 	s._check(h.eggs.scene.is_empty(), "nor while a menu is open")
 	h.menu.close()
 
-	var kinds: Array = []
-	var starts := 0
-	var seen := ""
-	var m2 := _home(43)
-	var g = m2[1]
-	g.pets.freeze = false
+	var kinds := _day(43)
+	s._check(kinds.size() >= 3 and kinds.size() <= 60, "big things come minutes apart: %d in ten hours" % kinds.size())
+	s._check(kinds == _day(43), "the same seed gives the same day")
+	made[0].queue_free()
+
+
+func keys() -> void:
+	var made := _home(51)
+	var h = made[1]
+	h.eggs.start("keys")
+	s._run_home(h, 60.0, func(): return h.eggs.scene.is_empty())
+	s._check(h.eggs.scene.is_empty() and not h.pets.critter("nina").hold, "Nina walks the piano keys and gets down")
+	s._check(h.sound.requested.has("piano"), "the keys sound")
+	made[0].queue_free()
+
+
+# the kinds of the big things that start in ten simulated hours
+func _day(seed_value: int) -> Array:
+	var made := _home(seed_value)
+	var g = made[1]
+	var out: Array = []
+	var was := false
 	for i in 36000:
 		g.process(0.1)
-		if g.eggs.scene.is_empty():
-			seen = ""
-		elif seen != g.eggs.scene["k"] or g.eggs.scene["t"] < 0.2:
-			if seen == "":
-				starts += 1
-				kinds.append(g.eggs.scene["k"])
-			seen = g.eggs.scene["k"]
-	s._check(
-		starts >= 3 and starts <= 60, "big things come minutes apart: %d in ten hours" % starts
-	)
-	var again := _home(43)
-	var g2 = again[1]
-	var kinds2: Array = []
-	seen = ""
-	for i in 36000:
-		g2.process(0.1)
-		if g2.eggs.scene.is_empty():
-			seen = ""
-		elif seen == "":
-			seen = g2.eggs.scene["k"]
-			kinds2.append(seen)
-	s._check(
-		kinds == kinds2, "the same seed gives the same day: %s vs %s" % [str(kinds), str(kinds2)]
-	)
-	m2[0].queue_free()
-	again[0].queue_free()
+		var on: bool = not g.eggs.scene.is_empty()
+		if on and not was:
+			out.append(g.eggs.scene["k"])
+		was = on
 	made[0].queue_free()
+	return out
