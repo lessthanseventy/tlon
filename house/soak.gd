@@ -11,6 +11,8 @@ const Hacks := preload("res://hacks.gd")
 const Tv := preload("res://tv.gd")
 const Voices := preload("res://voices.gd")
 const Layout := preload("res://layout.gd")
+const Packs := preload("res://packs.gd")
+const Guests := preload("res://guests.gd")
 const Decorate := preload("res://decorate.gd")
 const Closet := preload("res://closet.gd")
 const Card := preload("res://card.gd")
@@ -74,6 +76,8 @@ func _run() -> void:
 	_soak()
 	_where = "decorate"
 	_decorate_logic()
+	_where = "packs"
+	_packs_logic()
 	_where = "looks"
 	_looks()
 	_where = "hacks"
@@ -1287,13 +1291,18 @@ func _hacks_draw() -> void:
 
 
 func _layout() -> RefCounted:
-	var dir := _art().path_join("isometric-interiors/Gridwright Isometric Interiors/")
-	var sprites: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(dir + "isometric.json"))[
-		"sprites"
-	]
+	return _layout_of(Packs.extend(_interiors(), _art()))
+
+
+func _layout_of(sprites: Dictionary, path: String = "", keep: bool = false) -> RefCounted:
 	var l := Layout.new()
-	l.setup(sprites, true, "", false)
+	l.setup(sprites, true, path, keep)
 	return l
+
+
+func _interiors() -> Dictionary:
+	var dir := _art().path_join("isometric-interiors/Gridwright Isometric Interiors/")
+	return JSON.parse_string(FileAccess.get_file_as_string(dir + "isometric.json"))["sprites"]
 
 
 func _random_piece(l: RefCounted, rng: RandomNumberGenerator) -> Dictionary:
@@ -1360,7 +1369,7 @@ func _decorate_logic() -> void:
 			if not (key.ends_with("_f2") or key.ends_with("_f3") or key.ends_with("_f4")):
 				missing.append(key)
 	_check(missing.is_empty(), "every placeable sprite is in the catalogue: %s" % [missing])
-	_check(l.walls.size() == 6 and l.floors.size() == 10, "6 wall styles and 10 floor styles")
+	_check(l.walls_of("home").size() == 6 and l.floors_of("home").size() == 10, "6 wall styles and 10 floor styles of the interiors")
 
 	_check(l.check({"p": "bookshelf", "f": "se", "c": 4, "r": 4}, null, []) == l.BUSY, "not on a spot")
 	_check(
@@ -1645,3 +1654,243 @@ func _decorate_regressions() -> void:
 		_decorate_walk(s, 6000)
 	for s in range(100, 106):
 		_decorate_walk(s, 3000)
+
+
+func _packs_logic() -> void:
+	var l := _layout()
+	_packs_catalogue(l)
+	_packs_files()
+	_packs_routes(l)
+	_packs_meals()
+	_packs_october()
+
+
+func _file_ok(l: RefCounted, key: String) -> bool:
+	if not l.index.has(key):
+		return false
+	var s: Dictionary = l.index[key]
+	var dir: String = s.get("dir", _art().path_join("isometric-interiors/Gridwright Isometric Interiors/"))
+	return FileAccess.file_exists(dir + str(s["file"]))
+
+
+func _packs_catalogue(l: RefCounted) -> void:
+	var count := {}
+	for e in l.catalogue:
+		count[e["tab"]] = int(count.get(e["tab"], 0)) + 1
+		_check(e["tab"] in l.tabs, "%s is on a tab that exists" % e["key"])
+		for f in (e["faces"] if not e["faces"].is_empty() else [""]):
+			var p := {"p": e["key"], "f": f, "c": 0, "r": 0}
+			var id: String = l.sprite_id(p)
+			var frames: Array = [1, 2, 3, 4] if "%d" in id else [0]
+			for n in frames:
+				var key: String = id % n if n > 0 else id
+				_check(_file_ok(l, key), "%s has its texture" % key)
+			var fp: Vector2i = l.footprint(p)
+			_check(fp.x >= 1 and fp.y >= 1 and fp.x <= 3 and fp.y <= 3, "%s has a sane footprint %s" % [id, fp])
+			var key1: String = id % 1 if "%d" in id else id
+			var sh := str(l.index[key1].get("shadow", ""))
+			_check(sh == "" or _file_ok(l, sh), "%s has its shadow" % key1)
+	for tab in ["castle", "mansion", "garden"]:
+		_check(int(count.get(tab, 0)) > 10, "the %s tab has pieces (%s)" % [tab, count.get(tab, 0)])
+	for style in l.walls:
+		for part in Packs.WALL_PARTS:
+			_check(_file_ok(l, "wall_%s%s" % [style, part]), "wall %s%s has its texture" % [style, part])
+	for style in l.floors:
+		for n in [1, 2]:
+			_check(_file_ok(l, "floor_%s_0%d" % [style, n]), "floor %s has variant %d" % [style, n])
+	var shown := []
+	for tab in l.tabs:
+		shown.append("%s %d pieces %d walls %d floors" % [tab, count.get(tab, 0), l.walls_of(tab).size(), l.floors_of(tab).size()])
+	print("packs: ", "; ".join(shown))
+	_check(count.get("home", 0) == 45, "the interiors still give 45 pieces (%s)" % count.get("home", 0))
+
+
+func _write_layout(path: String, doc: Dictionary) -> void:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify(doc))
+	f.close()
+
+
+func _read_layout(path: String) -> Dictionary:
+	return JSON.parse_string(FileAccess.get_file_as_string(path))
+
+
+func _norm(doc: Dictionary) -> Dictionary:
+	return JSON.parse_string(JSON.stringify(doc))
+
+
+func _packs_files() -> void:
+	var path := "user://soak_packs.json"
+	var rows: Array = Layout.DEFAULTS.map(func(r): return {"p": r[0], "f": r[1], "c": r[2], "r": r[3]})
+	var fixtures: Array = [
+		{"v": 1, "wall": "wallpaper", "floor": "oak", "pieces": rows},
+		{
+			"v": 1,
+			"wall": "brick",
+			"floor": "marble",
+			"pieces":
+			[
+				{"p": "bookshelf", "f": "se", "c": 9, "r": 3},
+				{"p": "crate", "f": "", "c": 8, "r": 8},
+				{"p": "rug_red", "f": "nesw", "c": 7, "r": 7},
+				{"p": "painting", "f": "ne", "c": 8, "r": 0},
+			],
+		},
+	]
+	for doc in fixtures:
+		_write_layout(path, doc)
+		var l := _layout_of(Packs.extend(_interiors(), _art()), path, true)
+		_check(l.pieces.size() == doc["pieces"].size() and l.wall == doc["wall"], "an old layout file loads whole (%d)" % l.pieces.size())
+		for i in l.pieces.size():
+			_check(l.pieces[i] == doc["pieces"][i], "old piece %s keeps its meaning" % doc["pieces"][i])
+		l.save()
+		_check(_read_layout(path) == _norm(doc), "an old layout file saves back as it was")
+		var bare := _layout_of(_interiors(), path, true)
+		bare.save()
+		_check(_read_layout(path) == _norm(doc), "an old layout file saves back as it was without the packs")
+
+	var held := {
+		"v": 1,
+		"wall": "castle.ashlar",
+		"floor": "mansion.parquet",
+		"pieces":
+		[
+			{"p": "castle.throne", "f": "se", "c": 5, "r": 3},
+			{"p": "bookshelf", "f": "se", "c": 9, "r": 3},
+			{"p": "mansion.cobweb", "f": "ne", "c": 8, "r": 0},
+		],
+	}
+	_write_layout(path, held)
+	var gone := _layout_of(_interiors(), path, true)
+	_check(gone.pieces.size() == 1 and gone.pieces[0]["p"] == "bookshelf", "a piece of a missing pack loads without it")
+	_check(gone.wall == "wallpaper" and gone.floor_style == "oak", "a style of a missing pack falls back")
+	gone.place({"p": "crate", "f": "", "c": 8, "r": 8}, null, [])
+	var after := _read_layout(path)
+	_check(after["pieces"].size() == 4 and after["wall"] == "castle.ashlar" and after["floor"] == "mansion.parquet", "saving keeps what the missing packs held")
+	gone.set_style("wall", "brick")
+	_check(_read_layout(path)["wall"] == "brick", "choosing another wall replaces the kept one")
+	var back := _layout_of(Packs.extend(_interiors(), _art()), path, true)
+	_check(back.pieces.any(func(p): return p["p"] == "castle.throne"), "the pack's piece is back when the pack is")
+	_write_layout(path, held)
+	var reset := _layout_of(_interiors(), path, true)
+	reset.reset([])
+	_check(_read_layout(path)["pieces"].size() == Layout.DEFAULTS.size(), "reset forgets what the missing packs held")
+	DirAccess.remove_absolute(path)
+
+	var l := _layout()
+	var before: Array = l.pieces.duplicate(true)
+	l.guests = [{"p": "mansion.cobweb", "f": "ne", "c": 1, "r": 0, "fixed": true}]
+	l.path = path
+	l.persist = true
+	l.save()
+	_check(_read_layout(path)["pieces"].size() == before.size(), "guests are not saved")
+	DirAccess.remove_absolute(path)
+
+
+func _packs_routes(l: RefCounted) -> void:
+	var big: Array = []
+	for e in l.catalogue:
+		for f in (e["faces"] if not e["faces"].is_empty() else [""]):
+			var fp: Vector2i = l.footprint({"p": e["key"], "f": f, "c": 0, "r": 0})
+			if e["kind"] == "floor" and fp.x * fp.y >= 3:
+				big.append({"p": e["key"], "f": f, "c": 0, "r": 0})
+	_check(big.size() >= 10, "there are big new pieces to try (%d)" % big.size())
+	var pets := Pets.new()
+	pets.setup("", 3)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	var placed := 0
+	var built := _layout()
+	for i in 400:
+		var p: Dictionary = big[rng.randi() % big.size()].duplicate()
+		p["c"] = rng.randi_range(0, 9)
+		p["r"] = rng.randi_range(0, 9)
+		if built.place(p, null, []) == "":
+			placed += 1
+			pets.blocked_cells = built.blocked()
+			for s in Pets.SPOTS.values().filter(func(s): return s["cell"] != Layout.DOOR_FRONT):
+				_check(not pets.route(Layout.DOOR_FRONT, s["cell"]).is_empty(), "a route to %s with %s placed" % [s["cell"], p["p"]])
+	_check(placed >= 4, "the big pieces went down (%d)" % placed)
+
+
+func _packs_meals() -> void:
+	var hours := {}
+	for q in 96:
+		var hour := q / 4.0
+		var m := Guests.meal(hour)
+		var want := -1
+		if hour >= 7.0 and hour < 9.0:
+			want = 0
+		elif hour >= 12.0 and hour < 13.0:
+			want = 1
+		elif hour >= 18.0 and hour < 20.0:
+			want = 2
+		_check(m == want, "the meal at %s is %d, not %d" % [hour, want, m])
+		hours[hour] = m
+	_check(Guests.picks(20000, 2) == Guests.picks(20000, 2), "a meal's food is the same all meal")
+	var seen := {}
+	for day in 20:
+		seen[str(Guests.picks(20000 + day, 0))] = true
+	_check(seen.size() > 1, "the food changes from day to day")
+	var room := _room()
+	var h = room.home
+	var guests := Guests.new()
+	_check(h.layout.pieces.any(func(p): return p["p"] == "dining_table"), "the default layout has a dining table")
+	for q in 96:
+		var hour := q / 4.0
+		h.fake_hour = hour
+		var shown: int = guests.items(h).size()
+		_check(shown == (1 if hours[hour] >= 0 else 0), "food at %s is %d" % [hour, shown])
+	h.fake_hour = 19.0
+	h.layout.pieces = h.layout.pieces.filter(func(p): return p["p"] != "dining_table")
+	_check(guests.items(h).is_empty(), "no food with no table")
+	h.layout.pieces.append({"p": "round_table", "f": "", "c": 6, "r": 7})
+	_check(guests.items(h).size() == 1, "food on a round table too")
+	room.art_dir = "/none"
+	_check(guests.items(h).is_empty(), "no food without the pack")
+	room.queue_free()
+
+
+func _packs_october() -> void:
+	var room := _room()
+	var h = room.home
+	var guests := Guests.new()
+	var days := ["10-20", "10-24", "10-25", "10-28", "10-31", "11-01", "11-02"]
+	for day in days:
+		h.fake_day = day
+		guests.update(h)
+		var l = h.layout
+		var inside: bool = day in ["10-25", "10-28", "10-31"]
+		_check(l.guests.is_empty() == not inside, "guests on %s: %d" % [day, l.guests.size()])
+		if inside:
+			_check(l.guests.size() >= 2 and l.guests.size() <= 3, "two or three guests (%d)" % l.guests.size())
+			var all: Array = l.guests.duplicate()
+			for g in all:
+				l.guests = all.filter(func(o): return not is_same(o, g))
+				_check(l.check(g, null, h.busy_cells()) == "", "guest %s stands on a free cell" % [g])
+				_check(not g["p"].begins_with("mansion.") or g["p"] in Guests.SEASONAL, "only the season's pieces")
+			l.guests = all
+			_check(l.reaches(l.blocked(), h.busy_cells()), "the guests shut no path")
+			for g in all:
+				if l.kind(g) == "floor":
+					_check(h.pets.blocked_cells.has(Vector2i(g["c"], g["r"])), "pets walk round the guest at %s" % [g])
+		else:
+			_check(not h.pets.blocked_cells.is_empty(), "the room still has furniture to walk round")
+	h.fake_day = "10-28"
+	guests.update(h)
+	var first: Array = h.layout.guests.duplicate(true)
+	var again := Guests.new()
+	h.layout.guests = []
+	h.layout.version += 1
+	again.update(h)
+	_check(h.layout.guests == first, "the same week gives the same guests")
+	var drawn := false
+	for it in h.layout.rows()["furniture"] + h.layout.rows()["decor"]:
+		drawn = drawn or str(it[0]).begins_with("mansion.")
+	_check(drawn, "guests are drawn with the room")
+	h.layout = _layout_of(_interiors())
+	h.layout.guests = []
+	var none := Guests.new()
+	none.update(h)
+	_check(h.layout.guests.is_empty(), "no guests without the mansion")
+	room.queue_free()

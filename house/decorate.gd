@@ -10,7 +10,7 @@ const QUIET := Color("a89fb0")
 const ACCENT := Color("e8b86d")
 const WARM := Color("f0a07a")
 const PAD := 14.0
-const TOP := 54.0
+const TOP := 84.0
 const FOOT := 88.0
 const CHIP_H := 24.0
 const CELL_H := 46.0
@@ -22,6 +22,7 @@ var room: Control
 var home
 var sel := ""
 var face := ""
+var tab := "home"
 var held: Variant = null
 var pin: Variant = null
 
@@ -62,6 +63,7 @@ func pick(spec: String) -> void:
 	if e.is_empty():
 		return
 	sel = e["key"]
+	tab = e["tab"]
 	face = parts[1] if parts.size() > 1 and parts[1] in e["faces"] else _first_face(e)
 	queue_redraw()
 
@@ -97,6 +99,7 @@ func _draw() -> void:
 	draw_rect(Rect2(0, size.y - FOOT, size.x, FOOT), BG)
 	var font := ThemeDB.fallback_font
 	draw_string(font, Vector2(PAD, 34), "decorate", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, ACCENT)
+	_tabs()
 	var lines := [
 		"click a piece to place it or move one", "R turns - X or right click removes", "Esc done"
 	]
@@ -121,15 +124,22 @@ func _status() -> String:
 
 func _sections(y: float) -> float:
 	var layout = home.layout
-	y = _head("walls", y)
-	y = _chips("wall", layout.walls, layout.wall, y)
-	y = _head("floors", y)
-	y = _chips("floor", layout.floors, layout.floor_style, y)
-	y = _chips("", ["reset"], "", y + 4.0)
+	var walls: Array = layout.walls_of(tab)
+	var floors: Array = layout.floors_of(tab)
+	if not walls.is_empty():
+		y = _head("walls", y)
+		y = _chips("wall", walls, layout.wall, y)
+	if not floors.is_empty():
+		y = _head("floors", y)
+		y = _chips("floor", floors, layout.floor_style, y)
+	if tab == "home":
+		y = _chips("", ["reset"], "", y + 4.0)
 	var cw := (size.x - 2.0 * PAD) / 2.0
 	var group := ""
 	var col := 0
 	for e in layout.catalogue:
+		if e["tab"] != tab:
+			continue
 		if e["group"] != group:
 			if col == 1:
 				y += CELL_H
@@ -144,6 +154,18 @@ func _sections(y: float) -> float:
 	return y + (CELL_H if col == 1 else 0.0) + 16.0
 
 
+func _tabs() -> void:
+	var font := ThemeDB.fallback_font
+	var x := PAD
+	for t in home.layout.tabs:
+		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT).x + 16.0
+		var r := Rect2(x, 46.0, w, CHIP_H)
+		draw_rect(r, Color(ACCENT, 0.35) if t == tab else Color(1, 1, 1, 0.08))
+		draw_string(font, r.position + Vector2(8, 16), t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT, INK)
+		_hits.append({"rect": r, "act": "tab:" + t})
+		x += w + 6.0
+
+
 func _head(text: String, y: float) -> float:
 	draw_string(
 		ThemeDB.fallback_font, Vector2(PAD, y + 22), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ACCENT
@@ -155,13 +177,14 @@ func _chips(kind: String, names: Array, current: String, y: float) -> float:
 	var font := ThemeDB.fallback_font
 	var x := PAD
 	for n in names:
-		var w := font.get_string_size(n, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT).x + 16.0
+		var label: String = n.substr(n.find(".") + 1)
+		var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT).x + 16.0
 		if x + w > size.x - PAD:
 			x = PAD
 			y += CHIP_H + 6.0
 		var r := Rect2(x, y, w, CHIP_H)
 		draw_rect(r, Color(ACCENT, 0.35) if n == current else Color(1, 1, 1, 0.08))
-		draw_string(font, r.position + Vector2(8, 16), n, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT, INK)
+		draw_string(font, r.position + Vector2(8, 16), label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT, INK)
 		_hit(r, kind + ":" + n if kind != "" else n)
 		x += w + 6.0
 	return y + CHIP_H + 8.0
@@ -223,6 +246,9 @@ func _act(act: String) -> void:
 	match parts[0]:
 		"wall", "floor":
 			layout.set_style(parts[0], parts[1])
+		"tab":
+			tab = parts[1]
+			_scroll = 0.0
 		"reset":
 			layout.reset(home.busy_cells())
 			home.apply_layout()

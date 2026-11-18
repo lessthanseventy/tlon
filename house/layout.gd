@@ -3,6 +3,7 @@ extends RefCounted
 # The home's furniture: what stands where, the wall and the floor. Pieces the room's behaviour is
 # tied to are FIXED; everything else is plain and can be moved, saved and loaded.
 const Pets := preload("res://pets.gd")
+const Packs := preload("res://packs.gd")
 
 const SIDES := ["sw", "se", "ne", "nw", "nwse", "nesw"]
 const GROUPS := [
@@ -97,8 +98,17 @@ var persist := false
 var catalogue: Array = []
 var walls: Array = []
 var floors: Array = []
+var tabs: Array = []
+# visitors for a season: drawn and walked around like fixed pieces, never saved, never stand in the
+# way of a piece being placed (they step aside on the next change)
+var guests: Array = []
+var version := 0
 
 var _fixed: Array = []
+# what the file holds of a pack that is not here, kept so saving does not delete it
+var _dormant: Array = []
+var _dormant_wall := ""
+var _dormant_floor := ""
 
 
 func setup(sprites: Dictionary, with_art: bool, file: String, save_it: bool) -> void:
@@ -172,16 +182,31 @@ func _scan() -> void:
 				kind = "wall"
 			elif s.has("wall"):
 				kind = "hug"
-			e = {"key": id, "name": id.replace("_", " "), "kind": kind, "anim": anim, "faces": []}
+			e = {
+				"key": id,
+				"name": id.substr(id.find(".") + 1).replace("_", " "),
+				"kind": kind,
+				"anim": anim,
+				"faces": [],
+				"tab": s.get("tab", "home"),
+			}
+			if s.has("group"):
+				e["group"] = s["group"]
+				e["order"] = s["order"]
 			catalogue.append(e)
 		if face != "" and face not in e["faces"]:
 			e["faces"].append(face)
 	for i in catalogue.size():
 		var e: Dictionary = catalogue[i]
 		e["faces"].sort_custom(func(a, b): return SIDES.find(a) < SIDES.find(b))
-		e["group"] = _group(e["key"])
-		e["rank"] = _group_rank(e["group"]) * 1000 + i
+		if not e.has("group"):
+			e["group"] = _group(e["key"])
+			e["order"] = _group_rank(e["group"]) * 1000 + i
+		e["rank"] = Packs.TABS.find(e["tab"]) * 1000000 + e["order"]
 	catalogue.sort_custom(func(a, b): return a["rank"] < b["rank"])
+	tabs = Packs.TABS.filter(
+		func(t): return catalogue.any(func(e): return e["tab"] == t) or t == "home"
+	)
 
 
 func _group(key: String) -> String:
@@ -245,6 +270,10 @@ func height(p: Dictionary) -> int:
 
 
 func all() -> Array:
+	return _fixed + pieces + guests
+
+
+func _solid() -> Array:
 	return _fixed + pieces
 
 
@@ -313,7 +342,7 @@ func check(p: Dictionary, skip: Variant, busy: Array) -> String:
 		return NO_ROOM
 	if k == "rug":
 		return ""
-	for o in all():
+	for o in _solid():
 		if is_same(o, skip) or kind(o) == "rug":
 			continue
 		var ok := kind(o)
@@ -350,7 +379,7 @@ func _check_wall(p: Dictionary, skip: Variant) -> String:
 		return NO_ROOM
 	if along in WALL_FIXED["ne" if ne else "nw"]:
 		return STAYS
-	for o in all():
+	for o in _solid():
 		if is_same(o, skip):
 			continue
 		var ok := kind(o)
@@ -402,27 +431,43 @@ func place(p: Dictionary, moving: Variant, busy: Array) -> String:
 		moving["r"] = p["r"]
 	else:
 		pieces.append(p)
+	version += 1
 	save()
 	return ""
 
 
 func remove(p: Dictionary) -> void:
 	pieces = pieces.filter(func(o): return not is_same(o, p))
+	version += 1
 	save()
 
 
 func set_style(what: String, style: String) -> void:
 	if what == "wall":
 		wall = style
+		_dormant_wall = ""
 	else:
 		floor_style = style
+		_dormant_floor = ""
 	save()
+
+
+func walls_of(tab: String) -> Array:
+	return walls.filter(func(s): return Packs.tab_of(s) == tab)
+
+
+func floors_of(tab: String) -> Array:
+	return floors.filter(func(s): return Packs.tab_of(s) == tab)
 
 
 func reset(busy: Array) -> void:
 	wall = "wallpaper"
 	floor_style = "oak"
+	_dormant = []
+	_dormant_wall = ""
+	_dormant_floor = ""
 	pieces = _defaults(busy)
+	version += 1
 	save()
 
 
@@ -434,12 +479,17 @@ func save() -> void:
 		var saved: Array = pieces.map(
 			func(p): return {"p": p["p"], "f": p["f"], "c": p["c"], "r": p["r"]}
 		)
-		var doc := {"v": 1, "wall": wall, "floor": floor_style, "pieces": saved}
+		var doc := {
+			"v": 1,
+			"wall": _dormant_wall if _dormant_wall != "" else wall,
+			"floor": _dormant_floor if _dormant_floor != "" else floor_style,
+			"pieces": saved + _dormant,
+		}
 		f.store_string(JSON.stringify(doc))
 
 
-# a missing or unreadable file leaves the default; a piece the pack lacks or that cannot stand
-# is skipped
+# a missing or unreadable file leaves the default; a piece that cannot stand is skipped, one of a
+# pack that is not here is kept for the file
 func load_file() -> bool:
 	if not FileAccess.file_exists(path):
 		return false
@@ -449,10 +499,17 @@ func load_file() -> bool:
 	var d: Variant = json.data
 	if not d is Dictionary or not d.get("pieces") is Array:
 		return false
+	_dormant = []
+	_dormant_wall = ""
+	_dormant_floor = ""
 	if str(d.get("wall")) in walls:
 		wall = d["wall"]
+	elif _absent(str(d.get("wall"))):
+		_dormant_wall = d["wall"]
 	if str(d.get("floor")) in floors:
 		floor_style = d["floor"]
+	elif _absent(str(d.get("floor"))):
+		_dormant_floor = d["floor"]
 	var out: Array = []
 	for row in d["pieces"]:
 		if not row is Dictionary or not (row.get("p") is String and row.get("f") is String):
@@ -461,9 +518,18 @@ func load_file() -> bool:
 			continue
 		var p := {"p": row["p"], "f": row["f"], "c": int(row["c"]), "r": int(row["r"])}
 		if _entry(p["p"]).is_empty():
+			if _absent(p["p"]):
+				_dormant.append(p)
 			continue
 		pieces = out
 		if check(p, null, []) == "":
 			out.append(p)
 	pieces = out
+	version += 1
 	return true
+
+
+# named for one of our packs, and that pack is not in the catalogue
+func _absent(id: String) -> bool:
+	var ns := Packs.pack_of(id)
+	return ns != "" and not catalogue.any(func(e): return e["key"].begins_with(ns + "."))
