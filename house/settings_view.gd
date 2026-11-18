@@ -21,6 +21,7 @@ const DAYS := [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 const LOOKS := {
 	"glow": "a soft glow at the lights after dark",
 	"weather_art": "pixel weather in the window",
+	"spells": "spell effects",
 }
 
 var settings

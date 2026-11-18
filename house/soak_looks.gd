@@ -8,6 +8,7 @@ extends RefCounted
 const Looks := preload("res://looks.gd")
 const Glow := preload("res://glow.gd")
 const Weather := preload("res://weather.gd")
+const Spells := preload("res://spells.gd")
 const View := preload("res://view.gd")
 const Settings := preload("res://settings.gd")
 const Home := preload("res://home.gd")
@@ -44,6 +45,7 @@ func run() -> void:
 	_all(h, true)
 	_glow(h)
 	_weather(h)
+	_spells(h)
 	_loaded()
 	_empty(h)
 	room.queue_free()
@@ -51,12 +53,18 @@ func run() -> void:
 
 func _tables(art: String) -> void:
 	Looks.setup(art, null)
-	var all: Array = Glow.files() + Weather.files()
+	var all: Array = Glow.files() + Weather.files() + Spells.files()
 	s._check(all.size() >= 12, "the four looks name their files (%d)" % all.size())
 	for rel in all:
 		s._check(FileAccess.file_exists(art.path_join(rel)), "look file exists: " + rel)
-	for rel in Glow.files() + Weather.files():
+	for rel in Glow.files() + Weather.files() + Spells.files():
 		s._check(Looks.tex(rel) != null, "look file loads: " + rel)
+	for name in Spells.EFFECTS:
+		var e: Dictionary = Spells.EFFECTS[name]
+		s._check(
+			Looks.tex(e["file"]).get_size() == Vector2(e["frames"] * Spells.CELL, Spells.CELL),
+			"%s is a row of %d frames" % [name, e["frames"]]
+		)
 	for name in Weather.LAYERS:
 		var l: Dictionary = Weather.LAYERS[name]
 		var size := Looks.tex(l["file"]).get_size()
@@ -163,10 +171,45 @@ func _weather(h) -> void:
 	h.settings.forced["weather_art"] = true
 
 
+func _spells(h) -> void:
+	h.pets.freeze = false
+	h.look.stage("wear=hero,recipe=mage,weapon=staff")
+	s._check(h.look.hero(), "a staff hero can be staged")
+	h.quirks.perk = {"k": "cast", "st": 2, "t": 1.5}
+	h.quirks.process(0.1)
+	s._check(h.spells.live.size() == 1, "a cast plays one effect")
+	s._check(h.spells.live[0]["name"] == "cast", "the cast effect")
+	var canvas := Control.new()
+	canvas.draw.connect(func() -> void: h.spells.draw(canvas, 2))
+	s.root.add_child(canvas)
+	canvas.queue_redraw()
+	canvas.queue_free()
+	for i in 30:
+		h.spells.process(0.1)
+	s._check(h.spells.live.is_empty(), "and it is gone after its second")
+	h.fake_hour = 23.0
+	h.forced_weather = "clear"
+	h.process(0.1)
+	h._geometry()
+	h.outside.start("star")
+	h.outside.wish()
+	s._check(h.spells.live.size() == 1 and h.spells.live[0]["name"] == "wish", "a wish sparkles")
+	h.spells.process(5.0)
+	s._check(h.spells.live.is_empty(), "once")
+	h.settings.forced["spells"] = false
+	s._check(not h.spells.play("cast", Vector2.ZERO) and h.spells.live.is_empty(), "off plays none")
+	h.settings.forced["spells"] = true
+	for name in Spells.EFFECTS:
+		var e: Dictionary = Spells.EFFECTS[name]
+		s._check(
+			float(e["frames"]) / float(e["fps"]) <= 1.1 and e["fps"] <= 10.0, "%s is ~1 s" % name
+		)
+
+
 func _loaded() -> void:
 	var opened: Array = Looks.loaded()
 	opened.sort()
-	var listed: Array = Glow.files() + Weather.files()
+	var listed: Array = Glow.files() + Weather.files() + Spells.files()
 	var unique := {}
 	for rel in listed:
 		unique[rel] = true
@@ -184,6 +227,7 @@ func _empty(h) -> void:
 	s._check(Glow.plan(h).is_empty() and not Glow.shown(), "no art: no glow")
 	var q := View.quad(Vector2(100, 100), 2)
 	s._check(Weather.plan(q, 2, "storm", 12.4, 1.0).is_empty(), "no art: no weather overlay")
+	s._check(not h.spells.play("cast", Vector2.ZERO), "no art: no spell")
 	Looks.setup(s._art(), h.settings)
 
 

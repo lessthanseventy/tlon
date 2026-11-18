@@ -260,6 +260,7 @@ func hits(c: CanvasItem, _frame: PackedVector2Array) -> void:
 
 # a click on the star: a wish
 func wish() -> void:
+	h.spells.play("wish", star_at(View.quad(h._o, h._k)))
 	act.erase("star")
 	wished = WISHES[h.eggs.rng.randi() % WISHES.size()]
 	h.show_reply(wished)
