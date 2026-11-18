@@ -1012,7 +1012,35 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"id" => ^id, "text" => "buy milk"}} = post_json("/api/home/#{id}/done", %{})
       assert {404, _} = post_json("/api/home/#{id}/done", %{})
       assert {404, _} = post_json("/api/home/nope/done", %{})
-      assert {200, %{"open" => []}} = get_json("/api/home")
+      assert {200, %{"open" => [], "done_week" => 1}} = get_json("/api/home")
+    end
+
+    test "a thing typed is kept and read as a text is; an open thing is put off" do
+      Server.TestDB.clean!()
+      reader = Application.get_env(:server, :home_reader)
+
+      on_exit(fn ->
+        if reader,
+          do: Application.put_env(:server, :home_reader, reader),
+          else: Application.delete_env(:server, :home_reader)
+      end)
+
+      Application.put_env(:server, :home_reader, fn body, _context ->
+        {:ok, %{kind: "todo", text: body, due_at: nil}}
+      end)
+
+      assert {200, %{"reply" => "to do: buy stamps"}} = post_json("/api/home", %{text: "buy stamps"})
+      assert {400, _} = post_json("/api/home", %{})
+
+      assert {200, %{"open" => [%{"id" => id, "text" => "buy stamps", "since" => since, "told_at" => nil}]}} =
+               get_json("/api/home")
+
+      assert is_binary(since)
+      assert {404, _} = post_json("/api/home/#{id}/later", %{until: "never"})
+      assert {200, %{"id" => ^id, "due_at" => due}} = post_json("/api/home/#{id}/later", %{until: "hour"})
+
+      assert {200, %{"open" => [], "coming" => [%{"id" => ^id, "kind" => "reminder", "due_at" => ^due}]}} =
+               get_json("/api/home")
     end
   end
 

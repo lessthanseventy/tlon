@@ -158,6 +158,8 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
       GET    /api/home                   Server.Home.status; {open, coming, notes}: what the operator's jots have left open
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
+      POST   /api/home/:id/later         {until: "hour"|"tomorrow"} → Server.Home.later; the jot, or 404
+      POST   /api/home                   {text} → Server.Home.say; {reply}: kept and read as a text in the chat is
   """
 
   import Plug.Conn
@@ -562,6 +564,27 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "POST", "life", ["quests", id, "done"]), do: with_row(conn, Server.Quest, id, &done_quest(conn, &1))
 
   defp route(conn, "GET", "home", []), do: json(conn, 200, Server.Home.status(DateTime.utc_now()))
+
+  defp route(conn, "POST", "home", []) do
+    case body(conn) do
+      {%{"text" => text}, conn} when is_binary(text) and text != "" ->
+        json(conn, 200, %{reply: Server.Home.say(text, DateTime.utc_now())})
+
+      {_, conn} ->
+        json(conn, 400, %{error: "text is required"})
+    end
+  end
+
+  defp route(conn, "POST", "home", [id, "later"]) do
+    {b, conn} = body(conn)
+
+    with {id, ""} <- Integer.parse(id),
+         {:ok, jot} <- Server.Home.later(id, b["until"], DateTime.utc_now()) do
+      json(conn, 200, %{id: jot.id, text: jot.text, due_at: jot.due_at})
+    else
+      _ -> no_route(conn)
+    end
+  end
 
   defp route(conn, "POST", "home", [id, "done"]) do
     with {id, ""} <- Integer.parse(id),

@@ -115,6 +115,27 @@ defmodule Server.Home.Inbox do
     end
   end
 
+  @doc """
+  Keep what the operator said (`text`, delivery `id` of `via`) at `now` and read it, as a text in the
+  chat is: `{reply, say opts}`, or `:seen` when `via` already delivered `id`.
+  """
+  @spec keep(String.t(), integer(), String.t(), DateTime.t()) :: {String.t(), keyword()} | :seen
+  def keep(via, id, text, now) do
+    case if(String.downcase(String.trim(text)) in @done, do: Jot.last_nudged(via)) do
+      %Jot{} = jot -> {closed(jot, now), []}
+      nil -> with {:ok, jot} <- Jot.take(via, id, text), do: filed(jot, via, now)
+    end
+  end
+
+  @doc ~s(Put the open thing `jot` off, `until` an `"hour"` from `now` or `"tomorrow"` at 09:00 local: the jot.)
+  @spec later(Jot.t(), String.t(), DateTime.t()) :: Jot.t()
+  def later(jot, "hour", now), do: Jot.put_off(jot, DateTime.add(now, 3600))
+
+  def later(jot, "tomorrow", now) do
+    morning = now |> Clock.local() |> NaiveDateTime.to_date() |> Date.add(1) |> NaiveDateTime.new!(~T[09:00:00])
+    Jot.put_off(jot, Clock.utc(morning))
+  end
+
   @impl true
   def init(opts) do
     messenger = Keyword.get(opts, :messenger, Application.get_env(:server, :home_messenger, Server.Home.Telegram))
@@ -177,18 +198,7 @@ defmodule Server.Home.Inbox do
     do: say.(chat, "Text me anything and I'll keep it.", [])
 
   defp take(%{chat: chat, text: text, id: id}, via, chat, say) when is_binary(text) do
-    now = DateTime.utc_now()
-
-    case if(String.downcase(String.trim(text)) in @done, do: Jot.last_nudged(via)) do
-      %Jot{} = jot ->
-        say.(chat, closed(jot, now), [])
-
-      nil ->
-        with {:ok, jot} <- Jot.take(via, id, text) do
-          {text, opts} = filed(jot, via, now)
-          say.(chat, text, opts)
-        end
-    end
+    with {text, opts} <- keep(via, id, text, DateTime.utc_now()), do: say.(chat, text, opts)
   end
 
   defp take(%{chat: chat, voice: file, id: id}, via, chat, say) do
@@ -211,12 +221,7 @@ defmodule Server.Home.Inbox do
   defp take(_update, _via, _chat, _say), do: :ok
 
   defp tapped("done", jot, _via, now), do: {closed(jot, now), []}
-  defp tapped("hour", jot, _via, now), do: {Reader.say(Jot.put_off(jot, DateTime.add(now, 3600))), []}
-
-  defp tapped("tomorrow", jot, _via, now) do
-    morning = now |> Clock.local() |> NaiveDateTime.to_date() |> Date.add(1) |> NaiveDateTime.new!(~T[09:00:00])
-    {Reader.say(Jot.put_off(jot, Clock.utc(morning))), []}
-  end
+  defp tapped(until, jot, _via, now) when until in ["hour", "tomorrow"], do: {Reader.say(later(jot, until, now)), []}
 
   defp tapped("tick", jot, via, now) do
     Jot.done(jot, now)
