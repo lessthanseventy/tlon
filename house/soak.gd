@@ -21,12 +21,16 @@ const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
 const LocalSoak := preload("res://soak_local.gd")
 const ArtSoak := preload("res://soak_art.gd")
+const TalkSoak := preload("res://soak_talk.gd")
+const TelegramSoak := preload("res://soak_telegram.gd")
 const DEADLINE_MS := 540000
 
 var _srv := TCPServer.new()
 var _conns: Array = []
 var _log: Array = []
 var _fail_jot := false
+# answers the stub's /bot... paths (Telegram's API) when set: (path, params) -> {code, body}
+var bot := Callable()
 var served := true
 var _local
 var _mode := ""
@@ -549,6 +553,9 @@ func _routes() -> void:
 	await ChatSoak.new(self, main).run()
 	_where = "local routes, forms and chat"
 	await LocalSoak.new(self).over(main)
+	_where = "claude and telegram"
+	await TalkSoak.new(self).run(main)
+	await TelegramSoak.new(self).run(main)
 	_srv.stop()
 
 
@@ -697,7 +704,11 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 	var code := 200
 	var out: Variant = {}
 	var parsed: Variant = JSON.parse_string(body) if body != "" else {}
-	if method == "GET" and path == "/api/home":
+	if bot.is_valid() and path.begins_with("/bot"):
+		var answer: Dictionary = bot.call(path, parsed)
+		code = answer["code"]
+		out = answer["body"]
+	elif method == "GET" and path == "/api/home":
 		out = _state
 	elif method == "GET" and path == "/api/home/pets":
 		out = _pets_batch
