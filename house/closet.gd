@@ -2,6 +2,7 @@ extends Control
 
 signal applied
 signal closed
+signal tabbed
 
 const INK := Color("2a2530")
 const PAPER := Color("f3ead6")
@@ -92,6 +93,7 @@ func _switch_tab() -> void:
 	if _tabs.size() > 1:
 		_tab = _tabs[(_tabs.find(_tab) + 1) % _tabs.size()]
 		_show_tab()
+		tabbed.emit()
 
 
 func _options(row: Dictionary) -> Array:

@@ -288,7 +288,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	person.setup(pets, look, seed_value)
 	tv.setup(seed_value)
 	knock.setup(seed_value)
-	sound.setup(room, not staged)
+	sound.setup(room, not staged, art_dir)
 	eggs.setup(self, seed_value, not staged)
 	hearth.setup(self)
 	outside.setup(self)
@@ -567,7 +567,7 @@ func process(dt: float) -> void:
 	water_left = maxf(0.0, water_left - dt)
 	_beats(dt)
 	_knocking(dt)
-	sound.process(dt)
+	sound.process(dt, self)
 	eggs.process(dt)
 	hearth.process(dt)
 	outside.process(dt)
@@ -685,6 +685,7 @@ func tick_off(id: int) -> void:
 		perk_left = 600.0
 		water_left = 4.0
 	sound.request("rustle")
+	sound.request("done")
 	var fire := eggs.toss_ids.has(id) and hearth.lit
 	eggs.toss_ids.erase(id)
 	var miss: bool = not fire and (force_bat or pets.rng.randf() < 0.4)
@@ -770,6 +771,7 @@ func _open_pick() -> void:
 
 func _celebrate() -> void:
 	_geometry()
+	sound.request("all_done")
 	var at := _p(4.0, 2.0, 70.0)
 	for i in 46:
 		(

@@ -61,6 +61,11 @@ var _http: HTTPRequest
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
+	if "--sounds" in args:
+		print(preload("res://sound.gd").listing(_art_dir()))
+		set_process(false)
+		get_tree().quit()
+		return
 	_demo = "--demo" in args
 	if "--office" in args:
 		_at = "office"
@@ -115,6 +120,8 @@ func _ready() -> void:
 	add_child(_jot)
 	_closet = preload("res://closet.gd").new()
 	_closet.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_closet.tabbed.connect(func() -> void: _room.home.sound.request("tab"))
+	_closet.applied.connect(func() -> void: _room.home.sound.request("save"))
 	add_child(_closet)
 	_form = FormScript.new()
 	_form.submitted.connect(
@@ -720,6 +727,7 @@ func _send_jot(text: String) -> void:
 			return
 		if ok and code == 200:
 			_jot.finish()
+			_room.home.sound.request("save")
 			var reply := "kept"
 			if body is Dictionary and body.get("reply") is String:
 				reply = body["reply"]
@@ -734,6 +742,7 @@ func _send_jot(text: String) -> void:
 				_poll()
 		else:
 			_jot.fail("couldn't reach tlon — not kept")
+			_room.home.sound.request("error")
 	if _demo:
 		get_tree().create_timer(1.4).timeout.connect(
 			func() -> void: finished.call(true, 200, {"reply": "to do: " + text})
