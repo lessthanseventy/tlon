@@ -10,7 +10,8 @@ const RoomScript := preload("res://room.gd")
 const ORDER := ["waiting", "working", "idle", "cold", "off"]
 const LIVE := ["waiting", "working", "idle"]
 const WAITING_SHOWN := 5
-const WIDGET_SIZE := Vector2i(528, 368)
+const DecorateScript := preload("res://decorate.gd")
+const WIDGET_SIZE := Vector2i(656, 432)
 const WIDGET_STORE := "user://house_widget.json"
 
 var pets_retry := 20.0
@@ -25,6 +26,7 @@ var _base := "http://127.0.0.1:4040"
 var _data := {"open": [], "coming": [], "notes": [], "done_week": 0}
 var _jot: PanelContainer
 var _closet: Control
+var _decorate: Control
 var _widget := false
 var _drag := false
 var _drag_mouse := Vector2i.ZERO
@@ -84,6 +86,15 @@ func _ready() -> void:
 	_panel.now_cleared.connect(func() -> void: _room.home.focus.clear())
 	_panel.timer_pressed.connect(_on_timer)
 	add_child(_panel)
+	_decorate = DecorateScript.new()
+	_decorate.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	_decorate.offset_left = -PANEL_WIDTH
+	_decorate.offset_right = 0
+	_decorate.room = _room
+	_decorate.home = _room.home
+	_decorate.done.connect(func() -> void: _set_decorate(false))
+	add_child(_decorate)
+	_room.decorate = _decorate
 	_room.home.acted.connect(_on_act)
 	_room.pressed_empty.connect(_begin_drag)
 
@@ -164,6 +175,13 @@ func _ready() -> void:
 		_set_widget(true)
 	if "--closet" in args:
 		get_tree().create_timer(0.3).timeout.connect(_open_closet)
+	if "--decorate" in args:
+		_set_decorate(true)
+		if "--pick" in args:
+			_decorate.pick(args[args.find("--pick") + 1])
+		if "--cell" in args:
+			var rc := args[args.find("--cell") + 1].split(",")
+			_decorate.pin = Vector2i(int(rc[0]), int(rc[1]))
 	if "--typing" in args:
 		var text: String = args[args.find("--typing") + 1]
 		get_tree().create_timer(0.3).timeout.connect(
@@ -242,7 +260,14 @@ func _input(event: InputEvent) -> void:
 		return
 	if get_viewport().gui_get_focus_owner() != null:
 		return
+	if _decorate.active and _decorate.key(event.keycode):
+		get_viewport().set_input_as_handled()
+		return
 	match event.keycode:
+		KEY_D:
+			if _at == "home":
+				get_viewport().set_input_as_handled()
+				_set_decorate(not _decorate.active)
 		KEY_N, KEY_SLASH, KEY_ENTER, KEY_KP_ENTER:
 			if _at == "home":
 				get_viewport().set_input_as_handled()
@@ -273,6 +298,22 @@ func _process(_dt: float) -> void:
 			_save_widget()
 
 
+func _set_decorate(on: bool) -> void:
+	if on == _decorate.active:
+		return
+	if on and (_at != "home" or _widget):
+		return
+	if on and not _room.home.layout.art:
+		_room.home.reply_text = "decorating needs the art, and it was not found"
+		_room.home.reply_left = 4.0
+		return
+	_panel.visible = not on
+	if on:
+		_decorate.enter()
+	else:
+		_decorate.leave()
+
+
 func _open_closet() -> void:
 	if not _widget:
 		_closet.open(_room.home.look)
@@ -300,6 +341,7 @@ func _set_widget(on: bool) -> void:
 		_prev_size = w.size
 	else:
 		_save_widget()
+	_set_decorate(false)
 	_widget = on
 	_panel.visible = not on
 	_room.offset_right = 0 if on else -PANEL_WIDTH
@@ -446,6 +488,7 @@ func _enter(where: String) -> void:
 		_away_at = Time.get_ticks_msec() / 1000.0
 	if where == "home" and _watch != null:
 		_watch_door()
+	_set_decorate(false)
 	_at = where
 	var other := "office" if where == "home" else "home"
 	get_window().title = "the house - the " + where
