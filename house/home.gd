@@ -19,6 +19,7 @@ const Card := preload("res://card.gd")
 const Sound := preload("res://sound.gd")
 const Eggs := preload("res://eggs.gd")
 const Hearth := preload("res://hearth.gd")
+const Outside := preload("res://outside.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -88,6 +89,7 @@ var knock := Knock.new()
 var sound := Sound.new()
 var eggs := Eggs.new()
 var hearth := Hearth.new()
+var outside := Outside.new()
 var door := Door.new()
 var rhythm := Rhythm.new()
 var layout := Layout.new()
@@ -269,6 +271,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	sound.setup(room, not staged)
 	eggs.setup(self, seed_value, not staged)
 	hearth.setup(self)
+	outside.setup(self)
 	person.snap()
 	if "--shot" in args:
 		pets.freeze = true
@@ -541,6 +544,7 @@ func process(dt: float) -> void:
 	sound.process(dt)
 	eggs.process(dt)
 	hearth.process(dt)
+	outside.process(dt)
 	sound.loop("rain", _env["weather"] in ["rain", "storm"])
 	if jar.clinks.any(func(cl): return cl["t"] < dt + 0.001):
 		sound.request("clink")
@@ -848,9 +852,12 @@ func _monitor_quad() -> PackedVector2Array:
 
 
 func _draw_window() -> void:
-	var frame := View.draw(room, _o, _k, _env, _t, _hover == "window")
+	var frame := View.draw(
+		room, _o, _k, _env, _t, _hover == "window", outside.draw.bind(room, _k, _env)
+	)
 	_draw_season(frame)
 	_register("window", frame, Props.qlerp(frame, 0.5, 0.0))
+	outside.hits(room, frame)
 
 
 func _draw_pad_phone() -> void:
@@ -1656,6 +1663,9 @@ func click(pos: Vector2) -> bool:
 		return true
 	if key.begins_with("thing:"):
 		eggs.take(int(key.substr(6)))
+		return true
+	if key == "star":
+		outside.wish()
 		return true
 	if key.begins_with("furn:") and not blocked:
 		eggs.furn_click(key.substr(5))

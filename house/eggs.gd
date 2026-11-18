@@ -26,7 +26,9 @@ const ZOOM_CELLS := [
 ]
 const DOOR_FRONT := Vector2i(1, 7)
 const MUG_AT := Vector2(4.27, 0.33)
-const QUICK := ["flop", "sulk", "box", "piano", "fire"]
+const QUICK := [
+	"flop", "sulk", "box", "piano", "fire", "bird", "balloon", "nightcat", "star", "plane", "fireworks"
+]
 const BRING := ["slipper", "yarn", "crumple"]
 const LINES := {
 	"push": {"Nina": ["gravity is a theory.", "it was in my way.", "I regret nothing."]},
@@ -58,6 +60,7 @@ var next_big := 0.0
 var t := 0.0
 var laser_on := false
 var laser_pin := false
+var firework_forced := false
 var laser_at := Vector2.ZERO
 var laser_cell := Vector2i(-1, -1)
 var toss_ids: Array = []
@@ -829,3 +832,7 @@ func _quick(name: String) -> void:
 			h.hearth.piano_click()
 		"fire":
 			h.hearth.manual = 1
+		"fireworks":
+			firework_forced = true
+		_:
+			h.outside.start(name)

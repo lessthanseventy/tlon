@@ -100,6 +100,12 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
   blocked cell. A lit fireplace (snow, under 8 C, or a Nov-Feb evening; a click toggles it) draws them in
   front of it now and then, and the item menu offers "Into the fire". A bed draws a nap; a click on the piano
   has the person play a few bars (a hero stands and plays badly); the soak pins both.
+- **Outside** (`outside.gd`, drawn in the window's glass and on its sill): a bird on the sill and a
+  balloon by day, a plane by day (not the door's paper plane, `--plane`), a cat on the fence at night that
+  Nina goes to stare at from the sill, a shooting star at night that a click turns into a wish (a one-line
+  reply and a chime), snow on the sill Dec-Feb, fireworks 31 Dec 23:00 to 1 Jan 01:00. Each comes minutes
+  apart on the seeded dice, only in the weather and hour that suit it; `--egg bird|balloon|plane|nightcat|star|fireworks`
+  (use `--at 23:00` for the night ones).
 - **Sound** (`sound.gd`): every sound is synthesized, no files, and it starts muted. `M` toggles, the choice
   is `user://house_sound.json` (`{"muted": bool}`), a speaker mark shows a moment. Events: `piano`, `bad_piano`,
   `crackle` and `rain` (loops), `clink`, `purr`, `bark`, `rustle`, `ring`, `wish`; each is requested through
