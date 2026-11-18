@@ -433,6 +433,49 @@ static func paper_ball(c: CanvasItem, at: Vector2, k: int, spin: float, scale: f
 	c.draw_arc(at, r, 0.0, TAU, 14, PAPER_SHADE.darkened(0.15), w)
 
 
+static func phone(
+	c: CanvasItem, o: Vector2, k: int, x: float, y: float, z: float, ringing: bool, t: float
+) -> PackedVector2Array:
+	var shake := Vector2(sin(t * 46.0) * 0.9 * k, 0) if ringing else Vector2.ZERO
+	var body := shifted(floor_quad(o, k, x, y, z, 0.2, 0.13, 0.2), shake)
+	c.draw_colored_polygon(shifted(body, Vector2(0.8, 1.2) * k), Color(0, 0, 0, 0.25))
+	c.draw_colored_polygon(body, Color("c8483f") if ringing else Color("3a3f4c"))
+	var screen := shifted(floor_quad(o, k, x, y, z + 0.4, 0.15, 0.09, 0.2), shake)
+	c.draw_colored_polygon(
+		screen, Color("ffe9a8") if ringing and fmod(t, 0.5) < 0.25 else Color("8aa0c8")
+	)
+	if ringing:
+		var mid := center(body) + Vector2(0, -4 * k)
+		for i in 3:
+			var a := fmod(t * 1.6 + i * 0.33, 1.0)
+			c.draw_arc(
+				mid,
+				(3.0 + a * 6.0) * k,
+				-2.4,
+				-0.74,
+				12,
+				Color("e8b86d", 1.0 - a),
+				maxf(2.0, 1.1 * k)
+			)
+	return body
+
+
+static func notepad(
+	c: CanvasItem, o: Vector2, k: int, x: float, y: float, z: float
+) -> PackedVector2Array:
+	var q := floor_quad(o, k, x, y, z, 0.2, 0.15, -0.2)
+	c.draw_colored_polygon(shifted(q, Vector2(0.8, 1.2) * k), Color(0, 0, 0, 0.25))
+	c.draw_colored_polygon(q, PAPER)
+	c.draw_colored_polygon(
+		PackedVector2Array([q[0], q[1], qlerp(q, 1.0, 0.18), qlerp(q, 0.0, 0.18)]), Color("c8483f")
+	)
+	var w := maxf(1.0, 0.5 * k)
+	c.draw_line(qlerp(q, 0.15, 0.45), qlerp(q, 0.85, 0.45), Color(INK, 0.5), w)
+	c.draw_line(qlerp(q, 0.15, 0.7), qlerp(q, 0.6, 0.7), Color(INK, 0.5), w)
+	c.draw_line(qlerp(q, 0.7, 0.95), qlerp(q, 1.25, 0.5), Color("e8b86d"), maxf(1.5, 0.9 * k))
+	return q
+
+
 static func yarn(c: CanvasItem, at: Vector2, k: int, spin: float) -> void:
 	var r := 3.4 * k
 	c.draw_circle(at + Vector2(0.4, 0.7) * k, r, Color(0, 0, 0, 0.2))

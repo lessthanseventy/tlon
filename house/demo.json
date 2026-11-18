@@ -1,25 +1,32 @@
 {
+  "done_week": 4,
   "open": [
     {
       "id": 1,
       "kind": "todo",
       "text": "buy milk",
       "due_at": null,
-      "every": null
+      "every": null,
+      "since": "2026-11-17T06:10:00Z",
+      "told_at": null
     },
     {
       "id": 2,
       "kind": "reminder",
       "text": "call the dentist back about the appointment",
       "due_at": "2026-11-17T09:30:00Z",
-      "every": null
+      "every": null,
+      "since": "2026-11-15T20:00:00Z",
+      "told_at": null
     },
     {
       "id": 3,
       "kind": "todo",
       "text": "send Sam the photos",
       "due_at": null,
-      "every": null
+      "every": null,
+      "since": "2026-11-16T12:00:00Z",
+      "told_at": null
     }
   ],
   "coming": [

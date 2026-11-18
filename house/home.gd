@@ -1,7 +1,15 @@
 extends RefCounted
 
+signal acted(id: int, what: String)
+
 const Props := preload("res://props.gd")
 const Pets := preload("res://pets.gd")
+const Look := preload("res://look.gd")
+const Person := preload("res://person.gd")
+const Tv := preload("res://tv.gd")
+const View := preload("res://view.gd")
+const Menus := preload("res://menus.gd")
+const Focus := preload("res://focus.gd")
 
 const WALL_H := 48
 const COLS := 8
@@ -16,6 +24,8 @@ const CONFETTI := [
 const BOARD := {"s": 33.0, "h": 13.0, "w": 30.0, "hh": 31.0}
 const STACK := Vector3(5.62, 0.55, 17.0)
 const MUG := Vector3(4.27, 0.33, 17.0)
+const PAD := Vector3(5.3, 0.88, 17.0)
+const PHONE := Vector3(4.62, 0.58, 17.0)
 # wall slots (plane 1 = the north-east wall, s along it, h up) and the desk top
 const SLOTS := [
 	{"s": 69.0, "h": 19.0, "rot": 0.15},
@@ -36,6 +46,17 @@ const NOTE_TILT := [-0.1, 0.07, 0.05, -0.07]
 
 var room: Control
 var pets := Pets.new()
+var look := Look.new()
+var person := Person.new()
+var tv := Tv.new()
+var menu := Menus.new()
+var focus := Focus.new()
+var done_week := 0
+var weather_desc := ""
+var temp_c: Variant = null
+var reply_text := ""
+var reply_left := 0.0
+var ring_ids: Array = []
 var open: Array = []
 var coming: Array = []
 var notes: Array = []
@@ -63,6 +84,14 @@ var _had_open := false
 var _seen_data := false
 var _scripted := {}
 var _say_done := false
+var _tv_t := 4.9
+var _real_tv := true
+var _cal := PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+var _arg_menu := -1
+var _arg_reply := ""
+var _arg_ring := -1
+var _rung: Array = []
+var _attention := false
 
 
 func setup(canvas: Control, art_dir: String, args: Array) -> void:
@@ -94,10 +123,41 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				_scripted["hover"] = _point(next)
 			"--click":
 				_scripted["click"] = _point(next)
+			"--playing":
+				tv.force("playing", next)
+				_real_tv = false
+			"--paused":
+				tv.force("paused", next)
+				_real_tv = false
+			"--person":
+				person.forced = next
+			"--menu":
+				_arg_menu = int(next)
+			"--reply":
+				_arg_reply = next
+			"--ring":
+				_arg_ring = int(next)
+			"--now":
+				var parts := next.split(":")
+				focus.persist = false
+				focus.id = int(parts[0])
+				focus.minutes = int(parts[1]) if parts.size() > 1 else 25
+				if parts.size() > 2:
+					focus.started = (
+						Time.get_unix_time_from_system() - float(parts[2]) * focus.minutes * 60.0
+					)
 	if "--shot" in args and seed_value < 0:
 		seed_value = 7
+	if "--demo" in args:
+		_real_tv = false
+		focus.persist = false
+	elif focus.persist:
+		focus.load_saved()
 	pets.is_night = _env_now()["day"] < 0.15
 	pets.setup(art_dir, seed_value)
+	look.setup(art_dir)
+	person.setup(pets, look, seed_value)
+	person.snap()
 	if "--shot" in args:
 		pets.freeze = true
 	if pets.is_night:
@@ -130,15 +190,27 @@ func set_voices(v: Dictionary) -> void:
 func set_weather(w: Variant) -> void:
 	if w is Dictionary and w.get("kind") is String:
 		weather = w["kind"]
+		weather_desc = str(w.get("desc", ""))
+		temp_c = w.get("temp_c")
 
 
 func set_data(d: Dictionary) -> void:
 	open = d["open"]
 	coming = d["coming"]
 	notes = d["notes"]
+	done_week = int(d.get("done_week", 0))
 	var ids: Array = []
+	ring_ids = []
 	for item in open:
 		ids.append(int(item["id"]))
+		if item.get("told_at") != null:
+			ring_ids.append(int(item["id"]))
+		if _arg_ring == int(item["id"]) and ring_ids.find(_arg_ring) < 0:
+			ring_ids.append(_arg_ring)
+		if int(item["id"]) == focus.id:
+			focus.text = str(item["text"])
+	if focus.active() and not ids.has(focus.id):
+		focus.clear()
 	for id in _slots.keys():
 		if not ids.has(id):
 			_slots.erase(id)
@@ -150,13 +222,42 @@ func set_data(d: Dictionary) -> void:
 				_slots[id] = s
 				break
 	pets.has_open = not open.is_empty()
-	var spot := "board" if pets.has_open else "lounge"
+	_feed_person()
 	if not _seen_data:
-		pets.place(pets.critter("person"), spot, "sit")
-	elif pets.has_open != _had_open:
-		pets.go(pets.critter("person"), spot, "sit", 9999.0)
+		person.snap()
 	_had_open = pets.has_open
 	_seen_data = true
+
+
+func _feed_person() -> void:
+	person.open_n = open.size()
+	person.has_notes = not notes.is_empty()
+	person.tv = tv.state
+	person.hour = _hour()
+	person.ring = not ring_ids.is_empty()
+	person.calm = true
+	for item in open:
+		if item["kind"] == "reminder":
+			person.calm = false
+
+
+func show_reply(text: String) -> void:
+	reply_text = text
+	reply_left = 7.0
+
+
+func take_attention() -> bool:
+	for id in ring_ids:
+		if not _rung.has(id):
+			_rung.append(id)
+			_attention = true
+	var ask := _attention
+	_attention = false
+	return ask
+
+
+func exit() -> void:
+	tv.exit()
 
 
 func _bias() -> float:
@@ -219,6 +320,25 @@ func process(dt: float) -> void:
 	pets.is_night = _env["day"] < 0.15
 	pets.bubble_cap = 4.5
 	_bin_balls += pets.process(dt)
+	_feed_person()
+	person.process(dt, pets.freeze)
+	if _real_tv:
+		_tv_t += dt
+		if _tv_t >= 5.0:
+			_tv_t = 0.0
+			tv.poll()
+		tv.collect()
+	pets.tv_on = tv.state == "playing"
+	if focus.finished():
+		person.stretch()
+	reply_left = maxf(0.0, reply_left - dt)
+	if _t > 0.3 and (_arg_menu >= 0 or _arg_reply != ""):
+		if _arg_menu >= 0:
+			open_item_menu(_arg_menu)
+			_arg_menu = -1
+		if _arg_reply != "":
+			show_reply(_arg_reply)
+			_arg_reply = ""
 	if _t > 0.4 and not _scripted.is_empty():
 		if _scripted.has("hover"):
 			hover(_scripted["hover"])
@@ -303,6 +423,71 @@ func tick_off(id: int) -> void:
 		_celebrate()
 
 
+func send_later(id: int) -> void:
+	_geometry()
+	var found := {}
+	for item in open:
+		if int(item["id"]) == id:
+			found = item
+	if found.is_empty():
+		return
+	var from := _stack_top(open.size())
+	if _slots.has(id):
+		from = Props.center(_slot_quad(_slots[id]))
+	_slots.erase(id)
+	(
+		_crumples
+		. append(
+			{
+				"t": 0.0,
+				"life": 1.1,
+				"from": (from - _o) / _k,
+				"slot": -1,
+				"color": _item_color(found),
+				"miss": false,
+				"fly": true,
+			}
+		)
+	)
+
+
+func open_item_menu(id: int) -> void:
+	_geometry()
+	var found := {}
+	for item in open:
+		if int(item["id"]) == id:
+			found = item
+	if found.is_empty():
+		return
+	var at := _stack_top(open.size())
+	if _slots.has(id):
+		at = Props.center(_slot_quad(_slots[id]))
+	(
+		menu
+		. show_at(
+			id,
+			at,
+			_cap(str(found["text"]), 30),
+			[
+				{"label": "Done", "act": "done"},
+				{"label": "In an hour", "act": "hour"},
+				{"label": "Tomorrow", "act": "tomorrow"},
+				{
+					"label": "Not now" if focus.id == id else "Now",
+					"act": "unnow" if focus.id == id else "now"
+				},
+			]
+		)
+	)
+
+
+func _open_pick() -> void:
+	var rows: Array = []
+	for item in open.slice(0, 7):
+		rows.append({"label": _cap(str(item["text"]), 30), "act": "pick:%d" % int(item["id"])})
+	menu.show_at(0, _stack_top(open.size()), "which one?", rows)
+
+
 func _celebrate() -> void:
 	_geometry()
 	var at := _p(4.0, 2.0, 70.0)
@@ -335,6 +520,8 @@ func _celebrate() -> void:
 
 
 func _land(cr: Dictionary) -> void:
+	if cr.get("fly", false):
+		return
 	if not cr["miss"]:
 		_bin_balls += 1
 		return
@@ -357,19 +544,101 @@ func items() -> Array:
 		{"key": 3.0, "pri": 0.4, "fn": _draw_calendar},
 		{"key": 3.0, "pri": 0.5, "fn": _draw_board},
 		{"key": 4.0, "pri": 0.5, "fn": _draw_pane_ne},
-		{"key": 5.0, "pri": 0.5, "fn": _draw_pane_nw},
+		{"key": 6.0, "pri": 0.5, "fn": _draw_window},
+		{"key": 1.0, "pri": 1.1, "fn": _draw_wardrobe},
+		{"key": 3.0, "pri": 1.2, "fn": _draw_tv},
+		{"key": 5.0, "pri": 1.2, "fn": _draw_monitor},
 		{"key": 5.0, "pri": 1.5, "fn": _draw_desk_things},
+		{"key": 5.0, "pri": 1.55, "fn": _draw_pad_phone},
 		{"key": 6.0, "pri": 1.5, "fn": _draw_bin_balls},
 	]
 	for t in pets.toys:
 		out.append({"key": t["pos"].x + t["pos"].y - 1.0, "pri": 1.8, "fn": _draw_toy.bind(t)})
 	for c in pets.critters:
-		out.append({"key": pets.sort_key(c), "pri": 2.0, "fn": _draw_critter.bind(c)})
+		var pri := person.pri() if c.id == "person" else 2.0
+		out.append({"key": pets.sort_key(c), "pri": pri, "fn": _draw_critter.bind(c)})
 	return out
 
 
 func _draw_critter(c: Pets.Critter) -> void:
-	pets.draw(room, c, _o, _k)
+	if c.id == "person":
+		person.draw(room, _o, _k)
+	else:
+		pets.draw(room, c, _o, _k)
+
+
+func _px(base: Vector2, pts: Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p in pts:
+		out.append(base + (p as Vector2) * _k)
+	return out
+
+
+func _tv_quad() -> PackedVector2Array:
+	if room._sprite("tv_stand_se").is_empty():
+		return PackedVector2Array(
+			[_p(1.0, 3.85, 36), _p(1.0, 2.15, 36), _p(1.0, 2.15, 16), _p(1.0, 3.85, 16)]
+		)
+	var base := _p(0, 2) - Vector2(32, 40) * _k
+	return _px(base, [Vector2(13, 26), Vector2(32, 16.5), Vector2(32, 31), Vector2(13, 41)])
+
+
+func _monitor_quad() -> PackedVector2Array:
+	if room._sprite("computer_desk_sw").is_empty():
+		return PackedVector2Array(
+			[_p(4.35, 0.4, 44), _p(5.25, 0.4, 44), _p(5.25, 0.4, 33), _p(4.35, 0.4, 33)]
+		)
+	var base := _p(4, 0) - Vector2(16, 24) * _k
+	return _px(base, [Vector2(21, 1), Vector2(33, 7), Vector2(33, 18), Vector2(21, 12)])
+
+
+func _draw_window() -> void:
+	var frame := View.draw(room, _o, _k, _env, _t, _hover == "window")
+	_register("window", frame, Props.qlerp(frame, 0.5, 0.0))
+
+
+func _draw_pad_phone() -> void:
+	var pad := Props.notepad(room, _o, _k, PAD.x, PAD.y, PAD.z)
+	_register("pad", pad, Props.qlerp(pad, 0.5, 1.0))
+	var ph := Props.phone(room, _o, _k, PHONE.x, PHONE.y, PHONE.z, not ring_ids.is_empty(), _t)
+	_register("phone", ph, Props.qlerp(ph, 0.5, 1.0))
+
+
+func _draw_wardrobe() -> void:
+	var hex := PackedVector2Array(
+		[_p(1, 0, 44), _p(2, 0, 44), _p(2, 0), _p(2, 1), _p(1, 1), _p(1, 1, 44)]
+	)
+	_register("wardrobe", hex, _p(1.5, 1.0))
+
+
+func _draw_tv() -> void:
+	var q := _tv_quad()
+	tv.screen(room, q, _t)
+	_register("tv", q, Props.qlerp(q, 0.5, 1.0))
+
+
+func _draw_monitor() -> void:
+	if not focus.active():
+		return
+	var q := _monitor_quad()
+	room.draw_colored_polygon(q, Color("1c2438"))
+	var lines := 3
+	for i in lines:
+		var v := 0.22 + 0.24 * i
+		room.draw_line(
+			Props.qlerp(q, 0.12, v),
+			Props.qlerp(q, 0.88 - 0.25 * (i % 2), v),
+			Color("e8b86d", 0.9),
+			maxf(1.0, 0.8 * _k)
+		)
+	if focus.running():
+		var p := focus.progress()
+		room.draw_line(
+			Props.qlerp(q, 0.08, 0.92),
+			Props.qlerp(q, 0.08 + 0.84 * p, 0.92),
+			Color("8fd18a"),
+			maxf(1.0, _k)
+		)
 
 
 func _draw_toy(t: Dictionary) -> void:
@@ -396,7 +665,8 @@ func draw_floor() -> void:
 		if c.id != "person":
 			pets.draw_shadow(room, c, _o, _k)
 		else:
-			room._draw_person_shadow(_o, {"col": c.pos.x - 0.5, "row": c.pos.y - 0.5})
+			if not person.seated:
+				room._draw_person_shadow(_o, {"col": c.pos.x - 0.5, "row": c.pos.y - 0.5})
 
 
 func _ellipse(x: float, y: float, rx: float, ry: float, z: float = 0.0) -> PackedVector2Array:
@@ -457,10 +727,6 @@ func draw_plant(f: Array) -> void:
 
 func _draw_pane_ne() -> void:
 	Props.pane(room, _o, _k, 1, 68.0, 74.0, 18.0, 32.0, _env, _t, true)
-
-
-func _draw_pane_nw() -> void:
-	Props.pane(room, _o, _k, -1, 84.0, 90.0, 19.0, 32.0, _env, _t, false)
 
 
 func _register(key: String, poly: PackedVector2Array, below: Vector2) -> void:
@@ -530,7 +796,8 @@ func _draw_calendar() -> void:
 		if nd["month"] == d["month"] and nd["year"] == d["year"]:
 			due_day = nd["day"]
 		_next_text = "next: %s - %s" % [_clock(nxt["at"]), _cap(nxt["text"], 28)]
-	var q := Props.calendar(room, _o, _k, 56.0, 31.0, d["day"], first_wd, month_days, due_day)
+	var q := Props.calendar(room, _o, _k, 24.0, 31.0, d["day"], first_wd, month_days, due_day)
+	_cal = q
 	_register("cal", q, Props.qlerp(q, 0.5, 0.0))
 
 
@@ -619,7 +886,57 @@ func draw_over() -> void:
 	for c in pets.critters:
 		_draw_extras(c, bounds)
 	Props.caption(room, Vector2(room.size.x / 2.0, 30), _next_text)
+	tv.over(room, _tv_quad(), _k, _t, bounds)
+	_draw_now(bounds)
+	if reply_left > 0.0 and reply_text != "":
+		Props.card(room, Vector2(room.size.x / 2.0, 36), reply_text, bounds)
 	_draw_card(bounds)
+	menu.draw(room, bounds)
+
+
+func _draw_now(bounds: Rect2) -> void:
+	if not focus.active() or focus.text == "":
+		return
+	var font := ThemeDB.fallback_font
+	var q := _monitor_quad()
+	var top := (q[0] + q[1]) / 2.0 + Vector2(0, -22)
+	var text := _cap(focus.text, 60)
+	var wrap := 170.0
+	var sz := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, wrap, 17)
+	var box := Vector2(maxf(sz.x, 90.0) + 56, sz.y + 40)
+	var pos := Vector2(top.x - box.x / 2.0, top.y - box.y)
+	pos.x = clampf(pos.x, bounds.position.x + 6, bounds.end.x - box.x - 6)
+	pos.y = maxf(pos.y, bounds.position.y + 50)
+	var r := Rect2(pos.round(), box)
+	room.draw_rect(Rect2(r.position + Vector2(3, 5), r.size), Color(0, 0, 0, 0.3))
+	room.draw_rect(r, Props.INK)
+	room.draw_rect(r.grow(-2), Color("f8efb8"))
+	room.draw_string(
+		font,
+		r.position + Vector2(10, 17),
+		"NOW",
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		12,
+		Color(Props.INK, 0.6)
+	)
+	room.draw_multiline_string(
+		font, r.position + Vector2(10, 38), text, HORIZONTAL_ALIGNMENT_LEFT, wrap, 17, -1, Props.INK
+	)
+	var ring := r.position + Vector2(box.x - 24, 22)
+	room.draw_arc(ring, 10, 0, TAU, 24, Color(Props.INK, 0.25), 3.0)
+	if focus.running():
+		room.draw_arc(ring, 10, -PI / 2, -PI / 2 + TAU * focus.progress(), 24, Color("5fa86a"), 4.0)
+		var cw := font.get_string_size(focus.clock(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		room.draw_string(
+			font,
+			ring + Vector2(-cw / 2.0, 24),
+			focus.clock(),
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			12,
+			Props.INK
+		)
 
 
 func _draw_extras(c: Pets.Critter, bounds: Rect2) -> void:
@@ -653,6 +970,19 @@ func _draw_extras(c: Pets.Critter, bounds: Rect2) -> void:
 func _draw_crumple(cr: Dictionary) -> void:
 	var t: float = cr["t"]
 	var from: Vector2 = _o + (cr["from"] as Vector2) * _k
+	if cr.get("fly", false):
+		var f := t / float(cr["life"])
+		var at := _arc(from, Props.center(_cal), f)
+		var s := (1.0 - 0.55 * f) * 3.4 * _k
+		var pts := PackedVector2Array()
+		for corner in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+			pts.append(at + (corner as Vector2).rotated(f * 7.0) * s)
+		room.draw_colored_polygon(Props.shifted(pts, Vector2(1, 2) * _k), Color(0, 0, 0, 0.2))
+		room.draw_colored_polygon(pts, cr["color"])
+		room.draw_polyline(
+			PackedVector2Array([pts[0], pts[1], pts[2], pts[3], pts[0]]), Color(Props.INK, 0.6), 1.0
+		)
+		return
 	if t < 0.3:
 		var squash := t / 0.3
 		if cr["slot"] >= 0:
@@ -672,7 +1002,24 @@ func _arc(from: Vector2, to: Vector2, u: float) -> Vector2:
 	return from.lerp(to, u) + Vector2(0, -44.0 * _k * u * (1.0 - u))
 
 
+func _ago(iso: String) -> String:
+	var secs := (
+		Time.get_unix_time_from_system()
+		- Time.get_unix_time_from_datetime_string(iso.trim_suffix("Z"))
+	)
+	if secs < 90.0:
+		return "just now"
+	if secs < 3600.0:
+		return "%d min ago" % roundi(secs / 60.0)
+	if secs < 86400.0:
+		return "%d h ago" % roundi(secs / 3600.0)
+	var days := int(secs / 86400.0)
+	return "yesterday" if days == 1 else "%d days ago" % days
+
+
 func _draw_card(bounds: Rect2) -> void:
+	if menu.is_open:
+		return
 	var key := _hover if _hover != "" else _locked
 	if show_note >= 0 and key == "":
 		key = "note:%d" % show_note
@@ -695,6 +1042,32 @@ func _draw_card(bounds: Rect2) -> void:
 				text = str(item["text"])
 				if item.get("due_at") != null:
 					text += "\n" + _clock(_due(item))
+				if item.get("since") != null:
+					text += "\nsaid " + _ago(str(item["since"]))
+	elif key == "window":
+		text = weather_desc if weather_desc != "" else weather
+		if temp_c != null:
+			var c := float(temp_c)
+			text += "\n%d°C (%d°F)" % [roundi(c), roundi(c * 9.0 / 5.0 + 32.0)]
+	elif key == "wardrobe":
+		text = "the closet  (C)"
+	elif key == "pad":
+		text = "jot something  (N)"
+	elif key == "tv":
+		text = (
+			"nothing playing"
+			if tv.state == ""
+			else (
+				("playing: " if tv.state == "playing" else "paused: ")
+				+ tv.caption
+				+ "\nclick: play / pause"
+			)
+		)
+	elif key == "phone":
+		text = "the phone"
+		for item in open:
+			if ring_ids.has(int(item["id"])):
+				text = str(item["text"])
 	elif key == "stack":
 		var rest: Array = []
 		for item in open.slice(0, 8):
@@ -725,21 +1098,62 @@ func _topmost(pos: Vector2) -> String:
 	for i in range(_hits.size() - 1, -1, -1):
 		if Geometry2D.is_point_in_polygon(pos, _hits[i]["poly"]):
 			return _hits[i]["key"]
+	if pets.hit_rect(pets.critter("person"), _o, _k).has_point(pos):
+		return "person"
 	return ""
 
 
 func hover(pos: Vector2) -> bool:
+	if menu.is_open and menu.hover(pos):
+		_hover = ""
+		return true
 	var key := _topmost(pos)
 	_hover = key
 	return key != ""
 
 
 func click(pos: Vector2) -> bool:
+	if menu.is_open:
+		var act := menu.click(pos)
+		if act == "inside":
+			return true
+		if act.begins_with("pick:"):
+			open_item_menu(int(act.substr(5)))
+			return true
+		if act != "outside":
+			var id := menu.id
+			menu.close()
+			acted.emit(id, act)
+			return true
+		menu.close()
 	var key := _topmost(pos)
 	if key.begins_with("pet:"):
 		var c: Pets.Critter = pets.critter(key.substr(4))
 		pets.pat(c, "pet" if c.id == "nina" else ("belly" if pets.rng.randf() < 0.25 else "pat"))
 		return true
+	if key.begins_with("item:"):
+		open_item_menu(int(key.substr(5)))
+		return true
+	match key:
+		"stack":
+			_open_pick()
+			return true
+		"person":
+			person.poke()
+			return true
+		"tv":
+			tv.toggle()
+			return true
+		"wardrobe":
+			acted.emit(0, "closet")
+			return true
+		"pad":
+			acted.emit(0, "jot")
+			return true
+		"phone":
+			if not ring_ids.is_empty():
+				open_item_menu(ring_ids[0])
+			return true
 	if key != "":
 		_locked = "" if _locked == key else key
 		return true

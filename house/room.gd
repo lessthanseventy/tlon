@@ -1,6 +1,7 @@
 extends Control
 
 signal door_clicked
+signal pressed_empty
 
 const WALL_H := 48
 const FRAME_FPS := 6.0
@@ -18,18 +19,17 @@ const HOME := {
 	"wall": "plaster",
 	"furniture":
 	[
-		["bookshelf_sw", 1, 0, 1, 1, 39, Color("8a5a3c")],
+		["wardrobe_sw", 1, 0, 1, 1, 44, Color("8a5a3c")],
 		["computer_desk_sw", 4, 0, 2, 1, 31, Color("b58a5a")],
 		["office_chair_ne", 4, 1, 1, 1, 26, Color("5a6f8a")],
 		["waste_bin", 6, 0, 1, 1, 11, Color("6f7480")],
 		["plant_large", 7, 0, 1, 1, 34, Color("5f8a4f")],
-		["bookshelf_se", 0, 2, 1, 1, 39, Color("8a5a3c")],
-		["side_table", 0, 3, 1, 1, 14, Color("b58a5a")],
+		["tv_stand_se", 0, 2, 1, 2, 40, Color("6f5a48")],
 		["sofa_se", 0, 4, 1, 2, 17, Color("9a4f58")],
 		["floor_lamp", 0, 6, 1, 1, 33, Color("d9b86a")],
 	],
 	"rug": ["rug_blue_nwse", 1, 4, 3, 2, Color("4a6a9a")],
-	"windows": {"ne": [4], "nw": [5]},
+	"windows": {"ne": [4], "nw": []},
 	"door": {"row": 7, "label": "to the office"},
 	"figures": [],
 }
@@ -189,7 +189,9 @@ func _pick_scale() -> int:
 	var span: int = _desc["cols"] + _desc["rows"]
 	if size.x >= span * 16 * 3 + 16 and size.y >= (span * 8 + WALL_H) * 3 + 16:
 		return 3
-	return 2
+	if size.x >= span * 16 * 2 + 16 and size.y >= (span * 8 + WALL_H) * 2 + 16:
+		return 2
+	return 1
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -209,6 +211,8 @@ func _gui_input(event: InputEvent) -> void:
 			return
 		if _door_hit(event.position):
 			door_clicked.emit()
+		else:
+			pressed_empty.emit()
 
 
 func _door_hit(pos: Vector2) -> bool:
@@ -249,7 +253,8 @@ func _draw() -> void:
 	for w in _walls():
 		items.append({"key": w["c"] + w["r"], "pri": 0, "wall": w})
 	for f in _desc["furniture"]:
-		items.append({"key": f[1] + f[3] - 1 + f[2] + f[4] - 1, "pri": 1, "furn": f})
+		var pri := 1.8 if _desc == HOME and f[0] == "office_chair_ne" else 1.0
+		items.append({"key": f[1] + f[3] - 1 + f[2] + f[4] - 1, "pri": pri, "furn": f})
 		var s := _sprite(f[0])
 		if not s.is_empty() and s["shadow"] != "":
 			var sh := _sprite(s["shadow"])

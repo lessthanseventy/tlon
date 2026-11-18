@@ -28,9 +28,14 @@ const SPOTS := {
 	"board": {"cell": Vector2i(3, 2), "face": 5},
 	"lounge": {"cell": Vector2i(5, 4), "face": 7},
 	"sofa":
-	{"cell": Vector2i(1, 4), "perch": Vector2(0.55, 4.95), "z": 10.0, "key": 5.5, "face": 7},
+	{"cell": Vector2i(1, 4), "perch": Vector2(0.55, 5.45), "z": 10.0, "key": 5.5, "face": 7},
 	"desk":
 	{"cell": Vector2i(3, 1), "perch": Vector2(4.95, 0.74), "z": 17.0, "key": 5.6, "face": 1},
+	"sill": {"cell": Vector2i(1, 5), "perch": Vector2(0.35, 5.2), "z": 23.5, "key": 6.2, "face": 3},
+	"tv": {"cell": Vector2i(1, 3), "face": 3},
+	"desk_stand": {"cell": Vector2i(4, 2), "face": 5},
+	"sofa_stand": {"cell": Vector2i(1, 4), "face": 7},
+	"board_stand": {"cell": Vector2i(2, 1), "face": 5},
 }
 const BIN_TOP := Vector2(6.5, 0.5)
 const BIN_Z := 11.0
@@ -82,6 +87,7 @@ var chars_dir := ""
 var freeze := false
 var is_night := false
 var has_open := false
+var tv_on := false
 var bubble_cap := 4.5
 
 var _tex := {}
@@ -423,6 +429,8 @@ func _decide_nina(c: Critter) -> void:
 		["rug", 2.0, "sit", rng.randf_range(8, 14)],
 		["lamp", 1.0, "sit", rng.randf_range(6, 10)],
 		["mid", 1.0, "sit", rng.randf_range(5, 9)],
+		["sill", 1.2, "sit", rng.randf_range(15, 30)],
+		["tv", 7.0 if tv_on else 0.0, "sit", rng.randf_range(12, 25)],
 		["yarn", 2.5, "chase", 0.0],
 	]
 	var pick := _pick(options, c.spot)
