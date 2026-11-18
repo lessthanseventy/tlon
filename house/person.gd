@@ -72,6 +72,7 @@ const LINES := [
 ]
 
 var acts := ACTS.duplicate(true)
+var fx := {}
 var pets
 var look
 var c
@@ -330,6 +331,8 @@ func anim() -> String:
 			return "walk"
 		"leaving", "entering":
 			return "sit"
+	if fx.has("anim") and phase == "idle":
+		return fx["anim"]
 	if react_left > 0.0 and not seated:
 		return "wave"
 	return acts[act]["anim"]

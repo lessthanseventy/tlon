@@ -27,7 +27,10 @@ const ZOOM_CELLS := [
 const DOOR_FRONT := Vector2i(1, 7)
 const MUG_AT := Vector2(4.27, 0.33)
 const QUICK := [
-	"flop", "sulk", "box", "piano", "fire", "bird", "balloon", "nightcat", "star", "plane", "fireworks"
+	"flop", "sulk", "box", "piano", "fire", "bird", "balloon", "nightcat", "star", "plane", "fireworks",
+	"mouse", "book", "globe", "found", "disco", "tlon", "uqbar", "argos", "borges",
+	"spin", "pencil", "stretch", "nod", "cast", "bow", "salute", "visitor",
+	"moth", "rainwatch", "storm", "jarfull", "newlook"
 ]
 const BRING := ["slipper", "yarn", "crumple"]
 const LINES := {
@@ -44,7 +47,55 @@ const LINES := {
 	"watch": {"Argos": ["go Nina go!"], "Nina": ["amateurs."]},
 }
 # every secret there is, by id: the found card counts these and names the ones he has met
-const CATALOGUE: Array = []
+const CATALOGUE := [
+	["push", "Nina and the edge of the desk"],
+	["bring", "Argos brings a gift"],
+	["zoomies", "zoomies"],
+	["box", "Nina in a box"],
+	["laser", "the red dot"],
+	["flop", "Argos, belly up"],
+	["sulk", "Nina leaves the room"],
+	["hearth", "both by the fire"],
+	["bed", "a nap on the bed"],
+	["keys", "Nina on the piano"],
+	["piano", "the piano"],
+	["piano_hero", "a hero at the piano"],
+	["fire", "the fireplace"],
+	["toss", "a note into the fire"],
+	["bird", "a bird on the sill"],
+	["balloon", "a balloon"],
+	["plane", "a plane"],
+	["nightcat", "a cat on the fence"],
+	["star", "a shooting star"],
+	["fireworks", "New Year fireworks"],
+	["sillsnow", "snow on the sill"],
+	["snowman", "a snowman on the sill"],
+	["lantern", "a lit pumpkin"],
+	["cake", "the birthday cake"],
+	["book", "a book from the shelf"],
+	["borges", "the Library of Babel"],
+	["globe", "the snow globe"],
+	["mouse", "the mouse"],
+	["fidget_spin", "a spin of the chair"],
+	["fidget_pencil", "the balancing pencil"],
+	["fidget_stretch", "a stretch"],
+	["fidget_nod", "nodding off"],
+	["cast", "a spell at the hearth"],
+	["salute", "a salute at the door"],
+	["bow", "an arrow in the wall"],
+	["visitor", "a visitor"],
+	["konami", "the old code"],
+	["tlon", "Tlon"],
+	["uqbar", "Uqbar"],
+	["argos_word", "his name"],
+	["umbrella", "an umbrella by the door"],
+	["moth", "a moth at the lamp"],
+	["rain_watch", "Nina watches the rain"],
+	["storm_hide", "Argos in the storm"],
+	["tv_react", "the pets and the TV"],
+	["new_look", "a new look"],
+	["jar_full", "a full jar"],
+]
 
 var _hw: WeakRef
 var h:
@@ -813,7 +864,7 @@ func key(code: int) -> bool:
 	if code == KEY_M:
 		h.sound.toggle()
 		return true
-	return false
+	return h.secrets.key(code)
 
 
 # staged on demand: things that need no scene of their own
@@ -832,6 +883,32 @@ func _quick(name: String) -> void:
 			h.hearth.piano_click()
 		"fire":
 			h.hearth.manual = 1
+		"mouse":
+			h.finds.start_mouse()
+		"book":
+			h.finds.pick_book()
+			h.card.open("book", "furn:bookshelf")
+		"globe":
+			h.finds.shake = 4.0
+		"found":
+			h.card.open("found", "mousehole")
+		"disco":
+			h.secrets.start_disco()
+		"tlon", "uqbar", "argos", "borges":
+			h.secrets.word(name)
+		"spin", "pencil", "stretch", "nod", "cast", "bow", "salute", "visitor":
+			h.quirks.force(name)
+		"moth":
+			h.delights.start_moth()
+		"rainwatch":
+			h.delights.rain_watch()
+		"storm":
+			h.delights.storm_hide()
+		"jarfull":
+			h.delights.jar_spark = 6.0
+			h.pets.critter("argos").hops = 4
+		"newlook":
+			h.delights.new_look()
 		"fireworks":
 			firework_forced = true
 		_:
