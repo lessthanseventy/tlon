@@ -190,9 +190,19 @@ and every layer the spine design's re-laid §9 asked for
 - **the home's inbox** (`Server.Home.Inbox`, `Server.Jot`) — what the operator texts a messenger bot
   from their phone (a voice note heard on this machine by whisper.cpp, `Server.Home.Ear`, when
   `TLON_WHISPER_MODEL` names a model), kept raw as a `jot`, then read by one small model call (`Server.Home.Reader`: a
-  reminder with its time and whether it repeats, a to-do, or a note) and the reading said back. A
+  reminder with its time and whether it repeats, a to-do with a rough size, a note, a project of up to five
+  steps, or a waiting-on) and the reading said back, with what it assumed and the one question it may have
+  (its answer amends the jot). A
   message can also ask the helper for something and is then kept as nothing: that things are done,
-  what is open, or a question its notes answer. What is open is also said once a day at the
+  what is open, what to do now (`Server.Home.Now`), what is on someday, or a question its notes answer.
+  The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
+  open next step or a question about it, a waiting-on is asked about after three days, a weekly review
+  (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28
+  days to someday, and a to-do that sat a week is offered a two-minute start with the daily list. Each
+  question is a `jot` row with an `ask`, said in the chat and raised on the desktop
+  (`Server.Home.asked/0`, a sticky `home_ask` alert whose buttons call `POST /api/home/:id/answer`), so it
+  works with no messenger. Its two model calls (next step, a start) go through the reader's provider
+  and `:home_helper`. What is open is also said once a day at the
   `home_list_at` setting, each thing with a button that ticks it off. A message that corrects the jot before it
   changes that jot's reading, and a reminder is said in the chat when it comes due, with done / in an
   hour / tomorrow under it, and again if left unanswered (never at night, six times at most). No

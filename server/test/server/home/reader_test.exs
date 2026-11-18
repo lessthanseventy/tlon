@@ -39,6 +39,64 @@ defmodule Server.Home.ReaderTest do
     assert Reader.parse(~s({"kind":"answer","text":""})) == :error
   end
 
+  test "an outcome of several steps is a project with at most five steps, and says them back" do
+    reply = ~s({"kind":"project","text":"plan mom's birthday","steps":["book a table"," ","ask dad","a","b","c","d"]})
+
+    assert {:ok, %{kind: "project", text: "plan mom's birthday", steps: steps, due_at: nil} = reading} =
+             Reader.parse(reply)
+
+    assert steps == ["book a table", "ask dad", "a", "b", "c"]
+
+    assert Reader.say(reading) == "project: plan mom's birthday\nfirst step: book a table\nthen: ask dad, a, b, c"
+
+    assert Reader.say(%{reading | steps: ["call"]}) == "project: plan mom's birthday\nfirst step: call"
+  end
+
+  test "a project with no steps is a to-do, and a waiting-on with no one named is too" do
+    assert {:ok, %{kind: "todo", text: "sort the car"}} = Reader.parse(~s({"kind":"project","text":"sort the car"}))
+    assert {:ok, %{kind: "todo"}} = Reader.parse(~s({"kind":"project","text":"x","steps":"call"}))
+    assert {:ok, %{kind: "todo", text: "the photos"}} = Reader.parse(~s({"kind":"waiting","text":"the photos"}))
+  end
+
+  test "a waiting-on says who and what, and when it will ask" do
+    assert {:ok, %{kind: "waiting", who: "Sam", text: "the photos"} = reading} =
+             Reader.parse(~s({"kind":"waiting","text":"the photos","who":" Sam "}))
+
+    assert Reader.say(reading) == "waiting on Sam for the photos. I'll ask in 3 days."
+    assert Reader.say(%Server.Jot{kind: "waiting", text: "the photos", waiting_on: "Sam"}) == Reader.say(reading)
+  end
+
+  test "asking what now, with the minutes there are, and what is on someday, needs no text" do
+    assert {:ok, %{kind: "now", minutes: 10}} = Reader.parse(~s({"kind":"now","minutes":10}))
+    assert {:ok, %{kind: "now"} = reading} = Reader.parse(~s({"kind":"now","minutes":"ten"}))
+    refute Map.has_key?(reading, :minutes)
+    refute Map.has_key?(elem(Reader.parse(~s({"kind":"now","minutes":0})), 1), :minutes)
+    assert {:ok, %{kind: "someday", ids: []}} = Reader.parse(~s({"kind":"someday"}))
+  end
+
+  test "a to-do's size, project, what was assumed, the one question and what to revive are kept when they are valid" do
+    reply =
+      ~s({"kind":"todo","text":"email Sam","mins":10,"project":4,"assumed":"Sam is Sam Lee","ask":"Which day? Or later?","revive":[3,"x"]})
+
+    assert {:ok, %{mins: 10, project: 4, assumed: "Sam is Sam Lee", ask: "Which day?", revive: [3]} = reading} =
+             Reader.parse(reply)
+
+    assert Reader.reply(reading) == "to do: email Sam\nI took it that Sam is Sam Lee.\nWhich day?"
+
+    assert {:ok, bare} =
+             Reader.parse(~s({"kind":"todo","text":"x","mins":7,"project":"4","assumed":" ","ask":5,"revive":[]}))
+
+    assert bare == %{kind: "todo", text: "x", due_at: nil, every: nil, ids: [], amends: false}
+  end
+
+  test "a project is never asked about, and a note carries no size or project" do
+    assert {:ok, reading} = Reader.parse(~s({"kind":"project","text":"x","steps":["a"],"ask":"When?"}))
+    refute Map.has_key?(reading, :ask)
+
+    assert {:ok, note} = Reader.parse(~s({"kind":"note","text":"x","mins":10,"project":2}))
+    assert note == %{kind: "note", text: "x", due_at: nil, every: nil, ids: [], amends: false}
+  end
+
   test "a reply that holds no reading is none" do
     assert Reader.parse("I can't help with that") == :error
     assert Reader.parse(~s({"kind":"quest","text":"milk"})) == :error

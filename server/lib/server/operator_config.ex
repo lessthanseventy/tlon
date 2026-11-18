@@ -162,6 +162,13 @@ defmodule Server.OperatorConfig do
       doc: "when the home's helper says what is still open each day, local HH:MM; empty for never"
     },
     %{
+      key: "home_review_on",
+      type: "string",
+      default: "sun",
+      doc:
+        "the weekday the home's helper reviews what has gone stale, as mon..sun, at the daily list's time; empty for never"
+    },
+    %{
       key: "intake_every_minutes",
       type: "int",
       min: 1,

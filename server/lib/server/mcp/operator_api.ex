@@ -156,11 +156,19 @@ defmodule Server.MCP.OperatorAPI do
       PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe; the page it replaces is kept
       GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
-      GET    /api/home                   Server.Home.status; {open, coming, notes}: what the operator's jots have left open
+      GET    /api/home                   Server.Home.status; {open, coming, notes, projects, waiting, done_week}: what the operator's
+                                         jots have left open; a row has its project {id, text} or nil, a project its next step
+                                         and how many are done, a waiting-on its who/since/due_at
+      GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open
+                                         thing to do now; skip is ids joined by commas, minutes the time there is; 400 on either not numbers
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion
                                          (asking may write the next batch); {} before the first
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
       POST   /api/home/:id/later         {until: "hour"|"tomorrow"} → Server.Home.later; the jot, or 404
+      POST   /api/home/:id/answer        {choice, text?} → Server.Home.answer; {reply}: a question the home put (the alerts'
+                                         home_ask) answered: next: add|finish|step (text), review: keep|later|drop,
+                                         waiting: got|chased|tomorrow, shrink: add|no; "nottoday" hides an open thing
+                                         until tomorrow. 400 with no choice, 404 when there is no such question
       POST   /api/home                   {text} → Server.Home.say; {reply}: kept and read as a text in the chat is
   """
 
@@ -569,6 +577,32 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "GET", "home", ["pets"]), do: json(conn, 200, Server.Home.Pets.voices(DateTime.utc_now()))
 
+  defp route(conn, "GET", "home", ["now"]) do
+    q = fetch_query_params(conn).query_params
+
+    with {:ok, skip} <- ids(q["skip"]),
+         {:ok, minutes} <- minutes(q["minutes"]) do
+      json(conn, 200, Server.Home.now(skip, minutes, DateTime.utc_now()))
+    else
+      :error -> json(conn, 400, %{error: "skip is ids joined by commas, minutes a number"})
+    end
+  end
+
+  defp route(conn, "POST", "home", [id, "answer"]) do
+    {b, conn} = body(conn)
+
+    with {id, ""} <- Integer.parse(id),
+         {:choice, choice} when is_binary(choice) <- {:choice, b["choice"]} do
+      case Server.Home.answer(id, choice, b["text"], DateTime.utc_now()) do
+        {:ok, reply} -> json(conn, 200, %{reply: reply})
+        :error -> no_route(conn)
+      end
+    else
+      {:choice, _} -> json(conn, 400, %{error: "choice is required"})
+      _ -> no_route(conn)
+    end
+  end
+
   defp route(conn, "POST", "home", []) do
     case body(conn) do
       {%{"text" => text}, conn} when is_binary(text) and text != "" ->
@@ -765,6 +799,23 @@ defmodule Server.MCP.OperatorAPI do
   defp on_workspaces(conn, _, _), do: no_route(conn)
 
   defp no_route(conn), do: json(conn, 404, %{error: "no such route"})
+
+  defp ids(nil), do: {:ok, []}
+  defp ids(""), do: {:ok, []}
+
+  defp ids(text) do
+    parsed = text |> String.split(",") |> Enum.map(&Integer.parse/1)
+    if Enum.all?(parsed, &match?({_, ""}, &1)), do: {:ok, Enum.map(parsed, &elem(&1, 0))}, else: :error
+  end
+
+  defp minutes(nil), do: {:ok, nil}
+
+  defp minutes(text) do
+    case Integer.parse(text) do
+      {n, ""} when n > 0 -> {:ok, n}
+      _ -> :error
+    end
+  end
 
   # the cat slot as the office has it (`?cat=&species=&warmth=&wits=&energy=`), or nil
   defp pet_profile(%{"cat" => name} = q) do
