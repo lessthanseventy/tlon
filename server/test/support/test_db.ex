@@ -50,6 +50,7 @@ defmodule Server.TestDB do
     "need_routing",
     "jot",
     "home_slot",
+    "home_keep",
     "home_agenda",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so
     # tickets clear before all of them; note has no FK.

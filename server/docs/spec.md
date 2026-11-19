@@ -521,7 +521,9 @@ and changes them through the routes below with no model call (`Server.Home.Form`
 rows); a monthly repeat keeps the day it is on (`jot.every_day`: Jan 31, Feb 28, Mar 31; nil for any other repeat, worked out again from the time when a time or the repeat is edited; putting one off moves that time only).
 Delete drops any open thing (a repeating reminder stops for good; a project takes its steps and plan; the only
 open step of a project proposes the next): Delete under a told reminder and a what-now pick, on the reminder's
-desktop alert, typed ("forget the bins"), and `POST /api/home/:id/drop`.
+desktop alert, typed ("forget the bins"), and `POST /api/home/:id/drop`. The pets' lines
+(`Server.Home.Pets`) are kept as JSON in `home_keep` (name `pets`: the lines, their cast, the time asked), read at
+start, so a restart serves them at once and ages them from that time; a kept value that does not parse is ignored.
 
 An **agenda** is a named standing pile of notes for an occasion that comes round (`Server.Agenda`: "retro",
 "1:1 with Sam", "weekly"), with or without a rhythm (`every` as above, `next_at`). Its notes are notes with
