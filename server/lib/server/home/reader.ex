@@ -19,6 +19,8 @@ defmodule Server.Home.Reader do
   one, matched loosely, else a new name): `"agenda"` (`text` is a note for its pile),
   `"agenda_set"` (`due_at` and `every` are its rhythm, either may be nil), and the asks
   `"agenda_show"`, `"agenda_past"` (what was on it before it was cleared) and `"agenda_clear"`.
+  Proposals (`Server.Proposal`) have three asks: `"proposals"` (what is proposed), `"take"` (yes to the
+  proposals numbered `ids`) and `"dismiss"` (no to them).
   The model is shown what it needs for that: the jot before, the open things, the newest notes, the
   open projects, what is put off and the names of the agendas. Times are read and said in the machine's own zone. The model is
   Haiku on the operator's Claude login, with no tools (`:home_reader_cmd` and `:home_reader_model`
@@ -43,7 +45,8 @@ defmodule Server.Home.Reader do
           optional(:projects) => [Server.Jot.t()],
           optional(:someday) => [Server.Jot.t()],
           optional(:agendas) => [String.t()],
-          optional(:meetings) => [Server.Home.Day.meeting()]
+          optional(:meetings) => [Server.Home.Day.meeting()],
+          optional(:proposals) => [Server.Proposal.t()]
         }
 
   @kept ["reminder", "todo", "note", "project", "waiting", "agenda"]
@@ -57,9 +60,25 @@ defmodule Server.Home.Reader do
     "agenda_set",
     "agenda_show",
     "agenda_past",
-    "agenda_clear"
+    "agenda_clear",
+    "proposals",
+    "take",
+    "dismiss"
   ]
-  @bare ["done", "delete", "list", "now", "someday", "agenda_set", "agenda_show", "agenda_past", "agenda_clear"]
+  @bare [
+    "done",
+    "delete",
+    "list",
+    "now",
+    "someday",
+    "agenda_set",
+    "agenda_show",
+    "agenda_past",
+    "agenda_clear",
+    "proposals",
+    "take",
+    "dismiss"
+  ]
   @sizes [2, 10, 30, 60]
   @steps 5
 
@@ -290,6 +309,11 @@ defmodule Server.Home.Reader do
       retro?"). "agenda" names it.
     - "agenda_clear": they say an occasion is over and its pile is done ("retro's done", "clear retro").
       "agenda" names it.
+    - "proposals": they ask what is proposed, or whether anything is new ("what's proposed?", "anything new?").
+    - "take": they say yes to one or more of the PROPOSED things ("take the first", "yes to the Sam
+      one", "add them all"). "ids" are the numbers of those things; the first is the first listed.
+    - "dismiss": they say no to one or more of the PROPOSED things ("no to the second", "dismiss
+      all"). "ids" are the numbers of those things.
     "agenda" is the name of the matching one in AGENDAS when one plausibly is the occasion ("my 1:1",
     "one on one with Sam" are the same agenda), else a new short name, lowercase, without "my", "the"
     or "our" ("for the offsite: ..." is "offsite"). Only a message that names or plainly means an
@@ -330,6 +354,8 @@ defmodule Server.Home.Reader do
     #{agendas(Map.get(context, :agendas, []))}
     MEETINGS:
     #{meetings(Map.get(context, :meetings, []))}
+    PROPOSED:
+    #{proposed(Map.get(context, :proposals, []))}
     #{previous(context.previous)}
     MESSAGE: #{body}
     """
@@ -345,6 +371,9 @@ defmodule Server.Home.Reader do
 
   defp projects(jots),
     do: Enum.map_join(jots, "\n", &"#{&1.id}: #{&1.text}#{if &1.ask == "next", do: " (waiting for its next step)"}")
+
+  defp proposed([]), do: "(none)"
+  defp proposed(rows), do: Enum.map_join(rows, "\n", &"#{&1.id}: #{&1.text}#{if &1.why, do: " (#{&1.why})"}")
 
   defp agendas([]), do: "(none)"
   defp agendas(names), do: Enum.map_join(names, "\n", &"- #{&1}")

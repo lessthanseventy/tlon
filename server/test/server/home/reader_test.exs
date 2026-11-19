@@ -50,6 +50,12 @@ defmodule Server.Home.ReaderTest do
     end
   end
 
+  test "what is proposed, and a yes or a no to some of it, are asks that need no text" do
+    assert {:ok, %{kind: "proposals", text: ""}} = Reader.parse(~s({"kind":"proposals"}))
+    assert {:ok, %{kind: "take", ids: [4, 5]}} = Reader.parse(~s({"kind":"take","ids":[4,5]}))
+    assert {:ok, %{kind: "dismiss", ids: [4]}} = Reader.parse(~s({"kind":"dismiss","ids":[4]}))
+  end
+
   test "a reminder with no time it can read is a note" do
     assert {:ok, %{kind: "todo", due_at: nil}} = Reader.parse(~s({"kind":"reminder","text":"milk","at":"friday"}))
 

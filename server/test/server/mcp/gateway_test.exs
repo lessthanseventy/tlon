@@ -1058,6 +1058,39 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"open" => [], "done_week" => 1, "done" => [%{"text" => "buy milk"}]}} = get_json("/api/home")
     end
 
+    test "proposals: listed in the home, taken or dismissed over HTTP" do
+      Server.TestDB.clean!()
+      assert {200, %{"proposals" => []}} = get_json("/api/home")
+
+      Server.Proposal.offer(
+        "telegram",
+        "test",
+        [
+          %{key: "a", text: "Send Sam the Q4 numbers", why: "Sam asked", kind: "todo", url: "https://x.test/a"},
+          %{key: "b", text: "Review the deck", kind: "todo"}
+        ],
+        ~U[2026-11-19 12:00:00Z],
+        []
+      )
+
+      assert {200,
+              %{
+                "proposals" => [
+                  %{"id" => a, "source" => "test", "why" => "Sam asked", "url" => "https://x.test/a"},
+                  %{"id" => b}
+                ]
+              }} =
+               get_json("/api/home")
+
+      assert {200, %{"id" => ^a}} = post_json("/api/home/proposals/#{a}/take", %{})
+      assert {200, %{"open" => [%{"text" => "Send Sam the Q4 numbers"}]}} = get_json("/api/home")
+      assert {404, _} = post_json("/api/home/proposals/#{a}/take", %{})
+      assert {200, %{"id" => ^b}} = post_json("/api/home/proposals/#{b}/dismiss", %{})
+      assert {404, _} = post_json("/api/home/proposals/#{b}/dismiss", %{})
+      assert {404, _} = post_json("/api/home/proposals/nope/take", %{})
+      assert {200, %{"proposals" => []}} = get_json("/api/home")
+    end
+
     test "agendas: start, put notes on, edit, clear and delete over HTTP" do
       Server.TestDB.clean!()
       assert {200, %{"agendas" => []}} = get_json("/api/home")

@@ -52,6 +52,7 @@ defmodule Server.TestDB do
     "home_slot",
     "home_keep",
     "home_agenda",
+    "home_proposal",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so
     # tickets clear before all of them; note has no FK.
     Server.Ticket,
