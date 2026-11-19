@@ -675,6 +675,12 @@ func _gate() -> bool:
 
 
 func _stage(st: Array) -> void:
+	var who = h.pets.critter(str(st[1]) if st[1] != "" else "nina")
+	var row: Dictionary = ANTICS.get(str(st[0]), {})
+	var sleeper: bool = row.has("keep") or row.get("need") == "asleep"
+	var perched: bool = who.z > 0.0 and not (row.has("go") or row.has("perch_ok"))
+	if perched or (who.mode == "sleep" and not sleeper):
+		h.pets.place(who, "mid", "idle")
 	if ANTICS.get(str(st[0]), {}).get("pair", false):
 		var mate = other(h.pets.critter(str(st[1]) if st[1] != "" else "nina"))
 		if not mate.away and (mate.mode == "sleep" or mate.z > 0.0):
