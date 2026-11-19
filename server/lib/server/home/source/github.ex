@@ -4,13 +4,16 @@ defmodule Server.Home.Source.GitHub do
   (`:home_gh`, a function of the argument list answering `{:ok, stdout}` or `{:error, reason}`, is
   where a test stands in):
 
-    * `gh search prs --review-requested=@me --state=open`: `todo` "Review: <title>", asked by the author;
+    * `gh search prs "user-review-requested:@me" --state=open`: `todo` "Review: <title>", asked by the
+      author, for a review requested of the operator by name; with the `home_github_team_reviews`
+      setting on it is `--review-requested=@me` instead, which counts a team's requests too;
     * `gh search prs --author=@me --state=open --review=changes_requested`: `todo` "Changes requested: <title>";
     * `gh search prs --author=@me --state=open --review=none`: `waiting` "Waiting on review: <title>",
       taken by itself (`auto/0`): it is a fact about what is owed, said as "Reviewed: <title>" once a
       review comes.
 
-  Drafts are skipped, and so are the repos and owners in the `home_github_ignore` setting (a comma
+  Drafts are skipped, and so are PRs by a bot (`author.is_bot`, or a login ending `[bot]`), in all three
+  searches, and the repos and owners in the `home_github_ignore` setting (a comma
   list of `owner/repo` or `owner`). A key is the PR's URL and its role, so a PR that moves from one
   role to another is a key gone and a key new. A key known to the proposals and no longer listed is
   resolved; any failed search resolves nothing. A waiting-on that is gone is looked up
@@ -38,13 +41,18 @@ defmodule Server.Home.Source.GitHub do
   def fetch do
     ignored = ignored()
 
-    with {:ok, asked} <- search(["--review-requested=@me"]),
+    asked_of_me =
+      if Server.OperatorConfig.setting("home_github_team_reviews"),
+        do: ["--review-requested=@me"],
+        else: ["user-review-requested:@me"]
+
+    with {:ok, asked} <- search(asked_of_me),
          {:ok, changes} <- search(["--author=@me", "--review=changes_requested"]),
          {:ok, waiting} <- search(["--author=@me", "--review=none"]) do
       proposals =
         for {role, prs} <- [review: asked, changes: changes, waiting: waiting],
             pr <- prs,
-            not pr["isDraft"] and not ignored?(pr, ignored),
+            not pr["isDraft"] and not bot?(pr) and not ignored?(pr, ignored),
             do: proposal(role, pr)
 
       keys = MapSet.new(proposals, & &1.key)
@@ -152,6 +160,10 @@ defmodule Server.Home.Source.GitHub do
     |> Enum.map(&(&1 |> String.trim() |> String.downcase()))
     |> Enum.reject(&(&1 == ""))
   end
+
+  defp bot?(%{"author" => %{"is_bot" => true}}), do: true
+  defp bot?(%{"author" => %{"login" => login}}) when is_binary(login), do: String.ends_with?(login, "[bot]")
+  defp bot?(_pr), do: false
 
   defp ignored?(pr, ignored), do: repo_ignored?(pr["repository"]["nameWithOwner"], ignored)
 

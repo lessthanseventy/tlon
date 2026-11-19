@@ -182,6 +182,13 @@ defmodule Server.OperatorConfig do
       doc: "GitHub repos (owner/repo) or owners the home's github source leaves out, comma separated; empty for none"
     },
     %{
+      key: "home_github_team_reviews",
+      type: "bool",
+      default: false,
+      doc:
+        "whether the home's github source proposes reviews requested of a team you are in too, not only those asked of you by name"
+    },
+    %{
       key: "home_review_on",
       type: "string",
       default: "sun",

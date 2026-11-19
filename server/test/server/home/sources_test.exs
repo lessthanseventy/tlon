@@ -26,7 +26,7 @@ defmodule Server.Home.SourcesTest do
       "number" => n,
       "title" => title,
       "url" => "https://github.com/#{opts[:repo] || "acme/app"}/pull/#{n}",
-      "author" => %{"login" => opts[:author] || "sam"},
+      "author" => %{"login" => opts[:author] || "sam", "is_bot" => opts[:bot] || false},
       "repository" => %{"nameWithOwner" => opts[:repo] || "acme/app"},
       "isDraft" => opts[:draft] || false
     }
@@ -50,7 +50,7 @@ defmodule Server.Home.SourcesTest do
 
         answer =
           cond do
-            "--review-requested=@me" in args -> asked
+            "--review-requested=@me" in args or "user-review-requested:@me" in args -> asked
             "--review=changes_requested" in args -> changes
             "--review=none" in args -> waiting
           end
@@ -103,11 +103,38 @@ defmodule Server.Home.SourcesTest do
                        "100",
                        "--json",
                        _,
-                       "--review-requested=@me"
+                       "user-review-requested:@me"
                      ]}
 
     assert_received {:gh, [_, _, _, _, _, _, _, _, "--author=@me", "--review=changes_requested"]}
     assert_received {:gh, [_, _, _, _, _, _, _, _, "--author=@me", "--review=none"]}
+  end
+
+  test "PRs by a bot are left out of all three searches" do
+    gh(
+      [pr(1, "Bump deps", author: "dependabot[bot]", bot: true), pr(2, "Old style bot", author: "renovate[bot]")],
+      [pr(3, "Bump again", bot: true)],
+      [pr(4, "Bumped", bot: true), pr(5, "Mine")]
+    )
+
+    assert {:ok, [%{text: "Waiting on review: Mine"}], []} = GitHub.fetch()
+  end
+
+  test "team reviews are asked for only with home_github_team_reviews on, and switching it off withdraws them silently" do
+    modules = %{"github" => GitHub}
+    set("home_github_team_reviews", true)
+    gh([pr(1, "By name"), pr(2, "Team's")], [], [])
+    Sources.poll("telegram", ["github"], modules, @now, %{})
+    assert_received {:gh, [_, _, _, _, _, _, _, _, "--review-requested=@me"]}
+    assert ["Review: By name", "Review: Team's"] = Enum.map(Proposal.open(), & &1.text)
+
+    set("home_github_team_reviews", false)
+    gh([pr(1, "By name")], [], [])
+    Sources.poll("telegram", ["github"], modules, DateTime.add(@now, 900), %{})
+    assert_received {:gh, [_, _, _, _, _, _, _, _, "user-review-requested:@me"]}
+    assert [%{text: "Review: By name"}] = Proposal.open()
+    assert Proposal.settled() == []
+    assert Jot.opens("telegram") == []
   end
 
   test "the poller files the waiting-on by itself, offers the rest, and says a PR reviewed as settled" do
@@ -136,16 +163,20 @@ defmodule Server.Home.SourcesTest do
     }
   end
 
-  defp ignore_repos(value) do
-    path = Path.join(System.tmp_dir!(), "tlon-sources-#{System.pid()}-#{System.unique_integer([:positive])}.json")
-    Application.put_env(:server, :operator_config_path, path)
+  defp ignore_repos(value), do: set("home_github_ignore", value)
 
-    on_exit(fn ->
-      Application.put_env(:server, :operator_config_path, "/nonexistent/tlon-test-config.json")
-      File.rm(path)
-    end)
+  defp set(key, value) do
+    if Application.get_env(:server, :operator_config_path) == "/nonexistent/tlon-test-config.json" do
+      path = Path.join(System.tmp_dir!(), "tlon-sources-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+      Application.put_env(:server, :operator_config_path, path)
 
-    :ok = Server.OperatorConfig.put("home_github_ignore", value)
+      on_exit(fn ->
+        Application.put_env(:server, :operator_config_path, "/nonexistent/tlon-test-config.json")
+        File.rm(path)
+      end)
+    end
+
+    :ok = Server.OperatorConfig.put(key, value)
   end
 
   defp waiting_then_gone(view, ignore \\ nil) do
