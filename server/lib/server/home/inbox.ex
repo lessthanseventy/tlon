@@ -42,7 +42,7 @@ defmodule Server.Home.Inbox do
   @retry_ms 5_000
   @tick_ms 30_000
   @nudges 6
-  @kept ["reminder", "todo", "note", "project", "waiting"]
+  @kept ["reminder", "todo", "note", "project", "waiting", "agenda"]
   @done ["done", "did it", "did that"]
 
   @doc "Offer the smaller start `start` for the to-do `id` in the chat, once the model has written it."
@@ -478,6 +478,11 @@ defmodule Server.Home.Inbox do
     reader = Application.get_env(:server, :home_reader, &Reader.read/2)
 
     case reader.(jot.body, context) do
+      {:ok, %{amends: true, kind: "agenda"} = reading} when context.previous != nil ->
+        reply = Agendas.file(context.previous, reading, now)
+        Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
+        {"changed: " <> reply, []}
+
       {:ok, %{amends: true, kind: kind} = reading} when context.previous != nil and kind in @kept ->
         reply = Organize.file(context.previous, reading, now)
         Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
