@@ -21,7 +21,10 @@ class Row:
 	signal ticked
 	var _lit := false
 
-	func _init(text: String, sub: String = "", tick: bool = false, dim: bool = false) -> void:
+	# `line`: the quiet text sits at the right of the one line instead of under it
+	func _init(
+		text: String, sub: String = "", tick: bool = false, dim: bool = false, line: bool = false
+	) -> void:
 		mouse_filter = Control.MOUSE_FILTER_STOP
 		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -36,12 +39,27 @@ class Row:
 			var t := Tick.new()
 			t.pressed.connect(func() -> void: ticked.emit())
 			h.add_child(t)
+		var ink := Color(Paper.INK, 0.55) if dim else Paper.INK
+		if line:
+			var l := _text(text, 14, ink)
+			l.autowrap_mode = TextServer.AUTOWRAP_OFF
+			l.clip_text = true
+			l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			h.add_child(l)
+			if sub != "":
+				var q := _text(sub, 12, Paper.QUIET)
+				q.autowrap_mode = TextServer.AUTOWRAP_OFF
+				q.size_flags_horizontal = Control.SIZE_SHRINK_END
+				q.custom_minimum_size.x = 0
+				q.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+				h.add_child(q)
+			return
 		var col := VBoxContainer.new()
 		col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		col.add_theme_constant_override("separation", 0)
 		h.add_child(col)
-		var ink := Color(Paper.INK, 0.55) if dim else Paper.INK
 		col.add_child(_text(text, 15, ink))
 		if sub != "":
 			col.add_child(_text(sub, 12, Paper.QUIET))
@@ -85,7 +103,7 @@ class Tick:
 	var _lit := false
 
 	func _init() -> void:
-		custom_minimum_size = Vector2(24, 24)
+		custom_minimum_size = Vector2(22, 22)
 		size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		mouse_filter = Control.MOUSE_FILTER_STOP
 		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND

@@ -96,15 +96,16 @@ func setup(the_home, claude: RefCounted, phone: Node) -> void:
 	_views = Views.new(self, home)
 	var style := StyleBoxFlat.new()
 	style.bg_color = FRAME
-	style.set_content_margin_all(10)
+	style.set_content_margin_all(8)
 	add_theme_stylebox_override("panel", style)
 	custom_minimum_size.x = WIDTH
 	var outer := VBoxContainer.new()
-	outer.add_theme_constant_override("separation", 8)
+	outer.add_theme_constant_override("separation", 6)
 	add_child(outer)
 
 	_banner = VBoxContainer.new()
-	_banner.add_theme_constant_override("separation", 6)
+	_banner.custom_minimum_size.y = 38
+	_banner.alignment = BoxContainer.ALIGNMENT_CENTER
 	outer.add_child(_banner)
 	_build_header(outer)
 	_status = Paper.label("can't reach tlon", 13, Color("a89fb0"))
@@ -117,7 +118,7 @@ func setup(the_home, claude: RefCounted, phone: Node) -> void:
 	outer.add_child(_pane)
 	_sheet = PanelContainer.new()
 	_sheet.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_sheet.add_theme_stylebox_override("panel", Paper.panel(10))
+	_sheet.add_theme_stylebox_override("panel", Paper.panel(9))
 	_pane.add_child(_sheet)
 	var inner := VBoxContainer.new()
 	inner.add_theme_constant_override("separation", 0)
@@ -132,7 +133,7 @@ func setup(the_home, claude: RefCounted, phone: Node) -> void:
 	scroll.add_child(stack)
 	_dyn = VBoxContainer.new()
 	_dyn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_dyn.add_theme_constant_override("separation", 6)
+	_dyn.add_theme_constant_override("separation", 2)
 	stack.add_child(_dyn)
 	_build_persistent(stack, claude, phone)
 	decorate = null
@@ -573,24 +574,28 @@ func _layout() -> void:
 	chat_view.size_flags_vertical = Control.SIZE_EXPAND_FILL if full else Control.SIZE_SHRINK_END
 	chat_view.custom_minimum_size.y = 0.0
 	if eff == "dock":
-		chat_view.custom_minimum_size.y = maxf(190.0, size.y * 0.4)
+		chat_view.custom_minimum_size.y = maxf(176.0, size.y * 0.3)
 
 
 func _banner_update() -> void:
 	var pad := get_global_rect().has_point(get_global_mouse_position())
 	home.rhythm.held = pad and _banner.get_global_rect().has_point(get_global_mouse_position())
-	var ring: Dictionary = {}
+	var queue: Array = []
 	for item in home.open:
 		if home.ring_ids.has(int(item["id"])):
-			ring = item
+			queue.append({"k": "ring", "item": item})
 			break
+	if home.reply_left > 0.0 and home.reply_text != "":
+		queue.append({"k": "reply", "text": home.reply_text})
+	if home.rhythm.kind != "":
+		queue.append({"k": "slip"})
+	var first: Dictionary = queue[0] if not queue.is_empty() else {}
 	var sig := JSON.stringify(
 		[
-			ring.get("id"),
-			ring.get("text"),
+			first,
+			queue.size(),
 			home.rhythm.kind,
-			home.rhythm.rows.map(func(r: Dictionary) -> Variant: return r["label"]),
-			home.reply_text if home.reply_left > 0.0 else "",
+			home.rhythm.rows.size() + home.rhythm.more,
 		]
 	)
 	if sig == _banner_sig:
@@ -599,62 +604,73 @@ func _banner_update() -> void:
 	for c in _banner.get_children():
 		_banner.remove_child(c)
 		c.queue_free()
-	if not ring.is_empty():
-		_ring_strip(ring)
-	if home.rhythm.kind != "":
-		_slip_strip()
-	if home.reply_left > 0.0 and home.reply_text != "":
-		var line := _strip()
-		line.add_child(Blocks.wrapped(home.reply_text, 14, Paper.INK))
-	_banner.visible = _banner.get_child_count() > 0
+	if queue.is_empty():
+		return
+	var strip := _strip()
+	var text := ""
+	var acts: Array = []
+	var cb: Callable
+	match first["k"]:
+		"ring":
+			var id := int(first["item"]["id"])
+			text = "ringing: " + str(first["item"]["text"])
+			acts = [
+				{"label": "Done", "act": "done"},
+				{"label": "In 1 h", "act": "hour"},
+				{"label": "Tomorrow", "act": "tomorrow"},
+			]
+			cb = func(a: String) -> void: item_act(id, a)
+		"reply":
+			text = str(first["text"])
+			acts = [{"label": "ok", "act": "ok"}]
+			cb = func(_a: String) -> void: home.reply_left = 0.0
+		_:
+			var n: int = home.rhythm.rows.size() + home.rhythm.more
+			text = (
+				"%d still open" % n
+				if home.rhythm.kind == "home"
+				else "%s (%d)" % [home.rhythm.title, n]
+			)
+			if home.rhythm.kind == "home":
+				acts.append({"label": "Look", "act": "look"})
+			acts.append({"label": "Put away", "act": "away"})
+			cb = func(a: String) -> void: _slip_act(a)
+	var l := Paper.label(text, 14, Paper.INK)
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.custom_minimum_size.x = 30
+	strip.add_child(l)
+	if queue.size() > 1:
+		strip.add_child(Paper.label("+%d" % (queue.size() - 1), 12, Paper.QUIET))
+	for a in acts:
+		var b := Paper.chip(str(a["label"]), strip, func() -> void: cb.call(str(a["act"])), false)
+		b.add_theme_font_size_override("font_size", 12)
+		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 
-func _strip() -> VBoxContainer:
+func _slip_act(a: String) -> void:
+	home.rhythm.dismiss()
+	if a == "look":
+		open_expanded = true
+		_switch("home", null)
+
+
+# one compact row: the slip's paper with its text and buttons side by side
+func _strip() -> HBoxContainer:
 	var p := PanelContainer.new()
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var s := StyleBoxFlat.new()
 	s.bg_color = SLIP
 	s.set_border_width_all(2)
 	s.border_color = Paper.INK
-	s.set_content_margin_all(8)
+	s.content_margin_left = 8
+	s.content_margin_right = 4
+	s.content_margin_top = 3
+	s.content_margin_bottom = 3
 	p.add_theme_stylebox_override("panel", s)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 4)
-	p.add_child(col)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 5)
+	p.add_child(row)
 	_banner.add_child(p)
-	return col
-
-
-func _ring_strip(item: Dictionary) -> void:
-	var col := _strip()
-	var id := int(item["id"])
-	col.add_child(Blocks.wrapped("ringing: " + str(item["text"]), 15, Paper.INK))
-	var acts: Array = [
-		{"label": "Done", "act": "done", "s": 13},
-		{"label": "In an hour", "act": "hour", "s": 13},
-		{"label": "Tomorrow", "act": "tomorrow", "s": 13},
-	]
-	Blocks.build(col, [{"t": "buttons", "items": acts}], func(a: String) -> void: item_act(id, a))
-
-
-func _slip_strip() -> void:
-	var col := _strip()
-	col.add_child(Paper.heading(home.rhythm.title, 15, Paper.INK))
-	for r in home.rhythm.rows.slice(0, 3):
-		col.add_child(Blocks.wrapped("- " + str(r["label"]), 14, Paper.INK))
-	var more: int = home.rhythm.rows.size() - 3 + home.rhythm.more
-	if more > 0:
-		col.add_child(Blocks.wrapped("and %d more" % more, 12, Paper.QUIET))
-	var acts: Array = []
-	if home.rhythm.kind == "home":
-		acts.append({"label": "Look", "act": "look", "s": 13})
-	acts.append({"label": "Put away", "act": "away", "s": 13})
-	Blocks.build(
-		col,
-		[{"t": "buttons", "items": acts}],
-		func(a: String) -> void:
-			if a == "look":
-				home.rhythm.dismiss()
-				open_desk()
-			else:
-				home.rhythm.dismiss()
-	)
+	return row
