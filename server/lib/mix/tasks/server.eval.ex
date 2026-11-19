@@ -5,13 +5,17 @@ defmodule Mix.Tasks.Server.Eval do
 
   Loads every scenario in `evals/` and runs it against its own Postgres database
   (`tlon_eval_<pid>`, dropped and recreated per run) — never the live or dev-scratch one,
-  whatever `TLON_DATABASE` the shell carries. Deterministic scenarios are plain
+  whatever `TLON_DATABASE` the shell carries. The run starts by dropping the `tlon_eval_<pid>`
+  databases of dead pids (a gate killed before its teardown) and ends by stopping the app, then
+  dropping its own; a teardown that fails says so in one line and leaves the verdict alone. Deterministic scenarios are plain
   asserts; judged scenarios go through the LLM judge (`Server.Eval.Judge.Claude`, cheap alias)
   and gate on a ≥3.5 average. `--deterministic` skips the judged set — the fast, offline mode
   `mix precommit` runs. Exits nonzero on any failure.
   """
   use Mix.Task
   use Boundary, classify_to: Server
+
+  @drop_timeout to_timeout(minute: 3)
 
   @impl Mix.Task
   def run(argv) do
@@ -36,6 +40,7 @@ defmodule Mix.Tasks.Server.Eval do
     System.delete_env("TLON_DATABASE_URL")
     System.put_env("TLON_DATABASE", eval_db)
     Mix.Task.run("ecto.drop", ["--quiet", "--force-drop"])
+    Enum.each(stale_databases(), &drop/1)
     Mix.Task.run("ecto.create", ["--quiet"])
 
     # dropped again when the run ends, red or raised: the pid is fresh every run, so the drop above
@@ -49,8 +54,31 @@ defmodule Mix.Tasks.Server.Eval do
       Mix.shell().info(Server.Eval.scorecard(report))
       if not report.ok?, do: Mix.raise("server.eval failed")
     after
-      Mix.Task.reenable("ecto.drop")
-      Mix.Task.run("ecto.drop", ["--quiet", "--force-drop"])
+      # the app's repo pool reconnects to a database being force-dropped and slows the drop
+      Application.stop(:server)
+      drop(eval_db)
     end
   end
+
+  # ecto.drop's adapter call reads :timeout from the repo config, 15s by default: a drop
+  # interrupted on a busy box leaves an "invalid" database. A failed drop is said, never raised:
+  # it must not turn a passed eval red nor hide a failed one.
+  defp drop(database) do
+    config = Keyword.merge(Server.Repo.config(), database: database, force_drop: true, timeout: @drop_timeout)
+
+    case Ecto.Adapters.Postgres.storage_down(config) do
+      result when result in [:ok, {:error, :already_down}] -> :ok
+      {:error, reason} -> Mix.shell().error("server.eval: could not drop #{database}: #{inspect(reason)}")
+    end
+  end
+
+  defp stale_databases do
+    config = Keyword.merge(Server.Repo.config(), database: "postgres")
+    {:ok, conn} = config |> Keyword.drop([:name, :log, :pool, :pool_size]) |> Postgrex.start_link()
+    %{rows: rows} = Postgrex.query!(conn, "SELECT datname FROM pg_database WHERE datname LIKE 'tlon\\_eval\\_%'", [])
+    GenServer.stop(conn)
+    rows |> List.flatten() |> Server.Eval.stale_databases(&os_pid_alive?/1)
+  end
+
+  defp os_pid_alive?(pid), do: match?({_, 0}, System.cmd("kill", ["-0", pid], stderr_to_stdout: true))
 end

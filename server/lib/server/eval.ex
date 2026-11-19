@@ -86,6 +86,18 @@ defmodule Server.Eval do
   defp avg([]), do: nil
   defp avg(values), do: Float.round(Enum.sum(values) / length(values), 2)
 
+  @doc """
+  The `tlon_eval_<pid>` databases among `names` whose pid `alive?` says is gone: what a gate
+  killed before its teardown left behind. A name that is not that shape is never returned.
+  """
+  @spec stale_databases([String.t()], (String.t() -> boolean())) :: [String.t()]
+  def stale_databases(names, alive?) do
+    for name <- names,
+        [_, pid] <- [Regex.run(~r/\Atlon_eval_(\d+)\z/, name)],
+        not alive?.(pid),
+        do: name
+  end
+
   @doc "The shared CLI contract for the per-module eval mix tasks."
   def mode(argv), do: if("--deterministic" in argv, do: :deterministic, else: :all)
 

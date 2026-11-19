@@ -101,6 +101,14 @@ defmodule Server.EvalTest do
     assert {:error, {:unparseable_judgement, _}} = Claude.parse(~s({"scores": {}, "rationale": "empty"}))
   end
 
+  test "stale_databases keeps only tlon_eval_<pid> names whose pid is gone" do
+    names = ["tlon", "tlon_eval", "tlon_eval_abc", "tlon_eval_11", "tlon_eval_22", "tlon_eval_33_x"]
+
+    assert Eval.stale_databases(names, &(&1 == "22")) == ["tlon_eval_11"]
+    assert Eval.stale_databases(names, fn _ -> false end) == ["tlon_eval_11", "tlon_eval_22"]
+    assert Eval.stale_databases([], fn _ -> false end) == []
+  end
+
   test "the scorecard renders one line per scenario plus the tally" do
     card =
       [assert_scenario("picks the mention", "x", &(&1 == "x"))]
