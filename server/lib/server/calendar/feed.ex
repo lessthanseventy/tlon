@@ -10,8 +10,13 @@ defmodule Server.Calendar.Feed do
   Outlook's X-MICROSOFT-CDO-BUSYSTATUS, else TRANSP, else STATUS.
 
   A TZID that is a Windows zone name is read by `ICal`, except UTC's spellings, which are made
-  `Etc/UTC` here. One the parser cannot read takes the fixed standard offset of the feed's own
-  VTIMEZONE of that name (whole hours only, so an hour off in summer), else UTC, and is logged once.
+  `Etc/UTC` here. One the parser cannot read is logged once and takes, in this order: the region's
+  zone when the feed's own VTIMEZONE of that name carries a US or EU daylight rule at a known
+  standard offset (daylight time right); that VTIMEZONE's standard offset otherwise; the
+  `(UTC±hh:mm)` prefix of the name as a fixed offset; UTC. Fixed offsets are whole hours only
+  (`Etc/GMT-14` to `Etc/GMT+12`), so a fixed one is an hour off in summer for a zone with daylight
+  time, and a half-hour one is UTC. The body is unfolded (a CRLF and a space or tab joins a line to
+  the one before) before any of this.
   """
 
   require Logger
@@ -93,6 +98,7 @@ defmodule Server.Calendar.Feed do
 
   defp parse(ics) do
     ics
+    |> String.replace(~r/\r?\n[ \t]/, "")
     |> zones()
     |> ICal.from_ics()
     |> case do
@@ -171,7 +177,7 @@ defmodule Server.Calendar.Feed do
   defp offset(sign, h, m), do: if(sign == "-", do: -1, else: 1) * (String.to_integer(h) * 60 + String.to_integer(m))
 
   defp fixed(0), do: "Etc/UTC"
-  defp fixed(minutes) when rem(minutes, 60) == 0 and abs(minutes) <= 12 * 60, do: etc(div(minutes, 60))
+  defp fixed(minutes) when rem(minutes, 60) == 0 and minutes in -720..840, do: etc(div(minutes, 60))
   defp fixed(_half_hour), do: "Etc/UTC"
 
   defp etc(hours) when hours < 0, do: "Etc/GMT+#{-hours}"
