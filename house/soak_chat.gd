@@ -37,8 +37,14 @@ func _stamp() -> Dictionary:
 	return out
 
 
+# `secs`, then until no request is in flight (bounded): a slow machine is slower, not wrong
 func _wait(secs: float = 0.6) -> void:
 	await s.create_timer(secs).timeout
+	var quiet := 0
+	var end := Time.get_ticks_msec() + 8000
+	while quiet < 3 and Time.get_ticks_msec() < end:
+		quiet = quiet + 1 if main._backend.get_child_count() == 0 else 0
+		await s.process_frame
 
 
 func _key(code: int) -> InputEventKey:
