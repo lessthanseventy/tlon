@@ -1902,10 +1902,12 @@ func _packs_files() -> void:
 		for i in l.pieces.size():
 			_check(l.pieces[i] == doc["pieces"][i], "old piece %s keeps its meaning" % doc["pieces"][i])
 		l.save()
-		_check(_read_layout(path) == _norm(doc), "an old layout file saves back as it was")
+		var kept := _norm(doc)
+		kept["v"] = float(Layout.SAVED)
+		_check(_read_layout(path) == kept, "an old layout file saves back as it was, in the current version")
 		var bare := _layout_of(_interiors(), path, true)
 		bare.save()
-		_check(_read_layout(path) == _norm(doc), "an old layout file saves back as it was without the packs")
+		_check(_read_layout(path) == kept, "an old layout file saves back as it was without the packs")
 
 	var held := {
 		"v": 1,

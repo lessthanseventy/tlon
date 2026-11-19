@@ -7,6 +7,9 @@ const Packs := preload("res://packs.gd")
 const PetThings := preload("res://pet_things.gd")
 
 const SIDES := ["sw", "se", "ne", "nw", "nwse", "nesw"]
+const FRONT := {
+	"se": Vector2i(1, 0), "sw": Vector2i(0, 1), "ne": Vector2i(0, -1), "nw": Vector2i(-1, 0)
+}
 const GROUPS := [
 	[
 		"living",
@@ -89,6 +92,7 @@ const NO_ROOM := "no room there"
 const BUSY := "someone is there"
 const SHUTS := "that would shut a path"
 const ONCE := "that one is already out"
+const SAVED := 2
 # the pets' spots that move with their thing: their old cells stay free ground
 const MOVING_SPOTS := ["bed", "bowl"]
 
@@ -109,6 +113,8 @@ var guests: Array = []
 var version := 0
 # the pet things put out once, so one the owner took away is not put back
 var pets_seen: Array = []
+# a file saved before `SAVED`: the pets' things in it were put by the first rule
+var old_things := false
 
 var _fixed: Array = []
 # what the file holds of a pack that is not here, kept so saving does not delete it
@@ -123,6 +129,7 @@ func setup(sprites: Dictionary, with_art: bool, file: String, save_it: bool) -> 
 	path = file
 	persist = save_it
 	pets_seen = []
+	old_things = false
 	catalogue = []
 	version += 1
 	_fixed = FIXED.map(func(r): return _piece(r, true))
@@ -347,6 +354,27 @@ func blocked(extra: Variant = null, skip: Variant = null) -> Dictionary:
 	return out
 
 
+# the cells a person or a pet steps onto to use a piece: the side a piece faces (a piece on a wall
+# faces away from it), the door's, and the pets' spots
+func in_front() -> Dictionary:
+	var out := {DOOR_FRONT: true, DOOR_FRONT + Vector2i(1, 0): true}
+	for cell in _spot_cells():
+		out[cell] = true
+	for p in all():
+		var side: String = p["f"]
+		if kind(p) == "hug":
+			side = {"ne": "sw", "nw": "se"}.get(side, "")
+		if PetThings.is_pet(p) or kind(p) not in ["floor", "hug"] or not FRONT.has(side):
+			continue
+		var r := rect(p)
+		for x in range(r.position.x, r.end.x):
+			for y in range(r.position.y, r.end.y):
+				var cell: Vector2i = Vector2i(x, y) + FRONT[side]
+				if not r.has_point(cell):
+					out[cell] = true
+	return out
+
+
 func _wall_fixed(cell: Vector2i) -> bool:
 	return (
 		(cell.y == 0 and cell.x in WALL_FIXED["ne"]) or (cell.x == 0 and cell.y in WALL_FIXED["nw"])
@@ -544,6 +572,7 @@ func reset(busy: Array) -> void:
 	_dormant_wall = ""
 	_dormant_floor = ""
 	pets_seen = []
+	old_things = false
 	pieces = _defaults(busy)
 	version += 1
 	save()
@@ -556,7 +585,7 @@ func save() -> void:
 	if f != null:
 		var saved: Array = pieces.map(_row)
 		var doc := {
-			"v": 1,
+			"v": SAVED,
 			"wall": _dormant_wall if _dormant_wall != "" else wall,
 			"floor": _dormant_floor if _dormant_floor != "" else floor_style,
 			"pieces": saved + _dormant,
@@ -626,6 +655,7 @@ func load_file() -> bool:
 	for p in out:
 		p.erase("_i")
 	pieces = out
+	old_things = not (d.get("v") is float and d["v"] >= SAVED)
 	pets_seen = []
 	if d.get("pets_seen") is Array:
 		pets_seen = d["pets_seen"].filter(func(k): return k is String and k not in dropped)
