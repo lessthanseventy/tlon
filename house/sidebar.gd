@@ -17,6 +17,7 @@ signal kept_closet
 
 const Paper := preload("res://paper.gd")
 const Fonts := preload("res://fonts.gd")
+const Card := preload("res://card.gd")
 const Blocks := preload("res://blocks.gd")
 const Views := preload("res://views.gd")
 const Form := preload("res://form.gd")
@@ -596,6 +597,7 @@ func _banner_update() -> void:
 			queue.size(),
 			home.rhythm.kind,
 			home.rhythm.rows.size() + home.rhythm.more,
+			_stamp() if queue.is_empty() else "",
 		]
 	)
 	if sig == _banner_sig:
@@ -605,6 +607,9 @@ func _banner_update() -> void:
 		_banner.remove_child(c)
 		c.queue_free()
 	if queue.is_empty():
+		var clock := Paper.label(_stamp(), 13, Color("a89fb0"))
+		clock.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_banner.add_child(clock)
 		return
 	var strip := _strip()
 	var text := ""
@@ -674,3 +679,11 @@ func _strip() -> HBoxContainer:
 	p.add_child(row)
 	_banner.add_child(p)
 	return row
+
+
+# "Wed 18 Nov · 19:42": the banner row's quiet text while nothing waits
+func _stamp() -> String:
+	var d := Time.get_datetime_dict_from_unix_time(int(home._now_local()))
+	var day: String = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][int(d["weekday"])]
+	var month: String = Card.MONTHS[int(d["month"]) - 1].substr(0, 3)
+	return "%s %d %s · %02d:%02d" % [day, d["day"], month, d["hour"], d["minute"]]

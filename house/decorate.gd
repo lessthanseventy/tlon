@@ -161,10 +161,10 @@ func _tabs() -> void:
 	var font := ThemeDB.fallback_font
 	var x := PAD
 	for t in home.layout.tabs:
-		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT).x + 16.0
+		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT).x + 12.0
 		var r := Rect2(x, 10.0, w, CHIP_H)
 		draw_rect(r, Color(ACCENT, 0.35) if t == tab else Color(0, 0, 0, 0.08))
-		draw_string(font, r.position + Vector2(8, 16), t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT, INK)
+		draw_string(font, r.position + Vector2(6, 16), t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT, INK)
 		_hits.append({"rect": r, "act": "tab:" + t})
 		x += w + 6.0
 
