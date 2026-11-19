@@ -987,11 +987,43 @@ func _tv_logic() -> void:
 	_check(not tv.on, "it is off in the deep night")
 	tv.process(0.1, false, false)
 	tv.click()
-	tv.process(0.1, false, false)
-	_check(tv.on, "a click turns it on")
-	var before: String = tv.hacks.current
+	_check(tv.on, "a click turns the TV on")
+	for i in 20:
+		tv.process(0.5, false, false)
+	_check(tv.on, "a clicked-on TV stays on while nobody watches")
 	tv.click()
-	_check(tv.hacks.current != before, "a click changes the channel")
+	_check(not tv.on, "a second click turns it off")
+	tv.process(0.1, false, false)
+	_check(not tv.on, "and it stays off")
+	tv.process(0.1, true, false)
+	_check(tv.on, "he sits down to watch: automatic again, on")
+	tv.click()
+	for i in 20:
+		tv.process(0.5, true, false)
+	_check(not tv.on, "a click-off survives the frames after it while he watches")
+	tv.process(0.1, false, false)
+	tv.process(0.1, true, false)
+	_check(tv.on, "he leaves and comes back: automatic again, on")
+	tv.process(0.1, false, false)
+	tv.click()
+	tv.process(0.1, false, false)
+	_check(tv.on, "clicked on again while nobody watches")
+	tv.process(0.1, false, true)
+	_check(not tv.on, "the deep night turns a clicked-on TV off")
+	tv.click()
+	tv.process(0.1, false, true)
+	_check(tv.on, "a click in the deep night turns it on")
+	tv.process(0.1, false, false)
+	tv.process(0.1, true, false)
+	tv.process(0.1, false, false)
+	_check(not tv.on, "he leaves the sofa: the automatic rule turns it off")
+	tv.click()
+	tv.process(0.1, true, false)
+	tv.process(0.1, false, false)
+	_check(not tv.on, "a clicked-on TV does not outlast his watching")
+	var before: String = tv.hacks.current
+	tv.hacks.advance()
+	_check(tv.hacks.current != before, "the pictures still change")
 	_check(Hacks.NAMES.size() >= 8, "at least eight hacks")
 	var seen := {}
 	var last: String = tv.hacks.current
@@ -1267,7 +1299,7 @@ func _cards() -> void:
 	var empty: Vector2 = pts[""][pts[""].size() - 1]
 	var things := {
 		"calendar": "cal", "jar": "jar", "weather": "window", "clock": "clock",
-		"plant": "plant", "tv": "tv", "board": "board",
+		"plant": "plant", "board": "board",
 	}
 	for kind in things:
 		var key: String = things[kind]
@@ -1292,6 +1324,12 @@ func _cards() -> void:
 				break
 		h.close_card()
 	print("cards: %d things open their card from their hit area" % things.size())
+	_check(pts.has("tv"), "the TV has a hit area")
+	if pts.has("tv"):
+		h.click(pts["tv"][0])
+		_check(h.tv.on and not h.card.is_open(), "a click turns the TV on and opens no card")
+		h.click(pts["tv"][0])
+		_check(not h.tv.on and not h.card.is_open(), "a second click turns it off")
 	h.click(pts["note:0"][0] if pts.has("note:0") else pts["board"][0])
 	_check(h.card.kind == "board", "a note opens the board card")
 	h.close_card()
@@ -1365,20 +1403,6 @@ func _cards() -> void:
 	_check(h.card_blocks().size() == 8 and h.card.page == 0, "the board shows a page of notes")
 	h.card.page = 5
 	_check(h.card_blocks().size() == 5 and h.card.page == 1, "the board pages clamp")
-	h.card.kind = "tv"
-	h.tv.force_on(true)
-	h.tv.hacks.force("plasma")
-	h.card.key = "tv"
-	await process_frame
-	await process_frame
-	var button: Rect2 = h.card._buttons[0]["rect"]
-	var last: String = h.tv.hacks.current
-	var always := true
-	for i in 40:
-		h.click(button.get_center())
-		always = always and h.tv.hacks.current != last
-		last = h.tv.hacks.current
-	_check(always and h.card.kind == "tv", "Next always shows a different picture")
 	room.queue_free()
 
 
