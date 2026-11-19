@@ -151,6 +151,8 @@ var done_week := 0
 var weather_desc := ""
 var temp_c: Variant = null
 var forecast: Array = []
+# today's and tomorrow's meetings as the server gives them; [] over the local list
+var meetings: Array = []
 var reply_text := ""
 var reply_left := 0.0
 var ring_ids: Array = []
@@ -503,6 +505,7 @@ func set_data(d: Dictionary) -> void:
 	notes = d["notes"]
 	done_week = int(d.get("done_week", 0))
 	done = d["done"] if d.get("done") is Array else null
+	meetings = d["meetings"] if d.get("meetings") is Array else []
 	things.set_data(d)
 	var ids: Array = []
 	ring_ids = []
@@ -647,6 +650,45 @@ func _clock(unix: float) -> String:
 	if day == today + 1:
 		return "tomorrow " + at
 	return "%s %s" % [DAYS[d["weekday"]], at]
+
+
+# today's next meeting that is not over, not an all-day one; {} when there is none
+func next_meeting() -> Dictionary:
+	var now := _now_local()
+	for m in meetings:
+		if (
+			m.get("day") == "today"
+			and not m.get("all_day", false)
+			and _local(str(m["ends_at"])) > now
+		):
+			return m
+	return {}
+
+
+func meeting_time(m: Dictionary) -> String:
+	if m.get("all_day", false):
+		return "all day"
+	var t := Time.get_datetime_dict_from_unix_time(int(_local(str(m["starts_at"]))))
+	return "%02d:%02d" % [t["hour"], t["minute"]]
+
+
+# the calendar card's meetings: a quiet block per day that has any, a tentative one dimmed
+func meeting_blocks() -> Array:
+	var out: Array = []
+	for day in ["today", "tomorrow"]:
+		var rows: Array = meetings.filter(func(m: Dictionary) -> bool: return m.get("day") == day)
+		if rows.is_empty():
+			continue
+		out.append({"t": "dim", "text": day.capitalize()})
+		for m in rows:
+			out.append(
+				{
+					"t": "meet",
+					"text": "%s  %s" % [meeting_time(m), str(m["title"])],
+					"dim": m.get("tentative", false),
+				}
+			)
+	return out
 
 
 func _due(item: Dictionary) -> float:

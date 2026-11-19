@@ -202,6 +202,11 @@
     "desc": "Sunny",
     "temp_c": 13
   },
+  "meetings": [
+    {"title": "Standup", "in_min": 20, "mins": 15},
+    {"title": "Design review", "in_min": 90, "mins": 45, "tentative": true},
+    {"title": "1:1 with Sam", "tomorrow": "10:00", "mins": 30}
+  ],
   "forecast": [
     {"in_days": 0, "high_c": 14, "low_c": 6, "kind": "clear", "wet": 0},
     {"in_days": 1, "high_c": 9, "low_c": 4, "kind": "rain", "wet": 60},

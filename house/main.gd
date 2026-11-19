@@ -159,6 +159,7 @@ func _ready() -> void:
 			_room.home.set_office(_office)
 		demo["forecast"] = _dated(demo.get("forecast", []))
 		demo["agendas"] = _demo_agendas(demo.get("agendas", []))
+		demo["meetings"] = _demo_meetings(demo.get("meetings", []))
 		_apply(demo)
 		if "--tick-demo" in args:
 			get_tree().create_timer(0.75).timeout.connect(func(): _on_ticked(1))
@@ -460,6 +461,7 @@ static func _home_data(d: Dictionary) -> Dictionary:
 		"note_rows": d.get("note_rows", []),
 		"agendas": d.get("agendas", []),
 		"forecast": d.get("forecast", []),
+		"meetings": d.get("meetings", []),
 	}
 
 
@@ -468,6 +470,32 @@ static func _home_data(d: Dictionary) -> Dictionary:
 func _staged_forecast(spec: String) -> Array:
 	var rows: Variant = JSON.parse_string(spec) if spec != "none" else []
 	return _dated(rows) if rows is Array else []
+
+
+# demo meetings are `{title, mins, tentative}` with `in_min` (minutes from now) or `tomorrow`
+# (local "HH:MM"), so the demo never goes stale: the server's rows, UTC, with their `day`
+func _demo_meetings(rows: Array) -> Array:
+	var today := Time.get_unix_time_from_datetime_string(_room.home.today() + "T00:00:00")
+	var bias: float = _room.home._bias()
+	var out: Array = []
+	for row in rows:
+		var start: float = Time.get_unix_time_from_system() + float(row.get("in_min", 0)) * 60.0
+		if row.has("tomorrow"):
+			var hm := str(row["tomorrow"]).split(":")
+			start = today + 86400.0 + int(hm[0]) * 3600.0 + int(hm[1]) * 60.0 - bias
+		var local_day := int((start + bias) / 86400.0)
+		out.append(
+			{
+				"title": row["title"],
+				"starts_at": Time.get_datetime_string_from_unix_time(int(start)) + "Z",
+				"ends_at":
+				Time.get_datetime_string_from_unix_time(int(start + float(row["mins"]) * 60.0)) + "Z",
+				"tentative": row.get("tentative", false),
+				"all_day": false,
+				"day": "today" if local_day == int(today / 86400.0) else "tomorrow",
+			}
+		)
+	return out
 
 
 func _dated(rows: Array) -> Array:

@@ -69,8 +69,11 @@ func home_view(box: VBoxContainer) -> void:
 		home.coming.filter(func(i: Dictionary) -> bool: return i.get("due_at") != null), NEXT_SHOWN
 	)
 	var due: Array = home.things.agendas_today()
-	if not next.is_empty() or not due.is_empty():
+	var meeting: Dictionary = home.next_meeting()
+	if not next.is_empty() or not due.is_empty() or not meeting.is_empty():
 		heading(box, "Next up")
+		if not meeting.is_empty():
+			box.add_child(quiet("%s  ·  %s" % [meeting["title"], home.meeting_time(meeting)], 14))
 		for item in next:
 			_row(box, item, false, _when(item))
 		for a in due:
