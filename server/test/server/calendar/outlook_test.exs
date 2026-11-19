@@ -98,6 +98,29 @@ defmodule Server.Calendar.OutlookTest do
     end
   end
 
+  test "a +13:00 prefix with no VTIMEZONE is Etc/GMT-13, not UTC" do
+    ics = feed(vevent(["UID:t", ~s[DTSTART;TZID="(UTC+13:00) Nuku'alofa":20261119T090000], "SUMMARY:M"]))
+    assert [%{start: ~U[2026-11-18 20:00:00Z]}] = all(ics)
+  end
+
+  test "a long display name folded mid-name still finds its VTIMEZONE, daylight time right" do
+    zones =
+      "BEGIN:VTIMEZONE\r\nTZID:(UTC+01:00) Amsterdam, Berlin, Bern, Rome,\r\n  Stockholm, Vienna\r\n" <>
+        "BEGIN:STANDARD\r\nDTSTART:16010101T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0100\r\n" <>
+        "RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=10\r\nEND:STANDARD\r\n" <>
+        "BEGIN:DAYLIGHT\r\nDTSTART:16010101T020000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0200\r\n" <>
+        "RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=3\r\nEND:DAYLIGHT\r\nEND:VTIMEZONE\r\n"
+
+    event =
+      vevent([
+        "UID:f",
+        ~s[DTSTART;TZID="(UTC+01:00) Amsterdam, Berlin, Bern, Rome,\r\n  Stockholm, Vienna":20260617T090000],
+        "SUMMARY:M"
+      ])
+
+    assert [%{start: ~U[2026-06-17 07:00:00Z]}] = all(feed(event, zones))
+  end
+
   test "an all-day event with no end lasts one day" do
     ics = feed(vevent(["UID:a", "DTSTART;VALUE=DATE:20261119", "SUMMARY:Out"]))
     assert [%{all_day: true, stop: ~U[2026-11-20 00:00:00Z]}] = all(ics)
