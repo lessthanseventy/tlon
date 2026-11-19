@@ -68,6 +68,16 @@ defmodule Server.ProposalTest do
     assert [%{text: "Waiting on review: PR 1", waiting_on: "a reviewer", due_at: nil}] = Jot.waiting("telegram")
   end
 
+  test "a take that cannot file its jot leaves the proposal open, with no jot" do
+    offer([sam()])
+    [%{id: id} = row] = Proposal.open()
+    {:ok, _} = Jot.take("telegram", Proposal.external_id(row), "something else")
+
+    assert {:error, :seen} = Proposal.take("telegram", id, @now)
+    assert [%{id: ^id, state: :open, jot_id: nil}] = Proposal.open()
+    assert [%{text: nil}] = Jot.recent("telegram", 5)
+  end
+
   test "a key that is gone withdraws an open proposal silently and leaves a taken to-do" do
     offer([sam(), Map.put(sam(), :key, "other")])
     [%{id: id} | _] = Proposal.open()
@@ -133,19 +143,34 @@ defmodule Server.ProposalTest do
              ]
     end
 
-    test ~s("take the first" and "dismiss all" act on the ids the reader names), %{say: say, first: a, second: b} do
-      {reply, _} = tell("take the first", %{kind: "take", ids: [a.id]}, say, 1)
+    test ~s("take the first" and "dismiss all" act on the positions the reader names), %{say: say} do
+      {reply, _} = tell("take the first", %{kind: "take", ids: [1]}, say, 1)
       assert reply =~ "added: Send Sam the Q4 numbers by Friday\n\nProposed (1):\n1. Review the deck"
       assert [%{text: "Send Sam the Q4 numbers by Friday"}] = Jot.opens("telegram")
 
-      {reply, opts} = tell("dismiss all", %{kind: "dismiss", ids: [a.id, b.id]}, say, 2)
+      {reply, opts} = tell("dismiss all", %{kind: "dismiss", ids: [1, 2]}, say, 2)
       assert reply == "left out: Review the deck"
       assert opts == []
       assert Proposal.open() == []
     end
 
-    test "an id that is not proposed is not guessed at", %{say: say} do
-      {reply, _} = tell("yes to the Sam one", %{kind: "take", ids: [999_999]}, say, 1)
+    test "the reader is shown the list as the chat numbers it, and a position is mapped to its proposal", %{say: say} do
+      Server.Repo.delete_all(Proposal)
+      Server.Repo.query!("select setval(pg_get_serial_sequence('home_proposal', 'id'), 2)")
+      offer([%{key: "a", text: "thing a", kind: "todo"}, %{key: "b", text: "thing b", kind: "todo"}])
+      Server.Repo.query!("select setval(pg_get_serial_sequence('home_proposal', 'id'), 8)")
+      offer([%{key: "c", text: "thing c", kind: "todo"}])
+      assert [3, 4, 9] = Enum.map(Proposal.open(), & &1.id)
+
+      {reply, _} = tell("take 3", %{kind: "take", ids: [3]}, say, 1)
+      assert_received {:shown, [%{text: "thing a"}, %{text: "thing b"}, %{text: "thing c"}]}
+      assert reply =~ "added: thing c"
+      assert [%{text: "thing c"}] = Jot.opens("telegram")
+      assert [3, 4] = Enum.map(Proposal.open(), & &1.id)
+    end
+
+    test "a position that is not listed is not guessed at", %{say: say} do
+      {reply, _} = tell("yes to the Sam one", %{kind: "take", ids: [7, 0]}, say, 1)
       assert reply =~ "I couldn't tell which one you meant.\n\nProposed (2):"
       assert Jot.opens("telegram") == []
     end

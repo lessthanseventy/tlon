@@ -23,6 +23,10 @@ defmodule Server.Home.Proposals do
     {text(open), choices: choices}
   end
 
+  @doc "The open proposals the chat numbers (the first #{@shown}), in the order it numbers them: position `n` is `n`th."
+  @spec listed() :: [Proposal.t()]
+  def listed, do: Enum.take(Proposal.open(), @shown)
+
   @doc "The open proposals as plain text, for a surface with no buttons; nil when none are open."
   @spec plain([Proposal.t()]) :: String.t() | nil
   def plain([]), do: nil
@@ -62,8 +66,8 @@ defmodule Server.Home.Proposals do
 
   @doc """
   What the operator asked of the proposals (a reading of kind `proposals`, `take` or `dismiss`,
-  with `ids`): the reply and its options. An id that is none of the open ones is passed over; when
-  none is, the list is said after that.
+  with `ids`, the positions in the list the chat numbers, `listed/0`): the reply and its options. A
+  position that is none of the listed is passed over; when none is, the list is said after that.
   """
   @spec ask(map(), String.t(), DateTime.t()) :: {String.t(), keyword()}
   def ask(%{kind: "proposals"}, _via, _now), do: listed("Nothing proposed.")
@@ -71,7 +75,15 @@ defmodule Server.Home.Proposals do
   def ask(%{kind: kind, ids: ids}, via, now) do
     choice = if kind == "take", do: "take", else: "no"
 
-    case for(id <- ids, line = act(choice, via, id, now), do: line) do
+    listed = listed()
+
+    case for(
+           n <- Enum.uniq(ids),
+           n >= 1,
+           %Proposal{id: id} <- [Enum.at(listed, n - 1)],
+           line = act(choice, via, id, now),
+           do: line
+         ) do
       [] ->
         {text, opts} = listed("Nothing proposed.")
         {"I couldn't tell which one you meant.\n\n" <> text, opts}
@@ -88,7 +100,7 @@ defmodule Server.Home.Proposals do
   defp act(_choice, _via, _id, _now), do: nil
 
   defp said({:ok, p}, prefix), do: prefix <> p.text
-  defp said(:not_found, _prefix), do: nil
+  defp said(_none, _prefix), do: nil
 
   defp join(line, open) do
     case say(open) do

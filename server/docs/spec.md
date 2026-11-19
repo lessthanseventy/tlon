@@ -547,7 +547,7 @@ message of its own. Nothing about proposals is said at the moment it arrives: th
 today, the settled waiting-ons and up to five proposals with an Add and a No each, "and N more" after; skipped when there is
 nothing to say; told once a day under the same slot record, quiet hours and first-start rule as the daily list; on the desktop
 an info `home_morning` alert for ten minutes after its time) and in the clock-out daily list. The reader's asks: `proposals` (what is
-proposed), `take` and `dismiss` (with the numbers of the proposals shown to it); Telegram taps `p:<id>:take|no`.
+proposed), `take` and `dismiss` (with the positions, as the chat numbers them, of the first five shown to it); Telegram taps `p:<id>:take|no`.
 
 Sources (`Server.Home.Source`: `name/0`, `fetch/0` answering `{:ok, proposals, resolved_keys}` or `{:error, why}`, `auto/0`)
 are polled every 15 minutes by `Server.Home.Sources` for the names in `home_sources` (comma list, default `github`, `""` none),
@@ -556,7 +556,11 @@ started with the home inbox; a failing source is logged once per distinct reason
 `gh search prs --author=@me --state=open --review=changes_requested` (a to-do "Changes requested: <title>") and
 `--author=@me --state=open --review=none` (a waiting-on "Waiting on review: <title>", filed by itself, said as "Reviewed: <title>"
 once a review comes), each with `--draft=false --json number,title,url,author,repository,isDraft`; a key is the PR's URL and its
-role; a PR in a repo or owner listed in `home_github_ignore` (comma list, default `lessthanseventy/tlon`) is left out.
+role; a PR in a repo or owner listed in `home_github_ignore` (comma list, default `lessthanseventy/tlon`) is left out. A
+waiting-on whose PR left the search is looked up (`gh pr view <url> --json state,isDraft,reviewDecision,reviews`) and said by
+what became of it: "Reviewed: ...", "Merged: ..." or "Closed: ..."; a PR back to a draft keeps its waiting-on open, one whose
+repo is now ignored is dropped without a word, and a failed lookup settles nothing. The settled waiting-ons are recorded told
+by the teller that says them (the chat's message, or with no chat the tick at the slot); a desktop read records nothing.
 
 | Route | Request | Reply |
 |---|---|---|
