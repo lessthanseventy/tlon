@@ -66,7 +66,26 @@ func find(id: int) -> Dictionary:
 		for row in list:
 			if int(row["id"]) == id:
 				return row
+	for row in note_rows:
+		if int(row["id"]) == id:
+			return {"kind": "note"}.merged(row)
 	return {}
+
+
+# a note with an id opens its item view; a plain text has none, so the board's notes open
+func open_note(row: Dictionary) -> void:
+	if int(row["id"]) > 0:
+		h.open_item(int(row["id"]))
+		return
+	tab = "notes"
+	h.open_card("board")
+
+
+# the notes newest first; with no ids from the backend, plain texts with id 0
+func note_list() -> Array:
+	if note_rows.is_empty():
+		return h.notes.map(func(n): return {"id": 0, "text": str(n)})
+	return note_rows
 
 
 func edit(id: int) -> void:
@@ -215,9 +234,7 @@ func _x(act: String) -> Dictionary:
 
 
 func _notes_blocks() -> Array:
-	var rows: Array = note_rows
-	if rows.is_empty():
-		rows = h.notes.map(func(n): return {"id": 0, "text": n})
+	var rows: Array = note_list()
 	var per: int = h.NOTES_PER_PAGE
 	var pages := maxi(1, ceili(rows.size() / float(per)))
 	h.card.page = clampi(h.card.page, 0, pages - 1)
@@ -230,7 +247,7 @@ func _notes_blocks() -> Array:
 				{
 					"t": "row",
 					"text": "- " + str(r["text"]),
-					"act": "nop",
+					"act": "item:%d" % id if id > 0 else "nop",
 					"marks": [_x("note_del:%d" % id)] if id > 0 else [],
 				}
 			)
@@ -466,6 +483,8 @@ func _act_arg(a: String) -> bool:
 			day = 0 if day == n else n
 		"edit":
 			edit(n)
+		"item":
+			h.open_item(n)
 		"timer":
 			var t := Time.get_datetime_dict_from_unix_time(int(h._now_local() + n * 60.0))
 			var stamp := (

@@ -84,15 +84,16 @@ func home_view(box: VBoxContainer) -> void:
 			row.pressed.connect(func() -> void: sb.open_expanded = not sb.open_expanded)
 			box.add_child(row)
 	_weather(box)
-	if not home.notes.is_empty():
-		var label := "Notes (%d)" % home.notes.size()
+	var notes: Array = home.things.note_list()
+	if not notes.is_empty():
+		var label := "Notes (%d)" % notes.size()
 		var row := Blocks.Row.new(("v " if sb.notes_expanded else "> ") + label, "", false)
 		row.pressed.connect(func() -> void: sb.notes_expanded = not sb.notes_expanded)
 		box.add_child(row)
 		if sb.notes_expanded:
-			for n in home.notes:
-				var note := Blocks.Row.new("- " + str(n), "", false)
-				note.pressed.connect(func() -> void: sb.open_card("board"))
+			for n in notes:
+				var note := Blocks.Row.new("- " + str(n["text"]), "", false)
+				note.pressed.connect(func() -> void: home.things.open_note(n))
 				box.add_child(note)
 	if box.get_child_count() == 0:
 		box.add_child(quiet("Nothing waiting. Enjoy it.", 15))

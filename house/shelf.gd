@@ -51,7 +51,7 @@ func _fill() -> void:
 		_list.remove_child(c)
 		c.queue_free()
 	var q := filter.to_lower()
-	var kept := _section("notes", "Notes", q, func(_r: Dictionary) -> void: _open_notes())
+	var kept := _section("notes", "Notes", q, home.things.open_note)
 	for key in ["someday", "projects"]:
 		kept += _section(
 			key, key.capitalize(), q, func(r: Dictionary) -> void: home.open_item(int(r["id"]))
@@ -59,11 +59,6 @@ func _fill() -> void:
 	if kept == 0 and filter == "":
 		_list.add_child(Blocks.wrapped("Nothing is kept here yet.", 15, Paper.QUIET))
 	_books(q)
-
-
-func _open_notes() -> void:
-	home.things.tab = "notes"
-	sb.open_card("board")
 
 
 # returns how many rows the section holds before the filter, so an empty shelf can say so

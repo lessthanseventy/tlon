@@ -21,8 +21,9 @@ six with "N more...", the weather line with three day chips, "Notes (N)" collaps
 (calendar, jar, window, clock, board, plant, book, mousehole, fireplace, piano, globe: `home.card`
 holds which, `home.card_blocks` the blocks; the "book" card is the shelf, `shelf.gd`: every note newest
 first, Someday, Projects (each shows 8 then "N more...", a filter line over 8 rows) and all the Borges
-titles, a click on a title showing the pet's remark under it and granting the "book" find; a note
-opens the board's notes, a someday or project row its item), `item`, `open`, `add` (`jot.gd` the free-text line and
+titles, a click on a title showing the pet's remark under it and granting the "book" find; a note,
+someday or project row opens its item view; a note's has Edit and Delete, and the board's notes tab,
+Home's expanded notes and the shelf all open it; a note with no id opens the board's notes), `item`, `open`, `add` (`jot.gd` the free-text line and
 `form.gd` the typed form), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
 (`settings_view.gd`), `decorate`. A click on a thing replaces the view; "< home", Esc and a click on
 empty floor go back. The chat dock (`chat_view.gd`) shows the phone's last messages and its input:

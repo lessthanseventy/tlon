@@ -516,7 +516,7 @@ func _signature() -> String:
 					[
 						home.open,
 						home.coming,
-						home.notes,
+						home.things.note_list(),
 						home.things.pick,
 						home.weather,
 						home.weather_desc,
