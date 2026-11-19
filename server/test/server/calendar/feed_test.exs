@@ -109,6 +109,26 @@ defmodule Server.Calendar.FeedTest do
            ]
   end
 
+  test "a recurring series is expanded for a range in the past too" do
+    feed =
+      ics(
+        vevent([
+          "UID:p@x",
+          "DTSTART:20260105T150000Z",
+          "DTEND:20260105T153000Z",
+          "RRULE:FREQ=WEEKLY;BYDAY=MO",
+          "SUMMARY:Weekly"
+        ])
+      )
+
+    {from, to} = window("2026-02-01T00:00:00Z", "2026-02-15T00:00:00Z")
+
+    assert Enum.map(Feed.occurrences(feed, from, to), & &1.start) == [
+             ~U[2026-02-02 15:00:00Z],
+             ~U[2026-02-09 15:00:00Z]
+           ]
+  end
+
   test "a meeting given a DURATION instead of an end lasts that long" do
     feed = ics(vevent(["UID:dur@x", "DTSTART:20261008T160000Z", "DURATION:PT1H15M", "SUMMARY:Review"]))
     {from, to} = window("2026-10-08T00:00:00Z", "2026-10-09T00:00:00Z")
