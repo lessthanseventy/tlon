@@ -32,7 +32,9 @@ const TelegramSoak := preload("res://soak_telegram.gd")
 const WeatherSoak := preload("res://soak_weather.gd")
 const AnticSoak := preload("res://soak_antics.gd")
 const DriveSoak := preload("res://soak_drive.gd")
-const DEADLINE_MS := 540000
+# stops a hang, not slow work: the soak takes about 7 minutes on a quiet machine and about twice
+# that on a loaded one; the task wraps it in `timeout 1000`
+const DEADLINE_MS := 900000
 
 # what the stub of wttr.in (`?format=j1` on any path) answers
 var wttr_code := 200
@@ -164,6 +166,7 @@ func _run() -> void:
 	_where = "end"
 	for e in _errors.seen:
 		_check(false, "the engine reported: " + e)
+	print("SOAK took %.0fs of %.0fs" % [Time.get_ticks_msec() / 1000.0, DEADLINE_MS / 1000.0])
 	print("SOAK %s (%d failures)" % ["OK" if _failures.is_empty() else "FAILED", _failures.size()])
 	quit(0 if _failures.is_empty() else 1)
 

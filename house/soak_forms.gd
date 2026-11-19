@@ -23,8 +23,14 @@ func _sent(path: String, from: int) -> Variant:
 	return null
 
 
+# a moment, then until no request is in flight (bounded): a slow machine is slower, not wrong
 func _wait() -> void:
-	await s.create_timer(0.45).timeout
+	await s.create_timer(0.1).timeout
+	var quiet := 0
+	var end := Time.get_ticks_msec() + 8000
+	while quiet < 3 and Time.get_ticks_msec() < end:
+		quiet = quiet + 1 if main._backend.get_child_count() == 0 else 0
+		await s.process_frame
 
 
 func _read_again(before: int) -> void:
