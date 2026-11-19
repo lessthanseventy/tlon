@@ -190,6 +190,7 @@ var _crumples: Array = []
 var _confetti: Array = []
 var _hits: Array = []
 var _used := {}
+var _images := {}
 var _hover := ""
 var _hover_at := Vector2.ZERO
 var selected := ""
@@ -1187,13 +1188,16 @@ func furn(id: String, tex: Texture2D, at: Vector2) -> void:
 
 func register_sprite(key: String, tex: Texture2D, at: Vector2) -> void:
 	if not _used.has(tex):
-		_used[tex] = Rect2(tex.get_image().get_used_rect())
+		_images[tex] = tex.get_image()
+		_used[tex] = Rect2(_images[tex].get_used_rect())
 	var r: Rect2 = _used[tex]
 	r.position += at
 	var poly := PackedVector2Array(
 		[r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]
 	)
 	_register(key, poly, Vector2(r.get_center().x, r.end.y))
+	_hits[-1]["img"] = _images[tex]
+	_hits[-1]["at"] = at
 
 
 func _draw_board() -> void:
@@ -1731,7 +1735,7 @@ func _topmost(pos: Vector2) -> String:
 		if c.id != "person" and not c.away and pets.hit_rect(c, _o, _k).has_point(pos):
 			return "pet:" + c.id
 	for i in range(_hits.size() - 1, -1, -1):
-		if Geometry2D.is_point_in_polygon(pos, _hits[i]["poly"]):
+		if Geometry2D.is_point_in_polygon(pos, _hits[i]["poly"]) and _opaque(_hits[i], pos):
 			return _hits[i]["key"]
 	if pets.hit_rect(pets.critter("person"), _o, _k).has_point(pos):
 		return "person"
@@ -2176,3 +2180,14 @@ func _draw_bunting() -> void:
 				PackedVector2Array([prev, at, mid + Vector2(0, 5 * _k)]), col
 			)
 		prev = at
+
+
+# a thing drawn from a sprite is hit where the sprite has a pixel, not over its whole box
+func _opaque(hit: Dictionary, pos: Vector2) -> bool:
+	if not hit.has("img"):
+		return true
+	var img: Image = hit["img"]
+	var p: Vector2i = (pos - hit["at"]).floor()
+	if p.x < 0 or p.y < 0 or p.x >= img.get_width() or p.y >= img.get_height():
+		return false
+	return img.get_pixelv(p).a > 0.1
