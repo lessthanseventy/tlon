@@ -15,7 +15,7 @@ const Settings := preload("res://settings.gd")
 const Home := preload("res://home.gd")
 const ASCII_FIRST := 32
 const ASCII_LAST := 126
-const FRAMES := 300
+const FRAMES := 100
 
 var s
 
