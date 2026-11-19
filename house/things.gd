@@ -95,10 +95,6 @@ func set_meetings(key: String, rows: Array) -> void:
 	month_meetings[key] = rows
 
 
-# a request that failed is asked again the next time the month is shown
-func forget_meetings(key: String) -> void:
-	_asked.erase(key)
-
 
 func _plus_day(d: Dictionary) -> Dictionary:
 	var t := Time.get_datetime_dict_from_unix_time(int(Card.unix(d["y"], d["m"], d["d"]) + 86400.0))
@@ -128,7 +124,14 @@ func _day_blocks(d: Dictionary) -> Array:
 	var blocks: Array = [{"t": "title", "text": head}]
 	var meets := meetings_on(d)
 	for m in meets:
-		blocks.append({"t": "meet", "text": _meeting_line(m), "dim": m.get("tentative", false)})
+		blocks.append(
+			{
+				"t": "meet",
+				"text": _meeting_line(m),
+				"dim": m.get("tentative", false),
+				"past": _ended(m),
+			}
+		)
 	var entries: Array = []
 	for item in h._timed():
 		for when in Card.occurrences(h._due(item), h._every(item), at, at + 86400.0):
@@ -139,6 +142,13 @@ func _day_blocks(d: Dictionary) -> Array:
 	if entries.is_empty() and meets.is_empty():
 		blocks.append({"t": "dim", "text": "nothing"})
 	return blocks
+
+
+# over by now: a timed one past its end, an all-day one on an earlier date
+func _ended(m: Dictionary) -> bool:
+	if m.get("all_day", false):
+		return str(m["date"]) < h.today()
+	return h._local(str(m["ends_at"])) < h._now_local()
 
 
 func _meeting_line(m: Dictionary) -> String:
@@ -255,6 +265,7 @@ func _head() -> Array:
 
 # the calendar: the month with its arrows, a day's things when one is picked, else what is coming
 func calendar_blocks() -> Array:
+	want_meetings()
 	var s := shown()
 	var from := Card.unix(s["y"], s["m"], 1)
 	var to := Card.unix(int(s["y"]) + int(s["m"]) / 12, int(s["m"]) % 12 + 1, 1)
@@ -558,15 +569,12 @@ func act(a: String) -> bool:
 		"mprev":
 			mo -= 1
 			day = 0
-			want_meetings()
 		"mnext":
 			mo += 1
 			day = 0
-			want_meetings()
 		"mtoday":
 			mo = 0
 			day = 0
-			want_meetings()
 		"dayoff":
 			day = 0
 		"add_day":

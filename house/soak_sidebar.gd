@@ -60,36 +60,51 @@ func _meetings() -> void:
 
 
 # the wall calendar: Today and Tomorrow headed when nothing is picked, a clicked date its own block
-# (named when it is today or tomorrow) and back, a mark for a day with meetings, and each month
-# fetched once while the view is open and again when it is reopened
+# (named when it is today or tomorrow) and back, a mark for a day with meetings, a meeting that is
+# over dimmer, and each month fetched once while the view is open and again when it is reopened;
+# on an ordinary day, the last of a month and the last of a year
 func _day_meetings() -> void:
+	var was: String = h.fake_day
+	for pin: String in ["03-14", "11-30", "12-31"]:
+		h.fake_day = pin
+		_day_view(pin)
+	h.fake_day = was
+
+
+func _day_view(pin: String) -> void:
 	var things = h.things
+	var at := "(%s) " % pin
 	var asked: Array = []
 	var ask := func(key: String, _from: String, _to: String) -> void: asked.append(key)
 	things.meetings_wanted.connect(ask)
 	things.reset()
-	things.want_meetings()
+	things.calendar_blocks()
 	var first := asked.size()
-	things.want_meetings()
-	s._check(first >= 1 and asked.size() == first, "a month in view is asked for once")
+	things.calendar_blocks()
+	s._check(first >= 1 and asked.size() == first, at + "a month in view is asked for once")
 	var t: Dictionary = things.today()
 	var tomorrow: Dictionary = things._plus_day(t)
 	var other := {"y": t["y"], "m": t["m"], "d": (int(t["d"]) + 9) % 28 + 1}
-	var row := func(title: String, d: Dictionary, tentative: bool) -> Dictionary:
-		var date := "%04d-%02d-%02d" % [int(d["y"]), int(d["m"]), int(d["d"])]
+	var now: float = h._now_local() - h._bias()
+	var iso := func(secs: float) -> String:
+		return Time.get_datetime_string_from_unix_time(int(now + secs)) + "Z"
+	var row := func(
+		title: String, d: Dictionary, from: String, to: String, tentative: bool
+	) -> Dictionary:
 		return {
 			"title": title,
-			"starts_at": date + "T15:00:00Z",
-			"ends_at": date + "T16:00:00Z",
+			"starts_at": from,
+			"ends_at": to,
 			"tentative": tentative,
 			"all_day": false,
-			"date": date,
+			"date": "%04d-%02d-%02d" % [int(d["y"]), int(d["m"]), int(d["d"])],
 		}
 	var rows := {}
 	for r: Dictionary in [
-		row.call("Standup", t, false),
-		row.call("Review", tomorrow, true),
-		row.call("Dentist", other, false)
+		row.call("Over", t, iso.call(-7200.0), iso.call(-3600.0), false),
+		row.call("Soon", t, iso.call(3600.0), iso.call(5400.0), false),
+		row.call("Review", tomorrow, iso.call(90000.0), iso.call(92000.0), true),
+		row.call("Dentist", other, iso.call(900000.0), iso.call(901800.0), false)
 	]:
 		var key: String = str(r["date"]).substr(0, 7)
 		rows[key] = rows.get(key, []) + [r]
@@ -104,60 +119,83 @@ func _day_meetings() -> void:
 		)
 	var meet := func() -> Array:
 		return things.calendar_blocks().filter(func(b: Dictionary) -> bool: return b["t"] == "meet")
+	var grid := func() -> Dictionary:
+		return things.calendar_blocks().filter(func(b: Dictionary) -> bool: return b["t"] == "month")[0]
 	var heads: Array = titles.call()
 	s._check(
 		str(heads[0]).begins_with("Today · ") and str(heads[1]).begins_with("Tomorrow · "),
-		"nothing picked: Today and Tomorrow, headed"
+		at + "nothing picked: Today and Tomorrow, headed"
 	)
 	var shown: Array = meet.call()
 	s._check(
-		shown.size() == 2 and shown[0]["text"].ends_with("Standup") and shown[1]["dim"],
-		"each has its meetings, a tentative one dimmed"
+		shown.size() == 3 and shown[1]["text"].ends_with("Soon") and shown[2]["dim"],
+		at + "each has its meetings, a tentative one dimmed"
 	)
+	s._check(shown[0]["past"] and not shown[1]["past"], at + "one that is over is dimmer")
 	things.act("day:%d" % int(other["d"]))
-	var one: Array = titles.call()
 	s._check(
 		(
-			not str(one[0]).begins_with("Today")
-			and not str(one[0]).begins_with("Tomorrow")
+			not str(titles.call()[0]).begins_with("Today")
+			and not str(titles.call()[0]).begins_with("Tomorrow")
 			and meet.call().size() == 1
 			and meet.call()[0]["text"].ends_with("Dentist")
 		),
-		"a clicked date shows its own meetings"
+		at + "a clicked date shows its own meetings"
 	)
 	things.act("day:%d" % int(other["d"]))
 	s._check(
 		str(titles.call()[0]).begins_with("Today · "),
-		"clicking it again is back to Today and Tomorrow"
+		at + "clicking it again is back to Today and Tomorrow"
 	)
 	things.act("day:%d" % int(t["d"]))
 	var named: Array = titles.call()
 	s._check(
 		named.size() == 1 and str(named[0]).begins_with("Today · "),
-		"a clicked today is one block, named"
+		at + "a clicked today is one block, named"
 	)
-	things.act("day:%d" % int(tomorrow["d"]))
-	s._check(str(titles.call()[0]).begins_with("Tomorrow · "), "a clicked tomorrow is named")
 	things.act("day:%d" % int(t["d"]))
-	var grid: Dictionary = things.calendar_blocks().filter(func(b: Dictionary) -> bool: return b["t"] == "month")[0]
+	var g: Dictionary = grid.call()
 	s._check(
-		grid["meet_marks"].has(int(t["d"])) and grid["meet_marks"].has(int(other["d"])),
-		"a day with a meeting has its mark"
+		g["meet_marks"].has(int(t["d"])) and g["meet_marks"].has(int(other["d"])),
+		at + "a day with a meeting has its mark"
 	)
 	s._check(
-		not grid["meet_marks"].has(int(other["d"]) % 28 + 1) and int(grid["today"]) == int(t["d"]),
-		"another day has none; today is marked"
+		not g["meet_marks"].has(int(other["d"]) % 28 + 1) and int(g["today"]) == int(t["d"]),
+		at + "another day has none; today is marked"
+	)
+	var same_month: bool = tomorrow["m"] == t["m"]
+	s._check(
+		int(g["tomorrow"]) == (int(tomorrow["d"]) if same_month else 0),
+		at + "tomorrow is marked in its own month"
 	)
 	var before := asked.size()
 	things.act("mnext")
-	var next_key: String = things._month_key()
-	s._check(asked.has(next_key), "a month change asks for that month")
+	things.calendar_blocks()
+	s._check(asked.has(things._month_key()), at + "a month change asks for that month")
 	var after := asked.size()
 	things.act("mprev")
-	s._check(asked.size() == after and after >= before, "a month already asked for is kept")
+	things.calendar_blocks()
+	s._check(asked.size() == after and after >= before, at + "a month already asked for is kept")
+	if not same_month:
+		things.act("mnext")
+		var g2: Dictionary = grid.call()
+		s._check(
+			int(g2["tomorrow"]) == int(tomorrow["d"]) and g2["meet_marks"].has(int(tomorrow["d"])),
+			at + "paged to tomorrow's month, tomorrow is marked"
+		)
+		things.act("day:%d" % int(tomorrow["d"]))
+		s._check(
+			str(titles.call()[0]).begins_with("Tomorrow · ") and meet.call().size() == 1,
+			at + "its first is tomorrow, named, with its meeting"
+		)
+	else:
+		things.act("day:%d" % int(tomorrow["d"]))
+		s._check(
+			str(titles.call()[0]).begins_with("Tomorrow · "), at + "a clicked tomorrow is named"
+		)
 	things.reset()
-	things.want_meetings()
-	s._check(asked.size() > after, "reopening the view asks again")
+	things.calendar_blocks()
+	s._check(asked.size() > after, at + "reopening the view asks again")
 	for key: String in rows:
 		things.month_meetings.erase(key)
 	things.meetings_wanted.disconnect(ask)

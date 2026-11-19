@@ -1938,8 +1938,7 @@ func open_card(name: String) -> void:
 			if parts[0] == "calendar" and parts.size() > 1:
 				things.day = int(parts[1])
 				things.mo = int(parts[2]) if parts.size() > 2 else 0
-			if parts[0] == "calendar":
-				things.want_meetings()
+
 			if parts[0] == "board" and parts.size() > 1:
 				things.tab = parts[1]
 				things.proj = int(parts[2]) if parts.size() > 2 else 0

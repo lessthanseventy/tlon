@@ -1387,8 +1387,37 @@ func _cards() -> void:
 	_check(not h.card.is_open(), "no view while decorating")
 	h.decorating = false
 	h.rhythm.kind = "home"
+	var wanted: Array = []
+	var serve := func(key: String, _from: String, _to: String) -> void:
+		wanted.append(key)
+		var date: String = h.today()
+		(
+			h
+			. things
+			. set_meetings(
+				key,
+				[
+					{
+						"title": "Clicked in",
+						"starts_at": date + "T23:00:00Z",
+						"ends_at": date + "T23:30:00Z",
+						"tentative": false,
+						"all_day": false,
+						"date": date,
+					}
+				]
+			)
+		)
+	h.things.meetings_wanted.connect(serve)
 	h.click(pts["cal"][0])
 	_check(h.card.kind == "calendar", "a slip never stops a click on a thing")
+	var drawn: Array = h.card_blocks()
+	_check(
+		not wanted.is_empty() and drawn.any(func(b: Dictionary) -> bool: return b["t"] == "meet"),
+		"clicking the calendar on the wall fetches the month, and today shows its meeting"
+	)
+	h.things.meetings_wanted.disconnect(serve)
+	h.things.month_meetings.clear()
 	h.rhythm.dismiss()
 	h.close_card()
 	h.open_card("calendar")
