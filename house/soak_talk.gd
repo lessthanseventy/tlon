@@ -516,7 +516,7 @@ func _claude_in_the_house(main) -> void:
 	var b := _backend()
 	b.claude = null
 	main._install(b)
-	var v = main._settings_view
+	var v = main._sidebar.settings_view
 	settings.forced["where"] = "local"
 	settings.forced["claude"] = false
 	_eq(b.claude, null, "Claude is off until it is switched on")
@@ -544,7 +544,7 @@ func _claude_in_the_house(main) -> void:
 		["me", "home"],
 		"and the chat keeps both"
 	)
-	main._chat_view.sent.emit("again")
+	main._sidebar.chat_view.sent.emit("again")
 	await _until(
 		func() -> bool:
 			return (
@@ -554,7 +554,7 @@ func _claude_in_the_house(main) -> void:
 	_eq(
 		h.chat.messages.back()["text"], "Stretch at three.", "the chat's own line goes the same way"
 	)
-	main._chat_view.finish(true, "again")
+	main._sidebar.chat_view.finish(true, "again")
 	v.open()
 	_eq(
 		[v._talk_box.visible, v._claude_on.button_pressed, v._claude_box.visible],

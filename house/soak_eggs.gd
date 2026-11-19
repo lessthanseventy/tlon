@@ -330,12 +330,10 @@ func _hearth() -> void:
 	)
 	s._run_home(h, 3.0)
 	s._check(h.eggs.found.has("toss") and h._bin_balls == 0, "it burns, not into the bin")
-	h.open_item_menu(1)
+	var acts: Array = preload("res://views.gd").new(null, h)._actions(h.things.find(1), "todo")
 	s._check(
-		h.menu.rows.any(func(r): return r["act"] == "fire"),
-		"the menu offers the fire when it is lit"
+		acts.any(func(r): return r["act"] == "fire"), "the item view offers the fire when it is lit"
 	)
-	h.menu.close()
 
 	h.fake_hour = 14.0
 	h.look.wear = "everyday"
@@ -366,11 +364,11 @@ func _calm() -> void:
 	s._run_home(h, 40.0)
 	s._check(h.eggs.scene.is_empty(), "nothing big starts while a card is open")
 	h.card.close()
-	h.menu.show_at(1, Vector2(100, 100), "x", [{"label": "Done", "act": "done"}])
+	h.form_open = true
 	h.eggs.next_big = 0.0
 	s._run_home(h, 40.0)
-	s._check(h.eggs.scene.is_empty(), "nor while a menu is open")
-	h.menu.close()
+	s._check(h.eggs.scene.is_empty(), "nor while a form is open")
+	h.form_open = false
 
 	var kinds := _day(43)
 	s._check(kinds.size() >= 3 and kinds.size() <= 60, "big things come minutes apart: %d in ten hours" % kinds.size())

@@ -70,7 +70,7 @@ func _send(cmd: Variant) -> Dictionary:
 
 
 func _control(things: Dictionary, klass: String, key: String, text: String) -> Dictionary:
-	for c in things["controls"]:
+	for c in things["sidebar"]["controls"]:
 		if c["class"] == klass and str(c.get(key, "")).begins_with(text):
 			return c
 	return {}
@@ -109,10 +109,10 @@ func _add_a_todo(h) -> void:
 func _keys() -> void:
 	await _send({"do": "key", "key": ","})
 	var state := await _send({"do": "state"})
-	_eq(state["mode"]["settings"], true, "a key opens settings")
+	_eq(state["mode"]["view"], "settings", "a key opens settings")
 	await _send({"do": "key", "key": "Escape"})
 	state = await _send({"do": "state"})
-	_eq(state["mode"]["settings"], false, "Escape closes it")
+	_eq(state["mode"]["view"], "home", "Escape closes it")
 
 
 func _pet_card() -> void:
@@ -125,10 +125,10 @@ func _pet_card() -> void:
 		return
 	await _click(pets[0]["center"], "right")
 	var state := await _send({"do": "state"})
-	_eq(state["mode"]["pet_card"] != "", true, "a right click on a pet opens the picker")
+	_eq(state["mode"]["view"], "pet", "a right click on a pet opens its view")
 	await _send({"do": "key", "key": "Escape"})
 	state = await _send({"do": "state"})
-	_eq(state["mode"]["pet_card"], "", "Escape closes it")
+	_eq(state["mode"]["view"], "home", "Escape closes it")
 
 
 func _decorate(h) -> void:

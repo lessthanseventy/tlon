@@ -330,7 +330,7 @@ func _things() -> void:
 func _picker() -> void:
 	var room: Control = s._room(41)
 	var h = room.home
-	var view: PanelContainer = PetView.new()
+	var view = PetView.new()
 	view.setup(h.settings, h)
 	s.root.add_child(view)
 	view.open("nina")

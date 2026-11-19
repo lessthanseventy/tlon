@@ -220,7 +220,7 @@ func _settings_view() -> void:
 	home.settings.store = TMP
 	home.settings.persist = false
 	home.chat.persist = false
-	var v: PanelContainer = SettingsView.new()
+	var v = SettingsView.new()
 	v.setup(home.settings, home)
 	s.root.add_child(v)
 	await s.process_frame
@@ -286,7 +286,7 @@ func _settings_view() -> void:
 
 
 func _address() -> void:
-	var v = main._settings_view
+	var v = main._sidebar.settings_view
 	v.open()
 	main._check_server("http://127.0.0.1:%d" % s._srv.get_local_port())
 	await _wait()
@@ -312,9 +312,9 @@ func _conversation() -> void:
 	var chat = h.chat
 	chat.messages = []
 	s._fail_jot = false
-	main._jot.finish()
+	main._sidebar.jot.finish()
 	s._check(main._open_chat(), "the chat opens")
-	var v = main._chat_view
+	var v = main._sidebar.chat_view
 	var before: int = s._count("/api/home")
 	v._submit("hello house")
 	s._check(v.reading and chat.messages[-1]["who"] == "me", "sending shows his line and a reading state")
@@ -334,13 +334,13 @@ func _conversation() -> void:
 	v._edit_key(_key(KEY_UP))
 	s._check(v._edit.text == "older", "Up recalls his last message")
 	v._edit.text = ""
-	v.close()
-	main._jot.open("from the pad")
+	main._open_add(true)
+	main._sidebar.jot.open("from the pad")
 	main._send_jot("from the pad")
 	await _wait(1.0)
 	var texts: Array = chat.messages.map(func(m): return m["text"])
 	s._check(texts.has("from the pad") and texts.has(s.reply_for("from the pad")), "a notepad line and its reply are in the history")
-	main._jot.finish()
+	main._sidebar.jot.finish()
 	for row in [
 		{"id": 7, "kind": "reminder", "text": "stretch", "due_at": null, "every": null, "told_at": "2026-11-18T10:00:00Z"},
 		{"id": 8, "kind": "reminder", "text": "water", "due_at": null, "every": null, "told_at": "2026-11-18T10:00:00Z"},
@@ -348,6 +348,10 @@ func _conversation() -> void:
 		{"id": 10, "kind": "reminder", "text": "bins", "due_at": null, "every": "week", "told_at": "2026-11-18T10:00:00Z"},
 	]:
 		s.add_open(row)
+	main._sidebar.chat_mode = "line"
+	main._sidebar._apply()
+	await s.process_frame
+	await s.process_frame
 	chat.unread = false
 	main._poll()
 	await _wait()
@@ -358,6 +362,8 @@ func _conversation() -> void:
 	await _wait()
 	s._check(chat.messages.filter(func(m): return m.has("id")).size() == 4, "a second read tells nothing again")
 	main._open_chat()
+	await s.process_frame
+	await s.process_frame
 	s._check(not chat.unread, "opening clears the unread mark")
 	await s.process_frame
 	await s.process_frame
@@ -395,56 +401,50 @@ func _conversation() -> void:
 	h.settings.put("cat", "Mimi")
 	s._check(v._text_of(chat.messages[-1]).begins_with("Mimi:"), "and shows the name he gave her")
 	h.settings.put("cat", "Nina")
-	v.close()
+	v.set_mode("line")
 	s._check(not chat.open, "closing marks the chat closed")
 
 
 func _blockers() -> void:
-	main._jot.finish()
-	var holds := {
-		"the notepad": func() -> void: main._jot.open(),
-		"a menu": func() -> void: h.menu.is_open = true,
-		"the day's slip": func() -> void: h.rhythm.show_slip("home", "Still open", []),
-	}
-	for name in holds:
-		holds[name].call()
-		s._check(not main._open_settings() and not main._open_chat(), "neither opens over %s" % name)
-		main._jot.finish()
-		h.menu.close()
-		h.rhythm.kind = ""
-	main._closet.visible = true
-	s._check(not main._open_settings() and not main._open_chat(), "neither opens over the closet")
-	main._closet.visible = false
-	main._decorate.active = true
-	s._check(not main._open_settings() and not main._open_chat(), "neither opens over decorate mode")
-	main._decorate.active = false
-	main._open_form("new", {"kinds": ["todo"]})
-	s._check(not main._open_settings() and not main._open_chat(), "neither opens over a form")
-	main._form.close()
-	s._check(main._open_settings() and main._settings_view.visible, "the settings open when nothing else is up")
-	s._check(not main._open_chat() and not main._open_form("new", {"kinds": ["todo"]}), "the chat and a form do not open over it")
-	main._input(_key(KEY_N))
-	main._input(_key(KEY_K))
-	s._check(not main._jot.visible and not main._chat_view.visible, "keys open nothing over it")
+	var sb = main._sidebar
+	main._open_add(true)
 	await s.process_frame
-	s._check(h.form_open, "the room ignores clicks while it is up")
+	s._check(sb.view == "add" and sb.takes_text(), "the add view takes text")
+	main._input(_key(KEY_K))
+	main._input(_key(KEY_D))
+	main._input(_key(KEY_C))
+	main._input(_key(KEY_COMMA))
+	s._check(
+		sb.view == "add" and not main._decorate.active and not sb.chat_popped,
+		"letter hotkeys do not fire while a field has focus"
+	)
+	main._input(_key(KEY_ESCAPE))
+	s._check(sb.view == "home", "Esc goes back to the home view")
+	s._check(main._open_settings() and sb.view == "settings", "the settings open as a view")
 	h.rhythm.show_slip("home", "Still open", [])
 	await s.process_frame
 	await s.process_frame
-	s._check(not main._settings_view.visible, "a slip arriving closes it")
-	h.rhythm.kind = ""
-	s._check(main._open_chat(), "the chat opens")
-	main._input(_key(KEY_COMMA))
-	s._check(not main._settings_view.visible, "the settings do not open over the chat")
+	s._check(sb.view == "settings", "a slip arriving does not close the view")
+	h.rhythm.dismiss()
 	main._input(_key(KEY_ESCAPE))
-	main._chat_view._input(_key(KEY_ESCAPE))
-	s._check(not main._chat_view.visible, "Esc closes the chat")
-	main._input(_key(KEY_COMMA))
-	s._check(main._settings_view.visible, ", opens the settings")
-	main._settings_view._input(_key(KEY_ESCAPE))
+	s._check(sb.view == "home", "Esc leaves the settings")
+	get_viewport_release()
 	main._input(_key(KEY_K))
-	s._check(main._chat_view.visible, "K opens the chat")
-	main._chat_view.close()
+	s._check(sb._effective() in ["dock", "full"], "K brings the chat up")
+	main._input(_key(KEY_ESCAPE))
+	main._open_closet()
+	s._check(sb.view == "closet", "the closet is a view")
+	main._input(_key(KEY_ESCAPE))
+	s._check(sb.view == "home", "Esc leaves the closet")
+	main._open_chat()
+	s._check(sb._effective() in ["dock", "full"], "the chat is up at home")
 	h.acted.emit(0, "chat")
-	s._check(main._chat_view.visible, "a click on the phone opens the chat")
-	main._chat_view.close()
+	s._check(sb._effective() in ["dock", "full"], "a click on the phone brings up the chat")
+	main._sidebar.chat_view.set_mode("line")
+	s._check(not h.chat.open, "the collapsed chat is marked closed")
+
+
+func get_viewport_release() -> void:
+	var f = main.get_viewport().gui_get_focus_owner()
+	if f != null:
+		f.release_focus()

@@ -1,0 +1,145 @@
+extends RefCounted
+
+# The soak's checks of the sidebar as a whole: every thing in the room opens a view or toggles, the
+# views never lie outside the window at the smallest and the largest sizes, and a banner never takes
+# a view away. Nothing here reaches a server.
+const SIZES := [Vector2(900, 600), Vector2(1100, 700), Vector2(1920, 1080)]
+const VIEWS := ["home", "item", "open", "add", "pet", "closet", "settings", "decorate", "card"]
+
+var s
+var main
+var h
+var sb
+
+
+func _init(soak, the_main) -> void:
+	s = soak
+	main = the_main
+	h = main._room.home
+	sb = main._sidebar
+
+
+func _frames(n: int = 3) -> void:
+	for _i in n:
+		await s.process_frame
+
+
+func run() -> void:
+	await _things()
+	await _fit()
+	await _banner()
+
+
+func _centre(key: String) -> Variant:
+	for hit in h._hits:
+		if hit["key"] != key:
+			continue
+		var sum := Vector2.ZERO
+		for p: Vector2 in hit["poly"]:
+			sum += p
+		var c: Vector2 = sum / maxf(1.0, hit["poly"].size())
+		if h._topmost(c) == key:
+			return c
+	return null
+
+
+# a click on each thing leaves the home view, or turns something on or off
+func _things() -> void:
+	main._at = "home"
+	sb.back()
+	h.decorating = false
+	await _frames()
+	var seen := 0
+	for key in [
+		"cal", "jar", "window", "clock", "plant", "board", "mousehole", "furn:fireplace",
+		"furn:bookshelf", "furn:piano", "globe", "wardrobe", "pad", "stack", "phone", "tv"
+	]:
+		var c: Variant = _centre(key)
+		if c == null:
+			continue
+		seen += 1
+		sb.back()
+		await _frames()
+		var was := [sb.view, h.card.kind, h.tv.on, sb._effective()]
+		h.click(c)
+		await _frames()
+		var now := [sb.view, h.card.kind, h.tv.on, sb._effective()]
+		s._check(now != was, "a click on %s opens a view or toggles (%s)" % [key, str(now)])
+		if key != "tv" and key != "phone":
+			s._check(sb.selected_key() == h.selected, "%s stays highlighted" % key)
+		sb.back()
+		await _frames()
+	s._check(seen >= 8, "the room has things to click: %d" % seen)
+	sb.back()
+	var a: Variant = _centre("cal")
+	var b: Variant = _centre("jar")
+	if a != null and b != null:
+		h.click(a)
+		await _frames()
+		h.click(b)
+		await _frames()
+		s._check(sb.view == "card" and h.card.kind == "jar", "thing B replaces thing A's view")
+		sb.back()
+		await _frames()
+		s._check(sb.view == "home" and h.selected == "", "back brings the home view, nothing selected")
+
+
+# every control of every view sits inside the window, at the smallest and the largest size
+func _fit() -> void:
+	var was: Vector2 = main.size
+	for size in SIZES:
+		main.size = size
+		var win := Rect2(Vector2.ZERO, size)
+		for name in ["home", "add", "pet", "closet", "settings", "card"]:
+			sb.back()
+			await _frames()
+			match name:
+				"add":
+					sb.open_add(true)
+				"pet":
+					sb.open_pet("nina")
+				"closet":
+					sb.open_closet()
+				"settings":
+					sb.open_settings()
+				"card":
+					h.card.open("calendar", "cal")
+			await _frames(4)
+			var out := _outside(win)
+			s._check(out == "", "no %s control lies outside a %s window: %s" % [name, size, out])
+			s._check(sb.get_global_rect().end.x <= size.x + 0.5, "the sidebar fits a %s window" % size)
+		sb.back()
+	main.size = was
+	await _frames()
+
+
+func _outside(win: Rect2) -> String:
+	var bad: Array = []
+	for c in sb.find_children("*", "Control", true, false):
+		if not c.is_visible_in_tree():
+			continue
+		var r: Rect2 = c.get_global_rect()
+		if r.size.x <= 0.0 or r.size.y <= 0.0:
+			continue
+		if r.position.x < win.position.x - 0.5 or r.end.x > win.end.x + 0.5:
+			bad.append("%s %s" % [c.name, r])
+	return ", ".join(bad.slice(0, 3))
+
+
+# a slip or a ring over an open view takes nothing from it
+func _banner() -> void:
+	sb.back()
+	main._open_add(false)
+	await _frames()
+	var form_was: bool = sb.form.visible
+	h.rhythm.show_slip("home", "Still open", [])
+	await _frames()
+	s._check(sb.view == "add" and sb.form.visible == form_was, "a slip leaves the add view be")
+	h.rhythm.dismiss()
+	main._open_settings()
+	h.show_reply("noted")
+	await _frames()
+	s._check(sb.view == "settings", "a reply leaves the settings be")
+	sb.back()
+	await _frames()
+	s._check(sb.view == "home", "and back still goes home")
