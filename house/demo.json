@@ -205,7 +205,12 @@
   "meetings": [
     {"title": "Standup", "in_min": 20, "mins": 15},
     {"title": "Design review", "in_min": 90, "mins": 45, "tentative": true},
-    {"title": "1:1 with Sam", "tomorrow": "10:00", "mins": 30}
+    {"title": "1:1 with Sam", "tomorrow": "10:00", "mins": 30},
+    {"title": "Planning", "in_days": -4, "from": "10:00", "mins": 60},
+    {"title": "Offsite", "in_days": 3, "all_day": true},
+    {"title": "Sprint review", "in_days": 3, "from": "14:00", "mins": 45},
+    {"title": "Retro", "in_days": 6, "from": "11:00", "mins": 45, "tentative": true},
+    {"title": "Dentist", "in_days": 9, "from": "08:30", "mins": 30}
   ],
   "forecast": [
     {"in_days": 0, "high_c": 14, "low_c": 6, "kind": "clear", "wet": 0},

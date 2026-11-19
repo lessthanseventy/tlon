@@ -51,6 +51,7 @@ var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": nul
 var _skip: Array = []
 var _again := false
 var _demo_ids := 1000
+var _demo_rows: Array = []
 var _decorate: Control
 var _widget := false
 var _drag := false
@@ -145,6 +146,7 @@ func _ready() -> void:
 
 	_room.home.things.form_wanted.connect(_open_form)
 	_room.home.things.post.connect(func(path: String, body: Dictionary) -> void: _write(path, body))
+	_room.home.things.meetings_wanted.connect(_fetch_meetings)
 	_room.home.settings.changed.connect(_on_setting)
 
 	if _demo:
@@ -159,7 +161,8 @@ func _ready() -> void:
 			_room.home.set_office(_office)
 		demo["forecast"] = _dated(demo.get("forecast", []))
 		demo["agendas"] = _demo_agendas(demo.get("agendas", []))
-		demo["meetings"] = _demo_meetings(demo.get("meetings", []))
+		_demo_rows = _demo_meetings(demo.get("meetings", []))
+		demo["meetings"] = _demo_rows.filter(func(m: Dictionary) -> bool: return m["day"] != "")
 		_apply(demo)
 		if "--tick-demo" in args:
 			get_tree().create_timer(0.75).timeout.connect(func(): _on_ticked(1))
@@ -472,27 +475,50 @@ func _staged_forecast(spec: String) -> Array:
 	return _dated(rows) if rows is Array else []
 
 
-# demo meetings are `{title, mins, tentative}` with `in_min` (minutes from now) or `tomorrow`
-# (local "HH:MM"), so the demo never goes stale: the server's rows, UTC, with their `day`
+# the month's meetings for the calendar view: from the server, or in the demo from `_demo_rows`
+func _fetch_meetings(key: String, from: String, to: String) -> void:
+	var things = _room.home.things
+	if _demo:
+		things.set_meetings(
+			key, _demo_rows.filter(func(m: Dictionary) -> bool: return m["date"] >= from and m["date"] <= to)
+		)
+		return
+	_backend.fetch(
+		"/api/home/meetings?from=%s&to=%s" % [from, to],
+		func(reached: bool, code: int, body: Variant) -> void:
+			if reached and code == 200 and body is Array:
+				things.set_meetings(key, body)
+			else:
+				things.forget_meetings(key)
+	)
+
+
+# demo meetings are `{title, mins, tentative}` with `in_min` (minutes from now), `tomorrow`
+# (local "HH:MM") or `in_days` (and `from`, or `all_day`), so the demo never goes stale: the
+# server's rows, UTC, with their local `date` and, for today and tomorrow, their `day`
 func _demo_meetings(rows: Array) -> Array:
 	var today := Time.get_unix_time_from_datetime_string(_room.home.today() + "T00:00:00")
 	var bias: float = _room.home._bias()
 	var out: Array = []
 	for row in rows:
 		var start: float = Time.get_unix_time_from_system() + float(row.get("in_min", 0)) * 60.0
-		if row.has("tomorrow"):
-			var hm := str(row["tomorrow"]).split(":")
-			start = today + 86400.0 + int(hm[0]) * 3600.0 + int(hm[1]) * 60.0 - bias
+		var all_day: bool = row.get("all_day", false)
+		var hm := str(row.get("tomorrow", row.get("from", "00:00"))).split(":")
+		if row.has("tomorrow") or row.has("in_days"):
+			var days: int = 1 if row.has("tomorrow") else int(row["in_days"])
+			start = today + days * 86400.0 + int(hm[0]) * 3600.0 + int(hm[1]) * 60.0 - bias
+		var length: float = 86400.0 if all_day else float(row["mins"]) * 60.0
 		var local_day := int((start + bias) / 86400.0)
+		var gap := local_day - int(today / 86400.0)
 		out.append(
 			{
 				"title": row["title"],
 				"starts_at": Time.get_datetime_string_from_unix_time(int(start)) + "Z",
-				"ends_at":
-				Time.get_datetime_string_from_unix_time(int(start + float(row["mins"]) * 60.0)) + "Z",
+				"ends_at": Time.get_datetime_string_from_unix_time(int(start + length)) + "Z",
 				"tentative": row.get("tentative", false),
-				"all_day": false,
-				"day": "today" if local_day == int(today / 86400.0) else "tomorrow",
+				"all_day": all_day,
+				"date": Time.get_date_string_from_unix_time(int(start + bias)),
+				"day": "today" if gap == 0 else ("tomorrow" if gap == 1 else ""),
 			}
 		)
 	return out
