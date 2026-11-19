@@ -21,6 +21,7 @@ defmodule Server.DoctorTest do
                "generator_call",
                "habit",
                "health_since",
+               "home_agenda",
                "home_slot",
                "issue",
                "jot",
