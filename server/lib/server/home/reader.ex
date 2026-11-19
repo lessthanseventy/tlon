@@ -15,8 +15,12 @@ defmodule Server.Home.Reader do
   message mentions, which come back) and `updates` (a to-do or a reminder that makes an open thing
   more exact: the open thing's number); absent when the model gave none. An answer that names a
   thing by its number is put right (`unnumber/2`).
+  Agendas (`Server.Agenda`) have their own readings, each with the `agenda` it names (an existing
+  one, matched loosely, else a new name): `"agenda"` (`text` is a note for its pile),
+  `"agenda_set"` (`due_at` and `every` are its rhythm, either may be nil), and the asks
+  `"agenda_show"`, `"agenda_past"` (what was on it before it was cleared) and `"agenda_clear"`.
   The model is shown what it needs for that: the jot before, the open things, the newest notes, the
-  open projects and what is put off. Times are read and said in the machine's own zone. The model is
+  open projects, what is put off and the names of the agendas. Times are read and said in the machine's own zone. The model is
   Haiku on the operator's Claude login, with no tools (`:home_reader_cmd` and `:home_reader_model`
   name another): what a person texts themselves stays with the provider they already use.
   """
@@ -37,12 +41,24 @@ defmodule Server.Home.Reader do
           required(:open) => [Server.Jot.t()],
           required(:notes) => [String.t()],
           optional(:projects) => [Server.Jot.t()],
-          optional(:someday) => [Server.Jot.t()]
+          optional(:someday) => [Server.Jot.t()],
+          optional(:agendas) => [String.t()]
         }
 
-  @kept ["reminder", "todo", "note", "project", "waiting"]
-  @asked ["done", "delete", "list", "answer", "now", "someday"]
-  @bare ["done", "delete", "list", "now", "someday"]
+  @kept ["reminder", "todo", "note", "project", "waiting", "agenda"]
+  @asked [
+    "done",
+    "delete",
+    "list",
+    "answer",
+    "now",
+    "someday",
+    "agenda_set",
+    "agenda_show",
+    "agenda_past",
+    "agenda_clear"
+  ]
+  @bare ["done", "delete", "list", "now", "someday", "agenda_set", "agenda_show", "agenda_past", "agenda_clear"]
   @sizes [2, 10, 30, 60]
   @steps 5
 
@@ -80,8 +96,9 @@ defmodule Server.Home.Reader do
   def parse(out) do
     with [json] <- Regex.run(~r/\{.*\}/s, out),
          {:ok, %{"kind" => kind} = map} when kind in @kept or kind in @asked <- JSON.decode(json),
-         {:ok, text} <- text(kind, map["text"]) do
-      {:ok, kind |> reading(text, at(map["at"]), map) |> extras(map)}
+         {:ok, text} <- text(kind, map["text"]),
+         {:ok, agenda} <- agenda(kind, map["agenda"]) do
+      {:ok, kind |> reading(text, at(map["at"]), map) |> extras(map) |> Map.merge(agenda)}
     else
       _ -> :error
     end
@@ -141,6 +158,16 @@ defmodule Server.Home.Reader do
       who -> %{kind: "waiting", text: text, due_at: nil, every: nil, ids: [], amends: map["amends"] == true, who: who}
     end
   end
+
+  defp reading("agenda_set", text, at, map),
+    do: %{
+      kind: "agenda_set",
+      text: text,
+      due_at: at,
+      every: Server.Home.Clock.every(map["every"]),
+      ids: [],
+      amends: false
+    }
 
   defp reading("reminder", text, %DateTime{} = due, map) do
     every = Server.Home.Clock.every(map["every"])
@@ -222,7 +249,7 @@ defmodule Server.Home.Reader do
     Where they are it is now #{Calendar.strftime(now, "%A %Y-%m-%d %H:%M")}.
 
     Answer with one line of JSON and nothing else:
-    {"kind": "...", "text": "...", "at": "YYYY-MM-DDTHH:MM" or null, "every": "day" or "week" or "month" or a number then one of them like "6 week" or null, "updates": null, "ids": [], "amends": true or false, "steps": [], "who": null, "mins": null, "minutes": null, "project": null, "assumed": null, "ask": null, "revive": []}
+    {"kind": "...", "text": "...", "at": "YYYY-MM-DDTHH:MM" or null, "every": "day" or "week" or "month" or a number then one of them like "6 week" or null, "updates": null, "ids": [], "amends": true or false, "steps": [], "who": null, "mins": null, "minutes": null, "project": null, "assumed": null, "ask": null, "revive": [], "agenda": null}
 
     "kind" is one of:
     - "reminder": a thing to keep that names or implies a time they should be told. "at" is that
@@ -247,6 +274,23 @@ defmodule Server.Home.Reader do
     - "someday": they ask what is on someday, or what they have put off.
     - "answer": they ask a question. "text" is the answer, short, from the NOTES and the OPEN
       things alone; when those do not hold it, "text" is only "I have nothing on that."
+    - "agenda": a thing to remember for a recurring occasion, a standing pile of notes (a retro, a
+      1:1, a weekly): "for retro: the deploy took three tries", "retro - flaky gate again", "tell Sam
+      about the conference budget in our 1:1", "add to weekly: ...". "agenda" names the occasion and
+      "text" is the thing to remember, short, without the occasion's name.
+    - "agenda_set": they say when an occasion comes round or how often ("retro is every other
+      Thursday at 2", "my 1:1 with Sam is weekly on Mondays at 10"). "agenda" names it, "at" is its
+      next time (local, in the future, as for a reminder) and "every" how often, each null when not said.
+    - "agenda_show": they ask what is on an occasion's pile ("what's on retro?", "what do I have for
+      Sam?"). "agenda" names it.
+    - "agenda_past": they ask what was on a pile before it was cleared ("what did we cover last
+      retro?"). "agenda" names it.
+    - "agenda_clear": they say an occasion is over and its pile is done ("retro's done", "clear retro").
+      "agenda" names it.
+    "agenda" is the name of the matching one in AGENDAS when one plausibly is the occasion ("my 1:1",
+    "one on one with Sam" are the same agenda), else a new short name, lowercase, without "my", "the"
+    or "our" ("for the offsite: ..." is "offsite"). Only a message that names or plainly means an
+    occasion is an agenda one: a plain thing to remember is a "note".
     For a thing to keep, "text" is what to do or remember, short, in their own words, without the time.
     "amends" is true only when the message plainly corrects the PREVIOUS MESSAGE ("no, saturday").
     Then answer that one's reading, corrected, in full.
@@ -279,6 +323,8 @@ defmodule Server.Home.Reader do
     #{projects(Map.get(context, :projects, []))}
     SOMEDAY:
     #{open(Map.get(context, :someday, []))}
+    AGENDAS:
+    #{agendas(Map.get(context, :agendas, []))}
     #{previous(context.previous)}
     MESSAGE: #{body}
     """
@@ -294,6 +340,9 @@ defmodule Server.Home.Reader do
 
   defp projects(jots),
     do: Enum.map_join(jots, "\n", &"#{&1.id}: #{&1.text}#{if &1.ask == "next", do: " (waiting for its next step)"}")
+
+  defp agendas([]), do: "(none)"
+  defp agendas(names), do: Enum.map_join(names, "\n", &"- #{&1}")
 
   defp notes([]), do: "(none)"
   defp notes(notes), do: Enum.map_join(notes, "\n", &"- #{&1}")
@@ -313,4 +362,13 @@ defmodule Server.Home.Reader do
 
   defp minutes("now", minutes) when is_integer(minutes) and minutes > 0, do: minutes
   defp minutes(_kind, _minutes), do: nil
+
+  defp agenda("agenda" <> _, name) do
+    case Server.Agenda.clean(name) do
+      nil -> :error
+      name -> {:ok, %{agenda: name}}
+    end
+  end
+
+  defp agenda(_kind, _name), do: {:ok, %{}}
 end

@@ -196,6 +196,11 @@ and every layer the spine design's re-laid §9 asked for
   message can also ask the helper for something and is then kept as nothing: that things are done,
   what is open, what to do now (`Server.Home.Now`), what is on someday, that a thing is to be deleted, or a question its notes answer.
   A form puts things in and changes them with no model call (`Server.Home.Form`, `POST /api/home/add|:id/edit|:id/plan|:id/revive`).
+  An **agenda** (`Server.Agenda`, `Server.Home.Agendas`) is a named standing pile of notes for a recurring occasion ("retro",
+  "1:1 with Sam"), with or without a rhythm (`every`, `next_at`): the reader files "for retro: …" on it (a new name starts
+  one, and the reply says so; it is shown the existing names to match loosely), sets its rhythm, and answers what is on it, what
+  was on it, and "retro's done" (archives the notes as done). Its notes (`jot.agenda_id`) are in no plain list. The pile is told
+  once, 15 minutes before `next_at` (the chat, else an info `home_agenda` alert), and the time moves on an hour after it.
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
   open next step or a question about it, a waiting-on is asked about after three days, a weekly review
   (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28
