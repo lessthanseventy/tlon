@@ -1,9 +1,31 @@
 # house — the standalone window over the home and the office
 
-A Godot 4.7 project: two isometric rooms and a panel. The home keeps in sight what the operator's
+A Godot 4.7 project: two isometric rooms and one sidebar. The home keeps in sight what the operator's
 jots left open, what is coming, and the newest notes; the office shows the crew at their desks and
 what waits on the operator. `main.gd` polls, posts and maps the office data, `room.gd` draws a room
-from a description (floor, walls, furniture, figures, door), `panel.gd` the lists.
+from a description (floor, walls, furniture, figures, door), `sidebar.gd` is everything that is not
+the room (below).
+
+**The sidebar** is one 360 px column on the right of the full window (`Sidebar.WIDTH`), always there;
+the room takes the rest and is drawn as large as whole steps of its art fit (`room.gd` `fit_scale`,
+applied by `main.gd` `_fit_room` as the room Control's scale; the 3x art is the largest). Nothing
+floats over the room but pet bubbles, a short hover name (gone when the pointer leaves or has been
+still for 2 s) and the selected thing's gold outline. Top: an optional banner strip (the rhythm slip,
+a reply, a ringing reminder; buttons, never covering the pane, never closing a view, never taking a
+room click), then the header (a "< home" back button and the title, the door, `add`, the settings
+cog) and the context pane, a paper sheet. Bottom: the chat dock. `sidebar.gd` owns the views and the
+chat modes; `views.gd` builds Home, an item, the "On the desk" list and the office view; `blocks.gd`
+turns a card's blocks (title, text, dim, gap, month, buttons, row, foot, day) into Controls.
+Views: `home` (the Now line with Done / Something else / Not today, "Next up" three coming things, "Open"
+six with "N more...", the weather line with three day chips, "Notes (N)" collapsed), `card`
+(calendar, jar, window, clock, board, plant, book, mousehole, fireplace, piano, globe: `home.card`
+holds which, `home.card_blocks` the blocks), `item`, `open`, `add` (`jot.gd` the free-text line and
+`form.gd` the typed form), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
+(`settings_view.gd`), `decorate`. A click on a thing replaces the view; "< home", Esc and a click on
+empty floor go back. The chat dock (`chat_view.gd`) shows the phone's last messages and its input:
+about 40% of the sidebar at home, a handle to collapse it to the input line or to take the whole
+sidebar; it is the input line alone while a thing's view is open, and `K` or a click on the phone
+brings it up. While a LineEdit or TextEdit has focus no letter hotkey fires (`main.gd` `_input`).
 
 The home is a lived-in room, not a dashboard. `home.gd` owns its state and the order it draws in
 (it hands `room.gd` sortable items); `pets.gd` is Nina, Argos and the grid they and the person walk
@@ -11,10 +33,10 @@ The home is a lived-in room, not a dashboard. `home.gd` owns its state and the o
 corkboard, calendar, phone, notepad, bubbles, light and weather). One file per thing that lives in it:
 `person.gd` (the person's activities), `look.gd` (who they are: layered composition, flat fallback,
 saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (the window's scene),
-`closet.gd`, `jot.gd`, `menus.gd` (the paper menu), `focus.gd` (the now card and its timer), `jar.gd`
+`closet.gd`, `jot.gd`, `focus.gd` (the now pin and its timer), `jar.gd`
 (the done jar), `knock.gd` (Nina's one nag), `door.gd` (what comes through the office door),
-`rhythm.gd` (the day's two beats and their slips), `layout.gd` (the furniture and the rules of placing it),
-`decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet picker card). `drive.gd` (`--drive`: the live house driven over TCP). `soak.gd` is the scripted check.
+`rhythm.gd` (the day's two beats and their banners), `layout.gd` (the furniture and the rules of placing it),
+`decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet view). `drive.gd` (`--drive`: the live house driven over TCP). `soak.gd` is the scripted check.
 
 Where the list lives is one `Backend` (`backend.gd`): `backend_http.gd` is the tlon server, `backend_local.gd`
 the house's own file (`local_list.gd` the list, `reader_rules.gd` the loose-line reader). `main.gd` holds one and
@@ -22,7 +44,7 @@ never asks which. The sections below describe the server's list; with `where` = 
 runs on the local list.
 
 - Notes are slips pinned to the corkboard (four shown, "+N" for the rest); hover shows the
-  whole note, a click opens the board card. Open things are stickies on and around the monitor and a stack of paper on the desk
+  whole note, a click opens the board view. Open things are stickies on and around the monitor and a stack of paper on the desk
   whose height and small badge follow the count. A reminder's next due time is the wall calendar
   and the caption above the room, in local time.
 - Ticking a thing off (after the server says 200) crumples its paper into a ball that arcs into the
@@ -41,7 +63,7 @@ runs on the local list.
   cell; pets treat the person as air (they never route around or get stuck on him). Click him for a
   line. Seated on the sofa he sorts after the window, so head and shoulders show over the back.
 - **The TV** (`tv.gd`, `hacks.gd`) is just a TV: it knows nothing of the computer. It is on while
-  the person watches and off otherwise and in the deep night. A click on it (no card, no tooltip)
+  the person watches and off otherwise and in the deep night. A click on it (no view)
   turns it off if on and on if off, and that choice holds until the next click or until the
   automatic state changes (he sits down or leaves, or the deep night begins), whichever is first.
   On, it runs one of the code-drawn screen hacks (`spectrum stars plasma logo
@@ -53,17 +75,19 @@ runs on the local list.
   week (`done_week`, drawn up to 27, colours stable per week). A thing done drops a marble with a
   bounce and a clink mark; a new week (Monday) starts it empty, quietly. Hover: "N done this week".
   The count is `done_week`; names come only from a `done` list in the status.
-- **Cards** (`card.gd`; blocks built in `home.gd` `card_blocks`): a click on the calendar, jar, window,
-  clock, board (cork, a note or the "+N" tag), large plant opens one paper popup near it, at
-  readable size; hover keeps the small tooltip and the pointing hand. One at a time: Esc, a click
-  outside, or a click on another thing closes it (the same thing again too); none opens while a menu,
-  the notepad, the closet, decorate mode or the day's slip is up, and one open closes when they do.
+- **Thing views** (`card.gd` holds which; blocks built in `home.gd` `card_blocks`, drawn by
+  `blocks.gd` in the sidebar pane): a click on the calendar, jar, window, clock, board (cork, a note
+  or the "+N" tag), large plant, bookshelf, mouse hole, fireplace, piano or snow globe opens its view
+  in the pane, replacing the one before, and outlines the thing in the room; hover shows only its
+  short name. "< home", Esc and a click on empty floor go back. No view opens in decorate mode. A
+  rhythm banner never stops a click. The piano plays and the globe shakes on the click that opens
+  its view; the fireplace view has a lit/unlit button and an "into the fire" list.
   Calendar: the month grid with a dot on each day a reminder falls (a repeating one on each of its days,
   `every` being `day|week|month` or `"N unit"`, worded "every other week", "every 6 weeks"), today
   marked, `<` `>` (and the arrow keys) for the month and a click on its name for today's; a click on a
   day lists that day's things and an "add" button; the next five coming up when no day is picked.
-  A click on a thing opens its form. A quiet "today is my birthday" line shows only while no birthday
-  is set (the file's `birthday` wins; on the day the card says so). Jar: the count, and the names newest
+  A click on a thing opens its item view. A quiet "today is my birthday" line shows only while no birthday
+  is set (the file's `birthday` wins; on the day the view says so). Jar: the count, and the names newest
   first when the status has `done` (`[{text, done_at}]`; ten shown). Window: the weather in words
   and the temperature in his `degrees`, then up to three forecast rows (Today, Tomorrow, the weekday; an icon
   from `forecast.gd`, high / low, the chance of rain or snow from 20%; none when there is none, no "unavailable"
@@ -81,7 +105,7 @@ runs on the local list.
   at the door when he comes in. **Nina's one nag**: when the oldest open thing without a future
   `due_at` has sat over 3 days (`since`), she now and then (checks every 3-10 min, 4 h apart at
   most, 08:00-21:00, never at night) walks to the desk and knocks that sticky onto the floor
-  (`knock.gd`); one at a time; it lies there until clicked, which gives its paper menu and puts it
+  (`knock.gd`); one at a time; it lies there until clicked, which opens its item view and puts it
   back on the desk. It is not kept across restarts, only the time of the last knock. She also sits on
   the notepad now and then while the jot field is closed.
 - **The door**: while the home is in view `/api/office` is read every 60 s. When something waits on
@@ -93,31 +117,31 @@ runs on the local list.
   on a tag; click puts it away, it also goes by itself after 5 min.
 - **The day's rhythm** (`rhythm.gd`), each beat once a day, remembered in `user://house_rhythm.json`:
   at the server's `home_list_at` (`GET /api/settings`, `knobs[].key`; empty never; 17:30 until
-  read) he comes home through the door with a bag, Argos greets him, and a slip of what is still open
-  unrolls for 14 s (click an item for its menu, click the slip or Esc puts it away); for 3 h after
+  read) he comes home through the door with a bag, Argos greets him, and a banner of what is still open
+  shows for 14 s (an item opens its view; "Put away" or Esc ends it; it waits while the pointer is on it); for 3 h after
   that time at most. In the morning (first run after 05:30, or the clock passing 08:00, before noon)
-  he stretches and a slip shows what is coming today. Late at night with nothing due the lights dim
+  he stretches and a banner shows what is coming today. Late at night with nothing due the lights dim
   further, he sleeps, the TV is off, Nina sleeps on the sofa and Argos on the rug beside it. Coming
   back to the home from the office after 20 s also brings him in through the door.
 - Small things: a "water the plant" thing done perks the plant up for 10 min with a can and drops;
   a note, open thing or reminder due today that says birthday or anniversary hangs bunting; the
   window gets lights in December, a pumpkin from 25 Oct, hearts 10-14 Feb.
-- **The room** is 10x10 cells and, in the 1100x700 window beside the panel, drawn at scale 2 (scale 3
+- **The room** is 10x10 cells and, in the 1100x700 window beside the sidebar, drawn at scale 1 (2 needs a 976 px area, scale 3
   needs 976 px). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
   (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
   board, calendar, jar, none of them movable) and the plain ones (the rest of
   the default room: armchair, plants, paintings, clock, rugs, fireplace with its fire, bookshelf,
   piano, dining set, mirror...), plus the wall and floor style. `room.gd` draws what it hands over.
 - **Surprises** (`eggs.gd` the director and the pets' scenes, `hearth.gd`, `sound.gd`; more files below as
-  they land). One big thing at a time, minutes apart (7-20 min, seeded), never while a card, menu, notepad,
-  closet, decorate mode or the phone's ring is up; `--egg a,b` forces them for a picture (`push bring zoomies
+  they land). One big thing at a time, minutes apart (7-20 min, seeded), never while a view, the notepad,
+  the closet, decorate mode or the phone's ring is up; `--egg a,b` forces them for a picture (`push bring zoomies
   flop sulk box piano fire`). Nina pushes the pen or mug off the desk (or walks the piano keys) and looks at you (it returns after a
   minute or on a click); Argos brings the yarn, a slipper or a crumple from the bin and sits proud; one of
   them tears a lap (`zoomies`) while the other watches; with a crate or barrel in the room Nina ends up on it
   within a minute; 20 pats in a row flop Argos belly up, 14 on Nina and she sulks in the corner for a minute.
   `P` held is a laser dot at the pointer (`--laser X,Y`): Nina chases it, Argos chases Nina, never onto a
   blocked cell. A lit fireplace (snow, under 8 C, or a Nov-Feb evening; a click toggles it) draws them in
-  front of it now and then, and the item menu offers "Into the fire". A bed draws a nap; a click on the piano
+  front of it now and then, and the item view offers "Into the fire". A bed draws a nap; a click on the piano
   has the person play a few bars (a hero stands and plays badly); the soak pins both.
 - **Outside** (`outside.gd`, drawn in the window's glass and on its sill): a bird on the sill and a
   balloon by day, a plane by day (not the door's paper plane, `--plane`), a cat on the fence at night that
@@ -135,7 +159,7 @@ runs on the local list.
   (not in the notepad): `borges` (shelf glows, a Babel line), `tlon` (colours drift), `uqbar` (a second
   moon), `argos` (he hops). `quirks.gd`: desk fidgets (`spin pencil stretch nod`, `--egg ...`), hero perks
   (staff: `cast` lights the fire; blade: salutes a visitor at the door; bow: an arrow stays in the wall), and a
-  visitor, one at a time (never over a card, form, menu or ringing reminder), `visitors_rate` apart (`rare` 40-90
+  visitor, one at a time (never over a view, form or ringing reminder), `visitors_rate` apart (`rare` 40-90
   min, `sometimes` 15-35, `often` 7-15; default sometimes) and, by `Quirks.HOURS`, between 09:00 and 21:00 for the
   people and the farm, 07:00-23:00 for the wild: a hero (`--egg visitor`), a seeded pedestrian of the city-people
   pack (`--egg visitor_city[:punk]`), a farm animal that walks in at the door, looks around and leaves
@@ -158,7 +182,7 @@ runs on the local list.
   (`{"muted", "volume"}`, default 0.6); the speaker mark shows the level. At most `MAX_VOICES` sound at once
   (the oldest is cut) and a cue's `gap` drops a burst of itself. Cues come from `sound.request(name)` (kept
   in `requested`, which the soak reads; a name with no cue is ignored), from `sound.process(dt, home)`
-  watching the card, menu, note, closet, decorate, door and timer open and close, and from `eggs.find(id)` as
+  watching the view, note, closet, decorate, door and timer open and close, and from `eggs.find(id)` as
   `egg_<id>`. `--sounds` prints every cue with the file it resolved to (or `synth`/`none`) and quits.
 - **Looks** (`looks.gd` the four switches and the one loader of their textures, from the art dir, cached;
   `glow.gd`, `weather.gd`, `spells.gd`, `fonts.gd`): what the light-textures, weather-effects, spell-vfx and
@@ -182,12 +206,12 @@ runs on the local list.
   fire, and a starburst (`impact_holy`) at the window on a wish, each played once (about a second) and dropped;
   the Konami disco has none.
   *Font*: Gridwright Round, loaded from the TTF at its design size (16 px) or a
-  whole multiple of it whatever size is asked (`fixed_size`), unsmoothed, for headings only: the side panel's
-  titles, card and form titles, the settings' and the chat's; body text keeps the default font, as the pack's
+  whole multiple of it whatever size is asked (`fixed_size`), unsmoothed, for headings only: the sidebar's
+  titles, view titles, the settings' and the chat's; body text keeps the default font, as the pack's
   text fonts were thin or wide at 14-17 px. Labels take it through the `Heading` theme variation
   (`Fonts.HEADING`, `Paper.heading`), so the switch applies at once; the default font is its fallback for
   what Round lacks (a thing's text in another script, an emoji).
-- **Decorate** (`D`, or `--decorate`; the home only, not the widget): the side panel becomes the
+- **Decorate** (`D`, or `--decorate`; the home only, not the widget): its view in the sidebar is the
   catalogue (`decorate.gd`): wall and floor styles, `reset`, and every placeable piece of the pack's
   index grouped and scrolled, a piece's four sides (or a rug's two, a wall piece's two) one entry. Click a piece, a ghost follows the pointer
   snapped to the cell (red where it cannot go), click places it and keeps it chosen, `R` turns it
@@ -210,7 +234,7 @@ runs on the local list.
   farm packs when they are under the art dir (a missing one adds nothing, silently): `Packs.PACKS` lists
   the curated pieces, walls and floors of each, merged into `room._index` as `<pack>.<name>` ids
   (`castle.throne`, wall style `castle.ashlar`); an id without a dot is the interiors', so old layout
-  files load as they were. The panel has tabs home / castle / mansion / garden (the farm pack) / pets (the pets' things, below); `--pick`
+  files load as they were. Its view has tabs home / castle / mansion / garden (the farm pack) / pets (the pets' things, below); `--pick`
   switches to the piece's tab. A saved piece of a pack that is missing is not placed but is kept in the
   file when saving (until `reset`). All packs share the interiors' grid, anchors and footprints. Add a
   piece: a row in `Packs.PACKS` (options `faces`, `still`, `as`).
@@ -222,10 +246,10 @@ runs on the local list.
 - **The closet** (wardrobe, or `C`) picks who the person is. With the character-creator pack it
   composes `Layers/<build>/<group>/…png` from `layers.json`'s layer order in GDScript (alpha-stacked,
   scaled nearest) and offers build, skin, hair and colour, beard, top and colour, trousers and
-  colour, shoes and colour, hat, eyewear, scarf, backpack and apron (worn together, each with none), the 20 ready-made recipes and a random button; keys up/down,
-  left/right, `R`, Enter keeps, Esc leaves. Without the pack: skin, shirt, hat, glasses, scarf drawn
+  colour, shoes and colour, hat, eyewear, scarf, backpack and apron (worn together, each with none), the 20 ready-made recipes and a random button; an arrow pair on each row;
+  Random and Keep; the person in the room wears the choice as it is made, and "< home" or Esc leaves with the old look back. Without the pack: skin, shirt, hat, glasses, scarf drawn
   in code. The choice is saved to `user://house_person.json` (an old `extra` loads into its slot).
-  With the hero-creator pack there is a second tab, "hero" (Tab or a click switches; absent without the
+  With the hero-creator pack there is a second tab, "hero" (a click switches; absent without the
   pack): its ready-mades, build, skin and every group of `layers.json` (cape, chest, gloves, beard, hair,
   helmet, legs, shoes, shoulders, weapon) as a style row and a colour row (the colours are the ones that
   style comes in; "none" where a piece is optional), and random. Keep wears the tab it was kept on: the
@@ -235,9 +259,8 @@ runs on the local list.
   stands on the floor cell he would walk to (no seat offset) and the action maps to `HERO_ACT` in
   `look.gd` (desk typing: `ready`; sofa, TV, coffee, sleep, talk: `idle`; wave: `block`; cheer: `cast`;
   pickup: `thrust`; walk: `walk`). Changing between the two re-places the person.
-- **Settings** (`settings.gd` the store, `settings_view.gd` the paper screen and its cog): a small cog in the
-  room's top-right corner (also in the widget) or `,` opens it at home; Esc closes. Never over the notepad, closet,
-  decorate mode, a form, a menu or the day's slip, and those close it (`main.gd` `_form_blocked`, the form's rule).
+- **Settings** (`settings.gd` the store, `settings_view.gd` the settings view): the cog in the sidebar header
+  or `,` opens it in the pane, replacing any view; "< home" or Esc closes. A banner never closes it.
   One flat object in `user://house_settings.json`, written on a change only, other keys kept as found, never in a
   scripted or staged run: `name` (used in the birthday line and a server line's `{name}`; a line with `{name}` and
   no name is skipped), `birthday` (`"MM-DD"`, `""`), `cat` and `dog` (default Nina and Argos: shown everywhere the
@@ -265,13 +288,13 @@ runs on the local list.
   "check" (`GET /api/home`), or "this computer" with one quiet line of where the file is kept), the art folder, and the daily list time and weekly review day only
   when `GET /api/settings` already returned them (`home_list_at`, `home_review_on`). Quiet hours are the server's and
   no existing route returns them, so they are not shown. `--settings "name=Sam;cat=Mimi;scroll;armed=reset"` stages it (`scroll=PIXELS` too); it also takes `weather=on|off`, `weather_town=TOWN`, `degrees=f|c`, `telegram=on`, `claude=on`, `claude_command=PATH` and `phone=pairing|paired` (a made-up bot state, no request).
-- **Chat** (`chat.gd` the history, `chat_view.gd` the panel): the desk phone, clicked while it is not ringing, or
-  `K`, opens a paper chat: his lines on the right, the home's on the left, newest at the bottom, the wheel and
+- **Chat** (`chat.gd` the history, `chat_view.gd` the dock at the bottom of the sidebar): the desk phone, clicked while it is not ringing, or
+  `K`, brings it up from its input line: his lines on the right, the home's on the left, newest at the bottom, the wheel and
   PageUp/PageDown scroll, Enter sends (`POST /api/home`, the notepad's request: both go through `main.gd` `_tell`),
-  Up recalls his last line, Esc closes. A failure says "couldn't reach tlon - not sent" and puts the text back. It
+  Up recalls his last line, the "-" and "+" chips collapse it to the line or open it to the whole sidebar. A failure says "couldn't reach tlon - not sent" and puts the text back. It
   holds his lines and the replies (the notepad's too), each reminder the house is told of (the ring's moment) with
-  Done / In an hour / Tomorrow / Delete (the paper menu's routes through `_act`; a repeating one asks twice) that
-  become a quiet line once used, the day's slips, and now and then a pet's bubble (not twice in ten minutes), marked
+  Done / In an hour / Tomorrow / Delete (the item view's routes through `_act`; a repeating one asks twice) that
+  become a quiet line once used, the day's banners, and now and then a pet's bubble (not twice in ten minutes), marked
   with the pet's name. A message that arrives while it is closed puts a small dot on the phone until it opens. The
   last 300 are kept in `user://house_chat.json` (`{"messages": [{t, who: me|home|cat|dog, text, done?, via?}]}`, `via` "phone" on a line from Telegram and its reply, a
   reminder also `id` and `told_at`), never in a scripted or staged run. A question the server holds for him is not
@@ -372,39 +395,40 @@ runs on the local list.
   (`soak_weather.gd`) serves the stub of wttr.in from its own server (`base` is injectable); no check calls the real one.
   **First start**: no settings file, no `TLON_URL`, and nothing answering at the default address starts the house on
   its own list with a to-do "say hello to the cat", a weekly reminder "water the plant" and a note, once and only then.
-  **Not shown over the local list**: the office (the door in the room and its label, the panel's "to the office"
+  **Not shown over the local list**: the office (the door in the room and its label, the header's "to the office"
   button, Tab, the visitor, `--office`), the server's polls (`/api/office`, `/api/settings`: the daily list time stays
   17:30), the "couldn't reach tlon" states, and the address row of the settings. Choosing the other side applies at
   once and deletes neither side's data; the settings screen says where the file is kept.
 - **Jotting** (the notepad on the desk, `N`, `/` or Enter): a paper field; Enter sends the text to
-  the server (a model reads it, so a pencil scribbles while it waits) and the reply shows as a slip
+  the server (a model reads it, so a pencil scribbles while it waits) and the reply shows as a banner
   for a few seconds. A server that does not answer says "couldn't reach tlon — not kept" and keeps
   the text in the field.
-- **Acting on a thing**: click a sticky, a panel row, or a stack (which asks "which one?") for a paper
-  menu: Done (the crumple), In an hour, Tomorrow (the paper flies to the wall calendar), Now, Delete.
-  The panel's tick circle still ticks. Delete asks nothing of a one-off; a repeating reminder or a
+- **Acting on a thing**: click a sticky, a row of the Home view or a stack (which lists "On the desk") for its item
+  view: Done (the crumple), Into the fire (while it burns), In an hour, Tomorrow (the paper flies to the wall calendar), Now, Edit, Delete (and Plan for a project).
+  Each row's tick circle ticks. Delete asks nothing of a one-off; a repeating reminder or a
   project asks again on the same button ("Delete for good?", 4 s, `sure.gd`).
-- **Forms** (`form.gd`, `things.gd`): `I` or the panel's "add" opens the paper form: to-do, reminder,
+- **Forms** (`form.gd`, `things.gd`): `I` or the header's "add" opens the add view, `N` its free-text jot line first (`jot.gd`; same reader and route, Enter keeps it): the form: to-do, reminder,
   note, waiting-on or project; a reminder has a date (a month grid), a time (typed `HH:MM`, default
   09:00, chips morning/noon/evening) and a repeat (once, every day/week/month, or every N day/week/month).
   The calendar's day and its things, the clock's named timer, the board and its tabs open it too, and a
   thing is changed the same way (to-do or reminder, text, date, time, repeat; Done, Delete, "Stop
   repeating"). Enter saves (Ctrl+Enter in the project's steps), Esc cancels, Tab moves between fields.
-  One at a time, never over the notepad, closet, decorate mode, a menu or the day's slip (they close
-  it); the room ignores clicks while it is up. A refused request (the server's 400 line, 404, no
+  One at a time, in the pane (it replaces any other view; a banner never closes it); the room still
+  takes clicks, which open their own views. A refused request (the server's 400 line, 404, no
   answer) is said on the form, which stays as typed; after any change the room is read again at once.
-  Local times go to the server without a zone. `H` or the panel's "what now?" asks `GET /api/home/now`
-  and shows the pick on a slip: Done, Something else (the skip list grows), Not today
+  Local times go to the server without a zone. `H` or the Home view's Now line asks `GET /api/home/now`
+  and shows the pick on the Home view's Now line: Done, Something else (the skip list grows), Not today
   (`POST /api/home/:id/answer` `nottoday`), Delete. In `--demo` nothing is sent: adds and deletes only
   change what is on screen.
 - **The phone** on the desk buzzes with a ring mark while an open reminder has `told_at` (the server
-  has nudged it); the window asks for attention once per reminder; click it for that reminder's menu, or for the chat when it is quiet.
-- **Now** pins one open thing: large above the monitor and as a card on top of the panel, with a
+  has nudged it); the window asks for attention once per reminder; click it for that reminder's item view, or for the chat when it is quiet.
+- **Now** pins one open thing: large above the monitor and as a pin under the Now line of the Home view, with a
   timer you start there (click the length for 10 / 25 / 45 min), a progress ring, no sound. Kept in
   `user://house_now.json`; cleared when the thing is done or leaves `open`.
-- **Widget** (`--widget`, `W`, `mise run house:widget`): the room alone in a borderless always-on-top
+- **Widget** (`--widget`, `W`, `mise run house:widget`): the room alone (no sidebar) in a borderless always-on-top
   window of 656x432, exactly the room at scale 2 so it stays crisp; drag the room to move it, the
-  spot is kept in `user://house_widget.json`.
+  spot is kept in `user://house_widget.json`. Only bubbles and the hover name are drawn; a click on a thing leaves
+  the widget for the full window with that thing's view open.
 - The pets are roles, not animals: `nina` (naps on furniture, pushes things off the desk, walks the piano) and
   `argos` (brings gifts, flops), each any animal of `Pets.KINDS` (all 29 of the animals pack, horses and bears
   included: every sheet has all of `Pets.ANIMS`, so each animation plays under its own name) or `none`
@@ -413,7 +437,7 @@ runs on the local list.
   (house lines that suit one species) and `Voices.OWN` (what a species says offline).
   A new kind is a row in `KINDS`, and its sheets are in the art pack at once (`art_pack.gd`).
 - **Antics** (`antics.gd`; the setting `pet_antics` `few|some|lots`, default `some`, with `pet_chatter`): short
-  (2-12 s) rare behaviours by species and personality, one at a time and never over a card, form, menu or ring;
+  (2-12 s) rare behaviours by species and personality, one at a time and never over a view, form or ring;
   they read cells from `pets.spots` and need nothing of the art folder. The table is `ANTICS`: to add one, a row
   (`who` species weights, `need`, `go`/`pgo` spots, `dur`, `pers` weights; `pair`, `trig` for one only a hook
   starts), a branch of `_pose` that sets the critter's `dir`/`anim`/`lift`/`flip` from the clock, and its offline
@@ -438,7 +462,7 @@ runs on the local list.
   `box`, `ell`, `diamond`, `line`; `part` "back" and "front" for a `walk` thing), a `_register_one` arm for its spot and a `_habits`
   row (or an entry in `_plain`); `soak_petthings.gd` covers every thing by itself.
 - Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
-  (sweet, not bright). Clicking one pets it; a right click opens its card, "who is this?" (`pet_view.gd`: the animal as a grid of idling sprites and `none`, the name and the way; the same `pet1`/`pet2`, `cat`/`dog` the settings screen writes; `--pet-card nina|argos` stages it). Their lines are `voices.gd`: `GET /api/home/pets` (with `nina_name`, `nina_species`, `nina_personality` and the same three for `argos`, URL-encoded: the first and second pet as set; a pet that is `none` sends none; an older server ignores them; any of the six changing asks once more), a batch a
+  (sweet, not bright). A left click pets and selects it, opening its view (a right click does too), "who is this?" (`pet_view.gd`: the animal as a grid of idling sprites and `none`, the name and the way; the same `pet1`/`pet2`, `cat`/`dog` the settings screen writes; `--pet-card nina|argos` stages it; a "pat" chip and its last lines are there). Their lines are `voices.gd`: `GET /api/home/pets` (with `nina_name`, `nina_species`, `nina_personality` and the same three for `argos`, URL-encoded: the first and second pet as set; a pet that is `none` sends none; an older server ignores them; any of the six changing asks once more), a batch a
   model wrote for the home as it is now, `{Nina: {occasion: [lines]}, Argos: {...}, duo: [[
   "Nina: ...", "Argos: ..."]]}` (`{}` until the first exists). Asked at start, every 20 s while empty
   (3 min, then every 5 min), else every 5 min, and once 60 s after the open list changes; a failure or
@@ -475,11 +499,11 @@ runs on the local list.
   `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above), apart from one outward call, the weather from wttr.in (below), and only when he has switched them on to Telegram (`api.telegram.org`) and to the `claude` program (his own account). A server that does not answer leaves the
   last data on screen and a quiet line saying so; a post that fails moves nothing.
 - **Rooms.** The window starts in the home, or the office with `--office`. The door in each room, its
-  panel button and Tab go between them. A coworker's state is the roster row's `status`
+  header button and Tab go between them. A coworker's state is the roster row's `status`
   (`working`, `waiting` on the operator, `idle`, `cold`, `off`; no row is `off`), as `office/kit/crew.ts`
   says it; the crew is `bench`, live seats first. `pause` closes the office.
 - **Nothing nags.** No scores, streaks or warnings; the only settings are the ones on the cog's screen (sound starts muted and is his to turn on); the only timer is the one you
-  start on a now card. A bubble fades by itself and stays inside the room, never over the panel.
+  start on the pinned now. A bubble fades by itself and stays inside the room.
 
 ## Dev loop
 
@@ -522,8 +546,8 @@ per line on 127.0.0.1, input as real events through `Input.parse_input_event` (w
 {"do":"wheel","x":N,"y":N,"dy":-1}  {"do":"key","key":"I|Escape|Enter|Tab|Backspace|F2|...","shift":false,"ctrl":false}
 {"do":"type","text":"buy milk"}  {"do":"wait","seconds":1.5}  {"do":"frames","n":3}
 {"do":"shot","path":"a.png"}  (relative: under the run's folder; the reply holds the absolute path)
-{"do":"at","x":N,"y":N}  topmost key, the Control there, a card/menu/decorate hit
-{"do":"things"}  registered keys with centres, input Controls, drawn card/menu/decorate hits, mode, window
+{"do":"at","x":N,"y":N}  topmost key, the Control there, a decorate hit
+{"do":"things"}  registered keys with centres, the sidebar (view, selected key, banner, chat mode, every control with text and centre), decorate hits, mode, window
 {"do":"state"}  items, pets, person, tv, fire, weather, clock, settings, layout, said, mode
 {"do":"set","what":"time|date|weather|pet|setting","value":"23:00|10-31|snow|cat=bear_brown|degrees=f"}
 {"do":"resize","w":N,"h":N}  {"do":"quit"}
@@ -531,9 +555,9 @@ per line on 127.0.0.1, input as real events through `Input.parse_input_event` (w
 
 Every reply has `ok`, and `error` when it is false; a bad command never stops the house. `things` is how
 to find what to click: do not guess pixels. Gotchas: decorate is click-to-pick then click-to-place, a
-drag's release drops nothing; a slip (`mode.slip`) blocks and closes forms, so Escape it first; the
+drag's release drops nothing; the window size comes from `HOUSE_DRIVE_W` and `HOUSE_DRIVE_H` (default 1100x700); the
 `shot` verb needs a window (headless answers an error; `soak_drive.gd` holds the verbs over a real TCP client).
-**A change that touches clicks, keys, cards, forms or decorate is verified in drive mode before it
+**A change that touches clicks, keys, views, forms or decorate is verified in drive mode before it
 lands; photos alone are not enough.** Not reachable by it: the OS's own window drag and
 always-on-top, hover tooltips' delay, anything the compositor decides.
 
@@ -541,18 +565,18 @@ User args (after `--`) that fix a state for a picture; `--shot` also freezes the
 and seeds their dice (`--seed N` to pick another):
 
 - `--at HH:MM` pretend local time; `--weather clear|partly|cloudy|fog|rain|storm|snow`;
-  `--forecast none|JSON` the card's days (rows as the server's, `in_days` for `date`: 0 is today; `demo.json` has three).
+  `--forecast none|JSON` the window view's days (rows as the server's, `in_days` for `date`: 0 is today; `demo.json` has three).
 - `--tick-demo` ticks thing 1 off at 0.75 s (a picture at 1.5 s catches the paper in the air);
   `--tick-all` ticks 1, 2, 3 for the confetti; `--bat` makes the paper miss so Nina chases it;
   `--empty` is the demo with nothing open, no notes, nothing coming.
 - `--say Nina|Argos` a bubble at 0.3 s (`--occasion NAME` for its line; `--duo` plays an exchange; `--no-voices` drops the demo batch to show the built-ins); `--nina SPOT[:sleep|sit|walk|run]`, `--argos SPOT[:...]` start a pet
   at a spot (`pets.gd` `SPOTS`: `sofa`, `desk`, `rug`, `bed`, ...); `--wait SECONDS` when to shoot.
-- `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a card, a
+- `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a view, a
   name tag or a pat can be photographed without a pointer.
 - `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--wave "text"` a coworker at the door; `--plane "title"` a landed plane; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--plain` / `--looks glow,weather_art,spells,font` the looks all off / only the named on; `--visitor` feed the demo office to the door; `--person
-  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--card calendar|jar|weather|clock|board|plant` opens that card at 0.45 s (`calendar:DAY[:MONTHS_AHEAD]`, `board:projects|waiting|someday[:PROJECT_ID]`); `--form "KIND;key=value;..."` opens a form at 0.4 s (`todo reminder note waiting project`, or `edit:ID`; keys `kinds text who steps date time every error`, `date` as `MM-DD` or `YYYY-MM-DD`, `steps` lines split by `\n`); `--what-now` the slip; `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
-  "text"` opens the jot field (`--sending` shows the scribble); `--reply "text"` the reply slip;
-  `--menu ID` the paper menu on thing ID; `--ring ID` rings the phone for thing ID; `--now
+  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--card calendar|jar|weather|clock|board|plant` opens that view at 0.45 s (`calendar:DAY[:MONTHS_AHEAD]`, `board:projects|waiting|someday[:PROJECT_ID]`); `--form "KIND;key=value;..."` opens the form view at 0.4 s (`todo reminder note waiting project`, or `edit:ID`; keys `kinds text who steps date time every error`, `date` as `MM-DD` or `YYYY-MM-DD`, `steps` lines split by `\n`); `--what-now` asks for the Now line; `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
+  "text"` opens the add view with the jot field filled (`--sending` shows the scribble); `--reply "text"` the reply banner;
+  `--menu ID` the item view of thing ID; `--ring ID` rings the phone for thing ID; `--now
   ID[:MINUTES[:DONE_FRACTION]]` pins thing ID with a running timer (nothing saved); `--widget`;
   `--layout PATH` a layout file; `--decorate` opens decorate mode, `--pick NAME[:SIDE]` chooses a piece
   and `--cell COL,ROW` puts the ghost there.
