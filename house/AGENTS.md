@@ -326,7 +326,7 @@ runs on the local list.
 - **The house's own list** (`where`: `"server"` by default, `"local"` for "this computer"; the cog's screen chooses,
   `--local FILE|starters` stages it, nothing saved; `--tell "line;line"` sends loose lines and opens the chat). The same room runs on `backend_local.gd`: every route of the
   server's list answered on the next frame by `local_list.gd`, a Dictionary kept in `user://house_list.json`
-  `{"v": 1, "next_id": N, "things": [...]}` (a thing: `id kind text state since due_at every every_day told_at nudges
+  `{"v": 1, "next_id": N, "things": [...], "agendas": [...]}` (a thing: `id kind text state since due_at every every_day told_at nudges
   project_id who plan done_at hidden_until`; unknown keys, top level or on a thing, are kept; `due_at` is UTC `Z` as
   the server's rows). Saved after every change, written to a temp file and renamed over the old one, which stays as
   `house_list.bak.json`; a file that cannot be read is moved aside as `house_list.broken-N.json` and the house starts

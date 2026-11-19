@@ -75,6 +75,9 @@ defmodule Server.Jot do
           Map.has_key?(reading, from),
           do: {to, if(from == :steps, do: Enum.drop(reading.steps, 1), else: reading[from])}
 
+    optional =
+      if kind != "note" and not Map.has_key?(reading, :agenda), do: [agenda_id: nil] ++ optional, else: optional
+
     put(
       jot,
       [
