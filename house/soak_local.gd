@@ -1631,7 +1631,7 @@ func _real_pass(main) -> void:
 	await _wait()
 	main._what_now()
 	await _wait()
-	_eq([h.card.kind, h.things.pick["text"], h.things.pick["why"]], ["pick", "water", "it has sat the longest"], "what now")
+	_eq([h.things.pick["text"], h.things.pick["why"]], ["water", "it has sat the longest"], "what now")
 	h.things.act("pk_else")
 	await _wait()
 	_eq(h.things.pick["text"], "mail", "something else skips the first")
@@ -1642,8 +1642,8 @@ func _real_pass(main) -> void:
 	_eq(h.things.pick["text"], "water", "not today hides the thing")
 	h.card.close()
 	# the room says nothing is wrong
-	var door: Button = main._panel._door
-	_eq([main._panel._status.visible, h.reply_text.contains("reach")], [false, false], "no word of a server that is not there")
+	var door: Button = main._sidebar._door
+	_eq([main._sidebar._status.visible, h.reply_text.contains("reach")], [false, false], "no word of a server that is not there")
 	_eq([door.visible, h.room.office_door], [false, false], "the office door is not offered")
 	var at_before: String = main._at
 	main._toggle()
@@ -1696,12 +1696,12 @@ func _where(main) -> void:
 	var before := FileAccess.get_file_as_string(FILE)
 	main._fixture = FILE
 	settings.put("where", "local")
-	_eq([main._backend.local, h.room.office_door, main._panel._door.visible], [true, false, false], "choosing this computer applies at once")
+	_eq([main._backend.local, h.room.office_door, main._sidebar._door.visible], [true, false, false], "choosing this computer applies at once")
 	main._poll()
 	await _wait()
 	_eq([_texts(main._data["open"]), main._data["notes"]], [["one", "two"], ["a note"]], "the room reads the list file")
 	settings.put("where", "server")
-	_eq([main._backend.local, main._backend.base, h.room.office_door, main._panel._door.visible], [false, settings.server_url(), true, true], "choosing a server applies at once and brings the door back")
+	_eq([main._backend.local, main._backend.base, h.room.office_door, main._sidebar._door.visible], [false, settings.server_url(), true, true], "choosing a server applies at once and brings the door back")
 	main._poll()
 	await _wait()
 	_eq(_texts(main._data["open"]).has("one"), false, "and the room reads the server")
@@ -1710,7 +1710,7 @@ func _where(main) -> void:
 	main._poll()
 	await _wait()
 	_eq(_texts(main._data["open"]), ["one", "two"], "and is there when the house comes back")
-	var v = main._settings_view
+	var v = main._sidebar.settings_view
 	v.open()
 	_eq([v._server_box.visible, v._local_say.visible, v._where_local.button_pressed], [false, true, true], "the settings show this computer")
 	_eq(v._local_say.text, "kept in " + ProjectSettings.globalize_path(LocalList.STORE), "and where the file is kept")

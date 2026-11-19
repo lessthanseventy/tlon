@@ -823,7 +823,7 @@ func _in_the_house(main) -> void:
 	main._install(_backend())
 
 	# the settings screen: masked token, pairing code, last reached, the second click
-	var v = main._settings_view
+	var v = main._sidebar.settings_view
 	ph.chat = 0
 	ph.code = "4821"
 	v.open()

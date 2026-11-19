@@ -43,10 +43,10 @@ func _iso_utc(y: int, m: int, d: int, hour: int, minute: int) -> String:
 
 # open a new form and fill it, send it, and answer the body it posted
 func _send(preset: Dictionary, fields: Dictionary, path: String = "/api/home/add") -> Variant:
-	s._check(main._open_form("new", preset), "a form opens for %s (at %s, widget %s, blocked %s, slip %s)" % [str(fields), main._at, main._widget, main._form_blocked(), h.rhythm.kind])
-	main._form.fill(fields)
+	s._check(main._open_form("new", preset), "a form opens for %s (at %s, widget %s)" % [str(fields), main._at, main._widget])
+	main._sidebar.form.fill(fields)
 	var from: int = s._log.size()
-	main._form.submit()
+	main._sidebar.form.submit()
 	await _wait()
 	return _sent(path, from)
 
@@ -64,7 +64,7 @@ func _refresh_state(open: Array, coming: Array = [], extra: Dictionary = {}) -> 
 
 
 func run() -> void:
-	main._jot.finish()
+	main._sidebar.jot.finish()
 	await _bodies()
 	await _errors()
 	await _edits()
@@ -75,7 +75,7 @@ func run() -> void:
 
 
 func _bodies() -> void:
-	var f = main._form
+	var f = main._sidebar.form
 	var before: int = s._count("/api/home")
 	var body: Variant = await _send(
 		{"kinds": ["reminder"], "date": _date(2026, 11, 30)}, {"text": "pay rent", "time": "09:00"}
@@ -195,7 +195,7 @@ func _bodies() -> void:
 
 
 func _errors() -> void:
-	var f = main._form
+	var f = main._sidebar.form
 	_opens({"kinds": ["reminder"], "date": _date(2026, 11, 30)})
 	f.fill({"text": "keep me", "time": "9:75"})
 	var from: int = s._log.size()
@@ -244,7 +244,7 @@ func _errors() -> void:
 
 
 func _edits() -> void:
-	var f = main._form
+	var f = main._sidebar.form
 	var due := _iso_utc(2026, 11, 24, 9, 0)
 	await _refresh_state(
 		[{"id": 8, "kind": "todo", "text": "buy milk", "due_at": null, "every": null}],
@@ -306,7 +306,7 @@ func _edits() -> void:
 
 
 func _deletes() -> void:
-	var f = main._form
+	var f = main._sidebar.form
 	await _refresh_state(
 		[{"id": 8, "kind": "todo", "text": "buy milk", "due_at": null, "every": null}],
 		[
@@ -375,23 +375,22 @@ func _deletes() -> void:
 			}
 		]
 	)
-	h.open_item_menu(9)
-	s._check(h.menu.rows[-1]["act"] == "delete", "the paper menu ends with Delete")
-	h.menu._layout(Rect2(0, 0, 800, 700))
-	var at: Vector2 = h.menu._rects[-1].get_center()
+	h.open_item(9)
+	var sb = main._sidebar
+	await s.process_frame
+	await s.process_frame
+	s._check(sb.view == "item" and sb.arg == 9, "a click on a reminder opens its view")
+	var acts: Array = sb._views._actions(h.things.find(9), "reminder")
+	s._check(acts[-1]["act"] == "delete", "the item view ends with Delete")
 	from = s._log.size()
-	h.click(at)
+	sb.item_act(9, "delete")
 	s._check(
-		h.menu.is_open and h.menu.rows[-1]["label"] == "Delete for good?",
-		"a repeating one's menu asks again on the same button"
+		sb._views._actions(h.things.find(9), "reminder")[-1]["label"] == "Delete for good?",
+		"a repeating one's view asks again on the same button"
 	)
-	h.menu._layout(Rect2(0, 0, 800, 700))
-	h.click(h.menu._rects[-1].get_center())
+	sb.item_act(9, "delete")
 	await _wait()
-	s._check(
-		not h.menu.is_open and _sent("/api/home/9/drop", from) != null,
-		"and the second click deletes"
-	)
+	s._check(_sent("/api/home/9/drop", from) != null, "and the second click deletes")
 	f.close()
 
 
@@ -437,7 +436,7 @@ func _plan_and_now() -> void:
 	# what now
 	main._what_now()
 	await _wait()
-	s._check(h.card.kind == "pick" and int(h.things.pick["id"]) == 1, "what now shows the pick")
+	s._check(int(h.things.pick["id"]) == 1, "what now picks the thing")
 	h.things.act("pk_else")
 	await _wait()
 	s._check(int(h.things.pick["id"]) == 2, "something else asks again with the first skipped")
@@ -484,40 +483,24 @@ func _plan_and_now() -> void:
 
 
 func _blockers() -> void:
-	var f = main._form
+	var f = main._sidebar.form
+	var sb = main._sidebar
 	var spec := {"kinds": ["note"]}
-	main._jot.visible = true
-	s._check(not main._open_form("new", spec), "no form while the notepad is up")
-	main._jot.visible = false
-	main._closet.visible = true
-	s._check(not main._open_form("new", spec), "no form while the closet is up")
-	main._closet.visible = false
-	main._decorate.active = true
-	s._check(not main._open_form("new", spec), "no form in decorate mode")
-	main._decorate.active = false
-	h.menu.show_at(1, Vector2(300, 300), "x", [{"label": "a", "act": "done"}])
-	s._check(not main._open_form("new", spec), "no form over a menu")
-	h.menu.close()
-	s._check(main._open_form("new", spec), "a form opens when nothing is up")
-	s._check(h.click(Vector2(400, 300)) and not h.card.is_open(), "a form takes the room's clicks")
-	main._jot.visible = true
+	s._check(main._open_form("new", spec), "a form opens in the sidebar")
+	s._check(sb.view == "add" and f.visible, "the sidebar shows the form")
+	s._check(h.form_open or sb.takes_text(), "the form is up")
+	h.rhythm.kind = "home"
+	h.rhythm.left = 30.0
 	await s.process_frame
 	await s.process_frame
-	s._check(not f.visible, "the notepad closes the form")
-	main._jot.visible = false
-	main._open_form("new", spec)
-	h.menu.show_at(1, Vector2(300, 300), "x", [{"label": "a", "act": "done"}])
-	await s.process_frame
-	await s.process_frame
-	s._check(not f.visible, "a menu closes the form")
-	h.menu.close()
-	main._open_form("new", spec)
+	s._check(f.visible, "a slip appearing does not close the form")
+	h.rhythm.dismiss()
 	main._open_form("new", {"kinds": ["todo"]})
 	s._check(f.visible and f.kind == "todo", "one form at a time: the second replaces the first")
 	f.cancel()
 	await s.process_frame
 	await s.process_frame
-	s._check(not h.form_open, "the room is free again")
+	s._check(not f.visible and sb.view == "home", "the form's end brings the home view back")
 
 
 func _card_things() -> void:
@@ -568,8 +551,8 @@ func _opens(preset: Dictionary) -> void:
 	s._check(
 		ok,
 		(
-			"a form opens (jot %s closet %s decorate %s menu %s slip '%s')"
-			% [main._jot.visible, main._closet.visible, main._decorate.active, h.menu.is_open, h.rhythm.kind]
+			"a form opens (view %s decorate %s slip %s)"
+			% [main._sidebar.view, main._decorate.active, h.rhythm.kind]
 		)
 	)
 

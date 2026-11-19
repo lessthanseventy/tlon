@@ -101,8 +101,6 @@ func _forecast() -> void:
 	_eq(h._weather_blocks().size(), bare, "a forecast that is no list adds nothing")
 	room.queue_free()
 
-	var row := {"t": "day", "name": "Today", "kind": "clear", "temps": "1", "wet": ""}
-	_eq(Card._height(ThemeDB.fallback_font, row, 298.0), Card.DAY_HEIGHT, "a day row's height")
 
 
 # the server's /api/home carries the forecast to the card; an older one has no key

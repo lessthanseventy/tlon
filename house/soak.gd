@@ -23,6 +23,7 @@ const PetLifeSoak := preload("res://soak_petlife.gd")
 const PetThingsSoak := preload("res://soak_petthings.gd")
 const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
+const SidebarSoak := preload("res://soak_sidebar.gd")
 const LocalSoak := preload("res://soak_local.gd")
 const ArtSoak := preload("res://soak_art.gd")
 const PackLooksSoak := preload("res://soak_looks.gd")
@@ -602,7 +603,8 @@ func _routes() -> void:
 		main._data["open"].is_empty() and main._data["coming"].size() == 1,
 		"later moved the thing to coming"
 	)
-	main._jot.open("buy stamps")
+	main._open_add(true)
+	main._sidebar.jot.open("buy stamps")
 	main._send_jot("buy stamps")
 	await create_timer(1.0).timeout
 	_check(_seen("POST", "/api/home", "buy stamps"), "jot posted")
@@ -610,16 +612,17 @@ func _routes() -> void:
 		main._room.home.reply_text == "to do: buy stamps",
 		"reply shown: '%s'" % main._room.home.reply_text
 	)
-	_check(not main._jot.visible, "jot hid after a reply")
+	_check(not main._sidebar.jot.visible, "jot hid after a reply")
 	_fail_jot = true
-	main._jot.open("keep me")
+	main._open_add(true)
+	main._sidebar.jot.open("keep me")
 	main._send_jot("keep me")
 	await create_timer(1.0).timeout
 	_check(
-		main._jot.visible and main._jot._edit.text == "keep me",
+		main._sidebar.jot.visible and main._sidebar.jot._edit.text == "keep me",
 		"failed jot keeps its text in the field"
 	)
-	_check("not kept" in main._jot._hint.text, "failed jot says so: '%s'" % main._jot._hint.text)
+	_check("not kept" in main._sidebar.jot._hint.text, "failed jot says so: '%s'" % main._sidebar.jot._hint.text)
 	var home = main._room.home
 	_check(
 		is_equal_approx(home.rhythm.list_at, 9.25),
@@ -646,6 +649,8 @@ func _routes() -> void:
 	)
 	_where = "forms"
 	await FormSoak.new(self, main).run()
+	_where = "sidebar"
+	await SidebarSoak.new(self, main).run()
 	_where = "settings and chat"
 	await ChatSoak.new(self, main).run()
 	_where = "local routes, forms and chat"
@@ -1170,9 +1175,8 @@ func _home_logic() -> void:
 	h.knock.next_check = 0.0
 	_run_home(h, 1.0)
 	_check(h.knock.id == 1 and h.knock.pending == -1, "one knocked sticky at a time")
-	h.open_item_menu(1)
-	_check(h.knock.id == -1 and h._slots.has(1) and h.menu.is_open, "a click gives the paper menu")
-	h.menu.close()
+	h.open_item(1)
+	_check(h.knock.id == -1 and h._slots.has(1), "opening the item puts the sticky back")
 	h.knock.last = Time.get_unix_time_from_system()
 	h.knock.next_check = 0.0
 	_run_home(h, 700.0)
@@ -1346,60 +1350,33 @@ func _cards() -> void:
 		if not pts.has(key):
 			continue
 		h.click(pts[key][0])
-		_check(h.card.kind == kind and h.card.key == key, "a click on %s opens its card" % key)
-		_check(not h.card_blocks().is_empty(), "the %s card has something to say" % kind)
-		await process_frame
-		var out: bool = h.click(empty)
-		_check(not h.card.is_open() and out, "a click outside closes the %s card" % kind)
-		h.click(pts[key][0])
+		_check(h.card.kind == kind and h.card.key == key, "a click on %s opens its view" % key)
+		_check(not h.card_blocks().is_empty(), "the %s view has something to say" % kind)
 		h.close_card()
-		_check(not h.card.is_open(), "Esc closes the %s card" % kind)
-		h.click(pts[key][0])
-		await process_frame
-		for p in pts[key]:
-			if not h.card._box.has_point(p):
-				h.click(p)
-				_check(not h.card.is_open(), "the same thing again closes the %s card" % kind)
-				break
-		h.close_card()
-	print("cards: %d things open their card from their hit area" % things.size())
+		_check(not h.card.is_open(), "going back closes the %s view" % kind)
+	print("cards: %d things open their view from their hit area" % things.size())
 	_check(pts.has("tv"), "the TV has a hit area")
 	if pts.has("tv"):
 		h.click(pts["tv"][0])
-		_check(h.tv.on and not h.card.is_open(), "a click turns the TV on and opens no card")
+		_check(h.tv.on and not h.card.is_open(), "a click turns the TV on and opens no view")
 		h.click(pts["tv"][0])
 		_check(not h.tv.on and not h.card.is_open(), "a second click turns it off")
 	h.click(pts["note:0"][0] if pts.has("note:0") else pts["board"][0])
-	_check(h.card.kind == "board", "a note opens the board card")
+	_check(h.card.kind == "board", "a note opens the board view")
 	h.close_card()
 	h.click(pts["cal"][0])
-	await process_frame
-	var jar_pt := Vector2(-1, -1)
-	for p in pts["jar"]:
-		if not h.card._box.has_point(p):
-			jar_pt = p
-	_check(jar_pt.x >= 0, "a jar point outside the calendar card")
-	h.click(jar_pt)
-	_check(h.card.kind == "jar", "another thing replaces the card: one at a time (%s)" % h.card.kind)
+	h.click(pts["jar"][0])
+	_check(h.card.kind == "jar", "another thing replaces the view: one at a time (%s)" % h.card.kind)
 	h.close_card()
-	for state in ["jot_open", "closet_open", "decorating"]:
-		h.set(state, true)
-		h.click(pts["cal"][0])
-		_check(not h.card.is_open(), "no card while %s" % state)
-		h.set(state, false)
-	h.menu.show_at(1, Vector2(300, 300), "x", [{"label": "a", "act": "done"}])
+	h.decorating = true
 	h.click(pts["cal"][0])
-	_check(not h.card.is_open() and not h.menu.is_open, "no card over a menu; its click only closes it")
-	h.click(pts["cal"][0])
-	_check(h.card.kind == "calendar", "the card opens once the menu is gone")
-	h.jot_open = true
-	h.process(0.1)
-	_check(not h.card.is_open(), "opening the notepad closes the card")
-	h.jot_open = false
+	_check(not h.card.is_open(), "no view while decorating")
+	h.decorating = false
 	h.rhythm.kind = "home"
 	h.click(pts["cal"][0])
-	_check(not h.card.is_open(), "no card over the day's slip")
-	h.rhythm.kind = ""
+	_check(h.card.kind == "calendar", "a slip never stops a click on a thing")
+	h.rhythm.dismiss()
+	h.close_card()
 	h.open_card("calendar")
 	_check(h.card.kind == "calendar", "--card opens by name")
 
