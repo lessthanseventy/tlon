@@ -20,6 +20,7 @@ const Card := preload("res://card.gd")
 const EggSoak := preload("res://soak_eggs.gd")
 const GuestSoak := preload("res://soak_guests.gd")
 const PetLifeSoak := preload("res://soak_petlife.gd")
+const PetThingsSoak := preload("res://soak_petthings.gd")
 const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
 const LocalSoak := preload("res://soak_local.gd")
@@ -113,6 +114,8 @@ func _run() -> void:
 	PetLifeSoak.new(self).run()
 	_where = "antics"
 	AnticSoak.new(self).run()
+	_where = "pet things"
+	await PetThingsSoak.new(self).run()
 	_where = "cards"
 	await _cards()
 	_where = "routes"
@@ -1819,6 +1822,8 @@ func _packs_catalogue(l: RefCounted) -> void:
 	for e in l.catalogue:
 		count[e["tab"]] = int(count.get(e["tab"], 0)) + 1
 		_check(e["tab"] in l.tabs, "%s is on a tab that exists" % e["key"])
+		if e["tab"] == "pets":
+			continue
 		for f in (e["faces"] if not e["faces"].is_empty() else [""]):
 			var p := {"p": e["key"], "f": f, "c": 0, "r": 0}
 			var id: String = l.sprite_id(p)
