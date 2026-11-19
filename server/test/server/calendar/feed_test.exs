@@ -87,7 +87,7 @@ defmodule Server.Calendar.FeedTest do
            ]
   end
 
-  test "a recurrence that ended stays ended, and all-day events are left out" do
+  test "a recurrence that ended stays ended, and an all-day event is marked" do
     feed =
       ics(
         vevent([
@@ -102,9 +102,10 @@ defmodule Server.Calendar.FeedTest do
 
     {from, to} = window("2026-10-02T00:00:00Z", "2026-10-10T00:00:00Z")
 
-    assert Enum.map(Feed.occurrences(feed, from, to), & &1.start) == [
-             ~U[2026-10-02 12:00:00Z],
-             ~U[2026-10-03 12:00:00Z]
+    assert Enum.map(Feed.occurrences(feed, from, to), &{&1.start, &1.all_day}) == [
+             {~U[2026-10-02 12:00:00Z], false},
+             {~U[2026-10-03 12:00:00Z], false},
+             {~U[2026-10-08 00:00:00Z], true}
            ]
   end
 
