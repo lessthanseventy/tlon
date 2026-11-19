@@ -348,6 +348,12 @@ static func _button(label: String, data: String) -> Dictionary:
 	return {"text": label, "callback_data": data}
 
 
+# an agenda's pile, told once ahead of its time: a plain message, nothing to press
+func on_agenda(text: String) -> void:
+	if chat != 0:
+		_say(text)
+
+
 # a reminder the house has just told: a message with its buttons; one told before loses its buttons
 func on_told(row: Dictionary) -> void:
 	if chat == 0:

@@ -30,6 +30,7 @@ func setup(path: String, clock: Callable, bias: float, keep: bool = true) -> voi
 	list.tick()
 	list.told.disconnect(first)
 	list.told.connect(func(row: Dictionary) -> void: told.emit(row))
+	list.told_agenda.connect(func(text: String) -> void: told_agenda.emit(text))
 
 
 func _ready() -> void:
@@ -77,6 +78,10 @@ func _route(method: String, path: String, body: Dictionary) -> Dictionary:
 		return _tell(str(body.get("text", "")))
 	if p.size() == 3 and p[2] == "add":
 		return list.add(body)
+	if p.size() == 3 and p[2] == "agendas":
+		return list.agenda_add(body)
+	if p.size() == 5 and p[2] == "agendas" and p[3].is_valid_int():
+		return _agenda_route(int(p[3]), p[4], body)
 	if p.size() != 4 or not p[2].is_valid_int():
 		return {"code": 404, "body": null}
 	var id := int(p[2])
@@ -95,6 +100,19 @@ func _route(method: String, path: String, body: Dictionary) -> Dictionary:
 			return list.drop(id)
 		"answer":
 			return list.answer(id, body)
+	return {"code": 404, "body": null}
+
+
+func _agenda_route(id: int, action: String, body: Dictionary) -> Dictionary:
+	match action:
+		"edit":
+			return list.agenda_edit(id, body)
+		"add":
+			return list.agenda_note(id, body)
+		"clear":
+			return list.agenda_clear(id)
+		"drop":
+			return list.agenda_drop(id)
 	return {"code": 404, "body": null}
 
 

@@ -11,6 +11,8 @@ extends Node
 signal told(row: Dictionary)
 signal replied(said: String, reply: String)
 signal changed
+# an agenda's pile, told ahead of its time
+signal told_agenda(text: String)
 
 var local := false
 
