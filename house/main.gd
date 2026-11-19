@@ -460,6 +460,7 @@ static func _home_data(d: Dictionary) -> Dictionary:
 		"projects": d.get("projects", []),
 		"note_rows": d.get("note_rows", []),
 		"agendas": d.get("agendas", []),
+		"proposals": d.get("proposals", []),
 		"forecast": d.get("forecast", []),
 		"meetings": d.get("meetings", []),
 	}
@@ -839,6 +840,9 @@ func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 			_write("/api/home/%d/drop" % id, {}, _then(ok, func() -> void: _gone(id)))
 		"revive":
 			_write("/api/home/%d/revive" % id, {}, ok)
+		"propose_take", "propose_no":
+			var verb := "take" if what == "propose_take" else "dismiss"
+			_write("/api/home/proposals/%d/%s" % [id, verb], {}, ok)
 		"nottoday":
 			var close := func() -> void: _ask_now(true)
 			_write("/api/home/%d/answer" % id, {"choice": "nottoday"}, _then(ok, close))
@@ -958,8 +962,23 @@ func _demo_write(path: String, body: Dictionary) -> void:
 		_apply(_data)
 	elif parts.size() == 5 and parts[4] == "drop":
 		_gone(int(parts[3]))
+	elif parts.size() == 6 and parts[3] == "proposals":
+		_demo_proposal(int(parts[4]), parts[5])
 	elif parts.size() >= 4 and parts[3] == "agendas":
 		_demo_agenda(parts, body)
+
+
+func _demo_proposal(id: int, verb: String) -> void:
+	for p in _data["proposals"]:
+		if int(p["id"]) != id:
+			continue
+		if verb == "take":
+			_demo_ids += 1
+			var row := {"id": _demo_ids, "kind": "todo", "text": p["text"], "due_at": null}
+			_data["open"] = _data["open"] + [row]
+		_data["proposals"] = _data["proposals"].filter(func(x): return int(x["id"]) != id)
+		break
+	_apply(_data)
 
 
 # a staged agenda's `in_days` and `at` ("14:00") stand where its `next_at` would, so a demo never goes stale

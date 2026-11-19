@@ -856,6 +856,14 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 			code = 404
 		else:
 			out = {"id": 99, "text": str(parsed.get("text", "")), "reply": "ok"}
+	elif method == "POST" and path.begins_with("/api/home/proposals/"):
+		var id := int(path.get_slice("/", 4))
+		var proposals: Array = _state.get("proposals", [])
+		for prop in proposals:
+			if int(prop["id"]) == id and path.ends_with("/take"):
+				_state["open"].append({"id": 900 + id, "kind": "todo", "text": prop["text"], "due_at": null})
+		_state["proposals"] = proposals.filter(func(x): return int(x["id"]) != id)
+		out = {"id": id}
 	elif method == "POST" and path == "/api/home":
 		if _fail_jot:
 			code = 404
