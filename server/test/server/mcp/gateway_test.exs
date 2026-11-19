@@ -996,7 +996,7 @@ defmodule Server.MCP.GatewayTest do
   describe "/api/home — what the operator's jots have left open (Server.MCP.OperatorAPI)" do
     test "the forecast is [] with the weather off, else the days the report held" do
       Server.TestDB.clean!()
-      assert {200, %{"forecast" => []}} = get_json("/api/home")
+      assert {200, %{"forecast" => [], "meetings" => []}} = get_json("/api/home")
 
       report =
         JSON.encode!(%{

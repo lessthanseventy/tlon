@@ -471,7 +471,8 @@ defmodule Server.Home.Inbox do
       notes: Jot.notes(via, 60),
       projects: Jot.projects(via),
       someday: Jot.somedays(via),
-      agendas: Enum.map(Server.Agenda.all(via), & &1.name)
+      agendas: Enum.map(Server.Agenda.all(via), & &1.name),
+      meetings: Server.Home.Day.meetings(now)
     }
 
     reader = Application.get_env(:server, :home_reader, &Reader.read/2)

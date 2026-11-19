@@ -37,6 +37,11 @@ defmodule Server.Home.InboxTest do
     assert_received {:said, "42", "I'll remind you " <> _}
   end
 
+  test "the reader is given today's and tomorrow's meetings to answer from", %{say: say} do
+    reads(fn _body, %{meetings: []} -> :error end)
+    Inbox.hear([%{id: 7, chat: "42", text: "what's on today?"}], "telegram", "42", say)
+  end
+
   test "a message that corrects the jot before it changes that jot's reading", %{say: say} do
     reads(fn _body, _context -> dentist(friday(), false) end)
     Inbox.hear([%{id: 7, chat: "42", text: "call the dentist friday"}], "telegram", "42", say)
