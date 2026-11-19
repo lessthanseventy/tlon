@@ -11,6 +11,7 @@ const Sure := preload("res://sure.gd")
 const Settings := preload("res://settings.gd")
 const OPEN_SHOWN := 6
 const NEXT_SHOWN := 3
+const SHORT := ["jar", "plant", "clock", "book", "found", "globe", "piano", "weather"]
 const GOOD := Color("3f7a47")
 const KINDS := {
 	"todo": "a to-do",
@@ -30,7 +31,7 @@ func _init(the_sidebar, the_home) -> void:
 
 
 static func heading(box: Control, text: String) -> void:
-	var l := Paper.heading(text, 15, Paper.INK)
+	var l := Paper.heading(text, 14, Paper.INK)
 	box.add_child(l)
 
 
@@ -49,7 +50,7 @@ func _when(item: Dictionary) -> String:
 
 func _row(box: Control, item: Dictionary, tick: bool, sub: String) -> void:
 	var id := int(item["id"])
-	var row := Blocks.Row.new(str(item["text"]), sub, tick)
+	var row := Blocks.Row.new(str(item["text"]), sub, tick, false, true)
 	row.pressed.connect(func() -> void: home.open_item(id))
 	row.ticked.connect(func() -> void: home.acted.emit(id, "done"))
 	box.add_child(row)
@@ -100,7 +101,6 @@ func _now(box: VBoxContainer) -> void:
 	var pick: Dictionary = home.things.pick
 	if pick.is_empty():
 		return
-	heading(box, "Now")
 	var id := int(pick["id"])
 	var row := Blocks.Row.new(str(pick["text"]), str(pick.get("why", "")))
 	row.pressed.connect(func() -> void: home.open_item(id))
@@ -128,6 +128,8 @@ func _weather(box: VBoxContainer) -> void:
 
 func card_view(box: VBoxContainer) -> void:
 	Blocks.build(box, home.card_blocks(), func(a: String) -> void: home.card_act(a))
+	if home.card.kind in SHORT:
+		_now(box)
 
 
 func open_view(box: VBoxContainer) -> void:
@@ -157,6 +159,14 @@ func item_view(box: VBoxContainer, id: int) -> void:
 		facts.append("said " + home._ago(str(item["since"])))
 	box.add_child(quiet("  -  ".join(facts), 14))
 	_chips(box, _actions(item, kind), func(a: String) -> void: sb.item_act(id, a))
+	var plan: Array = item.get("plan", [])
+	for step in plan.slice(0, 3):
+		box.add_child(quiet("then " + str(step), 13))
+	var others: Array = home.open.filter(func(t: Dictionary) -> bool: return int(t["id"]) != id)
+	if not others.is_empty():
+		heading(box, "Other open")
+		for other in others.slice(0, 3):
+			_row(box, other, true, _when(other))
 
 
 func _actions(item: Dictionary, kind: String) -> Array:
@@ -336,7 +346,7 @@ class Strip:
 			draw_rect(Rect2(at, Vector2(w - 6.0, 46.0)), Color("e4d8bd"))
 			draw_rect(Rect2(at, Vector2(w - 6.0, 46.0)), Paper.INK, false, 1.0)
 			var name: String = Forecast.name_of(d["date"], today)
-			name = name.substr(0, 3) if name not in ["Today", "Tomorrow"] else name.substr(0, 5)
+			name = {"Today": "Today", "Tomorrow": "Tmrw"}.get(name, name.substr(0, 3))
 			draw_string(
 				font, at + Vector2(6, 15), name, HORIZONTAL_ALIGNMENT_LEFT, w - 14, 12, Paper.INK
 			)
