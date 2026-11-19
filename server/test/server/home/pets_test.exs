@@ -131,6 +131,31 @@ defmodule Server.Home.PetsTest do
       assert %{"Nina" => %{"pet" => ["Newer."]}} = eventually_not(fn -> Pets.voices(late) end, "Kept.")
     end
 
+    test "after a restart an unchanged home waits out the full age, a changed one the shorter" do
+      written()
+      start_supervised!(Pets)
+      writes({:ok, ~s({"Nina": {"pet": ["Newer."]}, "Argos": {}})})
+
+      between = DateTime.add(@now, 400)
+      assert %{"Nina" => %{"pet" => ["Kept."]}} = Pets.voices(between)
+      refute_receive {:asked, _}, 50
+
+      todo(1, "buy milk")
+      assert %{"Nina" => %{"pet" => ["Kept."]}} = Pets.voices(between)
+      assert_receive {:asked, _}
+    end
+
+    test "a kept value from before the key was kept still loads" do
+      written()
+      body = "pets" |> Server.Home.Keep.get() |> JSON.decode!() |> Map.delete("key") |> JSON.encode!()
+      Server.Home.Keep.put("pets", body)
+      start_supervised!(Pets)
+      writes({:error, :down})
+
+      assert %{"Nina" => %{"pet" => ["Kept."]}} = Pets.voices(@now)
+      refute_receive {:asked, _}, 50
+    end
+
     test "a different cast is not served the kept batch" do
       written()
       start_supervised!(Pets)

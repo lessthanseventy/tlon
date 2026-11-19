@@ -232,7 +232,7 @@ defmodule Server.Home.Pets do
 
   @impl true
   def handle_cast({:wrote, ref, {:ok, lines}}, %{writing: ref} = state) do
-    save(lines, state.cast, state.asked)
+    save(lines, state.cast, state.asked, state.key)
     {:noreply, %{state | lines: lines, at: state.asked, writing: nil}}
   end
 
@@ -254,25 +254,29 @@ defmodule Server.Home.Pets do
   defp outcome({:ok, out}), do: with(:error <- parse(out), do: {:error, :unparseable})
   defp outcome(_), do: {:error, :writer_failed}
 
-  defp save(lines, cast, at) do
+  defp save(lines, cast, at, {ids, done_week}) do
     params = for {role, pet} <- cast, {field, value} <- pet, into: %{}, do: {"#{role}_#{field}", value}
-    Home.Keep.put("pets", JSON.encode!(%{"lines" => lines, "cast" => params, "at" => DateTime.to_iso8601(at)}))
+    kept = %{"lines" => lines, "cast" => params, "at" => DateTime.to_iso8601(at), "key" => [ids, done_week]}
+    Home.Keep.put("pets", JSON.encode!(kept))
   rescue
     error -> Logger.warning("home pets: batch not kept (#{inspect(error.__struct__)})")
   end
 
   defp keep(state) do
     with body when is_binary(body) <- Home.Keep.get("pets"),
-         {:ok, %{"lines" => lines, "cast" => %{} = params, "at" => at}} <- JSON.decode(body),
+         {:ok, %{"lines" => lines, "cast" => %{} = params, "at" => at} = kept} <- JSON.decode(body),
          {:ok, lines} <- parse(JSON.encode!(lines)),
          {:ok, at, _} <- DateTime.from_iso8601(at) do
-      %{state | lines: lines, at: at, cast: cast(params)}
+      %{state | lines: lines, at: at, cast: cast(params), key: key(kept["key"])}
     else
       _ -> state
     end
   rescue
     _ -> state
   end
+
+  defp key([ids, done_week]) when is_list(ids) and is_integer(done_week), do: {ids, done_week}
+  defp key(_), do: nil
 
   defp describe(:nina, cast) when cast == @defaults, do: @nina
   defp describe(:argos, cast) when cast == @defaults, do: @argos
