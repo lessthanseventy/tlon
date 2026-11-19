@@ -249,6 +249,66 @@ defmodule Server.Home do
   defp via, do: Application.get_env(:server, :home_messenger, Server.Home.Telegram).name()
 
   @doc """
+  Start an agenda from a form (`Server.Home.Form.agenda/3`: `name`, `every`, `at`): `{:ok, row}` as
+  `status/1` shows it, `{:error, reason}`.
+  """
+  @spec agenda_add(map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()}
+  def agenda_add(params, now) do
+    with {:ok, %{name: name} = changes} <- Server.Home.Form.agenda(params, now, :add),
+         {:ok, agenda} <- Server.Agenda.create(via(), name, changes, now) do
+      {:ok, agenda_row(agenda)}
+    end
+  end
+
+  @doc "Change the agenda `id` (`name`, `every` or null, `at` or null): `{:ok, row}`, `{:error, reason}`, `:not_found`."
+  @spec agenda_edit(integer(), map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
+  def agenda_edit(id, params, now) do
+    with %Server.Agenda{} = agenda <- Server.Agenda.get(via(), id) || :not_found,
+         {:ok, changes} <- Server.Home.Form.agenda(params, now, :edit),
+         {:ok, agenda} <- Server.Agenda.edit(agenda, changes, now) do
+      {:ok, agenda_row(agenda)}
+    end
+  end
+
+  @doc "Put a note `text` on the pile of the agenda `id`: `{:ok, note row}`, `{:error, reason}`, `:not_found`."
+  @spec agenda_note(integer(), term(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
+  def agenda_note(id, text, now) do
+    with %Server.Agenda{} = agenda <- Server.Agenda.get(via(), id) || :not_found,
+         {:ok, %{text: text}} <- Server.Home.Form.add(%{"kind" => "note", "text" => text}, now) do
+      {:ok, jot} =
+        Jot.take(via(), -System.unique_integer([:positive, :monotonic]) - System.os_time(:second), text)
+
+      {:ok, agenda |> Server.Agenda.note(jot, text, now) |> view()}
+    end
+  end
+
+  @doc "Archive the pile of the agenda `id` (its notes kept, done): `{:ok, row}`, `:not_found`."
+  @spec agenda_clear(integer(), DateTime.t()) :: {:ok, map()} | :not_found
+  def agenda_clear(id, now) do
+    case Server.Agenda.get(via(), id) do
+      nil ->
+        :not_found
+
+      agenda ->
+        Server.Agenda.clear(agenda, now)
+        {:ok, agenda_row(agenda)}
+    end
+  end
+
+  @doc "Delete the agenda `id` and its pile: `{:ok, %{id, name}}`, `:not_found`."
+  @spec agenda_drop(integer(), DateTime.t()) :: {:ok, map()} | :not_found
+  def agenda_drop(id, now) do
+    case Server.Agenda.get(via(), id) do
+      nil ->
+        :not_found
+
+      agenda ->
+        :ok = Server.Agenda.delete(agenda, now)
+        {:ok, %{id: agenda.id, name: agenda.name}}
+    end
+  end
+
+  @doc """
   The agendas whose pile was told since `since` and still has notes, as the desktop raises them:
   `%{id, created_at, thread_id, body}`, `body` the same line the chat is told.
   """

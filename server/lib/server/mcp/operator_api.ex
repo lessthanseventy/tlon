@@ -156,7 +156,7 @@ defmodule Server.MCP.OperatorAPI do
       PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe; the page it replaces is kept
       GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
-      GET    /api/home                   Server.Home.status; {open, coming, notes, note_rows, projects, waiting, someday, done, done_week}:
+      GET    /api/home                   Server.Home.status; {open, coming, notes, note_rows, projects, waiting, someday, done, done_week, agendas}:
                                          what the operator's jots have left open; a row has id/kind/text/due_at/every/since/told_at and its
                                          project {id, text} or nil, a project its next step, how many are done, its plan and steps_done,
                                          a waiting-on its who; someday are the put-off things; note_rows is notes as {id, text};
@@ -173,6 +173,13 @@ defmodule Server.MCP.OperatorAPI do
                                          400 {error} (one line) on a bad body, 404 when project is not an open project
       POST   /api/home/:id/edit          {text?, at?, every? (null stops it), kind? (todo|reminder only)} → Server.Home.edit; the row,
                                          a touch; 400 {error}, 404 when the thing is not live
+      POST   /api/home/agendas           {name, every?, at?} → Server.Home.agenda_add; the agenda as GET /api/home shows it in agendas
+                                         ({id, name, every, next_at, notes: [{id, text, since}]}); 400 {error}
+      POST   /api/home/agendas/:id/edit  {name?, every? (null stops it), at? (null clears it)} → the agenda; 400, 404
+      POST   /api/home/agendas/:id/add   {text} → the note put on its pile, as a note row; 400, 404
+      POST   /api/home/agendas/:id/clear the pile archived (its notes kept, done) → the agenda, empty; 404
+      POST   /api/home/agendas/:id/drop  the agenda and its pile deleted → {id, name}; 404
+                                         (a note on a pile is edited and dropped by /api/home/:id/edit and /drop)
       POST   /api/home/:id/plan          {plan: [text]} → Server.Home.plan; the project's row, its planned steps replaced; 400, 404
       POST   /api/home/:id/revive        Server.Home.revive; the put-off thing's row, open again; 404 when it is not on someday
       POST   /api/home/:id/drop          Server.Home.drop; the jot as /done answers (dropped_at for done_at), or 404 when it is not open:
@@ -648,6 +655,21 @@ defmodule Server.MCP.OperatorAPI do
     home_form(conn, Server.Home.add(b, DateTime.utc_now()))
   end
 
+  defp route(conn, "POST", "home", ["agendas"]) do
+    {b, conn} = body(conn)
+    home_form(conn, Server.Home.agenda_add(b, DateTime.utc_now()))
+  end
+
+  defp route(conn, "POST", "home", ["agendas", id, action]) when action in ~w(edit add clear drop) do
+    {b, conn} = body(conn)
+    now = DateTime.utc_now()
+
+    case Integer.parse(id) do
+      {id, ""} -> home_form(conn, agenda_action(action, id, b, now))
+      _ -> no_route(conn)
+    end
+  end
+
   defp route(conn, "POST", "home", [id, "edit"]) do
     {b, conn} = body(conn)
 
@@ -692,6 +714,11 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp route(conn, _, _, _), do: no_route(conn)
+
+  defp agenda_action("edit", id, body, now), do: Server.Home.agenda_edit(id, body, now)
+  defp agenda_action("add", id, body, now), do: Server.Home.agenda_note(id, body["text"], now)
+  defp agenda_action("clear", id, _body, now), do: Server.Home.agenda_clear(id, now)
+  defp agenda_action("drop", id, _body, now), do: Server.Home.agenda_drop(id, now)
 
   defp home_form(conn, {:ok, row}), do: json(conn, 200, row)
   defp home_form(conn, {:error, reason}), do: json(conn, 400, %{error: reason})
