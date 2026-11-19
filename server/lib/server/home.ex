@@ -248,6 +248,23 @@ defmodule Server.Home do
 
   defp via, do: Application.get_env(:server, :home_messenger, Server.Home.Telegram).name()
 
+  @doc """
+  The agendas whose pile was told since `since` and still has notes, as the desktop raises them:
+  `%{id, created_at, thread_id, body}`, `body` the same line the chat is told.
+  """
+  @spec told_agendas(DateTime.t()) :: [map()]
+  def told_agendas(since) do
+    for agenda <- Server.Agenda.told_since(via(), since),
+        [_ | _] = notes <- [Jot.agenda_notes(agenda.id)] do
+      %{
+        id: "#{agenda.id}:#{DateTime.to_unix(agenda.told_for)}",
+        created_at: agenda.told_at,
+        thread_id: nil,
+        body: Server.Agenda.say_told(agenda, notes)
+      }
+    end
+  end
+
   @doc "An agenda as `status/1` shows it: `%{id, name, every, next_at, notes: [%{id, text, since}]}`."
   @spec agenda_row(Server.Agenda.t()) :: map()
   def agenda_row(agenda) do

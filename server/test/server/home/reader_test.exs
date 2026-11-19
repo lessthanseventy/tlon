@@ -12,6 +12,44 @@ defmodule Server.Home.ReaderTest do
     assert Reader.say(reading) == "I'll remind you Fri 20 Nov 09:00: call the dentist"
   end
 
+  describe "agendas" do
+    test "\"for retro: the deploy took three tries\" is a note on the agenda retro" do
+      reply = ~s({"kind":"agenda","agenda":" retro ","text":"the deploy took three tries","at":null})
+
+      assert {:ok, %{kind: "agenda", agenda: "retro", text: "the deploy took three tries", due_at: nil}} =
+               Reader.parse(reply)
+    end
+
+    test "an agenda reading with no agenda named, or no text, is no reading" do
+      assert :error = Reader.parse(~s({"kind":"agenda","text":"x"}))
+      assert :error = Reader.parse(~s({"kind":"agenda","agenda":"  ","text":"x"}))
+      assert :error = Reader.parse(~s({"kind":"agenda","agenda":"retro","text":" "}))
+      assert :error = Reader.parse(~s({"kind":"agenda_show"}))
+    end
+
+    test "\"retro is every other Thursday at 2\" sets a rhythm: a time and an every" do
+      reply = ~s({"kind":"agenda_set","agenda":"retro","text":"","at":"2026-11-19T14:00","every":"2 weeks"})
+
+      assert {:ok, %{kind: "agenda_set", agenda: "retro", every: "2 week", due_at: %DateTime{} = at}} =
+               Reader.parse(reply)
+
+      assert Server.Home.Clock.say(at) == "Thu 19 Nov 14:00"
+
+      assert {:ok, %{agenda: "1:1 with Sam", every: "week", due_at: %DateTime{}}} =
+               Reader.parse(~s({"kind":"agenda_set","agenda":"1:1 with Sam","at":"2026-11-23T10:00","every":"week"}))
+
+      assert {:ok, %{agenda: "retro", every: nil, due_at: nil}} =
+               Reader.parse(~s({"kind":"agenda_set","agenda":"retro","every":"fortnight"}))
+    end
+
+    test "what is on a pile, what was, and clearing it are asks that need no text" do
+      for kind <- ["agenda_show", "agenda_past", "agenda_clear"] do
+        assert {:ok, %{kind: ^kind, agenda: "retro", text: ""}} =
+                 Reader.parse(~s({"kind":"#{kind}","agenda":"retro"}))
+      end
+    end
+  end
+
   test "a reminder with no time it can read is a note" do
     assert {:ok, %{kind: "todo", due_at: nil}} = Reader.parse(~s({"kind":"reminder","text":"milk","at":"friday"}))
 

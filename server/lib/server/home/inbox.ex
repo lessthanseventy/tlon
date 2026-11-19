@@ -22,13 +22,15 @@ defmodule Server.Home.Inbox do
   and the offer of a smaller start after the daily list) is said in the same chat with its choices under it, and
   is answered by a tap or, for a project's next step, by typing it. "What now" is answered with one
   open thing and Done, Something else, Not today and Delete under it (`Server.Home.Now`). "Delete the
-  milk" typed is the same as the button. Off unless `TLON_START_HOME_INBOX=1` (`:start_home_inbox`), which the service alone
+  milk" typed is the same as the button. A note for a recurring occasion ("for retro: …") is filed
+  on that agenda's pile, and an agenda's pile is said once, ahead of its time (`Server.Home.Agendas`). Off unless `TLON_START_HOME_INBOX=1` (`:start_home_inbox`), which the service alone
   sets: a second node polling the same bot would take the operator's messages from it. With no token
   on the machine it does not start.
   """
   use GenServer
 
   alias Server.Home
+  alias Server.Home.Agendas
   alias Server.Home.Clock
   alias Server.Home.Organize
   alias Server.Home.Reader
@@ -219,6 +221,7 @@ defmodule Server.Home.Inbox do
   def handle_info(:tick, %{messenger: messenger} = state) do
     now = DateTime.utc_now()
     guarded(:ok, fn -> nudge(messenger.name(), "", nil, now) end)
+    guarded(:ok, fn -> Agendas.tell(messenger.name(), "", nil, now) end)
     Process.send_after(self(), :tick, @tick_ms)
     {:noreply, tend(state, "", nil, now)}
   end
@@ -227,6 +230,7 @@ defmodule Server.Home.Inbox do
     chat = Server.OperatorConfig.setting("home_chat")
     now = DateTime.utc_now()
     guarded(:ok, fn -> nudge(messenger.name(), chat, &messenger.say/3, now) end)
+    guarded(:ok, fn -> Agendas.tell(messenger.name(), chat, &messenger.say/3, now) end)
     state = tend(state, chat, &messenger.say/3, now)
 
     case messenger.updates(offset) do
@@ -466,7 +470,8 @@ defmodule Server.Home.Inbox do
       open: Jot.opens(via),
       notes: Jot.notes(via, 60),
       projects: Jot.projects(via),
-      someday: Jot.somedays(via)
+      someday: Jot.somedays(via),
+      agendas: Enum.map(Server.Agenda.all(via), & &1.name)
     }
 
     reader = Application.get_env(:server, :home_reader, &Reader.read/2)
@@ -485,6 +490,12 @@ defmodule Server.Home.Inbox do
       {:ok, %{kind: kind} = reading} when kind in ["done", "delete", "list", "now", "someday"] ->
         Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
         asked(reading, via, now)
+
+      {:ok, %{kind: "agenda"} = reading} ->
+        {Agendas.file(jot, reading, now), []}
+
+      {:ok, %{kind: "agenda_" <> _} = reading} ->
+        {Agendas.ask(jot, reading, now), []}
 
       {:ok, reading} ->
         {Organize.file(jot, reading, now), []}

@@ -19,7 +19,8 @@ defmodule Server.Alerts do
       `landed_title/1` — the desktop's toast and the Claude Code plugin's read this row); `fixing`, an issue a ticket
       took, saying who has it (`Server.Dossier.own_issue/3`); `live`, the service booted
       on a new release (`Server.Release.PM.note_live/1`); `home_list`, the home's daily list, for the
-      ten minutes after its time (`Server.Home.listing/1`). A `mention` of the operator is info too: a
+      ten minutes after its time (`Server.Home.listing/1`); `home_agenda`, an agenda's pile told ahead of its
+      time (`Server.Home.told_agendas/1`). A `mention` of the operator is info too: a
       coworker's report goes by, and the office's inbox keeps it; what they must decide is an ask.
 
   Each alert is `%{key, level, kind, title, body, at, thread_id, link, actions}`; an action is a
@@ -49,7 +50,8 @@ defmodule Server.Alerts do
       live: Server.Release.PM.live_since(since),
       told: Server.Home.told(),
       asked: Server.Home.asked(),
-      home_list: List.wrap(Server.Home.listing(now))
+      home_list: List.wrap(Server.Home.listing(now)),
+      home_agenda: Server.Home.told_agendas(since)
     )
   end
 
@@ -81,7 +83,8 @@ defmodule Server.Alerts do
       Enum.map(Keyword.get(opts, :landed, []), &info("landed", &1, landed_title(&1))) ++
       Enum.map(Keyword.get(opts, :fixing, []), &info("fixing", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :live, []), &info("live", &1, &1.body)) ++
-      Enum.map(Keyword.get(opts, :home_list, []), &info("home_list", &1, &1.body))
+      Enum.map(Keyword.get(opts, :home_list, []), &info("home_list", &1, &1.body)) ++
+      Enum.map(Keyword.get(opts, :home_agenda, []), &info("home_agenda", &1, &1.body))
   end
 
   @doc "The one wording of a landing, for every surface that toasts it: `#185 landed — <title>`."
