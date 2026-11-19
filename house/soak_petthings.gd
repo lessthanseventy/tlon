@@ -182,12 +182,19 @@ func _combos() -> void:
 func _visit(h, key: String) -> void:
 	var c = h.pets.critter("nina")
 	h.pets.freeze = true
+	h.sound.requested.clear()
 	h.pets.place(c, "rug", "sit")
+	c.say_left = 0.0
 	h.pets.go(c, key, "sit", 5.0)
 	s._run_home(h, 30.0, func(): return c.goal == "" and c.mode not in ["walk", "jump"])
 	var cell: Vector2i = h.pets.spots[key]["cell"]
 	var there: bool = c.z > 0.0 if h.pets.spots[key].has("perch") else h.pets._cell_of(c.pos) == cell
 	s._check(c.spot == key and there, "%s goes to the %s" % [c.species, key])
+	s._run_home(h, 0.5)
+	var howls: int = h.sound.requested.count("howl")
+	s._check(howls == (1 if key == "howl" else 0), "%s: the howl is asked for %d times" % [key, howls])
+	s._run_home(h, 3.0)
+	s._check(h.sound.requested.count("howl") == howls, "and not again while it stays on the %s" % key)
 
 
 # a thing goes with its animal and comes back where it was

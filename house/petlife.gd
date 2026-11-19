@@ -43,6 +43,7 @@ var h:
 		return _hw.get_ref()
 var _t := 0.0
 var _was_litter := {}
+var _was_rock := {}
 var _flicks: Array = []
 var _pour := {}
 var _sing := 0.0
@@ -413,7 +414,7 @@ func _register_one(p: Dictionary, key: String) -> void:
 		"kennel", "pail", "basket", "stump":
 			_spot(key, front)
 		"howl":
-			_spot(key, _perch(p, Vector3(0.5, 0.5, 13.0), 0.6))
+			_spot(key, _perch(p, Vector3(0.5, 0.5, 17.0), 0.6))
 		"fish", "rope":
 			_spot(key, {"cell": cell, "face": 1, "use": "post"})
 		"bone":
@@ -595,6 +596,7 @@ func process(dt: float) -> void:
 			litter_wait = rng.randf_range(420.0, 900.0)
 			h.sound.request("rustle")
 		_was_litter[id] = in_box
+		_arrivals(c)
 		if in_box and rng.randf() < dt * 3.0:
 			_flicks.append(
 				{"t": 0.0, "dx": rng.randf_range(-0.4, 0.4), "u": rng.randf_range(0.5, 1.0)}
@@ -606,6 +608,16 @@ func process(dt: float) -> void:
 	for f in _flicks:
 		f["t"] += dt
 	_flicks = _flicks.filter(func(f): return f["t"] < 0.5)
+
+
+# the wolf howls once on arriving at its rock
+func _arrivals(c) -> void:
+	var on_rock: bool = (
+		not c.away and c.goal == "" and c.jump.is_empty() and c.mode == "idle" and c.spot == "howl"
+	)
+	if on_rock and not _was_rock.get(c.id, false):
+		h.sound.request("howl")
+	_was_rock[c.id] = on_rock
 
 
 func fill(which: String) -> void:
