@@ -17,6 +17,28 @@ const SIGNATURE := {
 	"deer": "stump",
 }
 
+# the default furniture of the 10x10 room
+const OLD_ROWS := [
+	["plant_small", "", 0, 0],
+	["armchair", "se", 0, 1],
+	["rug_blue", "nwse", 1, 4],
+	["painting", "ne", 0, 0],
+	["clock", "ne", 7, 0],
+	["painting", "nw", 0, 6],
+	["fireplace", "ne", 8, 0],
+	["bookshelf", "sw", 9, 0],
+	["rug_red", "nesw", 8, 1],
+	["armchair", "ne", 8, 2],
+	["side_table", "", 9, 2],
+	["piano", "se", 0, 8],
+	["wall_shelf", "nw", 0, 8],
+	["mirror", "nw", 0, 9],
+	["rug_round", "", 3, 8],
+	["dining_table", "nwse", 3, 8],
+	["dining_chair", "ne", 3, 9],
+	["dining_chair", "ne", 4, 9],
+	["plant_small", "", 9, 9],
+]
 var s
 var _tmp: DirAccess
 
@@ -38,6 +60,7 @@ func run() -> void:
 	_pointer()
 	_migration()
 	_old_room()
+	_replaced()
 	_night()
 	_quiet()
 	await _drawn()
@@ -109,6 +132,7 @@ func _defaults() -> void:
 	s._check(keys == want, "a cat and a dog get their things: %s" % [keys])
 	_sound(h, "cat and dog")
 	_wall_sides(h, "cat and dog")
+	_in_front(h, "cat and dog")
 	for key in ["cardbox", "fish", "aquarium", "rope", "balls"]:
 		s._check(h.petlife.piece(key).is_empty(), "%s waits in the pets tab" % key)
 	var tower: Dictionary = h.petlife.piece("tower")
@@ -132,6 +156,7 @@ func _combos() -> void:
 		var h = room.home
 		_sound(h, sp)
 		_wall_sides(h, sp)
+		_in_front(h, sp)
 		for key in PetThings.THINGS:
 			var t: Dictionary = PetThings.THINGS[key]
 			var out: bool = not h.petlife.piece(key).is_empty()
@@ -148,6 +173,7 @@ func _combos() -> void:
 	]:
 		var room := _home(82, pair[0], pair[1])
 		_sound(room.home, str(pair))
+		_in_front(room.home, str(pair), false)
 		_wall_sides(room.home, str(pair))
 		room.queue_free()
 
@@ -438,12 +464,12 @@ func _pointer() -> void:
 	deco._act("tab:pets")
 	var cell := func(c: float, r: float) -> Vector2: return room._p(room._origin, c + 0.5, r + 0.5)
 	deco.pick("pet.cardbox")
-	s._click_at(deco, cell.call(2, 9))
+	s._click_at(deco, cell.call(4, 6))
 	s._check(not h.petlife.out("pet.cardbox").is_empty(), "a click puts the cardboard box down")
 	var box: Dictionary = h.petlife.out("pet.cardbox")
 	s._check(box.get("own", false) == false, "a thing a cat uses is not a decoration")
 	deco.sel = ""
-	s._click_at(deco, cell.call(2, 9))
+	s._click_at(deco, cell.call(4, 6))
 	s._check(deco.held != null and deco.held["p"] == "pet.cardbox", "a click on it picks it up")
 	s._click_at(deco, cell.call(3, 3))
 	s._check(_cell(box) == Vector2i(3, 3), "and the next click puts it down")
@@ -605,39 +631,126 @@ func _migration() -> void:
 	room.queue_free()
 
 
+# the room as a 10x10 house saved it: the first default furniture, the things where the first rule
+# put them, and a post he moved
+func _ten_file(post: Vector2i) -> String:
+	var rows: Array = OLD_ROWS.map(func(r): return {"p": r[0], "f": r[1], "c": r[2], "r": r[3]})
+	var things := {
+		"litter": Vector2i(1, 1),
+		"bowls": Vector2i(5, 1),
+		"post": post,
+		"tower": Vector2i(9, 4),
+		"bone": Vector2i(1, 8),
+		"bed_round": Vector2i(1, 9),
+		"bed_cushion": Vector2i(9, 8),
+		"window_perch": Vector2i(1, 5),
+	}
+	var seen: Array = []
+	for key in things:
+		seen.append(key)
+		var face: String = "sw" if key in ["tower", "bed_cushion"] else ""
+		rows.append({"p": "pet." + key, "f": face, "c": things[key].x, "r": things[key].y})
+	var path := _tmp.get_current_dir().path_join("ten_layout.json")
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	var doc := {"v": 1, "wall": "wallpaper", "floor": "oak", "pieces": rows, "pets_seen": seen}
+	f.store_string(JSON.stringify(doc))
+	f.close()
+	return path
+
+
 # a layout saved in the 10x10 room loads into the 11x11 one with every piece at its cell
 func _old_room() -> void:
 	var room := _home(87, "cat_grey", Pets.NONE)
-	var old := [
-		["plant_small", "", 0, 0],
-		["armchair", "se", 0, 1],
-		["rug_blue", "nwse", 1, 4],
-		["painting", "ne", 0, 0],
-		["clock", "ne", 7, 0],
-		["painting", "nw", 0, 6],
-		["fireplace", "ne", 8, 0],
-		["bookshelf", "sw", 9, 0],
-		["rug_red", "nesw", 8, 1],
-		["armchair", "ne", 8, 2],
-		["side_table", "", 9, 2],
-		["piano", "se", 0, 8],
-		["wall_shelf", "nw", 0, 8],
-		["mirror", "nw", 0, 9],
-		["rug_round", "", 3, 8],
-		["dining_table", "nwse", 3, 8],
-		["dining_chair", "ne", 3, 9],
-		["dining_chair", "ne", 4, 9],
-		["plant_small", "", 9, 9],
-	]
-	var rows: Array = old.map(func(r): return {"p": r[0], "f": r[1], "c": r[2], "r": r[3]})
-	var path := _tmp.get_current_dir().path_join("ten_layout.json")
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	f.store_string(JSON.stringify({"v": 1, "wall": "wallpaper", "floor": "oak", "pieces": rows}))
-	f.close()
+	var path := _ten_file(Vector2i(6, 9))
 	var l = s._layout_of(room._index, path, false)
-	var got: Array = l.pieces.map(func(p): return [p["p"], p["f"], p["c"], p["r"]])
-	s._check(got == old, "a 10x10 layout loads with every piece at its cell (%s)" % [got])
+	var got: Array = l.pieces.filter(func(p): return not PetThings.is_pet(p))
+	got = got.map(func(p): return [p["p"], p["f"], p["c"], p["r"]])
+	s._check(got == OLD_ROWS, "a 10x10 layout loads with every piece at its cell (%s)" % [got])
+	var things: Array = l.pet_pieces().map(func(p): return [p["p"], _cell(p)])
+	s._check(things.size() == 8, "and its things at their cells (%s)" % [things])
 	room.queue_free()
+
+
+# a thing still where the first rule put it is put again by the current one, once; one he moved
+# stays; a saved file is read as the current version
+func _replaced() -> void:
+	var path := _ten_file(Vector2i(6, 9))
+	var room := _home(97, "cat_grey", "dog_golden")
+	var h = room.home
+	h.layout.pieces = h.layout._defaults([])
+	h.layout.path = path
+	h.layout.persist = true
+	s._check(h.layout.load_file() and h.layout.old_things, "a version 1 file is read as the first rule's")
+	h.apply_layout()
+	h.petlife.sync()
+	s._check(not h.layout.old_things, "and its things are looked at once")
+	var old := {
+		"litter": Vector2i(1, 1),
+		"bowls": Vector2i(5, 1),
+		"tower": Vector2i(9, 4),
+		"bone": Vector2i(1, 8),
+		"bed_round": Vector2i(1, 9),
+		"bed_cushion": Vector2i(9, 8),
+	}
+	for key in old:
+		var at: Vector2i = _cell(h.petlife.piece(key))
+		s._check(at != old[key], "%s is put again (was %s, is %s)" % [key, old[key], at])
+	s._check(_cell(h.petlife.piece("post")) == Vector2i(6, 9), "a post he moved stays")
+	s._check(_cell(h.petlife.piece("window_perch")) == Vector2i(1, 5), "the perch stays at the window")
+	_in_front(h, "replaced")
+	_sound(h, "replaced")
+	var cells := {}
+	for p in h.layout.pet_pieces():
+		cells[p["p"]] = _cell(p)
+	h.layout.save()
+	s._check(_rows(path)["v"] == h.layout.SAVED, "it is saved as the current version")
+	h.petlife._stamp = []
+	h.petlife.sync()
+	var same := true
+	for p in h.layout.pet_pieces():
+		same = same and cells[p["p"]] == _cell(p)
+	s._check(same, "and nothing is moved a second time")
+	room.queue_free()
+	room = _home(98, "cat_grey", "dog_golden")
+	h = room.home
+	h.layout.pieces = h.layout._defaults([])
+	h.layout.path = path
+	h.layout.persist = true
+	s._check(h.layout.load_file() and not h.layout.old_things, "a saved file is read as current")
+	h.apply_layout()
+	h.petlife.sync()
+	same = true
+	for p in h.layout.pet_pieces():
+		same = same and cells[p["p"]] == _cell(p)
+	s._check(same, "and a second start finds the things where they were")
+	room.queue_free()
+
+
+# no thing in the default room stands where a person or a pet steps up to a piece, and no two
+# with some height touch (unless the room is too full for that: `apart` off)
+func _in_front(h, what: String, apart: bool = true) -> void:
+	var clear := {}
+	for cell in [Vector2i(1, 1), Vector2i(1, 2), Vector2i(1, 3), Vector2i(1, 4), Vector2i(1, 5)]:
+		clear[cell] = "the armchair, the wardrobe, the TV and the sofa"
+	for cell in [Vector2i(5, 1), Vector2i(8, 1), Vector2i(9, 1), Vector2i(1, 7), Vector2i(2, 7)]:
+		clear[cell] = "the desk, the fireplace, the bookshelf and the door"
+	for cell in [Vector2i(1, 8), Vector2i(1, 9)]:
+		clear[cell] = "the piano"
+	var front: Dictionary = h.layout.in_front()
+	var solid: Array = []
+	for p in h.layout.pieces:
+		if not PetThings.is_pet(p) or p["p"] == "pet.window_perch":
+			continue
+		var at := _cell(p)
+		s._check(not clear.has(at) and not front.has(at), "%s: %s at %s is in front of a piece" % [what, p["p"], at])
+		if PetThings.THINGS[PetThings.key_of(p)]["h"] > 0:
+			solid.append(at)
+	if not apart:
+		return
+	for i in solid.size():
+		for j in range(i + 1, solid.size()):
+			var d: Vector2i = (solid[i] - solid[j]).abs()
+			s._check(maxi(d.x, d.y) >= 2, "%s: things at %s and %s touch" % [what, solid[i], solid[j]])
 
 
 # an untouched house writes no layout file; a change in decorate mode writes one

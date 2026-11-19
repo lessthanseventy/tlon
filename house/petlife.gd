@@ -8,18 +8,24 @@ extends RefCounted
 const Pets := preload("res://pets.gd")
 const PetThings := preload("res://pet_things.gd")
 
-# where a thing is first put, against a wall or in a corner; the rest scan outward from the walls
-const PLACES := {
+# where a thing is first put before the open floor along the front edges and the walls; the rest of
+# the things go by the rule in `_default`
+const PLACES := {"window_perch": [Vector2i(1, 5)]}
+# where the first rule put the things in the 10x10 room, to tell one it placed from one he moved
+const OLD_SIZE := 10
+const OLD_PLACES := {
 	"litter": [Vector2i(1, 1)],
 	"bowls": [Vector2i(5, 1)],
-	"post": [Vector2i(Pets.COLS - 1, 6)],
-	"tower": [Vector2i(Pets.COLS - 1, 4)],
+	"post": [Vector2i(9, 6)],
+	"tower": [Vector2i(9, 4)],
 	"bone": [Vector2i(1, 8)],
 	"blanket": [Vector2i(1, 8)],
 	"bed_round": [Vector2i(1, 9)],
-	"bed_cushion": [Vector2i(Pets.COLS - 1, 8)],
+	"bed_cushion": [Vector2i(9, 8)],
 	"window_perch": [Vector2i(1, 5)],
 }
+# a new thing is put this many cells from the others when the room has such a place
+const APART := 3
 const HAY_PIECE := "farm.hay_round"
 const NIGHT_HOME := {
 	"nina": ["roost", "hutch", "bed_cushion", "bed", "kennel"],
@@ -138,6 +144,7 @@ func sync() -> void:
 		changed = true
 		if h.layout.check(p, p, h.busy_cells()) != "" and not _relocate(p):
 			p["hide"] = true
+	changed = _replace_old() or changed
 	changed = _put_out() or changed
 	if changed:
 		h.layout.version += 1
@@ -157,10 +164,12 @@ func _stamp_now() -> Array:
 	]
 
 
-# the things nobody has put out yet and an animal here uses, once each
+# the things nobody has put out yet and an animal here uses, once each, the tallest first
 func _put_out() -> bool:
 	var did := false
-	for key in PetThings.THINGS:
+	var keys: Array = PetThings.THINGS.keys()
+	keys.sort_custom(func(a, b): return PetThings.THINGS[a]["h"] > PetThings.THINGS[b]["h"])
+	for key in keys:
 		if not PetThings.THINGS[key]["def"] or key in h.layout.pets_seen or not shown(key):
 			continue
 		if not _any(key).is_empty():
@@ -175,6 +184,33 @@ func _put_out() -> bool:
 	return did
 
 
+# the things the first rule put out that are still where it put them are put again by this one;
+# what he moved stays
+func _replace_old() -> bool:
+	if not h.layout.old_things:
+		return false
+	h.layout.old_things = false
+	var unmoved: Array = []
+	for p in h.layout.pieces:
+		if PetThings.is_pet(p) and not p.get("own", false):
+			if _old_pick(PetThings.key_of(p), p) == Vector2i(p["c"], p["r"]):
+				unmoved.append(p)
+	var did := false
+	for p in unmoved:
+		did = _relocate(p) or did
+	return did
+
+
+# where the first rule would put a thing: its own places, then the cells against a wall of the
+# 10x10 room, nearest first
+func _old_pick(key: String, skip: Dictionary) -> Vector2i:
+	for cell in OLD_PLACES.get(key, []) + _edge_cells(OLD_SIZE):
+		var p := {"p": PetThings.PREFIX + key, "f": _face_of(key), "c": cell.x, "r": cell.y}
+		if h.layout.check(p, skip, h.busy_cells()) == "":
+			return cell
+	return Vector2i(-1, -1)
+
+
 func _relocate(p: Dictionary) -> bool:
 	var q := _default(PetThings.key_of(p), p)
 	if q.is_empty():
@@ -185,25 +221,84 @@ func _relocate(p: Dictionary) -> bool:
 	return true
 
 
-# the first free cell for a thing: its own places, then the cells against a wall
-func _default(key: String, skip: Variant = null) -> Dictionary:
+func _face_of(key: String) -> String:
 	var faces: Array = PetThings.THINGS[key]["faces"]
-	var face: String = faces[0] if not faces.is_empty() else ""
-	for cell in PLACES.get(key, []) + _wall_cells():
-		var p := {"p": PetThings.PREFIX + key, "f": face, "c": cell.x, "r": cell.y}
-		if h.layout.check(p, skip, h.busy_cells()) == "":
-			return p
+	return faces[0] if not faces.is_empty() else ""
+
+
+# the first cell for a thing that can hold it, never in front of a piece or at a spot, on no other
+# thing (hidden ones too), and as far from the others as the room allows: 2 cells from any thing or
+# piece, and `APART` from the things with some height for a thing with some
+func _default(key: String, skip: Variant = null) -> Dictionary:
+	var wall_mount: bool = key == "window_perch"
+	var clear: Dictionary = {} if wall_mount else h.layout.in_front()
+	var tall: bool = PetThings.THINGS[key]["h"] > 0
+	var others: Array = []
+	var raised: Array = []
+	var pieces: Array = []
+	for o in h.layout.all():
+		if not PetThings.is_pet(o):
+			if h.layout.kind(o) in ["floor", "hug"]:
+				var r: Rect2i = h.layout.rect(o)
+				for x in range(r.position.x, r.end.x):
+					for y in range(r.position.y, r.end.y):
+						pieces.append(Vector2i(x, y))
+		elif not is_same(o, skip):
+			others.append(Vector2i(o["c"], o["r"]))
+			if PetThings.THINGS[PetThings.key_of(o)]["h"] > 0:
+				raised.append(Vector2i(o["c"], o["r"]))
+	for o in h.layout.pieces:
+		if o.get("hide", false) and PetThings.is_pet(o) and not is_same(o, skip):
+			others.append(Vector2i(o["c"], o["r"]))
+	var cells: Array = PLACES.get(key, []) + _wall_cells()
+	var fits := {}
+	var gaps: Array = [[0, 1, false]]
+	if not wall_mount:
+		gaps = [[APART, 2, true], [2, 2, true], [0, 1, false]] if tall else [[0, 2, true], [0, 1, false]]
+	for gap in gaps:
+		var near: Array = others + pieces if gap[2] else others
+		for cell in cells:
+			if clear.has(cell) or _gap(cell, near) < gap[1]:
+				continue
+			if tall and _gap(cell, raised) < gap[0]:
+				continue
+			if not fits.has(cell):
+				var p := {"p": PetThings.PREFIX + key, "f": _face_of(key), "c": cell.x, "r": cell.y}
+				fits[cell] = p if h.layout.check(p, skip, h.busy_cells()) == "" else {}
+			if not fits[cell].is_empty():
+				return fits[cell]
 	return {}
 
 
-# the walkable cells that are against a wall, nearest first
+func _gap(cell: Vector2i, others: Array) -> int:
+	var out := 99
+	for o in others:
+		out = mini(out, maxi(absi(cell.x - o.x), absi(cell.y - o.y)))
+	return out
+
+
+# the open floor along the two front edges first, from the corner out, one edge then the other,
+# then the cells against a wall
 func _wall_cells() -> Array:
 	var out: Array = []
+	for k in Pets.ROWS - 1:
+		out.append(Vector2i(Pets.COLS - 1, Pets.ROWS - 1 - k))
+		if k > 0:
+			out.append(Vector2i(Pets.COLS - 1 - k, Pets.ROWS - 1))
+	for cell in _edge_cells(Pets.COLS):
+		if cell not in out:
+			out.append(cell)
+	return out
+
+
+# the walkable cells of a room `size` square that are against a wall, nearest first
+func _edge_cells(size: int) -> Array:
+	var out: Array = []
 	var rects := _wall_rects()
-	for x in range(1, Pets.COLS):
-		for y in range(1, Pets.ROWS):
+	for x in range(1, size):
+		for y in range(1, size):
 			var cell := Vector2i(x, y)
-			if _against(cell, rects) and not h.layout.PETS_CORNER.has_point(cell):
+			if _against(cell, rects, size) and not h.layout.PETS_CORNER.has_point(cell):
 				out.append(cell)
 	out.sort_custom(func(a, b): return mini(a.x, a.y) < mini(b.x, b.y))
 	return out
@@ -211,7 +306,7 @@ func _wall_cells() -> Array:
 
 # a wall or the room's edge on one side, or beside a piece that stands against one
 func wall_side(cell: Vector2i) -> bool:
-	return _against(cell, _wall_rects())
+	return _against(cell, _wall_rects(), Pets.COLS)
 
 
 # the floor pieces that stand against a wall
@@ -225,8 +320,8 @@ func _wall_rects() -> Array:
 	return out
 
 
-func _against(cell: Vector2i, rects: Array) -> bool:
-	if cell.x <= 1 or cell.y <= 1 or cell.x >= Pets.COLS - 1 or cell.y >= Pets.ROWS - 1:
+func _against(cell: Vector2i, rects: Array, size: int) -> bool:
+	if cell.x <= 1 or cell.y <= 1 or cell.x >= size - 1 or cell.y >= size - 1:
 		return true
 	for d in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]:
 		for r in rects:

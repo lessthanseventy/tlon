@@ -227,7 +227,7 @@ runs on the local list.
   (flood fill). A fireplace and wall pieces go on the wall their side names (ne: top row, nw: left
   column), not on the segments the board, window, calendar, jar and door use.
   The layout is saved on every change to `user://house_layout.json`
-  (`{"v": 1, "wall": "brick", "floor": "oak", "pieces": [{"p": "bookshelf", "f": "se", "c": 9, "r": 0}]}`:
+  (`{"v": 2, "wall": "brick", "floor": "oak", "pieces": [{"p": "bookshelf", "f": "se", "c": 9, "r": 0}]}`:
   `p` the catalogue name, `f` the side or `""`, `c`/`r` the back cell; the fixed pieces are not
   saved; the pets' things are saved too, as `pet.<key>` with `"own": true` for one he put out for animals not here, and the file's `pets_seen`) and read at start; a missing or unparsable file, an unknown name or side, or a piece that can no longer
   stand is skipped and the rest kept. `--demo` and `--shot` neither read nor write it unless
@@ -460,10 +460,16 @@ runs on the local list.
   One signature thing for each species that shared the rest: dog house (it sleeps by it; the night home when it has no bed),
   howling rock (a wolf stands on it), den (a fox curls up in it), apple bucket (horse eats), milk pail and bell post (cow stands
   by it), wool basket (sheep lies by it), mossy stump (deer stands by it).
-  A thing is put out once, at a free cell against a wall or the room's edge (`PLACES`, then the cells nearest a wall;
-  never the open middle), when an animal that uses it lives here and its `def` is set; `layout.pets_seen` (saved as `pets_seen`)
-  remembers it, so one he took away is not put back, and an old layout file gets the things at cells that miss what is
-  there. Putting them out is computed in memory and never writes `user://`: the layout file is written only by a change in
+  A thing is put out once, at a free cell (`_default`): never in front of a piece or at a spot (`layout.in_front`: the side each
+  seat, the TV, the desk, the piano, the fireplace, the wardrobe and the rest face, the door's and the pets' spots; the window perch
+  is on the wall and exempt), on no other thing, and as far from the others as the room allows (2 cells from any thing or furniture piece, 3 from the other things with
+  height; the tallest are put first), the open floor along the two front edges first, from the corner out, then the cells
+  against a wall. It is put out when an animal that uses it lives here and its `def` is set; `layout.pets_seen` (saved as `pets_seen`)
+  remembers it, so one he took away is not put back. The file's `"v"` is `Layout.SAVED`; a file saved before it (`old_things`) has its
+  things looked at once: one still at the cell the first rule would have chosen in the 10x10 room (`OLD_PLACES`, `_old_pick`; the
+  layout does not record that a thing was moved, so a thing he moved onto exactly that cell is placed again too) is put again by the
+  current rule, one anywhere else stays.
+  Putting them out is computed in memory and never writes `user://`: the layout file is written only by a change in
   decorate mode (`place`/`remove`/`reset`), so an untouched house leaves none. Hidden (`hide`, not deleted, not blocking, not drawn) when no animal here uses it or its switch is off, and back in its place; one
   he put out for animals not here is `own` and stays. The pets tab of decorate lists what fits the animals here ("all animals"
   lists every one); a thing is placed once, a click on a placed one picks it up. Spots follow the piece (`_register`, on every
