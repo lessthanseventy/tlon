@@ -11,10 +11,11 @@ defmodule Server.Home.Source do
 
   @doc """
   What the source suggests now: `{:ok, proposals, resolved}`, `proposals` as `Server.Proposal.offer/5`
-  takes them, `resolved` the keys it knows are gone (a PR merged, a review done elsewhere), or
-  `{:error, reason}`: a failure leaves everything already proposed alone.
+  takes them, `resolved` what it knows is gone (a PR merged, a review done elsewhere) as
+  `Server.Proposal.resolve/3` takes it, or `{:error, reason}`: a failure leaves everything already
+  proposed alone.
   """
-  @callback fetch() :: {:ok, [map()], [String.t()]} | {:error, term()}
+  @callback fetch() :: {:ok, [map()], [String.t() | {String.t(), String.t() | :drop}]} | {:error, term()}
 
   @doc ~s{The kinds of proposal (`"waiting"`, `"todo"`) the operator trusts this source to file without a yes: facts, not asks.}
   @callback auto() :: [String.t()]

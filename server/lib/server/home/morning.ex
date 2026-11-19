@@ -26,8 +26,9 @@ defmodule Server.Home.Morning do
 
   @doc """
   The message as plain text, for a surface with no buttons (the desktop's alert): `{text, settled}`,
-  `settled` the rows it says, which the caller records as told. Rows told since `since` are said again,
-  so the alert reads the same all the while it is up. nil when there is nothing to say.
+  `settled` the rows it says. A read records nothing: the inbox's tick does (`Server.Home.Inbox.morning/6`),
+  when it says the message in the chat or, with no chat, at the slot. Rows told since `since` are said
+  again, so the alert reads the same all the while it is up. nil when there is nothing to say.
   """
   @spec plain(String.t(), DateTime.t(), DateTime.t(), [Day.meeting()] | nil) :: {String.t(), [Proposal.t()]} | nil
   def plain(via, now, since, meetings \\ nil) do

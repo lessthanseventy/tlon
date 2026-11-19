@@ -8,9 +8,10 @@ defmodule Server.Proposal do
   trusted to file (`offer/5`: a waiting-on is a fact about what is owed, not an ask); a taken
   proposal is a to-do or a waiting-on (`Server.Jot`), its `jot_id` the link back.
 
-  A source can say keys are gone (`resolve/4`): an open proposal for one is withdrawn silently; a
+  A source can say keys are gone (`resolve/3`): an open proposal for one is withdrawn silently; a
   to-do taken from one is left alone; a waiting-on taken from one is marked done and kept as
-  `resolved_at` with `done_text` (how it is said in the next list, `settled/0`).
+  `resolved_at` with `done_text` (how it is said in the next list, `settled/1`), or, when the source
+  says to `:drop` it, closed as dropped and never said.
   """
   use Ecto.Schema
 
@@ -48,17 +49,21 @@ defmodule Server.Proposal do
   @spec open(integer()) :: t() | nil
   def open(id), do: Repo.one(from(p in __MODULE__, where: p.id == ^id and p.state == :open))
 
-  @doc "The keys of `source` that still count: open, or a waiting-on taken and not yet resolved."
-  @spec live_keys(String.t()) :: [String.t()]
-  def live_keys(source) do
+  @doc "The proposals of `source` that still count: open, or a waiting-on taken and not yet resolved."
+  @spec live(String.t()) :: [t()]
+  def live(source) do
     Repo.all(
       from(p in __MODULE__,
         where: p.source == ^source,
         where: p.state == :open or (p.state == :taken and p.kind == "waiting" and is_nil(p.resolved_at)),
-        select: p.key
+        order_by: p.id
       )
     )
   end
+
+  @doc "The keys of `live/1`."
+  @spec live_keys(String.t()) :: [String.t()]
+  def live_keys(source), do: source |> live() |> Enum.map(& &1.key)
 
   @doc """
   Offer `proposals` (maps of `key`, `text`, `kind` and optionally `why`, `who`, `url`, `done_text`)
@@ -82,13 +87,22 @@ defmodule Server.Proposal do
   end
 
   @doc """
-  Say `keys` of `source` are gone at `now`. Open proposals for them are withdrawn; a waiting-on taken
-  from one is done (and `resolved_at` kept); anything else taken is left alone.
+  Say `entries` of `source` are gone at `now`: a key, or `{key, how}` with `how` the text its
+  waiting-on is said by (replacing `done_text`) or `:drop` to close it without a word. Open proposals
+  for them are withdrawn; a waiting-on taken from one is done (and `resolved_at` kept); anything else
+  taken is left alone.
   """
-  @spec resolve(String.t(), [String.t()], DateTime.t()) :: :ok
+  @spec resolve(String.t(), [String.t() | {String.t(), String.t() | :drop}], DateTime.t()) :: :ok
   def resolve(_source, [], _now), do: :ok
 
-  def resolve(source, keys, now) do
+  def resolve(source, entries, now) do
+    how =
+      Map.new(entries, fn
+        {key, how} -> {key, how}
+        key -> {key, nil}
+      end)
+
+    keys = Map.keys(how)
     Repo.delete_all(from(p in __MODULE__, where: p.source == ^source and p.key in ^keys and p.state == :open))
 
     for %__MODULE__{} = row <-
@@ -98,21 +112,28 @@ defmodule Server.Proposal do
               where: is_nil(p.resolved_at)
             )
           ) do
-      with %Jot{done_at: nil, dropped_at: nil} = jot <- row.jot_id && Jot.get(row.jot_id), do: Jot.done(jot, now)
-      row |> Ecto.Changeset.change(resolved_at: DateTime.truncate(now, :second)) |> Repo.update!()
+      close(row, how[row.key], now)
     end
 
     :ok
   end
 
-  @doc "Take the open proposal `id` at `now`: filed as a to-do or a waiting-on for `via`. `{:ok, proposal}`, `:not_found`."
-  @spec take(String.t(), integer(), DateTime.t()) :: {:ok, t()} | :not_found
+  @doc """
+  Take the open proposal `id` at `now`: filed as a to-do or a waiting-on for `via`, both or neither.
+  `{:ok, proposal}`, `:not_found` when it is not open, `{:error, :seen}` when its jot's id is taken
+  (the proposal stays open).
+  """
+  @spec take(String.t(), integer(), DateTime.t()) :: {:ok, t()} | :not_found | {:error, :seen}
   def take(via, id, now) do
     case open(id) do
       nil -> :not_found
-      row -> {:ok, take_row(via, row, now)}
+      row -> take_row(via, row, now)
     end
   end
+
+  @doc "The delivery id the jot of `proposal` is kept under: one per proposal, apart from a messenger's and a form's."
+  @spec external_id(t()) :: integer()
+  def external_id(%__MODULE__{id: id}), do: -(1_000_000_000_000 + id)
 
   @doc "Dismiss the open proposal `id`: final for its key. `{:ok, proposal}`, `:not_found`."
   @spec dismiss(integer()) :: {:ok, t()} | :not_found
@@ -158,14 +179,35 @@ defmodule Server.Proposal do
   end
 
   defp take_row(via, %__MODULE__{id: id} = row, now) do
-    {1, _} = Repo.update_all(from(p in __MODULE__, where: p.id == ^id and p.state == :open), set: [state: :taken])
-    {:ok, jot} = Jot.take(via, -System.unique_integer([:positive, :monotonic]) - System.os_time(:second), row.text)
-    Jot.file(jot, reading(row), now)
-    row |> Ecto.Changeset.change(state: :taken, jot_id: jot.id) |> Repo.update!()
+    Repo.transaction(fn ->
+      {1, _} = Repo.update_all(from(p in __MODULE__, where: p.id == ^id and p.state == :open), set: [state: :taken])
+
+      case Jot.take(via, external_id(row), row.text) do
+        {:ok, jot} ->
+          Jot.file(jot, reading(row), now)
+          row |> Ecto.Changeset.change(state: :taken, jot_id: jot.id) |> Repo.update!()
+
+        :seen ->
+          Repo.rollback(:seen)
+      end
+    end)
   end
 
   defp reading(%__MODULE__{kind: "todo", text: text}), do: %{kind: "todo", text: text, due_at: nil}
 
   defp reading(%__MODULE__{kind: "waiting", text: text, who: who}),
     do: %{kind: "waiting", text: text, due_at: nil, who: who || "someone"}
+
+  defp close(row, :drop, now) do
+    with %Jot{done_at: nil, dropped_at: nil} = jot <- row.jot_id && Jot.get(row.jot_id), do: Jot.drop(jot, now)
+    row |> Ecto.Changeset.change(state: :dismissed) |> Repo.update!()
+  end
+
+  defp close(row, text, now) do
+    with %Jot{done_at: nil, dropped_at: nil} = jot <- row.jot_id && Jot.get(row.jot_id), do: Jot.done(jot, now)
+
+    row
+    |> Ecto.Changeset.change(resolved_at: DateTime.truncate(now, :second), done_text: text || row.done_text)
+    |> Repo.update!()
+  end
 end

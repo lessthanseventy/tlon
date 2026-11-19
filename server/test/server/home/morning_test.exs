@@ -185,20 +185,57 @@ defmodule Server.Home.MorningTest do
     assert Home.morning(friday(~T[08:41:00])) == nil
   end
 
-  test "with no chat, the desktop's morning alert says a settled waiting-on, records it, and keeps saying it while up" do
+  test "the desktop reading its alert marks nothing: the chat's morning still carries the settled line", %{say: say} do
     settle()
     assert %{body: body} = Home.morning(friday(~T[08:32:00]))
     assert body =~ "Settled:\n• Reviewed: PR 1"
-    assert Proposal.settled() == []
+    assert [%{resolved_said_at: nil}] = Proposal.settled()
+
+    Inbox.morning("telegram", "42", say, friday(~T[08:33:00]), "08:30", ~D[2026-11-19])
+    assert_received {:said, "42", "Good morning.\n\nSettled:\n• Reviewed: PR 1", _}
     assert %{body: ^body} = Home.morning(friday(~T[08:38:00]))
     assert Home.morning(friday(~T[08:45:00])) == nil
   end
 
-  test "with no chat, the desktop's daily list says a settled waiting-on too, with nothing else open" do
+  test "the chat's morning said first: the desktop still reads the line while its alert is up, and no longer", %{
+    say: say
+  } do
     settle()
-    assert %{id: "2026-11-20", body: "Settled:\n• Reviewed: PR 1"} = Home.listing(friday(~T[17:35:00]))
-    assert Proposal.settled() == []
+    Inbox.morning("telegram", "42", say, friday(~T[08:30:30]), "08:30", ~D[2026-11-19])
+    assert_received {:said, "42", "Good morning.\n\nSettled:" <> _, _}
+
+    assert %{body: "Good morning.\n\nSettled:\n• Reviewed: PR 1"} = Home.morning(friday(~T[08:32:00]))
+    assert Home.morning(friday(~T[08:45:00])) == nil
+  end
+
+  test "with no chat, the tick records the settled line at the slot: the desktop shows it for its window, once" do
+    settle()
+    assert Inbox.morning("telegram", "", nil, friday(~T[08:30:30]), "08:30", ~D[2026-11-19]) == ~D[2026-11-20]
+    assert [] = Proposal.settled()
+
+    assert %{body: body} = Home.morning(friday(~T[08:32:00]))
+    assert body =~ "Settled:\n• Reviewed: PR 1"
+    assert %{body: ^body} = Home.morning(friday(~T[08:38:00]))
+    assert Home.morning(friday(~T[08:45:00])) == nil
+
+    next = DateTime.add(friday(~T[08:32:00]), 86_400)
+    assert Home.morning(next) == nil
+
+    assert Inbox.morning("telegram", "", nil, DateTime.add(friday(~T[08:30:30]), 86_400), "08:30", ~D[2026-11-20]) ==
+             ~D[2026-11-21]
+
+    assert Home.morning(next) == nil
+  end
+
+  test "the daily list is the same: a desktop read marks nothing, and with no chat the tick records it" do
+    settle()
+    assert %{body: "Settled:\n• Reviewed: PR 1"} = Home.listing(friday(~T[17:35:00]))
+    assert [%{resolved_said_at: nil}] = Proposal.settled()
+
+    assert Inbox.daily("telegram", "", nil, friday(~T[17:30:30]), "17:30", ~D[2026-11-19]) == ~D[2026-11-20]
+    assert [] = Proposal.settled()
     assert %{body: "Settled:" <> _} = Home.listing(friday(~T[17:38:00]))
+    assert Home.listing(friday(~T[17:45:00])) == nil
   end
 
   defp settle do

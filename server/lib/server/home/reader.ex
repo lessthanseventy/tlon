@@ -373,7 +373,12 @@ defmodule Server.Home.Reader do
     do: Enum.map_join(jots, "\n", &"#{&1.id}: #{&1.text}#{if &1.ask == "next", do: " (waiting for its next step)"}")
 
   defp proposed([]), do: "(none)"
-  defp proposed(rows), do: Enum.map_join(rows, "\n", &"#{&1.id}: #{&1.text}#{if &1.why, do: " (#{&1.why})"}")
+
+  defp proposed(rows),
+    do:
+      rows
+      |> Enum.with_index(1)
+      |> Enum.map_join("\n", fn {p, n} -> "#{n}: #{p.text}#{if p.why, do: " (#{p.why})"}" end)
 
   defp agendas([]), do: "(none)"
   defp agendas(names), do: Enum.map_join(names, "\n", &"- #{&1}")
