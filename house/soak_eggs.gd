@@ -421,8 +421,8 @@ func outside() -> void:
 	s._check(o.eligible("nightcat") and o.eligible("star") and not o.eligible("bird"), "night things by night")
 	h.eggs.next_big = 1.0e9
 	o.start("nightcat")
-	s._run_home(h, 20.0)
 	var nn = h.pets.critter("nina")
+	s._run_home(h, 45.0, func(): return nn.spot == "sill")
 	s._check(nn.spot == "sill", "Nina stares at the cat on the fence %s %s %s %s" % [nn.spot, nn.mode, nn.goal, nn.hold])
 	o.start("star")
 	o.wish()
