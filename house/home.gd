@@ -97,6 +97,9 @@ static var scripted := false
 
 # set by `setup`: nothing is read from or kept in user://
 var staged := false
+# set by `setup`: `--drive`, a live run that keeps its files in user://
+var drive := false
+var keeps := false
 
 var room: Control
 var pets := Pets.new()
@@ -210,8 +213,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 		var next: String = args[i + 1] if i + 1 < args.size() else ""
 		match args[i]:
 			"--at":
-				var hm := next.split(":")
-				fake_hour = float(hm[0]) + (float(hm[1]) / 60.0 if hm.size() > 1 else 0.0)
+				set_at(next)
 			"--weather":
 				forced_weather = next
 			"--say":
@@ -225,8 +227,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 			"--argos":
 				argos_at = next
 			"--pets":
-				for p in next.split(",", false):
-					settings.forced["pet1" if p.get_slice("=", 0) == "cat" else "pet2"] = p.get_slice("=", 1)
+				settings.forced.merge(pets_spec(next), true)
 			"--note":
 				show_note = int(next)
 			"--seed":
@@ -306,21 +307,25 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 					)
 	if "--shot" in args and seed_value < 0:
 		seed_value = 7
-	staged = scripted or "--demo" in args or "--shot" in args or "--local" in args
-	settings.setup(not staged)
+	drive = "--drive" in args
+	if drive and "--demo" not in args:
+		settings.forced["where"] = "local"
+	staged = scripted or "--demo" in args or "--shot" in args or "--local" in args or drive
+	keeps = not staged or drive
+	settings.setup(keeps)
 	Looks.setup(art_dir, settings)
 	Fonts.apply()
-	chat.setup(not staged)
+	chat.setup(keeps)
 	pets.on_say = _pet_said
 	if "--demo" in args:
 		focus.persist = false
 	elif focus.persist:
 		focus.load_saved()
 	things.setup(self)
-	knock.persist = not staged
-	rhythm.persist = not staged
+	knock.persist = keeps
+	rhythm.persist = keeps
 	rhythm.load_days()
-	if layout_file == "" and not staged:
+	if layout_file == "" and keeps:
 		layout_file = LAYOUT_STORE
 	layout.setup(room._index, room.art_found, layout_file, layout_file != "")
 	pets.blocked_cells = layout.blocked()
@@ -337,8 +342,8 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	person.setup(pets, look, seed_value)
 	tv.setup(seed_value)
 	knock.setup(seed_value)
-	sound.setup(room, not staged, art_dir)
-	eggs.setup(self, seed_value, not staged)
+	sound.setup(room, keeps, art_dir)
+	eggs.setup(self, seed_value, keeps)
 	petlife.setup(self)
 	pets.life_options = petlife.options
 	hearth.setup(self)
@@ -380,6 +385,19 @@ func busy_cells() -> Array:
 func apply_layout() -> void:
 	pets.blocked_cells = layout.blocked()
 	pets.reroute()
+
+
+func set_at(text: String) -> void:
+	var hm := text.split(":")
+	fake_hour = float(hm[0]) + (float(hm[1]) / 60.0 if hm.size() > 1 else 0.0)
+
+
+# `cat=KIND,dog=KIND` as the settings keys it stands for
+func pets_spec(text: String) -> Dictionary:
+	var out := {}
+	for p in text.split(",", false):
+		out["pet1" if p.get_slice("=", 0) == "cat" else "pet2"] = p.get_slice("=", 1)
+	return out
 
 
 func _point(text: String) -> Vector2:

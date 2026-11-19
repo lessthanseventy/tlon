@@ -20,6 +20,7 @@ const DecorateScript := preload("res://decorate.gd")
 const WIDGET_SIZE := Vector2i(656, 432)
 const WIDGET_STORE := "user://house_widget.json"
 const FormScript := preload("res://form.gd")
+const DriveScript := preload("res://drive.gd")
 const SettingsView := preload("res://settings_view.gd")
 const Pets := preload("res://pets.gd")
 const Settings := preload("res://settings.gd")
@@ -284,6 +285,11 @@ func _ready() -> void:
 		get_tree().create_timer(0.4).timeout.connect(func() -> void: _stage_form(form_spec))
 	if "--what-now" in args:
 		get_tree().create_timer(0.4).timeout.connect(_what_now)
+	if _room.home.drive:
+		var at := args.find("--drive") + 1
+		var drive := DriveScript.new()
+		add_child(drive)
+		drive.start(self, int(args[at]) if at < args.size() and args[at].is_valid_int() else 0)
 	if _shot != "":
 		var wait := float(args[args.find("--wait") + 1]) if "--wait" in args else 1.5
 		await get_tree().create_timer(wait).timeout
@@ -296,7 +302,9 @@ func _use_backend(args: Array) -> void:
 	var settings = _room.home.settings
 	var at := args.find("--local") + 1
 	_fixture = args[at] if at > 0 and at < args.size() else ""
-	_probing = settings.fresh and not OS.has_environment("TLON_URL")
+	_probing = settings.fresh and not OS.has_environment("TLON_URL") and not _room.home.drive
+	if _fixture == "" and _room.home.drive:
+		_fixture = "starters"
 	if settings.is_local():
 		_at = "home"
 	_make_backend()
@@ -308,7 +316,7 @@ func _make_backend() -> void:
 	var node: Node
 	if home.settings.is_local():
 		var local := BackendLocal.new()
-		var keep: bool = not home.staged
+		var keep: bool = home.keeps
 		var path := LocalList.STORE if keep else ""
 		if _fixture not in ["", "starters"]:
 			path = _fixture
@@ -1397,7 +1405,7 @@ func _remove(id: int) -> void:
 
 
 # `--settings "key=value;scroll;armed=reset"` (keys name cat dog birthday widget), for a picture
-func _stage_settings(spec: String) -> void:
+func _put_staged(spec: String) -> void:
 	var settings = _room.home.settings
 	for p in spec.split(";", false):
 		var key := p.get_slice("=", 0)
@@ -1408,6 +1416,10 @@ func _stage_settings(spec: String) -> void:
 			settings.put(key, val == "on")
 		elif key == "phone":
 			_stage_phone(val)
+
+
+func _stage_settings(spec: String) -> void:
+	_put_staged(spec)
 	_open_settings()
 	for p in spec.split(";", false):
 		match p.get_slice("=", 0):
