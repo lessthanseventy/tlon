@@ -170,7 +170,7 @@ func item_view(box: VBoxContainer, id: int) -> void:
 	for step in plan.slice(0, 3):
 		box.add_child(quiet("then " + str(step), 13))
 	var others: Array = home.open.filter(func(t: Dictionary) -> bool: return int(t["id"]) != id)
-	if not others.is_empty():
+	if kind != "note" and not others.is_empty():
 		heading(box, "Other open")
 		for other in others.slice(0, 3):
 			_row(box, other, true, _when(other))
