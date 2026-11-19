@@ -169,6 +169,19 @@ defmodule Server.OperatorConfig do
         "when the home's helper says the morning message (meetings, what to start with, agendas due, what is proposed), local HH:MM; empty for never"
     },
     %{
+      key: "home_sources",
+      type: "string",
+      default: "github",
+      doc:
+        "the outside sources that propose things for the home's list, comma separated (github); polled every 15 minutes; empty for none"
+    },
+    %{
+      key: "home_github_ignore",
+      type: "string",
+      default: "lessthanseventy/tlon",
+      doc: "GitHub repos (owner/repo) or owners the home's github source leaves out, comma separated; empty for none"
+    },
+    %{
       key: "home_review_on",
       type: "string",
       default: "sun",

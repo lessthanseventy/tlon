@@ -549,6 +549,15 @@ nothing to say; told once a day under the same slot record, quiet hours and firs
 an info `home_morning` alert for ten minutes after its time) and in the clock-out daily list. The reader's asks: `proposals` (what is
 proposed), `take` and `dismiss` (with the numbers of the proposals shown to it); Telegram taps `p:<id>:take|no`.
 
+Sources (`Server.Home.Source`: `name/0`, `fetch/0` answering `{:ok, proposals, resolved_keys}` or `{:error, why}`, `auto/0`)
+are polled every 15 minutes by `Server.Home.Sources` for the names in `home_sources` (comma list, default `github`, `""` none),
+started with the home inbox; a failing source is logged once per distinct reason and leaves its proposals alone. GitHub reads
+`gh search prs --review-requested=@me --state=open` (a to-do "Review: <title>", why "<repo>#<n>, asked by <author>"),
+`gh search prs --author=@me --state=open --review=changes_requested` (a to-do "Changes requested: <title>") and
+`--author=@me --state=open --review=none` (a waiting-on "Waiting on review: <title>", filed by itself, said as "Reviewed: <title>"
+once a review comes), each with `--draft=false --json number,title,url,author,repository,isDraft`; a key is the PR's URL and its
+role; a PR in a repo or owner listed in `home_github_ignore` (comma list, default `lessthanseventy/tlon`) is left out.
+
 | Route | Request | Reply |
 |---|---|---|
 | `GET /api/home` | | `{open, coming, notes, note_rows, projects, waiting, someday, done, done_week, agendas, forecast, meetings, proposals}`; `proposals` is `{id, source, text, why, url}` each, the open ones; `agendas` is `{id, name, every, next_at, notes: [{id, text, since}]}` each; `meetings` is today's remaining and tomorrow's from the operator's calendars (`Server.Home.Day`: cancelled, free all-day and doubled ones dropped, a leading `[EXT] `/`Synced invitation: ` and a trailing ` @ … (address)` stripped from titles), soonest first, each `{title, starts_at, ends_at, tentative, all_day, day: "today"\|"tomorrow"}` in UTC (`[]` with no calendars; the home reads them, never writes a calendar, and says nothing unasked about them); `forecast` is up to three days, today first, each `{date, high_c, low_c, kind, wet}` (`kind` the worst of 09:00-18:00 as the weather kinds, `wet` the highest chance of rain or snow then, 0-100; `[]` when none); `open`, `coming`, `waiting` and `someday` rows each carry `id, kind, text, due_at, every, since, told_at, project` (a waiting-on also `who`); `someday` are the put-off things; a project row carries `id, kind, text, since, next, done, plan, steps_done` (`plan` the texts still to come, `steps_done` the texts done); `note_rows` is `notes` as `{id, text}`; `done` is the last seven days' `{text, done_at}`, newest first; a row has `project` `{id, text}` or nil; a project `{id, text, next: {id, text} or nil, done}`; a waiting-on `{id, text, who, since, due_at}` |
