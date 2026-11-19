@@ -31,8 +31,26 @@ func _until(done: Callable, secs: float = 4.0) -> void:
 		await s.create_timer(0.02).timeout
 
 
+func _polls(bot) -> int:
+	return bot.calls.filter(func(c): return c["method"] == "getUpdates").size()
+
+
+# `secs`, then until the bot has acknowledged every update and polled twice more, so what it
+# answered has reached the stub (bounded). A bot that is not polling is not waited for.
 func _settle(secs: float = 0.3) -> void:
 	await s.create_timer(secs).timeout
+	if s.bot.is_null():
+		return
+	var bot = s.bot.get_object()
+	var from := _polls(bot)
+	var start := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - start < 5000:
+		var seen: int = _polls(bot) - from
+		if seen >= 2 and bot.updates.is_empty():
+			return
+		if seen == 0 and Time.get_ticks_msec() - start > 700:
+			return
+		await s.create_timer(0.02).timeout
 
 
 func _wipe() -> void:
