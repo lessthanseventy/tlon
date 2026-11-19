@@ -200,7 +200,7 @@ const THINGS := {
 		"group": "dogs",
 		"kinds": ["wolf"],
 		"mode": "solid",
-		"h": 14,
+		"h": 17,
 		"faces": [],
 		"def": true,
 		"sw": "things"
@@ -980,12 +980,16 @@ static func _kennel(s: Pen) -> void:
 	s.outline(slope)
 
 
+# wider than its cell, so the rock shows around and below the wolf standing on top (z 17)
 static func _howl(s: Pen) -> void:
-	s.ell(0.5, 0.5, 12.0, 5.6, 0.0, Color("5f6470"))
-	s.ell(0.5, 0.5, 10.0, 4.6, 5.0, Color("7a808c"))
-	s.ell(0.5, 0.5, 7.5, 3.5, 10.0, Color("949aa6"))
-	s.ell(0.5, 0.5, 6.0, 2.8, 13.0, Color("a8aeba"))
-	s.line(s.p(0.3, 0.7, 2.0), s.p(0.34, 0.74, 9.0), Color("4a4e58"))
+	s.ell(0.5, 0.5, 18.5, 8.6, 0.0, Color("4f545f"))
+	s.ell(0.5, 0.5, 16.0, 7.5, 5.0, Color("5f6470"))
+	s.ell(0.5, 0.5, 13.5, 6.3, 10.0, Color("7a808c"))
+	s.ell(0.5, 0.5, 11.0, 5.1, 14.0, Color("949aa6"))
+	s.ell(0.5, 0.5, 8.5, 4.0, 17.0, Color("a8aeba"))
+	s.line(s.p(0.15, 0.85, 2.0), s.p(0.2, 0.92, 11.0), Color("3f434d"), 1.0)
+	s.line(s.p(0.85, 0.2, 3.0), s.p(0.8, 0.12, 10.0), Color("3f434d"), 1.0)
+	s.line(s.p(0.3, 0.7, 6.0), s.p(0.34, 0.74, 13.0), Color("4a4e58"))
 
 
 static func _den(s: Pen, part: String) -> void:

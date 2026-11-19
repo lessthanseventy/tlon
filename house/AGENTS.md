@@ -458,7 +458,7 @@ runs on the local list.
   naps there by day), bird cage (for every animal, not put out by itself, only added from the pets tab: a bird hops between two
   perches and sings now and then or on a click, `cage` is its hit, and a cat now and then goes to watch it, the antic `cage_watch`).
   One signature thing for each species that shared the rest: dog house (it sleeps by it; the night home when it has no bed),
-  howling rock (a wolf stands on it), den (a fox curls up in it), apple bucket (horse eats), milk pail and bell post (cow stands
+  howling rock (wider than its cell, so it shows around and below the wolf standing on top; the wolf howls once on arriving, `petlife` `_arrivals`), den (a fox curls up in it), apple bucket (horse eats), milk pail and bell post (cow stands
   by it), wool basket (sheep lies by it), mossy stump (deer stands by it).
   A thing is put out once, at a free cell (`_default`): never in front of a piece or at a spot (`layout.in_front`: the side each
   seat, the TV, the desk, the piano, the fireplace, the wardrobe and the rest face, the door's and the pets' spots; the window perch
