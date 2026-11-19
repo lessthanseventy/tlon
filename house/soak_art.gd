@@ -73,11 +73,6 @@ func run() -> void:
 	var given := _zip(base.path_join("given"), "given")
 	got = Art.dir(["--art", given], beside)
 	s._check(got == Art.MOUNT and _marker(got) == "given", "--art <pack> beats the pack beside the executable")
-	var app := base.path_join("the.app/Contents")
-	_zip(app.path_join("Resources"), "resources")
-	DirAccess.make_dir_recursive_absolute(app.path_join("MacOS"))
-	got = Art.dir([], app.path_join("MacOS"), false)
-	s._check(got == Art.MOUNT and _marker(got) == "resources", "an app's Resources holds the pack")
 	var room := Room.new()
 	room.art_dir = got
 	s._check(room._load_texture(got.path_join("sub/dot.png")) != null, "a loader reads a texture out of the pack")

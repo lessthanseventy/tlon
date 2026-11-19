@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Builds the house for another machine, from this one, into $dist/<platform>/ and
 # $dist/the-house-<platform>.zip (see lib/house-dist.sh; never inside a repo). Windows and Linux are
-# one executable with the code and the art pack (scripts/house-art-pack.sh) in its embedded pck;
-# the Mac app carries the pack in its Resources. Presets: house/export_presets.cfg.
+# one executable with the code and the art pack (scripts/house-art-pack.sh) in its embedded pck; the Mac
+# app carries it in its pck too, and is ad-hoc signed by the export, so nothing is added to it after.
+# Presets: house/export_presets.cfg.
 #
 # The art goes in as raw files: a throwaway copy of house/ under $dist gets the pack's files in art/,
 # each with a `keep` .import so Godot neither imports it as a texture nor leaves it out of the pck.
@@ -26,31 +27,24 @@ build() {
     echo "house: no export template $templates/$tmpl: install Godot's official 4.7.2 export templates" >&2
     return 1
   }
-  local out="$dist/$platform"
-  rm -rf "$out" "$dist/the-house-$platform.zip"
-  mkdir -p "$out"
-  local project="$root/house" stage=""
-  if [ "$platform" != mac ]; then
-    stage="$dist/.stage-$platform"
-    rm -rf "$stage"
-    mkdir -p "$stage"
-    rsync -a --exclude .godot --exclude '*.uid' --exclude .logs "$root/house/" "$stage/" || return 1
-    unzip -q "$dist/house-art.zip" -d "$stage" || return 1
-    find "$stage/art" -type f ! -name '*.import' -print0 |
-      while IFS= read -r -d '' f; do printf '[remap]\n\nimporter="keep"\n' >"$f.import"; done
-    godot --headless --path "$stage" --import >"$out/import.log" 2>&1 || true
-    project="$stage"
-  fi
-  godot --headless --path "$project" --export-release "$preset" "$out/$exe" >"$out/export.log" 2>&1 || true
-  [ -z "$stage" ] || rm -rf "$stage"
+  local out="$dist/$platform" stage="$dist/.stage-$platform"
+  rm -rf "$out" "$dist/the-house-$platform.zip" "$stage"
+  mkdir -p "$out" "$stage"
+  rsync -a --exclude .godot --exclude '*.uid' --exclude .logs "$root/house/" "$stage/" || return 1
+  unzip -q "$dist/house-art.zip" -d "$stage" || return 1
+  find "$stage/art" -type f ! -name '*.import' -print0 |
+    while IFS= read -r -d '' f; do printf '[remap]\n\nimporter="keep"\n' >"$f.import"; done
+  godot --headless --path "$stage" --import >"$out/import.log" 2>&1 || true
+  godot --headless --path "$stage" --export-release "$preset" "$out/$exe" >"$out/export.log" 2>&1 || true
+  rm -rf "$stage"
   [ -s "$out/$exe" ] || { grep -E "ERROR|Cannot|Enable|select|WARNING" "$out/export.log" >&2; echo "house: the $preset export produced nothing" >&2; return 1; }
   rm -f "$out/export.log" "$out/import.log"
   if [ "$platform" = mac ]; then
+    # The export's own zip is the hand-over: the signature seals the bundle, so nothing is added to it.
+    cp "$out/$exe" "$dist/the-house-mac.zip" || return 1
+    unzip -Z1 "$dist/the-house-mac.zip" | grep -q '/_CodeSignature/CodeResources$' ||
+      { echo "house: the Mac export is not signed (no _CodeSignature/CodeResources): Apple silicon would refuse it" >&2; return 1; }
     (cd "$out" && unzip -q "$exe" && rm "$exe") || return 1
-    local app
-    app="$(basename "$out"/*.app)"
-    cp "$dist/house-art.zip" "$out/$app/Contents/Resources/" || return 1
-    (cd "$out" && zip -q -r -y -X "$dist/the-house-mac.zip" "$app") || return 1
   else
     (cd "$out" && zip -q -X "$dist/the-house-$platform.zip" "$exe") || return 1
   fi
