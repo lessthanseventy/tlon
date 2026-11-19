@@ -137,7 +137,7 @@ defmodule Server.Home.SourcesTest do
   end
 
   defp ignore_repos(value) do
-    path = Path.join(System.tmp_dir!(), "tlon-sources-#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "tlon-sources-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     Application.put_env(:server, :operator_config_path, path)
 
     on_exit(fn ->
