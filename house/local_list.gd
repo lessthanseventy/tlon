@@ -341,6 +341,7 @@ func status() -> Dictionary:
 		"done": [],
 		"done_week": 0,
 		"agendas": doc["agendas"].map(_agenda_row),
+		"proposals": [],
 	}
 	for t in things():
 		var s := _state(t)

@@ -58,6 +58,7 @@ var home
 var view := "home"
 var arg: Variant = null
 var open_expanded := false
+var proposed_expanded := false
 var notes_expanded := false
 # the agenda's add line takes the cursor back after a note went in
 var agenda_typing := false
@@ -536,6 +537,8 @@ func _signature() -> String:
 						home.coming,
 						home.things.note_list(),
 						home.things.agendas,
+						home.things.proposals,
+						proposed_expanded,
 						home.things.pick,
 						home.weather,
 						home.weather_desc,

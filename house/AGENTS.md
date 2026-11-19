@@ -18,7 +18,7 @@ chat modes; `views.gd` builds Home, an item, the "On the desk" list and the offi
 turns a card's blocks (title, text, dim, gap, month, buttons, row, foot, day) into Controls.
 Views: `home` (the Now line with Done / Something else / Not today, "Next up" today's next meeting first when
 there is one (a quiet line, "Standup  ·  09:00": no tick, no click) then three coming things, "Open"
-six with "N more...", the weather line with three day chips, "Notes (N)" collapsed), `card`
+six with "N more...", "Proposed (N)" under it when sources have suggested things (`proposals` of `GET /api/home`: `{id, source, text, why, url}`; `views.gd` `_proposed`: three rows, each its text with the why line small under it and two small buttons, "add" and "no", which post `/api/home/proposals/:id/take|dismiss`; then "N more..." in place; never a banner, a ring or a badge; the family's local list has no sources and answers none), the weather line with three day chips, "Notes (N)" collapsed), `card`
 (calendar, jar, window, clock, board, plant, book, mousehole, fireplace, piano, globe: `home.card`
 holds which, `home.card_blocks` the blocks; the "book" card is the shelf, `shelf.gd`: Agendas (a row each
 with its note count and when it is next, "Thu 14:00"; "new agenda" asks a name), then every note newest

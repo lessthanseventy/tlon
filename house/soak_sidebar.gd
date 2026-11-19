@@ -30,6 +30,7 @@ func run() -> void:
 	await _things()
 	await _shelf()
 	await _agendas()
+	await _proposals()
 	await _fit()
 	await _pet()
 	await _banner()
@@ -260,6 +261,98 @@ func _agendas() -> void:
 	s._state = keep
 	main._poll()
 	await s.create_timer(0.45).timeout
+
+
+# proposals: a section under Open with the why line, add and no, three shown, no banner
+func _proposals() -> void:
+	var keep: Dictionary = s._state.duplicate(true)
+	var rows: Array = []
+	for i in 5:
+		var why := "acme/app#%d" % i
+		rows.append({"id": 80 + i, "source": "github", "text": "Review: PR %d" % i, "why": why})
+	s.seed(keep["open"], keep["coming"], {"proposals": rows})
+	await _poll_home()
+	sb.back()
+	await _frames()
+	var texts: Array = _texts(sb._dyn)
+	s._check("Proposed (5)" in texts, "Home has a Proposed (5) section: %s" % str(texts))
+	s._check(texts.find("Proposed (5)") > texts.find("Open"), "Proposed comes under Open")
+	var shows: bool = "Review: PR 0" in texts and "acme/app#0" in texts and "Review: PR 2" in texts
+	s._check(shows, "a row shows the text and the why line")
+	var three: bool = not ("Review: PR 3" in texts) and "2 more..." in texts
+	s._check(three, "three are shown, then 2 more...")
+	s._check(sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the pane stays %d wide" % sb.WIDTH)
+	var banner := " ".join(_texts(sb._banner))
+	s._check(not ("Review: PR" in banner or "Proposed" in banner), "a proposal raises no banner")
+	await _press("2 more...")
+	s._check("Review: PR 4" in _texts(sb._dyn), "2 more... shows the rest in place")
+	await _press("less")
+	var add: Variant = _mark("Review: PR 0", "add")
+	s._check(add != null, "a row has an add button")
+	if add != null:
+		add.pressed.emit()
+	for i in 30:
+		if not _posted("/api/home/proposals/80/take").is_empty():
+			break
+		await s.create_timer(0.1).timeout
+	s._check(_posted("/api/home/proposals/80/take").size() == 1, "add takes the proposal")
+	await _settle_home()
+	texts = _texts(sb._dyn)
+	var at: int = texts.find("Review: PR 0")
+	var moved: bool = "Proposed (4)" in texts and at < texts.find("Proposed (4)")
+	s._check(moved and texts.find("Review: PR 0") > texts.find("Open"), "added: in Open, section 4")
+	var no: Variant = _mark("Review: PR 1", "no")
+	s._check(no != null, "a row has a no button")
+	if no != null:
+		no.pressed.emit()
+	for i in 30:
+		if not _posted("/api/home/proposals/81/dismiss").is_empty():
+			break
+		await s.create_timer(0.1).timeout
+	s._check(_posted("/api/home/proposals/81/dismiss").size() == 1, "no dismisses the proposal")
+	await _settle_home()
+	texts = _texts(sb._dyn)
+	s._check("Proposed (3)" in texts and not ("Review: PR 1" in texts), "the dismissed one is gone")
+	s._check(sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the pane still stays %d wide" % sb.WIDTH)
+	s._state = keep
+	await _poll_home()
+	await _settle_home()
+	s._check(not ("Proposed (" in " ".join(_texts(sb._dyn))), "with none there is no section")
+
+
+# read the home again and wait for the stub to have answered it
+func _poll_home() -> void:
+	var before: int = s._count("/api/home")
+	main._poll()
+	for i in 30:
+		if s._count("/api/home") > before:
+			break
+		await s.create_timer(0.1).timeout
+	await s.create_timer(0.45).timeout
+
+
+func _settle_home() -> void:
+	await _poll_home()
+	sb.back()
+	await _frames()
+
+
+# the small button `label` on the row whose text is `text`
+func _mark(text: String, label: String) -> Variant:
+	var row: Variant = _row(sb._dyn, text)
+	if row == null:
+		return null
+	return _find_button(row, label)
+
+
+func _find_button(node: Node, label: String) -> Variant:
+	for c in node.get_children():
+		if c is Button and c.text == label:
+			return c
+		var b: Variant = _find_button(c, label)
+		if b != null:
+			return b
+	return null
 
 
 # the local list keeps agendas the same way: new agenda, a note, Clear
