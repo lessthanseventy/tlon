@@ -57,7 +57,9 @@ func _date(y: int, m: int, d: int) -> Dictionary:
 
 func _refresh_state(open: Array, coming: Array = [], extra: Dictionary = {}) -> void:
 	s.seed(open, coming, extra)
+	var before: int = s._count("/api/home")
 	main._poll()
+	await _read_again(before)
 	await _wait()
 
 
