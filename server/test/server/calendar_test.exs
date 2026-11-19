@@ -35,6 +35,37 @@ defmodule Server.CalendarTest do
     assert [%{title: "Standup"}] = Calendar.upcoming(pid, window)
   end
 
+  test "a read answers from the last good copy while a refresh is in flight" do
+    me = self()
+    {:ok, agent} = Agent.start_link(fn -> {:ok, @ics} end)
+
+    fetch = fn _source ->
+      case Agent.get(agent, & &1) do
+        :block ->
+          send(me, {:fetching, self()})
+
+          receive do
+            :release -> {:ok, @ics}
+          end
+
+        other ->
+          other
+      end
+    end
+
+    pid = start(fetch, [%{"name" => "work", "ics" => "https://example.test/a.ics"}])
+    :ok = Calendar.refresh(pid)
+    window = {~U[2026-10-08 00:00:00Z], ~U[2026-10-09 00:00:00Z]}
+
+    Agent.update(agent, fn _ -> :block end)
+    refresh = Task.async(fn -> Calendar.refresh(pid) end)
+    assert_receive {:fetching, fetcher}
+
+    assert [%{title: "Standup"}] = Calendar.upcoming(pid, window)
+    send(fetcher, :release)
+    assert Task.await(refresh) == :ok
+  end
+
   test "no calendars configured is no meetings" do
     pid = start(fn _ -> flunk("nothing to fetch") end, [])
     :ok = Calendar.refresh(pid)

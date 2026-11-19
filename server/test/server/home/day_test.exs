@@ -90,6 +90,12 @@ defmodule Server.Home.DayTest do
     assert s1 == at(@today, "00:00") and s2 == at(@tomorrow, "00:00")
   end
 
+  test "a meeting ending exactly at midnight is on its own day only" do
+    found = ["Late" |> m(@today, "23:00", "23:59") |> Map.put(:stop, at(@tomorrow, "00:00"))]
+
+    assert [%{day: "today"}] = Day.build(found, now())
+  end
+
   test "no calendar running is no meetings" do
     assert Day.meetings(now(), :no_such_calendar) == []
   end

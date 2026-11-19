@@ -63,6 +63,17 @@ defmodule Server.Calendar.OutlookTest do
     end
   end
 
+  test "a quoted TZID is read without its quotes" do
+    ics = feed(meeting(~s("Eastern Standard Time"), "20261119T090000"))
+    assert [%{start: ~U[2026-11-19 14:00:00Z]}] = all(ics)
+    assert [%{start: ~U[2026-11-19 09:00:00Z]}] = all(feed(meeting(~s("UTC"), "20261119T090000")))
+  end
+
+  test "an all-day event with no end lasts one day" do
+    ics = feed(vevent(["UID:a", "DTSTART;VALUE=DATE:20261119", "SUMMARY:Out"]))
+    assert [%{all_day: true, stop: ~U[2026-11-20 00:00:00Z]}] = all(ics)
+  end
+
   test "an unknown zone name takes its offset from the feed's VTIMEZONE" do
     zones = vtimezone("Fictional Standard Time", "-0300", "-0300")
 
