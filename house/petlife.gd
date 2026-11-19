@@ -197,10 +197,11 @@ func _default(key: String, skip: Variant = null) -> Dictionary:
 # the walkable cells that are against a wall, nearest first
 func _wall_cells() -> Array:
 	var out: Array = []
+	var rects := _wall_rects()
 	for x in range(1, Pets.COLS):
 		for y in range(1, Pets.ROWS):
 			var cell := Vector2i(x, y)
-			if wall_side(cell) and not h.layout.PETS_CORNER.has_point(cell):
+			if _against(cell, rects) and not h.layout.PETS_CORNER.has_point(cell):
 				out.append(cell)
 	out.sort_custom(func(a, b): return mini(a.x, a.y) < mini(b.x, b.y))
 	return out
@@ -208,14 +209,26 @@ func _wall_cells() -> Array:
 
 # a wall or the room's edge on one side, or beside a piece that stands against one
 func wall_side(cell: Vector2i) -> bool:
+	return _against(cell, _wall_rects())
+
+
+# the floor pieces that stand against a wall
+func _wall_rects() -> Array:
+	var out: Array = []
+	for p in h.layout.all():
+		if not PetThings.is_pet(p) and h.layout.kind(p) == "floor":
+			var r: Rect2i = h.layout.rect(p)
+			if r.position.x <= 1 or r.position.y <= 1:
+				out.append(r)
+	return out
+
+
+func _against(cell: Vector2i, rects: Array) -> bool:
 	if cell.x <= 1 or cell.y <= 1 or cell.x >= Pets.COLS - 1 or cell.y >= Pets.ROWS - 1:
 		return true
 	for d in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]:
-		for p in h.layout.all():
-			if PetThings.is_pet(p) or h.layout.kind(p) != "floor":
-				continue
-			var r: Rect2i = h.layout.rect(p)
-			if r.has_point(cell + d) and (r.position.x <= 1 or r.position.y <= 1):
+		for r in rects:
+			if r.has_point(cell + d):
 				return true
 	return false
 
