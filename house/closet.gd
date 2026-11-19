@@ -203,6 +203,9 @@ func _build() -> void:
 		for t in _tabs:
 			var chip := Paper.chip(t, row, func() -> void: _pick(t), true)
 			chip.set_pressed_no_signal(t == _tab)
+	var buttons := Paper.row(self)
+	Paper.chip("Random", buttons, _random, false)
+	Paper.chip("Keep", buttons, _apply, false)
 	_values = []
 	for i in _rows.size():
 		var row := Paper.row(self)
@@ -217,9 +220,6 @@ func _build() -> void:
 		row.add_child(value)
 		_values.append(value)
 		Paper.chip(">", row, func() -> void: _step(i, 1), false)
-	var buttons := Paper.row(self)
-	Paper.chip("Random", buttons, _random, false)
-	Paper.chip("Keep", buttons, _apply, false)
 	_refresh_values()
 
 
