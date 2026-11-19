@@ -50,8 +50,8 @@ var _kind_chips := {}
 var _every_chips := {}
 var _unit_chips := {}
 var _title: Label
-var _kind_row: HBoxContainer
-var _who_row: HBoxContainer
+var _kind_row: Container
+var _who_row: Container
 var _who: LineEdit
 var _text: LineEdit
 var _steps: TextEdit
@@ -139,26 +139,19 @@ class MiniMonth:
 
 func _ready() -> void:
 	visible = false
-	var style := StyleBoxFlat.new()
-	style.bg_color = PAPER
-	style.set_border_width_all(3)
-	style.border_color = INK
-	style.shadow_color = Color(0, 0, 0, 0.3)
-	style.shadow_size = 4
-	style.shadow_offset = Vector2(3, 5)
-	style.set_content_margin_all(14)
-	add_theme_stylebox_override("panel", style)
-	custom_minimum_size = Vector2(450, 0)
+	add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	add_child(col)
-	_title = _label("", 20, INK)
+	_title = _label("", 17, INK)
 	_title.theme_type_variation = Fonts.HEADING
 	col.add_child(_title)
 	_kind_row = _row(col)
 	for k in KINDS:
 		_kind_chips[k] = _chip(KINDS[k], _kind_row, func() -> void: _set_kind(k))
-	_who_row = _row(col)
+	_who_row = HBoxContainer.new()
+	_who_row.add_theme_constant_override("separation", 6)
+	col.add_child(_who_row)
 	_who_row.add_child(_label("who", 14, QUIET))
 	_who = _edit("a name", _who_row)
 	_text = _edit("", col)
@@ -226,10 +219,7 @@ func _process(dt: float) -> void:
 func _input(event: InputEvent) -> void:
 	if not visible or not (event is InputEventKey and event.pressed and not event.echo):
 		return
-	if event.keycode == KEY_ESCAPE:
-		get_viewport().set_input_as_handled()
-		cancel()
-	elif event.keycode in [KEY_ENTER, KEY_KP_ENTER] and _steps.has_focus() and event.ctrl_pressed:
+	if event.keycode in [KEY_ENTER, KEY_KP_ENTER] and _steps.has_focus() and event.ctrl_pressed:
 		get_viewport().set_input_as_handled()
 		submit()
 
@@ -260,8 +250,8 @@ func _label(text: String, size: int, color: Color) -> Label:
 	return l
 
 
-func _row(parent: Control) -> HBoxContainer:
-	var r := HBoxContainer.new()
+func _row(parent: Control) -> Container:
+	var r := HFlowContainer.new()
 	r.add_theme_constant_override("separation", 6)
 	parent.add_child(r)
 	return r
@@ -324,7 +314,6 @@ func _set_kind(k: String) -> void:
 		"name the project" if k == "project" else "what is it?" if k != "waiting" else "what for?"
 	)
 	_err.visible = false
-	size = Vector2.ZERO
 
 
 func _set_mode(m: String) -> void:
@@ -354,7 +343,6 @@ func _show(title: String, kinds: Array, today: Dictionary) -> void:
 	sure.key = ""
 	_month.today = today
 	visible = true
-	size = Vector2.ZERO
 
 
 # What to start with: `kinds` the kinds on offer (the first is the start), and any of `text`,
@@ -536,7 +524,6 @@ func submit() -> void:
 func _say(line: String) -> void:
 	_err.text = line
 	_err.visible = true
-	size = Vector2.ZERO
 
 
 # the server said no (or nothing): the form stays as it was typed

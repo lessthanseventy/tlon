@@ -5,7 +5,7 @@
 # log, shots/). The throwaway XDG_DATA_HOME is set on the gamescope process only, never exported
 # into a shell that goes on to call mise.
 #
-#   scripts/house-drive.sh start [house args]   prints the port
+#   scripts/house-drive.sh start [house args]   prints the port (HOUSE_DRIVE_W / _H: the window, 1100x700)
 #   scripts/house-drive.sh send '<json>' ...    one reply line per command
 #   scripts/house-drive.sh errors               Godot error lines since the last call
 #   scripts/house-drive.sh stop
@@ -30,7 +30,7 @@ start() {
 	data="$(mktemp -d "${TMPDIR:-/tmp}/tlon-house-drive-data.XXXXXX")"
 	echo "$data" >"$run/data"
 	echo 0 >"$run/errors.seen"
-	XDG_DATA_HOME="$data" setsid gamescope --backend headless -W 1100 -H 700 -- \
+	XDG_DATA_HOME="$data" setsid gamescope --backend headless -W "${HOUSE_DRIVE_W:-1100}" -H "${HOUSE_DRIVE_H:-700}" -- \
 		godot --display-driver x11 --path "$root/house" -- --drive "$@" >"$run/log" 2>&1 &
 	echo $! >"$run/pid"
 	local line=""

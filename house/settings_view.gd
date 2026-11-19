@@ -1,9 +1,8 @@
-extends PanelContainer
+extends VBoxContainer
 
 # The paper settings screen, and the small cog that opens it. It reads and writes `settings` and
 # drives what already exists (sound, the room's layout, the finds, the chat); the address check
 # goes up to main.gd, which owns the server calls.
-signal closed
 signal check_requested(url: String)
 
 const Paper := preload("res://paper.gd")
@@ -39,7 +38,6 @@ var sure := Sure.new()
 var claude: RefCounted
 var phone: Node
 
-var _scroll: ScrollContainer
 var _name: LineEdit
 var _month: OptionButton
 var _day: OptionButton
@@ -168,21 +166,8 @@ func setup(the_settings, the_home) -> void:
 
 func _ready() -> void:
 	visible = false
-	add_theme_stylebox_override("panel", Paper.panel(14))
-	var outer := VBoxContainer.new()
-	outer.add_theme_constant_override("separation", 6)
-	add_child(outer)
-	outer.add_child(Paper.heading("Settings", 20, Paper.INK))
-	_scroll = ScrollContainer.new()
-	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_scroll.custom_minimum_size = Vector2(450, 300)
-	outer.add_child(_scroll)
-	var col := VBoxContainer.new()
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.add_theme_constant_override("separation", 7)
-	_scroll.add_child(col)
-	outer.add_child(Paper.label("Esc closes", 12, Paper.QUIET))
+	add_theme_constant_override("separation", 7)
+	var col: VBoxContainer = self
 
 	_head(col, "you")
 	var r := Paper.row(col)
@@ -366,7 +351,6 @@ func open() -> void:
 	_loading = false
 	_refresh()
 	visible = true
-	_scroll.scroll_vertical = 0
 
 
 func close() -> void:
@@ -375,7 +359,6 @@ func close() -> void:
 	if get_viewport().gui_get_focus_owner() != null:
 		get_viewport().gui_get_focus_owner().release_focus()
 	visible = false
-	closed.emit()
 
 
 func _process(dt: float) -> void:
@@ -383,15 +366,6 @@ func _process(dt: float) -> void:
 	if visible:
 		_refresh()
 
-
-func _input(event: InputEvent) -> void:
-	if visible and event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		get_viewport().set_input_as_handled()
-		close()
-
-
-func fit(room: Vector2) -> void:
-	_scroll.custom_minimum_size.y = clampf(room.y - 120.0, 160.0, 480.0)
 
 
 # the address check came back

@@ -181,7 +181,6 @@ func calm() -> bool:
 	return not (
 		h._cards_blocked()
 		or h.card.is_open()
-		or h.menu.is_open
 		or not h.ring_ids.is_empty()
 		or h.person.arrive_left > 0.0
 		or h.person.stretch_left > 0.0

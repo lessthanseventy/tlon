@@ -216,7 +216,7 @@ func _under(cmd: Dictionary) -> Dictionary:
 	var drawn := _drawn().filter(func(d: Dictionary) -> bool: return _rect(d).has_point(at))
 	return _ok(
 		{
-			"topmost": _home._topmost(at - _main._room.global_position),
+			"topmost": _home._topmost(_room_pt(at)),
 			"control": _describe(_control_at(_main, at)),
 			"drawn": drawn.back() if not drawn.is_empty() else null,
 		}
@@ -489,18 +489,17 @@ func _moved(r: Rect2, by: Vector2) -> Array:
 	return _rect_of(Rect2(r.position + by, r.size))
 
 
+# a point of the room's own canvas in window pixels (the room is magnified to fill its area)
+func _win(p: Vector2) -> Vector2:
+	return _main._room.get_global_transform() * p
+
+
+func _room_pt(p: Vector2) -> Vector2:
+	return _main._room.get_global_transform().affine_inverse() * p
+
+
 func _drawn() -> Array:
 	var out: Array = []
-	var room: Vector2 = _main._room.global_position
-	for b in _home.card._buttons:
-		out.append({"src": "card", "act": b["act"], "rect": _moved(b["rect"], room)})
-	if _home.menu.is_open:
-		for i in _home.menu.rows.size():
-			var label := str(_home.menu.rows[i].get("label", ""))
-			out.append({"src": "menu", "label": label, "rect": _moved(_home.menu._rects[i], room)})
-	if _home.rhythm.kind != "":
-		for r: Rect2 in _home.rhythm._rects:
-			out.append({"src": "slip", "rect": _moved(r, room)})
 	if _main._decorate.active:
 		var at: Vector2 = _main._decorate.global_position
 		for h in _main._decorate._hits:
@@ -512,22 +511,22 @@ func _drawn() -> Array:
 
 func _registered() -> Array:
 	var out: Array = []
-	var room: Vector2 = _main._room.global_position
 	for c in _home.pets.critters:
 		if not c.away:
 			var r: Rect2 = _home.pets.hit_rect(c, _home._o, _home._k)
 			var key: String = c.id if c.id == "person" else "pet:" + c.id
-			var at := _centre(Rect2(r.position + room, r.size))
-			var reach: bool = _home._topmost(Vector2(at[0], at[1]) - room) == key
-			out.append({"key": key, "center": at, "reachable": reach})
+			var mid := _win(r.get_center())
+			var reach: bool = _home._topmost(_room_pt(mid)) == key
+			out.append({"key": key, "center": [roundi(mid.x), roundi(mid.y)], "reachable": reach})
 	for h in _home._hits:
 		var sum := Vector2.ZERO
 		for p: Vector2 in h["poly"]:
 			sum += p
 		var c: Vector2 = sum / maxf(1.0, h["poly"].size())
+		var at := _win(c)
 		var row := {
 			"key": h["key"],
-			"center": [roundi(c.x + room.x), roundi(c.y + room.y)],
+			"center": [roundi(at.x), roundi(at.y)],
 			"reachable": _home._topmost(c) == h["key"],
 		}
 		out.append(row)
@@ -536,19 +535,46 @@ func _registered() -> Array:
 
 func _mode() -> Dictionary:
 	var m := _main
+	var sb = m._sidebar
 	return {
 		"room": m._at,
+		"view": sb.view,
+		"selected": _home.selected,
 		"decorate": m._decorate.active,
-		"closet": m._closet.visible,
-		"settings": m._settings_view.visible,
-		"chat": m._chat_view.visible,
-		"pet_card": m._pet_view.role if m._pet_view.visible else "",
-		"form": m._form.kind if m._form.visible else "",
+		"form": sb.form.kind if sb.form.visible else "",
 		"card": _home.card.kind,
-		"menu": _home.menu.is_open,
-		"jot": m._jot.visible,
-		"slip": _home.rhythm.kind,
+		"banner": _banner(),
+		"chat": sb._effective(),
 		"widget": m._widget,
+	}
+
+
+func _banner() -> String:
+	var parts: Array = []
+	if not _home.ring_ids.is_empty():
+		parts.append("ring")
+	if _home.rhythm.kind != "":
+		parts.append("slip:" + _home.rhythm.kind)
+	return ",".join(parts)
+
+
+# the sidebar: its frame, the open view and the controls inside it, with text and centre
+func _sidebar() -> Dictionary:
+	var sb = _main._sidebar
+	var r: Rect2 = sb.get_global_rect()
+	var chat: Rect2 = sb.chat_view.get_global_rect() if sb.chat_view.visible else Rect2()
+	var controls: Array = _controls().filter(
+		func(c: Dictionary) -> bool: return r.encloses(_rect(c)) or r.intersects(_rect(c))
+	)
+	return {
+		"rect": _rect_of(r),
+		"view": sb.view,
+		"arg": sb.arg,
+		"title": sb.view_title(),
+		"selected": _home.selected,
+		"chat": {"mode": sb._effective(), "rect": _rect_of(chat)},
+		"banner": _banner(),
+		"controls": controls,
 	}
 
 
@@ -557,8 +583,8 @@ func _things(_cmd: Dictionary = {}) -> Dictionary:
 		{
 			"window": [get_window().size.x, get_window().size.y],
 			"mode": _mode(),
+			"sidebar": _sidebar(),
 			"registered": _registered(),
-			"controls": _controls(),
 			"drawn": _drawn(),
 		}
 	)

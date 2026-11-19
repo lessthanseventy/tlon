@@ -5,7 +5,7 @@ extends PanelContainer
 # sends and answers.
 signal sent(text: String)
 signal acted(id: int, what: String)
-signal closed
+signal mode_wanted(mode: String)
 
 const Paper := preload("res://paper.gd")
 const Settings := preload("res://settings.gd")
@@ -31,10 +31,12 @@ var home
 var sure := Sure.new()
 var acting := -1
 var reading := false
+var mode := "line"
 
 var _log: Log
 var _edit: LineEdit
 var _note: Label
+var _head: HBoxContainer
 var _items: Array = []
 var _hits: Array = []
 var _total := 0.0
@@ -52,7 +54,7 @@ class Log:
 		view = owner
 		mouse_filter = Control.MOUSE_FILTER_STOP
 		clip_contents = true
-		custom_minimum_size = Vector2(400, 300)
+		custom_minimum_size = Vector2(0, 90)
 		size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	func _draw() -> void:
@@ -74,43 +76,54 @@ func setup(the_chat, the_home) -> void:
 
 
 func _ready() -> void:
-	visible = false
-	add_theme_stylebox_override("panel", Paper.panel(12))
+	add_theme_stylebox_override("panel", Paper.panel(8))
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", 5)
 	add_child(col)
-	col.add_child(Paper.heading("The phone", 18, Paper.INK))
+	_head = Paper.row(col)
+	var title := Paper.heading("The phone", 15, Paper.INK)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_head.add_child(title)
+	Paper.chip("-", _head, func() -> void: mode_wanted.emit(_lower()), false)
+	Paper.chip("+", _head, func() -> void: mode_wanted.emit(_higher()), false)
 	_log = Log.new(self)
 	col.add_child(_log)
 	_note = Paper.label("", 13, Paper.QUIET)
+	_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(_note)
 	_edit = Paper.edit("say something to the house", col)
 	_edit.text_submitted.connect(_submit)
 	_edit.gui_input.connect(_edit_key)
-	col.add_child(Paper.label("Enter sends  -  Esc puts it down", 12, Paper.QUIET))
 
 
-func open() -> void:
-	visible = true
-	chat.open = true
-	chat.unread = false
-	_off = 0.0
-	_dirty = true
-	_note.text = ""
+func _lower() -> String:
+	return "dock" if mode == "full" else "line"
+
+
+func _higher() -> String:
+	return "full" if mode == "dock" else "dock"
+
+
+# "line": only the input; "dock": the log above it; "full": the log fills the sidebar
+func set_mode(m: String) -> void:
+	mode = m
+	var shown := m != "line"
+	_log.visible = shown
+	_note.visible = shown and _note.text != ""
+	chat.open = shown
+	if shown:
+		chat.unread = false
+		_off = 0.0
+		_dirty = true
+		_log.queue_redraw()
+
+
+func focus_input() -> void:
 	_edit.grab_focus()
-	_log.queue_redraw()
-
-
-func close() -> void:
-	if not visible:
-		return
-	visible = false
-	chat.open = false
-	_edit.release_focus()
-	closed.emit()
 
 
 func _process(dt: float) -> void:
+	_note.visible = _log.visible and _note.text != ""
 	sure.tick(dt)
 
 
@@ -124,7 +137,7 @@ func finish(ok: bool, text: String) -> void:
 		_note.add_theme_color_override("font_color", Paper.WARM)
 		_edit.text = text
 		_edit.caret_column = text.length()
-	_edit.grab_focus()
+		_edit.grab_focus()
 	_log.queue_redraw()
 
 
@@ -163,12 +176,9 @@ func _edit_key(event: InputEvent) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not visible or not (event is InputEventKey and event.pressed):
+	if not _log.visible or not (event is InputEventKey and event.pressed):
 		return
 	match event.keycode:
-		KEY_ESCAPE:
-			get_viewport().set_input_as_handled()
-			close()
 		KEY_PAGEUP, KEY_PAGEDOWN:
 			get_viewport().set_input_as_handled()
 			scroll(_log.size.y * 0.8 * (1.0 if event.keycode == KEY_PAGEUP else -1.0))
@@ -358,6 +368,3 @@ func _actions(c: Control, m: Dictionary, box: Rect2) -> void:
 		c.draw_string(font, r.position + Vector2(7, 16), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Paper.QUIET if acting >= 0 else Paper.INK)
 		x += w + 5.0
 
-
-func fit(room: Vector2) -> void:
-	_log.custom_minimum_size.y = clampf(room.y - 150.0, 140.0, 420.0)

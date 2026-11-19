@@ -128,7 +128,6 @@ func process(dt: float, h: Object = null) -> void:
 	if h == null:
 		return
 	_edge("card", h.card.is_open(), "card_open", "card_close")
-	_edge("menu", h.menu.is_open, "menu_open", "menu_close")
 	_edge("jot", h.jot_open, "card_open", "card_close")
 	_edge("closet", h.closet_open, "closet_open", "closet_close")
 	_edge("decorate", h.decorating, "decorate_on", "decorate_off")

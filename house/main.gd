@@ -10,22 +10,18 @@ const POLL_SECONDS := 5.0
 const SLOW_SECONDS := 300.0
 const WATCH_SECONDS := 60.0
 const AWAY_FOR_GREETING := 20.0
-const PANEL_WIDTH := 300
 const BACKDROP := Color("1f1b24")
 const RoomScript := preload("res://room.gd")
 const ORDER := ["waiting", "working", "idle", "cold", "off"]
 const LIVE := ["waiting", "working", "idle"]
 const WAITING_SHOWN := 5
 const DecorateScript := preload("res://decorate.gd")
+const Sidebar := preload("res://sidebar.gd")
 const WIDGET_SIZE := Vector2i(656, 432)
 const WIDGET_STORE := "user://house_widget.json"
-const FormScript := preload("res://form.gd")
 const DriveScript := preload("res://drive.gd")
-const SettingsView := preload("res://settings_view.gd")
 const Pets := preload("res://pets.gd")
 const Settings := preload("res://settings.gd")
-const PetView := preload("res://pet_view.gd")
-const ChatView := preload("res://chat_view.gd")
 const BackendHttp := preload("res://backend_http.gd")
 const BackendLocal := preload("res://backend_local.gd")
 const LocalList := preload("res://local_list.gd")
@@ -52,23 +48,15 @@ var _starters := false
 var _forecast_arg: Variant = null
 
 var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": null}
-var _form: PanelContainer
-var _settings_view: PanelContainer
-var _pet_view: PanelContainer
-var _chat_view: PanelContainer
-var _cog: Control
 var _skip: Array = []
 var _again := false
 var _demo_ids := 1000
-var _jot: PanelContainer
-var _closet: Control
 var _decorate: Control
 var _widget := false
 var _drag := false
 var _drag_mouse := Vector2i.ZERO
 var _drag_win := Vector2i.ZERO
 var _prev_size := Vector2i(1100, 700)
-var _jot_seq := 0
 var _office := {}
 var _at := "home"
 var _inflight := ""
@@ -86,7 +74,8 @@ var _watch_busy := false
 var _away_at := 0.0
 
 var _room: Control
-var _panel: PanelContainer
+var _sidebar: PanelContainer
+var _pick_ids: Array = []
 
 
 func _ready() -> void:
@@ -108,85 +97,55 @@ func _ready() -> void:
 	add_child(bg)
 
 	_room = RoomScript.new()
-	_room.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_room.offset_right = -PANEL_WIDTH
 	_room.art_dir = _art_dir()
 	_room.door_clicked.connect(_toggle)
 	add_child(_room)
 
-	_panel = preload("res://panel.gd").new()
-	_panel.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	_panel.offset_left = -PANEL_WIDTH
-	_panel.offset_right = 0
-	_panel.ticked.connect(_on_ticked)
-	_panel.door_pressed.connect(_toggle)
-	_panel.focus = _room.home.focus
-	_panel.opened.connect(func(id: int) -> void: _room.home.open_item_menu(id))
-	_panel.now_cleared.connect(func() -> void: _room.home.focus.clear())
-	_panel.timer_pressed.connect(_on_timer)
-	_panel.add_pressed.connect(_add_thing)
-	_panel.now_pressed.connect(_what_now)
-	add_child(_panel)
 	talk_live = not _room.home.staged
 	_wttr.live = talk_live
 	_wttr.reported.connect(_on_wttr)
 	add_child(_wttr)
 	_set_up_phone()
+	_sidebar = Sidebar.new()
+	_sidebar.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	_sidebar.offset_left = -Sidebar.WIDTH
+	_sidebar.offset_right = 0
+	add_child(_sidebar)
+	_sidebar.setup(_room.home, _claude, _phone)
+	_sidebar.door_pressed.connect(_toggle)
+	_sidebar.jot_submitted.connect(_send_jot)
+	_sidebar.chat_sent.connect(_send_chat)
+	_sidebar.chat_acted.connect(_chat_act)
+	_sidebar.check_requested.connect(_check_server)
+	_sidebar.form_submitted.connect(
+		func(req: Dictionary) -> void: _write(req["path"], req["body"], _form_saved)
+	)
+	_sidebar.form_acted.connect(
+		func(id: int, what: String) -> void: _act(id, what, _sidebar.form_done)
+	)
+	_sidebar.closet.tabbed.connect(func() -> void: _room.home.sound.request("tab"))
+	_sidebar.closet.applied.connect(func() -> void: _room.home.sound.request("save"))
 	_use_backend(args)
 	if "--forecast" in args:
 		_forecast_arg = _staged_forecast(args[args.find("--forecast") + 1])
 	_decorate = DecorateScript.new()
-	_decorate.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	_decorate.offset_left = -PANEL_WIDTH
-	_decorate.offset_right = 0
 	_decorate.room = _room
 	_decorate.home = _room.home
 	_decorate.done.connect(func() -> void: _set_decorate(false))
-	add_child(_decorate)
+	_sidebar.attach_decorate(_decorate)
 	_room.decorate = _decorate
 	_room.home.acted.connect(_on_act)
-	_room.pressed_empty.connect(_begin_drag)
+	_room.home.viewed.connect(_on_viewed)
+	_room.pressed_empty.connect(_on_empty)
+	_room.pet_menu.connect(func(who: String) -> void: _on_viewed("pet", who))
 
 	_add_note(Control.PRESET_BOTTOM_LEFT, "Art by Gridwright")
 	if not _room.art_found:
 		_add_note(Control.PRESET_TOP_LEFT, "art not found")
 
-	_jot = preload("res://jot.gd").new()
-	_jot.submitted.connect(_send_jot)
-	_jot.cancelled.connect(func() -> void: _jot_seq += 1)
-	add_child(_jot)
-	_closet = preload("res://closet.gd").new()
-	_closet.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_closet.tabbed.connect(func() -> void: _room.home.sound.request("tab"))
-	_closet.applied.connect(func() -> void: _room.home.sound.request("save"))
-	add_child(_closet)
-	_form = FormScript.new()
-	_form.submitted.connect(
-		func(req: Dictionary) -> void: _write(req["path"], req["body"], _form_saved)
-	)
-	_form.acted.connect(func(id: int, what: String) -> void: _act(id, what, _form.finish))
-	add_child(_form)
 	_room.home.things.form_wanted.connect(_open_form)
 	_room.home.things.post.connect(func(path: String, body: Dictionary) -> void: _write(path, body))
-	_settings_view = SettingsView.new()
-	_settings_view.setup(_room.home.settings, _room.home)
-	_settings_view.claude = _claude
-	_settings_view.phone = _phone
-	_settings_view.check_requested.connect(_check_server)
-	add_child(_settings_view)
-	_pet_view = PetView.new()
-	_pet_view.setup(_room.home.settings, _room.home)
-	add_child(_pet_view)
-	_room.pet_menu.connect(_open_pet_view)
 	_room.home.settings.changed.connect(_on_setting)
-	_chat_view = ChatView.new()
-	_chat_view.setup(_room.home.chat, _room.home)
-	_chat_view.sent.connect(_send_chat)
-	_chat_view.acted.connect(_chat_act)
-	add_child(_chat_view)
-	_cog = SettingsView.Cog.new()
-	_cog.pressed.connect(func() -> void: _toggle_settings())
-	add_child(_cog)
 
 	if _demo:
 		var demo: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://demo.json"))
@@ -242,7 +201,7 @@ func _ready() -> void:
 		_room.home.chat.unread = true
 	if "--pet-card" in args:
 		var who: String = args[args.find("--pet-card") + 1]
-		get_tree().create_timer(0.4).timeout.connect(func() -> void: _open_pet_view(who))
+		get_tree().create_timer(0.4).timeout.connect(func() -> void: _on_viewed("pet", who))
 	if "--settings" in args:
 		var spec: String = args[args.find("--settings") + 1]
 		get_tree().create_timer(0.4).timeout.connect(func() -> void: _stage_settings(spec))
@@ -255,14 +214,14 @@ func _ready() -> void:
 			func() -> void:
 				for line in lines:
 					_tell(line, func(_ok: bool, _reply: String) -> void: pass)
-				_open_chat()
+				_sidebar.focus_chat()
 		)
 	if "--closet" in args:
 		get_tree().create_timer(0.3).timeout.connect(
 			func() -> void:
-				_open_closet()
-				if "--tab" in args:
-					_closet.pick_tab(args[args.find("--tab") + 1])
+					_open_closet()
+					if "--tab" in args:
+						_sidebar.closet.pick_tab(args[args.find("--tab") + 1])
 		)
 	if "--decorate" in args:
 		_set_decorate(true)
@@ -275,9 +234,10 @@ func _ready() -> void:
 		var text: String = args[args.find("--typing") + 1]
 		get_tree().create_timer(0.3).timeout.connect(
 			func() -> void:
-				_jot.open(text)
-				if "--sending" in args:
-					_jot.sending(true)
+					_open_add(true)
+					_sidebar.jot.open(text)
+					if "--sending" in args:
+						_sidebar.jot.sending(true)
 		)
 
 	if "--form" in args:
@@ -363,8 +323,8 @@ func _install(node: Node) -> void:
 func _apply_where() -> void:
 	var served: bool = not _backend.local
 	_room.office_door = served
-	_panel.set_door_visible(served)
-	_panel.set_reachable(true)
+	_sidebar.set_door(served)
+	_sidebar.set_reachable(true)
 	if not served and _at == "office":
 		_enter("home")
 
@@ -531,7 +491,9 @@ func _apply(data: Dictionary) -> void:
 	_ids_known = true
 	if _at == "home":
 		_room.show_home()
-		_panel.show_data(_data)
+		if ids != _pick_ids:
+			_pick_ids = ids
+			_ask_now(true)
 	if _room.home.take_attention() and _shot == "":
 		DisplayServer.window_request_attention()
 
@@ -545,13 +507,16 @@ func _toggle() -> void:
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
-	if _closet.visible or _jot.visible or _overlay() or event.ctrl_pressed or event.alt_pressed:
+	var focus := get_viewport().gui_get_focus_owner()
+	var typing: bool = focus is LineEdit or focus is TextEdit
+	if event.keycode == KEY_ESCAPE:
+		_escape(typing)
+		return
+	if typing or event.ctrl_pressed or event.alt_pressed:
 		return
 	if event.keycode == KEY_TAB:
 		get_viewport().set_input_as_handled()
 		_toggle()
-		return
-	if get_viewport().gui_get_focus_owner() != null:
 		return
 	if _decorate.active and _decorate.key(event.keycode):
 		get_viewport().set_input_as_handled()
@@ -567,7 +532,7 @@ func _input(event: InputEvent) -> void:
 		KEY_N, KEY_SLASH, KEY_ENTER, KEY_KP_ENTER:
 			if _at == "home":
 				get_viewport().set_input_as_handled()
-				_jot.open()
+				_open_add(true)
 		KEY_C:
 			if _at == "home":
 				get_viewport().set_input_as_handled()
@@ -591,51 +556,57 @@ func _input(event: InputEvent) -> void:
 		KEY_W:
 			get_viewport().set_input_as_handled()
 			_set_widget(not _widget)
-		KEY_ESCAPE:
-			_room.home.menu.close()
-			_room.home.close_card()
-			_room.home.dismiss_slip()
+
+
+# Esc: decorating lets go, an open view goes back, else the day's slip is put away
+func _escape(typing: bool) -> void:
+	if _decorate.active:
+		_decorate.key(KEY_ESCAPE)
+	elif _sidebar.is_open():
+		get_viewport().gui_release_focus()
+		_sidebar.back()
+	elif typing:
+		get_viewport().gui_release_focus()
+	else:
+		_room.home.dismiss_slip()
+	get_viewport().set_input_as_handled()
 
 
 func _process(_dt: float) -> void:
-	_room.home.jot_open = _jot.visible
-	_room.home.closet_open = _closet.visible
-	_room.home.decorating = _decorate.active
-	if _overlay() and _form_blocked():
-		_form.close()
-		_settings_view.close()
-		_pet_view.close()
-		_chat_view.close()
-	_room.home.form_open = _overlay()
-	var room_w := size.x - (0 if _widget else PANEL_WIDTH)
-	_cog.visible = _at == "home" and not _decorate.active and not _closet.visible
-	_cog.position = Vector2(room_w - 34.0, 8.0)
-	for v in [_form, _settings_view, _pet_view, _chat_view]:
-		if v.visible:
-			if v == _settings_view or v == _chat_view:
-				v.fit(size)
-			v.size = v.get_combined_minimum_size()
-			v.position = ((Vector2(room_w, size.y) - v.size) / 2.0).round()
+	var home = _room.home
+	var view: String = _sidebar.view
+	home.jot_open = view == "add" and _sidebar.jot.visible
+	home.closet_open = view == "closet"
+	home.decorating = _decorate.active
+	home.form_open = _sidebar.takes_text()
+	if _widget and view not in ["home", "office"]:
+		_set_widget(false)
+	_fit_room()
 	var at_mouse := _room.get_local_mouse_position()
-	_room.home.eggs.set_laser(
+	home.eggs.set_laser(
 		_at == "home"
 		and Input.is_key_pressed(KEY_P)
-		and not _jot.visible
-		and not _closet.visible
+		and not home.jot_open
+		and not home.closet_open
 		and not _decorate.active
 		and Rect2(Vector2.ZERO, _room.size).has_point(at_mouse),
 		at_mouse
 	)
-	if _jot.visible:
-		var w := size.x - (0 if _widget else PANEL_WIDTH)
-		_jot.size = _jot.get_combined_minimum_size()
-		_jot.position = Vector2((w - _jot.size.x) / 2.0, size.y - _jot.size.y - 56).round()
 	if _drag:
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 			get_window().position = _drag_win + (DisplayServer.mouse_get_position() - _drag_mouse)
 		else:
 			_drag = false
 			_save_widget()
+
+
+# the room takes the window but for the sidebar, drawn as large as whole steps of its art allow
+func _fit_room() -> void:
+	var area := Vector2(size.x - (0.0 if _widget else float(Sidebar.WIDTH)), size.y)
+	var s: float = _room.fit_scale(area)
+	_room.scale = Vector2(s, s)
+	_room.position = Vector2.ZERO
+	_room.size = area / s
 
 
 func _set_decorate(on: bool) -> void:
@@ -647,85 +618,84 @@ func _set_decorate(on: bool) -> void:
 		_room.home.reply_text = "decorating needs the art, and it was not found"
 		_room.home.reply_left = 4.0
 		return
-	_panel.visible = not on
 	if on:
-		_decorate.enter()
+		_sidebar.open_decorate()
 	else:
-		_decorate.leave()
+		_sidebar.back()
 
 
-func _form_blocked() -> bool:
-	var h = _room.home
-	return _jot.visible or _closet.visible or _decorate.active or h.menu.is_open or h.rhythm.kind != ""
+func _on_viewed(kind: String, arg: Variant) -> void:
+	if _at != "home":
+		return
+	match kind:
+		"item":
+			_sidebar.open_item(int(arg))
+		"open":
+			_sidebar.open_desk()
+		"add":
+			_open_add(true)
+		"closet":
+			_open_closet()
+		"chat":
+			_open_chat()
+		"pet":
+			_sidebar.open_pet(str(arg))
 
 
-func _overlay() -> bool:
-	return _form.visible or _settings_view.visible or _pet_view.visible or _chat_view.visible
+func _on_empty() -> void:
+	if _widget:
+		_begin_drag()
+	elif _sidebar.is_open() and not _decorate.active:
+		_sidebar.back()
 
 
-func _open_pet_view(id: String) -> bool:
-	if _at != "home" or _form_blocked() or _overlay():
-		return false
-	_room.home.close_card()
-	_pet_view.open(id)
-	return true
+func _open_settings() -> void:
+	if _at == "home":
+		_set_widget(false)
+		_sidebar.open_settings()
 
 
-func _open_settings() -> bool:
-	if _at != "home" or _form_blocked() or _overlay():
-		return false
-	_room.home.close_card()
-	_settings_view.open()
-	return true
+func _open_chat() -> void:
+	if _at == "home":
+		_set_widget(false)
+		_sidebar.focus_chat()
 
 
-func _toggle_settings() -> void:
-	if _settings_view.visible:
-		_settings_view.close()
-	else:
-		_open_settings()
+func _open_closet() -> void:
+	if _at == "home":
+		_set_widget(false)
+		_sidebar.open_closet()
 
 
-func _open_chat() -> bool:
-	if _at != "home" or _form_blocked() or _overlay():
-		return false
-	_room.home.close_card()
-	_chat_view.open()
-	return true
+func _open_add(jot_first: bool) -> void:
+	if _at == "home":
+		_set_widget(false)
+		_sidebar.open_add(jot_first)
 
 
-# mode "new" (a preset for the form) or "edit" ({row, due}); false when something else is up
+# mode "new" (a preset for the form) or "edit" ({row, due})
 func _open_form(mode: String, spec: Dictionary) -> bool:
-	if (
-		_at != "home"
-		or _widget
-		or _form_blocked()
-		or _settings_view.visible
-		or _pet_view.visible
-		or _chat_view.visible
-	):
+	if _at != "home":
 		return false
-	var home = _room.home
-	home.close_card()
-	var today: Dictionary = home.things.today()
-	if mode == "edit":
-		_form.open_edit(spec["row"], spec["due"], today)
-	else:
-		_form.open_new(spec, today)
-	home.form_open = true
+	_set_widget(false)
+	_sidebar.open_form(mode, spec)
+	_room.home.form_open = true
 	return true
 
 
 func _add_thing() -> void:
-	_open_form("new", {"kinds": ["todo", "reminder", "note", "waiting", "project"]})
+	_open_add(false)
 
 
+# H: the Now line on the home view, asked again from the top
 func _what_now() -> void:
 	_skip = []
-	_ask_now()
+	if _sidebar.view != "home" and _at == "home":
+		_sidebar.back()
+	_ask_now(true)
 
 
-func _ask_now() -> void:
+func _ask_now(quiet: bool = false) -> void:
 	if _demo:
 		var rows: Array = _data["open"].filter(func(t): return not _skip.has(int(t["id"])))
 		var pick: Variant = rows[0].duplicate() if not rows.is_empty() else null
@@ -739,7 +709,7 @@ func _ask_now() -> void:
 		func(reached: bool, code: int, parsed: Variant) -> void:
 			if reached and code == 200 and parsed is Dictionary:
 				_show_pick(parsed.get("pick"), str(parsed.get("say", "")))
-			else:
+			elif not quiet:
 				_trouble(_why(reached, code, parsed)),
 		8.0
 	)
@@ -749,9 +719,6 @@ func _show_pick(pick: Variant, say: String) -> void:
 	if pick == null:
 		_skip = []
 	_room.home.show_pick(pick if pick is Dictionary else {}, say)
-
-
-# `--form KIND;key=value;...` or `--form edit:ID;...` (keys: kinds text who steps date time every
 # error), for a picture
 func _stage_form(spec: String) -> void:
 	var parts := spec.split(";")
@@ -777,14 +744,12 @@ func _stage_form(spec: String) -> void:
 	else:
 		var preset := {"kinds": str(kv.get("kinds", parts[0])).split(",")}
 		_open_form("new", preset)
-	_form.fill(fill)
+	_sidebar.form.fill(fill)
 	if kv.has("error"):
-		_form.fail(kv["error"])
+		_sidebar.form.fail(kv["error"])
 
 
-func _open_closet() -> void:
-	if not _widget:
-		_closet.open(_room.home.look)
+
 
 
 func _begin_drag() -> void:
@@ -811,8 +776,7 @@ func _set_widget(on: bool) -> void:
 		_save_widget()
 	_set_decorate(false)
 	_widget = on
-	_panel.visible = not on
-	_room.offset_right = 0 if on else -PANEL_WIDTH
+	_sidebar.visible = not on
 	w.borderless = on
 	w.always_on_top = on and _room.home.settings.value("on_top")
 	w.size = WIDGET_SIZE if on else _prev_size
@@ -838,11 +802,11 @@ func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 		"revive":
 			_write("/api/home/%d/revive" % id, {}, ok)
 		"nottoday":
-			var close := func() -> void: _room.home.close_card()
+			var close := func() -> void: _ask_now(true)
 			_write("/api/home/%d/answer" % id, {"choice": "nottoday"}, _then(ok, close))
 		"else":
 			_skip.append(id)
-			_ask_now()
+			_ask_now(true)
 		"hour", "tomorrow":
 			_later(id, what, ok)
 		"now":
@@ -856,7 +820,7 @@ func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 		"closet":
 			_open_closet()
 		"jot":
-			_jot.open()
+			_open_add(true)
 		"chat":
 			_open_chat()
 
@@ -880,7 +844,7 @@ func _write(path: String, body: Dictionary, ok: Callable = Callable()) -> void:
 		path,
 		body,
 		func(reached: bool, code: int, parsed: Variant) -> void:
-			_panel.set_reachable(reached)
+			_sidebar.set_reachable(reached)
 			if reached:
 				_refresh()
 			if reached and code == 200:
@@ -893,7 +857,7 @@ func _write(path: String, body: Dictionary, ok: Callable = Callable()) -> void:
 
 func _form_saved() -> void:
 	_room.home.sound.request("save")
-	_form.finish()
+	_sidebar.form_done()
 
 
 static func _why(reached: bool, code: int, parsed: Variant) -> String:
@@ -909,10 +873,10 @@ static func _why(reached: bool, code: int, parsed: Variant) -> String:
 # one line where he is looking: the form, else the open card, else a slip
 func _trouble(line: String) -> void:
 	_room.home.sound.request("error")
-	if _form.visible:
-		_form.fail(line)
-	elif _chat_view.visible:
-		_chat_view.flash(line)
+	if _sidebar.form.visible:
+		_sidebar.form.fail(line)
+	elif _sidebar.chat_view.acting >= 0:
+		_sidebar.chat_view.flash(line)
 	elif _room.home.card.is_open():
 		_room.home.things.flash = line
 	else:
@@ -934,8 +898,6 @@ func _gone(id: int) -> void:
 	for key in ["open", "coming", "waiting", "someday", "projects"]:
 		_data[key] = _data[key].filter(func(t): return int(t["id"]) != id)
 	_data["note_rows"] = _data["note_rows"].filter(func(t): return int(t["id"]) != id)
-	if _room.home.card.kind == "pick":
-		_room.home.close_card()
 	_apply(_data)
 
 
@@ -959,17 +921,6 @@ func _demo_write(path: String, body: Dictionary) -> void:
 	elif parts.size() == 5 and parts[4] == "drop":
 		_gone(int(parts[3]))
 
-func _on_timer(what: String) -> void:
-	var f: RefCounted = _room.home.focus
-	match what:
-		"cycle":
-			f.cycle()
-		"toggle":
-			if f.running():
-				f.stop()
-			else:
-				f.start()
-
 
 func _post(path: String, payload: Dictionary, done: Callable, timeout: float = 6.0) -> void:
 	_backend.send(path, payload, done, timeout)
@@ -988,7 +939,7 @@ func _later(id: int, until: String, ok: Callable = Callable()) -> void:
 				due = str(body["due_at"]).trim_suffix("Z")
 			_moved(id, due + "Z")
 		else:
-			_panel.set_reachable(code > 0)
+			_sidebar.set_reachable(code > 0)
 			_trouble(_why(code > 0, code, body))
 			_apply(_data)
 	if _demo:
@@ -1016,20 +967,19 @@ func _moved(id: int, due_at: String) -> void:
 
 
 func _send_jot(text: String) -> void:
-	_jot.sending(true)
-	_jot_seq += 1
-	var seq := _jot_seq
+	var jot = _sidebar.jot
+	jot.sending(true)
 	_tell(
 		text,
 		func(ok: bool, reply: String) -> void:
-			if seq != _jot_seq:
+			if not jot.visible:
 				return
 			if ok:
-				_jot.finish()
 				_room.home.sound.request("save")
 				_room.home.show_reply(reply)
+				_sidebar.jot_done()
 			else:
-				_jot.fail("couldn't reach tlon — not kept")
+				jot.fail("couldn't reach tlon — not kept")
 				_room.home.sound.request("error")
 	)
 
@@ -1067,7 +1017,7 @@ func _tell(text: String, done: Callable, via: String = "") -> void:
 
 
 func _send_chat(text: String) -> void:
-	_tell(text, func(ok: bool, _reply: String) -> void: _chat_view.finish(ok, text))
+	_tell(text, func(ok: bool, _reply: String) -> void: _sidebar.chat_view.finish(ok, text))
 
 
 # a button under a told reminder: the same routes the paper menu calls
@@ -1077,13 +1027,13 @@ func _chat_act(id: int, what: String) -> void:
 		what,
 		func() -> void:
 			_room.home.chat.resolve(id, what)
-			_chat_view.acting = -1
+			_sidebar.chat_view.acting = -1
 	)
 
 
 func _check_server(url: String) -> void:
 	if _demo:
-		_settings_view.url_result(true)
+		_sidebar.settings_view.url_result(true)
 		return
 	var probe := BackendHttp.new()
 	add_child(probe)
@@ -1091,7 +1041,7 @@ func _check_server(url: String) -> void:
 		url,
 		func(ok: bool) -> void:
 			probe.queue_free()
-			_settings_view.url_result(ok)
+			_sidebar.settings_view.url_result(ok)
 	)
 
 
@@ -1134,8 +1084,8 @@ func _enter(where: String) -> void:
 	_at = where
 	var other := "office" if where == "home" else "home"
 	get_window().title = "the house - the " + where
-	_panel.set_room(where, "to the " + other + "  >")
-	_panel.set_reachable(_reach.get(where, true))
+	_sidebar.set_room(where, "to the " + other + "  >", not _backend.local)
+	_sidebar.set_reachable(_reach.get(where, true))
 	if where == "home":
 		_apply(_data)
 	else:
@@ -1175,7 +1125,7 @@ func _on_polled(reached: bool, code: int, body: Variant) -> void:
 			_office = parsed
 			_room.home.set_weather(parsed.get("weather"))
 	if polled == _at:
-		_panel.set_reachable(ok)
+		_sidebar.set_reachable(ok)
 		if ok:
 			_enter_view()
 	else:
@@ -1192,7 +1142,7 @@ func _enter_view() -> void:
 func _show_office() -> void:
 	var view := _office_view(_office)
 	_room.show_office(view["figures"], view["caption"])
-	_panel.show_office(view["panel"])
+	_sidebar.show_office(view["panel"])
 
 
 
@@ -1425,9 +1375,9 @@ func _stage_settings(spec: String) -> void:
 		match p.get_slice("=", 0):
 			"scroll":
 				var to := p.substr(p.find("=") + 1) if "=" in p else ""
-				_settings_view._scroll.scroll_vertical = int(to) if to != "" else 100000
+				_sidebar.scroll.scroll_vertical = int(to) if to != "" else 100000
 			"armed":
-				_settings_view.sure.ask(p.get_slice("=", 1))
+				_sidebar.settings_view.sure.ask(p.get_slice("=", 1))
 
 
 # `phone=pairing|paired` in `--settings`: the bot's state for a picture, a made-up token
@@ -1467,7 +1417,7 @@ func _stage_chat(spec: String) -> void:
 		)
 	if "reading" in kinds:
 		chat.messages.append({"t": now - 5, "who": "me", "text": "move the dentist to friday"})
-		_chat_view.reading = true
+		_sidebar.chat_view.reading = true
 	_open_chat()
 	if "fail" in kinds:
-		_chat_view.finish(false, "buy stamps")
+		_sidebar.chat_view.finish(false, "buy stamps")

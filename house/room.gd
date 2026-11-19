@@ -192,6 +192,20 @@ func icon(id: String) -> Texture2D:
 	return _load_texture(_dir(_index[id]) + str(_index[id]["file"]))
 
 
+# How much the room's own canvas is magnified to fill `area`: its art comes at 2x and 3x, and a
+# whole step above (2x of either) is crisp; in an area too small for the 2x art it shrinks a little
+func fit_scale(area: Vector2) -> float:
+	var span: int = _desc["cols"] + _desc["rows"]
+	for steps in [[3, 2.0], [2, 2.0], [3, 1.0]]:
+		var k: int = steps[0]
+		var s: float = steps[1]
+		var need := Vector2(span * 16 * k + 16, (span * 8 + WALL_H) * k + 16) * s
+		if area.x >= need.x and area.y >= need.y:
+			return s
+	var base := Vector2(span * 16 * 2 + 16, (span * 8 + WALL_H) * 2 + 16)
+	return clampf(floorf(minf(area.x / base.x, area.y / base.y) * 20.0) / 20.0, 0.5, 1.0)
+
+
 func _pick_scale() -> int:
 	var span: int = _desc["cols"] + _desc["rows"]
 	if size.x >= span * 16 * 3 + 16 and size.y >= (span * 8 + WALL_H) * 3 + 16:

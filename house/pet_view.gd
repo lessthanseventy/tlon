@@ -1,8 +1,7 @@
-extends PanelContainer
+extends VBoxContainer
 
 # "who is this?": the small paper card a pet's right click opens. It writes the same settings the
 # settings screen does (the pet's animal, its name) and the room follows at once.
-signal closed
 
 const Paper := preload("res://paper.gd")
 const Pets := preload("res://pets.gd")
@@ -20,6 +19,7 @@ var role := "nina"
 var _name: LineEdit
 var _way: OptionButton
 var _kind_label: Label
+var _lines: Label
 var _tiles := {}
 var _loading := false
 var _t := 0.0
@@ -71,11 +71,9 @@ func setup(the_settings, the_home) -> void:
 
 func _ready() -> void:
 	visible = false
-	add_theme_stylebox_override("panel", Paper.panel(14))
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 7)
-	add_child(col)
-	col.add_child(Paper.heading("who is this?", 20, Paper.INK))
+	add_theme_constant_override("separation", 7)
+	var col: VBoxContainer = self
+	col.add_child(Paper.heading("who is this?", 15, Paper.INK))
 	var r := Paper.row(col)
 	r.add_child(Paper.label("name", 14, Paper.QUIET))
 	_name = Paper.edit("", r)
@@ -90,7 +88,7 @@ func _ready() -> void:
 	_way.item_selected.connect(func(i: int) -> void: _put("way", Pets.PERSONALITIES[i]))
 	r.add_child(_way)
 	var grid := GridContainer.new()
-	grid.columns = 8
+	grid.columns = 5
 	grid.add_theme_constant_override("h_separation", 4)
 	grid.add_theme_constant_override("v_separation", 4)
 	col.add_child(grid)
@@ -104,8 +102,11 @@ func _ready() -> void:
 	_kind_label = Paper.label("", 14, Paper.INK)
 	col.add_child(_kind_label)
 	r = Paper.row(col)
-	Paper.chip("done", r, close)
-	col.add_child(Paper.label("Esc closes", 12, Paper.QUIET))
+	Paper.chip("pat", r, _pat, false)
+	_lines = Paper.label("", 13, Paper.QUIET)
+	_lines.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_lines.custom_minimum_size.x = 40
+	col.add_child(_lines)
 
 
 func open(id: String) -> void:
@@ -124,13 +125,8 @@ func close() -> void:
 	if get_viewport().gui_get_focus_owner() != null:
 		get_viewport().gui_get_focus_owner().release_focus()
 	visible = false
-	closed.emit()
 
 
-func _input(event: InputEvent) -> void:
-	if visible and event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		get_viewport().set_input_as_handled()
-		close()
 
 
 func _process(dt: float) -> void:
@@ -155,6 +151,9 @@ func _refresh() -> void:
 		_tiles[kind].chosen = kind == _kind()
 	_say(_kind())
 	_way.select(Pets.PERSONALITIES.find(Pets.persona_of(settings.value(ROLES[role]["way"]), role)))
+	var who := "cat" if role == "nina" else "dog"
+	var said: Array = home.chat.messages.filter(func(m: Dictionary) -> bool: return m["who"] == who)
+	_lines.text = "\n".join(said.slice(-3).map(func(m: Dictionary) -> String: return "- " + str(m["text"])))
 
 
 func _put(what: String, v: Variant) -> void:
@@ -162,3 +161,7 @@ func _put(what: String, v: Variant) -> void:
 		return
 	settings.put(ROLES[role][what], v)
 	_refresh()
+
+
+func _pat() -> void:
+	home.pets.pat(home.pets.critter(role), "pet")
