@@ -501,7 +501,7 @@ defmodule Server.Home.Inbox do
       someday: Jot.somedays(via),
       agendas: Enum.map(Server.Agenda.all(via), & &1.name),
       meetings: Server.Home.Day.meetings(now),
-      proposals: Server.Proposal.open()
+      proposals: Proposals.listed()
     }
 
     reader = Application.get_env(:server, :home_reader, &Reader.read/2)
@@ -596,9 +596,8 @@ defmodule Server.Home.Inbox do
     Organize.shrink(via, now)
     settled = Proposal.settled()
 
-    with true <- chat != "",
-         {text, opts} <- together(digest(via, now), Proposals.tail(Proposal.open(), settled)),
-         :ok <- say.(chat, "Before you clock out:\n\n" <> text, opts) do
+    with {text, opts} <- together(digest(via, now), Proposals.tail(Proposal.open(), settled)),
+         true <- chat == "" or say.(chat, "Before you clock out:\n\n" <> text, opts) == :ok do
       Proposal.settled_said(settled, now)
     end
 
@@ -608,7 +607,8 @@ defmodule Server.Home.Inbox do
   @doc """
   The morning message: when a day's slot at `at` (`"08:30"`, local; `""` is never) has come round and
   was not said (`Server.Home.Clock.due/4`), `Server.Home.Morning` is said in `chat` (nothing with no
-  chat: the desktop raises it, `Server.Home.morning/1`), once, in waking hours. `last` is the date of
+  chat: the desktop raises it, `Server.Home.morning/1`), once, in waking hours. The settled waiting-ons
+  it says are recorded told when it is said, or with no chat at the slot. `last` is the date of
   the last slot said, `:boot` when none is kept under the present setting; the date of the slot now
   said is answered.
   """
@@ -626,9 +626,8 @@ defmodule Server.Home.Inbox do
   def morning(via, chat, say, now, at, %Date{} = last) do
     case Clock.due(last, now, at) do
       {:say, slot} ->
-        with true <- chat != "",
-             {text, opts, settled} <- Morning.compose(via, now),
-             :ok <- say.(chat, text, opts) do
+        with {text, opts, settled} <- Morning.compose(via, now),
+             true <- chat == "" or say.(chat, text, opts) == :ok do
           Proposal.settled_said(settled, now)
         end
 

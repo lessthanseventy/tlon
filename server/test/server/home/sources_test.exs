@@ -19,6 +19,8 @@ defmodule Server.Home.SourcesTest do
     end)
   end
 
+  @pull5 "https://github.com/acme/app/pull/5"
+
   defp pr(n, title, opts \\ []) do
     %{
       "number" => n,
@@ -31,23 +33,32 @@ defmodule Server.Home.SourcesTest do
   end
 
   # gh, stubbed: each search's answer by the flag that tells them apart
-  defp gh(asked, changes, waiting) do
+  defp gh(asked, changes, waiting, views \\ %{}) do
     me = self()
 
-    Application.put_env(:server, :home_gh, fn args ->
-      send(me, {:gh, args})
+    Application.put_env(:server, :home_gh, fn
+      ["pr", "view", url | _] = args ->
+        send(me, {:gh, args})
 
-      answer =
-        cond do
-          "--review-requested=@me" in args -> asked
-          "--review=changes_requested" in args -> changes
-          "--review=none" in args -> waiting
+        case Map.get(views, url, {:error, "no view"}) do
+          {:error, _} = error -> error
+          view -> {:ok, JSON.encode!(view)}
         end
 
-      case answer do
-        {:error, _} = error -> error
-        prs -> {:ok, JSON.encode!(prs)}
-      end
+      args ->
+        send(me, {:gh, args})
+
+        answer =
+          cond do
+            "--review-requested=@me" in args -> asked
+            "--review=changes_requested" in args -> changes
+            "--review=none" in args -> waiting
+          end
+
+        case answer do
+          {:error, _} = error -> error
+          prs -> {:ok, JSON.encode!(prs)}
+        end
     end)
   end
 
@@ -107,12 +118,84 @@ defmodule Server.Home.SourcesTest do
     assert [%{text: "Review: Fix the gate"}] = Proposal.open()
     assert [%{text: "Waiting on review: New settings", waiting_on: "a reviewer"}] = Jot.waiting("telegram")
 
-    gh([pr(1, "Fix the gate")], [pr(5, "New settings")], [])
+    gh([pr(1, "Fix the gate")], [pr(5, "New settings")], [], %{@pull5 => view("OPEN", reviews: 1)})
     Sources.poll("telegram", ["github"], modules, DateTime.add(@now, 900), %{})
 
     assert Jot.waiting("telegram") == []
     assert [%{done_text: "Reviewed: New settings"}] = Proposal.settled()
     assert ["Review: Fix the gate", "Changes requested: New settings"] = Enum.map(Proposal.open(), & &1.text)
+    assert_received {:gh, ["pr", "view", @pull5, "--json", "state,isDraft,reviewDecision,reviews"]}
+  end
+
+  defp view(state, opts) do
+    %{
+      "state" => state,
+      "isDraft" => opts[:draft] || false,
+      "reviewDecision" => opts[:decision] || "",
+      "reviews" => List.duplicate(%{"state" => "COMMENTED"}, opts[:reviews] || 0)
+    }
+  end
+
+  defp ignore_repos(value) do
+    path = Path.join(System.tmp_dir!(), "tlon-sources-#{System.unique_integer([:positive])}.json")
+    Application.put_env(:server, :operator_config_path, path)
+
+    on_exit(fn ->
+      Application.put_env(:server, :operator_config_path, "/nonexistent/tlon-test-config.json")
+      File.rm(path)
+    end)
+
+    :ok = Server.OperatorConfig.put("home_github_ignore", value)
+  end
+
+  defp waiting_then_gone(view, ignore \\ nil) do
+    modules = %{"github" => GitHub}
+    gh([], [], [pr(5, "New settings")])
+    Sources.poll("telegram", ["github"], modules, @now, %{})
+    if ignore, do: ignore_repos(ignore)
+    gh([], [], [], %{@pull5 => view})
+    Sources.poll("telegram", ["github"], modules, DateTime.add(@now, 900), %{})
+  end
+
+  test "a waiting-on whose PR was merged unreviewed is said as merged, a closed one as closed" do
+    waiting_then_gone(view("MERGED", []))
+    assert [%{done_text: "Merged: New settings"}] = Proposal.settled()
+    assert Jot.waiting("telegram") == []
+  end
+
+  test "a closed PR's waiting-on is said as closed" do
+    waiting_then_gone(view("CLOSED", []))
+    assert [%{done_text: "Closed: New settings"}] = Proposal.settled()
+  end
+
+  test "a PR turned back to a draft leaves its waiting-on open and untouched" do
+    waiting_then_gone(view("OPEN", draft: true))
+    assert Proposal.settled() == []
+    assert [%{text: "Waiting on review: New settings"}] = Jot.waiting("telegram")
+    assert [@pull5 <> ":waiting"] = Proposal.live_keys("github")
+  end
+
+  test "a PR open, not a draft and with no review yet settles nothing" do
+    waiting_then_gone(view("OPEN", []))
+    assert Proposal.settled() == []
+    assert [_] = Jot.waiting("telegram")
+  end
+
+  test "a PR whose repo is now ignored is dropped without a word" do
+    waiting_then_gone(view("OPEN", reviews: 1), "acme")
+    assert Proposal.settled() == []
+    assert Jot.waiting("telegram") == []
+    assert Proposal.live_keys("github") == []
+  end
+
+  test "a failed lookup settles nothing, and the next poll tries again" do
+    waiting_then_gone({:error, "gh exited 1"})
+    assert Proposal.settled() == []
+    assert [_] = Jot.waiting("telegram")
+
+    gh([], [], [], %{@pull5 => view("OPEN", reviews: 2)})
+    Sources.poll("telegram", ["github"], %{"github" => GitHub}, DateTime.add(@now, 1800), %{})
+    assert [%{done_text: "Reviewed: New settings"}] = Proposal.settled()
   end
 
   test "a review done elsewhere withdraws the open proposal, and a to-do he took stays" do

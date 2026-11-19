@@ -57,8 +57,8 @@ defmodule Server.Home do
   @spec proposal_row(Server.Proposal.t()) :: map()
   def proposal_row(p), do: %{id: p.id, source: p.source, text: p.text, why: p.why, url: p.url}
 
-  @doc "Take the open proposal `id` at `now` (`Server.Proposal.take/3`): `{:ok, row}`, `:not_found` when it is not open."
-  @spec take_proposal(integer(), DateTime.t()) :: {:ok, map()} | :not_found
+  @doc "Take the open proposal `id` at `now` (`Server.Proposal.take/3`): `{:ok, row}`, `:not_found` when it is not open, `{:error, :seen}` when it could not be filed."
+  @spec take_proposal(integer(), DateTime.t()) :: {:ok, map()} | :not_found | {:error, :seen}
   def take_proposal(id, now) do
     with {:ok, p} <- Server.Proposal.take(via(), id, now), do: {:ok, proposal_row(p)}
   end
@@ -159,7 +159,7 @@ defmodule Server.Home do
 
   @doc """
   The daily list for a desktop: `%{id, created_at, thread_id, body}` for the ten minutes after
-  `home_list_at` (local) on a day something is open, nil otherwise.
+  `home_list_at` (local) on a day something is open, nil otherwise. A read records nothing.
   """
   @spec listing(DateTime.t()) :: map() | nil
   def listing(now) do
@@ -175,8 +175,6 @@ defmodule Server.Home do
            List.wrap(if open != [], do: "Still open: " <> Enum.map_join(open, " · ", &label(&1, projects))) ++
              List.wrap(Server.Home.Proposals.settled(settled)) ++
              List.wrap(Server.Home.Proposals.plain(Server.Proposal.open())) do
-      Server.Proposal.settled_said(settled, now)
-
       %{
         id: Date.to_iso8601(NaiveDateTime.to_date(local)),
         created_at: from,
@@ -199,9 +197,7 @@ defmodule Server.Home do
     with {:ok, at} <- Time.from_iso8601(Server.OperatorConfig.setting("home_morning_at") <> ":00"),
          since when since in 0..599 <- Time.diff(NaiveDateTime.to_time(local), at),
          from = DateTime.add(now, -since),
-         {body, settled} <- Server.Home.Morning.plain(via(), now, from) do
-      Server.Proposal.settled_said(settled, now)
-
+         {body, _settled} <- Server.Home.Morning.plain(via(), now, from) do
       %{
         id: "morning:" <> Date.to_iso8601(NaiveDateTime.to_date(local)),
         created_at: from,

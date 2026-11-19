@@ -65,7 +65,8 @@ defmodule Server.Jot do
   `mins`, `project` (the project a step belongs to), `steps` (a project's: all but the first are its
   plan) and `who` (a waiting-on's); what it leaves out stays as it was. Filing is a touch at `now`,
   and makes it plainly open again: not done, put off, dropped or hidden. Only what the operator does touches a thing: filing,
-  amending, putting off, keeping, hiding, done; the home's own nudges and questions do not.
+  amending, putting off, keeping, hiding, done; the home's own nudges and questions do not. A reading
+  of any kind but a note takes a thing off its agenda's pile; a note keeps the pile it was on.
   """
   @spec file(%__MODULE__{}, %{kind: String.t(), text: String.t() | nil, due_at: DateTime.t() | nil}, DateTime.t()) ::
           %__MODULE__{}

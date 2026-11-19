@@ -206,9 +206,12 @@ and every layer the spine design's re-laid §9 asked for
   is filed by itself except a `waiting` one from a source that is trusted for it (`Proposal.offer/5`'s `auto`): a waiting-on is a fact,
   a to-do is an ask and waits for his yes. Offering a known key changes nothing, whatever its state; a dismissed key is final; a key
   the source says is gone (`Proposal.resolve/3`) withdraws an open proposal silently, leaves a taken to-do, and marks a taken
-  waiting-on done, said once in the next list as its `done_text` (`Proposal.settled/0`). Nothing is said when one arrives: they
+  waiting-on done, said once in the next list as its `done_text` (`Proposal.settled/1`): recorded told by the teller that says it
+  (the chat's message when it goes out, or with no chat the inbox tick at the slot), never by a desktop read, which shows what
+  was told since the slot opened. Nothing is said when one arrives: they
   are listed in the morning message and the daily list, on ask ("what's proposed?", "take the first", "dismiss all": reader kinds
-  `proposals`, `take`, `dismiss`, shown the open ones as PROPOSED), and by Add/No buttons (`p:<id>:take|no`). `GET /api/home` has
+  `proposals`, `take`, `dismiss`, shown the first five open ones as PROPOSED numbered as the chat numbers them, and answering
+  those positions), and by Add/No buttons (`p:<id>:take|no`). `GET /api/home` has
   `proposals`; `POST /api/home/proposals/:id/take|dismiss`. A **source** is a module behind `Server.Home.Source` (`name/0`,
   `fetch/0` → `{:ok, proposals, resolved_keys} | {:error, why}`, `auto/0` the kinds it may file itself); `Server.Home.Sources` polls
   the ones in `home_sources` (comma list, default `github`; `""` none) every 15 minutes, started with the inbox

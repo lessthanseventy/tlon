@@ -13,13 +13,17 @@ defmodule Server.Home.Source.GitHub do
   Drafts are skipped, and so are the repos and owners in the `home_github_ignore` setting (a comma
   list of `owner/repo` or `owner`). A key is the PR's URL and its role, so a PR that moves from one
   role to another is a key gone and a key new. A key known to the proposals and no longer listed is
-  resolved; any failed search resolves nothing.
+  resolved; any failed search resolves nothing. A waiting-on that is gone is looked up
+  (`gh pr view <url> --json state,isDraft,reviewDecision,reviews`) and said by what became of its PR:
+  "Reviewed: ...", "Merged: ..." or "Closed: ..."; one back to a draft is left open and one whose
+  repo is now ignored is dropped without a word; a failed lookup settles nothing.
   """
   @behaviour Server.Home.Source
 
   alias Server.Proposal
 
   @fields "number,title,url,author,repository,isDraft"
+  @view "state,isDraft,reviewDecision,reviews"
 
   @impl true
   def name, do: "github"
@@ -41,7 +45,42 @@ defmodule Server.Home.Source.GitHub do
             do: proposal(role, pr)
 
       keys = MapSet.new(proposals, & &1.key)
-      {:ok, proposals, Enum.reject(Proposal.live_keys(name()), &MapSet.member?(keys, &1))}
+      gone = Enum.reject(Proposal.live(name()), &MapSet.member?(keys, &1.key))
+      {:ok, proposals, for(row <- gone, entry <- [settle(row, ignored)], entry != :keep, do: entry)}
+    end
+  end
+
+  # An open proposal that is gone is withdrawn; a waiting-on is said by what became of its PR.
+  defp settle(%Proposal{state: :open, key: key}, _ignored), do: key
+
+  defp settle(%Proposal{key: key} = row, ignored) do
+    url = String.replace_suffix(key, ":waiting", "")
+    title = String.replace_prefix(row.text, "Waiting on review: ", "")
+
+    if repo_ignored?(repo_of(url), ignored) do
+      {key, :drop}
+    else
+      with {:ok, out} <- Application.get_env(:server, :home_gh, &gh/1).(["pr", "view", url, "--json", @view]),
+           {:ok, pr} when is_map(pr) <- JSON.decode(out),
+           line when is_binary(line) <- outcome(pr) do
+        {key, line <> ": " <> title}
+      else
+        _ -> :keep
+      end
+    end
+  end
+
+  defp outcome(%{"state" => "MERGED"}), do: "Merged"
+  defp outcome(%{"state" => "CLOSED"}), do: "Closed"
+  defp outcome(%{"isDraft" => true}), do: nil
+  defp outcome(%{"reviews" => [_ | _]}), do: "Reviewed"
+  defp outcome(%{"reviewDecision" => decision}) when decision not in [nil, ""], do: "Reviewed"
+  defp outcome(_pr), do: nil
+
+  defp repo_of(url) do
+    case Regex.run(~r{^https://github\.com/([^/]+/[^/]+)/pull/}, url) do
+      [_, repo] -> repo
+      nil -> ""
     end
   end
 
@@ -105,8 +144,10 @@ defmodule Server.Home.Source.GitHub do
     |> Enum.reject(&(&1 == ""))
   end
 
-  defp ignored?(pr, ignored) do
-    repo = String.downcase(pr["repository"]["nameWithOwner"])
+  defp ignored?(pr, ignored), do: repo_ignored?(pr["repository"]["nameWithOwner"], ignored)
+
+  defp repo_ignored?(repo, ignored) do
+    repo = String.downcase(repo)
     Enum.any?(ignored, &(repo == &1 or String.starts_with?(repo, &1 <> "/")))
   end
 end
