@@ -372,6 +372,21 @@ func _register() -> void:
 		_register_one(p, PetThings.key_of(p))
 
 
+# where a cat sits on the window perch: on its ledge, or on top of its post
+func _perch_seat(p: Dictionary) -> Dictionary:
+	var c: int = p["c"]
+	var r: int = p["r"]
+	var seat := {"cell": Vector2i(c, r), "z": PetThings.PERCH_Z}
+	match PetThings.perch_wall(p):
+		"nw":
+			seat.merge({"perch": Vector2(c - 0.75, r + 0.2), "key": c + r + 0.2, "face": 3})
+		"ne":
+			seat.merge({"perch": Vector2(c + 0.2, r - 0.75), "key": c + r + 0.2, "face": 5})
+		_:
+			seat.merge({"perch": Vector2(c + 0.5, r + 0.5), "key": c + r + 0.6, "face": 7})
+	return seat
+
+
 func _register_one(p: Dictionary, key: String) -> void:
 	var cell := Vector2i(p["c"], p["r"])
 	var front := _front(p)
@@ -412,15 +427,9 @@ func _register_one(p: Dictionary, key: String) -> void:
 		"perch":
 			_spot("roost", _perch(p, Vector3(0.5, 0.5, 19.0), 0.6))
 		"window_perch":
-			var seat := {
-				"cell": cell,
-				"perch": Vector2(p["c"] - 0.65, p["r"] + 0.2),
-				"z": 22.0,
-				"key": p["c"] + p["r"] + 0.2,
-				"face": 3,
-			}
+			var seat := _perch_seat(p)
 			_spot(key, seat)
-			if cell == Pets.SPOTS["sill"]["cell"]:
+			if PetThings.perch_wall(p) == "nw" and p["r"] in Pets.WINDOW_ROWS:
 				_spot("sill", seat)
 		"pool":
 			_spot(key, {"cell": cell, "face": 3})
@@ -627,7 +636,7 @@ func size_of(species: String) -> float:
 
 
 func _pen(p: Dictionary) -> PetThings.Pen:
-	return PetThings.Pen.new(h.room, h._p(p["c"], p["r"]), h._k, p["f"] == "se")
+	return PetThings.Pen.new(h.room, h._p(p["c"], p["r"]), h._k, PetThings.turned(p))
 
 
 func _data(key: String) -> Dictionary:
@@ -699,7 +708,9 @@ func _draw(p: Dictionary, part: String) -> void:
 			h.room.draw_texture(s["tex"], (h._p(p["c"], p["r"]) - s["anchor"]).round())
 		return
 	var pen := _pen(p)
-	PetThings.draw(pen, key, part, _data(key))
+	var d := _data(key)
+	d["wall"] = PetThings.perch_wall(p)
+	PetThings.draw(pen, key, part, d)
 	if key == "birdcage":
 		var hull := PackedVector2Array(
 			[pen.p(0.1, 0.9), pen.p(0.9, 0.9), pen.p(0.9, 0.1), pen.p(0.9, 0.1, 33.0)]

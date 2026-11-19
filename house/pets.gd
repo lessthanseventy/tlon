@@ -4,6 +4,7 @@ const Voices := preload("res://voices.gd")
 const Settings := preload("res://settings.gd")
 const COLS := 11
 const ROWS := 11
+const WINDOW_ROWS := [4, 5]
 const CHAIR := Vector2i(4, 1)
 const DIRS := {"se": 7, "nw": 3, "sw": 1, "ne": 5}
 const FPS := {"idle": 6.0, "walk": 10.0, "run": 14.0, "sleep": 3.0, "attack": 12.0, "eat": 4.0}

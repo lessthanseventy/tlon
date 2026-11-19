@@ -465,9 +465,11 @@ func draw_ghost() -> void:
 		room.draw_colored_polygon(pts, Color(0.4, 1, 0.5, 0.28) if ok else Color(1, 0.3, 0.3, 0.32))
 	if PetThings.is_pet(p) and not home.petlife.hay(p):
 		var pen := PetThings.Pen.new(
-			room, room._p(room._origin, p["c"], p["r"]), room._k, p["f"] == "se", tint
+			room, room._p(room._origin, p["c"], p["r"]), room._k, PetThings.turned(p), tint
 		)
-		PetThings.draw_all(pen, PetThings.key_of(p), {"level": home.petlife.level})
+		PetThings.draw_all(
+			pen, PetThings.key_of(p), {"level": home.petlife.level, "wall": PetThings.perch_wall(p)}
+		)
 		return
 	var s: Dictionary = room._sprite(room._furn_id([layout.sprite_id(p)]))
 	if home.petlife.hay(p):

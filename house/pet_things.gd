@@ -18,6 +18,8 @@ const TOWER_BAT := Vector3(0.5, 0.78, 27.0)
 const TOWER_CUBE := Vector3(0.33, 0.64, 4.5)
 const TOWER_PINK := Color("f08cb4")
 const SISAL := Color("e6d3a2")
+# the height a cat sits at on the window perch: the sill of the window
+const PERCH_Z := 24.5
 
 # kinds: species it is for (empty: every animal); mode: flat (walked over, no blocking), walk
 # (flat with walls, a pet stands in it) or solid (blocks, used from beside it); h: height in px;
@@ -392,6 +394,19 @@ static func key_of(p: Dictionary) -> String:
 	return str(p["p"]).trim_prefix(PREFIX)
 
 
+# the wall a window perch is fixed to: the cell's own back wall (the north-west one first), "" for a
+# cell against none, where it stands on a post
+static func perch_wall(p: Dictionary) -> String:
+	if key_of(p) != "window_perch":
+		return ""
+	return "nw" if p["c"] <= 1 else ("ne" if p["r"] <= 1 else "")
+
+
+# drawn with its x and y swapped: a thing turned to the south-east, a perch on the north-east wall
+static func turned(p: Dictionary) -> bool:
+	return p["f"] == "se" or perch_wall(p) == "ne"
+
+
 static func fits(key: String, species: Array) -> bool:
 	var t: Dictionary = THINGS[key]
 	return species.any(
@@ -586,7 +601,7 @@ static func draw(pen: Pen, key: String, part: String, d: Dictionary) -> void:
 		"honey":
 			_honey(pen)
 		"window_perch":
-			_window_perch(pen)
+			_window_perch(pen, d)
 		"birdcage":
 			_birdcage(pen, d)
 		"kennel":
@@ -900,14 +915,24 @@ static func _honey(s: Pen) -> void:
 	s.line(s.p(0.34, 0.66, 9.5), s.p(0.34, 0.66, 5.5), Color("f0b830"), 1.0)
 
 
-# hung on the wall under the window: its own cell's x runs from -1 (the wall) to 0
-static func _window_perch(s: Pen) -> void:
+# a ledge fixed to the back wall at the sill, bracketed, its own cell's x running from -1 (the wall)
+# to 0; where its cell is against no back wall it is a cushioned platform on a post
+static func _window_perch(s: Pen, d: Dictionary) -> void:
 	var wood := Color("8a5a36")
-	s.line(s.p(-0.9, 0.0, 14.0), s.p(-0.9, 0.0, 19.0), wood.darkened(0.2), 2.0)
-	s.line(s.p(-0.9, 0.5, 14.0), s.p(-0.9, 0.5, 19.0), wood.darkened(0.2), 2.0)
-	s.box(-1.0, -0.05, -0.3, 0.55, 19.0, 21.5, wood)
-	s.diamond(-0.97, 0.0, -0.33, 0.5, 21.5, Color("c98577"))
-	s.diamond(-0.9, 0.07, -0.4, 0.43, 22.0, Color("e0a898"))
+	var cushion := Color("c98577")
+	var top := PERCH_Z - 0.5
+	if d.get("wall", "") == "":
+		s.box(0.18, 0.18, 0.82, 0.82, 0.0, 2.5, wood.darkened(0.15))
+		s.box(0.42, 0.42, 0.58, 0.58, 2.5, top - 2.0, wood)
+		s.box(0.08, 0.08, 0.92, 0.92, top - 2.0, top, wood)
+		s.diamond(0.12, 0.12, 0.88, 0.88, top, cushion)
+		s.diamond(0.22, 0.22, 0.78, 0.78, PERCH_Z, Color("e0a898"))
+		return
+	for y in [-0.2, 0.6]:
+		s.line(s.p(-1.0, y, top - 8.0), s.p(-0.62, y, top - 2.0), wood.darkened(0.2), 2.0)
+	s.box(-1.0, -0.3, -0.55, 0.7, top - 2.0, top, wood)
+	s.diamond(-0.97, -0.26, -0.58, 0.66, top, cushion)
+	s.diamond(-0.92, -0.18, -0.62, 0.58, PERCH_Z, Color("e0a898"))
 
 
 # the bird hops between its two perches every few seconds; `sing` is the seconds of song left
