@@ -12,9 +12,11 @@ defmodule Server.Home.Inbox do
   jot's reading; with no reading the answer is "got it" and the jot stays raw. A message can also
   ask the helper for something, and is then nothing to keep: that things are done, what is open
   (`digest/2`, each open thing with a button that ticks it off), or a question its notes answer.
-  Once a day, at the `home_list_at` setting, what is open is said unasked (`daily/6`), with what sources proposed
-  (`Server.Proposal`, an Add and a No under each) and the waiting-ons they settled; once a day at `home_morning_at`
-  the morning message is (`morning/6`, `Server.Home.Morning`). A proposal is never said when it arrives. Before each poll the
+  Once a day, at the `home_list_at` setting, what is open is said unasked (`daily/6`) with the waiting-ons
+  sources settled, and once a day at `home_morning_at` the morning message is (`morning/6`,
+  `Server.Home.Morning`); each is followed by what sources proposed (`Server.Proposal`) as a message of its
+  own, an Add and a No under each, so a tap replaces only the message it is on (a tick on the daily list
+  rebuilds it with the settled lines it told). A proposal is never said when it arrives. Before each poll the
   reminders that have come due are said in the chat (`nudge/4`) with three choices under each: done,
   in an hour, tomorrow, and delete under them. One left unanswered is said again, after 30 minutes and then at doubling
   gaps up to four hours, never between 22:00 and 08:00, six times in all. "done" typed in the chat
@@ -460,10 +462,10 @@ defmodule Server.Home.Inbox do
 
   defp tapped("tick", jot, via, now) do
     Jot.done(jot, now)
-    join(listed(via, now), Organize.advance(jot, now))
+    join(relisted(via, now), Organize.advance(jot, now))
   end
 
-  defp gone("tick:" <> _id, via, now), do: listed(via, now)
+  defp gone("tick:" <> _id, via, now), do: relisted(via, now)
   defp gone(_tap, _via, _now), do: {"That one is already done.", []}
 
   defp closed(jot, now) do
@@ -596,12 +598,11 @@ defmodule Server.Home.Inbox do
     Organize.shrink(via, now)
     settled = Proposal.settled()
 
-    with {text, opts} <- together(digest(via, now), Proposals.tail(Proposal.open(), settled)),
-         true <- chat == "" or say.(chat, "Before you clock out:\n\n" <> text, opts) == :ok do
-      Proposal.settled_said(settled, now)
-    end
+    head =
+      with {text, opts} <- with_settled(digest(via, now), Proposals.settled(settled)),
+           do: {"Before you clock out:\n\n" <> text, opts, settled}
 
-    :ok
+    deliver(chat, say, head, now)
   end
 
   @doc """
@@ -626,11 +627,7 @@ defmodule Server.Home.Inbox do
   def morning(via, chat, say, now, at, %Date{} = last) do
     case Clock.due(last, now, at) do
       {:say, slot} ->
-        with {text, opts, settled} <- Morning.compose(via, now),
-             true <- chat == "" or say.(chat, text, opts) == :ok do
-          Proposal.settled_said(settled, now)
-        end
-
+        deliver(chat, say, with({text, settled} <- Morning.compose(via, now), do: {text, [], settled}), now)
         slot
 
       :wait ->
@@ -638,11 +635,26 @@ defmodule Server.Home.Inbox do
     end
   end
 
-  defp together(nil, tail), do: tail
-  defp together(head, nil), do: head
+  defp with_settled(nil, nil), do: nil
+  defp with_settled(nil, settled), do: {settled, []}
+  defp with_settled(head, nil), do: head
+  defp with_settled({text, opts}, settled), do: {text <> "\n\n" <> settled, opts}
 
-  defp together({head, head_opts}, {tail, tail_opts}),
-    do: {head <> "\n\n" <> tail, choices: head_opts[:choices] ++ Keyword.get(tail_opts, :choices, [])}
+  # the daily list again, as a tick on it replaces it: what is open, and the settled lines it told
+  # since its slot, so they are not lost with the replaced message
+  defp relisted(via, now) do
+    at = Server.OperatorConfig.setting("home_list_at")
+
+    told =
+      with %Date{} = slot <- Clock.slot(now, at),
+           {:ok, time} <- Time.from_iso8601(at <> ":00") do
+        slot |> NaiveDateTime.new!(time) |> Clock.utc() |> Proposal.settled() |> Enum.filter(& &1.resolved_said_at)
+      else
+        _ -> []
+      end
+
+    with_settled(digest(via, now), Proposals.settled(told)) || {"Nothing open.", []}
+  end
 
   # a project is left as it is: its steps point at it, so a note for a pile is a new one
   defp amend(jot, %Jot{kind: "project"}, %{kind: "agenda"} = reading, now), do: {Agendas.file(jot, reading, now), []}
@@ -655,5 +667,24 @@ defmodule Server.Home.Inbox do
 
     Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
     {"changed: " <> reply, []}
+  end
+
+  # `head` is the message a slot says, `{text, opts, settled}` or nil: said, then its settled rows
+  # recorded told; the proposals go as a message of their own after it, so a tap on either one
+  # replaces only what it carries. With no chat the rows are recorded at the slot, for the desktop's read.
+  defp deliver(chat, say, head, now) do
+    delivered =
+      case head do
+        nil ->
+          true
+
+        {text, opts, settled} ->
+          sent = chat == "" or say.(chat, text, opts) == :ok
+          if sent, do: Proposal.settled_said(settled, now)
+          sent
+      end
+
+    if delivered and chat != "", do: with({text, opts} <- Proposals.say(Proposal.open()), do: say.(chat, text, opts))
+    :ok
   end
 end

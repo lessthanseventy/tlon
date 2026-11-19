@@ -86,7 +86,7 @@ defmodule Server.Home.MorningTest do
     propose(1)
     propose(2)
 
-    assert {text, opts, []} = Morning.compose("telegram", now, meetings)
+    assert {text, []} = Morning.compose("telegram", now, meetings)
 
     assert text ==
              """
@@ -100,23 +100,84 @@ defmodule Server.Home.MorningTest do
              Start with: call the dentist — due 30 minutes ago
 
              Due today:
-             • retro at 14:00: 2 things
-
-             Proposed (2):
-             1. thing 1 (from 1)
-             2. thing 2 (from 2)\
+             • retro at 14:00: 2 things\
              """
 
-    assert [[{"Add 1", "p:" <> _}, {"No 1", _}], [{"Add 2", _}, {"No 2", _}]] = opts[:choices]
-    assert {^text, []} = Morning.plain("telegram", now, friday(~T[08:30:00]), meetings)
+    assert {plain, []} = Morning.plain("telegram", now, friday(~T[08:30:00]), meetings)
+    assert plain == text <> "\n\nProposed (2):\n1. thing 1 (from 1)\n2. thing 2 (from 2)"
   end
 
-  test "with only proposals it is just them, five shown and the rest counted" do
+  test "the chat's morning message has no buttons and the proposals follow as a message of their own", %{say: say} do
+    reminder("call the dentist", friday(~T[08:05:00]))
+    propose(1)
+    propose(2)
+
+    assert Inbox.morning("telegram", "42", say, friday(~T[08:35:00]), "08:30", ~D[2026-11-19]) == ~D[2026-11-20]
+    assert_received {:said, "42", "Good morning.\n\nStart with: call the dentist — due 30 minutes ago", []}
+    assert_received {:said, "42", "Proposed (2):\n1. thing 1 (from 1)\n2. thing 2 (from 2)", opts}
+    assert [[{"Add 1", "p:" <> _}, {"No 1", _}], [{"Add 2", _}, {"No 2", _}]] = opts[:choices]
+    refute_received {:said, _, _, _}
+  end
+
+  test "with only proposals the chat gets just the proposals message, five shown and the rest counted", %{say: say} do
     for n <- 1..7, do: propose(n)
-    assert {text, opts, []} = Morning.compose("telegram", friday(~T[08:35:00]))
-    assert text =~ "Good morning.\n\nProposed (7):\n1. thing 1"
+    assert Morning.compose("telegram", friday(~T[08:35:00])) == nil
+    Inbox.morning("telegram", "42", say, friday(~T[08:35:00]), "08:30", ~D[2026-11-19])
+    assert_received {:said, "42", "Proposed (7):\n1. thing 1" <> _ = text, opts}
     assert text =~ "5. thing 5 (from 5)\nand 2 more"
     assert length(opts[:choices]) == 5
+    refute_received {:said, _, _, _}
+  end
+
+  test "with no proposals there is no second message", %{say: say} do
+    reminder("call the dentist", friday(~T[08:05:00]))
+    Inbox.morning("telegram", "42", say, friday(~T[08:35:00]), "08:30", ~D[2026-11-19])
+    assert_received {:said, "42", "Good morning." <> _, []}
+    refute_received {:said, _, _, _}
+  end
+
+  test "a tap on Add replaces the proposals message only; the last No leaves a closing line with no buttons", %{
+    say: say
+  } do
+    propose(1)
+    propose(2)
+    Inbox.morning("telegram", "42", say, friday(~T[08:35:00]), "08:30", ~D[2026-11-19])
+    assert_received {:said, "42", "Proposed (2):" <> _, opts}
+    [[{_, add}, {_, no}] | _] = opts[:choices]
+
+    Inbox.hear([%{id: 1, chat: "42", tap: add, ref: 77, text: nil}], "telegram", "42", say)
+    assert_received {:said, "42", "added: thing 1\n\nProposed (1):\n1. thing 2 (from 2)", reply}
+    assert reply[:replace] == 77
+    assert [[{"Add 1", _}, {"No 1", no2}]] = reply[:choices]
+    refute no == no2
+
+    Inbox.hear([%{id: 2, chat: "42", tap: no2, ref: 77, text: nil}], "telegram", "42", say)
+    assert_received {:said, "42", "left out: thing 2", [replace: 77]}
+  end
+
+  test "a tick on a daily list that had Settled lines keeps them, and adds no proposals", %{say: say} do
+    {:ok, jot} = Jot.take("telegram", 1, "milk")
+    Jot.file(jot, %{kind: "todo", text: "milk", due_at: nil}, friday(~T[06:00:00]))
+    {:ok, other} = Jot.take("telegram", 2, "bread")
+    Jot.file(other, %{kind: "todo", text: "bread", due_at: nil}, friday(~T[06:00:00]))
+    propose(1)
+    settle()
+
+    Inbox.daily("telegram", "42", say, friday(~T[17:35:00]), "17:30", ~D[2026-11-19])
+
+    assert_received {:said, "42", "Before you clock out:\n\nStill open:\n• milk\n• bread\n\nSettled:\n• Reviewed: PR 1",
+                     opts}
+
+    assert [[{"✓ milk", tick}], [{"✓ bread", _}]] = opts[:choices]
+    assert_received {:said, "42", "Proposed (1):" <> _, _}
+
+    Inbox.hear([%{id: 3, chat: "42", tap: tick, ref: 9, text: nil}], "telegram", "42", say)
+    assert_received {:said, "42", "Still open:\n• bread\n\nSettled:\n• Reviewed: PR 1", reply}
+    assert reply[:replace] == 9
+    assert [[{"✓ bread", _}]] = reply[:choices]
+
+    Inbox.hear([%{id: 4, chat: "42", tap: tick, ref: 9, text: nil}], "telegram", "42", say)
+    assert_received {:said, "42", "Still open:\n• bread\n\nSettled:\n• Reviewed: PR 1", _}
   end
 
   describe "said once a day at home_morning_at" do
@@ -132,7 +193,7 @@ defmodule Server.Home.MorningTest do
       refute_received {:said, _, _, _}
 
       assert Inbox.morning("telegram", "42", say, at(sunday, ~T[08:31:00]), "08:30", last) == sunday
-      assert_received {:said, "42", "Good morning." <> _, [choices: [_]]}
+      assert_received {:said, "42", "Proposed (1):" <> _, [choices: [_]]}
 
       assert Inbox.morning("telegram", "42", say, at(sunday, ~T[09:00:00]), "08:30", sunday) == sunday
       refute_received {:said, _, _, _}
@@ -145,7 +206,7 @@ defmodule Server.Home.MorningTest do
       refute_received {:said, _, _, _}
 
       assert Inbox.morning("telegram", "42", say, at(~D[2026-11-22], ~T[08:00:00]), "03:00", last) == ~D[2026-11-22]
-      assert_received {:said, "42", "Good morning." <> _, _}
+      assert_received {:said, "42", "Proposed (1):" <> _, _}
 
       assert Inbox.morning("telegram", "42", say, at(~D[2026-11-23], ~T[09:00:00]), "", last) == last
       refute_received {:said, _, _, _}
@@ -268,10 +329,9 @@ defmodule Server.Home.MorningTest do
 
     assert_received {:said, "42", text, opts}
 
-    assert text =~
-             "Before you clock out:\n\nStill open:\n• milk\n\nSettled:\n• Reviewed: PR 1\n\nProposed (1):\n1. thing 1 (from 1)"
-
-    assert [[{"✓ milk", _}], [{"Add 1", _}, {"No 1", _}]] = opts[:choices]
+    assert text == "Before you clock out:\n\nStill open:\n• milk\n\nSettled:\n• Reviewed: PR 1"
+    assert [[{"✓ milk", _}]] = opts[:choices]
+    assert_received {:said, "42", "Proposed (1):\n1. thing 1 (from 1)", [choices: [[{"Add 1", _}, {"No 1", _}]]]}
 
     Inbox.daily("telegram", "42", say, friday(~T[17:36:00]), "17:30", ~D[2026-11-19])
     assert_received {:said, "42", text, _}

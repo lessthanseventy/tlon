@@ -68,22 +68,27 @@ defmodule Server.Proposal do
   @doc """
   Offer `proposals` (maps of `key`, `text`, `kind` and optionally `why`, `who`, `url`, `done_text`)
   from `source` at `now`, for the operator `via`. A key already known is left as it is, in whatever
-  state. An open one whose kind is in `auto` is taken at once. Nothing is said to anyone.
+  state. An open one whose kind is in `auto` is taken at once; the keys of those that could not be
+  (`take/3` refused them) are answered, so a source can say so. Nothing is said to anyone.
   """
-  @spec offer(String.t(), String.t(), [map()], DateTime.t(), [String.t()]) :: :ok
+  @spec offer(String.t(), String.t(), [map()], DateTime.t(), [String.t()]) :: [String.t()]
   def offer(via, source, proposals, now, auto) do
-    for attrs <- proposals do
-      attrs = attrs |> Map.take(@attrs) |> Map.put(:source, source)
-      %{key: key, kind: kind} = attrs
-      true = kind in ["todo", "waiting"]
+    Enum.reverse(
+      for attrs <- proposals, reduce: [] do
+        refused ->
+          attrs = attrs |> Map.take(@attrs) |> Map.put(:source, source)
+          %{key: key, kind: kind} = attrs
+          true = kind in ["todo", "waiting"]
 
-      Repo.insert!(struct(__MODULE__, attrs), on_conflict: :nothing, conflict_target: [:source, :key])
+          Repo.insert!(struct(__MODULE__, attrs), on_conflict: :nothing, conflict_target: [:source, :key])
 
-      row = Repo.get_by!(__MODULE__, source: source, key: key)
-      if row.state == :open and kind in auto, do: take_row(via, row, now)
-    end
+          row = Repo.get_by!(__MODULE__, source: source, key: key)
 
-    :ok
+          if row.state == :open and kind in auto and match?({:error, _}, take_row(via, row, now)),
+            do: [key | refused],
+            else: refused
+      end
+    )
   end
 
   @doc """

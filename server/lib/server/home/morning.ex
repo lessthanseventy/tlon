@@ -2,9 +2,9 @@ defmodule Server.Home.Morning do
   @moduledoc """
   The morning message, said once a day at `home_morning_at` (`Server.Home.Inbox.morning/6`): today's
   meetings (`Server.Home.Day.meetings/1`), the one thing to start with (`Server.Home.now/3`), the
-  agendas whose time is today and have a pile, what sources proposed (`Server.Home.Proposals`, with an
-  Add and a No under each in the chat) and the waiting-ons a source has since settled. Nothing when
-  there is nothing to say.
+  agendas whose time is today and have a pile and the waiting-ons a source has since settled; what
+  sources proposed (`Server.Home.Proposals`) follows in a message of its own in the chat, and is in
+  the text on the desktop. Nothing when there is nothing to say.
   """
 
   alias Server.Agenda
@@ -16,13 +16,14 @@ defmodule Server.Home.Morning do
   alias Server.Proposal
 
   @doc """
-  The message for `via` at `now`: `{text, opts, settled}`, `opts` the `say` options (the proposals'
-  buttons) and `settled` the settled rows the text says, to be recorded once it went out. nil when
-  there is nothing to say. `meetings` are `Server.Home.Day` rows, read from the calendar when nil.
+  The message for the chat, with no buttons (the proposals are a message of their own after it):
+  `{text, settled}`, `settled` the settled rows the text says, to be recorded once it went out. nil
+  when there is nothing to say. `meetings` are `Server.Home.Day` rows, read from the calendar when nil.
   """
-  @spec compose(String.t(), DateTime.t(), [Day.meeting()] | nil) :: {String.t(), keyword(), [Proposal.t()]} | nil
-  def compose(via, now, meetings \\ nil),
-    do: build(via, now, meetings, Proposal.settled(), Proposals.say(Proposal.open()) || {nil, []})
+  @spec compose(String.t(), DateTime.t(), [Day.meeting()] | nil) :: {String.t(), [Proposal.t()]} | nil
+  def compose(via, now, meetings \\ nil) do
+    with {text, _opts, settled} <- build(via, now, meetings, Proposal.settled(), {nil, []}), do: {text, settled}
+  end
 
   @doc """
   The message as plain text, for a surface with no buttons (the desktop's alert): `{text, settled}`,

@@ -909,6 +909,8 @@ static func _why(reached: bool, code: int, parsed: Variant) -> String:
 		return parsed["error"]
 	if code == 404:
 		return "that one is not there any more"
+	if code == 409:
+		return "that one could not be added just now - it is still there"
 	return "tlon answered %d" % code
 
 

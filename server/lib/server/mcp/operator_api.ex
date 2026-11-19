@@ -184,7 +184,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/home/agendas/:id/clear the pile archived (its notes kept, done) → the agenda, empty; 404
       POST   /api/home/agendas/:id/drop  the agenda and its pile deleted → {id, name}; 404
                                          (a note on a pile is edited and dropped by /api/home/:id/edit and /drop)
-      POST   /api/home/proposals/:id/take     Server.Home.take_proposal; the proposal's row; filed as a to-do or a waiting-on; 404 when it is not open
+      POST   /api/home/proposals/:id/take     Server.Home.take_proposal; the proposal's row; filed as a to-do or a waiting-on; 404 when it is not open, 409 {error} when it could not be filed (it stays open)
       POST   /api/home/proposals/:id/dismiss  Server.Home.dismiss_proposal; the proposal's row; final for its key; 404 when it is not open
       POST   /api/home/:id/plan          {plan: [text]} → Server.Home.plan; the project's row, its planned steps replaced; 400, 404
       POST   /api/home/:id/revive        Server.Home.revive; the put-off thing's row, open again; 404 when it is not on someday
@@ -708,6 +708,7 @@ defmodule Server.MCP.OperatorAPI do
          {:ok, row} <- proposal_action(action, id) do
       json(conn, 200, row)
     else
+      {:error, :seen} -> json(conn, 409, %{error: "could not be filed: its note id is taken, nothing changed"})
       _ -> no_route(conn)
     end
   end

@@ -39,20 +39,6 @@ defmodule Server.Home.Proposals do
   def settled(rows), do: Enum.join(["Settled:" | Enum.map(rows, &"• #{&1.done_text || "Done: #{&1.text}"}")], "\n")
 
   @doc """
-  What the daily list has after the open things: the `settled` waiting-ons, then the open proposals
-  with their buttons. nil when there is neither.
-  """
-  @spec tail([Proposal.t()], [Proposal.t()]) :: {String.t(), keyword()} | nil
-  def tail(open, settled) do
-    {proposed, opts} = say(open) || {nil, []}
-
-    case Enum.reject([settled(settled), proposed], &is_nil/1) do
-      [] -> nil
-      parts -> {Enum.join(parts, "\n\n"), opts}
-    end
-  end
-
-  @doc """
   The reply to the operator's `choice` (`"take"` or `"no"`) on the proposal `id` from `via` at `now`:
   what was done, and what is still proposed under its buttons. `:gone` when it is no longer open.
   """
