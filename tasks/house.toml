@@ -28,3 +28,19 @@ run = "scripts/house-art-pack.sh \"$@\""
 ["house:build"]
 description = "house: `-- windows|mac|linux|all` — export the house with the art inside it (Windows and Linux: one file; the Mac app carries the pack in Resources) into ~/.cache/tlon/house-dist/<platform>/ and the-house-<platform>.zip (never inside a repo: the art's licence forbids redistributing it; hand the zips over privately; needs Godot's 4.7.2 export templates; the Mac build is unsigned, see house/SHIPPING.md)"
 run = "scripts/house-build.sh \"$@\""
+
+["house:drive:start"]
+description = "house: start the real house LIVE under headless gamescope on a throwaway data folder (starter list, no server, no network) with a drive port, in the background, and print the port; `-- --demo` for the demo list; refuses a second one (scripts/house-drive.sh; house/AGENTS.md `Driving it`)"
+run = "scripts/house-drive.sh start \"$@\""
+
+["house:drive"]
+description = "house: send each JSON argument to the running drive house and print one reply line each (`-- '{\"do\":\"things\"}' '{\"do\":\"click\",\"x\":900,\"y\":60}'`; commands in house/AGENTS.md `Driving it`; a relative shot path saves under the run's folder)"
+run = "scripts/house-drive.sh send \"$@\""
+
+["house:drive:errors"]
+description = "house: the Godot ERROR / SCRIPT ERROR lines the drive house has logged since the last call"
+run = "scripts/house-drive.sh errors"
+
+["house:drive:stop"]
+description = "house: quit the drive house, remove its throwaway data folder and pid file (also when it is already dead)"
+run = "scripts/house-drive.sh stop"
