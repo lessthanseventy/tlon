@@ -4,6 +4,7 @@ defmodule Server.Home.MorningTest do
   alias Server.Agenda
   alias Server.Home
   alias Server.Home.Clock
+  alias Server.Home.Day
   alias Server.Home.Inbox
   alias Server.Home.Morning
   alias Server.Jot
@@ -11,7 +12,7 @@ defmodule Server.Home.MorningTest do
 
   setup do
     Server.TestDB.clean!()
-    on_exit(fn -> Application.delete_env(:server, :home_meetings) end)
+
     me = self()
 
     %{
@@ -42,13 +43,34 @@ defmodule Server.Home.MorningTest do
 
   test "there is nothing to say, so nothing is said" do
     assert Morning.compose("telegram", friday(~T[08:35:00])) == nil
-    assert Morning.plain("telegram", friday(~T[08:35:00])) == nil
+    assert Morning.plain("telegram", friday(~T[08:35:00]), friday(~T[08:30:00])) == nil
+  end
+
+  defp meeting(title, date, from, to, opts \\ []) do
+    Map.merge(
+      %{title: title, start: at(date, from), stop: at(date, to), cancelled: false, busy: :busy, all_day: false},
+      Map.new(opts)
+    )
   end
 
   test "it holds the meetings, what to start with, the agendas due today and what is proposed" do
-    Application.put_env(:server, :home_meetings, fn _now ->
-      [%{at: friday(~T[09:30:00]), title: "Standup"}, %{at: friday(~T[13:00:00]), title: "1:1 with Sam"}]
-    end)
+    now = friday(~T[08:35:00])
+    friday = ~D[2026-11-20]
+
+    meetings =
+      Day.build(
+        [
+          meeting("Standup", friday, ~T[09:30:00], ~T[10:00:00]),
+          meeting("1:1 with Sam", friday, ~T[13:00:00], ~T[13:30:00], busy: :tentative),
+          meeting("Offsite", friday, ~T[00:00:00], ~T[00:00:00],
+            all_day: true,
+            start: ~U[2026-11-20 00:00:00Z],
+            stop: ~U[2026-11-21 00:00:00Z]
+          ),
+          meeting("Tomorrow's", ~D[2026-11-21], ~T[09:00:00], ~T[10:00:00])
+        ],
+        now
+      )
 
     reminder("call the dentist", friday(~T[08:05:00]))
     {:ok, retro} = Agenda.create("telegram", "retro", %{next_at: friday(~T[14:00:00])}, friday(~T[06:00:00]))
@@ -64,15 +86,16 @@ defmodule Server.Home.MorningTest do
     propose(1)
     propose(2)
 
-    assert {text, opts, []} = Morning.compose("telegram", friday(~T[08:35:00]))
+    assert {text, opts, []} = Morning.compose("telegram", now, meetings)
 
     assert text ==
              """
              Good morning.
 
              Today:
+             • all day Offsite
              • 09:30 Standup
-             • 13:00 1:1 with Sam
+             • 13:00 1:1 with Sam (tentative)
 
              Start with: call the dentist — due 30 minutes ago
 
@@ -85,7 +108,7 @@ defmodule Server.Home.MorningTest do
              """
 
     assert [[{"Add 1", "p:" <> _}, {"No 1", _}], [{"Add 2", _}, {"No 2", _}]] = opts[:choices]
-    assert Morning.plain("telegram", friday(~T[08:35:00])) == text
+    assert {^text, []} = Morning.plain("telegram", now, friday(~T[08:30:00]), meetings)
   end
 
   test "with only proposals it is just them, five shown and the rest counted" do
@@ -160,6 +183,34 @@ defmodule Server.Home.MorningTest do
     assert %{id: "morning:2026-11-20", body: "Good morning." <> _} = Home.morning(friday(~T[08:35:00]))
     assert Home.morning(friday(~T[08:29:00])) == nil
     assert Home.morning(friday(~T[08:41:00])) == nil
+  end
+
+  test "with no chat, the desktop's morning alert says a settled waiting-on, records it, and keeps saying it while up" do
+    settle()
+    assert %{body: body} = Home.morning(friday(~T[08:32:00]))
+    assert body =~ "Settled:\n• Reviewed: PR 1"
+    assert Proposal.settled() == []
+    assert %{body: ^body} = Home.morning(friday(~T[08:38:00]))
+    assert Home.morning(friday(~T[08:45:00])) == nil
+  end
+
+  test "with no chat, the desktop's daily list says a settled waiting-on too, with nothing else open" do
+    settle()
+    assert %{id: "2026-11-20", body: "Settled:\n• Reviewed: PR 1"} = Home.listing(friday(~T[17:35:00]))
+    assert Proposal.settled() == []
+    assert %{body: "Settled:" <> _} = Home.listing(friday(~T[17:38:00]))
+  end
+
+  defp settle do
+    Proposal.offer(
+      "telegram",
+      "test",
+      [%{key: "w", text: "Waiting on review: PR 1", kind: "waiting", done_text: "Reviewed: PR 1"}],
+      friday(~T[06:00:00]),
+      ["waiting"]
+    )
+
+    Proposal.resolve("test", ["w"], friday(~T[07:00:00]))
   end
 
   test "the daily list holds the proposals, and what a source settled, once", %{say: say} do

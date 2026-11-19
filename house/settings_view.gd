@@ -587,7 +587,11 @@ func _check() -> void:
 func _plan_rows() -> void:
 	for c in _plan.get_children():
 		c.queue_free()
-	for pair in [["home_list_at", "the daily list at"], ["home_review_on", "the weekly review on"]]:
+	for pair in [
+		["home_morning_at", "the morning message at"],
+		["home_list_at", "the daily list at"],
+		["home_review_on", "the weekly review on"],
+	]:
 		if home.knobs.has(pair[0]):
 			_plan.add_child(Paper.label("%s %s  (the server's)" % [pair[1], home.knobs[pair[0]]], 13, Paper.INK))
 
