@@ -542,7 +542,11 @@ one call (`Proposal.offer/5`); a key already known changes nothing, in any state
 waiting-on (no time to be asked about: the source says when it is settled) linked back by `jot_id`; dismissing is final for the
 key. A source can say keys are gone (`Proposal.resolve/3`): an open proposal for one is withdrawn silently, a taken to-do is
 left alone, a taken waiting-on is marked done and said once in the next list as its `done_text` ("Reviewed: ..."), with no
-message of its own. Nothing about proposals is said at the moment it arrives. The reader's asks: `proposals` (what is
+message of its own. Nothing about proposals is said at the moment it arrives: they come batched in the morning message
+(`home_morning_at`, default `08:30`, `""` never; one message of today's meetings, the one thing to start with, the agendas due
+today, the settled waiting-ons and up to five proposals with an Add and a No each, "and N more" after; skipped when there is
+nothing to say; told once a day under the same slot record, quiet hours and first-start rule as the daily list; on the desktop
+an info `home_morning` alert for ten minutes after its time) and in the clock-out daily list. The reader's asks: `proposals` (what is
 proposed), `take` and `dismiss` (with the numbers of the proposals shown to it); Telegram taps `p:<id>:take|no`.
 
 | Route | Request | Reply |

@@ -162,6 +162,13 @@ defmodule Server.OperatorConfig do
       doc: "when the home's helper says what is still open each day, local HH:MM; empty for never"
     },
     %{
+      key: "home_morning_at",
+      type: "string",
+      default: "08:30",
+      doc:
+        "when the home's helper says the morning message (meetings, what to start with, agendas due, what is proposed), local HH:MM; empty for never"
+    },
+    %{
       key: "home_review_on",
       type: "string",
       default: "sun",
