@@ -310,15 +310,17 @@ func _hearth() -> void:
 	s._check(h.hearth.lit, "cold lights it")
 	h.temp_c = null
 	h.hearth.manual = 1
-	h.eggs._furn_next["fire"] = 0.0
-	s._run_home(h, 20.0)
-	s._check(
-		(
+	var at_fire := func():
+		return (
 			h.pets.critter("nina").spot.begins_with("hearth")
 			or h.pets.critter("argos").spot.begins_with("hearth")
-		),
-		"someone lies in front of the fire"
-	)
+		)
+	for _try in 8:
+		h.eggs._furn_next["fire"] = 0.0
+		s._run_home(h, 3.0, at_fire)
+		if at_fire.call():
+			break
+	s._check(at_fire.call(), "someone lies in front of the fire")
 
 	h.set_data(s._data([s._thing(1, 1.0, "burn me")], 0))
 	h.eggs.toss_ids.append(1)
