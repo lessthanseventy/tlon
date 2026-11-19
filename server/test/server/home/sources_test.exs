@@ -211,6 +211,23 @@ defmodule Server.Home.SourcesTest do
     assert [%{text: "Review: Fix the gate"}] = Jot.opens("telegram")
   end
 
+  test "a search that comes back full resolves nothing, offers nothing, and is an error" do
+    modules = %{"github" => GitHub}
+    gh([pr(1, "Fix the gate")], [], [pr(5, "New settings")])
+    Sources.poll("telegram", ["github"], modules, @now, %{})
+
+    full = for n <- 10..109, do: pr(n, "PR #{n}")
+    gh(full, [], [])
+
+    capture_log(fn ->
+      assert %{"github" => "a search came back full" <> _} = Sources.poll("telegram", ["github"], modules, @now, %{})
+    end)
+
+    assert [%{text: "Review: Fix the gate"}] = Proposal.open()
+    assert [%{text: "Waiting on review: New settings"}] = Jot.waiting("telegram")
+    assert Proposal.settled() == []
+  end
+
   test "a failing source is logged once per distinct reason and leaves the proposals alone" do
     modules = %{"github" => GitHub}
     gh([pr(1, "Fix the gate")], [], [])

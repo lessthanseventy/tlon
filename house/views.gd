@@ -118,7 +118,8 @@ func _proposed(box: VBoxContainer) -> void:
 	var shown: Array = rows if sb.proposed_expanded else rows.slice(0, PROPOSED_SHOWN)
 	for p in shown:
 		var id := int(p["id"])
-		var row := Blocks.Row.new(str(p["text"]), str(p.get("why", "")))
+		var why = p.get("why")
+		var row := Blocks.Row.new(str(p["text"]), "" if why == null else str(why))
 		row.marks(
 			[{"label": "add", "act": "take"}, {"label": "no", "act": "no"}],
 			func(a: String) -> void: home.acted.emit(id, "propose_" + a)

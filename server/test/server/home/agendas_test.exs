@@ -186,6 +186,23 @@ defmodule Server.Home.AgendasTest do
     assert note_id != project_id
   end
 
+  test "a correction onto a pile leaves a project's step as it is and files a new note", %{say: say} do
+    say_it("plan the trip", %{kind: "project", text: "plan the trip", steps: ["book the flights"]}, say, 1)
+    replied()
+    assert [%{id: project_id}] = Jot.projects("telegram")
+    {:ok, step} = Jot.take("telegram", 2, "pack bags")
+    Jot.file(step, %{kind: "todo", text: "pack bags", due_at: nil, project: project_id})
+    step_id = step.id
+
+    say_it("no, that's for retro", %{kind: "agenda", agenda: "retro", text: "pack bags", amends: true}, say, 3)
+    assert replied() == "Started a new agenda, retro. On the retro pile (1)."
+
+    assert %{kind: "todo", agenda_id: nil, project_id: ^project_id} = Jot.get(step_id)
+    assert %{id: id} = Agenda.named("telegram", "retro")
+    assert [%{id: note_id, text: "pack bags", project_id: nil}] = Jot.agenda_notes(id)
+    assert note_id != step_id
+  end
+
   describe "telling the pile" do
     setup %{say: say} do
       say_it("for retro: a", %{kind: "agenda", agenda: "retro", text: "deploy took three tries"}, say, 1)
