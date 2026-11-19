@@ -72,7 +72,7 @@ defmodule Server.Home.Day do
     from = midnight(date)
     to = midnight(Date.add(date, 1))
 
-    if DateTime.compare(m.start, to) == :lt and DateTime.compare(m.stop, from) != :lt,
+    if DateTime.compare(m.start, to) == :lt and DateTime.compare(m.stop, from) == :gt,
       do: [{m.start, m.stop}],
       else: []
   end

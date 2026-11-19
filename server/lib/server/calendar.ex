@@ -1,7 +1,8 @@
 defmodule Server.Calendar do
   @moduledoc """
-  The operator's calendars, for the alerts a meeting earns (`Server.Alerts`). Each source is a
-  `.ics` feed named in the settings file (`Server.OperatorConfig`):
+  The operator's calendars, read by the alerts a meeting earns (`Server.Alerts`), by the home's day
+  (`Server.Home.Day`: `GET /api/home`, the reader's answers) and by the office's celebrations
+  (`Server.Office`). Each source is a `.ics` feed named in the settings file (`Server.OperatorConfig`):
 
       "calendars": [
         {"name": "work", "ics_secret": "calendar-work"},
@@ -10,10 +11,11 @@ defmodule Server.Calendar do
 
   `ics` is the feed's address; `ics_secret` names a machine secret holding it
   (`$XDG_RUNTIME_DIR/agenix/<name>`) — Google's and Zoho's private addresses are credentials, and
-  tlon never stores one. Feeds are fetched in the background every `@every_ms` and kept;
-  `upcoming/2` answers from the last good copy of each (`Server.Calendar.Feed` reads them), so a
-  read never waits on the network and a failed fetch leaves the last copy standing. On unless
-  `TLON_CALENDAR=0` (`:start_calendar`).
+  tlon never stores one. Feeds are fetched in a task every `@every_ms`, parsed once when fetched
+  (`Server.Calendar.Feed.read/1`) and kept; `upcoming/2` answers from the last good parse of each, so
+  a read never parses a feed, never waits on the network or on a fetch in flight (`refresh/1`
+  included), and a failed fetch leaves the last copy standing. On unless `TLON_CALENDAR=0`
+  (`:start_calendar`).
   """
   use GenServer
 
@@ -27,8 +29,8 @@ defmodule Server.Calendar do
   @spec upcoming(GenServer.server(), {DateTime.t(), DateTime.t()}) :: [map()]
   def upcoming(server \\ __MODULE__, {from, to}) do
     if GenServer.whereis(server) do
-      for {name, ics} <- GenServer.call(server, :feeds),
-          m <- occurrences(ics, from, to),
+      for {name, parsed} <- GenServer.call(server, :parsed),
+          m <- occurrences(parsed, from, to),
           do: Map.put(m, :calendar, name)
     else
       []
@@ -103,9 +105,12 @@ defmodule Server.Calendar do
   def init(opts) do
     state = %{
       feeds: %{},
+      parsed: %{},
+      fetching: false,
+      waiters: [],
       cache: %{},
       celebrate: Keyword.get(opts, :celebrations, &Feed.celebrations/2),
-      fetch: Keyword.get(opts, :fetch, &fetch/1),
+      fetch: Keyword.get(opts, :fetch, &get_feed/1),
       sources: Keyword.get(opts, :sources, fn -> List.wrap(Server.OperatorConfig.read()["calendars"]) end),
       every: Keyword.get(opts, :every_ms, @every_ms)
     }
@@ -115,8 +120,8 @@ defmodule Server.Calendar do
   end
 
   @impl true
-  def handle_call(:feeds, _from, state), do: {:reply, state.feeds, state}
-  def handle_call(:refresh, _from, state), do: {:reply, :ok, %{state | feeds: fetch_all(state), cache: %{}}}
+  def handle_call(:parsed, _from, state), do: {:reply, state.parsed, state}
+  def handle_call(:refresh, from, state), do: {:noreply, fetch(state, [from])}
 
   def handle_call({:celebrations, day}, _from, state) do
     case state.cache do
@@ -131,24 +136,54 @@ defmodule Server.Calendar do
 
   @impl true
   def handle_info(:tick, state) do
-    me = self()
-    Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:fetched, fetch_all(state)}) end)
     Process.send_after(self(), :tick, state.every)
-    {:noreply, state}
+    {:noreply, fetch(state, [])}
   end
 
   @impl true
-  def handle_cast({:fetched, feeds}, state), do: {:noreply, %{state | feeds: Map.merge(state.feeds, feeds), cache: %{}}}
+  def handle_cast({:fetched, got}, state) do
+    Enum.each(state.waiters, &GenServer.reply(&1, :ok))
 
-  # the sources fetched this round, by name; a failed one is absent, so a merge keeps its last copy
+    {:noreply,
+     %{
+       state
+       | feeds: Map.merge(state.feeds, Map.new(got, fn {name, {ics, _}} -> {name, ics} end)),
+         parsed: Map.merge(state.parsed, Map.new(got, fn {name, {_, parsed}} -> {name, parsed} end)),
+         cache: %{},
+         fetching: false,
+         waiters: []
+     }}
+  end
+
+  # a fetch in a task, its result swapped in when done; one already in flight is waited for, not doubled
+  defp fetch(%{fetching: true} = state, waiters), do: %{state | waiters: state.waiters ++ waiters}
+
+  defp fetch(state, waiters) do
+    me = self()
+
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+      got =
+        try do
+          fetch_all(state)
+        rescue
+          _ -> %{}
+        end
+
+      GenServer.cast(me, {:fetched, got})
+    end)
+
+    %{state | fetching: true, waiters: waiters}
+  end
+
+  # the sources fetched this round, by name, with their parse; a failed one is absent, so a merge keeps its last copy
   defp fetch_all(state) do
     for %{"name" => name} = source <- state.sources.(),
         {:ok, ics} <- [state.fetch.(source)],
-        into: state.feeds,
-        do: {name, ics}
+        into: %{},
+        do: {name, {ics, Feed.read(ics)}}
   end
 
-  defp fetch(source) do
+  defp get_feed(source) do
     with {:ok, url} <- url(source), do: get(String.replace_prefix(url, "webcal://", "https://"))
   end
 
@@ -172,8 +207,8 @@ defmodule Server.Calendar do
   end
 
   # one feed whose recurrences can't be expanded drops out, rather than failing every caller's read
-  defp occurrences(ics, from, to) do
-    Feed.occurrences(ics, from, to)
+  defp occurrences(parsed, from, to) do
+    Feed.occurrences(parsed, from, to)
   rescue
     _ -> []
   end

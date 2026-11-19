@@ -29,12 +29,19 @@ defmodule Server.Calendar.Feed do
           all_day: boolean()
         }
 
-  @tzid ~r/TZID=([^:;\r\n]+)/
+  @tzid ~r/TZID="?([^:;"\r\n]+)"?/
 
-  @doc "The feed's meetings that overlap `[from, to)`, by start time."
-  @spec occurrences(String.t(), DateTime.t(), DateTime.t()) :: [meeting()]
-  def occurrences(ics, from, to) do
-    events = ics |> parse() |> Enum.filter(&meeting?/1)
+  @opaque parsed :: %{events: [ICal.Event.t()]}
+
+  @doc "A feed body read once: its time-zone names made readable and its events parsed, for `occurrences/3` to ask often."
+  @spec read(String.t()) :: parsed()
+  def read(ics), do: %{events: ics |> parse() |> Enum.filter(&meeting?/1)}
+
+  @doc "The feed's (a body, or its `read/1`) meetings that overlap `[from, to)`, by start time."
+  @spec occurrences(String.t() | parsed(), DateTime.t(), DateTime.t()) :: [meeting()]
+  def occurrences(ics, from, to) when is_binary(ics), do: occurrences(read(ics), from, to)
+
+  def occurrences(%{events: events}, from, to) do
     {moved, series} = Enum.split_with(events, & &1.recurrence_id)
     replaced = MapSet.new(moved, &{&1.uid, utc(&1.recurrence_id)})
 
@@ -98,11 +105,8 @@ defmodule Server.Calendar.Feed do
           into: %{},
           do: {name, fix}
 
-    Regex.replace(@tzid, ics, fn whole, name -> rewrite(whole, fixes[name]) end)
+    Regex.replace(@tzid, ics, fn _whole, name -> "TZID=" <> Map.get(fixes, name, name) end)
   end
-
-  defp rewrite(whole, nil), do: whole
-  defp rewrite(_whole, fix), do: "TZID=" <> fix
 
   defp zone(name, ics) do
     cond do
@@ -178,6 +182,7 @@ defmodule Server.Calendar.Feed do
   defp length_s(%{duration: %ICal.Duration{time: {h, m, s}, days: d, weeks: w}}),
     do: ((w * 7 + d) * 24 + h) * 3600 + m * 60 + s
 
+  defp length_s(%{dtstart: %Date{}}), do: 86_400
   defp length_s(_), do: 0
 
   defp link(e) do
