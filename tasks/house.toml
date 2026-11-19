@@ -19,7 +19,7 @@ run = "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; XDG_DATA_HOME=\"$d\" godot --h
 
 ["house:check"]
 description = "house: every script loads clean in headless Godot (not in `check`: Godot is not a mise tool)"
-run = "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; XDG_DATA_HOME=\"$d\" godot --headless --path house --quit 2>&1 | { ! grep -E 'ERROR|SCRIPT ERROR|Parse Error'; }"
+run = "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; XDG_DATA_HOME=\"$d\" godot --headless --path house --quit 2>&1 | { ! grep -E 'ERROR|SCRIPT ERROR|Parse Error|Unicode parsing error'; }"
 
 ["house:art-pack"]
 description = "house: pack the art the house can open (derived from its loaders, with each pack's LICENSE.txt) into ~/.cache/tlon/house-dist/house-art.zip, outside the repo, and print files and size per pack; `-- --list` prints the files and builds nothing (art from TLON_ART_DIR)"

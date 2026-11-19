@@ -575,7 +575,7 @@ func _claude_in_the_house(main) -> void:
 	)
 	_eq(v._claude_say.text, "works", "and works when it does")
 	settings.forced["claude_command"] = "claude-nowhere-x"
-	v._cmd_seen = "\u0000"
+	v._cmd_seen = "\n"
 	v._refresh()
 	_eq(v._claude_found.text, "not found on PATH", "a program that is not there is said so")
 	settings.forced["claude_command"] = _dir.path_join("claude")
