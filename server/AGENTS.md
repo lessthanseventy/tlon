@@ -228,9 +228,10 @@ and every layer the spine design's re-laid §9 asked for
   `home_list_at` setting, each thing with a button that ticks it off, then the waiting-ons a source settled and the open proposals
   (an Add and a No each). Once a day at `home_morning_at` (08:30; `""` never; same slot record and quiet hours as the list,
   `Server.Home.Inbox.morning/6`) the morning message is said (`Server.Home.Morning`): today's meetings (`Server.Home.Day.meetings/1`,
-  the calendar's seam, none yet; `:home_meetings` stands in for it in tests), what to start with, agendas due today with a pile, the
+  today's only: times local, "all day", a tentative one marked), what to start with, agendas due today with a pile, the
   settled waiting-ons and the proposals (five shown, "and N more"); it is skipped when there is nothing to say, and the desktop
-  gets it as a `home_morning` info alert for ten minutes after its time (`Server.Home.morning/1`). A message that corrects the jot before it
+  gets it as a `home_morning` info alert for ten minutes after its time (`Server.Home.morning/1`), and the daily list as a
+  `home_list` one, each carrying the settled waiting-ons and recording them told the first time it is raised, so a desktop with no chat says them too. A message that corrects the jot before it
   changes that jot's reading, and a reminder is said in the chat when it comes due, with done / in an
   hour / tomorrow / delete under it, and again if left unanswered (never at night, six times at most). No
   reading, and the answer is "got it". Times are the machine's zone (`Server.Home.Clock`). The
