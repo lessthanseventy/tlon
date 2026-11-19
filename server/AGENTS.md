@@ -209,7 +209,13 @@ and every layer the spine design's re-laid §9 asked for
   waiting-on done, said once in the next list as its `done_text` (`Proposal.settled/0`). Nothing is said when one arrives: they
   are listed in the morning message and the daily list, on ask ("what's proposed?", "take the first", "dismiss all": reader kinds
   `proposals`, `take`, `dismiss`, shown the open ones as PROPOSED), and by Add/No buttons (`p:<id>:take|no`). `GET /api/home` has
-  `proposals`; `POST /api/home/proposals/:id/take|dismiss`.
+  `proposals`; `POST /api/home/proposals/:id/take|dismiss`. A **source** is a module behind `Server.Home.Source` (`name/0`,
+  `fetch/0` → `{:ok, proposals, resolved_keys} | {:error, why}`, `auto/0` the kinds it may file itself); `Server.Home.Sources` polls
+  the ones in `home_sources` (comma list, default `github`; `""` none) every 15 minutes, started with the inbox
+  (`TLON_START_HOME_INBOX=1`), logging a failure once per distinct reason and leaving the proposals alone. GitHub
+  (`Server.Home.Source.GitHub`) shells out to the signed-in `gh` through `:home_gh`: review requests and PRs with changes requested
+  are to-dos, his own open PRs with no review are waiting-ons it files itself; drafts and `home_github_ignore` repos
+  (default `lessthanseventy/tlon`, his own merge queue's churn) are left out.
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
   open next step or a question about it, a waiting-on is asked about after three days, a weekly review
   (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28
