@@ -4,7 +4,7 @@ extends RefCounted
 # through FileAccess/DirAccess/Image, which read a mounted pack at res:// like a folder. The order:
 # `--art <folder|.zip|.pck>`, then art the program carries inside it (a `res://art` already there at
 # start: scripts/house-build.sh exports it into the pck), then a `house-art.zip|pck` beside the
-# executable (macOS: the .app's Resources), then TLON_ART_DIR or the checkout's default folder. No
+# executable, then TLON_ART_DIR or the checkout's default folder. No
 # art at all is a folder that is not there, which the loaders already draw around.
 const MOUNT := "res://art"
 const PACK_NAMES := ["house-art.pck", "house-art.zip"]
@@ -22,7 +22,7 @@ static func dir(
 		return MOUNT if given.get_extension() in ["zip", "pck"] and _mount(given) else given
 	if carried:
 		return MOUNT
-	for base in [exe_dir, exe_dir.path_join("../Resources")]:
+	for base in [exe_dir]:
 		for name in PACK_NAMES:
 			if _mount(base.path_join(name)):
 				return MOUNT
