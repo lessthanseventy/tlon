@@ -423,7 +423,8 @@ func form_done() -> void:
 
 func jot_done() -> void:
 	jot.finish()
-	back()
+	if view == "add":
+		back()
 
 
 func focus_chat() -> void:

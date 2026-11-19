@@ -180,6 +180,9 @@ func forget() -> void:
 func calm() -> bool:
 	return not (
 		h._cards_blocked()
+		or h.jot_open
+		or h.closet_open
+		or h.form_open
 		or h.card.is_open()
 		or not h.ring_ids.is_empty()
 		or h.person.arrive_left > 0.0
