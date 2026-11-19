@@ -37,6 +37,7 @@ func run() -> void:
 	_decorating()
 	_pointer()
 	_migration()
+	_old_room()
 	_night()
 	_quiet()
 	await _drawn()
@@ -601,6 +602,41 @@ func _migration() -> void:
 	s._check(not h.petlife.piece("aquarium").is_empty(), "and comes back as his")
 	var fresh = s._layout_of(h.room._index, path, false)
 	s._check(fresh.pieces.size() > 0, "a layout with no pets in the room still reads the file")
+	room.queue_free()
+
+
+# a layout saved in the 10x10 room loads into the 11x11 one with every piece at its cell
+func _old_room() -> void:
+	var room := _home(87, "cat_grey", Pets.NONE)
+	var old := [
+		["plant_small", "", 0, 0],
+		["armchair", "se", 0, 1],
+		["rug_blue", "nwse", 1, 4],
+		["painting", "ne", 0, 0],
+		["clock", "ne", 7, 0],
+		["painting", "nw", 0, 6],
+		["fireplace", "ne", 8, 0],
+		["bookshelf", "sw", 9, 0],
+		["rug_red", "nesw", 8, 1],
+		["armchair", "ne", 8, 2],
+		["side_table", "", 9, 2],
+		["piano", "se", 0, 8],
+		["wall_shelf", "nw", 0, 8],
+		["mirror", "nw", 0, 9],
+		["rug_round", "", 3, 8],
+		["dining_table", "nwse", 3, 8],
+		["dining_chair", "ne", 3, 9],
+		["dining_chair", "ne", 4, 9],
+		["plant_small", "", 9, 9],
+	]
+	var rows: Array = old.map(func(r): return {"p": r[0], "f": r[1], "c": r[2], "r": r[3]})
+	var path := _tmp.get_current_dir().path_join("ten_layout.json")
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"v": 1, "wall": "wallpaper", "floor": "oak", "pieces": rows}))
+	f.close()
+	var l = s._layout_of(room._index, path, false)
+	var got: Array = l.pieces.map(func(p): return [p["p"], p["f"], p["c"], p["r"]])
+	s._check(got == old, "a 10x10 layout loads with every piece at its cell (%s)" % [got])
 	room.queue_free()
 
 

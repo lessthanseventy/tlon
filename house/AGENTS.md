@@ -130,8 +130,7 @@ runs on the local list.
 - Small things: a "water the plant" thing done perks the plant up for 10 min with a can and drops;
   a note, open thing or reminder due today that says birthday or anniversary hangs bunting; the
   window gets lights in December, a pumpkin from 25 Oct, hearts 10-14 Feb.
-- **The room** is 10x10 cells and, in the 1100x700 window beside the sidebar, drawn at scale 1 (2 needs a 976 px area, scale 3
-  needs 976 px). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
+- **The room** is 11x11 cells (`Pets.COLS`/`ROWS`, which the home, the room and the walkers all follow; the back walls are column 0 and row 0, so a bigger room grows toward the front and a saved layout loads unchanged) and, in the 1100x700 window beside the sidebar, drawn with the 2x art (`fit_scale`; the 3x art needs a 1072 px area, which a 1450x980 window has). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
   (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
   board, calendar, jar, none of them movable) and the plain ones (the rest of
   the default room: armchair, plants, paintings, clock, rugs, fireplace with its fire, bookshelf,
@@ -430,7 +429,7 @@ runs on the local list.
   timer you start there (click the length for 10 / 25 / 45 min), a progress ring, no sound. Kept in
   `user://house_now.json`; cleared when the thing is done or leaves `open`.
 - **Widget** (`--widget`, `W`, `mise run house:widget`): the room alone (no sidebar) in a borderless always-on-top
-  window of 656x432, exactly the room at scale 2 so it stays crisp; drag the room to move it, the
+  window of 720x464, exactly the room at scale 2 so it stays crisp; drag the room to move it, the
   spot is kept in `user://house_widget.json`. Only bubbles and the hover name are drawn; a click on a thing leaves
   the widget for the full window with that thing's view open.
 - The pets are roles, not animals: `nina` (naps on furniture, pushes things off the desk, walks the piano) and
@@ -591,6 +590,6 @@ and seeds their dice (`--seed N` to pick another):
   ID[:MINUTES[:DONE_FRACTION]]` pins thing ID with a running timer (nothing saved); `--widget`;
   `--layout PATH` a layout file; `--decorate` opens decorate mode, `--pick NAME[:SIDE]` chooses a piece
   and `--cell COL,ROW` puts the ghost there.
-  For `--widget` give gamescope `-W 656 -H 432`. `TLON_ART_DIR=/none` for no art.
+  For `--widget` give gamescope `-W 720 -H 464`. `TLON_ART_DIR=/none` for no art.
 - Not covered by any picture or script: a real pointer (drag, hover feel), the compositor's
   always-on-top and attention request, the real hour of the beats.

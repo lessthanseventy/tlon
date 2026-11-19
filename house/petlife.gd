@@ -12,12 +12,12 @@ const PetThings := preload("res://pet_things.gd")
 const PLACES := {
 	"litter": [Vector2i(1, 1)],
 	"bowls": [Vector2i(5, 1)],
-	"post": [Vector2i(9, 6)],
-	"tower": [Vector2i(9, 4)],
+	"post": [Vector2i(Pets.COLS - 1, 6)],
+	"tower": [Vector2i(Pets.COLS - 1, 4)],
 	"bone": [Vector2i(1, 8)],
 	"blanket": [Vector2i(1, 8)],
 	"bed_round": [Vector2i(1, 9)],
-	"bed_cushion": [Vector2i(9, 8)],
+	"bed_cushion": [Vector2i(Pets.COLS - 1, 8)],
 	"window_perch": [Vector2i(1, 5)],
 }
 const HAY_PIECE := "farm.hay_round"

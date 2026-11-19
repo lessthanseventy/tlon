@@ -10,7 +10,7 @@ description = "house: the window on made-up things, no server (both rooms; `-- -
 run = "godot --path house -- --demo"
 
 ["house:widget"]
-description = "house: the room alone in a borderless always-on-top window (656x432) over the live server (W toggles it in the full window; drag the room to move it, the spot is remembered)"
+description = "house: the room alone in a borderless always-on-top window (720x464) over the live server (W toggles it in the full window; drag the room to move it, the spot is remembered)"
 run = "godot --path house -- --widget"
 
 ["house:soak"]

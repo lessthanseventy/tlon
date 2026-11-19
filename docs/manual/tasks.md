@@ -78,7 +78,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `house:drive:stop` | house: quit the drive house, remove its throwaway data folder and pid file (also when it is already dead) |
 | `house:run` | house: the window over the live server: the home (what the jots left open, what is coming, the notes) and the office (the crew, what waits on you); `-- --office` starts in the office (TLON_URL; art from TLON_ART_DIR) |
 | `house:soak` | house: a simulated ten hours of the person and the pets on the grid, decorating (placement rules, reachability, saving, the pointer work), the closet's composition over every ready-made, the jar, knock rules, rhythm, door and TV hacks, and the POST and GET routes against a local stub (needs Godot) |
-| `house:widget` | house: the room alone in a borderless always-on-top window (656x432) over the live server (W toggles it in the full window; drag the room to move it, the spot is remembered) |
+| `house:widget` | house: the room alone in a borderless always-on-top window (720x464) over the live server (W toggles it in the full window; drag the room to move it, the spot is remembered) |
 
 ## manual
 
