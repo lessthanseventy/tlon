@@ -22,8 +22,8 @@ const PLACES := {
 }
 const HAY_PIECE := "farm.hay_round"
 const NIGHT_HOME := {
-	"nina": ["roost", "hutch", "bed_cushion", "bed"],
-	"argos": ["roost", "hutch", "bed", "bed_cushion"],
+	"nina": ["roost", "hutch", "bed_cushion", "bed", "kennel"],
+	"argos": ["roost", "hutch", "bed", "bed_cushion", "kennel"],
 }
 
 var level := {"food": 1.0, "water": 1.0}
@@ -298,8 +298,12 @@ func _register_one(p: Dictionary, key: String) -> void:
 			_spot("tower_top", _perch(p, PetThings.TOWER_TOP, 0.6))
 			_spot("tower_cube", _perch(p, PetThings.TOWER_CUBE, 0.7))
 			_spot("tower_bat", _perch(p, PetThings.TOWER_BAT, 0.6, {"use": "post"}))
-		"cardbox", "nest", "hutch":
+		"cardbox", "nest", "hutch", "den":
 			_spot(key, {"cell": cell, "face": 5 if key == "hutch" else 1})
+		"kennel", "pail", "basket", "stump":
+			_spot(key, front)
+		"howl":
+			_spot(key, _perch(p, Vector3(0.5, 0.5, 13.0), 0.6))
 		"fish", "rope":
 			_spot(key, {"cell": cell, "face": 1, "use": "post"})
 		"bone":
@@ -327,7 +331,7 @@ func _register_one(p: Dictionary, key: String) -> void:
 			_spot(key, {"cell": cell, "face": 3})
 		"blanket":
 			_spot("mat", {"cell": cell, "face": 1})
-		"trough", "salt":
+		"trough", "salt", "apples":
 			if not front.is_empty():
 				front["eat"] = true
 				_spot(key, front)
@@ -378,8 +382,10 @@ func _habits(c, key: String, night: bool) -> Array:
 			]
 		"perch":
 			out = [["roost", 8.0 if night else 1.0, "sleep" if night else "sit", _secs(25, 50)]]
-		"hutch":
-			out = [["hutch", 4.0 if night else 1.0, "sleep", _secs(25, 50)]]
+		"hutch", "den", "kennel":
+			out = [[key, 4.0 if night else 1.0, "sleep", _secs(25, 50)]]
+		"basket":
+			out = [["basket", 1.0, "sleep", _secs(25, 50)]]
 		"window_perch":
 			out = [
 				["window_perch", 0.3 if night else 1.2, "sit" if night else "sleep", _secs(25, 45)]
@@ -409,6 +415,10 @@ func _plain(key: String) -> Array:
 		"salt": [0.5, 4, 6],
 		"pool": [1.0, 15, 30],
 		"log": [0.7, 4, 6],
+		"howl": [0.7, 6, 10],
+		"apples": [0.8, 5, 9],
+		"pail": [0.7, 6, 10],
+		"stump": [0.6, 8, 14],
 	}
 	if not rows.has(key):
 		return []
@@ -443,7 +453,7 @@ func night_spot(c) -> String:
 		var bed: bool = name == "bed" or name == "bed_cushion"
 		if (bed and _bed_of(c) == name) or (name == "roost" and c.species == "chicken"):
 			return name
-		if name == "hutch" and c.species == "rabbit":
+		if (name == "hutch" and c.species == "rabbit") or (name == "kennel" and c.species == "dog"):
 			return name
 	return ""
 

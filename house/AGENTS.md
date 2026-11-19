@@ -454,6 +454,9 @@ runs on the local list.
   stands in the sill's cell the `sill` spot is the perch, else the window's own, so every antic that goes to the sill uses it, and a cat
   naps there by day), bird cage (for every animal, not put out by itself, only added from the pets tab: a bird hops between two
   perches and sings now and then or on a click, `cage` is its hit, and a cat now and then goes to watch it, the antic `cage_watch`).
+  One signature thing for each species that shared the rest: dog house (it sleeps by it; the night home when it has no bed),
+  howling rock (a wolf stands on it), den (a fox curls up in it), apple bucket (horse eats), milk pail and bell post (cow stands
+  by it), wool basket (sheep lies by it), mossy stump (deer stands by it).
   A thing is put out once, at a free cell against a wall or the room's edge (`PLACES`, then the cells nearest a wall;
   never the open middle), when an animal that uses it lives here and its `def` is set; `layout.pets_seen` (saved as `pets_seen`)
   remembers it, so one he took away is not put back, and an old layout file gets the things at cells that miss what is

@@ -181,6 +181,39 @@ const THINGS := {
 		"def": false,
 		"sw": "things"
 	},
+	"kennel":
+	{
+		"name": "dog house",
+		"group": "dogs",
+		"kinds": ["dog"],
+		"mode": "solid",
+		"h": 22,
+		"faces": ["sw", "se"],
+		"def": true,
+		"sw": "things"
+	},
+	"howl":
+	{
+		"name": "howling rock",
+		"group": "dogs",
+		"kinds": ["wolf"],
+		"mode": "solid",
+		"h": 14,
+		"faces": [],
+		"def": true,
+		"sw": "things"
+	},
+	"den":
+	{
+		"name": "den",
+		"group": "dogs",
+		"kinds": ["fox"],
+		"mode": "walk",
+		"h": 9,
+		"faces": [],
+		"def": true,
+		"sw": "things"
+	},
 	"perch":
 	{
 		"name": "perch",
@@ -257,6 +290,50 @@ const THINGS := {
 		"h": 12,
 		"faces": [],
 		"def": false,
+		"sw": "things"
+	},
+	"apples":
+	{
+		"name": "apple bucket",
+		"group": "farm animals",
+		"kinds": ["horse"],
+		"mode": "solid",
+		"h": 10,
+		"faces": [],
+		"def": true,
+		"sw": "things"
+	},
+	"pail":
+	{
+		"name": "milk pail and bell",
+		"group": "farm animals",
+		"kinds": ["cow"],
+		"mode": "solid",
+		"h": 26,
+		"faces": [],
+		"def": true,
+		"sw": "things"
+	},
+	"basket":
+	{
+		"name": "wool basket",
+		"group": "farm animals",
+		"kinds": ["sheep"],
+		"mode": "solid",
+		"h": 8,
+		"faces": [],
+		"def": true,
+		"sw": "things"
+	},
+	"stump":
+	{
+		"name": "mossy stump",
+		"group": "farm animals",
+		"kinds": ["deer"],
+		"mode": "solid",
+		"h": 9,
+		"faces": [],
+		"def": true,
 		"sw": "things"
 	},
 	"pool":
@@ -512,6 +589,20 @@ static func draw(pen: Pen, key: String, part: String, d: Dictionary) -> void:
 			_window_perch(pen)
 		"birdcage":
 			_birdcage(pen, d)
+		"kennel":
+			_kennel(pen)
+		"howl":
+			_howl(pen)
+		"den":
+			_den(pen, part)
+		"apples":
+			_apples(pen)
+		"pail":
+			_pail(pen)
+		"basket":
+			_basket(pen)
+		"stump":
+			_stump(pen)
 
 
 
@@ -849,3 +940,72 @@ static func _birdcage(s: Pen, d: Dictionary) -> void:
 		s.line(s.p(0.85, x, 3.0), s.p(0.85, x, 27.0), gold.darkened(0.2))
 	s.box(0.12, 0.12, 0.88, 0.88, 27.0, 29.0, gold)
 	s.line(s.p(0.5, 0.5, 29.0), s.p(0.5, 0.5, 33.0), gold)
+
+
+static func _kennel(s: Pen) -> void:
+	var roof := Color("7a3a30")
+	s.box(0.1, 0.1, 0.9, 0.9, 0.0, 14.0, Color("b9553f"), "lr")
+	var door := [s.p(0.35, 0.9, 0.0), s.p(0.65, 0.9, 0.0), s.p(0.65, 0.9, 8.0), s.p(0.5, 0.9, 11.0)]
+	door.append(s.p(0.35, 0.9, 8.0))
+	s.poly(door, Color("2a1a1a"))
+	s.poly([s.p(0.9, 0.1, 14.0), s.p(0.9, 0.9, 14.0), s.p(0.9, 0.5, 22.0)], Color("9a4636"))
+	var slope := [s.p(0.04, 0.5, 22.0), s.p(0.96, 0.5, 22.0), s.p(0.96, 0.96, 13.0)]
+	slope.append(s.p(0.04, 0.96, 13.0))
+	s.poly(slope, roof)
+	s.outline(slope)
+
+
+static func _howl(s: Pen) -> void:
+	s.ell(0.5, 0.5, 12.0, 5.6, 0.0, Color("5f6470"))
+	s.ell(0.5, 0.5, 10.0, 4.6, 5.0, Color("7a808c"))
+	s.ell(0.5, 0.5, 7.5, 3.5, 10.0, Color("949aa6"))
+	s.ell(0.5, 0.5, 6.0, 2.8, 13.0, Color("a8aeba"))
+	s.line(s.p(0.3, 0.7, 2.0), s.p(0.34, 0.74, 9.0), Color("4a4e58"))
+
+
+static func _den(s: Pen, part: String) -> void:
+	var bark := Color("7a5230")
+	if part == "back":
+		_tray_back(s, 9.0, bark)
+		s.diamond(0.12, 0.12, 0.88, 0.88, 0.5, Color("3a2818"))
+		s.ell(0.5, 0.5, 9.0, 4.2, 1.5, Color("d8b04a"))
+	else:
+		s.front(0.1, 0.1, 0.9, 0.9, 9.0, bark)
+		s.ell(0.5, 0.9, 5.0, 2.2, 9.0, Color("d9b27a"))
+
+
+static func _apples(s: Pen) -> void:
+	s.box(0.3, 0.3, 0.7, 0.7, 0.0, 9.0, Color("8a6a46"), "lr")
+	s.ell(0.5, 0.5, 6.4, 3.0, 9.0, Color("3a2a1a"))
+	for at in [Vector2(0.42, 0.46), Vector2(0.56, 0.44), Vector2(0.5, 0.56)]:
+		s.dot(at.x, at.y, 10.5, 2.6, Color("c8383a"))
+		s.dot(at.x - 0.03, at.y, 11.4, 0.8, Color("f08a8a"))
+	s.line(s.p(0.3, 0.7, 9.0), s.p(0.5, 0.7, 13.0), Color("5a4430"))
+
+
+static func _pail(s: Pen) -> void:
+	s.box(0.1, 0.5, 0.44, 0.84, 0.0, 8.0, Color("c8ccd4"), "lr")
+	s.diamond(0.13, 0.53, 0.41, 0.81, 8.0, Color("f4f0e6"))
+	s.box(0.68, 0.18, 0.78, 0.28, 0.0, 24.0, Color("8a5a36"))
+	s.line(s.p(0.5, 0.23, 24.0), s.p(0.96, 0.23, 24.0), Color("8a5a36"), 2.0)
+	s.line(s.p(0.55, 0.23, 24.0), s.p(0.55, 0.23, 20.0), Color("5a4430"))
+	s.dot(0.55, 0.23, 18.0, 2.4, Color("e8c040"))
+
+
+static func _basket(s: Pen) -> void:
+	var wicker := Color("b08a50")
+	s.box(0.12, 0.12, 0.88, 0.88, 0.0, 6.0, wicker, "lr")
+	for i in 3:
+		s.line(s.p(0.12, 0.88, 1.5 + 2.0 * i), s.p(0.88, 0.88, 1.5 + 2.0 * i), wicker.darkened(0.25))
+	s.ell(0.5, 0.5, 10.0, 4.6, 7.0, Color("f4f0e6"))
+	s.ell(0.4, 0.46, 5.0, 2.4, 9.0, Color("ffffff"))
+	s.ell(0.62, 0.54, 4.0, 2.0, 8.5, Color("e8e2d4"))
+
+
+static func _stump(s: Pen) -> void:
+	var bark := Color("7a5230")
+	s.box(0.22, 0.22, 0.78, 0.78, 0.0, 9.0, bark, "lr")
+	s.ell(0.5, 0.5, 9.0, 4.4, 9.0, Color("d9b27a"))
+	s.ell(0.5, 0.5, 5.0, 2.4, 9.2, Color("b8925c"))
+	s.ell(0.74, 0.62, 3.0, 1.5, 9.4, Color("5f8a4f"))
+	s.line(s.p(0.3, 0.78, 3.0), s.p(0.34, 0.78, 8.0), Color("5f8a4f"), 2.0)
