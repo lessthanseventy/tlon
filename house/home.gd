@@ -1065,6 +1065,15 @@ func _draw_toy(t: Dictionary) -> void:
 	if t["z"] > 0.5 and t["z"] < 10.0:
 		room.draw_circle(_p(t["pos"].x, t["pos"].y), 2.4 * _k, Color(0, 0, 0, 0.18))
 	if t["kind"] == "yarn":
+		var q := PackedVector2Array(
+			[
+				at + Vector2(-6, -6) * _k,
+				at + Vector2(6, -6) * _k,
+				at + Vector2(6, 5) * _k,
+				at + Vector2(-6, 5) * _k
+			]
+		)
+		_register("toy:%d" % pets.toys.find(t), q, at)
 		Props.yarn(room, at, _k, t["spin"])
 	else:
 		Props.paper_ball(room, at, _k, t["spin"])
@@ -1833,6 +1842,11 @@ func click(pos: Vector2) -> bool:
 		return true
 	if key == "star":
 		outside.wish()
+		return true
+	if key.begins_with("toy:"):
+		var ti := int(key.substr(4))
+		if ti >= 0 and ti < pets.toys.size():
+			antics.throw_toy(pets.toys[ti])
 		return true
 	if key == "cake":
 		finds.candles = false

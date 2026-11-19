@@ -418,6 +418,14 @@ runs on the local list.
   `layout.guests` so it blocks its cell; a chicken sleeps on it, the rest eat from it). The pets reach them through
   `Pets.life_options` (extra rows for `_decide_*`) and a spot's `use` key. A thing is not there when the owner's furniture
   stands on its cell; none of it is saved or movable in decorate mode.
+- **Antics** (`antics.gd`; the setting `pet_antics` `few|some|lots`, default `some`, with `pet_chatter`): short
+  (2-12 s) rare behaviours by species and personality, one at a time and never over a card, form, menu or ring;
+  they read cells from `pets.spots` and need nothing of the art folder. The table is `ANTICS`: to add one, a row
+  (`who` species weights, `need`, `go`/`pgo` spots, `dur`, `pers` weights; `pair`, `trig` for one only a hook
+  starts), a branch of `_pose` that sets the critter's `dir`/`anim`/`lift`/`flip` from the clock, and its offline
+  lines in `LINES` (dry; never about what is undone, late or counted). `_need` holds the conditions (hour,
+  weather, tv, visitor). `--antic <name> [--antic-who nina|argos] [--antic-t <s>]` stages one for a picture.
+  `soak_antics.gd` forces every row for every species it allows and checks the pet is released and normal.
 - Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
   (sweet, not bright). Clicking one pets it; a right click opens its card, "who is this?" (`pet_view.gd`: the animal as a grid of idling sprites and `none`, the name and the way; the same `pet1`/`pet2`, `cat`/`dog` the settings screen writes; `--pet-card nina|argos` stages it). Their lines are `voices.gd`: `GET /api/home/pets` (with `nina_name`, `nina_species`, `nina_personality` and the same three for `argos`, URL-encoded: the first and second pet as set; a pet that is `none` sends none; an older server ignores them; any of the six changing asks once more), a batch a
   model wrote for the home as it is now, `{Nina: {occasion: [lines]}, Argos: {...}, duo: [[
