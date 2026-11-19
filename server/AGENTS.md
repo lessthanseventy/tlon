@@ -201,6 +201,15 @@ and every layer the spine design's re-laid §9 asked for
   one, and the reply says so; it is shown the existing names to match loosely), sets its rhythm, and answers what is on it, what
   was on it, and "retro's done" (archives the notes as done). Its notes (`jot.agenda_id`) are in no plain list. The pile is told
   once, 15 minutes before `next_at` (in the chat, and as an info `home_agenda` alert on the desktop, as reminders are), and the time moves on an hour after it.
+  A **proposal** (`Server.Proposal`, `Server.Home.Proposals`; table `home_proposal`) is what an outside source suggests he might
+  want: `{source, key}` unique, `text`, `why`, `kind` todo or waiting, `url`, `state` open/taken/dismissed. Nothing a source offers
+  is filed by itself except a `waiting` one from a source that is trusted for it (`Proposal.offer/5`'s `auto`): a waiting-on is a fact,
+  a to-do is an ask and waits for his yes. Offering a known key changes nothing, whatever its state; a dismissed key is final; a key
+  the source says is gone (`Proposal.resolve/3`) withdraws an open proposal silently, leaves a taken to-do, and marks a taken
+  waiting-on done, said once in the next list as its `done_text` (`Proposal.settled/0`). Nothing is said when one arrives: they
+  are listed in the morning message and the daily list, on ask ("what's proposed?", "take the first", "dismiss all": reader kinds
+  `proposals`, `take`, `dismiss`, shown the open ones as PROPOSED), and by Add/No buttons (`p:<id>:take|no`). `GET /api/home` has
+  `proposals`; `POST /api/home/proposals/:id/take|dismiss`.
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
   open next step or a question about it, a waiting-on is asked about after three days, a weekly review
   (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28

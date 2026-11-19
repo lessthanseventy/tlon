@@ -23,6 +23,7 @@ defmodule Server.DoctorTest do
                "health_since",
                "home_agenda",
                "home_keep",
+               "home_proposal",
                "home_slot",
                "issue",
                "jot",

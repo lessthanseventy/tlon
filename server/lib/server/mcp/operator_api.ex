@@ -156,7 +156,7 @@ defmodule Server.MCP.OperatorAPI do
       PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe; the page it replaces is kept
       GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
-      GET    /api/home                   Server.Home.status; {open, coming, notes, note_rows, projects, waiting, someday, done, done_week, agendas}:
+      GET    /api/home                   Server.Home.status; {open, coming, notes, note_rows, projects, waiting, someday, done, done_week, agendas, meetings, proposals}:
                                          what the operator's jots have left open; a row has id/kind/text/due_at/every/since/told_at and its
                                          project {id, text} or nil, a project its next step, how many are done, its plan and steps_done,
                                          a waiting-on its who; someday are the put-off things; note_rows is notes as {id, text};
@@ -164,7 +164,8 @@ defmodule Server.MCP.OperatorAPI do
                                          {date, high_c, low_c, kind, wet} ([] when there is none);
                                          meetings is Server.Home.Day.meetings: today's remaining and tomorrow's,
                                          cleaned, each {title, starts_at, ends_at, tentative, all_day, day:
-                                         "today"|"tomorrow"} ([] with no calendars)
+                                         "today"|"tomorrow"} ([] with no calendars); proposals is what sources suggest
+                                         and the operator has not answered, as {id, source, text, why, url}
       GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open
                                          thing to do now; skip is ids joined by commas, minutes the time there is; 400 on either not numbers
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion; ?nina_|argos_ + name|species|personality (sassy sweet lazy mischievous shy bold) choose the cast
@@ -183,6 +184,8 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/home/agendas/:id/clear the pile archived (its notes kept, done) → the agenda, empty; 404
       POST   /api/home/agendas/:id/drop  the agenda and its pile deleted → {id, name}; 404
                                          (a note on a pile is edited and dropped by /api/home/:id/edit and /drop)
+      POST   /api/home/proposals/:id/take     Server.Home.take_proposal; the proposal's row; filed as a to-do or a waiting-on; 404 when it is not open
+      POST   /api/home/proposals/:id/dismiss  Server.Home.dismiss_proposal; the proposal's row; final for its key; 404 when it is not open
       POST   /api/home/:id/plan          {plan: [text]} → Server.Home.plan; the project's row, its planned steps replaced; 400, 404
       POST   /api/home/:id/revive        Server.Home.revive; the put-off thing's row, open again; 404 when it is not on someday
       POST   /api/home/:id/drop          Server.Home.drop; the jot as /done answers (dropped_at for done_at), or 404 when it is not open:
@@ -700,6 +703,15 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
+  defp route(conn, "POST", "home", ["proposals", id, action]) when action in ~w(take dismiss) do
+    with {id, ""} <- Integer.parse(id),
+         {:ok, row} <- proposal_action(action, id) do
+      json(conn, 200, row)
+    else
+      _ -> no_route(conn)
+    end
+  end
+
   defp route(conn, "POST", "home", [id, "revive"]) do
     case Integer.parse(id) do
       {id, ""} -> home_form(conn, Server.Home.revive(id, DateTime.utc_now()))
@@ -726,6 +738,9 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp route(conn, _, _, _), do: no_route(conn)
+
+  defp proposal_action("take", id), do: Server.Home.take_proposal(id, DateTime.utc_now())
+  defp proposal_action("dismiss", id), do: Server.Home.dismiss_proposal(id)
 
   defp agenda_action("edit", id, body, now), do: Server.Home.agenda_edit(id, body, now)
   defp agenda_action("add", id, body, now), do: Server.Home.agenda_note(id, body["text"], now)
