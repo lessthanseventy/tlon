@@ -22,6 +22,7 @@ func run() -> void:
 	_species()
 	_switches()
 	_moved()
+	_window()
 	_decorating()
 	_pointer()
 	_migration()
@@ -90,7 +91,9 @@ func _defaults() -> void:
 	var h = room.home
 	var keys := _keys(h)
 	keys.sort()
-	var want := ["bed_cushion", "bed_round", "bone", "bowls", "litter", "post", "tower"]
+	var want := [
+		"bed_cushion", "bed_round", "bone", "bowls", "litter", "post", "tower", "window_perch"
+	]
 	s._check(keys == want, "a cat and a dog get their things: %s" % [keys])
 	_sound(h, "cat and dog")
 	_wall_sides(h, "cat and dog")
@@ -267,6 +270,26 @@ func _moved() -> void:
 	room.queue_free()
 
 
+# a cat sent to the window sits on the perch; without it the sill is the window's own
+func _window() -> void:
+	var room := _home(95, "cat_grey", Pets.NONE)
+	var h = room.home
+	var cat = h.pets.critter("nina")
+	var perch: Dictionary = h.petlife.piece("window_perch")
+	s._check(_cell(perch) == Vector2i(1, 5), "a cat has its window perch at the sill (%s)" % [perch])
+	s._check(h.pets.spots["sill"]["z"] == 22.0, "the sill is the perch")
+	h.pets.freeze = true
+	h.pets.place(cat, "rug", "sit")
+	h.pets.go(cat, "sill", "sit", 5.0)
+	s._run_home(h, 30.0, func(): return cat.z > 20.0 and cat.mode != "jump")
+	s._check(cat.z == 22.0 and cat.spot == "sill", "a cat sent to the window ends up on it")
+	h.layout.remove(perch)
+	h.apply_layout()
+	h.petlife.sync()
+	s._check(h.pets.spots["sill"]["z"] == Pets.SPOTS["sill"]["z"], "the sill is its own without it")
+	room.queue_free()
+
+
 # every thing: added, turned, moved, taken out, put out again, and never onto another piece
 func _decorating() -> void:
 	var room := _home(86, "cat_grey", "dog_golden")
@@ -418,7 +441,8 @@ func _migration() -> void:
 	var keys := _keys(h)
 	keys.sort()
 	s._check(
-		keys == ["bed_cushion", "bed_round", "bone", "bowls", "litter", "post", "tower"],
+		keys
+		== ["bed_cushion", "bed_round", "bone", "bowls", "litter", "post", "tower", "window_perch"],
 		"the things are added to it (%s)" % [keys]
 	)
 	_sound(h, "migrated")
@@ -431,7 +455,7 @@ func _migration() -> void:
 		kept == JSON.parse_string(JSON.stringify(rows)), "his furniture is saved back as it was"
 	)
 	s._check(
-		back.get("pets_seen") is Array and back["pets_seen"].size() == 7,
+		back.get("pets_seen") is Array and back["pets_seen"].size() == 8,
 		"the things are marked put out"
 	)
 	var cells := {}
@@ -521,7 +545,7 @@ func _quiet() -> void:
 	h.layout.persist = true
 	h.petlife._stamp = []
 	h.petlife.sync()
-	s._check(h.layout.pet_pieces().size() == 7, "the things are put out in memory")
+	s._check(h.layout.pet_pieces().size() == 8, "the things are put out in memory")
 	s._run_home(h, 5.0)
 	h.settings.put("pet1", "rabbit_white")
 	s._run_home(h, 2.0)

@@ -18,6 +18,7 @@ const PLACES := {
 	"blanket": [Vector2i(1, 8)],
 	"bed_round": [Vector2i(1, 9)],
 	"bed_cushion": [Vector2i(9, 8)],
+	"window_perch": [Vector2i(1, 5)],
 }
 const HAY_PIECE := "farm.hay_round"
 const NIGHT_HOME := {
@@ -266,6 +267,7 @@ func _spot(name: String, def: Dictionary) -> void:
 
 func _register() -> void:
 	_spots = {}
+	h.pets.spots["sill"] = Pets.SPOTS["sill"].duplicate()
 	var round := piece("bed_round")
 	h.pets.spots["bed"]["cell"] = (
 		Vector2i(round["c"], round["r"]) if not round.is_empty() else Vector2i(6, 6)
@@ -307,6 +309,17 @@ func _register_one(p: Dictionary, key: String) -> void:
 			_spot(key, front)
 		"perch":
 			_spot("roost", _perch(p, Vector3(0.5, 0.5, 19.0), 0.6))
+		"window_perch":
+			var seat := {
+				"cell": cell,
+				"perch": Vector2(p["c"] - 0.65, p["r"] + 0.2),
+				"z": 22.0,
+				"key": p["c"] + p["r"] + 0.2,
+				"face": 3,
+			}
+			_spot(key, seat)
+			if cell == Pets.SPOTS["sill"]["cell"]:
+				_spot("sill", seat)
 		"pool":
 			_spot(key, {"cell": cell, "face": 3})
 		"blanket":
@@ -364,6 +377,10 @@ func _habits(c, key: String, night: bool) -> Array:
 			out = [["roost", 8.0 if night else 1.0, "sleep" if night else "sit", _secs(25, 50)]]
 		"hutch":
 			out = [["hutch", 4.0 if night else 1.0, "sleep", _secs(25, 50)]]
+		"window_perch":
+			out = [
+				["window_perch", 0.3 if night else 1.2, "sit" if night else "sleep", _secs(25, 45)]
+			]
 		"hay":
 			out = [["hay_top" if c.species == "chicken" else "hay_eat", 1.0, "sit", _secs(8, 16)]]
 		"blanket":
@@ -508,7 +525,7 @@ func _data(key: String) -> Dictionary:
 func draw_floor() -> void:
 	sync()
 	var flat: Array = h.layout.pet_pieces().filter(
-		func(p): return PetThings.THINGS[PetThings.key_of(p)]["mode"] == "flat"
+		func(p): return _on_floor(PetThings.THINGS[PetThings.key_of(p)])
 	)
 	flat.sort_custom(func(a, b): return a["c"] + a["r"] < b["c"] + b["r"])
 	for p in flat:
@@ -516,6 +533,10 @@ func draw_floor() -> void:
 		PetThings.draw(_pen(p), key, "", _data(key))
 		if key == "bowls":
 			_bowls_fx(p)
+
+
+func _on_floor(t: Dictionary) -> bool:
+	return t["mode"] == "flat" and not t.get("raised", false)
 
 
 func _bowls_fx(p: Dictionary) -> void:
@@ -543,8 +564,9 @@ func items() -> Array:
 		if mode == "walk":
 			out.append({"key": k - 0.5, "pri": 1.9, "fn": _draw.bind(p, "back")})
 			out.append({"key": k + 0.6, "pri": 2.2, "fn": _draw.bind(p, "front")})
-		elif mode == "solid":
-			out.append({"key": k, "pri": 1.0, "fn": _draw.bind(p, "")})
+		elif mode == "solid" or not _on_floor(PetThings.THINGS[key]):
+			var at := k + (0.1 if mode == "flat" else 0.0)
+			out.append({"key": at, "pri": 1.0, "fn": _draw.bind(p, "")})
 			if key == "tower":
 				out.append({"key": k + 0.9, "pri": 1.0, "fn": _draw.bind(p, "front")})
 	return out

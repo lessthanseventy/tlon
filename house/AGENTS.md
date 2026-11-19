@@ -450,7 +450,9 @@ runs on the local list.
   to, whether it is put out by itself). Bowls, round bed, cushion bed (sized to its pet), litter box, scratching post, cat tower
   (pink, three platforms and a cube; both sides), cardboard box, fish toy, aquarium, bone, rope toy, tennis balls, chicken perch
   and nest box, bunny house, carrot, hay bale (the farm pack's sprite), trough, salt lick, kiddie pool, blanket, scratching log,
-  honey pot. A thing is put out once, at a free cell against a wall or the room's edge (`PLACES`, then the cells nearest a wall;
+  honey pot, window perch (a cushioned shelf on the wall at the sill cell, `raised`: a flat thing drawn with the furniture; while it
+  stands in the sill's cell the `sill` spot is the perch, else the window's own, so every antic that goes to the sill uses it, and a cat
+  naps there by day). A thing is put out once, at a free cell against a wall or the room's edge (`PLACES`, then the cells nearest a wall;
   never the open middle), when an animal that uses it lives here and its `def` is set; `layout.pets_seen` (saved as `pets_seen`)
   remembers it, so one he took away is not put back, and an old layout file gets the things at cells that miss what is
   there. Putting them out is computed in memory and never writes `user://`: the layout file is written only by a change in

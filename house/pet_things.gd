@@ -21,7 +21,8 @@ const SISAL := Color("e6d3a2")
 
 # kinds: species it is for (empty: every animal); mode: flat (walked over, no blocking), walk
 # (flat with walls, a pet stands in it) or solid (blocks, used from beside it); h: height in px;
-# faces: the sides it can be turned to; def: put out by itself; sw: the master switch
+# faces: the sides it can be turned to; def: put out by itself; sw: the master switch; raised: a
+# flat thing drawn with the furniture, above the floor
 const THINGS := {
 	"bowls":
 	{
@@ -90,6 +91,18 @@ const THINGS := {
 		"faces": ["sw", "se"],
 		"def": true,
 		"sw": "things"
+	},
+	"window_perch":
+	{
+		"name": "window perch",
+		"group": "cats",
+		"kinds": ["cat"],
+		"mode": "flat",
+		"h": 0,
+		"faces": [],
+		"def": true,
+		"sw": "things",
+		"raised": true
 	},
 	"cardbox":
 	{
@@ -484,6 +497,8 @@ static func draw(pen: Pen, key: String, part: String, d: Dictionary) -> void:
 			_log(pen)
 		"honey":
 			_honey(pen)
+		"window_perch":
+			_window_perch(pen)
 
 
 
@@ -779,3 +794,13 @@ static func _honey(s: Pen) -> void:
 	s.ell(0.5, 0.5, 6.4, 3.0, 10.0, Color("e8a828"))
 	s.ell(0.46, 0.46, 3.2, 1.3, 10.4, Color("f8d868"))
 	s.line(s.p(0.34, 0.66, 9.5), s.p(0.34, 0.66, 5.5), Color("f0b830"), 1.0)
+
+
+# hung on the wall under the window: its own cell's x runs from -1 (the wall) to 0
+static func _window_perch(s: Pen) -> void:
+	var wood := Color("8a5a36")
+	s.line(s.p(-0.9, 0.0, 14.0), s.p(-0.9, 0.0, 19.0), wood.darkened(0.2), 2.0)
+	s.line(s.p(-0.9, 0.5, 14.0), s.p(-0.9, 0.5, 19.0), wood.darkened(0.2), 2.0)
+	s.box(-1.0, -0.05, -0.3, 0.55, 19.0, 21.5, wood)
+	s.diamond(-0.97, 0.0, -0.33, 0.5, 21.5, Color("c98577"))
+	s.diamond(-0.9, 0.07, -0.4, 0.43, 22.0, Color("e0a898"))
