@@ -129,12 +129,17 @@ defmodule Server.Proposal do
   """
   @spec settled(DateTime.t() | nil) :: [t()]
   def settled(since \\ nil) do
-    told = if since, do: dynamic([p], p.resolved_said_at >= ^DateTime.truncate(since, :second)), else: false
+    unsaid = dynamic([p], is_nil(p.resolved_said_at))
+
+    wanted =
+      if since,
+        do: dynamic([p], ^unsaid or p.resolved_said_at >= ^DateTime.truncate(since, :second)),
+        else: unsaid
 
     Repo.all(
       from(p in __MODULE__,
         where: p.state == :taken and not is_nil(p.resolved_at),
-        where: is_nil(p.resolved_said_at) or ^told,
+        where: ^wanted,
         order_by: [p.resolved_at, p.id]
       )
     )

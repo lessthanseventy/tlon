@@ -303,8 +303,8 @@ runs on the local list.
   is the arg of `widget`; `Settings.forced`). The screen also shows sound (`sound.gd`'s own file keeps it), "N of M
   found" with "forget them all", "reset the room to how it came" (`layout.reset`) and "clear" for the chat, each
   asking for a second click (`sure.gd`), "where the list lives" (`where`: "a tlon server" with its address and a
-  "check" (`GET /api/home`), or "this computer" with one quiet line of where the file is kept), the art folder, and the daily list time and weekly review day only
-  when `GET /api/settings` already returned them (`home_list_at`, `home_review_on`). Quiet hours are the server's and
+  "check" (`GET /api/home`), or "this computer" with one quiet line of where the file is kept), the art folder, and the morning message time, the daily list time and weekly review day only
+  when `GET /api/settings` already returned them (`home_morning_at`, `home_list_at`, `home_review_on`). Quiet hours are the server's and
   no existing route returns them, so they are not shown. `--settings "name=Sam;cat=Mimi;scroll;armed=reset"` stages it (`scroll=PIXELS` too); it also takes `weather=on|off`, `weather_town=TOWN`, `degrees=f|c`, `telegram=on`, `claude=on`, `claude_command=PATH` and `phone=pairing|paired` (a made-up bot state, no request).
 - **Chat** (`chat.gd` the history, `chat_view.gd` the dock at the bottom of the sidebar): the desk phone, clicked while it is not ringing, or
   `K`, brings it up from its input line: his lines on the right, the home's on the left, newest at the bottom, the wheel and
