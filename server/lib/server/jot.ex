@@ -18,6 +18,9 @@ defmodule Server.Jot do
   (2, 10, 30, 60), `touched_at` the last time the operator did anything with it, `hidden_until` the
   moment a "not today" ends, `someday_at` and `dropped_at` when it left the open list, and
   `shrunk_at` when a smaller start was offered for it or the model had none.
+
+  A note on an agenda (`Server.Agenda`) is a note with its `agenda_id`: it is in none of the lists
+  of plain notes, and clearing the agenda marks it done.
   """
   use Ecto.Schema
 
@@ -52,6 +55,7 @@ defmodule Server.Jot do
     field :someday_at, :utc_datetime
     field :dropped_at, :utc_datetime
     field :shrunk_at, :utc_datetime
+    field :agenda_id, :integer
   end
 
   @doc """
@@ -67,7 +71,7 @@ defmodule Server.Jot do
           %__MODULE__{}
   def file(%__MODULE__{} = jot, %{kind: kind, text: text, due_at: due_at} = reading, now \\ DateTime.utc_now()) do
     optional =
-      for {from, to} <- [mins: :mins, project: :project_id, who: :waiting_on, steps: :plan],
+      for {from, to} <- [mins: :mins, project: :project_id, who: :waiting_on, steps: :plan, agenda: :agenda_id],
           Map.has_key?(reading, from),
           do: {to, if(from == :steps, do: Enum.drop(reading.steps, 1), else: reading[from])}
 
@@ -113,12 +117,65 @@ defmodule Server.Jot do
   def note_rows(via, limit) do
     Repo.all(
       from(j in __MODULE__,
-        where: j.via == ^via and j.kind == "note" and is_nil(j.dropped_at),
+        where: j.via == ^via and j.kind == "note" and is_nil(j.dropped_at) and is_nil(j.agenda_id),
         order_by: [desc: j.id],
         limit: ^limit,
         select: %{id: j.id, text: j.text}
       )
     )
+  end
+
+  @doc "The notes on the agenda `id` still on its pile, oldest first."
+  @spec agenda_notes(integer()) :: [%__MODULE__{}]
+  def agenda_notes(id) do
+    Repo.all(
+      from(j in __MODULE__,
+        where: j.agenda_id == ^id and j.kind == "note" and is_nil(j.done_at) and is_nil(j.dropped_at),
+        order_by: j.id
+      )
+    )
+  end
+
+  @doc "Mark the notes on the agenda `id` done at `now`, keeping them: how many were."
+  @spec archive_agenda(integer(), DateTime.t()) :: non_neg_integer()
+  def archive_agenda(id, now) do
+    {count, _} =
+      Repo.update_all(
+        from(j in __MODULE__,
+          where: j.agenda_id == ^id and j.kind == "note" and is_nil(j.done_at) and is_nil(j.dropped_at)
+        ),
+        set: [done_at: DateTime.truncate(now, :second)]
+      )
+
+    count
+  end
+
+  @doc "The notes of the agenda `id` that were cleared last, oldest first: those marked done at its newest clearing."
+  @spec agenda_archived(integer()) :: [%__MODULE__{}]
+  def agenda_archived(id) do
+    newest =
+      from(j in __MODULE__,
+        where: j.agenda_id == ^id and j.kind == "note" and not is_nil(j.done_at),
+        select: max(j.done_at)
+      )
+
+    Repo.all(
+      from(j in __MODULE__,
+        where: j.agenda_id == ^id and j.kind == "note" and j.done_at == subquery(newest) and is_nil(j.dropped_at),
+        order_by: j.id
+      )
+    )
+  end
+
+  @doc "Delete the notes on the agenda `id` at `now`: dropped, not done."
+  @spec drop_agenda(integer(), DateTime.t()) :: :ok
+  def drop_agenda(id, now) do
+    Repo.update_all(
+      from(j in __MODULE__, where: j.agenda_id == ^id and is_nil(j.done_at) and is_nil(j.dropped_at)),
+      set: [dropped_at: DateTime.truncate(now, :second)]
+    )
+
+    :ok
   end
 
   @doc "The newest jot from `via` read as a reminder, a to-do, a note, a project or a waiting-on and not deleted, nil when none is."
@@ -373,7 +430,10 @@ defmodule Server.Jot do
   def done_since(via, since),
     do:
       Repo.all(
-        from(j in __MODULE__, where: j.via == ^via and j.done_at >= ^since, order_by: [desc: j.done_at, desc: j.id])
+        from(j in __MODULE__,
+          where: j.via == ^via and j.done_at >= ^since and is_nil(j.agenda_id),
+          order_by: [desc: j.done_at, desc: j.id]
+        )
       )
 
   @doc "Keep `body`: `{:ok, jot}`, or `:seen` when `via` already delivered `external_id`."

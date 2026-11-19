@@ -1,0 +1,189 @@
+defmodule Server.Agenda do
+  @moduledoc """
+  A standing pile of notes for an occasion that comes round: "retro", "1:1 with Sam", "weekly". Its
+  notes are notes of the home (`Server.Jot`, `agenda_id`) that live on the agenda, in none of the plain
+  lists. An agenda may have a rhythm: `every` (as `Server.Home.Clock.every/1` reads it) and `next_at`,
+  the next time it comes round (no `every`: a one-off time, or none). Fifteen minutes before `next_at` the
+  home tells the pile once (`due/2`, `told/2`); an hour after it the time moves on by the rhythm
+  (`advance/2`), so the pile can still be added to while the occasion is on. Clearing archives the
+  notes (done, with the date) and the agenda stands, empty.
+  """
+  use Ecto.Schema
+
+  import Ecto.Query
+
+  alias Server.Home.Clock
+  alias Server.Jot
+  alias Server.Repo
+
+  @type t :: %__MODULE__{}
+
+  @lead_min 15
+  @linger_min 60
+  @max_name 80
+
+  schema "home_agenda" do
+    field :via, :string
+    field :name, :string
+    field :every, :string
+    field :every_day, :integer
+    field :next_at, :utc_datetime
+    field :told_for, :utc_datetime
+    field :told_at, :utc_datetime
+  end
+
+  @doc "The agendas from `via`, oldest first."
+  @spec all(String.t()) :: [t()]
+  def all(via), do: Repo.all(from(a in __MODULE__, where: a.via == ^via, order_by: a.id))
+
+  @doc "The agenda `id` from `via`, nil when there is none."
+  @spec get(String.t(), integer()) :: t() | nil
+  def get(via, id), do: Repo.get_by(__MODULE__, via: via, id: id)
+
+  @doc "The agenda called `name` (any case) from `via`, nil when there is none."
+  @spec named(String.t(), String.t()) :: t() | nil
+  def named(via, name) do
+    key = String.downcase(name)
+    Repo.one(from(a in __MODULE__, where: a.via == ^via and fragment("lower(?)", a.name) == ^key))
+  end
+
+  @doc "A name as it is kept: trimmed, at most #{@max_name} characters; nil when it is none."
+  @spec clean(term()) :: String.t() | nil
+  def clean(name) when is_binary(name) do
+    name
+    |> String.trim()
+    |> String.slice(0, @max_name)
+    |> case do
+      "" -> nil
+      name -> name
+    end
+  end
+
+  def clean(_none), do: nil
+
+  @doc """
+  Start the agenda `name` for `via` at `now`, with `rhythm` (`every`, `next_at`, either or both). A
+  rhythm whose time has passed starts from its next one.
+  """
+  @spec create(String.t(), String.t(), map(), DateTime.t()) :: {:ok, t()} | {:error, String.t()}
+  def create(via, name, rhythm, now) do
+    attrs = timing(%__MODULE__{}, rhythm, now)
+
+    case Repo.insert!(struct(__MODULE__, [via: via, name: name] ++ attrs), on_conflict: :nothing) do
+      %__MODULE__{id: nil} -> {:error, "there is already an agenda called #{name}"}
+      agenda -> {:ok, agenda}
+    end
+  end
+
+  @doc """
+  Change `agenda` as the operator says: `changes` may hold `name`, `every` (nil stops the repeat) and
+  `next_at` (nil clears it). A time that has passed on a repeat becomes its next one.
+  """
+  @spec edit(t(), map(), DateTime.t()) :: {:ok, t()} | {:error, String.t()}
+  def edit(%__MODULE__{via: via, id: id} = agenda, changes, now) do
+    name = Map.get(changes, :name, agenda.name)
+
+    case named(via, name) do
+      %__MODULE__{id: other} when other != id ->
+        {:error, "there is already an agenda called #{name}"}
+
+      _free ->
+        {:ok, agenda |> Ecto.Changeset.change([name: name] ++ timing(agenda, changes, now)) |> Repo.update!()}
+    end
+  end
+
+  @doc "Delete `agenda` and the notes on its pile, at `now`."
+  @spec delete(t(), DateTime.t()) :: :ok
+  def delete(%__MODULE__{id: id} = agenda, now) do
+    Jot.drop_agenda(id, now)
+    Repo.delete!(agenda)
+    :ok
+  end
+
+  @doc "Put the kept jot `jot` on the pile of `agenda` as the note `text`, at `now`: the note."
+  @spec note(t(), Jot.t(), String.t(), DateTime.t()) :: Jot.t()
+  def note(%__MODULE__{id: id}, %Jot{} = jot, text, now),
+    do: Jot.file(jot, %{kind: "note", text: text, due_at: nil, agenda: id}, now)
+
+  @doc "Archive the pile of `agenda` at `now`: its notes are kept, done. How many there were."
+  @spec clear(t(), DateTime.t()) :: non_neg_integer()
+  def clear(%__MODULE__{id: id}, now), do: Jot.archive_agenda(id, now)
+
+  @doc "The agendas from `via` whose time is within the lead before it at `now` and that were not told for it yet."
+  @spec due(String.t(), DateTime.t()) :: [t()]
+  def due(via, now) do
+    for %__MODULE__{next_at: %DateTime{} = at} = agenda <- all(via),
+        DateTime.after?(at, now),
+        DateTime.diff(at, now) <= @lead_min * 60,
+        agenda.told_for != at,
+        do: agenda
+  end
+
+  @doc "Record that `agenda` was told for its time at `now`: not told again for it."
+  @spec told(t(), DateTime.t()) :: t()
+  def told(%__MODULE__{next_at: at} = agenda, now),
+    do: agenda |> Ecto.Changeset.change(told_for: at, told_at: DateTime.truncate(now, :second)) |> Repo.update!()
+
+  @doc """
+  Move on the agendas from `via` whose time went by an hour ago: a repeat to its next time after
+  `now`, a one-off to none.
+  """
+  @spec advance(String.t(), DateTime.t()) :: :ok
+  def advance(via, now) do
+    gone = DateTime.add(now, -@linger_min * 60)
+
+    for %__MODULE__{next_at: %DateTime{} = at} = agenda <- all(via), not DateTime.after?(at, gone) do
+      next = if agenda.every, do: Clock.next(at, agenda.every, now, agenda.every_day)
+      agenda |> Ecto.Changeset.change(next_at: next) |> Repo.update!()
+    end
+
+    :ok
+  end
+
+  @doc "The agendas from `via` told since `since`."
+  @spec told_since(String.t(), DateTime.t()) :: [t()]
+  def told_since(via, since),
+    do: Repo.all(from(a in __MODULE__, where: a.via == ^via and a.told_at >= ^since, order_by: a.told_at))
+
+  @doc "What the home says ahead of the occasion: `Retro in 15 — 3 things: a; b; c`. The pile is `notes`."
+  @spec say_told(t(), [Jot.t()]) :: String.t()
+  def say_told(%__MODULE__{} = agenda, notes),
+    do: "#{upcase(agenda.name)} in #{@lead_min} — #{things(length(notes))}: #{Enum.map_join(notes, "; ", & &1.text)}"
+
+  @doc "The reading of a note filed on the pile, said back: `On the retro pile (3).`"
+  @spec say_pile(t(), non_neg_integer()) :: String.t()
+  def say_pile(%__MODULE__{name: name}, count), do: "On the #{name} pile (#{count})."
+
+  @doc "The pile `notes` of `agenda` as an answer to what is on it."
+  @spec say_list(t(), [Jot.t()]) :: String.t()
+  def say_list(%__MODULE__{name: name}, []), do: "Nothing on the #{name} pile."
+
+  def say_list(%__MODULE__{name: name}, notes),
+    do: Enum.join(["On the #{name} pile (#{length(notes)}):" | Enum.map(notes, &"• #{&1.text}")], "\n")
+
+  @doc "The rhythm of `agenda` as the helper says it."
+  @spec say_rhythm(t()) :: String.t()
+  def say_rhythm(%__MODULE__{every: nil, next_at: nil, name: name}),
+    do: "#{name} has no rhythm: bring it up when you want."
+
+  def say_rhythm(%__MODULE__{every: nil, next_at: at, name: name}), do: "#{name} is #{Clock.say(at)}."
+  def say_rhythm(%__MODULE__{every: every, next_at: nil, name: name}), do: "#{name} is every #{Clock.say_every(every)}."
+
+  def say_rhythm(%__MODULE__{every: every, next_at: at, name: name}),
+    do: "#{name} is every #{Clock.say_every(every)}, next #{Clock.say(at)}."
+
+  defp things(1), do: "1 thing"
+  defp things(count), do: "#{count} things"
+
+  defp upcase(<<first::utf8, rest::binary>>), do: String.upcase(<<first::utf8>>) <> rest
+  defp upcase(name), do: name
+
+  defp timing(agenda, changes, now) do
+    every = Map.get(changes, :every, agenda.every)
+    at = Map.get(changes, :next_at, agenda.next_at)
+    given? = Map.has_key?(changes, :every) or Map.has_key?(changes, :next_at)
+    anchor = if given?, do: Jot.anchor(every, at), else: agenda.every_day
+    next = if is_binary(every) and is_struct(at, DateTime), do: Clock.forward(at, every, now, anchor), else: at
+    [every: every, every_day: anchor, next_at: next]
+  end
+end
