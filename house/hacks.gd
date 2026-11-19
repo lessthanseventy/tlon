@@ -112,19 +112,23 @@ static func box(
 	u1 = clampf(u1, 0.0, 1.0)
 	v0 = clampf(v0, 0.0, 1.0)
 	v1 = clampf(v1, 0.0, 1.0)
-	if u0 == u1 or v0 == v1:
-		return
-	c.draw_colored_polygon(
-		PackedVector2Array([pt(q, u0, v0), pt(q, u1, v0), pt(q, u1, v1), pt(q, u0, v1)]), col
-	)
+	_fill(c, PackedVector2Array([pt(q, u0, v0), pt(q, u1, v0), pt(q, u1, v1), pt(q, u0, v1)]), col)
 
 
 static func shape(
 	c: CanvasItem, q: PackedVector2Array, points: PackedVector2Array, col: Color
 ) -> void:
 	for part in Geometry2D.intersect_polygons(points, q):
-		if part.size() >= 3:
-			c.draw_colored_polygon(part, col)
+		_fill(c, part, col)
+
+
+# a sliver under a pixel does not triangulate
+static func _fill(c: CanvasItem, pts: PackedVector2Array, col: Color) -> void:
+	var twice := 0.0
+	for i in pts.size():
+		twice += pts[i].cross(pts[(i + 1) % pts.size()])
+	if absf(twice) >= 2.0:
+		c.draw_colored_polygon(pts, col)
 
 
 static func clip(a: Vector2, b: Vector2) -> Array:
