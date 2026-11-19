@@ -733,7 +733,7 @@ func _need(need: String, c) -> bool:
 		"bird":
 			return h.outside.act.has("bird")
 		"bone":
-			return h.petlife.has_mat() and c.species in ["dog", "wolf", "fox"]
+			return h.petlife.has("bone") and c.species in ["dog", "wolf", "fox"]
 		"toy":
 			return not h.pets._toy_of("yarn").is_empty()
 		"sun":

@@ -75,7 +75,31 @@ var _state := {
 }
 
 
+class EngineErrors:
+	extends Logger
+	var seen: Array = []
+
+	func _log_error(
+		_function: String,
+		file: String,
+		line: int,
+		code: String,
+		rationale: String,
+		_editor_notify: bool,
+		error_type: int,
+		_backtraces: Array
+	) -> void:
+		if error_type == Logger.ERROR_TYPE_SCRIPT or "triangulation failed" in rationale + code:
+			var what := "%s (%s:%d)" % [rationale if rationale != "" else code, file, line]
+			if not seen.has(what):
+				seen.append(what)
+
+
+var _errors := EngineErrors.new()
+
+
 func _initialize() -> void:
+	OS.add_logger(_errors)
 	load("res://home.gd").scripted = true
 	_run.call_deferred()
 
@@ -137,6 +161,8 @@ func _run() -> void:
 	_where = "art"
 	ArtSoak.new(self).run()
 	_where = "end"
+	for e in _errors.seen:
+		_check(false, "the engine reported: " + e)
 	print("SOAK %s (%d failures)" % ["OK" if _failures.is_empty() else "FAILED", _failures.size()])
 	quit(0 if _failures.is_empty() else 1)
 

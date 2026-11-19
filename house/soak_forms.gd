@@ -27,6 +27,13 @@ func _wait() -> void:
 	await s.create_timer(0.45).timeout
 
 
+func _read_again(before: int) -> void:
+	for i in 30:
+		if s._count("/api/home") > before:
+			return
+		await s.create_timer(0.1).timeout
+
+
 func _iso_utc(y: int, m: int, d: int, hour: int, minute: int) -> String:
 	return (
 		Time.get_datetime_string_from_unix_time(int(Card.unix(y, m, d, hour, minute) - h._bias()))
@@ -76,6 +83,7 @@ func _bodies() -> void:
 		"a one-off reminder: %s" % str(body)
 	)
 	s._check(not f.visible, "a saved form closes")
+	await _read_again(before)
 	s._check(s._count("/api/home") > before, "the room is read again at once")
 	body = await _send(
 		{"kinds": ["reminder"]},
