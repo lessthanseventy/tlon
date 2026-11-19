@@ -1,0 +1,587 @@
+extends RefCounted
+
+# The soak's checks of the pets' things as pieces of the room: put out by themselves, hidden with
+# their animal and their switch, movable and followed by the pets, saved, migrated from an old
+# layout, never on another piece, against a wall.
+const Pets := preload("res://pets.gd")
+const PetThings := preload("res://pet_things.gd")
+const Decorate := preload("res://decorate.gd")
+
+var s
+var _tmp: DirAccess
+
+
+func _init(soak) -> void:
+	s = soak
+
+
+func run() -> void:
+	_tmp = DirAccess.create_temp("house-petthings-soak")
+	_defaults()
+	_combos()
+	_species()
+	_switches()
+	_moved()
+	_decorating()
+	_pointer()
+	_migration()
+	_night()
+	_quiet()
+	await _drawn()
+
+
+func _home(seed_value: int, pet1: String, pet2: String) -> Control:
+	var room: Control = s._room(seed_value)
+	var h = room.home
+	h.fake_hour = 14.0
+	h.fake_day = "06-15"
+	h.set_data(s._data([s._thing(1, 1.0)], 0))
+	h._env = h._env_now()
+	h.settings.put("pet1", pet1)
+	h.settings.put("pet2", pet2)
+	h.petlife.sync()
+	return room
+
+
+func _cell(p: Dictionary) -> Vector2i:
+	return Vector2i(p["c"], p["r"])
+
+
+# no piece shares a cell with another, solid things block and flat ones do not, and nobody
+# stands inside a blocked cell
+func _sound(h, what: String) -> void:
+	h.apply_layout()
+	h.petlife.sync()
+	var l = h.layout
+	var all: Array = l.all().filter(func(p): return l.kind(p) not in ["rug", "wall"])
+	for i in all.size():
+		for j in range(i + 1, all.size()):
+			if l.rect(all[i]).intersects(l.rect(all[j])):
+				s._check(false, "%s: %s and %s share a cell" % [what, all[i]["p"], all[j]["p"]])
+	for p in l.pieces:
+		if PetThings.is_pet(p) and p.get("hide", false):
+			s._check(
+				not h.pets.blocked_cells.has(_cell(p)), "%s: hidden %s blocks" % [what, p["p"]]
+			)
+	for p in l.pet_pieces():
+		var solid: bool = l.kind(p) == "floor"
+		s._check(
+			h.pets.blocked_cells.has(_cell(p)) == solid,
+			"%s: %s blocks as it should" % [what, p["p"]]
+		)
+	s._check(l.reaches(h.pets.blocked_cells, h.busy_cells()), "%s: every spot reachable" % what)
+
+
+func _keys(h) -> Array:
+	return h.layout.pet_pieces().map(func(p): return PetThings.key_of(p))
+
+
+func _wall_sides(h, what: String) -> void:
+	for p in h.layout.pet_pieces():
+		s._check(
+			h.petlife.wall_side(_cell(p)),
+			"%s: %s at %s is against a wall" % [what, p["p"], _cell(p)]
+		)
+
+
+# a cat and a dog: what each uses is out, against the walls, nothing else
+func _defaults() -> void:
+	var room := _home(80, "cat_grey", "dog_golden")
+	var h = room.home
+	var keys := _keys(h)
+	keys.sort()
+	var want := ["bed_cushion", "bed_round", "bone", "bowls", "litter", "post", "tower"]
+	s._check(keys == want, "a cat and a dog get their things: %s" % [keys])
+	_sound(h, "cat and dog")
+	_wall_sides(h, "cat and dog")
+	for key in ["cardbox", "fish", "aquarium", "rope", "balls"]:
+		s._check(h.petlife.piece(key).is_empty(), "%s waits in the pets tab" % key)
+	var tower: Dictionary = h.petlife.piece("tower")
+	s._check(tower["f"] in ["sw", "se"] and not tower.has("own"), "the tower is put out for a cat")
+	for p in h.layout.pet_pieces():
+		var c: Vector2i = _cell(p)
+		s._check(
+			not (c.x in range(3, 9) and c.y in range(3, 9)),
+			"%s is not in the middle of the floor (%s)" % [p["p"], c]
+		)
+	room.queue_free()
+
+
+# every species alone, and a farm pair: its things are out, against walls, on nothing
+func _combos() -> void:
+	var one := {}
+	for kind in Pets.KINDS:
+		one[Pets.KINDS[kind]["species"]] = kind
+	for sp in one:
+		var room := _home(81, one[sp], Pets.NONE)
+		var h = room.home
+		_sound(h, sp)
+		_wall_sides(h, sp)
+		for key in PetThings.THINGS:
+			var t: Dictionary = PetThings.THINGS[key]
+			var out: bool = not h.petlife.piece(key).is_empty()
+			var wanted: bool = t["def"] and PetThings.fits(key, [sp]) and h.petlife.shown(key)
+			s._check(out == wanted, "%s: %s %s" % [sp, key, "out" if out else "not out"])
+		room.queue_free()
+	for pair in [
+		["chicken_white", "cow_holstein"], ["rabbit_white", "pig_pink"], ["bear_black", "deer_doe"]
+	]:
+		var room := _home(82, pair[0], pair[1])
+		_sound(room.home, str(pair))
+		_wall_sides(room.home, str(pair))
+		room.queue_free()
+
+
+# a thing goes with its animal and comes back where it was
+func _species() -> void:
+	var room := _home(83, "cat_grey", "dog_golden")
+	var h = room.home
+	var tower: Dictionary = h.petlife.piece("tower")
+	var at := _cell(tower)
+	var face: String = tower["f"]
+	h.settings.put("pet1", "rabbit_white")
+	h.petlife.sync()
+	s._check(
+		not h.layout.pet_pieces().any(func(p): return p["p"] == "pet.tower"), "no cat, no tower"
+	)
+	s._check(tower.get("hide", false), "the tower is hidden, not gone")
+	s._check(h.layout.pieces.any(func(p): return is_same(p, tower)), "and stays in the layout")
+	s._check(not h.pets.blocked_cells.has(at), "a hidden tower blocks nothing")
+	s._check(not h.petlife.piece("hutch").is_empty(), "a rabbit gets its house")
+	s._check(not h.petlife.piece("bowls").is_empty(), "bowls stay for anyone")
+	_sound(h, "rabbit and dog")
+	h.settings.put("pet1", "cat_grey")
+	h.petlife.sync()
+	var back: Dictionary = h.petlife.piece("tower")
+	s._check(
+		not back.is_empty() and _cell(back) == at and back["f"] == face,
+		"the cat's return brings the tower back where it stood"
+	)
+	var seen: int = h.layout.pets_seen.count("tower")
+	s._check(seen == 1, "the tower is put out once (%d)" % seen)
+	h.settings.put("pet1", Pets.NONE)
+	h.settings.put("pet2", Pets.NONE)
+	h.petlife.sync()
+	s._check(h.layout.pet_pieces().is_empty(), "no pets, no things")
+	_sound(h, "no pets")
+	h.settings.put("pet1", "cat_grey")
+	h.settings.put("pet2", "dog_golden")
+	h.petlife.sync()
+	s._check(_cell(h.petlife.piece("tower")) == at, "both back: the tower is where it was")
+	room.queue_free()
+
+
+# each master switch hides its things and the things come back in place
+func _switches() -> void:
+	var room := _home(84, "cat_grey", "dog_golden")
+	var h = room.home
+	var cells := {}
+	for p in h.layout.pet_pieces():
+		cells[p["p"]] = _cell(p)
+	var rows := {
+		"litter_box": ["litter"],
+		"bowls": ["bowls"],
+		"pet_things": ["post", "tower", "bone", "bed_round", "bed_cushion"],
+	}
+	for sw in rows:
+		h.settings.put(sw, false)
+		h.petlife.sync()
+		for key in rows[sw]:
+			s._check(h.petlife.piece(key).is_empty(), "%s off hides the %s" % [sw, key])
+		var others := _keys(h)
+		s._check(others.size() == cells.size() - rows[sw].size(), "%s off hides only its own" % sw)
+		_sound(h, sw + " off")
+		h.settings.put(sw, true)
+		h.petlife.sync()
+		for key in rows[sw]:
+			var p: Dictionary = h.petlife.piece(key)
+			s._check(not p.is_empty() and _cell(p) == cells["pet." + key], "%s is back" % key)
+	room.queue_free()
+
+
+# a moved thing is where the pet goes
+func _moved() -> void:
+	var room := _home(85, "cat_grey", "dog_golden")
+	var h = room.home
+	var l = h.layout
+	var cat = h.pets.critter("nina")
+	var dog = h.pets.critter("argos")
+	h.pets.freeze = true
+	var to := {"litter": Vector2i(3, 1), "bowls": Vector2i(2, 9), "tower": Vector2i(2, 8)}
+	to["bed_round"] = Vector2i(9, 3)
+	to["bed_cushion"] = Vector2i(9, 5)
+	to["post"] = Vector2i(9, 7)
+	to["bone"] = Vector2i(7, 9)
+	for key in to:
+		var p: Dictionary = h.petlife.piece(key)
+		var want := Dictionary(p).duplicate()
+		want["c"] = to[key].x
+		want["r"] = to[key].y
+		var why: String = l.place(want, p, h.busy_cells())
+		s._check(why == "", "%s moves to %s (%s)" % [key, to[key], why])
+	h.apply_layout()
+	h.petlife.sync()
+	_sound(h, "moved")
+	var spots := {
+		"litter": "litter",
+		"bowls": "bowl",
+		"bed_round": "bed",
+		"bed_cushion": "bed_cushion",
+		"bone": "bone"
+	}
+	for key in spots:
+		var cell: Vector2i = h.pets.spots[spots[key]]["cell"]
+		s._check(cell == to[key], "the %s spot follows its piece to %s (%s)" % [key, to[key], cell])
+	var who := {"litter": cat, "bowl": cat, "bone": dog, "bed": dog, "bed_cushion": cat}
+	for name in who:
+		var c = who[name]
+		h.pets.place(c, "rug", "sit")
+		h.petlife.litter_wait = 0.0
+		h.pets.go(c, name, "sit", 5.0)
+		s._run_home(
+			h,
+			30.0,
+			func(): return h.pets._cell_of(c.pos) == h.pets.spots[name]["cell"] and c.mode != "walk"
+		)
+		s._check(
+			h.pets._cell_of(c.pos) == h.pets.spots[name]["cell"],
+			"%s goes to %s (%s)" % [c.id, name, h.pets.spots[name]["cell"]]
+		)
+	h.pets.place(cat, "rug", "sit")
+	h.pets.go(cat, "tower_top", "sit", 5.0)
+	s._run_home(h, 30.0, func(): return cat.z > 20.0 and cat.mode != "jump")
+	s._check(cat.z > 20.0, "the cat climbs the moved tower (z %.0f)" % cat.z)
+	s._check(
+		Vector2i(floori(cat.pos.x), floori(cat.pos.y)) == to["tower"],
+		"and is on it at %s" % [to["tower"]]
+	)
+	h.pets.place(cat, "rug", "sit")
+	h.pets.go(cat, "post", "sit", 5.0)
+	s._run_home(h, 30.0, func(): return cat.use == "post")
+	s._check(cat.use == "post", "the cat scratches the moved post")
+	var next := Vector2(h.pets.spots["post"]["cell"]) - Vector2(to["post"])
+	s._check(
+		maxf(absf(next.x), absf(next.y)) == 1.0,
+		"from the cell beside it (%s, %s)" % [h.pets.spots["post"]["cell"], to["post"]]
+	)
+	room.queue_free()
+
+
+# every thing: added, turned, moved, taken out, put out again, and never onto another piece
+func _decorating() -> void:
+	var room := _home(86, "cat_grey", "dog_golden")
+	var h = room.home
+	var l = h.layout
+	for key in PetThings.THINGS:
+		var t: Dictionary = PetThings.THINGS[key]
+		var old: Dictionary = h.petlife.piece(key)
+		if not old.is_empty():
+			l.remove(old)
+		h.apply_layout()
+		var fits := PetThings.fits(key, h.pets.species_here())
+		var p := {"p": PetThings.PREFIX + key, "f": "", "c": 0, "r": 0, "own": not fits}
+		if not t["faces"].is_empty():
+			p["f"] = t["faces"][0]
+		var spot: Dictionary = h.petlife._default(key)
+		s._check(not spot.is_empty(), "%s has a free place" % key)
+		if spot.is_empty():
+			continue
+		p["c"] = spot["c"]
+		p["r"] = spot["r"]
+		s._check(l.place(p, null, h.busy_cells()) == "", "%s is added" % key)
+		s._check(l.place(p.duplicate(), null, h.busy_cells()) == l.ONCE, "%s only once" % key)
+		h.apply_layout()
+		h.petlife.sync()
+		s._check(not p.get("hide", false), "%s stands (%s)" % [key, "own" if p["own"] else "fits"])
+		if t["faces"].size() > 1:
+			var turned := p.duplicate()
+			turned["f"] = t["faces"][1]
+			s._check(
+				l.place(turned, p, h.busy_cells()) == "" and p["f"] == t["faces"][1],
+				"%s turns" % key
+			)
+		var moved: Dictionary = h.petlife._default(key, p)
+		var from := _cell(p)
+		for cell in h.petlife._wall_cells():
+			var q := {"p": p["p"], "f": p["f"], "c": cell.x, "r": cell.y}
+			if cell != from and l.place(q, p, h.busy_cells()) == "":
+				break
+		s._check(_cell(p) != from or not moved.is_empty(), "%s moves" % key)
+		_sound(h, "decorating " + key)
+		l.remove(p)
+		h.apply_layout()
+		s._check(h.petlife.piece(key).is_empty(), "%s comes out" % key)
+		s._check(l.place(p.duplicate(), null, h.busy_cells()) == "", "%s goes in again" % key)
+		h.apply_layout()
+		h.petlife.sync()
+		s._check(not h.petlife.piece(key).is_empty(), "%s stands again" % key)
+		for o in l.all():
+			if l.kind(o) in ["rug", "wall"] or PetThings.is_pet(o):
+				continue
+			var onto := {"p": p["p"], "f": p["f"], "c": o["c"], "r": o["r"]}
+			s._check(
+				l.check(onto, p, h.busy_cells()) != "",
+				"%s is refused on %s at %s" % [key, o["p"], _cell(o)]
+			)
+	_sound(h, "every thing out")
+	room.queue_free()
+
+
+# the pointer: the pets tab, the filter, a click puts a thing down, a click picks it up
+func _pointer() -> void:
+	var room := _home(87, "cat_grey", "dog_golden")
+	room.size = Vector2(800, 700)
+	room._k = 2
+	room._origin = Vector2(400, 150)
+	var h = room.home
+	var deco: Control = Decorate.new()
+	deco.room = room
+	deco.home = h
+	deco.enter()
+	s._check("pets" in h.layout.tabs, "the catalogue has a pets tab")
+	var fitted: Array = h.layout.catalogue.filter(
+		func(e): return e["tab"] == "pets" and deco._listed(e)
+	)
+	deco.everyone = true
+	var every: Array = h.layout.catalogue.filter(
+		func(e): return e["tab"] == "pets" and deco._listed(e)
+	)
+	s._check(
+		fitted.size() < every.size() and every.size() == PetThings.THINGS.size(),
+		"the tab lists what fits (%d), all animals lists all (%d)" % [fitted.size(), every.size()]
+	)
+	deco.everyone = false
+	deco._act("tab:pets")
+	var cell := func(c: float, r: float) -> Vector2: return room._p(room._origin, c + 0.5, r + 0.5)
+	deco.pick("pet.cardbox")
+	s._click_at(deco, cell.call(2, 9))
+	s._check(not h.petlife.out("pet.cardbox").is_empty(), "a click puts the cardboard box down")
+	var box: Dictionary = h.petlife.out("pet.cardbox")
+	s._check(box.get("own", false) == false, "a thing a cat uses is not a decoration")
+	deco.sel = ""
+	s._click_at(deco, cell.call(2, 9))
+	s._check(deco.held != null and deco.held["p"] == "pet.cardbox", "a click on it picks it up")
+	s._click_at(deco, cell.call(3, 3))
+	s._check(_cell(box) == Vector2i(3, 3), "and the next click puts it down")
+	deco.pick("pet.cardbox")
+	s._check(deco.held == null, "choosing it again is a new one")
+	deco._act("pick:pet.tower")
+	s._check(
+		deco.held != null and deco.held["p"] == "pet.tower",
+		"choosing a thing already out picks that one up"
+	)
+	deco.held = null
+	deco.sel = ""
+	s._click_at(deco, cell.call(3, 3), MOUSE_BUTTON_RIGHT)
+	s._check(h.petlife.out("pet.cardbox").is_empty(), "right click takes it out")
+	deco.leave()
+	room.queue_free()
+
+
+func _rows(path: String) -> Dictionary:
+	return JSON.parse_string(FileAccess.get_file_as_string(path))
+
+
+# an old file with furniture on every cell a thing would be put: nothing of his is touched
+func _migration() -> void:
+	var room := _home(88, "cat_grey", "dog_golden")
+	var h = room.home
+	var l = h.layout
+	var path := _tmp.get_current_dir().path_join("old_layout.json")
+	var rows: Array = []
+	for p in l.pieces:
+		if not PetThings.is_pet(p):
+			rows.append({"p": p["p"], "f": p["f"], "c": p["c"], "r": p["r"]})
+	var taken: Array = []
+	for key in h.petlife.PLACES:
+		for cell in h.petlife.PLACES[key]:
+			if cell not in taken:
+				taken.append(cell)
+				rows.append({"p": "crate", "f": "", "c": cell.x, "r": cell.y})
+	var old := {"v": 1, "wall": "wallpaper", "floor": "oak", "pieces": rows}
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	l.pieces = l._defaults([])
+	l.pets_seen = []
+	l.path = path
+	l.persist = true
+	s._check(l.load_file(), "the old layout loads")
+	var crates: int = l.pieces.filter(func(p): return p["p"] == "crate").size()
+	s._check(
+		crates == taken.size(), "all his furniture is kept (%d of %d)" % [crates, taken.size()]
+	)
+	h.apply_layout()
+	h.petlife.sync()
+	h.apply_layout()
+	l.save()
+	var keys := _keys(h)
+	keys.sort()
+	s._check(
+		keys == ["bed_cushion", "bed_round", "bone", "bowls", "litter", "post", "tower"],
+		"the things are added to it (%s)" % [keys]
+	)
+	_sound(h, "migrated")
+	_wall_sides(h, "migrated")
+	for p in h.layout.pet_pieces():
+		s._check(_cell(p) not in taken, "%s avoided his furniture (%s)" % [p["p"], _cell(p)])
+	var back := _rows(path)
+	var kept: Array = back["pieces"].filter(func(r): return not str(r["p"]).begins_with("pet."))
+	s._check(
+		kept == JSON.parse_string(JSON.stringify(rows)), "his furniture is saved back as it was"
+	)
+	s._check(
+		back.get("pets_seen") is Array and back["pets_seen"].size() == 7,
+		"the things are marked put out"
+	)
+	var cells := {}
+	for p in h.layout.pet_pieces():
+		cells[p["p"]] = [p["f"], _cell(p)]
+	room.queue_free()
+	room = _home(89, "cat_grey", "dog_golden")
+	h = room.home
+	h.layout.pieces = h.layout._defaults([])
+	h.layout.pets_seen = []
+	h.layout.path = path
+	h.layout.persist = true
+	h.layout.load_file()
+	h.apply_layout()
+	h.petlife.sync()
+	var same := true
+	for p in h.layout.pet_pieces():
+		same = same and cells.get(p["p"]) == [p["f"], _cell(p)]
+	s._check(
+		same and h.layout.pet_pieces().size() == cells.size(),
+		"a second start finds the things where they were"
+	)
+	var tower: Dictionary = h.petlife.piece("tower")
+	var spot := Vector2i(-1, -1)
+	for cell in h.petlife._wall_cells():
+		var moved := {"p": "pet.tower", "f": "se", "c": cell.x, "r": cell.y}
+		if cell != _cell(tower) and h.layout.place(moved, tower, h.busy_cells()) == "":
+			spot = cell
+			break
+	s._check(spot.x > 0 and tower["f"] == "se", "he turns and moves the tower")
+	h.layout.remove(h.petlife.piece("post"))
+	h.apply_layout()
+	h.petlife.sync()
+	room.queue_free()
+	room = _home(90, "cat_grey", "dog_golden")
+	h = room.home
+	h.layout.pieces = h.layout._defaults([])
+	h.layout.pets_seen = []
+	h.layout.path = path
+	h.layout.persist = true
+	h.layout.load_file()
+	h.apply_layout()
+	h.petlife.sync()
+	var t2: Dictionary = h.petlife.piece("tower")
+	s._check(
+		not t2.is_empty() and t2["f"] == "se" and _cell(t2) == spot,
+		"a moved and turned tower is kept"
+	)
+	s._check(h.petlife.piece("post").is_empty(), "a post he took out is not put back")
+	var own := {"p": "pet.aquarium", "f": "", "c": 0, "r": 0, "own": true}
+	for cell in h.petlife._wall_cells():
+		own["c"] = cell.x
+		own["r"] = cell.y
+		if h.layout.place(own, null, h.busy_cells()) == "":
+			break
+	h.layout.save()
+	s._check(
+		_rows(path)["pieces"].any(
+			func(r): return r["p"] == "pet.aquarium" and r.get("own") == true
+		),
+		"a thing put out by hand is saved as his"
+	)
+	room.queue_free()
+	room = _home(91, "cat_grey", "dog_golden")
+	h = room.home
+	h.layout.pieces = h.layout._defaults([])
+	h.layout.pets_seen = []
+	h.layout.path = path
+	h.layout.persist = true
+	h.layout.load_file()
+	h.apply_layout()
+	h.petlife.sync()
+	s._check(not h.petlife.piece("aquarium").is_empty(), "and comes back as his")
+	var fresh = s._layout_of(h.room._index, path, false)
+	s._check(fresh.pieces.size() > 0, "a layout with no pets in the room still reads the file")
+	room.queue_free()
+
+
+# an untouched house writes no layout file; a change in decorate mode writes one
+func _quiet() -> void:
+	var path := _tmp.get_current_dir().path_join("quiet_layout.json")
+	var room := _home(94, "cat_grey", "dog_golden")
+	var h = room.home
+	h.layout.pieces = h.layout._defaults([])
+	h.layout.pets_seen = []
+	h.layout.path = path
+	h.layout.persist = true
+	h.petlife._stamp = []
+	h.petlife.sync()
+	s._check(h.layout.pet_pieces().size() == 7, "the things are put out in memory")
+	s._run_home(h, 5.0)
+	h.settings.put("pet1", "rabbit_white")
+	s._run_home(h, 2.0)
+	h.settings.put("pet1", "cat_grey")
+	s._run_home(h, 2.0)
+	s._check(not FileAccess.file_exists(path), "a run and a species change write no layout")
+	var box := {"p": "pet.cardbox", "f": "", "c": 2, "r": 9}
+	h.layout.place(box, null, h.busy_cells())
+	s._check(FileAccess.file_exists(path), "a change in decorate mode writes it")
+	var saved := _rows(path)
+	s._check(saved["pets_seen"].size() >= 7 and saved["pieces"].size() > 7,
+		"with the things in it %s" % [saved["pets_seen"]])
+	room.queue_free()
+
+
+
+# each pet sleeps in its bed at night, a chicken on its perch, a rabbit in its house
+func _night() -> void:
+	var room := _home(92, "cat_grey", "dog_golden")
+	var h = room.home
+	h.pets.is_night = true
+	h.petlife.night_place()
+	var cat = h.pets.critter("nina")
+	var dog = h.pets.critter("argos")
+	s._check(cat.spot == "bed_cushion" and cat.mode == "sleep", "the cat sleeps in its cushion bed")
+	s._check(dog.spot == "bed" and dog.mode == "sleep", "the dog sleeps in its round bed")
+	s._check(h.pets._cell_of(cat.pos) == _cell(h.petlife.piece("bed_cushion")), "on the bed's cell")
+	room.queue_free()
+	room = _home(93, "chicken_white", "rabbit_white")
+	h = room.home
+	h.pets.is_night = true
+	h.petlife.night_place()
+	s._check(
+		h.pets.critter("nina").spot == "roost" and h.pets.critter("nina").z > 0.0,
+		"a chicken roosts"
+	)
+	s._check(h.pets.critter("argos").spot == "hutch", "a rabbit sleeps in its house")
+	room.queue_free()
+
+
+# every thing draws, both ways round, with and without a tint, and its icon
+func _drawn() -> void:
+	var canvas := Control.new()
+	canvas.size = Vector2(400, 300)
+	var count := [0]
+	canvas.draw.connect(
+		func() -> void:
+			for key in PetThings.THINGS:
+				for turned in [false, true]:
+					for tint in [Color.WHITE, Color(1, 0.4, 0.4, 0.7)]:
+						var pen := PetThings.Pen.new(canvas, Vector2(200, 100), 2.0, turned, tint)
+						for lv in [0.0, 0.05, 0.5, 1.0]:
+							var d := {"level": {"food": lv, "water": lv}, "size": 1.15, "t": lv * 9.0}
+							PetThings.draw_all(pen, key, d)
+							count[0] += 1
+			var tiny := PetThings.Pen.new(canvas, Vector2(200, 100), 2.0)
+			s._check(not tiny.ell(0.5, 0.5, 0.4, 0.2, 0.0, Color.RED), "a tiny ellipse is not drawn")
+	)
+	s.root.add_child(canvas)
+	await s.process_frame
+	await s.process_frame
+	s._check(count[0] >= PetThings.THINGS.size() * 4, "every thing draws (%d)" % count[0])
+	canvas.queue_free()
