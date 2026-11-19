@@ -33,6 +33,7 @@ defmodule Server.Home.Inbox do
   alias Server.Home.Agendas
   alias Server.Home.Clock
   alias Server.Home.Organize
+  alias Server.Home.Proposals
   alias Server.Home.Reader
   alias Server.Home.Slot
   alias Server.Jot
@@ -385,6 +386,16 @@ defmodule Server.Home.Inbox do
     end
   end
 
+  defp tap("p:" <> answer, via, now) do
+    with [id, choice] <- String.split(answer, ":"),
+         {id, ""} <- Integer.parse(id),
+         {_text, _opts} = reply <- Proposals.tap(via, id, choice, now) do
+      reply
+    else
+      _ -> {"That one is already answered.", []}
+    end
+  end
+
   defp tap("n:" <> else_, _via, now) do
     with [minutes, skipped] <- String.split(else_, ":"),
          {minutes, ""} <- Integer.parse(minutes),
@@ -472,7 +483,8 @@ defmodule Server.Home.Inbox do
       projects: Jot.projects(via),
       someday: Jot.somedays(via),
       agendas: Enum.map(Server.Agenda.all(via), & &1.name),
-      meetings: Server.Home.Day.meetings(now)
+      meetings: Server.Home.Day.meetings(now),
+      proposals: Server.Proposal.open()
     }
 
     reader = Application.get_env(:server, :home_reader, &Reader.read/2)
@@ -493,7 +505,8 @@ defmodule Server.Home.Inbox do
         named = Reader.unnumber(text, context.open ++ context.someday ++ context.projects)
         asked(%{reading | text: named}, via, now)
 
-      {:ok, %{kind: kind} = reading} when kind in ["done", "delete", "list", "now", "someday"] ->
+      {:ok, %{kind: kind} = reading}
+      when kind in ["done", "delete", "list", "now", "someday", "proposals", "take", "dismiss"] ->
         Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
         asked(reading, via, now)
 
@@ -514,6 +527,9 @@ defmodule Server.Home.Inbox do
   defp asked(%{kind: "answer", text: text}, _via, _now), do: {text, []}
   defp asked(%{kind: "list"}, via, now), do: listed(via, now)
   defp asked(%{kind: "now"} = reading, _via, now), do: now([], Map.get(reading, :minutes, 0), now)
+
+  defp asked(%{kind: kind} = reading, via, now) when kind in ["proposals", "take", "dismiss"],
+    do: Proposals.ask(reading, via, now)
 
   defp asked(%{kind: "someday"}, via, _now) do
     case Jot.somedays(via) do

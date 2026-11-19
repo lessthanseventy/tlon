@@ -14,7 +14,8 @@ defmodule Server.Home do
   for naming one to delete), `projects` the open projects with their
   `next` step and how many are `done`, `waiting` what others owe the operator, `done` what was done in
   the last seven days by name (`text`, `done_at`, the newest first), and `done_week` how many
-  things were done in the last seven days, and `agendas` the standing piles (`agenda_row/1`). A row's `since` is when it was said, its `told_at` when the
+  things were done in the last seven days, and `agendas` the standing piles (`agenda_row/1`), and `proposals` what sources suggest and the
+  operator has not answered (`proposal_row/1`). A row's `since` is when it was said, its `told_at` when the
   operator was last told a reminder that is due (nil before that), its `project` the project it is a step
   of (nil when none). Things put off to someday or dropped are in none of these.
   """
@@ -28,7 +29,8 @@ defmodule Server.Home do
           someday: [map()],
           done: [map()],
           done_week: non_neg_integer(),
-          agendas: [map()]
+          agendas: [map()],
+          proposals: [map()]
         }
   def status(now) do
     {coming, open} = board(via(), now)
@@ -46,8 +48,25 @@ defmodule Server.Home do
       someday: Enum.map(Jot.somedays(via()), &row(&1, named)),
       done: Enum.map(done, &%{text: &1.text, done_at: &1.done_at}),
       done_week: length(done),
-      agendas: Enum.map(Server.Agenda.all(via()), &agenda_row/1)
+      agendas: Enum.map(Server.Agenda.all(via()), &agenda_row/1),
+      proposals: Enum.map(Server.Proposal.open(), &proposal_row/1)
     }
+  end
+
+  @doc "A proposal as `status/1` shows it: `%{id, source, text, why, url}`."
+  @spec proposal_row(Server.Proposal.t()) :: map()
+  def proposal_row(p), do: %{id: p.id, source: p.source, text: p.text, why: p.why, url: p.url}
+
+  @doc "Take the open proposal `id` at `now` (`Server.Proposal.take/3`): `{:ok, row}`, `:not_found` when it is not open."
+  @spec take_proposal(integer(), DateTime.t()) :: {:ok, map()} | :not_found
+  def take_proposal(id, now) do
+    with {:ok, p} <- Server.Proposal.take(via(), id, now), do: {:ok, proposal_row(p)}
+  end
+
+  @doc "Dismiss the open proposal `id`, for good: `{:ok, row}`, `:not_found` when it is not open."
+  @spec dismiss_proposal(integer()) :: {:ok, map()} | :not_found
+  def dismiss_proposal(id) do
+    with {:ok, p} <- Server.Proposal.dismiss(id), do: {:ok, proposal_row(p)}
   end
 
   @doc """
