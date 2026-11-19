@@ -14,8 +14,8 @@ const FACE_NE := 5
 
 # the home's furniture, floor and wall come from `home.layout`
 const HOME := {
-	"cols": 10,
-	"rows": 10,
+	"cols": Pets.COLS,
+	"rows": Pets.ROWS,
 	"windows": {"ne": [4], "nw": []},
 	"door": {"row": 7, "label": "to the office"},
 	"figures": [],
@@ -42,6 +42,7 @@ const SKIN_FALLBACK := [
 const MARK_COLOR := Color("e8b86d")
 const INK := Color("2a2530")
 const HomeScript := preload("res://home.gd")
+const Pets := preload("res://pets.gd")
 const Packs := preload("res://packs.gd")
 const Guests := preload("res://guests.gd")
 

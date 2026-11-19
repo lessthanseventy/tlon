@@ -985,14 +985,14 @@ func _enter(c, p) -> void:
 	for d in [c.dir, 7, 3, 1, 5]:
 		var v: Vector2 = vec(d)
 		var ahead: Vector2i = h.pets._cell_of(c.pos + v * 1.2)
-		if not h.pets._blocked(ahead) and _inside(c.pos + v * 1.2, 10.0):
+		if not h.pets._blocked(ahead) and _inside(c.pos + v * 1.2, 0.0):
 			fwd = v
 			break
 	act["fwd"] = fwd
 
 
-func _inside(p: Vector2, hi: float) -> bool:
-	return p.x >= 1.0 and p.y >= 1.0 and p.x < hi and p.y < hi
+func _inside(p: Vector2, margin: float) -> bool:
+	return p.x >= 1.0 and p.y >= 1.0 and p.x < Pets.COLS - margin and p.y < Pets.ROWS - margin
 
 
 func vec(d: int) -> Vector2:
@@ -1238,7 +1238,7 @@ func _pose(name: String, c, t: float, dur: float, p) -> void:
 			c.anim = "eat"
 			var step: float = t * 0.45
 			var to: Vector2 = base + fwd * step
-			if not h.pets._blocked(h.pets._cell_of(to)) and _inside(to, 9.8):
+			if not h.pets._blocked(h.pets._cell_of(to)) and _inside(to, 0.2):
 				c.pos = to
 			c.dir = h.pets._face(fwd, d0)
 		"head_tilt":
@@ -1321,7 +1321,7 @@ func _pose(name: String, c, t: float, dur: float, p) -> void:
 		"root_floor":
 			c.anim = "eat"
 			var to: Vector2 = base + fwd * t * 0.3
-			if not h.pets._blocked(h.pets._cell_of(to)) and _inside(to, 9.8):
+			if not h.pets._blocked(h.pets._cell_of(to)) and _inside(to, 0.2):
 				c.pos = to
 			_fx(c, "dust", fmod(t * 1.4, 1.0))
 		"happy_spin":

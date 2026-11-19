@@ -1499,7 +1499,7 @@ func _decorate_logic() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2024
 	var l := _layout()
-	_check(Pets.COLS == 10 and Pets.ROWS == 10, "the home is 10x10")
+	_check(Pets.COLS == 11 and Pets.ROWS == 11, "the home is 11x11")
 	_check(
 		l.pieces.size() == Layout.DEFAULTS.size(), "every default piece stands (%d)" % l.pieces.size()
 	)
@@ -1553,11 +1553,11 @@ func _decorate_logic() -> void:
 		"a rug may lie on a spot"
 	)
 	_check(
-		l.check({"p": "crate", "f": "", "c": 9, "r": 9}, null, []) == l.NO_ROOM,
+		l.check({"p": "crate", "f": "", "c": 10, "r": 10}, null, []) == l.NO_ROOM,
 		"not on another piece"
 	)
 	_check(
-		l.check({"p": "dining_table", "f": "nwse", "c": 9, "r": 8}, null, []) == l.NO_ROOM,
+		l.check({"p": "dining_table", "f": "nwse", "c": 10, "r": 8}, null, []) == l.NO_ROOM,
 		"not out of the room"
 	)
 	for c in [Vector2i(7, 2), Vector2i(8, 3), Vector2i(7, 4)]:

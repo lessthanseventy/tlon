@@ -40,8 +40,8 @@ const Fonts := preload("res://fonts.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
-const COLS := 10
-const ROWS := 10
+const COLS := Pets.COLS
+const ROWS := Pets.ROWS
 const DAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const DAYS_FULL := ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const CARD_KEYS := {

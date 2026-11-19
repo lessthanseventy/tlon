@@ -56,11 +56,11 @@ const DEFAULTS := [
 	["piano", "se", 0, 8],
 	["wall_shelf", "nw", 0, 8],
 	["mirror", "nw", 0, 9],
-	["rug_round", "", 3, 8],
-	["dining_table", "nwse", 3, 8],
-	["dining_chair", "ne", 3, 9],
+	["rug_round", "", 4, 8],
+	["dining_table", "nwse", 4, 8],
 	["dining_chair", "ne", 4, 9],
-	["plant_small", "", 9, 9],
+	["dining_chair", "ne", 5, 9],
+	["plant_small", "", 10, 10],
 ]
 # what each plain piece is drawn as with no art: footprint, height at 1x, colour
 const BOXES := {
