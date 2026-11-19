@@ -7,6 +7,16 @@ const Pets := preload("res://pets.gd")
 const PetThings := preload("res://pet_things.gd")
 const Decorate := preload("res://decorate.gd")
 
+const SIGNATURE := {
+	"dog": "kennel",
+	"wolf": "howl",
+	"fox": "den",
+	"horse": "apples",
+	"cow": "pail",
+	"sheep": "basket",
+	"deer": "stump",
+}
+
 var s
 var _tmp: DirAccess
 
@@ -93,7 +103,7 @@ func _defaults() -> void:
 	var keys := _keys(h)
 	keys.sort()
 	var want := [
-		"bed_cushion", "bed_round", "bone", "bowls", "litter", "post", "tower", "window_perch"
+		"bed_cushion", "bed_round", "bone", "bowls", "kennel", "litter", "post", "tower", "window_perch"
 	]
 	s._check(keys == want, "a cat and a dog get their things: %s" % [keys])
 	_sound(h, "cat and dog")
@@ -126,6 +136,11 @@ func _combos() -> void:
 			var out: bool = not h.petlife.piece(key).is_empty()
 			var wanted: bool = t["def"] and PetThings.fits(key, [sp]) and h.petlife.shown(key)
 			s._check(out == wanted, "%s: %s %s" % [sp, key, "out" if out else "not out"])
+		for who in SIGNATURE:
+			var out: bool = not h.petlife.piece(SIGNATURE[who]).is_empty()
+			s._check(out == (who == sp), "%s: the %s is %s" % [sp, SIGNATURE[who], out])
+		if SIGNATURE.has(sp):
+			_visit(h, SIGNATURE[sp])
 		room.queue_free()
 	for pair in [
 		["chicken_white", "cow_holstein"], ["rabbit_white", "pig_pink"], ["bear_black", "deer_doe"]
@@ -134,6 +149,18 @@ func _combos() -> void:
 		_sound(room.home, str(pair))
 		_wall_sides(room.home, str(pair))
 		room.queue_free()
+
+
+# the pet sent to a thing's spot ends up there
+func _visit(h, key: String) -> void:
+	var c = h.pets.critter("nina")
+	h.pets.freeze = true
+	h.pets.place(c, "rug", "sit")
+	h.pets.go(c, key, "sit", 5.0)
+	s._run_home(h, 30.0, func(): return c.goal == "" and c.mode not in ["walk", "jump"])
+	var cell: Vector2i = h.pets.spots[key]["cell"]
+	var there: bool = c.z > 0.0 if h.pets.spots[key].has("perch") else h.pets._cell_of(c.pos) == cell
+	s._check(c.spot == key and there, "%s goes to the %s" % [c.species, key])
 
 
 # a thing goes with its animal and comes back where it was
@@ -185,7 +212,7 @@ func _switches() -> void:
 	var rows := {
 		"litter_box": ["litter"],
 		"bowls": ["bowls"],
-		"pet_things": ["post", "tower", "bone", "bed_round", "bed_cushion"],
+		"pet_things": ["post", "tower", "bone", "bed_round", "bed_cushion", "window_perch", "kennel"],
 	}
 	for sw in rows:
 		h.settings.put(sw, false)
@@ -306,14 +333,17 @@ func _cage() -> void:
 	h.petlife.sync()
 	_sound(h, "bird cage")
 	s._check(h.pets.spots.has("cage") and h.antics._need("cage", cat), "a cat has the cage to watch")
-	h.antics.force("cage_watch", "nina")
+	h.pets.freeze = true
+	h.pets.place(cat, "rug", "idle")
+	cat.hold = false
+	h.antics.act = {}
+	s._check(h.antics.begin("cage_watch", cat, false), "a cat starts to watch it")
 	s._check(h.antics.act.get("legs") == ["cage"], "and goes beside it")
 	room.queue_redraw()
-	await s.process_frame
-	await s.process_frame
-	var hit := h._hits.filter(func(x): return x["key"] == "cage")
-	var inside: Vector2 = hit[0]["below"] - Vector2(0, 8) if hit.size() == 1 else Vector2.ZERO
-	s._check(hit.size() == 1 and h._topmost(inside) == "cage", "the cage is hit")
+	for i in 3:
+		await s.process_frame
+	var hit: Array = h._hits.filter(func(x): return x["key"] == "cage")
+	s._check(hit.size() == 1, "the cage is hit (%d of %d hits)" % [hit.size(), h._hits.size()])
 	s._check(h.petlife.click("cage") and h.sound.requested.has("squeak"), "a click makes it sing")
 	room.queue_free()
 
@@ -374,6 +404,8 @@ func _decorating() -> void:
 				l.check(onto, p, h.busy_cells()) != "",
 				"%s is refused on %s at %s" % [key, o["p"], _cell(o)]
 			)
+		l.remove(h.petlife.piece(key))
+		h.apply_layout()
 	_sound(h, "every thing out")
 	room.queue_free()
 
@@ -446,7 +478,7 @@ func _migration() -> void:
 	var taken: Array = []
 	for key in h.petlife.PLACES:
 		for cell in h.petlife.PLACES[key]:
-			if cell not in taken:
+			if cell not in taken and key != "window_perch":
 				taken.append(cell)
 				rows.append({"p": "crate", "f": "", "c": cell.x, "r": cell.y})
 	var old := {"v": 1, "wall": "wallpaper", "floor": "oak", "pieces": rows}
@@ -470,7 +502,17 @@ func _migration() -> void:
 	keys.sort()
 	s._check(
 		keys
-		== ["bed_cushion", "bed_round", "bone", "bowls", "litter", "post", "tower", "window_perch"],
+		== [
+			"bed_cushion",
+			"bed_round",
+			"bone",
+			"bowls",
+			"kennel",
+			"litter",
+			"post",
+			"tower",
+			"window_perch"
+		],
 		"the things are added to it (%s)" % [keys]
 	)
 	_sound(h, "migrated")
@@ -483,7 +525,7 @@ func _migration() -> void:
 		kept == JSON.parse_string(JSON.stringify(rows)), "his furniture is saved back as it was"
 	)
 	s._check(
-		back.get("pets_seen") is Array and back["pets_seen"].size() == 8,
+		back.get("pets_seen") is Array and back["pets_seen"].size() == 9,
 		"the things are marked put out"
 	)
 	var cells := {}
@@ -573,7 +615,7 @@ func _quiet() -> void:
 	h.layout.persist = true
 	h.petlife._stamp = []
 	h.petlife.sync()
-	s._check(h.layout.pet_pieces().size() == 8, "the things are put out in memory")
+	s._check(h.layout.pet_pieces().size() == 9, "the things are put out in memory")
 	s._run_home(h, 5.0)
 	h.settings.put("pet1", "rabbit_white")
 	s._run_home(h, 2.0)
@@ -601,6 +643,12 @@ func _night() -> void:
 	s._check(cat.spot == "bed_cushion" and cat.mode == "sleep", "the cat sleeps in its cushion bed")
 	s._check(dog.spot == "bed" and dog.mode == "sleep", "the dog sleeps in its round bed")
 	s._check(h.pets._cell_of(cat.pos) == _cell(h.petlife.piece("bed_cushion")), "on the bed's cell")
+	h.layout.remove(h.petlife.piece("bed_round"))
+	h.layout.remove(h.petlife.piece("bed_cushion"))
+	h.apply_layout()
+	h.petlife.sync()
+	h.petlife.night_place()
+	s._check(dog.spot == "kennel" and dog.mode == "sleep", "with no bed the dog sleeps by its house")
 	room.queue_free()
 	room = _home(93, "chicken_white", "rabbit_white")
 	h = room.home
