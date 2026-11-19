@@ -16,6 +16,7 @@ func _init(soak) -> void:
 func _home(seed_value: int = 71) -> Array:
 	var room: Control = s._room(seed_value)
 	var h = room.home
+	h.antics.quiet = false
 	h.fake_hour = 14.0
 	h.set_data(s._data([s._thing(1, 1.0)], 0))
 	h.pets.freeze = false
@@ -32,6 +33,8 @@ func run() -> void:
 	_gates(h)
 	_alone(h)
 	_events(h)
+	_world(h)
+	_clicks(h)
 	_rates()
 	_egg(h)
 	_random()
@@ -56,6 +59,7 @@ func kind_of(species: String) -> String:
 func tidy(h, kinds: Array) -> void:
 	h.antics.act = {}
 	h.antics.forced = []
+	h.antics.next = {"nina": 99999.0, "argos": 99999.0}
 	for i in 2:
 		var c = h.pets.critter(["nina", "argos"][i])
 		h.pets.change_kind(c, kinds[i])
@@ -83,6 +87,17 @@ func _finish(h, limit: int = 400) -> bool:
 	return false
 
 
+func _settle(h) -> void:
+	for i in 600:
+		var calm: bool = h.antics.act.is_empty()
+		for id in ["nina", "argos"]:
+			var c = h.pets.critter(id)
+			calm = calm and c.mode in ["idle", "sleep"] and c.goal == "" and c.jump.is_empty()
+		if calm:
+			return
+		h.process(0.1)
+
+
 func _table(h) -> void:
 	var species := {}
 	for name in Antics.ANTICS:
@@ -108,16 +123,87 @@ func _table(h) -> void:
 			var n: int = h.antics.started.size()
 			h.antics.force(name, "nina")
 			var ended := _finish(h)
-			if name == "standoff":
-				_finish(h, 150)
-				for i in 150:
-					h.process(0.1)
+			_settle(h)
 			var tag := "%s as %s" % [name, sp]
 			s._check(h.antics.started.size() > n, tag + " starts when forced")
 			s._check(ended, tag + " runs to its end")
 			normal(h, c, tag)
 			normal(h, h.pets.critter("argos"), tag + " (the other)")
 	s._check(species.size() >= 12, "the table covers the species")
+
+
+func _w(h, name: String, kind: String) -> float:
+	tidy(h, [kind, "dog_golden"])
+	return h.antics._weight(name, h.pets.critter("nina"))
+
+
+func _world(h) -> void:
+	h.fake_hour = 12.0
+	h.forced_weather = "clear"
+	h.process(0.1)
+	s._check(_w(h, "sunbathe", "cat_black") > 0.0, "a clear noon has the sun patch")
+	h.fake_hour = 21.0
+	h.process(0.1)
+	s._check(_w(h, "sunbathe", "cat_black") == 0.0, "no sun patch at night")
+	h.fake_hour = 12.0
+	h.forced_weather = "snow"
+	h.process(0.1)
+	s._check(_w(h, "sunbathe", "cat_black") == 0.0, "no sun patch in snow")
+	s._check(_w(h, "snow_watch", "cat_black") > 0.0, "snow is watched")
+	h.forced_weather = "clear"
+	h.process(0.1)
+	s._check(_w(h, "snow_watch", "cat_black") == 0.0, "no snow watching in the clear")
+	h.tv.force_on(true)
+	h.tv.hacks.current = "life"
+	s._check(_w(h, "tv_hunt", "cat_black") > 0.0, "the cat hunts the life cells")
+	s._check(_w(h, "tv_hunt", "dog_golden") == 0.0, "a dog does not")
+	h.tv.hacks.current = "fireworks"
+	s._check(_w(h, "tv_bark", "dog_golden") > 0.0, "the dog barks at fireworks")
+	h.tv.force_on(false)
+	h.quirks.visitor = {"kind": "monster", "t": 0.0, "name": "x"}
+	s._check(_w(h, "visitor_puff", "cat_black") > 0.0, "a cat puffs at a monster")
+	s._check(_w(h, "visitor_follow", "cat_black") == 0.0, "and does not follow a monster")
+	h.quirks.visitor = {}
+	h.forced_weather = ""
+	h.fake_hour = 14.0
+
+
+func _clicks(h) -> void:
+	var ignored := 0
+	var tricks := 0
+	for i in 400:
+		tidy(h, ["cat_black", "dog_golden"])
+		h.pets.set_persona(h.pets.critter("nina"), "sassy")
+		h.antics._click_t = 0.0
+		if h.antics.click(h.pets.critter("nina"), 2, 0.1):
+			tricks += 1
+			ignored += int(h.antics.act["name"] == "trick_ignore")
+		h.antics.act = {}
+	s._check(tricks == 400, "a quick second click is always taken")
+	s._check(ignored > 60 and ignored < 140, "a sassy pet ignores about one in four (%d)" % ignored)
+	for kind in ["cat_black", "dog_golden", "pig_pink"]:
+		tidy(h, [kind, "dog_golden"])
+		h.antics._click_t = 0.0
+		s._check(h.antics.click(h.pets.critter("nina"), 6, 5.0), "%s is rewarded for pats" % kind)
+		_finish(h)
+		normal(h, h.pets.critter("nina"), "pats " + kind)
+	for name in ["trick_sit", "trick_spin", "trick_dead", "trick_ignore"]:
+		tidy(h, ["cat_black", "dog_golden"])
+		h.antics.force(name, "nina")
+		_finish(h)
+		normal(h, h.pets.critter("nina"), name)
+	tidy(h, ["cat_black", "dog_golden"])
+	var toy := {
+		"kind": "yarn", "pos": Vector2(4.5, 4.5), "z": 0.0, "spin": 0.0, "hop": {}, "hits": 0
+	}
+	h.pets.toys.append(toy)
+	h.antics.throw_toy(toy)
+	s._check(not (toy["hop"] as Dictionary).is_empty(), "the toy is thrown")
+	s._check(h.pets.critter("argos").mode != "sit", "the dog goes after it")
+	for i in 150:
+		h.process(0.1)
+	h.pets.toys.erase(toy)
+	tidy(h, ["cat_black", "dog_golden"])
 
 
 func _alone(h) -> void:

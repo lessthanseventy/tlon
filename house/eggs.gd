@@ -679,9 +679,12 @@ func pet_click(c) -> bool:
 		h.pets.say(c, "...")
 		return true
 	var same: bool = _pet_run["id"] == c.id and _pet_run["last"] < PET_RUN_GAP
+	var gap: float = _pet_run["last"]
 	_pet_run["n"] = _pet_run["n"] + 1 if same else 1
 	_pet_run["id"] = c.id
 	_pet_run["last"] = 0.0
+	if h.antics.click(c, _pet_run["n"], gap if same else 99.0):
+		return true
 	if c.id == "argos" and _pet_run["n"] >= FLOP_AT:
 		_pet_run["n"] = 0
 		_do_flop(c)

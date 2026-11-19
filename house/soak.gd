@@ -1052,6 +1052,7 @@ func _room(seed_value: int = 7) -> Control:
 	h.quirks.setup(h)
 	h.delights.setup(h)
 	h.antics.setup(h)
+	h.antics.quiet = true
 	h.fake_day = "06-15"
 	h.layout.setup(room._index, room.art_found, "", false)
 	h.apply_layout()

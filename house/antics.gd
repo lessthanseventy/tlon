@@ -136,6 +136,90 @@ const ANTICS := {
 	"big_yawn": {"who": {"bear": 1.2}, "dur": [3.2, 4.0], "e": "lo"},
 	"pat_jar": {"who": {"bear": 1.0}, "go": ["nook"], "dur": [4.5, 5.5], "pers": {"sweet": 1.6}},
 	"greet": {"pair": true, "who": {"*": 1.5}, "go": ["@p"], "dur": [3.6, 4.6]},
+	"pat_purr":
+	{
+		"who": {"cat": 1.0},
+		"trig": true,
+		"wakes": true,
+		"perch_ok": true,
+		"dur": [3.5, 4.5],
+		"cue": "purr"
+	},
+	"pat_kick":
+	{
+		"who": {"dog": 1.0, "wolf": 1.0, "fox": 1.0},
+		"trig": true,
+		"wakes": true,
+		"perch_ok": true,
+		"dur": [3.0, 3.6]
+	},
+	"pat_roll":
+	{"who": {"*": 1.0}, "trig": true, "wakes": true, "perch_ok": true, "dur": [3.2, 4.0]},
+	"trick_sit":
+	{"who": {"*": 1.0}, "trig": true, "wakes": true, "perch_ok": true, "dur": [3.0, 3.6]},
+	"trick_spin":
+	{"who": {"*": 1.0}, "trig": true, "wakes": true, "perch_ok": true, "dur": [2.6, 3.0]},
+	"trick_dead":
+	{"who": {"*": 1.0}, "trig": true, "wakes": true, "perch_ok": true, "dur": [4.0, 5.0]},
+	"trick_ignore":
+	{"who": {"*": 1.0}, "trig": true, "wakes": true, "perch_ok": true, "dur": [2.2, 2.6]},
+	"sunbathe":
+	{
+		"who": {"cat": 2.0, "dog": 1.2, "fox": 1.2, "rabbit": 1.2, "*": 0.5},
+		"need": "sun",
+		"go": ["@sun"],
+		"dur": [18.0, 28.0],
+		"keep": true,
+		"w": 3.0,
+		"pers": {"lazy": 2.0}
+	},
+	"snow_watch":
+	{
+		"who": {"cat": 2.0, "dog": 1.0, "rabbit": 1.0, "fox": 1.0},
+		"need": "snow",
+		"go": ["sill"],
+		"dur": [10.0, 16.0],
+		"w": 3.0
+	},
+	"tv_hunt":
+	{
+		"who": {"cat": 3.0, "fox": 1.0},
+		"need": "tv_hunt",
+		"go": ["tv"],
+		"dur": [7.0, 10.0],
+		"w": 4.0,
+		"pers": {"mischievous": 2.0}
+	},
+	"tv_bark":
+	{
+		"who": {"dog": 3.0, "wolf": 1.0},
+		"need": "tv_fireworks",
+		"go": ["tv"],
+		"dur": [4.0, 5.0],
+		"cue": "cry",
+		"w": 4.0
+	},
+	"visitor_follow":
+	{
+		"who": {"*": 1.0},
+		"need": "visitor_hero",
+		"go": ["door_in"],
+		"dur": [6.0, 8.0],
+		"w": 4.0,
+		"pers": {"bold": 2.0, "sweet": 1.5, "shy": 0.2}
+	},
+	"visitor_shadow":
+	{"who": {"*": 1.0}, "need": "visitor_farm", "go": ["mid"], "dur": [6.0, 8.0], "w": 4.0},
+	"visitor_puff":
+	{"who": {"cat": 3.0, "fox": 1.0}, "need": "visitor_monster", "dur": [5.0, 6.0], "w": 6.0},
+	"festive_look":
+	{
+		"who": {"cat": 2.0, "dog": 1.0, "*": 0.6},
+		"need": "season",
+		"go": ["sill"],
+		"dur": [6.0, 9.0],
+		"w": 2.0
+	},
 	"meal_nap": {"who": {"*": 1.0}, "trig": true, "wakes": true, "keep": true, "dur": [14.0, 20.0]},
 	"birthday_hop":
 	{"who": {"*": 1.0}, "trig": true, "wakes": true, "perch_ok": true, "dur": [3.2, 3.8]},
@@ -364,6 +448,31 @@ const LINES := {
 	"phone_watch": {"*": ["it's ringing. should I answer?", "the phone is doing a thing."]},
 	"board_look": {"*": ["looking at the board. no comment.", "the board. interesting."]},
 	"meal_nap": {"*": ["full. sleeping now.", "food, then sleep. the order."]},
+	"trick_sit":
+	{
+		"*": ["a sit. you're welcome.", "sit. I know this one."],
+		"sweet": ["sit! did I do it right?"]
+	},
+	"trick_spin": {"*": ["one spin. no encore.", "ta-da. spun."], "bold": ["BEHOLD. a spin."]},
+	"trick_dead": {"*": ["x_x. very convincing.", "I'm gone. tell my story."]},
+	"trick_ignore":
+	{
+		"sassy": ["I heard you. I decline.", "no. but nicely."],
+		"lazy": ["...later.", "the trick is that I don't."],
+		"*": ["no."],
+	},
+	"pat_purr": {"cat": ["prrrr. don't stop.", "this is allowed."]},
+	"pat_kick": {"*": ["the leg! the leg! it kicks!", "that's the spot. that's THE spot."]},
+	"pat_roll": {"*": ["belly. yes.", "ahh. more."]},
+	"sunbathe": {"*": ["the sun patch. mine. it moves, I move.", "warm floor. best floor."]},
+	"snow_watch": {"*": ["white. falling. fascinating.", "the sky is shedding."]},
+	"tv_hunt":
+	{"cat": ["the dots. I'll get the dots.", "it bounced. I saw it."], "*": ["got you. nope."]},
+	"tv_bark": {"*": ["BOOM! (nobody is in the TV)", "woof. the sky is on fire."]},
+	"visitor_follow": {"*": ["I'll just walk with you. all over.", "hello. I'm supervising."]},
+	"visitor_shadow": {"*": ["hello. I'm keeping an eye on you.", "you smell like a field."]},
+	"visitor_puff": {"cat": ["I meant to do that.", "I was not scared. I was fluffing."]},
+	"festive_look": {"*": ["the lights are blinking at me.", "that pumpkin has opinions."]},
 	"birthday_hop":
 	{"*": ["happy birthday!", "it's your day! hop hop!"], "sassy": ["happy birthday. I mean it."]},
 }
@@ -373,6 +482,7 @@ var h:
 		return _hw.get_ref()
 var rng := RandomNumberGenerator.new()
 var act := {}
+var quiet := false
 var forced: Array = []
 var started: Array = []
 var staged: Array = []
@@ -380,7 +490,10 @@ var next := {}
 
 var _hw: WeakRef
 var _extra: Array = []
+var _click_t := 0.0
 var _jar := -1
+var _vis := false
+var _hack := ""
 var _bday := ""
 var _bday_next := 0.0
 var _rings := 0
@@ -421,6 +534,55 @@ func other(c):
 	return h.pets.critter("argos" if c.id == "nina" else "nina")
 
 
+# a click on a pet: a second quick one is a trick (a sassy or lazy pet sometimes ignores it), the
+# sixth in a row a reward by species; true when the click was taken
+func click(c, n: int, gap: float) -> bool:
+	if not act.is_empty() or _click_t > 0.0 or c.away:
+		return false
+	var name := ""
+	if n == 2 and gap < 0.4:
+		if c.persona in ["sassy", "lazy"] and rng.randf() < 0.25:
+			name = "trick_ignore"
+		else:
+			name = ["trick_sit", "trick_spin", "trick_dead"][rng.randi() % 3]
+	elif n == 6:
+		name = "pat_roll"
+		if c.species == "cat":
+			name = "pat_purr"
+		elif c.species in ["dog", "wolf", "fox"]:
+			name = "pat_kick"
+	if name == "" or not begin(name, c, true):
+		return false
+	_click_t = 6.0
+	return true
+
+
+# the yarn thrown: a dog-like pet fetches it, a cat watches it go
+func throw_toy(toy: Dictionary) -> void:
+	if toy.get("kind") != "yarn" or not (toy["hop"] as Dictionary).is_empty():
+		return
+	var from: Vector2 = toy["pos"]
+	var dest: Vector2 = h.pets._toy_dest(from, [7, 3, 1, 5][rng.randi() % 4])
+	if dest == from:
+		return
+	toy["hop"] = {
+		"from": from, "to": dest, "to_z": 0.0, "t": 0.0, "dur": 0.8, "peak": 18.0, "bin": false
+	}
+	for id in ["nina", "argos"]:
+		var c = h.pets.critter(id)
+		if c.away or not h.eggs.loose(c):
+			continue
+		if c.species in ["dog", "wolf", "fox"]:
+			h.pets.chase(c, toy, 2)
+		elif c.species == "cat":
+			c.dir = h.pets._face(dest - c.pos, c.dir)
+			c.mode = "idle"
+			c.anim = "idle"
+			c.wait = maxf(c.wait, 4.0)
+			if c.say_left <= 0.0 and rng.randf() < 0.5:
+				h.pets.say(c, ["fetch is for dogs.", "there it goes. I watched."][rng.randi() % 2])
+
+
 func trigger(name: String, id: String = "") -> bool:
 	if not act.is_empty() or not ANTICS.has(name):
 		return false
@@ -432,6 +594,13 @@ func trigger(name: String, id: String = "") -> bool:
 
 
 func _events(dt: float) -> void:
+	var vis: bool = not h.quirks.visitor.is_empty()
+	var hack: String = h.tv.hacks.current if h.tv.on else ""
+	if (vis and not _vis) or (hack != _hack and hack in ["life", "logo", "fireworks"]):
+		for id in ["nina", "argos"]:
+			next[id] = minf(next[id], rng.randf_range(0.8, 2.5))
+	_vis = vis
+	_hack = hack
 	var jar: int = h.jar.total
 	if _jar >= 0 and jar > _jar:
 		trigger("cheer_done", "nina" if not h.pets.critter("nina").away else "argos")
@@ -469,7 +638,9 @@ func _events(dt: float) -> void:
 
 
 func process(dt: float) -> void:
-	_events(dt)
+	_click_t = maxf(0.0, _click_t - dt)
+	if not quiet:
+		_events(dt)
 	if not staged.is_empty():
 		var st: Array = staged
 		staged = []
@@ -494,7 +665,13 @@ func process(dt: float) -> void:
 
 
 func _gate() -> bool:
-	return h._seen_data and h.eggs.scene.is_empty() and not h.eggs.laser_on and h.eggs.calm()
+	return (
+		not quiet
+		and h._seen_data
+		and h.eggs.scene.is_empty()
+		and not h.eggs.laser_on
+		and h.eggs.calm()
+	)
 
 
 func _stage(st: Array) -> void:
@@ -553,6 +730,20 @@ func _need(need: String, c) -> bool:
 			return h.petlife.has_mat() and c.species in ["dog", "wolf", "fox"]
 		"toy":
 			return not h.pets._toy_of("yarn").is_empty()
+		"sun":
+			var hr: float = h._hour()
+			var fair: bool = env["weather"] in ["clear", "partly"]
+			return fair and float(env["sun"]) > 0.4 and hr >= 8.0 and hr < 17.0
+		"snow":
+			return env["weather"] == "snow"
+		"tv_hunt":
+			return h.tv.on and h.tv.hacks.current in ["life", "logo"]
+		"tv_fireworks":
+			return h.tv.on and h.tv.hacks.current == "fireworks"
+		"visitor_hero", "visitor_farm", "visitor_monster":
+			return h.quirks.visitor.get("kind", "") == need.get_slice("_", 1)
+		"season":
+			return h._season() in ["lights", "pumpkin"]
 		"person_desk":
 			return h.person.act == "desk" and h.person.phase == "idle" and h.person.seated
 		"person_sleep":
@@ -778,10 +969,14 @@ func _enter(c, p) -> void:
 	for d in [c.dir, 7, 3, 1, 5]:
 		var v: Vector2 = vec(d)
 		var ahead: Vector2i = h.pets._cell_of(c.pos + v * 1.2)
-		if not h.pets._blocked(ahead) and c.pos.x + v.x * 1.2 < 10.0 and c.pos.y + v.y * 1.2 < 10.0:
+		if not h.pets._blocked(ahead) and _inside(c.pos + v * 1.2, 10.0):
 			fwd = v
 			break
 	act["fwd"] = fwd
+
+
+func _inside(p: Vector2, hi: float) -> bool:
+	return p.x >= 1.0 and p.y >= 1.0 and p.x < hi and p.y < hi
 
 
 func vec(d: int) -> Vector2:
@@ -1026,7 +1221,7 @@ func _pose(name: String, c, t: float, dur: float, p) -> void:
 			c.anim = "eat"
 			var step: float = t * 0.45
 			var to: Vector2 = base + fwd * step
-			if not h.pets._blocked(h.pets._cell_of(to)) and to.x < 9.8 and to.y < 9.8:
+			if not h.pets._blocked(h.pets._cell_of(to)) and _inside(to, 9.8):
 				c.pos = to
 			c.dir = h.pets._face(fwd, d0)
 		"head_tilt":
@@ -1073,7 +1268,6 @@ func _pose(name: String, c, t: float, dur: float, p) -> void:
 			c.anim = "attack" if _pulse(t, 0.22, 0.65) else "idle"
 			c.lift = -0.8 if c.anim == "attack" else 0.0
 			if _pulse(t, 0.04, 0.65) and t > 0.3:
-				h.sound.request("squeak")
 				_fx(c, "dust", fmod(t, 0.65) / 0.4)
 		"nose_wiggle":
 			c.lift = 0.5 * sin(t * 40.0)
@@ -1110,7 +1304,7 @@ func _pose(name: String, c, t: float, dur: float, p) -> void:
 		"root_floor":
 			c.anim = "eat"
 			var to: Vector2 = base + fwd * t * 0.3
-			if not h.pets._blocked(h.pets._cell_of(to)) and to.x < 9.8 and to.y < 9.8:
+			if not h.pets._blocked(h.pets._cell_of(to)) and _inside(to, 9.8):
 				c.pos = to
 			_fx(c, "dust", fmod(t * 1.4, 1.0))
 		"happy_spin":
@@ -1169,6 +1363,74 @@ func _pose(name: String, c, t: float, dur: float, p) -> void:
 			c.anim = "attack" if _pulse(t, 0.4, 1.3) else "idle"
 			if u > 0.7:
 				_hearts(c, 2)
+		"pat_purr":
+			c.anim = "sleep"
+			c.lift = 0.5 * sin(t * 8.0)
+			_hearts(c, 3)
+		"pat_kick":
+			c.flip = true
+			c.lift = 1.2 * absf(sin(t * 16.0))
+			_hearts(c, 3)
+		"pat_roll":
+			c.flip = u > 0.15 and u < 0.85
+			_hearts(c, 3)
+		"trick_sit":
+			c.dir = Pets.DIRS["se"]
+			if t < 0.6:
+				_fx(c, "bang")
+			elif t > 1.0:
+				_hearts(c, 2)
+		"trick_spin":
+			c.dir = int(t * 6.0) % 8 if t < 1.6 else d0
+			c.anim = "walk" if t < 1.6 else "idle"
+			c.lift = 2.0 * sin(PI * clampf(t / 1.6, 0.0, 1.0))
+			if t > 1.6:
+				_hearts(c, 2)
+		"trick_dead":
+			c.flip = t > 0.4 and t < dur - 0.7
+			c.anim = "sleep" if c.flip else "idle"
+			if not c.flip and t > dur - 0.7:
+				_hearts(c, 2)
+		"trick_ignore":
+			c.dir = (d0 + 4) % 8
+			_fx(c, "sweat", t)
+		"sunbathe":
+			c.mode = "sleep"
+			c.anim = "sleep"
+		"snow_watch":
+			c.dir = Pets.DIRS["nw"]
+			if u > 0.5 and int(t * 2.0) % 5 == 0:
+				_fx(c, "question")
+		"tv_hunt":
+			c.dir = Pets.DIRS["nw"]
+			c.anim = "attack" if _pulse(t, 0.3, 0.8) and t > 1.0 else "idle"
+			c.lift = 1.0 if c.anim == "attack" else 0.0
+			if t < 1.0 or c.anim == "attack":
+				_fx(c, "bang")
+		"tv_bark":
+			c.dir = Pets.DIRS["nw"]
+			if t > 1.0 and t < 1.6:
+				c.anim = "attack"
+				c.lift = 3.0
+				_fx(c, "bang")
+			elif t >= 1.6:
+				_fx(c, "question")
+		"visitor_follow", "visitor_shadow":
+			c.dir = h.pets._face(Vector2(2.6, 7.0) - c.pos, c.dir)
+			if u > 0.5:
+				_fx(c, "question")
+		"visitor_puff":
+			c.dir = h.pets._face(Vector2(2.6, 7.0) - c.pos, Pets.DIRS["sw"])
+			if t < 2.4:
+				c.lift = 5.0 * sin(PI * clampf(t / 0.5, 0.0, 1.0))
+				_fx(c, "fur", t)
+			else:
+				c.anim = "eat"
+				_fx(c, "sweat", t)
+		"festive_look":
+			c.dir = Pets.DIRS["nw"]
+			if u > 0.4:
+				_fx(c, "question")
 		"door_wait":
 			c.dir = Pets.DIRS["nw"]
 			if u > 0.4:
@@ -1330,6 +1592,12 @@ func _draw_fx(canvas: CanvasItem, c, f: Vector2, k: int, kind: String, u: float)
 				var ph := fmod(u * 1.5 + i * 0.25, 1.0)
 				var at := f + Vector2((i - 1.5) * 7.0 * k, -(6 + ph * 10) * k)
 				canvas.draw_rect(Rect2(at, Vector2(2 * k, k)), Color(1, 1, 1, 1.0 - ph))
+		"fur":
+			for i in 8:
+				var a := i * TAU / 8.0
+				var from := f + Vector2(cos(a) * 7.0, -7.0 + sin(a) * 5.0) * k
+				var to := from + Vector2(cos(a), sin(a)) * 3.0 * k
+				canvas.draw_line(from, to, Color(0.9, 0.9, 0.92), maxf(1.0, 0.8 * k))
 		"lick":
 			canvas.draw_rect(
 				Rect2(f + Vector2(6 * k, -(c.head - 6) * k), Vector2(2 * k, 2 * k)), Color("e88a9a")
