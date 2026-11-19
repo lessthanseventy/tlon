@@ -123,23 +123,29 @@ defmodule Server.Proposal do
     end
   end
 
-  @doc "The waiting-ons taken from proposals whose source has since resolved them and the operator has not been told, oldest first."
-  @spec settled() :: [t()]
-  def settled do
+  @doc """
+  The waiting-ons taken from proposals whose source has since resolved them and the operator has not
+  been told, oldest first; with `since`, those told at or after it too (an alert that stays up).
+  """
+  @spec settled(DateTime.t() | nil) :: [t()]
+  def settled(since \\ nil) do
+    told = if since, do: dynamic([p], p.resolved_said_at >= ^DateTime.truncate(since, :second)), else: false
+
     Repo.all(
       from(p in __MODULE__,
-        where: p.state == :taken and not is_nil(p.resolved_at) and is_nil(p.resolved_said_at),
+        where: p.state == :taken and not is_nil(p.resolved_at),
+        where: is_nil(p.resolved_said_at) or ^told,
         order_by: [p.resolved_at, p.id]
       )
     )
   end
 
-  @doc "Record that the operator was told the `rows` settled, at `now`."
+  @doc "Record that the operator was told the `rows` settled, at `now`: a row told before keeps its first time."
   @spec settled_said([t()], DateTime.t()) :: :ok
   def settled_said(rows, now) do
     ids = Enum.map(rows, & &1.id)
 
-    Repo.update_all(from(p in __MODULE__, where: p.id in ^ids),
+    Repo.update_all(from(p in __MODULE__, where: p.id in ^ids and is_nil(p.resolved_said_at)),
       set: [resolved_said_at: DateTime.truncate(now, :second)]
     )
 

@@ -90,7 +90,7 @@ defmodule Server.ProposalTest do
     assert ["https://github.com/o/r/pull/2:waiting"] = Proposal.live_keys("test")
 
     assert [row] = Proposal.settled()
-    assert Proposals.settled([row]) == ["Reviewed: PR 1"]
+    assert Proposals.settled([row]) == "Settled:\n• Reviewed: PR 1"
     Proposal.settled_said([row], @now)
     assert Proposal.settled() == []
     assert [%{text: "Waiting on review: PR 1", done_at: %DateTime{}}] = Jot.done_since("telegram", @now)
