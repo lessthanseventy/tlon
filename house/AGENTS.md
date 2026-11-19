@@ -14,7 +14,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 `closet.gd`, `jot.gd`, `menus.gd` (the paper menu), `focus.gd` (the now card and its timer), `jar.gd`
 (the done jar), `knock.gd` (Nina's one nag), `door.gd` (what comes through the office door),
 `rhythm.gd` (the day's two beats and their slips), `layout.gd` (the furniture and the rules of placing it),
-`decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet picker card). `soak.gd` is the scripted check.
+`decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet picker card). `drive.gd` (`--drive`: the live house driven over TCP). `soak.gd` is the scripted check.
 
 Where the list lives is one `Backend` (`backend.gd`): `backend_http.gd` is the tlon server, `backend_local.gd`
 the house's own file (`local_list.gd` the list, `reader_rules.gd` the loose-line reader). `main.gd` holds one and
@@ -496,6 +496,37 @@ Headless Godot draws nothing. A picture of the real window, with none opened on 
 `gamescope --backend headless -W 1100 -H 700 -- godot --display-driver x11 --path house -- --demo --shot /tmp/house.png`
 (`--shot PATH` saves the viewport after 1.5 s and quits; add `--office` for the office). Look at the
 picture. The door's click and Tab need a pointer and keys, which that run has not.
+
+### Driving it
+
+`mise run house:drive:start [-- house args]` starts the real house LIVE (pets moving, real time) under
+headless gamescope on a throwaway `XDG_DATA_HOME`, over the starter list (`-- --demo` for the demo
+one), no server and no network, and prints its port; `mise run house:drive -- '<json>' ...` sends
+each command and prints one reply line each; `house:drive:errors` prints the Godot `ERROR` lines since
+the last call; `house:drive:stop` quits it and removes the data folder. One house at a time. Save,
+load and the settings file work, inside that folder. `drive.gd` (`--drive [PORT]`) takes one JSON object
+per line on 127.0.0.1, input as real events through `Input.parse_input_event` (window pixels):
+
+```
+{"do":"move","x":N,"y":N}  {"do":"click","x":N,"y":N,"button":"left|right|middle","double":false}
+{"do":"down|up","x":N,"y":N,"button":"left"}  {"do":"drag","from":[x,y],"to":[x,y],"seconds":0.4}
+{"do":"wheel","x":N,"y":N,"dy":-1}  {"do":"key","key":"I|Escape|Enter|Tab|Backspace|F2|...","shift":false,"ctrl":false}
+{"do":"type","text":"buy milk"}  {"do":"wait","seconds":1.5}  {"do":"frames","n":3}
+{"do":"shot","path":"a.png"}  (relative: under the run's folder; the reply holds the absolute path)
+{"do":"at","x":N,"y":N}  topmost key, the Control there, a card/menu/decorate hit
+{"do":"things"}  registered keys with centres, input Controls, drawn card/menu/decorate hits, mode, window
+{"do":"state"}  items, pets, person, tv, fire, weather, clock, settings, layout, said, mode
+{"do":"set","what":"time|date|weather|pet|setting","value":"23:00|10-31|snow|cat=bear_brown|degrees=f"}
+{"do":"resize","w":N,"h":N}  {"do":"quit"}
+```
+
+Every reply has `ok`, and `error` when it is false; a bad command never stops the house. `things` is how
+to find what to click: do not guess pixels. Gotchas: decorate is click-to-pick then click-to-place, a
+drag's release drops nothing; a slip (`mode.slip`) blocks and closes forms, so Escape it first; the
+`shot` verb needs a window (headless answers an error; `soak_drive.gd` holds the verbs over a real TCP client).
+**A change that touches clicks, keys, cards, forms or decorate is verified in drive mode before it
+lands; photos alone are not enough.** Not reachable by it: the OS's own window drag and
+always-on-top, hover tooltips' delay, anything the compositor decides.
 
 User args (after `--`) that fix a state for a picture; `--shot` also freezes the pets' own choices
 and seeds their dice (`--seed N` to pick another):
