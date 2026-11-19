@@ -1,12 +1,10 @@
-extends PanelContainer
+extends VBoxContainer
 
+# The free-text jot in the add view: one line the house's reader takes as it is; Enter sends it, and
+# while it is read a pencil scribbles. main.gd sends it and says how it went.
 signal submitted(text: String)
-signal cancelled
 
-const INK := Color("2a2530")
-const PAPER := Color("f3ead6")
-const QUIET := Color(0.165, 0.145, 0.188, 0.6)
-const WARM := Color("a8453c")
+const Paper := preload("res://paper.gd")
 
 var _edit: LineEdit
 var _hint: Label
@@ -44,57 +42,33 @@ class Scribble:
 
 func _ready() -> void:
 	visible = false
-	var style := StyleBoxFlat.new()
-	style.bg_color = PAPER
-	style.set_border_width_all(3)
-	style.border_color = INK
-	style.shadow_color = Color(0, 0, 0, 0.3)
-	style.shadow_size = 4
-	style.shadow_offset = Vector2(3, 5)
-	style.set_content_margin_all(12)
-	add_theme_stylebox_override("panel", style)
-	custom_minimum_size = Vector2(520, 0)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 4)
-	add_child(col)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	col.add_child(row)
-	var tag := Label.new()
-	tag.text = "jot:"
-	tag.add_theme_color_override("font_color", QUIET)
-	tag.add_theme_font_size_override("font_size", 16)
-	row.add_child(tag)
-	_edit = LineEdit.new()
-	_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_edit.placeholder_text = "remind me to..., buy..., a note..., or ask something"
-	_edit.add_theme_color_override("font_color", INK)
-	_edit.add_theme_color_override("font_placeholder_color", Color(INK, 0.4))
-	_edit.add_theme_color_override("caret_color", INK)
-	_edit.add_theme_font_size_override("font_size", 18)
-	var flat := StyleBoxFlat.new()
-	flat.bg_color = Color(1, 1, 1, 0.35)
-	flat.set_content_margin_all(5)
-	for s in ["normal", "focus", "read_only"]:
-		_edit.add_theme_stylebox_override(s, flat)
+	add_theme_constant_override("separation", 4)
+	add_child(Paper.heading("Jot it", 15, Paper.INK))
+	var row := Paper.row(self)
+	_edit = Paper.edit("remind me to..., buy..., a note..., or ask", row)
 	_edit.text_submitted.connect(_on_submit)
-	row.add_child(_edit)
 	_scribble = Scribble.new()
 	row.add_child(_scribble)
-	_hint = Label.new()
-	_hint.add_theme_font_size_override("font_size", 12)
-	_hint.add_theme_color_override("font_color", QUIET)
-	col.add_child(_hint)
+	_hint = Paper.label("", 12, Paper.QUIET)
+	add_child(_hint)
+	_hint.text = "Enter keeps it"
 
 
+# shown with the cursor in it
 func open(prefill: String = "") -> void:
-	visible = true
+	show_quiet()
 	_edit.text = prefill
-	sending(false)
-	_hint.text = "Enter keeps it  -  Esc puts it down"
-	_hint.add_theme_color_override("font_color", QUIET)
 	_edit.grab_focus()
 	_edit.caret_column = prefill.length()
+
+
+# shown, the cursor elsewhere
+func show_quiet() -> void:
+	visible = true
+	_edit.text = ""
+	sending(false)
+	_hint.text = "Enter keeps it"
+	_hint.add_theme_color_override("font_color", Paper.QUIET)
 
 
 func sending(on: bool) -> void:
@@ -103,13 +77,13 @@ func sending(on: bool) -> void:
 	_scribble.visible = on
 	if on:
 		_hint.text = "reading it..."
-		_hint.add_theme_color_override("font_color", QUIET)
+		_hint.add_theme_color_override("font_color", Paper.QUIET)
 
 
 func fail(message: String) -> void:
 	sending(false)
 	_hint.text = message
-	_hint.add_theme_color_override("font_color", WARM)
+	_hint.add_theme_color_override("font_color", Paper.WARM)
 	_edit.grab_focus()
 	_edit.caret_column = _edit.text.length()
 
@@ -125,10 +99,3 @@ func _on_submit(text: String) -> void:
 	if _busy or text.strip_edges() == "":
 		return
 	submitted.emit(text.strip_edges())
-
-
-func _input(event: InputEvent) -> void:
-	if visible and event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		get_viewport().set_input_as_handled()
-		finish()
-		cancelled.emit()

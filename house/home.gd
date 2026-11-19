@@ -1,6 +1,9 @@
 extends RefCounted
 
 signal acted(id: int, what: String)
+# a click on a thing that has a view of its own: "item" (id), "open" (the desk's list), "add"
+# (the notepad), "closet", "chat" or "pet" (id); things with blocks open through `card`
+signal viewed(kind: String, arg: Variant)
 
 const Props := preload("res://props.gd")
 const Pets := preload("res://pets.gd")
@@ -8,7 +11,6 @@ const Look := preload("res://look.gd")
 const Person := preload("res://person.gd")
 const Tv := preload("res://tv.gd")
 const View := preload("res://view.gd")
-const Menus := preload("res://menus.gd")
 const Focus := preload("res://focus.gd")
 const Jar := preload("res://jar.gd")
 const Knock := preload("res://knock.gd")
@@ -51,7 +53,26 @@ const CARD_KEYS := {
 	"board": "board",
 	"more": "board",
 	"mousehole": "found",
+	"furn:bookshelf": "book",
+	"furn:fireplace": "fireplace",
+	"furn:piano": "piano",
+	"globe": "globe",
 }
+const NAMES := {
+	"cal": "the calendar",
+	"window": "the window",
+	"clock": "the clock",
+	"plant": "the plant",
+	"board": "the board",
+	"wardrobe": "the closet  (C)",
+	"pad": "jot something  (N)",
+	"furn:bookshelf": "the bookshelf",
+	"furn:fireplace": "the fireplace",
+	"furn:piano": "the piano",
+	"globe": "the snow globe",
+	"mousehole": "a mouse hole",
+}
+const NAME_STAYS := 2.0
 const FURN_KEYS := ["piano", "fireplace", "bookshelf"]
 const NOTES_PER_PAGE := 5
 const SKY_WORDS := {
@@ -106,7 +127,6 @@ var pets := Pets.new()
 var look := Look.new()
 var person := Person.new()
 var tv := Tv.new()
-var menu := Menus.new()
 var focus := Focus.new()
 var jar := Jar.new()
 var knock := Knock.new()
@@ -172,7 +192,8 @@ var _hits: Array = []
 var _used := {}
 var _hover := ""
 var _hover_at := Vector2.ZERO
-var _locked := ""
+var selected := ""
+var _hover_time := 0.0
 var _bin_balls := 0
 var _next_text := ""
 var _had_open := false
@@ -709,7 +730,7 @@ func process(dt: float) -> void:
 		sound.request("ring")
 	_rang_new = false
 	_ringing = ring_ids.size()
-	if card.is_open() and _cards_blocked():
+	if card.is_open() and decorating:
 		card.close()
 	if _t > 0.45 and _arg_card != "":
 		open_card(_arg_card)
@@ -720,7 +741,7 @@ func process(dt: float) -> void:
 	_t_args += dt
 	if _t > 0.3 and (_arg_menu >= 0 or _arg_reply != ""):
 		if _arg_menu >= 0:
-			open_item_menu(_arg_menu)
+			open_item(_arg_menu)
 			_arg_menu = -1
 		if _arg_reply != "":
 			show_reply(_arg_reply)
@@ -865,38 +886,14 @@ func send_later(id: int) -> void:
 	)
 
 
-func open_item_menu(id: int) -> void:
-	_geometry()
-	var found := {}
-	for item in open:
-		if int(item["id"]) == id:
-			found = item
-	if found.is_empty():
+# a thing on the desk, the stack or a row: its view opens in the sidebar
+func open_item(id: int) -> void:
+	if things.find(id).is_empty():
 		return
-	var at := _anchor(id)
 	if id == knock.id:
 		knock.clear()
 		_assign_slots(_open_ids())
-	var rows: Array = [
-		{"label": "Done", "act": "done"},
-		{"label": "In an hour", "act": "hour"},
-		{"label": "Tomorrow", "act": "tomorrow"},
-		{
-			"label": "Not now" if focus.id == id else "Now",
-			"act": "unnow" if focus.id == id else "now"
-		},
-		{"label": "Delete", "act": "delete"},
-	]
-	if hearth.lit:
-		rows.insert(1, {"label": "Into the fire", "act": "fire"})
-	menu.show_at(id, at, _cap(str(found["text"]), 30), rows)
-
-
-func _open_pick() -> void:
-	var rows: Array = []
-	for item in open.slice(0, 7):
-		rows.append({"label": _cap(str(item["text"]), 30), "act": "pick:%d" % int(item["id"])})
-	menu.show_at(0, _stack_top(open.size()), "which one?", rows)
+	viewed.emit("item", id)
 
 
 func _celebrate() -> void:
@@ -1209,7 +1206,7 @@ func _draw_board() -> void:
 		var q := Props.wall_quad(
 			_o, _k, 1, BOARD["s"] + at.x, BOARD["h"] + at.y, 10.0, 8.0, NOTE_TILT[i]
 		)
-		var hot: bool = _hover == "note:%d" % i or _locked == "note:%d" % i
+		var hot: bool = _hover == "note:%d" % i or selected == "note:%d" % i
 		Props.slip(room, _k, q, Props.SLIP_COLORS[i % 4], 2 + i % 2, Props.PIN_COLORS[i % 4], hot)
 		_register("note:%d" % i, q, Props.qlerp(q, 0.5, 0.0))
 	if notes.size() > 4:
@@ -1278,7 +1275,7 @@ func _draw_desk_things() -> void:
 		if not _slots.has(id):
 			continue
 		var q := _slot_quad(_slots[id])
-		var hot: bool = _hover == "item:%d" % id or _locked == "item:%d" % id
+		var hot: bool = _hover == "item:%d" % id or selected == "item:%d" % id
 		Props.slip(room, _k, q, _item_color(item), 2, Color(0, 0, 0, 0), hot)
 		room.draw_colored_polygon(
 			PackedVector2Array([Props.qlerp(q, 0, 0.8), Props.qlerp(q, 1, 0.8), q[2], q[3]]),
@@ -1356,7 +1353,6 @@ func draw_over() -> void:
 	for c in pets.critters:
 		if not c.away:
 			_draw_extras(c, bounds)
-	Props.caption(room, Vector2(room.size.x / 2.0, 30), _next_text)
 	var plane_hit := door.draw_plane(room, _o, _k, bounds)
 	if plane_hit.size() > 0:
 		_register("plane", plane_hit, plane_hit[2])
@@ -1369,58 +1365,8 @@ func draw_over() -> void:
 	delights.draw_over(room)
 	antics.draw_over(room)
 	sound.draw_mark(room, Vector2(14, 14), 2)
-	rhythm.draw(room, bounds)
-	_draw_now(bounds)
-	if reply_left > 0.0 and reply_text != "":
-		Props.card(room, Vector2(room.size.x / 2.0, 36), reply_text, bounds)
-	_draw_card(bounds)
-	_draw_paper(bounds)
-	menu.draw(room, bounds)
-
-
-func _draw_now(bounds: Rect2) -> void:
-	if not focus.active() or focus.text == "":
-		return
-	var font := ThemeDB.fallback_font
-	var q := _monitor_quad()
-	var top := (q[0] + q[1]) / 2.0 + Vector2(0, -22)
-	var text := _cap(focus.text, 60)
-	var wrap := 170.0
-	var sz := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, wrap, 17)
-	var box := Vector2(maxf(sz.x, 90.0) + 56, sz.y + 40)
-	var pos := Vector2(top.x - box.x / 2.0, top.y - box.y)
-	pos.x = clampf(pos.x, bounds.position.x + 6, bounds.end.x - box.x - 6)
-	pos.y = maxf(pos.y, bounds.position.y + 50)
-	var r := Rect2(pos.round(), box)
-	room.draw_rect(Rect2(r.position + Vector2(3, 5), r.size), Color(0, 0, 0, 0.3))
-	room.draw_rect(r, Props.INK)
-	room.draw_rect(r.grow(-2), Color("f8efb8"))
-	room.draw_string(
-		font,
-		r.position + Vector2(10, 17),
-		"NOW",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		12,
-		Color(Props.INK, 0.6)
-	)
-	room.draw_multiline_string(
-		font, r.position + Vector2(10, 38), text, HORIZONTAL_ALIGNMENT_LEFT, wrap, 17, -1, Props.INK
-	)
-	var ring := r.position + Vector2(box.x - 24, 22)
-	room.draw_arc(ring, 10, 0, TAU, 24, Color(Props.INK, 0.25), 3.0)
-	if focus.running():
-		room.draw_arc(ring, 10, -PI / 2, -PI / 2 + TAU * focus.progress(), 24, Color("5fa86a"), 4.0)
-		var cw := font.get_string_size(focus.clock(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
-		room.draw_string(
-			font,
-			ring + Vector2(-cw / 2.0, 24),
-			focus.clock(),
-			HORIZONTAL_ALIGNMENT_LEFT,
-			-1,
-			12,
-			Props.INK
-		)
+	_draw_selected()
+	_draw_name(bounds)
 
 
 func _draw_extras(c: Pets.Critter, bounds: Rect2) -> void:
@@ -1447,8 +1393,8 @@ func _draw_extras(c: Pets.Critter, bounds: Rect2) -> void:
 		var fade := minf(1.0, c.say_left / 0.4)
 		var lift := 7 if c.pat_t >= 0.0 or not c.hearts.is_empty() else 3
 		Props.bubble(room, f + Vector2(0, -(c.head + lift) * _k), c.say_text, bounds, fade)
-	elif _hover == "pet:" + c.id and c.id != "person":
-		Props.tag(room, f + Vector2(0, 6), [Settings.pets(c.title), "right click: who is this?"], bounds)
+	elif _hover == "pet:" + c.id and c.id != "person" and _t - _hover_time <= NAME_STAYS:
+		Props.tag(room, f + Vector2(0, 6), [Settings.pets(c.title)], bounds)
 
 
 func _draw_crumple(cr: Dictionary) -> void:
@@ -1503,84 +1449,76 @@ func _ago(iso: String) -> String:
 	return "yesterday" if days == 1 else "%d days ago" % days
 
 
-func _draw_card(bounds: Rect2) -> void:
-	if menu.is_open or card.is_open():
-		return
-	var key := _hover if _hover != "" else _locked
-	if show_note >= 0 and key == "":
-		key = "note:%d" % show_note
-	if key == "":
-		return
-	var text := ""
+# the short name of what the pointer is on; it goes when the pointer leaves or has been still
+func _name_of(key: String) -> String:
 	if key.begins_with("note:"):
 		var i := int(key.substr(5))
-		if i < notes.size():
-			text = str(notes[i])
-	elif key == "more":
-		var rest: Array = []
-		for i in range(4, mini(notes.size(), 10)):
-			rest.append("- " + str(notes[i]))
-		text = "\n".join(rest)
-	elif key.begins_with("item:"):
-		var id := int(key.substr(5))
+		return _cap(str(notes[i]), 34) if i < notes.size() else ""
+	if key == "more":
+		return "more notes"
+	if key.begins_with("item:"):
 		for item in open:
-			if int(item["id"]) == id:
-				text = str(item["text"])
-				if item.get("due_at") != null:
-					text += "\n" + _clock(_due(item))
-				if item.get("since") != null:
-					text += "\nsaid " + _ago(str(item["since"]))
-	elif key == "window":
-		text = weather_desc if weather_desc != "" else weather
-		if temp_c != null:
-			text += "\n" + Settings.temp(temp_c, settings.degrees())
-	elif key == "wardrobe":
-		text = "the closet  (C)"
-	elif key == "pad":
-		text = "jot something  (N)"
-	elif key == "jar":
-		text = jar.hover_text()
-	elif key == "plane":
-		text = "click: put it away"
-	elif key == "phone":
-		text = "the phone: chat  (K)"
-		for item in open:
-			if ring_ids.has(int(item["id"])):
-				text = str(item["text"])
-	elif key == "stack":
-		var rest: Array = []
-		for item in open.slice(0, 8):
-			rest.append("- " + str(item["text"]))
-		text = "\n".join(rest)
-	elif key == "cal":
-		var rest: Array = []
-		for item in coming.slice(0, 5):
-			rest.append(
-				(
-					(_clock(_due(item)) + "  " if item.get("due_at") != null else "")
-					+ str(item["text"])
-				)
-			)
-		text = "\n".join(rest) if not rest.is_empty() else "Nothing coming up."
+			if int(item["id"]) == int(key.substr(5)):
+				return _cap(str(item["text"]), 34)
+		return ""
+	match key:
+		"window":
+			var sky := weather_desc if weather_desc != "" else weather
+			if temp_c != null:
+				sky += ", " + Settings.temp(temp_c, settings.degrees())
+			return sky
+		"jar":
+			return jar.hover_text()
+		"stack":
+			return "the desk: %d open" % open.size()
+		"plane":
+			return "click: put it away"
+		"phone":
+			for item in open:
+				if ring_ids.has(int(item["id"])):
+					return _cap(str(item["text"]), 34)
+			return "the phone  (K)"
+	return NAMES.get(key, "")
+
+
+func _draw_name(bounds: Rect2) -> void:
+	var key := _hover
+	if show_note >= 0 and key == "":
+		key = "note:%d" % show_note
+	elif _t - _hover_time > NAME_STAYS:
+		return
+	if key == "" or key.begins_with("pet:"):
+		return
+	var text := _name_of(key)
 	if text == "":
 		return
 	for h in _hits:
 		if h["key"] == key:
-			Props.card(room, h["below"], text, bounds)
+			Props.tag(room, h["below"], [text], bounds)
 			return
 
 
-func _draw_paper(bounds: Rect2) -> void:
-	if not card.is_open():
+func _draw_selected() -> void:
+	if selected == "":
 		return
-	if card.kind == "pick":
-		card.draw(room, bounds, bounds.get_center() - Vector2(0, 90), card_blocks())
+	var pts := PackedVector2Array()
+	if selected.begins_with("pet:") or selected == "person":
+		var c: Pets.Critter = pets.critter(selected.substr(4) if selected != "person" else "person")
+		if c != null and not c.away:
+			var r := pets.hit_rect(c, _o, _k)
+			pts = PackedVector2Array(
+				[r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]
+			)
+	else:
+		for h in _hits:
+			if h["key"] == selected:
+				pts = h["poly"]
+	if pts.size() < 3:
 		return
-	for h in _hits:
-		if h["key"] == card.key:
-			card.draw(room, bounds, h["below"], card_blocks())
-			return
-	card.close()
+	var closed := pts.duplicate()
+	closed.append(pts[0])
+	room.draw_polyline(closed, Color(0, 0, 0, 0.55), 4.0)
+	room.draw_polyline(closed, Color("e8c77a"), 2.0)
 
 
 func _every(item: Dictionary) -> String:
@@ -1629,8 +1567,19 @@ func card_blocks() -> Array:
 			return things.clock_blocks(_clock_blocks())
 		"board":
 			return things.board_blocks()
-		"pick":
-			return things.pick_blocks()
+		"fireplace":
+			return _fireplace_blocks()
+		"piano":
+			return [
+				{"t": "title", "text": "The piano"},
+				{"t": "text", "text": "Nobody has to play it."},
+				{"t": "buttons", "items": [{"label": "play a few bars", "act": "play"}]},
+			]
+		"globe":
+			return [
+				{"t": "title", "text": "The snow globe"},
+				{"t": "buttons", "items": [{"label": "shake it", "act": "shake"}]},
+			]
 		"plant":
 			return _plant_blocks()
 		"book", "found":
@@ -1715,6 +1664,34 @@ func _clock_blocks() -> Array:
 		blocks.append({"t": "dim", "text": "Next up"})
 		blocks.append({"t": "text", "text": str(next[0]["text"])})
 		blocks.append({"t": "text", "text": "%s, %s" % [_stamp(at), Card.until_text(at - now)]})
+	if rhythm.list_at >= 0.0:
+		var at := rhythm.list_at
+		blocks.append({"t": "gap"})
+		blocks.append(
+			{
+				"t": "dim",
+				"text": "The day's list comes at %02d:%02d." % [int(at), roundi(fmod(at, 1.0) * 60.0)]
+			}
+		)
+	return blocks
+
+
+func _fireplace_blocks() -> Array:
+	var blocks: Array = [
+		{"t": "title", "text": "The fireplace"},
+		{"t": "text", "text": "It is lit." if hearth.lit else "It is out."},
+		{
+			"t": "buttons",
+			"items": [{"label": "put it out" if hearth.lit else "light it", "act": "fire_toggle"}],
+		},
+	]
+	if hearth.lit and not open.is_empty():
+		blocks.append({"t": "gap"})
+		blocks.append({"t": "dim", "text": "Into the fire"})
+		for item in open.slice(0, 6):
+			blocks.append(
+				{"t": "row", "text": str(item["text"]), "act": "fire:%d" % int(item["id"])}
+			)
 	return blocks
 
 
@@ -1763,76 +1740,37 @@ func _topmost(pos: Vector2) -> String:
 
 func hover(pos: Vector2) -> bool:
 	finds.touch()
-	if form_open:
-		return false
-	if rhythm.hover(pos):
-		_hover = ""
-		return true
-	if menu.is_open and menu.hover(pos):
-		_hover = ""
-		return true
-	if card.hover(pos):
-		_hover = ""
-		return true
 	var key := _topmost(pos)
+	if key != _hover or pos.distance_to(_hover_at) > 1.0:
+		_hover_time = _t
 	_hover = key
+	_hover_at = pos
 	return key != ""
 
 
+# what a click on the room does: a thing with a view of its own tells the sidebar (`viewed`), the
+# rest answer on the spot; true when something was there
 func click(pos: Vector2) -> bool:
 	finds.touch()
-	if form_open:
-		return true
-	var blocked := _cards_blocked()
-	if not menu.is_open:
-		var slip := rhythm.click(pos)
-		if slip.has("id"):
-			open_item_menu(int(slip["id"]))
-			return true
-		if slip.has("body"):
-			return true
-	if menu.is_open:
-		var act := menu.click(pos)
-		if act == "inside":
-			return true
-		if act.begins_with("pick:"):
-			open_item_menu(int(act.substr(5)))
-			return true
-		if act != "outside":
-			var id := menu.id
-			if act == "delete" and Sure.needs(things.find(id)) and not sure.ask("del:%d" % id):
-				menu.rows[-1]["label"] = "Delete for good?"
-				return true
-			menu.close()
-			if act == "fire":
-				eggs.toss_ids.append(id)
-				act = "done"
-			acted.emit(id, act)
-			return true
-		menu.close()
-	var shown := card.kind
-	if card.is_open():
-		var hit := card.click(pos)
-		if hit == "inside":
-			return true
-		if hit == "birthday":
-			finds.toggle_birthday()
-			card.close()
-			return true
-		if things.act(hit):
-			return true
-		card.close()
 	var key := _topmost(pos)
 	var wants := _card_kind(key)
 	if wants != "":
-		if not blocked and wants != shown:
-			things.reset()
-			card.open(wants, key)
+		things.reset()
+		if wants == "book":
+			finds.pick_book()
+		card.open(wants, key)
+		if wants == "piano":
+			hearth.piano_click()
+		elif wants == "globe":
+			finds.shake = 4.0
+			eggs.find("globe")
+			sound.request("clink")
 		return true
 	if key.begins_with("pet:"):
 		var c: Pets.Critter = pets.critter(key.substr(4))
 		if not eggs.pet_click(c):
 			pets.pat(c, "pet")
+		viewed.emit("pet", key.substr(4))
 		return true
 	if key.begins_with("thing:"):
 		eggs.take(int(key.substr(6)))
@@ -1852,27 +1790,15 @@ func click(pos: Vector2) -> bool:
 		show_reply("make a wish.")
 		sound.request("wish")
 		return true
-	if key == "globe":
-		finds.shake = 4.0
-		eggs.find("globe")
-		sound.request("clink")
-		return true
-	if key == "furn:bookshelf" and not blocked:
-		finds.pick_book()
-		card.open("book", key)
-		return true
-	if key.begins_with("furn:") and not blocked:
-		eggs.furn_click(key.substr(5))
-		return true
 	if key.begins_with("item:"):
-		open_item_menu(int(key.substr(5)))
+		open_item(int(key.substr(5)))
 		return true
 	match key:
 		"tv":
 			tv.click()
 			return true
 		"stack":
-			_open_pick()
+			viewed.emit("open", null)
 			return true
 		"person":
 			person.poke()
@@ -1884,26 +1810,22 @@ func click(pos: Vector2) -> bool:
 			door.dismiss_plane()
 			return true
 		"wardrobe":
-			acted.emit(0, "closet")
+			viewed.emit("closet", null)
 			return true
 		"pad":
-			acted.emit(0, "jot")
+			viewed.emit("add", true)
 			return true
 		"phone":
 			if ring_ids.is_empty():
-				acted.emit(0, "chat")
+				viewed.emit("chat", null)
 			else:
-				open_item_menu(ring_ids[0])
+				open_item(ring_ids[0])
 			return true
-	if key != "":
-		_locked = "" if _locked == key else key
-		return true
-	_locked = ""
-	return shown != ""
+	return key != ""
 
 
 func _cards_blocked() -> bool:
-	return menu.is_open or jot_open or closet_open or decorating or rhythm.kind != "" or form_open
+	return jot_open or closet_open or decorating or form_open
 
 
 func _card_kind(key: String) -> String:
@@ -1912,6 +1834,32 @@ func _card_kind(key: String) -> String:
 
 func close_card() -> void:
 	card.close()
+
+
+# a click inside an open view's blocks; true when it was one of ours
+func card_act(a: String) -> bool:
+	match a:
+		"birthday":
+			finds.toggle_birthday()
+			card.close()
+			return true
+		"fire_toggle":
+			hearth.toggle()
+			return true
+		"play":
+			hearth.piano_click()
+			return true
+		"shake":
+			finds.shake = 4.0
+			eggs.find("globe")
+			sound.request("clink")
+			return true
+	if a.begins_with("fire:"):
+		var id := int(a.substr(5))
+		eggs.toss_ids.append(id)
+		acted.emit(id, "done")
+		return true
+	return things.act(a)
 
 
 func key(code: int) -> bool:
@@ -1940,14 +1888,10 @@ func open_card(name: String) -> void:
 			return
 
 
-# the "what now" slip, over the middle of the room
+# what now: the pick the Now line shows
 func show_pick(row: Dictionary, say: String) -> void:
-	if _cards_blocked():
-		return
-	things.reset()
 	things.pick = row
 	things.say = say
-	card.open("pick", "pick")
 
 
 func leave() -> void:
@@ -2118,7 +2062,7 @@ func _draw_knock_flight() -> void:
 
 func _draw_knocked() -> void:
 	var q := Props.floor_quad(_o, _k, Knock.LANDS_AT.x, Knock.LANDS_AT.y, 0.3, 0.27, 0.27, 0.5)
-	var hot: bool = _hover == "item:%d" % knock.id or _locked == "item:%d" % knock.id
+	var hot: bool = _hover == "item:%d" % knock.id or selected == "item:%d" % knock.id
 	var color := TODO_COLOR
 	for item in open:
 		if int(item["id"]) == knock.id:
