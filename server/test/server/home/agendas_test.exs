@@ -142,6 +142,34 @@ defmodule Server.Home.AgendasTest do
     assert Jot.notes("telegram", 20) == []
   end
 
+  test "a correction that puts a plain note on a pile moves that note: one note, not two", %{say: say} do
+    say_it("flaky gate again", %{kind: "note", text: "flaky gate again"}, say, 1)
+    replied()
+    say_it("no, that's for retro", %{kind: "agenda", agenda: "retro", text: "flaky gate again", amends: true}, say, 2)
+    assert replied() == "changed: Started a new agenda, retro. On the retro pile (1)."
+
+    assert %{id: id} = Agenda.named("telegram", "retro")
+    assert [%{text: "flaky gate again"}] = Jot.agenda_notes(id)
+    assert Jot.notes("telegram", 20) == []
+    assert [%{kind: "amend"}, %{kind: "note", agenda_id: ^id}] = Jot.recent("telegram", 2)
+  end
+
+  test "a pile note re-filed as a to-do leaves the pile, and stays off it when corrected back to a note", %{say: say} do
+    say_it("for retro: call the vendor", %{kind: "agenda", agenda: "retro", text: "call the vendor"}, say, 1)
+    replied()
+    say_it("no, I'll just do it", %{kind: "todo", text: "call the vendor", amends: true}, say, 2)
+    replied()
+
+    assert %{id: id} = Agenda.named("telegram", "retro")
+    assert Jot.agenda_notes(id) == []
+    assert [%{text: "call the vendor", kind: "todo", agenda_id: nil}] = Jot.opens("telegram")
+
+    say_it("no, just a note", %{kind: "note", text: "call the vendor", amends: true}, say, 3)
+    replied()
+    assert Jot.agenda_notes(id) == []
+    assert [%{text: "call the vendor"}] = "telegram" |> Jot.notes(20) |> Enum.map(&%{text: &1})
+  end
+
   describe "telling the pile" do
     setup %{say: say} do
       say_it("for retro: a", %{kind: "agenda", agenda: "retro", text: "deploy took three tries"}, say, 1)
@@ -196,6 +224,22 @@ defmodule Server.Home.AgendasTest do
       assert id == "#{agenda.id}:#{DateTime.to_unix(thursday())}"
       Agenda.clear(agenda, thursday())
       assert Server.Home.told_agendas(since) == []
+    end
+
+    test "a note added after a poll found the pile empty is told by the next poll, once", %{say: say} do
+      retro = Agenda.named("telegram", "retro")
+      Agenda.clear(retro, thursday())
+
+      Server.Home.Agendas.tell("telegram", "42", say, DateTime.add(thursday(), -14, :minute))
+      refute_received {:said, _, _}
+
+      say_it("for retro: late one", %{kind: "agenda", agenda: "retro", text: "late one"}, say, 3)
+      replied()
+
+      Server.Home.Agendas.tell("telegram", "42", say, DateTime.add(thursday(), -5, :minute))
+      assert replied() == "Retro in 15 — 1 thing: late one"
+      Server.Home.Agendas.tell("telegram", "42", say, DateTime.add(thursday(), -2, :minute))
+      refute_received {:said, _, _}
     end
 
     test "an empty pile is passed without a word, and an agenda with no rhythm is never told", %{say: say} do
