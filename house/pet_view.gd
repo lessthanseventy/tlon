@@ -4,6 +4,7 @@ extends VBoxContainer
 # settings screen does (the pet's animal, its name) and the room follows at once.
 
 const Paper := preload("res://paper.gd")
+const Chooser := preload("res://chooser.gd")
 const Pets := preload("res://pets.gd")
 const Settings := preload("res://settings.gd")
 const ROLES := {
@@ -17,7 +18,7 @@ var home
 var role := "nina"
 
 var _name: LineEdit
-var _way: OptionButton
+var _way
 var _kind_label: Label
 var _lines: Label
 var _tiles := {}
@@ -81,11 +82,11 @@ func _ready() -> void:
 	_name.focus_exited.connect(func() -> void: _put("name", _name.text.strip_edges()))
 	r = Paper.row(col)
 	r.add_child(Paper.label("way", 14, Paper.QUIET))
-	_way = OptionButton.new()
+	_way = Chooser.new()
 	for p in Pets.PERSONALITIES:
 		_way.add_item(p)
-	Paper.skin(_way)
 	_way.item_selected.connect(func(i: int) -> void: _put("way", Pets.PERSONALITIES[i]))
+	_way.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	r.add_child(_way)
 	var grid := GridContainer.new()
 	grid.columns = 5
