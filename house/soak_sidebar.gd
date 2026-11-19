@@ -269,7 +269,8 @@ func _proposals() -> void:
 	var rows: Array = []
 	for i in 5:
 		var why := "acme/app#%d" % i
-		rows.append({"id": 80 + i, "source": "github", "text": "Review: PR %d" % i, "why": why})
+		var shown = null if i == 1 else why
+		rows.append({"id": 80 + i, "source": "github", "text": "Review: PR %d" % i, "why": shown})
 	s.seed(keep["open"], keep["coming"], {"proposals": rows})
 	await _poll_home()
 	sb.back()
@@ -279,6 +280,8 @@ func _proposals() -> void:
 	s._check(texts.find("Proposed (5)") > texts.find("Open"), "Proposed comes under Open")
 	var shows: bool = "Review: PR 0" in texts and "acme/app#0" in texts and "Review: PR 2" in texts
 	s._check(shows, "a row shows the text and the why line")
+	var bare: bool = "Review: PR 1" in texts and not ("<null>" in texts or "null" in texts)
+	s._check(bare, "a proposal with no why has no line")
 	var three: bool = not ("Review: PR 3" in texts) and "2 more..." in texts
 	s._check(three, "three are shown, then 2 more...")
 	s._check(sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the pane stays %d wide" % sb.WIDTH)

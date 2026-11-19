@@ -16,7 +16,9 @@ defmodule Server.Home.Source.GitHub do
   resolved; any failed search resolves nothing. A waiting-on that is gone is looked up
   (`gh pr view <url> --json state,isDraft,reviewDecision,reviews`) and said by what became of its PR:
   "Reviewed: ...", "Merged: ..." or "Closed: ..."; one back to a draft is left open and one whose
-  repo is now ignored is dropped without a word; a failed lookup settles nothing.
+  repo is now ignored is dropped without a word; a failed lookup settles nothing. A search that comes
+  back with as many as it may (100) is an error, logged once by the poller: what is missing from a full
+  search is not known to be gone, so that round offers and resolves nothing.
   """
   @behaviour Server.Home.Source
 
@@ -24,6 +26,7 @@ defmodule Server.Home.Source.GitHub do
 
   @fields "number,title,url,author,repository,isDraft"
   @view "state,isDraft,reviewDecision,reviews"
+  @limit 100
 
   @impl true
   def name, do: "github"
@@ -85,12 +88,18 @@ defmodule Server.Home.Source.GitHub do
   end
 
   defp search(flags) do
-    args = ["search", "prs", "--state=open", "--draft=false", "--limit", "100", "--json", @fields] ++ flags
+    args = ["search", "prs", "--state=open", "--draft=false", "--limit", "#{@limit}", "--json", @fields] ++ flags
 
     with {:ok, out} <- Application.get_env(:server, :home_gh, &gh/1).(args) do
       case JSON.decode(out) do
-        {:ok, prs} when is_list(prs) -> {:ok, prs}
-        _ -> {:error, "gh answered something that is not a list of pull requests"}
+        {:ok, prs} when is_list(prs) and length(prs) >= @limit ->
+          {:error, "a search came back full (#{@limit}): what is missing from it is not known to be gone"}
+
+        {:ok, prs} when is_list(prs) ->
+          {:ok, prs}
+
+        _ ->
+          {:error, "gh answered something that is not a list of pull requests"}
       end
     end
   end

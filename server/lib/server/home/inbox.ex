@@ -656,8 +656,11 @@ defmodule Server.Home.Inbox do
     with_settled(digest(via, now), Proposals.settled(told)) || {"Nothing open.", []}
   end
 
-  # a project is left as it is: its steps point at it, so a note for a pile is a new one
+  # a project and its steps are left as they are: a step points at its project, so a note for a pile is a new one
   defp amend(jot, %Jot{kind: "project"}, %{kind: "agenda"} = reading, now), do: {Agendas.file(jot, reading, now), []}
+
+  defp amend(jot, %Jot{project_id: id}, %{kind: "agenda"} = reading, now) when id != nil,
+    do: {Agendas.file(jot, reading, now), []}
 
   defp amend(jot, previous, reading, now) do
     reply =

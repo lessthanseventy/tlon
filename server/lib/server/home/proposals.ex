@@ -86,6 +86,7 @@ defmodule Server.Home.Proposals do
   defp act(_choice, _via, _id, _now), do: nil
 
   defp said({:ok, p}, prefix), do: prefix <> p.text
+  defp said({:error, :seen}, _prefix), do: "couldn't add that just now: it is still proposed"
   defp said(_none, _prefix), do: nil
 
   defp join(line, open) do

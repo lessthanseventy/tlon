@@ -84,7 +84,7 @@ defmodule Server.Proposal do
 
           row = Repo.get_by!(__MODULE__, source: source, key: key)
 
-          if row.state == :open and kind in auto and match?({:error, _}, take_row(via, row, now)),
+          if row.state == :open and kind in auto and take_row(via, row.id, now) == {:error, :seen},
             do: [key | refused],
             else: refused
       end
@@ -130,9 +130,9 @@ defmodule Server.Proposal do
   """
   @spec take(String.t(), integer(), DateTime.t()) :: {:ok, t()} | :not_found | {:error, :seen}
   def take(via, id, now) do
-    case open(id) do
-      nil -> :not_found
-      row -> take_row(via, row, now)
+    case take_row(via, id, now) do
+      {:error, :not_found} -> :not_found
+      taken -> taken
     end
   end
 
@@ -183,17 +183,17 @@ defmodule Server.Proposal do
     :ok
   end
 
-  defp take_row(via, %__MODULE__{id: id} = row, now) do
+  # the row is read under a lock inside the transaction, so of two takes at once the second finds it taken
+  defp take_row(via, id, now) do
     Repo.transaction(fn ->
-      {1, _} = Repo.update_all(from(p in __MODULE__, where: p.id == ^id and p.state == :open), set: [state: :taken])
-
-      case Jot.take(via, external_id(row), row.text) do
-        {:ok, jot} ->
-          Jot.file(jot, reading(row), now)
-          row |> Ecto.Changeset.change(state: :taken, jot_id: jot.id) |> Repo.update!()
-
-        :seen ->
-          Repo.rollback(:seen)
+      with %__MODULE__{} = row <-
+             Repo.one(from(p in __MODULE__, where: p.id == ^id and p.state == :open, lock: "FOR UPDATE")),
+           {:ok, jot} <- Jot.take(via, external_id(row), row.text) do
+        Jot.file(jot, reading(row), now)
+        row |> Ecto.Changeset.change(state: :taken, jot_id: jot.id) |> Repo.update!()
+      else
+        nil -> Repo.rollback(:not_found)
+        :seen -> Repo.rollback(:seen)
       end
     end)
   end

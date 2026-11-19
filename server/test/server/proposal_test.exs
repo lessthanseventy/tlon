@@ -175,6 +175,18 @@ defmodule Server.ProposalTest do
       assert Jot.opens("telegram") == []
     end
 
+    test "a proposal that cannot be filed is said to be still there, by tap and by ask", %{say: say, first: a} do
+      {:ok, _} = Jot.take("telegram", Proposal.external_id(a), "in the way")
+
+      Inbox.hear([%{id: 1, chat: "42", tap: "p:#{a.id}:take", ref: 7, text: nil}], "telegram", "42", say)
+      assert_receive {:said, "42", reply, _}
+      assert reply =~ "couldn't add that just now: it is still proposed\n\nProposed (2):"
+
+      {reply, _} = tell("take 1", %{kind: "take", ids: [1]}, say, 2)
+      assert reply =~ "couldn't add that just now: it is still proposed\n\nProposed (2):"
+      refute reply =~ "couldn't tell"
+    end
+
     test "a tap on Add files it and shows what is left, a tap on No leaves it out", %{say: say, first: a, second: b} do
       Inbox.hear([%{id: 1, chat: "42", tap: "p:#{a.id}:take", ref: 7, text: nil}], "telegram", "42", say)
       assert_receive {:said, "42", reply, opts}
