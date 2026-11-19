@@ -228,8 +228,9 @@ and every layer the spine design's re-laid §9 asked for
   (`Server.Home.asked/0`, a sticky `home_ask` alert whose buttons call `POST /api/home/:id/answer`), so it
   works with no messenger. Its two model calls (next step, a start) go through the reader's provider
   and `:home_helper`. What is open is also said once a day at the
-  `home_list_at` setting, each thing with a button that ticks it off, then the waiting-ons a source settled and the open proposals
-  (an Add and a No each). Once a day at `home_morning_at` (08:30; `""` never; same slot record and quiet hours as the list,
+  `home_list_at` setting, each thing with a button that ticks it off, then the waiting-ons a source settled; the open proposals
+  follow as a message of their own (an Add and a No each; the chat's morning message has no buttons, and its proposals follow the
+  same way). Once a day at `home_morning_at` (08:30; `""` never; same slot record and quiet hours as the list,
   `Server.Home.Inbox.morning/6`) the morning message is said (`Server.Home.Morning`): today's meetings (`Server.Home.Day.meetings/1`,
   today's only: times local, "all day", a tentative one marked), what to start with, agendas due today with a pile, the
   settled waiting-ons and the proposals (five shown, "and N more"); it is skipped when there is nothing to say, and the desktop

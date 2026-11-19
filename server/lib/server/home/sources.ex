@@ -59,8 +59,11 @@ defmodule Server.Home.Sources do
     name = module.name()
 
     case pull(via, module, now) do
-      :ok ->
-        %{}
+      {:ok, refused} ->
+        for key <- refused, into: %{} do
+          if failed[{name, key}] != :seen, do: Logger.warning("home source #{name}: #{key} could not be filed")
+          {{name, key}, :seen}
+        end
 
       {:error, reason} ->
         if failed[name] != reason, do: Logger.warning("home source #{name}: #{inspect(reason)}")
@@ -75,8 +78,9 @@ defmodule Server.Home.Sources do
 
   defp pull(via, module, now) do
     with {:ok, proposals, resolved} <- module.fetch() do
-      Proposal.offer(via, module.name(), proposals, now, module.auto())
+      refused = Proposal.offer(via, module.name(), proposals, now, module.auto())
       Proposal.resolve(module.name(), resolved, now)
+      {:ok, refused}
     end
   rescue
     error -> {:error, Exception.message(error)}

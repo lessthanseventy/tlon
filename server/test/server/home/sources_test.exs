@@ -247,6 +247,33 @@ defmodule Server.Home.SourcesTest do
     end)
   end
 
+  test "a trusted proposal that cannot be filed is logged once per key, and filed when it can be" do
+    defmodule Stub do
+      @behaviour Server.Home.Source
+
+      def name, do: "stub"
+      def auto, do: ["waiting"]
+
+      def fetch, do: {:ok, [%{key: "w", text: "Waiting on review: PR 1", kind: "waiting", who: "x"}], []}
+    end
+
+    Proposal.offer("telegram", "stub", [%{key: "w", text: "Waiting on review: PR 1", kind: "waiting"}], @now, [])
+    [row] = Proposal.open()
+    {:ok, _} = Jot.take("telegram", Proposal.external_id(row), "in the way")
+    modules = %{"stub" => Stub}
+
+    log =
+      capture_log(fn ->
+        failed = Sources.poll("telegram", ["stub"], modules, @now, %{})
+        assert failed == %{{"stub", "w"} => :seen}
+        failed = Sources.poll("telegram", ["stub"], modules, @now, failed)
+        assert failed == %{{"stub", "w"} => :seen}
+      end)
+
+    assert length(String.split(log, "home source stub: w could not be filed")) == 2
+    assert [%{state: :open}] = Proposal.open()
+  end
+
   test "home_sources names the sources: a comma list, empty for none" do
     assert Sources.names("github") == ["github"]
     assert Sources.names(" github, jira ,") == ["github", "jira"]

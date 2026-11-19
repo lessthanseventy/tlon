@@ -1091,6 +1091,24 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"proposals" => []}} = get_json("/api/home")
     end
 
+    test "proposals: a take that cannot be filed is 409 and the proposal stays open" do
+      Server.TestDB.clean!()
+
+      Server.Proposal.offer(
+        "telegram",
+        "test",
+        [%{key: "a", text: "Send Sam", kind: "todo"}],
+        ~U[2026-11-19 12:00:00Z],
+        []
+      )
+
+      [%{id: id} = row] = Server.Proposal.open()
+      {:ok, _} = Server.Jot.take("telegram", Server.Proposal.external_id(row), "in the way")
+
+      assert {409, %{"error" => "could not be filed" <> _}} = post_json("/api/home/proposals/#{id}/take", %{})
+      assert {200, %{"proposals" => [%{"id" => ^id}]}} = get_json("/api/home")
+    end
+
     test "agendas: start, put notes on, edit, clear and delete over HTTP" do
       Server.TestDB.clean!()
       assert {200, %{"agendas" => []}} = get_json("/api/home")
