@@ -41,9 +41,10 @@ defmodule Server.Home.Agendas do
   """
   @spec tell(String.t(), String.t(), (String.t(), String.t(), keyword() -> term()) | nil, DateTime.t()) :: :ok
   def tell(via, chat, say, now) do
-    for agenda <- Agenda.due(via, now), notes = Jot.agenda_notes(agenda.id) do
-      if notes == [] or chat == "" or say.(chat, Agenda.say_told(agenda, notes), []) == :ok,
-        do: Agenda.told(agenda, now)
+    for agenda <- Agenda.due(via, now),
+        [_ | _] = notes <- [Jot.agenda_notes(agenda.id)],
+        chat == "" or say.(chat, Agenda.say_told(agenda, notes), []) == :ok do
+      Agenda.told(agenda, now)
     end
 
     Agenda.advance(via, now)

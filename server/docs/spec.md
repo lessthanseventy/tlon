@@ -528,7 +528,7 @@ start, so a restart serves them at once and ages them from that time; a kept val
 An **agenda** is a named standing pile of notes for an occasion that comes round (`Server.Agenda`: "retro",
 "1:1 with Sam", "weekly"), with or without a rhythm (`every` as above, `next_at`). Its notes are notes with
 `jot.agenda_id`: in none of the plain lists, not in `done_week`. Fifteen minutes before `next_at` the pile is told
-once (in the chat and, as with reminders, as an info `home_agenda` alert on the desktop; nothing for an empty pile), an hour after it
+once (in the chat and, as with reminders, as an info `home_agenda` alert on the desktop; nothing for an empty pile, which is told if a note comes before its time), an hour after it
 the time moves on by the rhythm (a one-off time is dropped); clearing marks the notes done with the date and the
 agenda stands, empty. The reader (kinds `agenda`, `agenda_set`, `agenda_show`, `agenda_past`, `agenda_clear`, each
 with the `agenda` it names) is shown the agenda names to match loosely; a name that matches none starts an agenda

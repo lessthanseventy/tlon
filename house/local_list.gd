@@ -1,10 +1,10 @@
 extends RefCounted
 
 # The house's own list: what the tlon server's /api/home routes do, over one Dictionary kept in
-# `path` (`{"v": 1, "next_id": N, "things": [...]}`). Pure logic: no nodes, and the clock is
-# injected (`clock` returns local wall-clock seconds, as the house's `_now_local()` does; `bias`
-# is the zone's offset from UTC, which the rows' `due_at` carry as `Z`). Every route answers
-# `{"code": int, "body": Variant}`: 400 with `{"error": line}`, 404 with a null body.
+# `path` (`{"v": 1, "next_id": N, "things": [...], "agendas": [...]}`). Pure logic: no nodes, and
+# the clock is injected (`clock` returns local wall-clock seconds, as the house's `_now_local()`
+# does; `bias` is the zone's offset from UTC, which the rows' `due_at` carry as `Z`). Every route
+# answers `{"code": int, "body": Variant}`: 400 with `{"error": line}`, 404 with a null body.
 signal told(row: Dictionary)
 signal told_agenda(text: String)
 
