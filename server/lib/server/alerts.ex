@@ -4,7 +4,8 @@ defmodule Server.Alerts do
   calendar's meetings (`Server.Calendar`) as one list, served at `GET /api/alerts`:
 
     * **alarm** — a meeting from `alarm_minutes` (settings file, default 5) before it starts until
-      ten minutes in: full screen, with Join;
+      ten minutes in: full screen, with Join. Only `Server.Calendar.alarmable/1` ones: not a
+      cancelled meeting, an all-day event, one shown as free, or a double; a tentative one rings;
     * **decision** — work has stopped on a choice (a gate, a prompt, a question, a coworker's
       ask): a banner with its answers;
     * **sticky** — wants the operator, nothing waits on it (a red verify, stuck work): stays until
@@ -42,7 +43,7 @@ defmodule Server.Alerts do
     window = {DateTime.add(now, -@alarm_after_s), DateTime.add(now, minutes * 60)}
     since = DateTime.add(now, -@info_s)
 
-    build(Server.Office.Needs.list(), Server.Calendar.upcoming(window), now,
+    build(Server.Office.Needs.list(), Server.Calendar.alarmable(Server.Calendar.upcoming(window)), now,
       alarm_minutes: minutes,
       seated: Server.Sweep.seated_since(since),
       landed: Server.Workline.landed_since(since),

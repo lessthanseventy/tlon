@@ -90,4 +90,47 @@ defmodule Server.CalendarTest do
     Calendar.celebrations(pid, ~D[2026-10-08])
     assert_received {:parsed, ~D[2026-10-08]}
   end
+
+  describe "clean/1 and alarmable/1" do
+    defp m(title, opts \\ []) do
+      Map.merge(
+        %{title: title, start: ~U[2026-10-08 16:00:00Z], cancelled: false, busy: :busy, all_day: false},
+        Map.new(opts)
+      )
+    end
+
+    test "cancelled meetings are dropped" do
+      assert [m("A", cancelled: true), m("B")] |> Calendar.clean() |> Enum.map(& &1.title) == ["B"]
+      assert Calendar.alarmable([m("A", cancelled: true)]) == []
+    end
+
+    test "all-day events shown as free are dropped; a busy all-day stays in the day but never alarms" do
+      all = [m("Holiday", all_day: true, busy: :free), m("Offsite", all_day: true), m("Sync")]
+      assert all |> Calendar.clean() |> Enum.map(& &1.title) == ["Offsite", "Sync"]
+      assert all |> Calendar.alarmable() |> Enum.map(& &1.title) == ["Sync"]
+    end
+
+    test "a meeting shown as free does not alarm, a tentative one does" do
+      all = [m("Free", busy: :free), m("Maybe", busy: :tentative)]
+      assert all |> Calendar.clean() |> Enum.map(& &1.title) == ["Free", "Maybe"]
+      assert all |> Calendar.alarmable() |> Enum.map(& &1.title) == ["Maybe"]
+    end
+
+    test "doubles by stripped title and start are one, shown with the stripped title" do
+      all = [
+        m("Synced invitation: [EXT] Standup @ Thu Oct 8, 2026 (a@b.com)"),
+        m("Standup"),
+        m("Standup", start: ~U[2026-10-08 17:00:00Z])
+      ]
+
+      assert Enum.map(Calendar.clean(all), &{&1.title, &1.start}) ==
+               [{"Standup", ~U[2026-10-08 16:00:00Z]}, {"Standup", ~U[2026-10-08 17:00:00Z]}]
+    end
+
+    test "title/1 strips the prefixes and the recurrence blurb only" do
+      assert Calendar.title("[EXT] Design review") == "Design review"
+      assert Calendar.title("Synced invitation: 1:1 @ Weekly (me@x.org)") == "1:1"
+      assert Calendar.title("Lunch @ the park") == "Lunch @ the park"
+    end
+  end
 end
