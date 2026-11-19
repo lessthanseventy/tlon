@@ -18,6 +18,7 @@ var someday: Array = []
 var projects: Array = []
 var note_rows: Array = []
 var agendas: Array = []
+var proposals: Array = []
 var mo := 0
 var day := 0
 var tab := "notes"
@@ -42,6 +43,7 @@ func set_data(d: Dictionary) -> void:
 	projects = d.get("projects", [])
 	note_rows = d.get("note_rows", [])
 	agendas = d.get("agendas", [])
+	proposals = d.get("proposals", [])
 
 
 func reset() -> void:

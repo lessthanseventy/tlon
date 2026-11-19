@@ -12,6 +12,7 @@ const Settings := preload("res://settings.gd")
 const Shelf := preload("res://shelf.gd")
 const OPEN_SHOWN := 6
 const NEXT_SHOWN := 3
+const PROPOSED_SHOWN := 3
 const SHORT := ["jar", "plant", "clock", "found", "globe", "piano", "weather"]
 const GOOD := Color("3f7a47")
 const KINDS := {
@@ -91,6 +92,7 @@ func home_view(box: VBoxContainer) -> void:
 			var row := Blocks.Row.new(label, "", false, true)
 			row.pressed.connect(func() -> void: sb.open_expanded = not sb.open_expanded)
 			box.add_child(row)
+	_proposed(box)
 	_weather(box)
 	var notes: Array = home.things.note_list()
 	if not notes.is_empty():
@@ -105,6 +107,29 @@ func home_view(box: VBoxContainer) -> void:
 				box.add_child(note)
 	if box.get_child_count() == 0:
 		box.add_child(quiet("Nothing waiting. Enjoy it.", 15))
+
+
+# what outside sources suggest: never a banner, a ring or a badge, only these rows
+func _proposed(box: VBoxContainer) -> void:
+	var rows: Array = home.things.proposals
+	if rows.is_empty():
+		return
+	heading(box, "Proposed (%d)" % rows.size())
+	var shown: Array = rows if sb.proposed_expanded else rows.slice(0, PROPOSED_SHOWN)
+	for p in shown:
+		var id := int(p["id"])
+		var row := Blocks.Row.new(str(p["text"]), str(p.get("why", "")))
+		row.marks(
+			[{"label": "add", "act": "take"}, {"label": "no", "act": "no"}],
+			func(a: String) -> void: home.acted.emit(id, "propose_" + a)
+		)
+		box.add_child(row)
+	var more: int = rows.size() - PROPOSED_SHOWN
+	if more > 0:
+		var label := "less" if sb.proposed_expanded else "%d more..." % more
+		var row := Blocks.Row.new(label, "", false, true)
+		row.pressed.connect(func() -> void: sb.proposed_expanded = not sb.proposed_expanded)
+		box.add_child(row)
 
 
 func _now(box: VBoxContainer) -> void:

@@ -317,6 +317,16 @@
       "text": "library card number ends 4417"
     }
   ],
+  "proposals": [
+    {
+      "id": 91,
+      "source": "github",
+      "text": "Review: Fix the flaky gate",
+      "why": "lessthanseventy/tlon#12, asked by Sam",
+      "url": null
+    },
+    {"id": 92, "source": "github", "text": "Changes requested: Add the exports", "why": "acme/app#4", "url": null}
+  ],
   "agendas": [
     {
       "id": 71,
