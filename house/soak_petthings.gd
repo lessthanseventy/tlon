@@ -133,6 +133,11 @@ func _defaults() -> void:
 	_sound(h, "cat and dog")
 	_wall_sides(h, "cat and dog")
 	_in_front(h, "cat and dog")
+	for key in h.petlife.THING_LINES:
+		var lines: Array = h.petlife.THING_LINES[key]
+		s._check(PetThings.THINGS.has(key) and lines.size() == 2, "%s has two lines" % key)
+		for text in lines:
+			s._check(text == text.to_lower() and text.length() <= 40, "a short lowercase line: %s" % text)
 	for key in ["cardbox", "fish", "aquarium", "rope", "balls"]:
 		s._check(h.petlife.piece(key).is_empty(), "%s waits in the pets tab" % key)
 	var tower: Dictionary = h.petlife.piece("tower")
@@ -167,6 +172,8 @@ func _combos() -> void:
 			s._check(out == (who == sp), "%s: the %s is %s" % [sp, SIGNATURE[who], out])
 		if SIGNATURE.has(sp):
 			_visit(h, SIGNATURE[sp])
+		if sp == "cat":
+			_visit(h, "window_perch")
 		room.queue_free()
 	for pair in [
 		["chicken_white", "cow_holstein"], ["rabbit_white", "pig_pink"], ["bear_black", "deer_doe"]
@@ -182,6 +189,7 @@ func _combos() -> void:
 func _visit(h, key: String) -> void:
 	var c = h.pets.critter("nina")
 	h.pets.freeze = true
+	h.petlife.thing_say = 1.0
 	h.sound.requested.clear()
 	h.pets.place(c, "rug", "sit")
 	c.say_left = 0.0
@@ -191,6 +199,8 @@ func _visit(h, key: String) -> void:
 	var there: bool = c.z > 0.0 if h.pets.spots[key].has("perch") else h.pets._cell_of(c.pos) == cell
 	s._check(c.spot == key and there, "%s goes to the %s" % [c.species, key])
 	s._run_home(h, 0.5)
+	var lines: Array = h.petlife.THING_LINES.get(key, [])
+	s._check(lines.is_empty() or c.say_text in lines, "%s says a line of the %s (%s)" % [c.species, key, c.say_text])
 	var howls: int = h.sound.requested.count("howl")
 	s._check(howls == (1 if key == "howl" else 0), "%s: the howl is asked for %d times" % [key, howls])
 	s._run_home(h, 3.0)
