@@ -241,7 +241,7 @@ func is_open() -> bool:
 
 
 func takes_text() -> bool:
-	return view in ["add", "edit", "settings", "pet"]
+	return view in ["add", "edit", "settings"] or (view == "pet" and pet_view.editing)
 
 
 func view_title() -> String:
@@ -258,7 +258,7 @@ func view_title() -> String:
 		"add", "edit":
 			return FORM_TITLES[view]
 		"pet":
-			return Settings.cat if arg == "nina" else Settings.dog
+			return "Your pet"
 	return VIEW_TITLES.get(view, "")
 
 
@@ -353,6 +353,9 @@ func back() -> void:
 			if home.card.is_open():
 				var kind: String = home.card.kind
 				_switch("card", kind)
+				return
+		"pet":
+			if pet_view.back():
 				return
 	if view == "card":
 		home.close_card()

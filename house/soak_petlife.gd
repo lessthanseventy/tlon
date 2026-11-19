@@ -7,6 +7,9 @@ const Voices := preload("res://voices.gd")
 const Sound := preload("res://sound.gd")
 const Settings := preload("res://settings.gd")
 const PetView := preload("res://pet_view.gd")
+const PetNow := preload("res://pet_now.gd")
+const PetThings := preload("res://pet_things.gd")
+const Antics := preload("res://antics.gd")
 const Quirks := preload("res://quirks.gd")
 
 var s
@@ -19,6 +22,8 @@ func _init(soak) -> void:
 func run() -> void:
 	_kinds()
 	_picker()
+	_pet_view()
+	_pet_words()
 	_things()
 	_visits()
 	_ways()
@@ -323,6 +328,146 @@ func _things() -> void:
 		not h.petlife.has_hay() and not h.pets._blocked(Vector2i(hay["c"], hay["r"])),
 		"off, the hay is gone and the cell is free"
 	)
+	room.queue_free()
+
+
+# the phrase for forced states, and a phrase for every antic there is
+func _pet_words() -> void:
+	var base := {
+		"away": false, "mode": "idle", "anim": "idle", "spot": "", "goal": "", "use": "",
+		"plan": "", "hopping": false, "antic": ""
+	}
+	for row in [
+		[{"mode": "sleep", "spot": "bed"}, "asleep on the round bed"],
+		[{"mode": "sleep", "spot": "bed_cushion"}, "asleep on the cushion bed"],
+		[{"mode": "sleep", "spot": "ant_nx_nina_0"}, "asleep"],
+		[{"mode": "idle", "spot": "sill"}, "resting at the window"],
+		[{"mode": "idle", "spot": "sofa"}, "resting on the sofa"],
+		[{"mode": "idle", "spot": "kennel"}, "resting in the dog house"],
+		[{"mode": "idle", "spot": "bowl", "anim": "eat"}, "eating at the bowls"],
+		[
+			{"mode": "idle", "spot": "post", "anim": "attack", "use": "post"},
+			"playing at the scratch post"
+		],
+		[{"mode": "idle", "spot": "litter", "use": "litter"}, "in the litter box"],
+		[{"mode": "idle", "spot": "knocked"}, "sitting by what it knocked down"],
+		[{"mode": "idle", "spot": "ant_nx_nina_0"}, "hanging out"],
+		[{"mode": "walk", "goal": "tower_top"}, "on its way to the cat tower"],
+		[{"mode": "walk"}, "wandering"],
+		[{"mode": "bat"}, "after the yarn"],
+		[{"mode": "swat", "plan": "knock"}, "knocking something off the desk"],
+		[{"mode": "idle", "spot": "sill", "antic": "cage_watch"}, "watching the bird cage"],
+		[{"mode": "sleep", "spot": "bed", "antic": "dream"}, "dreaming"],
+		[{"antic": "no_such_antic", "spot": "rug"}, "resting on the rug"],
+		[{"away": true}, "not here"],
+	]:
+		var state := base.duplicate()
+		state.merge(row[0], true)
+		var said: String = PetNow.phrase(state)
+		s._check(said == row[1], "%s reads \"%s\" (%s)" % [str(row[0]), row[1], said])
+	for name in Antics.ANTICS:
+		s._check(PetNow.ANTIC.has(name), "the antic %s has a phrase" % name)
+	for key in PetThings.THINGS:
+		s._check(
+			PetNow.noun(PetNow.spots_of(key)[0]) == "the " + PetThings.THINGS[key]["name"],
+			"the thing %s reads by its name" % key
+		)
+
+
+# a pet's view: its words follow its state, each button sends it, "change who this is" is behind a
+# button
+func _pet_view() -> void:
+	var room := _home(46, "cat_grey", "dog_golden")
+	var h = room.home
+	h.pets.freeze = true
+	h.pets.toys = []
+	var cat = h.pets.critter("nina")
+	var dog = h.pets.critter("argos")
+	var view = PetView.new()
+	view.setup(h.settings, h)
+	s.root.add_child(view)
+	view.open("nina")
+	s._check(view._page.visible and not view._edit.visible, "a pet's view opens on the pet")
+	s._check(view._sub.text == "grey cat · sassy", "its kind and way are named: %s" % view._sub.text)
+	var labels := func(c) -> Array: return view._actions(c).map(func(a): return a["label"])
+	var did := func(what: String, c, until: Callable) -> void:
+		view._do(what)
+		s._run_home(h, 30.0, until)
+	h.pets.place(cat, "rug", "idle")
+	s._check(
+		labels.call(cat) == ["pat", "call over", "treat", "play", "off to bed"],
+		"a cat is patted, called, treated, played with and sent to bed: %s" % str(labels.call(cat))
+	)
+	did.call("call", cat, func(): return cat.goal == "" and cat.mode == "idle")
+	var person: Vector2i = h.pets._cell_of(h.pets.critter("person").pos)
+	var here: Vector2i = h.pets._cell_of(cat.pos)
+	s._check(
+		absi(here.x - person.x) + absi(here.y - person.y) == 1, "call over brings it beside the person"
+	)
+	did.call("treat", cat, func(): return cat.anim == "eat")
+	s._check(cat.spot == "bowl" and cat.anim == "eat", "a treat sends it to its bowl to eat")
+	h.pets.rng.seed = 5
+	did.call("play", cat, func(): return cat.use != "")
+	s._check(cat.use == "post" and cat.spot in ["post", "tower_bat"], "play is a post: %s" % cat.spot)
+	view._live()
+	s._check(view._now.text.begins_with("playing "), "and the view says so: %s" % view._now.text)
+	did.call("bed", cat, func(): return cat.mode == "sleep")
+	s._check(
+		cat.mode == "sleep" and cat.spot == h.petlife.night_spot(cat),
+		"off to bed sends it to its night home and it sleeps"
+	)
+	view._live()
+	s._check(view._now.text == "asleep on the cushion bed", "asleep: %s" % view._now.text)
+	h.pets.place(cat, "rug", "idle")
+	h.antics.quiet = true
+	s._check(h.antics.trigger("pounce", "nina"), "an antic can be forced")
+	s._run_home(h, 10.0, func(): return h.antics.act["st"] == "play")
+	view._live()
+	s._check(view._now.text == "pouncing on nothing", "its antic is its words: %s" % view._now.text)
+	did.call("call", cat, func(): return cat.goal == "" and cat.mode == "idle")
+	s._check(h.antics.act.is_empty() and not cat.hold, "a button lets go of the antic")
+	var rows: Array = view._rows(cat).map(func(r): return r["name"])
+	s._check(
+		rows.has("litter box") and rows.has("scratch post") and not rows.has("bone"),
+		"its things are the ones its kind uses: %s" % str(rows)
+	)
+	s._check(
+		view._things.get_child_count() == 1 + view.SHOWN + 1, "six of them show, the rest are behind more"
+	)
+	view._things.get_child(1 + rows.find("scratch post")).pressed.emit()
+	s._check(cat.plan["spot"] == "post", "a row sends it to that thing")
+	view._things.get_child(view._things.get_child_count() - 1).pressed.emit()
+	view._live()
+	s._check(view._things.get_child_count() == 1 + rows.size() + 1, "more shows the rest")
+	h.settings.put("bowls", false)
+	s._check(not labels.call(cat).has("treat"), "no bowls, no treat button")
+	h.settings.put("bowls", true)
+	view.open("argos")
+	h.pets.place(dog, "rug", "idle")
+	s._check(labels.call(dog).has("play"), "a dog can be played with: %s" % str(labels.call(dog)))
+	did.call("play", dog, func(): return dog.use != "")
+	s._check(dog.use == "bone" and dog.spot == "bone", "play is its bone")
+	h.settings.put("pet_things", false)
+	s._check(not labels.call(dog).has("play"), "no toys out, no play button")
+	h.settings.put("pet_things", true)
+	view._open_edit()
+	s._check(
+		view.editing and view._edit.visible and not view._page.visible,
+		"change who this is opens the controls"
+	)
+	view._put("kind", "bear_polar")
+	s._check(
+		h.settings.value("pet2") == "bear_polar" and h.pets.critter("argos").species == "bear",
+		"a kind chosen there changes the pet"
+	)
+	s._check(view.back() and not view.editing and view._page.visible, "back returns to the pet")
+	s._check(view._portrait.kind == "bear_polar" and not view.back(), "which shows the new one")
+	view._put("kind", Pets.NONE)
+	s._check(
+		not view._alive.visible and view._portrait.kind == "" and view._sub.text == "no pet here",
+		"no pet, only its header and the way back to the controls"
+	)
+	view.queue_free()
 	room.queue_free()
 
 
