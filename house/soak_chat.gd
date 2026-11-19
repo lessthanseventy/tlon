@@ -47,6 +47,13 @@ func _wait(_secs: float = 0.0) -> void:
 		await s.process_frame
 
 
+# until `done` holds, at most `secs`; a failure to hold is the caller's check
+func _until(done: Callable, secs: float = 8.0) -> void:
+	var end := Time.get_ticks_msec() + int(secs * 1000.0)
+	while not done.call() and Time.get_ticks_msec() < end:
+		await s.create_timer(0.02).timeout
+
+
 func _key(code: int) -> InputEventKey:
 	var e := InputEventKey.new()
 	e.keycode = code
@@ -295,10 +302,10 @@ func _address() -> void:
 	var v = main._sidebar.settings_view
 	v.open()
 	main._check_server("http://127.0.0.1:%d" % s._srv.get_local_port())
-	await _wait()
+	await _until(func() -> bool: return v._url_say.text == "reachable")
 	s._check(v._url_say.text == "reachable", "the check says reachable against the stub: %s" % v._url_say.text)
 	main._check_server("http://127.0.0.1:1")
-	await _wait()
+	await _until(func() -> bool: return v._url_say.text == "not reachable")
 	s._check(v._url_say.text == "not reachable", "and not reachable on a dead port: %s" % v._url_say.text)
 	v._url.text = "ftp://x"
 	v._check()
