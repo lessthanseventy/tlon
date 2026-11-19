@@ -724,13 +724,14 @@ func _voices_logic() -> void:
 	_check(first == "x" and v.line("Nina", "muse") == "y", "not twice in a row across occasions")
 	v.set_batch({})
 	_check(
-		v.line("Nina", "pet") in Voices.FALLBACK["Nina"]["pet"],
+		v.line("Nina", "pet") in v._offline("Nina", "pet"),
 		"nothing served: the built-in line"
 	)
+	_check(v.line("Nina", "pet") != v.line("Nina", "pet"), "nothing served: two pats, two lines")
 	_check(v.line("Nina", "tv") == "", "nothing served and no built-in: no bubble")
 	v.set_batch({"Nina": {"muse": ["served"]}})
 	_check(
-		v.line("Nina", "pet") in Voices.FALLBACK["Nina"]["pet"],
+		v.line("Nina", "pet") in v._offline("Nina", "pet"),
 		"the pet with nothing for an occasion falls back"
 	)
 	var mixed := false

@@ -191,8 +191,9 @@ func _offline(who: String, occasion: String) -> Array:
 	var pool: Array = []
 	if personality.get(who) == ROLE_PERSONALITY.get(who):
 		pool.append_array(FALLBACK.get(who, {}).get(occasion, []))
-	else:
-		pool.append_array(PERSONA.get(personality.get(who, ""), {}).get(occasion, []))
+	for l in PERSONA.get(personality.get(who, ""), {}).get(occasion, []):
+		if not pool.has(l):
+			pool.append(l)
 	pool.append_array(OWN.get(species.get(who, ""), {}).get(occasion, []))
 	return pool
 
