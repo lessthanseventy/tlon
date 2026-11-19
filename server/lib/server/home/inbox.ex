@@ -507,13 +507,8 @@ defmodule Server.Home.Inbox do
     reader = Application.get_env(:server, :home_reader, &Reader.read/2)
 
     case reader.(jot.body, context) do
-      {:ok, %{amends: true, kind: "agenda"} = reading} when context.previous != nil ->
-        reply = Agendas.file(context.previous, reading, now)
-        Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
-        {"changed: " <> reply, []}
-
       {:ok, %{amends: true, kind: kind} = reading} when context.previous != nil and kind in @kept ->
-        reply = Organize.file(context.previous, reading, now)
+        reply = amended(context.previous, reading, now)
         Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
         {"changed: " <> reply, []}
 
@@ -651,4 +646,7 @@ defmodule Server.Home.Inbox do
 
   defp together({head, head_opts}, {tail, tail_opts}),
     do: {head <> "\n\n" <> tail, choices: head_opts[:choices] ++ Keyword.get(tail_opts, :choices, [])}
+
+  defp amended(previous, %{kind: "agenda"} = reading, now), do: Agendas.file(previous, reading, now)
+  defp amended(previous, reading, now), do: Organize.file(previous, reading, now)
 end
