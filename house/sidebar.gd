@@ -325,6 +325,9 @@ func _leave(to: String) -> void:
 	if focused != null:
 		focused.release_focus()
 	match view:
+		"card":
+			if to != "card":
+				_views.shelf.reset()
 		"add", "edit":
 			if to not in ["add", "edit"]:
 				form.close()
