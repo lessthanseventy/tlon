@@ -3,7 +3,8 @@ extends RefCounted
 # The soak's checks of the sidebar as a whole: every thing in the room opens a view or toggles, the
 # views never lie outside the window at the smallest and the largest sizes, and a banner never takes
 # a view away. Nothing here reaches a server.
-const SIZES := [Vector2(900, 600), Vector2(1100, 700), Vector2(1920, 1080)]
+const Sidebar := preload("res://sidebar.gd")
+const SIZES :=[Vector2(900, 600), Vector2(1100, 700), Vector2(1920, 1080)]
 const VIEWS := ["home", "item", "open", "add", "pet", "closet", "settings", "decorate", "card"]
 
 var s
@@ -27,6 +28,7 @@ func _frames(n: int = 3) -> void:
 func run() -> void:
 	await _things()
 	await _fit()
+	await _pet()
 	await _banner()
 	await _decorate_tabs()
 
@@ -91,7 +93,7 @@ func _fit() -> void:
 	for size in SIZES:
 		main.size = size
 		var win := Rect2(Vector2.ZERO, size)
-		for name in ["home", "add", "pet", "closet", "settings", "card"]:
+		for name in ["home", "add", "pet", "pet_edit", "closet", "settings", "card"]:
 			sb.back()
 			await _frames()
 			match name:
@@ -99,6 +101,9 @@ func _fit() -> void:
 					sb.open_add(true)
 				"pet":
 					sb.open_pet("nina")
+				"pet_edit":
+					sb.open_pet("nina")
+					sb.pet_view._open_edit()
 				"closet":
 					sb.open_closet()
 				"settings":
@@ -125,6 +130,34 @@ func _outside(win: Rect2) -> String:
 		if r.position.x < win.position.x - 0.5 or r.end.x > win.end.x + 0.5:
 			bad.append("%s %s" % [c.name, r])
 	return ", ".join(bad.slice(0, 3))
+
+
+# a click on a pet opens its view, not the controls; Esc goes back one level at a time
+func _pet() -> void:
+	main._at = "home"
+	sb.back()
+	await _frames()
+	var cat = h.pets.critter("nina")
+	var c: Vector2 = h.pets.hit_rect(cat, h._o, h._k).get_center()
+	if h.pet_at(c) == "nina":
+		h.click(c)
+	else:
+		main._on_viewed("pet", "nina")
+	await _frames()
+	var v = sb.pet_view
+	s._check(sb.view == "pet" and v.visible, "a click on a pet opens its view")
+	s._check(v._page.visible and not v._tiles["cat_black"].is_visible_in_tree(), "not the kind grid")
+	s._check(not sb.takes_text(), "the pets go on with their day while it is open")
+	v._open_edit()
+	await _frames()
+	s._check(sb.takes_text() and v._tiles["cat_black"].is_visible_in_tree(), "change who this is")
+	s._check(is_equal_approx(sb.size.x, Sidebar.WIDTH), "the pane stays %d wide" % Sidebar.WIDTH)
+	sb.back()
+	await _frames()
+	s._check(sb.view == "pet" and v._page.visible and not v.editing, "Esc goes back to the pet")
+	sb.back()
+	await _frames()
+	s._check(sb.view == "home", "and again goes home")
 
 
 # a slip or a ring over an open view takes nothing from it
