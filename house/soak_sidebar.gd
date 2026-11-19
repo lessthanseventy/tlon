@@ -28,6 +28,7 @@ func run() -> void:
 	await _things()
 	await _fit()
 	await _banner()
+	await _decorate_tabs()
 
 
 func _centre(key: String) -> Variant:
@@ -143,3 +144,22 @@ func _banner() -> void:
 	sb.back()
 	await _frames()
 	s._check(sb.view == "home", "and back still goes home")
+
+
+# the pane is no wider than its 360 px with the decorate view up, whichever tab, and every tab shows
+func _decorate_tabs() -> void:
+	if not h.layout.art:
+		return
+	main._set_decorate(true)
+	await _frames(3)
+	var d = main._decorate
+	for t in h.layout.tabs:
+		d.tab = t
+		d.queue_redraw()
+		await _frames(2)
+		s._check(sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the sidebar stays %d wide on %s" % [sb.WIDTH, t])
+	for hit in d._hits:
+		if str(hit["act"]).begins_with("tab:"):
+			s._check(hit["rect"].end.x <= d.size.x - 4.0, "the %s tab fits the pane" % hit["act"])
+	main._set_decorate(false)
+	await _frames()
