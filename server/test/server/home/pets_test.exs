@@ -106,6 +106,66 @@ defmodule Server.Home.PetsTest do
     assert %{"Nina" => %{"pet" => ["One."]}} = Pets.voices(DateTime.add(soon, 302))
   end
 
+  describe "the kept batch" do
+    defp written(cast \\ Pets.cast(%{})) do
+      start_supervised!(Pets)
+      writes({:ok, ~s({"Nina": {"pet": ["Kept."]}, "Argos": {}})})
+      assert Pets.voices(@now, cast) == %{}
+      assert_receive {:asked, _}
+      assert %{"Nina" => _} = eventually(fn -> Pets.voices(@now, cast) end)
+      stop_supervised!(Pets)
+    end
+
+    test "a restart answers the same cast from the kept batch, and writes again only when it is old" do
+      written()
+      start_supervised!(Pets)
+      writes({:ok, ~s({"Nina": {"pet": ["Newer."]}, "Argos": {}})})
+
+      soon = DateTime.add(@now, 10)
+      assert %{"Nina" => %{"pet" => ["Kept."]}} = Pets.voices(soon)
+      refute_receive {:asked, _}, 50
+
+      late = DateTime.add(@now, 1801)
+      assert %{"Nina" => %{"pet" => ["Kept."]}} = Pets.voices(late)
+      assert_receive {:asked, _}
+      assert %{"Nina" => %{"pet" => ["Newer."]}} = eventually_not(fn -> Pets.voices(late) end, "Kept.")
+    end
+
+    test "a different cast is not served the kept batch" do
+      written()
+      start_supervised!(Pets)
+      writes({:error, :down})
+
+      assert Pets.voices(@now, Pets.cast(%{"nina_name" => "Rosa"})) == %{}
+      assert_receive {:asked, _}
+    end
+
+    test "a kept cast comes back as it was" do
+      cast = Pets.cast(cast_params())
+      written(cast)
+      start_supervised!(Pets)
+
+      assert %{"Nina" => %{"pet" => ["Kept."]}} = Pets.voices(@now, cast)
+      refute_receive {:asked, _}, 50
+    end
+
+    test "a kept value that does not parse starts empty" do
+      for body <- [
+            "not json",
+            ~s({"lines": 1}),
+            ~s({"lines": {"Nina": {}}, "cast": {}, "at": "2026-11-20T18:00:00Z"}),
+            ~s({"lines": {"Nina": {"pet": ["x"]}}, "cast": {}, "at": "yesterday"})
+          ] do
+        Server.Home.Keep.put("pets", body)
+        start_supervised!(Pets)
+        writes({:error, :down})
+        assert Pets.voices(@now) == %{}
+        assert_receive {:asked, _}
+        stop_supervised!(Pets)
+      end
+    end
+  end
+
   describe "the cast" do
     test "no params is Nina the sassy cat and Argos the sweet dog, and the prompt is as it was" do
       cast = Pets.cast(%{})
@@ -221,6 +281,17 @@ defmodule Server.Home.PetsTest do
       "argos_species" => "bear",
       "argos_personality" => "bold"
     }
+
+  defp eventually_not(read, old, tries \\ 50) do
+    case read.() do
+      %{"Nina" => %{"pet" => [^old]}} when tries > 0 ->
+        Process.sleep(10)
+        eventually_not(read, old, tries - 1)
+
+      lines ->
+        lines
+    end
+  end
 
   defp eventually(read, tries \\ 50) do
     case read.() do

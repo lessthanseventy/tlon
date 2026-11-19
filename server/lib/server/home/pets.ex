@@ -13,11 +13,17 @@ defmodule Server.Home.Pets do
   The two pets are roles, `nina` and `argos`, each with a chosen name, animal and personality (the
   cast, `cast/1`). The batch held is for one cast: asked for another, it is dropped and written
   anew, and the caller gets `%{}` until that is done.
+
+  The last good batch is kept (`Server.Home.Keep`, name `pets`) with its cast and the time it was
+  asked for, and read at start, so a restart serves it at once and judges its age as before. A kept
+  value that does not parse is ignored.
   """
   use GenServer
 
   alias Server.Home
   alias Server.Home.Clock
+
+  require Logger
 
   @every_s 1800
   @changed_s 300
@@ -201,7 +207,7 @@ defmodule Server.Home.Pets do
   end
 
   @impl true
-  def init(state), do: {:ok, state}
+  def init(state), do: {:ok, keep(state)}
 
   @impl true
   def handle_call({:voices, now, cast}, _from, state) do
@@ -225,11 +231,15 @@ defmodule Server.Home.Pets do
   end
 
   @impl true
-  def handle_cast({:wrote, ref, {:ok, lines}}, %{writing: ref} = state),
-    do: {:noreply, %{state | lines: lines, at: state.asked, writing: nil}}
+  def handle_cast({:wrote, ref, {:ok, lines}}, %{writing: ref} = state) do
+    save(lines, state.cast, state.asked)
+    {:noreply, %{state | lines: lines, at: state.asked, writing: nil}}
+  end
 
-  def handle_cast({:wrote, ref, :error}, %{writing: ref} = state),
-    do: {:noreply, %{state | at: state.asked, writing: nil}}
+  def handle_cast({:wrote, ref, {:error, why}}, %{writing: ref} = state) do
+    Logger.warning("home pets: no new batch (#{why})")
+    {:noreply, %{state | at: state.asked, writing: nil}}
+  end
 
   def handle_cast({:wrote, _ref, _result}, state), do: {:noreply, state}
 
@@ -237,14 +247,31 @@ defmodule Server.Home.Pets do
     writer = Application.get_env(:server, :home_pets_writer, &ask/1)
 
     Task.start(fn ->
-      result =
-        case writer.(prompt) do
-          {:ok, out} -> parse(out)
-          _ -> :error
-        end
-
-      GenServer.cast(__MODULE__, {:wrote, ref, result})
+      GenServer.cast(__MODULE__, {:wrote, ref, outcome(writer.(prompt))})
     end)
+  end
+
+  defp outcome({:ok, out}), do: with(:error <- parse(out), do: {:error, :unparseable})
+  defp outcome(_), do: {:error, :writer_failed}
+
+  defp save(lines, cast, at) do
+    params = for {role, pet} <- cast, {field, value} <- pet, into: %{}, do: {"#{role}_#{field}", value}
+    Home.Keep.put("pets", JSON.encode!(%{"lines" => lines, "cast" => params, "at" => DateTime.to_iso8601(at)}))
+  rescue
+    error -> Logger.warning("home pets: batch not kept (#{inspect(error.__struct__)})")
+  end
+
+  defp keep(state) do
+    with body when is_binary(body) <- Home.Keep.get("pets"),
+         {:ok, %{"lines" => lines, "cast" => %{} = params, "at" => at}} <- JSON.decode(body),
+         {:ok, lines} <- parse(JSON.encode!(lines)),
+         {:ok, at, _} <- DateTime.from_iso8601(at) do
+      %{state | lines: lines, at: at, cast: cast(params)}
+    else
+      _ -> state
+    end
+  rescue
+    _ -> state
   end
 
   defp describe(:nina, cast) when cast == @defaults, do: @nina
