@@ -39,6 +39,7 @@ var _t := 0.0
 var _was_litter := {}
 var _flicks: Array = []
 var _pour := {}
+var _sing := 0.0
 var _stamp: Array = []
 var _spots := {}
 
@@ -307,6 +308,8 @@ func _register_one(p: Dictionary, key: String) -> void:
 			_spot(key, {"cell": cell, "face": 1, "eat": true})
 		"aquarium":
 			_spot(key, front)
+		"birdcage":
+			_spot("cage", front)
 		"perch":
 			_spot("roost", _perch(p, Vector3(0.5, 0.5, 19.0), 0.6))
 		"window_perch":
@@ -463,6 +466,9 @@ func process(dt: float) -> void:
 	sync()
 	_t += dt
 	litter_wait = maxf(0.0, litter_wait - dt)
+	_sing = maxf(0.0, _sing - dt)
+	if _spots.has("cage") and _sing <= 0.0 and rng.randf() < dt / 30.0:
+		_chirp()
 	if not _pour.is_empty():
 		_pour["t"] += dt
 		if _pour["t"] > 0.9:
@@ -494,9 +500,17 @@ func fill(which: String) -> void:
 	h.sound.request("clink")
 
 
+func _chirp() -> void:
+	_sing = 1.6
+	h.sound.request("squeak")
+
+
 func click(key: String) -> bool:
 	if key.begins_with("bowl:"):
 		fill(key.substr(5))
+		return true
+	if key == "cage":
+		_chirp()
 		return true
 	return false
 
@@ -512,7 +526,7 @@ func _pen(p: Dictionary) -> PetThings.Pen:
 
 
 func _data(key: String) -> Dictionary:
-	var d := {"t": _t, "level": level, "flicks": _flicks}
+	var d := {"t": _t, "level": level, "flicks": _flicks, "sing": _sing}
 	if key == "bed_cushion":
 		var who = h.pets.critter("nina")
 		if _bed_of(who) != "bed_cushion":
@@ -579,4 +593,11 @@ func _draw(p: Dictionary, part: String) -> void:
 		if not s.is_empty():
 			h.room.draw_texture(s["tex"], (h._p(p["c"], p["r"]) - s["anchor"]).round())
 		return
-	PetThings.draw(_pen(p), key, part, _data(key))
+	var pen := _pen(p)
+	PetThings.draw(pen, key, part, _data(key))
+	if key == "birdcage":
+		var hull := PackedVector2Array(
+			[pen.p(0.1, 0.9), pen.p(0.9, 0.9), pen.p(0.9, 0.1), pen.p(0.9, 0.1, 33.0)]
+		)
+		hull.append_array([pen.p(0.1, 0.1, 33.0), pen.p(0.1, 0.9, 33.0)])
+		h._register("cage", hull, pen.p(0.5, 0.5))

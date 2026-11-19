@@ -137,6 +137,17 @@ const THINGS := {
 		"def": false,
 		"sw": "things"
 	},
+	"birdcage":
+	{
+		"name": "bird cage",
+		"group": "everyone",
+		"kinds": [],
+		"mode": "solid",
+		"h": 30,
+		"faces": [],
+		"def": false,
+		"sw": "things"
+	},
 	"bone":
 	{
 		"name": "bone",
@@ -499,6 +510,8 @@ static func draw(pen: Pen, key: String, part: String, d: Dictionary) -> void:
 			_honey(pen)
 		"window_perch":
 			_window_perch(pen)
+		"birdcage":
+			_birdcage(pen, d)
 
 
 
@@ -804,3 +817,35 @@ static func _window_perch(s: Pen) -> void:
 	s.box(-1.0, -0.05, -0.3, 0.55, 19.0, 21.5, wood)
 	s.diamond(-0.97, 0.0, -0.33, 0.5, 21.5, Color("c98577"))
 	s.diamond(-0.9, 0.07, -0.4, 0.43, 22.0, Color("e0a898"))
+
+
+# the bird hops between its two perches every few seconds; `sing` is the seconds of song left
+static func _birdcage(s: Pen, d: Dictionary) -> void:
+	var t := float(d.get("t", 0.0))
+	var sing := float(d.get("sing", 0.0)) > 0.0
+	var gold := Color("d9b86a")
+	var yellow := Color("f0c83a")
+	s.box(0.15, 0.15, 0.85, 0.85, 0.0, 3.0, Color("6a4a30"))
+	for i in 5:
+		var x := 0.15 + 0.175 * i
+		s.line(s.p(x, 0.15, 3.0), s.p(x, 0.15, 27.0), gold.darkened(0.3))
+	for x in [0.3, 0.7]:
+		s.line(s.p(x - 0.07, 0.5, 11.0), s.p(x + 0.07, 0.5, 11.0), Color("8a5a36"), 2.0)
+	var hop := clampf(fmod(t, 3.5) / 0.3, 0.0, 1.0)
+	var to := 0.3 if int(t / 3.5) % 2 == 1 else 0.7
+	var bx := lerpf(1.0 - to, to, hop)
+	var bz := 12.0 + 5.0 * sin(PI * hop)
+	var dir := 1.0 if to > 0.5 else -1.0
+	s.ell(bx, 0.5, 2.8, 2.4, bz + 3.0, yellow)
+	s.dot(bx + 0.06 * dir, 0.5, bz + 6.0, 1.6, yellow)
+	s.dot(bx + 0.1 * dir, 0.5, bz + 6.0, 0.6, Color("e8842c"))
+	var flap := 3.0 * sin(t * 40.0) if sing or hop < 1.0 else 0.0
+	s.line(s.p(bx, 0.5, bz + 4.0), s.p(bx - 0.08 * dir, 0.5, bz + 6.5 + flap), Color("c8a020"))
+	if sing:
+		s.dot(bx, 0.5, bz + 12.0 + 3.0 * sin(t * 6.0), 1.0, INK)
+	for i in 5:
+		var x := 0.15 + 0.175 * i
+		s.line(s.p(x, 0.85, 3.0), s.p(x, 0.85, 27.0), gold)
+		s.line(s.p(0.85, x, 3.0), s.p(0.85, x, 27.0), gold.darkened(0.2))
+	s.box(0.12, 0.12, 0.88, 0.88, 27.0, 29.0, gold)
+	s.line(s.p(0.5, 0.5, 29.0), s.p(0.5, 0.5, 33.0), gold)
