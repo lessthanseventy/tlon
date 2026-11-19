@@ -332,12 +332,38 @@ func _window() -> void:
 	var cat = h.pets.critter("nina")
 	var perch: Dictionary = h.petlife.piece("window_perch")
 	s._check(_cell(perch) == Vector2i(1, 5), "a cat has its window perch at the sill (%s)" % [perch])
-	s._check(h.pets.spots["sill"]["z"] == 22.0, "the sill is the perch")
+	s._check(h.pets.spots["sill"]["z"] == PetThings.PERCH_Z, "the sill is the perch")
 	h.pets.freeze = true
 	h.pets.place(cat, "rug", "sit")
 	h.pets.go(cat, "sill", "sit", 5.0)
 	s._run_home(h, 30.0, func(): return cat.z > 20.0 and cat.mode != "jump")
-	s._check(cat.z == 22.0 and cat.spot == "sill", "a cat sent to the window ends up on it")
+	s._check(cat.z == PetThings.PERCH_Z and cat.spot == "sill", "a cat sent to the window ends up on it")
+	s._check(PetThings.perch_wall(perch) == "nw", "at the window it is a ledge on the north-west wall")
+	var sill_own: float = Pets.SPOTS["sill"]["z"]
+	var forms := {Vector2i(8, 8): "", Vector2i(5, 1): "ne", Vector2i(1, 2): "nw"}
+	for cell in forms:
+		var want := Dictionary(perch).duplicate()
+		want["c"] = cell.x
+		want["r"] = cell.y
+		var why: String = h.layout.place(want, perch, h.busy_cells())
+		s._check(why == "", "the perch moves to %s (%s)" % [cell, why])
+		h.apply_layout()
+		h.petlife.sync()
+		s._check(PetThings.perch_wall(perch) == forms[cell], "the perch at %s is the %s form" % [cell, forms[cell]])
+		s._check(h.pets.spots["sill"]["z"] == sill_own, "away from the window the sill is its own")
+		var seat: Dictionary = h.pets.spots["window_perch"]
+		s._check(seat["z"] == PetThings.PERCH_Z, "a cat can use the perch at %s" % [cell])
+		h.pets.place(cat, "rug", "sit")
+		h.pets.go(cat, "window_perch", "sit", 5.0)
+		s._run_home(h, 30.0, func(): return cat.z > 20.0 and cat.mode != "jump")
+		s._check(cat.z == PetThings.PERCH_Z and cat.spot == "window_perch", "and is on it at %s" % [cell])
+	var back := Dictionary(perch).duplicate()
+	back["c"] = 1
+	back["r"] = 5
+	s._check(h.layout.place(back, perch, h.busy_cells()) == "", "the perch goes back to the window")
+	h.apply_layout()
+	h.petlife.sync()
+	s._check(h.pets.spots["sill"]["z"] == PetThings.PERCH_Z, "and is the sill again")
 	h.layout.remove(perch)
 	h.apply_layout()
 	h.petlife.sync()

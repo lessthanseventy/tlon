@@ -453,8 +453,8 @@ runs on the local list.
   to, whether it is put out by itself). Bowls, round bed, cushion bed (sized to its pet), litter box, scratching post, cat tower
   (pink, three platforms and a cube; both sides), cardboard box, fish toy, aquarium, bone, rope toy, tennis balls, chicken perch
   and nest box, bunny house, carrot, hay bale (the farm pack's sprite), trough, salt lick, kiddie pool, blanket, scratching log,
-  honey pot, window perch (a cushioned shelf on the wall at the sill cell, `raised`: a flat thing drawn with the furniture; while it
-  stands in the sill's cell the `sill` spot is the perch, else the window's own, so every antic that goes to the sill uses it, and a cat
+  honey pot, window perch (`raised`: a flat thing drawn with the furniture; a cushioned ledge bracketed to the back wall at sill height when its cell is against either back wall, `PetThings.perch_wall`, else a cushioned platform on a post; a cat uses both; while the ledge
+  hangs on the north-west wall at the window (`Pets.WINDOW_ROWS`) the `sill` spot is the perch, else the window's own, so every antic that goes to the sill uses it, and a cat
   naps there by day), bird cage (for every animal, not put out by itself, only added from the pets tab: a bird hops between two
   perches and sings now and then or on a click, `cage` is its hit, and a cat now and then goes to watch it, the antic `cage_watch`).
   One signature thing for each species that shared the rest: dog house (it sleeps by it; the night home when it has no bed),
