@@ -1,6 +1,6 @@
 extends RefCounted
 
-# The bookshelf's view: what is kept but not due (notes, someday, projects), then every Borges
+# The bookshelf's view: the agendas, then what is kept but not due (notes, someday, projects), then every Borges
 # title, a click on one showing the pet's remark under it. The filter and the opened sections live
 # here so a rebuild of the pane keeps them.
 const Paper := preload("res://paper.gd")
@@ -12,6 +12,7 @@ var home
 var sb
 var filter := ""
 var expanded := {}
+var naming := false
 var _data := {}
 var _list: VBoxContainer
 
@@ -24,9 +25,10 @@ func _init(the_sidebar, the_home) -> void:
 func reset() -> void:
 	filter = ""
 	expanded = {}
+	naming = false
 
 
-# `data` is the shelf block `home.card_blocks` gives: rows of "notes", "someday" and "projects"
+# `data` is the shelf block `home.card_blocks` gives: rows of "agendas", "notes", "someday" and "projects"
 func build(box: VBoxContainer, data: Dictionary) -> void:
 	_data = data
 	var count := 0
@@ -51,7 +53,8 @@ func _fill() -> void:
 		_list.remove_child(c)
 		c.queue_free()
 	var q := filter.to_lower()
-	var kept := _section("notes", "Notes", q, home.things.open_note)
+	var kept := _agendas(q)
+	kept += _section("notes", "Notes", q, home.things.open_note)
 	for key in ["someday", "projects"]:
 		kept += _section(
 			key, key.capitalize(), q, func(r: Dictionary) -> void: home.open_item(int(r["id"]))
@@ -59,6 +62,42 @@ func _fill() -> void:
 	if kept == 0 and filter == "":
 		_list.add_child(Blocks.wrapped("Nothing is kept here yet.", 15, Paper.QUIET))
 	_books(q)
+
+
+# the agendas, above the notes: each with how many notes and when it is next; "new agenda" asks a name
+func _agendas(q: String) -> int:
+	var held: Array = _data.get("agendas", [])
+	var rows: Array = held.filter(
+		func(a: Dictionary) -> bool: return q == "" or str(a["name"]).to_lower().contains(q)
+	)
+	_list.add_child(Paper.heading("Agendas (%d)" % rows.size(), 14, Paper.INK))
+	for a in rows:
+		var sub := str((a["notes"] as Array).size())
+		var when: String = home.things.agenda_when(a)
+		if when != "":
+			sub += " - " + when
+		var row := Blocks.Row.new(str(a["name"]), sub, false, false, true)
+		row.pressed.connect(func() -> void: home.open_agenda(int(a["id"])))
+		_list.add_child(row)
+	if naming:
+		var edit := Paper.edit("name the agenda", _list)
+		edit.text_submitted.connect(
+			func(name: String) -> void:
+				naming = false
+				if name.strip_edges() != "":
+					home.things.post.emit("/api/home/agendas", {"name": name})
+				_fill()
+		)
+		edit.grab_focus.call_deferred()
+	else:
+		var more := Blocks.Row.new("new agenda", "", false, true)
+		more.pressed.connect(
+			func() -> void:
+				naming = true
+				_fill()
+		)
+		_list.add_child(more)
+	return held.size()
 
 
 # returns how many rows the section holds before the filter, so an empty shelf can say so

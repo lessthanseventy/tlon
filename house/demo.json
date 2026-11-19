@@ -312,6 +312,29 @@
       "text": "library card number ends 4417"
     }
   ],
+  "agendas": [
+    {
+      "id": 71,
+      "name": "retro",
+      "every": "2 week",
+      "in_days": 0,
+      "at": "14:00",
+      "notes": [
+        {"id": 711, "text": "the deploy took three tries", "since": "2026-11-16T10:00:00Z"},
+        {"id": 712, "text": "flaky gate again", "since": "2026-11-17T15:30:00Z"},
+        {"id": 713, "text": "nobody owned the rollback", "since": "2026-11-18T09:10:00Z"}
+      ]
+    },
+    {
+      "id": 72,
+      "name": "1:1 with Sam",
+      "every": "week",
+      "in_days": 3,
+      "at": "10:00",
+      "notes": [{"id": 721, "text": "the conference budget", "since": "2026-11-17T11:00:00Z"}]
+    },
+    {"id": 73, "name": "offsite", "every": null, "next_at": null, "notes": []}
+  ],
   "waiting": [
     {
       "id": 41,

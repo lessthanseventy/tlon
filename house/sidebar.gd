@@ -59,6 +59,9 @@ var view := "home"
 var arg: Variant = null
 var open_expanded := false
 var notes_expanded := false
+# the agenda's add line takes the cursor back after a note went in
+var agenda_typing := false
+var _agenda_from_shelf := false
 var chat_mode := "dock"
 var chat_popped := false
 var form: Control
@@ -255,6 +258,8 @@ func view_title() -> String:
 			return str(row.get("text", "")) if not row.is_empty() else "a thing"
 		"card":
 			return TITLES.get(home.card.kind, "")
+		"agenda":
+			return str(home.things.agenda(int(arg)).get("name", "an agenda"))
 		"add", "edit":
 			return FORM_TITLES[view]
 		"pet":
@@ -313,6 +318,7 @@ func _switch(name: String, the_arg: Variant) -> void:
 	if name not in ["card", "add", "edit"] and home.card.is_open():
 		home.close_card()
 	_seen_card = home.card.kind + "|" + home.card.key
+	agenda_typing = false
 	chat_popped = false
 	_sig = ""
 	scroll.scroll_vertical = 0
@@ -360,6 +366,11 @@ func back() -> void:
 		"pet":
 			if pet_view.back():
 				return
+		"agenda":
+			_switch("home", null)
+			if _agenda_from_shelf:
+				home.open_card("book")
+			return
 	if view == "card":
 		home.close_card()
 	_switch("home", null)
@@ -367,6 +378,11 @@ func back() -> void:
 
 func open_item(id: int) -> void:
 	_switch("item", id)
+
+
+func open_agenda(id: int) -> void:
+	_agenda_from_shelf = view == "card" and home.card.kind == "book"
+	_switch("agenda", id)
 
 
 func open_pet(who: String) -> void:
@@ -479,7 +495,7 @@ func _apply() -> void:
 	if decorate != null:
 		decorate.visible = view == "decorate"
 	scroll.visible = view != "decorate"
-	_dyn.visible = view in ["home", "office", "item", "open", "card"]
+	_dyn.visible = view in ["home", "office", "item", "open", "card", "agenda"]
 	_add_root.visible = view in ["add", "edit"]
 	settings_view.visible = view == "settings"
 	pet_view.visible = view == "pet"
@@ -497,6 +513,8 @@ func _process(_dt: float) -> void:
 		elif view == "card":
 			_switch("home", null)
 	if view == "item" and home.things.find(int(arg)).is_empty():
+		_switch("home", null)
+	if view == "agenda" and home.things.agenda(int(arg)).is_empty():
 		_switch("home", null)
 	var sig := _signature()
 	if sig != _sig:
@@ -517,6 +535,7 @@ func _signature() -> String:
 						home.open,
 						home.coming,
 						home.things.note_list(),
+						home.things.agendas,
 						home.things.pick,
 						home.weather,
 						home.weather_desc,
@@ -536,6 +555,8 @@ func _signature() -> String:
 			var row: Dictionary = home.things.find(int(arg))
 			var armed: bool = home.sure.armed("del:%d" % int(arg))
 			return JSON.stringify([row, armed, home.hearth.lit, home.focus.id])
+		"agenda":
+			return JSON.stringify(home.things.agenda(int(arg)))
 		"card":
 			return JSON.stringify([home.card.kind, home.card_blocks()])
 		"open":
@@ -555,6 +576,8 @@ func _rebuild() -> void:
 			_views.office_view(_dyn, office)
 		"item":
 			_views.item_view(_dyn, int(arg))
+		"agenda":
+			_views.agenda_view(_dyn, int(arg))
 		"card":
 			_views.card_view(_dyn)
 		"open":
