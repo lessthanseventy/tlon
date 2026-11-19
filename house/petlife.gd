@@ -26,6 +26,17 @@ const OLD_PLACES := {
 }
 # a new thing is put this many cells from the others when the room has such a place
 const APART := 3
+# what a pet may say on arriving at the thing that is its own, now and then
+const THING_LINES := {
+	"kennel": ["my house. it has a roof.", "i live here. it's small and perfect."],
+	"howl": ["a good rock. the moon agrees.", "i have notes for the moon."],
+	"den": ["a hole of my own. wonderful.", "nobody knows this place. you do. fine."],
+	"apples": ["one for now. one for later.", "i'm only checking they're fresh."],
+	"pail": ["the bell is mine too.", "milk is grass, taking its time."],
+	"basket": ["soft. i helped.", "wool, mostly mine."],
+	"stump": ["a good stump. mossy.", "i stand here. it's enough."],
+	"window_perch": ["the street is on. i'm watching.", "birds, officially."],
+}
 const HAY_PIECE := "farm.hay_round"
 const NIGHT_HOME := {
 	"nina": ["roost", "hutch", "bed_cushion", "bed", "kennel"],
@@ -36,6 +47,8 @@ var level := {"food": 1.0, "water": 1.0}
 var rng := RandomNumberGenerator.new()
 var litter_wait := 0.0
 var visits := 0
+# the chance a pet says a line on arriving at its thing, and the seconds before it may again
+var thing_say := 0.35
 
 var _hw: WeakRef
 var h:
@@ -43,7 +56,8 @@ var h:
 		return _hw.get_ref()
 var _t := 0.0
 var _was_litter := {}
-var _was_rock := {}
+var _at := {}
+var _hush := {}
 var _flicks: Array = []
 var _pour := {}
 var _sing := 0.0
@@ -596,7 +610,7 @@ func process(dt: float) -> void:
 			litter_wait = rng.randf_range(420.0, 900.0)
 			h.sound.request("rustle")
 		_was_litter[id] = in_box
-		_arrivals(c)
+		_arrivals(c, dt)
 		if in_box and rng.randf() < dt * 3.0:
 			_flicks.append(
 				{"t": 0.0, "dx": rng.randf_range(-0.4, 0.4), "u": rng.randf_range(0.5, 1.0)}
@@ -610,14 +624,20 @@ func process(dt: float) -> void:
 	_flicks = _flicks.filter(func(f): return f["t"] < 0.5)
 
 
-# the wolf howls once on arriving at its rock
-func _arrivals(c) -> void:
-	var on_rock: bool = (
-		not c.away and c.goal == "" and c.jump.is_empty() and c.mode == "idle" and c.spot == "howl"
-	)
-	if on_rock and not _was_rock.get(c.id, false):
+# the wolf's howl and a pet's line, once on arriving at its thing
+func _arrivals(c, dt: float) -> void:
+	_hush[c.id] = maxf(0.0, _hush.get(c.id, 0.0) - dt)
+	var at := ""
+	if not c.away and c.goal == "" and c.jump.is_empty() and c.mode in ["idle", "sleep"]:
+		at = c.spot if THING_LINES.has(c.spot) else ""
+	if at == _at.get(c.id, ""):
+		return
+	_at[c.id] = at
+	if at == "howl":
 		h.sound.request("howl")
-	_was_rock[c.id] = on_rock
+	if at != "" and c.say_left <= 0.0 and _hush[c.id] <= 0.0 and rng.randf() < thing_say:
+		h.pets.say(c, THING_LINES[at][rng.randi() % 2])
+		_hush[c.id] = rng.randf_range(120.0, 300.0)
 
 
 func fill(which: String) -> void:

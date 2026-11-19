@@ -459,7 +459,9 @@ runs on the local list.
   perches and sings now and then or on a click, `cage` is its hit, and a cat now and then goes to watch it, the antic `cage_watch`).
   One signature thing for each species that shared the rest: dog house (it sleeps by it; the night home when it has no bed),
   howling rock (wider than its cell, so it shows around and below the wolf standing on top; the wolf howls once on arriving, `petlife` `_arrivals`), den (a fox curls up in it), apple bucket (horse eats), milk pail and bell post (cow stands
-  by it), wool basket (sheep lies by it), mossy stump (deer stands by it).
+  by it), wool basket (sheep lies by it), mossy stump (deer stands by it). A pet arriving at its own thing (these and the window perch)
+  now and then says one of its two lines (`THING_LINES`: short, lowercase, never about tasks; `thing_say` the chance, then 2 to 5 minutes
+  of quiet for that pet).
   A thing is put out once, at a free cell (`_default`): never in front of a piece or at a spot (`layout.in_front`: the side each
   seat, the TV, the desk, the piano, the fireplace, the wardrobe and the rest face, the door's and the pets' spots; the window perch
   is on the wall and exempt), on no other thing, and as far from the others as the room allows (2 cells from any thing or furniture piece, 3 from the other things with
