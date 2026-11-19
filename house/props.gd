@@ -389,7 +389,18 @@ static func caption(c: CanvasItem, at: Vector2, text: String) -> void:
 	)
 
 
+# drawn at the size of the screen's own pixels: a magnified canvas does not magnify it
 static func tag(c: CanvasItem, at: Vector2, lines: Array, bounds: Rect2) -> void:
+	var s: float = c.get_global_transform().get_scale().x
+	if is_equal_approx(s, 1.0) or s <= 0.0:
+		_tag(c, at, lines, bounds)
+		return
+	c.draw_set_transform(at, 0.0, Vector2(1.0 / s, 1.0 / s))
+	_tag(c, Vector2.ZERO, lines, Rect2((bounds.position - at) * s, bounds.size * s))
+	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+static func _tag(c: CanvasItem, at: Vector2, lines: Array, bounds: Rect2) -> void:
 	var font := ThemeDB.fallback_font
 	var fs := 13
 	var w := 0.0
