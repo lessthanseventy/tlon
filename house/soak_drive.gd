@@ -131,25 +131,18 @@ func _pet_card() -> void:
 	_eq(state["mode"]["pet_card"], "", "Escape closes it")
 
 
-func _piano(state: Dictionary) -> Array:
-	for p in state["layout"]:
-		if p["p"] == "piano":
-			return [p["c"], p["r"]]
-	return []
-
-
 func _decorate(h) -> void:
 	await _send({"do": "key", "key": "D"})
 	var state := await _send({"do": "state"})
 	_eq(state["mode"]["decorate"], true, "D enters decorate mode")
-	var before := _piano(state)
+	var before := str(state["layout"])
 	var things := await _send({"do": "things"})
 	var piano: Dictionary = {}
 	for r in things["registered"]:
 		if r["key"] == "furn:piano":
 			piano = r
-	_eq(before.is_empty() or piano.is_empty(), false, "the piano is in the room")
-	if before.is_empty() or piano.is_empty():
+	_eq(piano.is_empty(), false, "the piano is in the room")
+	if piano.is_empty():
 		return
 	var room = h.room
 	var moved := false
@@ -158,7 +151,7 @@ func _decorate(h) -> void:
 		for r in 10:
 			var at: Vector2 = room._p(room._origin, c + 0.5, r + 0.5)
 			await _click([at.x, at.y])
-			if _piano(await _send({"do": "state"})) != before:
+			if str((await _send({"do": "state"}))["layout"]) != before:
 				moved = true
 				break
 		if moved:

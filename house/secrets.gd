@@ -94,7 +94,7 @@ func start_disco() -> void:
 	disco = DISCO
 	_beat = 0.0
 	h.eggs.find("konami")
-	h.tv.manual = DISCO + 2.0
+	h.tv.override = 1
 	h.tv.hacks.current = "spectrum"
 	h.person.forced = "stretch"
 	for id in ["nina", "argos"]:

@@ -530,7 +530,7 @@ func secrets() -> void:
 	s._check(sc.disco == 0.0, "nine of the ten keys do nothing")
 	h.key(KEY_A)
 	s._check(sc.disco > 0.0 and h.eggs.found.has("konami"), "the old code starts the disco")
-	s._check(h.tv.manual > 0.0, "the TV is on for it")
+	s._check(h.tv.override > 0, "the TV is on for it")
 	s._run_home(h, 12.0, func(): return sc.disco <= 0.0)
 	s._check(
 		sc.disco == 0.0 and not h.pets.critter("nina").hold and not h.pets.critter("argos").hold,
