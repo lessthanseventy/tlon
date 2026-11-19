@@ -1,25 +1,29 @@
 extends RefCounted
 
-# The things in the pets' corner that the pets use: two bowls, a litter box and a scratching post
-# for a cat, a blanket for a pig, boar or bear, a bone for a dog, wolf or fox, hay for the farm
-# animals. Bowls, box, post, blanket and bone are drawn in code; the hay bale is the farm pack's
-# and stands as a lent piece (`layout.guests`), so it blocks its cell like furniture. None of it
-# is saved or movable; a thing whose cell is taken by the owner's furniture is not there.
+# What the pets use: bowls, beds, a litter box, a post and a tower, toys, a perch and a nest, hay,
+# a trough, a pool, a log. Each is a layout piece named `pet.<key>` (`pet_things.gd` says what it
+# is and draws it; `layout.gd` keeps it like furniture, saved and movable). This file puts them
+# out when an animal that uses them lives here, hides them when it does not or a master switch is
+# off, registers where a pet goes for each and what it does there.
 const Pets := preload("res://pets.gd")
-const Props := preload("res://props.gd")
+const PetThings := preload("res://pet_things.gd")
 
-const FOOD := Vector2i(7, 7)
-const WATER := Vector2i(5, 7)
-const LITTER := Vector2i(7, 5)
-const POST := Vector2i(5, 5)
-const MAT := Vector2i(7, 6)
-const HAY := Vector2i(5, 6)
+# where a thing is first put, against a wall or in a corner; the rest scan outward from the walls
+const PLACES := {
+	"litter": [Vector2i(1, 1)],
+	"bowls": [Vector2i(5, 1)],
+	"post": [Vector2i(9, 6)],
+	"tower": [Vector2i(9, 4)],
+	"bone": [Vector2i(1, 8)],
+	"blanket": [Vector2i(1, 8)],
+	"bed_round": [Vector2i(1, 9)],
+	"bed_cushion": [Vector2i(9, 8)],
+}
 const HAY_PIECE := "farm.hay_round"
-const BONE_KINDS := ["dog", "wolf", "fox"]
-const MAT_KINDS := ["pig", "boar", "bear"]
-const HAY_KINDS := ["cow", "horse", "sheep", "deer", "rabbit", "chicken"]
-const SWITCH := {"litter": "litter_box", "bowls": "bowls", "things": "pet_things"}
-const INK := Color("2a2530")
+const NIGHT_HOME := {
+	"nina": ["roost", "hutch", "bed_cushion", "bed"],
+	"argos": ["roost", "hutch", "bed", "bed_cushion"],
+}
 
 var level := {"food": 1.0, "water": 1.0}
 var rng := RandomNumberGenerator.new()
@@ -34,123 +38,399 @@ var _t := 0.0
 var _was_litter := {}
 var _flicks: Array = []
 var _pour := {}
+var _stamp: Array = []
+var _spots := {}
 
 
 func setup(home) -> void:
 	_hw = weakref(home)
 	rng.seed = home.eggs.rng.randi()
 	litter_wait = rng.randf_range(120.0, 400.0)
-	for name in ["litter", "post", "bone", "mat"]:
-		home.eggs.spot(name, _spot(name))
-	home.eggs.spot("water", {"cell": Vector2i(6, 7), "face": 3, "eat": true})
 
 
 func on(key: String) -> bool:
-	return bool(h.settings.value(SWITCH[key]))
+	return bool(h.settings.value(PetThings.SWITCH[key]))
 
 
-func _has(kinds: Array) -> bool:
-	return h.pets.species_here().any(func(s): return s in kinds)
+# a thing is out when its master switch is on and an animal that uses it lives here, or the
+# owner put it there by hand for none
+func shown(key: String, own: bool = false) -> bool:
+	var t: Dictionary = PetThings.THINGS[key]
+	if not on(t["sw"]) or (t.get("art", false) and not h.layout.index.has(HAY_PIECE)):
+		return false
+	return own or PetThings.fits(key, h.pets.species_here())
 
 
-func has_litter() -> bool:
-	return on("litter") and _has(["cat"]) and _free(LITTER)
-
-
-func has_post() -> bool:
-	return on("things") and _has(["cat"]) and _free(POST)
-
-
-func has_mat() -> bool:
-	return on("things") and (_has(MAT_KINDS) or _has(BONE_KINDS)) and _free(MAT)
-
-
-func has_hay() -> bool:
-	return (
-		on("things")
-		and _has(HAY_KINDS)
-		and h.layout.art
-		and not h.layout.entry(HAY_PIECE).is_empty()
-	)
-
-
-# the cell is not the owner's furniture (the pets' corner itself never holds any)
-func _free(cell: Vector2i) -> bool:
-	for p in h.layout.pieces:
-		if h.layout.kind(p) in ["rug", "wall"]:
-			continue
-		if h.layout.rect(p).has_point(cell):
-			return false
-	return true
-
-
-# what the lent pieces need to be: the guests are chosen again when this changes
-func sig() -> Array:
-	return [has_hay()]
-
-
-func pieces() -> Array:
-	return [{"p": HAY_PIECE, "f": "", "c": HAY.x, "r": HAY.y, "fixed": true}] if has_hay() else []
-
-
-func _hay() -> Dictionary:
-	for p in h.layout.guests:
-		if p["p"] == HAY_PIECE:
+# the live piece of a thing, or an empty one
+func piece(key: String) -> Dictionary:
+	for p in h.layout.pet_pieces():
+		if PetThings.key_of(p) == key:
 			return p
 	return {}
 
 
-# [spot, weight, mode, seconds] the pet may pick next, besides what its own habits give it
-func options(c) -> Array:
+func has(key: String) -> bool:
+	sync()
+	return not piece(key).is_empty()
+
+
+func has_litter() -> bool:
+	return has("litter")
+
+
+func has_post() -> bool:
+	return has("post")
+
+
+func has_hay() -> bool:
+	return has("hay")
+
+
+# what the lent pieces need to be (the hay is a pet piece: none are lent)
+func sig() -> Array:
+	return []
+
+
+func pieces() -> Array:
+	return []
+
+
+# whether the pets tab lists a thing: what the animals here use, or all of them
+func listed(key: String, everyone: bool) -> bool:
+	return everyone or PetThings.fits(key, h.pets.species_here()) or not _any(key).is_empty()
+
+
+# the piece of a thing the catalogue names (`pet.key`), standing or hidden, or an empty one
+func out(entry_key: String) -> Dictionary:
+	return _any(entry_key.trim_prefix(PetThings.PREFIX)) if entry_key.begins_with(PetThings.PREFIX) else {}
+
+
+func hay(p: Dictionary) -> bool:
+	return PetThings.is_pet(p) and PetThings.key_of(p) == "hay"
+
+
+func _any(key: String) -> Dictionary:
+
+	for p in h.layout.pieces:
+		if p["p"] == PetThings.PREFIX + key:
+			return p
+	return {}
+
+
+func sync() -> void:
+	if _stamp == _stamp_now():
+		return
+	var changed := false
+	var back: Array = []
+	for p in h.layout.pieces:
+		if not PetThings.is_pet(p):
+			continue
+		var out := shown(PetThings.key_of(p), p.get("own", false))
+		if out and p.get("hide", false):
+			back.append(p)
+		elif not out and not p.get("hide", false):
+			p["hide"] = true
+			changed = true
+	for p in back:
+		p.erase("hide")
+		changed = true
+		if h.layout.check(p, p, h.busy_cells()) != "" and not _relocate(p):
+			p["hide"] = true
+	changed = _put_out() or changed
+	if changed:
+		h.layout.version += 1
+		h.apply_layout()
+	_stamp = _stamp_now()
+	_register()
+
+
+func _stamp_now() -> Array:
+	return [
+		h.pets.species_here(),
+		on("litter"),
+		on("bowls"),
+		on("things"),
+		h.layout.version,
+		h.layout.art,
+	]
+
+
+# the things nobody has put out yet and an animal here uses, once each
+func _put_out() -> bool:
+	var did := false
+	for key in PetThings.THINGS:
+		if not PetThings.THINGS[key]["def"] or key in h.layout.pets_seen or not shown(key):
+			continue
+		if not _any(key).is_empty():
+			h.layout.pets_seen.append(key)
+			continue
+		var p := _default(key)
+		if p.is_empty():
+			continue
+		h.layout.pieces.append(p)
+		h.layout.pets_seen.append(key)
+		did = true
+	return did
+
+
+func _relocate(p: Dictionary) -> bool:
+	var q := _default(PetThings.key_of(p), p)
+	if q.is_empty():
+		return false
+	p["f"] = q["f"]
+	p["c"] = q["c"]
+	p["r"] = q["r"]
+	return true
+
+
+# the first free cell for a thing: its own places, then the cells against a wall
+func _default(key: String, skip: Variant = null) -> Dictionary:
+	var faces: Array = PetThings.THINGS[key]["faces"]
+	var face: String = faces[0] if not faces.is_empty() else ""
+	for cell in PLACES.get(key, []) + _wall_cells():
+		var p := {"p": PetThings.PREFIX + key, "f": face, "c": cell.x, "r": cell.y}
+		if h.layout.check(p, skip, h.busy_cells()) == "":
+			return p
+	return {}
+
+
+# the walkable cells that are against a wall, nearest first
+func _wall_cells() -> Array:
 	var out: Array = []
-	if c.away:
-		return out
-	var sp: String = c.species
-	if on("bowls"):
-		out.append(["bowl", 0.7, "sit", rng.randf_range(5, 8)])
-		out.append(["water", 0.5, "sit", rng.randf_range(4, 6)])
-	if has_litter() and litter_wait <= 0.0 and sp == "cat" and _reach(c, "litter"):
-		out.append(["litter", 2.0, "sit", rng.randf_range(4.5, 6.5)])
-	if has_post() and sp == "cat" and _reach(c, "post"):
-		out.append(["post", 0.6, "sit", rng.randf_range(3, 5)])
-	if has_mat() and _reach(c, "mat"):
-		if sp in BONE_KINDS:
-			out.append(["bone", 0.8, "sit", rng.randf_range(6, 10)])
-		if sp in MAT_KINDS:
-			out.append(["mat", 1.0, "sleep", rng.randf_range(25, 50)])
-	var hay := _hay()
-	if not hay.is_empty() and sp in HAY_KINDS:
-		var name := ""
-		if sp == "chicken":
-			name = h.eggs.perch("hay_top", hay, 0.85)
-		else:
-			var cell: Vector2i = h.eggs.front_cell(hay)
-			if cell.x >= 0:
-				var d := Vector2(HAY) + Vector2(0.5, 0.5) - Vector2(cell) - Vector2(0.5, 0.5)
-				name = h.eggs.spot(
-					"hay_eat", {"cell": cell, "face": h.pets._face(d, 7), "eat": true}
-				)
-		if name != "":
-			out.append([name, 1.0, "sleep" if sp == "chicken" else "sit", rng.randf_range(8, 16)])
+	for x in range(1, Pets.COLS):
+		for y in range(1, Pets.ROWS):
+			var cell := Vector2i(x, y)
+			if wall_side(cell) and not h.layout.PETS_CORNER.has_point(cell):
+				out.append(cell)
+	out.sort_custom(func(a, b): return mini(a.x, a.y) < mini(b.x, b.y))
 	return out
 
 
-# registers the spot and says whether the pet can get to it
+# a wall or the room's edge on one side, or beside a piece that stands against one
+func wall_side(cell: Vector2i) -> bool:
+	if cell.x <= 1 or cell.y <= 1 or cell.x >= Pets.COLS - 1 or cell.y >= Pets.ROWS - 1:
+		return true
+	for d in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]:
+		for p in h.layout.all():
+			if PetThings.is_pet(p) or h.layout.kind(p) != "floor":
+				continue
+			var r: Rect2i = h.layout.rect(p)
+			if r.has_point(cell + d) and (r.position.x <= 1 or r.position.y <= 1):
+				return true
+	return false
+
+
+func _front(p: Dictionary) -> Dictionary:
+	var cell: Vector2i = h.eggs.front_cell(p)
+	if cell.x < 0:
+		return {}
+	var d := Vector2(p["c"] - cell.x, p["r"] - cell.y)
+	return {"cell": cell, "face": h.pets._face(d, 7)}
+
+
+func _perch(p: Dictionary, at: Vector3, bonus: float, extra: Dictionary = {}) -> Dictionary:
+	var front := _front(p)
+	if front.is_empty():
+		return {}
+	var flip: bool = p["f"] == "se"
+	var out := {
+		"cell": front["cell"],
+		"perch": Vector2(p["c"] + (at.y if flip else at.x), p["r"] + (at.x if flip else at.y)),
+		"z": at.z,
+		"key": float(h.layout.draw_key(p)) + bonus,
+		"face": front["face"],
+	}
+	out.merge(extra)
+	return out
+
+
+func _spot(name: String, def: Dictionary) -> void:
+	if def.is_empty():
+		return
+	h.eggs.spot(name, def)
+	_spots[name] = true
+
+
+func _register() -> void:
+	_spots = {}
+	var round := piece("bed_round")
+	h.pets.spots["bed"]["cell"] = (
+		Vector2i(round["c"], round["r"]) if not round.is_empty() else Vector2i(6, 6)
+	)
+	for p in h.layout.pet_pieces():
+		_register_one(p, PetThings.key_of(p))
+
+
+func _register_one(p: Dictionary, key: String) -> void:
+	var cell := Vector2i(p["c"], p["r"])
+	var front := _front(p)
+	match key:
+		"bowls":
+			_spot("bowl", {"cell": cell, "face": 7, "eat": true})
+			_spot("water", {"cell": cell, "face": 3, "eat": true})
+		"bed_round":
+			_spots["bed"] = true
+		"bed_cushion":
+			_spot("bed_cushion", {"cell": cell, "face": 5})
+		"litter":
+			_spot("litter", {"cell": cell, "face": 1, "use": "litter"})
+		"post", "log", "balls":
+			if not front.is_empty():
+				front["use"] = "bone" if key == "balls" else "post"
+				_spot(key, front)
+		"tower":
+			_spot("tower_top", _perch(p, PetThings.TOWER_TOP, 0.6))
+			_spot("tower_cube", _perch(p, PetThings.TOWER_CUBE, 0.7))
+			_spot("tower_bat", _perch(p, PetThings.TOWER_BAT, 0.6, {"use": "post"}))
+		"cardbox", "nest", "hutch":
+			_spot(key, {"cell": cell, "face": 5 if key == "hutch" else 1})
+		"fish", "rope":
+			_spot(key, {"cell": cell, "face": 1, "use": "post"})
+		"bone":
+			_spot(key, {"cell": cell, "face": 1, "use": "bone"})
+		"carrot":
+			_spot(key, {"cell": cell, "face": 1, "eat": true})
+		"aquarium":
+			_spot(key, front)
+		"perch":
+			_spot("roost", _perch(p, Vector3(0.5, 0.5, 19.0), 0.6))
+		"pool":
+			_spot(key, {"cell": cell, "face": 3})
+		"blanket":
+			_spot("mat", {"cell": cell, "face": 1})
+		"trough", "salt":
+			if not front.is_empty():
+				front["eat"] = true
+				_spot(key, front)
+		"hay":
+			if h.eggs.perch("hay_top", p, 0.85) != "":
+				_spots["hay_top"] = true
+			if not front.is_empty():
+				_spot("hay_eat", {"cell": front["cell"], "face": front["face"], "eat": true})
+
+
+# [spot, weight, mode, seconds] the pet may pick next, besides what its own habits give it
+func options(c) -> Array:
+	sync()
+	var out: Array = []
+	if c.away:
+		return out
+	var night: bool = h.pets.is_night
+	for p in h.layout.pet_pieces():
+		var key := PetThings.key_of(p)
+		if not PetThings.fits(key, [c.species]):
+			continue
+		for o in _habits(c, key, night):
+			if _spots.has(o[0]) and _reach(c, o[0]):
+				out.append(o)
+	return out
+
+
+func _secs(a: float, b: float) -> float:
+	return rng.randf_range(a, b)
+
+
+func _habits(c, key: String, night: bool) -> Array:
+	var out: Array = []
+	match key:
+		"bowls":
+			out = [["bowl", 0.7, "sit", _secs(5, 8)], ["water", 0.5, "sit", _secs(4, 6)]]
+		"bed_cushion":
+			out = [["bed_cushion", 8.0 if night else 1.5, "sleep", _secs(30, 60)]]
+		"bed_round":
+			out = [["bed", 8.0 if night else 1.5, "sleep", _secs(30, 60)]]
+		"litter":
+			out = [["litter", 2.0, "sit", _secs(4.5, 6.5)]] if litter_wait <= 0.0 else []
+		"tower":
+			out = [
+				["tower_top", 1.0, "sit", _secs(15, 30)],
+				["tower_cube", 5.0 if night else 0.9, "sleep", _secs(25, 45)],
+				["tower_bat", 0.7, "sit", _secs(5, 9)],
+			]
+		"perch":
+			out = [["roost", 8.0 if night else 1.0, "sleep" if night else "sit", _secs(25, 50)]]
+		"hutch":
+			out = [["hutch", 4.0 if night else 1.0, "sleep", _secs(25, 50)]]
+		"hay":
+			out = [["hay_top" if c.species == "chicken" else "hay_eat", 1.0, "sit", _secs(8, 16)]]
+		"blanket":
+			out = [["mat", 1.0, "sleep", _secs(25, 50)]]
+		_:
+			out = _plain(key)
+	return out.filter(func(o): return _owns(c, key, o[0]))
+
+
+# the habits that are one stop with one weight
+func _plain(key: String) -> Array:
+	var rows := {
+		"post": [0.6, 3, 5],
+		"cardbox": [0.8, 10, 20],
+		"fish": [0.5, 3, 5],
+		"aquarium": [0.5, 8, 14],
+		"bone": [0.8, 6, 10],
+		"rope": [0.7, 5, 8],
+		"balls": [0.6, 5, 8],
+		"nest": [1.0, 10, 20],
+		"carrot": [0.8, 4, 7],
+		"trough": [0.9, 5, 9],
+		"salt": [0.5, 4, 6],
+		"pool": [1.0, 15, 30],
+		"log": [0.7, 4, 6],
+	}
+	if not rows.has(key):
+		return []
+	var r: Array = rows[key]
+	return [[key, r[0], "sit", _secs(r[1], r[2])]]
+
+
+# a bed is slept in by the pet it is for; the round one is the second pet's
+func _owns(c, key: String, spot: String) -> bool:
+	if key == "bed_round" or key == "bed_cushion":
+		return _bed_of(c) == spot
+	return true
+
+
+# the bed a pet sleeps in: its own kind first, the other when only that one is out
+func _bed_of(c) -> String:
+	var order := ["bed_cushion", "bed_round"] if c.id == "nina" else ["bed_round", "bed_cushion"]
+	for key in order:
+		if not piece(key).is_empty():
+			return "bed" if key == "bed_round" else key
+	return ""
+
+
+# where a pet is put for the night, if it has a place of its own
+func night_spot(c) -> String:
+	sync()
+	if c.away:
+		return ""
+	for name in NIGHT_HOME[c.id]:
+		if not _spots.has(name):
+			continue
+		var bed: bool = name == "bed" or name == "bed_cushion"
+		if (bed and _bed_of(c) == name) or (name == "roost" and c.species == "chicken"):
+			return name
+		if name == "hutch" and c.species == "rabbit":
+			return name
+	return ""
+
+
+func night_place() -> void:
+	for id in ["nina", "argos"]:
+		var c = h.pets.critter(id)
+		var name := night_spot(c)
+		if name != "":
+			h.pets.place(c, name, "sleep")
+
+
 func _reach(c, name: String) -> bool:
-	var cell: Vector2i = _spot(name)["cell"]
-	return not h.pets._blocked(cell) and not h.pets.route(h.pets._cell_of(c.pos), cell).is_empty()
-
-
-func _spot(name: String) -> Dictionary:
-	return {
-		"litter": {"cell": LITTER, "face": 1, "use": "litter"},
-		"post": {"cell": Vector2i(6, 5), "face": 3, "use": "post"},
-		"bone": {"cell": MAT, "face": 1, "use": "bone"},
-		"mat": {"cell": MAT, "face": 1},
-	}[name]
+	var cell: Vector2i = h.pets.spots[name]["cell"]
+	var from: Vector2i = h.pets._cell_of(c.pos)
+	return cell == from or (not h.pets._blocked(cell) and not h.pets.route(from, cell).is_empty())
 
 
 func process(dt: float) -> void:
+	sync()
 	_t += dt
 	litter_wait = maxf(0.0, litter_wait - dt)
 	if not _pour.is_empty():
@@ -191,120 +471,77 @@ func click(key: String) -> bool:
 	return false
 
 
+func size_of(species: String) -> float:
+	if species in PetThings.SMALL:
+		return 0.8
+	return 1.15 if species in PetThings.BIG else 1.0
+
+
+func _pen(p: Dictionary) -> PetThings.Pen:
+	return PetThings.Pen.new(h.room, h._p(p["c"], p["r"]), h._k, p["f"] == "se")
+
+
+func _data(key: String) -> Dictionary:
+	var d := {"t": _t, "level": level, "flicks": _flicks}
+	if key == "bed_cushion":
+		var who = h.pets.critter("nina")
+		if _bed_of(who) != "bed_cushion":
+			who = h.pets.critter("argos")
+		d["size"] = size_of(who.species)
+	return d
+
+
+# what lies on the floor, before the pets' shadows
 func draw_floor() -> void:
-	if on("bowls"):
-		_bowl("food", FOOD, Color("c9a86a"))
-		_bowl("water", WATER, Color("7fb8e0"))
-	if has_mat():
-		_mat()
-
-
-func _bowl(which: String, cell: Vector2i, fill_col: Color) -> void:
-	var x := cell.x + 0.5
-	var y := cell.y + 0.5
-	var room: Control = h.room
-	room.draw_colored_polygon(h._ellipse(x, y, 6.0, 3.0), Color("4a5a78"))
-	room.draw_colored_polygon(h._ellipse(x, y, 4.6, 2.2, 1.0), Color("8aa0c8"))
-	var lv: float = level[which]
-	if lv > 0.05:
-		room.draw_colored_polygon(h._ellipse(x, y, 1.0 + 2.6 * lv, 0.5 + 1.2 * lv, 1.5), fill_col)
-		if which == "water" and lv > 0.4:
-			room.draw_colored_polygon(
-				h._ellipse(x - 0.5, y - 0.2, 1.0 * lv, 0.4 * lv, 1.7), Color(1, 1, 1, 0.5)
-			)
-	if not _pour.is_empty() and _pour["which"] == which:
-		var u: float = _pour["t"] / 0.9
-		for i in 4:
-			var at: Vector2 = h._p(x + (i - 1.5) * 0.12, y, 6.0 + 10.0 * u - i * 2.0)
-			room.draw_circle(at, 1.2 * h._k, Color(fill_col, 1.0 - u))
-	var q: PackedVector2Array = h._ellipse(x, y, 6.0, 3.0)
-	h._register("bowl:" + which, q, h._p(x, y))
-
-
-func _mat() -> void:
-	var x := MAT.x + 0.5
-	var y := MAT.y + 0.5
-	var pts := PackedVector2Array(
-		[
-			h._p(x - 0.42, y - 0.42, 0.5),
-			h._p(x + 0.42, y - 0.42, 0.5),
-			h._p(x + 0.42, y + 0.42, 0.5),
-			h._p(x - 0.42, y + 0.42, 0.5)
-		]
+	sync()
+	var flat: Array = h.layout.pet_pieces().filter(
+		func(p): return PetThings.THINGS[PetThings.key_of(p)]["mode"] == "flat"
 	)
-	h.room.draw_colored_polygon(pts, Color("8f6f9f"))
-	h.room.draw_polyline(
-		PackedVector2Array([pts[0], pts[1], pts[2], pts[3], pts[0]]),
-		Color("6c4f7c"),
-		maxf(1.0, h._k)
-	)
-	h.room.draw_line(
-		h._p(x - 0.42, y, 0.5), h._p(x + 0.42, y, 0.5), Color("b79ac4"), maxf(1.0, h._k)
-	)
-	if _has(BONE_KINDS):
-		var a: Vector2 = h._p(x - 0.15, y + 0.1, 1.0)
-		var b: Vector2 = h._p(x + 0.15, y - 0.1, 1.0)
-		h.room.draw_line(a, b, Color("f1e9dc"), 2.0 * h._k)
-		for end in [a, b]:
-			h.room.draw_circle(end + Vector2(0, -h._k * 0.6), 1.5 * h._k, Color("f1e9dc"))
-			h.room.draw_circle(end + Vector2(0, h._k * 0.6), 1.5 * h._k, Color("f1e9dc"))
+	flat.sort_custom(func(a, b): return a["c"] + a["r"] < b["c"] + b["r"])
+	for p in flat:
+		var key := PetThings.key_of(p)
+		PetThings.draw(_pen(p), key, "", _data(key))
+		if key == "bowls":
+			_bowls_fx(p)
+
+
+func _bowls_fx(p: Dictionary) -> void:
+	for i in 2:
+		var which := "food" if i == 0 else "water"
+		var at := Vector2(0.28, 0.72) if i == 0 else Vector2(0.72, 0.28)
+		var x: float = p["c"] + at.x
+		var y: float = p["r"] + at.y
+		if not _pour.is_empty() and _pour["which"] == which:
+			var u: float = _pour["t"] / 0.9
+			var tone := Color("c9a86a") if i == 0 else Color("7fb8e0")
+			for j in 4:
+				var pt: Vector2 = h._p(x + (j - 1.5) * 0.12, y, 6.0 + 10.0 * u - j * 2.0)
+				h.room.draw_circle(pt, 1.2 * h._k, Color(tone, 1.0 - u))
+		h._register("bowl:" + which, h._ellipse(x, y, 6.0, 3.0), h._p(x, y))
 
 
 func items() -> Array:
+	sync()
 	var out: Array = []
-	if has_litter():
-		var k := float(LITTER.x + LITTER.y) + 1.0
-		out.append({"key": k - 1.5, "pri": 1.9, "fn": _litter_back})
-		out.append({"key": k - 0.4, "pri": 2.2, "fn": _litter_front})
-	if has_post():
-		out.append({"key": float(POST.x + POST.y) + 0.9, "pri": 1.9, "fn": _post})
+	for p in h.layout.pet_pieces():
+		var key := PetThings.key_of(p)
+		var mode: String = PetThings.THINGS[key]["mode"]
+		var k := float(p["c"] + p["r"])
+		if mode == "walk":
+			out.append({"key": k - 0.5, "pri": 1.9, "fn": _draw.bind(p, "back")})
+			out.append({"key": k + 0.6, "pri": 2.2, "fn": _draw.bind(p, "front")})
+		elif mode == "solid":
+			out.append({"key": k, "pri": 1.0, "fn": _draw.bind(p, "")})
+			if key == "tower":
+				out.append({"key": k + 0.9, "pri": 1.0, "fn": _draw.bind(p, "front")})
 	return out
 
 
-func _corners(cell: Vector2i, z: float) -> Array:
-	var x := cell.x + 0.5
-	var y := cell.y + 0.5
-	var r := 0.4
-	return [
-		h._p(x - r, y - r, z), h._p(x + r, y - r, z), h._p(x + r, y + r, z), h._p(x - r, y + r, z)
-	]
-
-
-func _wall(a: Vector2, b: Vector2, rise: float, col: Color) -> void:
-	var up := Vector2(0, -rise * h._k)
-	h.room.draw_colored_polygon(PackedVector2Array([a, b, b + up, a + up]), col)
-
-
-func _litter_back() -> void:
-	var low := _corners(LITTER, 0.0)
-	_wall(low[0], low[1], 6.0, Color("a8c4d8"))
-	_wall(low[0], low[3], 6.0, Color("8fb0c8"))
-	h.room.draw_colored_polygon(PackedVector2Array(_corners(LITTER, 4.0)), Color("e4d3a8"))
-	for i in 5:
-		var at: Vector2 = h._p(LITTER.x + 0.3 + 0.09 * i, LITTER.y + 0.35 + 0.07 * (i % 3), 4.5)
-		h.room.draw_rect(Rect2(at, Vector2(h._k, h._k)), Color("c4b088"))
-	for f in _flicks:
-		var u: float = f["t"] / 0.5
-		var at: Vector2 = h._p(
-			LITTER.x + 0.5 + f["dx"], LITTER.y + 0.5, 6.0 + 9.0 * f["u"] * sin(PI * u)
-		)
-		h.room.draw_rect(Rect2(at, Vector2(h._k, h._k)), Color("e4d3a8", 1.0 - u))
-
-
-func _litter_front() -> void:
-	var low := _corners(LITTER, 0.0)
-	_wall(low[3], low[2], 6.0, Color("c4dcea"))
-	_wall(low[1], low[2], 6.0, Color("9fbfd4"))
-	var top := _corners(LITTER, 6.0)
-	h.room.draw_polyline(PackedVector2Array([top[3], top[2], top[1]]), INK, maxf(1.0, h._k * 0.8))
-
-
-func _post() -> void:
-	var c: Vector2 = h._p(POST.x + 0.5, POST.y + 0.5)
-	h.room.draw_colored_polygon(PackedVector2Array(_corners(POST, 2.0)), Color("8a6a4a"))
-	h.room.draw_rect(Rect2(c + Vector2(-1.5, -22.0) * h._k, Vector2(3, 20) * h._k), Color("c9a86a"))
-	for i in 5:
-		h.room.draw_rect(
-			Rect2(c + Vector2(-1.5, -20.0 + i * 4.0) * h._k, Vector2(3, 1) * h._k), Color("a8845a")
-		)
-	h.room.draw_rect(Rect2(c + Vector2(-5, -25.0) * h._k, Vector2(10, 3) * h._k), Color("a8605a"))
+func _draw(p: Dictionary, part: String) -> void:
+	var key := PetThings.key_of(p)
+	if key == "hay":
+		var s: Dictionary = h.room._sprite(HAY_PIECE)
+		if not s.is_empty():
+			h.room.draw_texture(s["tex"], (h._p(p["c"], p["r"]) - s["anchor"]).round())
+		return
+	PetThings.draw(_pen(p), key, part, _data(key))

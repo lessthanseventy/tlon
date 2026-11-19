@@ -6,7 +6,7 @@ extends RefCounted
 # there adds nothing. Every pack shares the interiors' 32x16 grid, anchors and footprints.
 
 const NAMES := ["castle", "mansion", "farm"]
-const TABS := ["home", "castle", "mansion", "garden"]
+const TABS := ["home", "castle", "mansion", "garden", "pets"]
 const FRAME := "_f(\\d)$"
 const SIDE := "_(nwse|nesw|sw|se|ne|nw)$"
 const WALL_PARTS := ["_ne", "_corner", "_ne_window", "_nw", "_nw_door", "_nw_window"]
