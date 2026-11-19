@@ -69,6 +69,35 @@ defmodule Server.Calendar.OutlookTest do
     assert [%{start: ~U[2026-11-19 09:00:00Z]}] = all(feed(meeting(~s("UTC"), "20261119T090000")))
   end
 
+  describe "a display-name TZID with a colon, as Outlook can write it" do
+    @display "(UTC-05:00) Eastern Time (US & Canada)"
+
+    defp display_meeting(local) do
+      vevent([
+        "UID:d#{local}",
+        ~s[DTSTART;TZID="#{@display}":#{local}],
+        ~s[DTEND;TZID="#{@display}":#{local}],
+        "SUMMARY:M"
+      ])
+    end
+
+    test "the feed's own VTIMEZONE with a US rule gives Eastern time, daylight time right" do
+      zones = vtimezone(@display, "-0500", "-0400")
+      assert [%{start: ~U[2026-11-19 14:00:00Z]}] = all(feed(display_meeting("20261119T090000"), zones))
+      assert [%{start: ~U[2026-06-17 13:00:00Z]}] = all(feed(display_meeting("20260617T090000"), zones))
+    end
+
+    test "with no VTIMEZONE the (UTC-05:00) prefix is a fixed offset, so summer is an hour off" do
+      assert [%{start: ~U[2026-11-19 14:00:00Z]}] = all(feed(display_meeting("20261119T090000")))
+      assert [%{start: ~U[2026-06-17 14:00:00Z]}] = all(feed(display_meeting("20260617T090000")))
+    end
+
+    test "a half-hour prefix with no VTIMEZONE is UTC" do
+      ics = feed(vevent(["UID:h", ~s[DTSTART;TZID="(UTC+05:30) Chennai":20261119T090000], "SUMMARY:M"]))
+      assert [%{start: ~U[2026-11-19 09:00:00Z]}] = all(ics)
+    end
+  end
+
   test "an all-day event with no end lasts one day" do
     ics = feed(vevent(["UID:a", "DTSTART;VALUE=DATE:20261119", "SUMMARY:Out"]))
     assert [%{all_day: true, stop: ~U[2026-11-20 00:00:00Z]}] = all(ics)

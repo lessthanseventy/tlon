@@ -84,7 +84,10 @@ defmodule Server.Calendar do
     end
   end
 
-  @doc "Fetch every source now (and wait for it) — the timer's work, for a test or an operator."
+  @doc """
+  Fetch every source now (and wait for it) — the timer's work, for a test or an operator. A fetch
+  already in flight does not count: it was read before the call, so one more round runs after it.
+  """
   def refresh(server \\ __MODULE__), do: GenServer.call(server, :refresh, 60_000)
 
   @doc "A source's feed address: its `ics`, or the machine secret its `ics_secret` names."
@@ -106,8 +109,9 @@ defmodule Server.Calendar do
     state = %{
       feeds: %{},
       parsed: %{},
-      fetching: false,
+      fetching: nil,
       waiters: [],
+      queued: [],
       cache: %{},
       celebrate: Keyword.get(opts, :celebrations, &Feed.celebrations/2),
       fetch: Keyword.get(opts, :fetch, &get_feed/1),
@@ -140,39 +144,41 @@ defmodule Server.Calendar do
     {:noreply, fetch(state, [])}
   end
 
-  @impl true
-  def handle_cast({:fetched, got}, state) do
-    Enum.each(state.waiters, &GenServer.reply(&1, :ok))
-
-    {:noreply,
-     %{
-       state
-       | feeds: Map.merge(state.feeds, Map.new(got, fn {name, {ics, _}} -> {name, ics} end)),
-         parsed: Map.merge(state.parsed, Map.new(got, fn {name, {_, parsed}} -> {name, parsed} end)),
-         cache: %{},
-         fetching: false,
-         waiters: []
-     }}
+  def handle_info({ref, got}, %{fetching: %Task{ref: ref}} = state) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, finish(state, got)}
   end
 
-  # a fetch in a task, its result swapped in when done; one already in flight is waited for, not doubled
-  defp fetch(%{fetching: true} = state, waiters), do: %{state | waiters: state.waiters ++ waiters}
+  # a round that died took nothing with it: the feeds held stay, as for a source that failed
+  def handle_info({:DOWN, ref, :process, _pid, _why}, %{fetching: %Task{ref: ref}} = state),
+    do: {:noreply, finish(state, %{})}
 
-  defp fetch(state, waiters) do
-    me = self()
+  def handle_info(_late, state), do: {:noreply, state}
 
-    Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
-      got =
-        try do
-          fetch_all(state)
-        rescue
-          _ -> %{}
-        end
+  # a round in a task, its result swapped in when done; whoever asks while one is in flight gets a
+  # round that starts after the ask
+  defp fetch(%{fetching: nil} = state, waiters) do
+    task = Task.Supervisor.async_nolink(Server.TaskSupervisor, fn -> fetch_all(state) end)
+    %{state | fetching: task, waiters: waiters}
+  end
 
-      GenServer.cast(me, {:fetched, got})
-    end)
+  defp fetch(state, waiters), do: %{state | queued: state.queued ++ waiters}
 
-    %{state | fetching: true, waiters: waiters}
+  defp finish(state, got) do
+    Enum.each(state.waiters, &GenServer.reply(&1, :ok))
+    queued = state.queued
+
+    state = %{
+      state
+      | feeds: Map.merge(state.feeds, Map.new(got, fn {name, {ics, _}} -> {name, ics} end)),
+        parsed: Map.merge(state.parsed, Map.new(got, fn {name, {_, parsed}} -> {name, parsed} end)),
+        cache: %{},
+        fetching: nil,
+        waiters: [],
+        queued: []
+    }
+
+    if queued == [], do: state, else: fetch(state, queued)
   end
 
   # the sources fetched this round, by name, with their parse; a failed one is absent, so a merge keeps its last copy

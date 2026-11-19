@@ -29,7 +29,16 @@ defmodule Server.Calendar.Feed do
           all_day: boolean()
         }
 
-  @tzid ~r/TZID="?([^:;"\r\n]+)"?/
+  @tzid ~r/TZID=(?|"([^"]+)"|([^:;"\r\n]+))/
+  @iana ~r{^[A-Za-z_]+/[A-Za-z0-9_+\-/]+$}
+  @us_std %{
+    -300 => "America/New_York",
+    -360 => "America/Chicago",
+    -420 => "America/Denver",
+    -480 => "America/Los_Angeles",
+    -540 => "America/Anchorage"
+  }
+  @eu_std %{0 => "Europe/London", 60 => "Europe/Berlin", 120 => "Europe/Helsinki"}
 
   @opaque parsed :: %{events: [ICal.Event.t()]}
 
@@ -100,7 +109,7 @@ defmodule Server.Calendar.Feed do
   defp zones(ics) do
     fixes =
       for [name] <- Regex.scan(@tzid, ics, capture: :all_but_first),
-          not String.contains?(name, "/"),
+          not Regex.match?(@iana, name),
           fix = zone(name, ics),
           into: %{},
           do: {name, fix}
@@ -124,14 +133,49 @@ defmodule Server.Calendar.Feed do
       Logger.warning("calendar feed: unknown time zone #{inspect(name)}, using the feed's own offset or UTC")
     end
 
-    pattern = ~r/TZID:#{Regex.escape(name)}\r?\n.*?BEGIN:STANDARD.*?TZOFFSETTO:([+-])(\d\d)00\r?\n/s
+    from_block(name, ics) || from_prefix(name) || "Etc/UTC"
+  end
 
-    case Regex.run(pattern, ics) do
-      [_, "-", h] when h != "00" -> "Etc/GMT+" <> String.trim_leading(h, "0")
-      [_, "+", h] when h != "00" -> "Etc/GMT-" <> String.trim_leading(h, "0")
-      _ -> "Etc/UTC"
+  # the feed's own VTIMEZONE of that name: a US or EU daylight rule at a known standard offset is
+  # that region's zone (daylight time right); any other rule is read at its standard offset only
+  defp from_block(name, ics) do
+    with [_, block] <- Regex.run(~r/BEGIN:VTIMEZONE\r?\nTZID:#{Regex.escape(name)}\r?\n(.*?)END:VTIMEZONE/s, ics),
+         [_, sign, h, m] <- Regex.run(~r/BEGIN:STANDARD.*?TZOFFSETTO:([+-])(\d\d)(\d\d)/s, block) do
+      minutes = offset(sign, h, m)
+
+      case Regex.run(~r/BEGIN:DAYLIGHT.*?RRULE:([^\r\n]*)/s, block) do
+        [_, rule] -> region(rule, minutes) || fixed(minutes)
+        _ -> fixed(minutes)
+      end
+    else
+      _ -> nil
     end
   end
+
+  defp region(rule, minutes) do
+    cond do
+      String.contains?(rule, "-1SU") -> @eu_std[minutes]
+      String.contains?(rule, "2SU") -> @us_std[minutes]
+      true -> nil
+    end
+  end
+
+  # "(UTC-05:00) Eastern Time (US & Canada)": the offset in front, fixed
+  defp from_prefix(name) do
+    case Regex.run(~r/^\(UTC([+-])(\d\d):(\d\d)\)/, name) do
+      [_, sign, h, m] -> fixed(offset(sign, h, m))
+      _ -> nil
+    end
+  end
+
+  defp offset(sign, h, m), do: if(sign == "-", do: -1, else: 1) * (String.to_integer(h) * 60 + String.to_integer(m))
+
+  defp fixed(0), do: "Etc/UTC"
+  defp fixed(minutes) when rem(minutes, 60) == 0 and abs(minutes) <= 12 * 60, do: etc(div(minutes, 60))
+  defp fixed(_half_hour), do: "Etc/UTC"
+
+  defp etc(hours) when hours < 0, do: "Etc/GMT+#{-hours}"
+  defp etc(hours), do: "Etc/GMT-#{hours}"
 
   # every start up to `to`, in UTC; a series without a rule is its one start
   defp starts(%{rrule: nil} = e, _to), do: [utc(e.dtstart)]
