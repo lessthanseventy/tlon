@@ -994,6 +994,15 @@ defmodule Server.MCP.GatewayTest do
   end
 
   describe "/api/home — what the operator's jots have left open (Server.MCP.OperatorAPI)" do
+    test "meetings by date range: [] with no calendars, 400 on a bad or too wide range" do
+      assert {200, []} = get_json("/api/home/meetings?from=2026-11-01&to=2026-11-30")
+      assert {400, _} = get_json("/api/home/meetings?from=2026-11-01")
+      assert {400, _} = get_json("/api/home/meetings?from=nope&to=2026-11-30")
+      assert {400, _} = get_json("/api/home/meetings?from=2026-11-30&to=2026-11-01")
+      assert {200, _} = get_json("/api/home/meetings?from=2026-11-01&to=2027-01-01")
+      assert {400, _} = get_json("/api/home/meetings?from=2026-11-01&to=2027-01-02")
+    end
+
     test "the forecast is [] with the weather off, else the days the report held" do
       Server.TestDB.clean!()
       assert {200, %{"forecast" => [], "meetings" => []}} = get_json("/api/home")

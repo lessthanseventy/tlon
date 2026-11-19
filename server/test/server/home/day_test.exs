@@ -96,6 +96,30 @@ defmodule Server.Home.DayTest do
     assert [%{day: "today"}] = Day.build(found, now())
   end
 
+  test "any run of dates: each meeting on its date, past included, all-day first, a multi-day one per date" do
+    found = [
+      m("Review", @tomorrow, "09:00", "10:00"),
+      m("Old", ~D[2026-11-02], "09:00", "10:00"),
+      m("Early", @tomorrow, "07:00", "07:30"),
+      m("Away", @today, "00:00", "00:00",
+        all_day: true,
+        start: ~U[2026-11-19 00:00:00Z],
+        stop: ~U[2026-11-21 00:00:00Z]
+      ),
+      m("Gone", @today, "11:00", "11:30", cancelled: true)
+    ]
+
+    assert [
+             %{title: "Old", date: "2026-11-02"},
+             %{title: "Away", date: "2026-11-19", all_day: true},
+             %{title: "Away", date: "2026-11-20", all_day: true},
+             %{title: "Early", date: "2026-11-20"},
+             %{title: "Review", date: "2026-11-20"}
+           ] = Day.on_dates(found, Date.range(~D[2026-11-01], ~D[2026-11-30]))
+
+    assert Day.on_dates(found, Date.range(~D[2026-12-01], ~D[2026-12-05])) == []
+  end
+
   test "no calendar running is no meetings" do
     assert Day.meetings(now(), :no_such_calendar) == []
   end

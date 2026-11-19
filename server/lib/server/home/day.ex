@@ -5,6 +5,7 @@ defmodule Server.Home.Day do
   `%{title, starts_at, ends_at, tentative, all_day, day}` in UTC, `day` `"today"` or `"tomorrow"`,
   soonest first. Today and tomorrow are the machine's wall-clock days (`Server.Home.Clock`); today's
   are the ones not over yet. An all-day event is on each date it covers, from that local midnight.
+  `between/3` answers any run of local dates the same way, each row carrying its `date`.
   The home only reads: nothing here writes a calendar or says anything unasked.
   """
 
@@ -30,6 +31,30 @@ defmodule Server.Home.Day do
     build(found, now)
   end
 
+  @doc """
+  The meetings on each local date from `from` to `to` inclusive, past dates too, from what the
+  calendars hold: `%{title, starts_at, ends_at, tentative, all_day, date}` (`date` ISO 8601), by
+  date, all-day first, then soonest.
+  """
+  @spec between(Date.t(), Date.t(), GenServer.server()) :: [map()]
+  def between(%Date{} = from, %Date{} = to, server \\ Server.Calendar) do
+    window = {DateTime.add(midnight(from), -1, :day), DateTime.add(midnight(Date.add(to, 1)), 1, :day)}
+    server |> Server.Calendar.upcoming(window) |> on_dates(Date.range(from, to))
+  end
+
+  @doc "The meetings in `found` (`Server.Calendar.upcoming/2` rows) on each of `dates`, as `between/3` gives them."
+  @spec on_dates([map()], Enumerable.t()) :: [map()]
+  def on_dates(found, dates) do
+    cleaned = Server.Calendar.clean(found)
+
+    rows =
+      for date <- dates, {m, starts_at, ends_at} <- placed(cleaned, date) do
+        m |> row(starts_at, ends_at) |> Map.put(:date, Date.to_iso8601(date))
+      end
+
+    Enum.sort_by(rows, &{&1.date, not &1.all_day, DateTime.to_unix(&1.starts_at)})
+  end
+
   @doc "The meetings in `found` (`Server.Calendar.upcoming/2` rows) that fall on today or tomorrow at `now`."
   @spec build([map()], DateTime.t()) :: [meeting()]
   def build(found, %DateTime{} = now) do
@@ -38,21 +63,19 @@ defmodule Server.Home.Day do
 
     rows =
       for {name, date} <- [{"today", today}, {"tomorrow", Date.add(today, 1)}],
-          m <- cleaned,
-          {starts_at, ends_at} <- span(m, date),
+          {m, starts_at, ends_at} <- placed(cleaned, date),
           name == "tomorrow" or DateTime.compare(ends_at, now) != :lt do
-        %{
-          title: m.title,
-          starts_at: starts_at,
-          ends_at: ends_at,
-          tentative: m.busy == :tentative,
-          all_day: m.all_day,
-          day: name
-        }
+        m |> row(starts_at, ends_at) |> Map.put(:day, name)
       end
 
     Enum.sort_by(rows, & &1.starts_at, DateTime)
   end
+
+  defp row(m, starts_at, ends_at) do
+    %{title: m.title, starts_at: starts_at, ends_at: ends_at, tentative: m.busy == :tentative, all_day: m.all_day}
+  end
+
+  defp placed(cleaned, date), do: for(m <- cleaned, {s, e} <- span(m, date), do: {m, s, e})
 
   defp today(now), do: now |> Clock.local() |> NaiveDateTime.to_date()
 

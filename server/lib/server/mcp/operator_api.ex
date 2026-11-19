@@ -168,6 +168,10 @@ defmodule Server.MCP.OperatorAPI do
                                          and the operator has not answered, as {id, source, text, why, url}
       GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open
                                          thing to do now; skip is ids joined by commas, minutes the time there is; 400 on either not numbers
+      GET    /api/home/meetings?from=&to=  Server.Home.Day.between; [{title, starts_at, ends_at, tentative, all_day, date}]: the
+                                         meetings on each local date from..to (YYYY-MM-DD, inclusive, at most 62 days), past dates too,
+                                         cleaned as the day's are (a multi-day all-day event once per date); [] with no calendars; reads
+                                         only what the calendar holds; 400 on a bad or too wide range
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion; ?nina_|argos_ + name|species|personality (sassy sweet lazy mischievous shy bold) choose the cast
                                          (asking may write the next batch); {} before the first
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
@@ -611,6 +615,18 @@ defmodule Server.MCP.OperatorAPI do
       |> Map.put(:forecast, Server.Office.Weather.forecast())
       |> Map.put(:meetings, Server.Home.Day.meetings(now))
     )
+  end
+
+  defp route(conn, "GET", "home", ["meetings"]) do
+    q = fetch_query_params(conn).query_params
+
+    with {:ok, from} <- Date.from_iso8601(q["from"] || ""),
+         {:ok, to} <- Date.from_iso8601(q["to"] || ""),
+         days when days in 0..61 <- Date.diff(to, from) do
+      json(conn, 200, Server.Home.Day.between(from, to))
+    else
+      _ -> json(conn, 400, %{error: "from and to are dates as YYYY-MM-DD, from not after to, at most 62 days"})
+    end
   end
 
   defp route(conn, "GET", "home", ["pets"]) do
