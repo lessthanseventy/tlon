@@ -66,6 +66,68 @@ defmodule Server.CalendarTest do
     assert Task.await(refresh) == :ok
   end
 
+  test "a fetch that exits ends its round, keeps the last good data, and the next refresh fetches again" do
+    {:ok, agent} = Agent.start_link(fn -> {:ok, @ics} end)
+
+    fetch = fn _source ->
+      case Agent.get(agent, & &1) do
+        :exit -> exit(:boom)
+        other -> other
+      end
+    end
+
+    pid = start(fetch, [%{"name" => "work", "ics" => "https://example.test/a.ics"}])
+    :ok = Calendar.refresh(pid)
+    window = {~U[2026-10-08 00:00:00Z], ~U[2026-10-09 00:00:00Z]}
+
+    Agent.update(agent, fn _ -> :exit end)
+    ExUnit.CaptureLog.capture_log(fn -> assert Calendar.refresh(pid) == :ok end)
+    assert [%{title: "Standup"}] = Calendar.upcoming(pid, window)
+
+    Agent.update(agent, fn _ -> {:ok, String.replace(@ics, "Standup", "Retro")} end)
+    :ok = Calendar.refresh(pid)
+    assert [%{title: "Retro"}] = Calendar.upcoming(pid, window)
+  end
+
+  test "a refresh asked during a fetch gets a fetch that starts after the ask" do
+    me = self()
+    {:ok, agent} = Agent.start_link(fn -> {:ok, @ics} end)
+
+    fetch = fn _source ->
+      case Agent.get(agent, & &1) do
+        :block ->
+          send(me, {:fetching, self()})
+
+          receive do
+            :release -> {:ok, @ics}
+          end
+
+        other ->
+          other
+      end
+    end
+
+    pid = start(fetch, [%{"name" => "work", "ics" => "https://example.test/a.ics"}])
+    Agent.update(agent, fn _ -> :block end)
+    first = Task.async(fn -> Calendar.refresh(pid) end)
+    assert_receive {:fetching, round_one}
+
+    second = Task.async(fn -> Calendar.refresh(pid) end)
+    await_queued(pid)
+
+    send(round_one, :release)
+    assert Task.await(first) == :ok
+    assert_receive {:fetching, round_two}
+    assert Task.yield(second, 0) == nil
+
+    send(round_two, :release)
+    assert Task.await(second) == :ok
+  end
+
+  defp await_queued(pid) do
+    if :sys.get_state(pid).queued == [], do: await_queued(pid)
+  end
+
   test "no calendars configured is no meetings" do
     pid = start(fn _ -> flunk("nothing to fetch") end, [])
     :ok = Calendar.refresh(pid)
