@@ -6,6 +6,7 @@ extends RefCounted
 # is the zone's offset from UTC, which the rows' `due_at` carry as `Z`). Every route answers
 # `{"code": int, "body": Variant}`: 400 with `{"error": line}`, 404 with a null body.
 signal told(row: Dictionary)
+signal told_agenda(text: String)
 
 const STORE := "user://house_list.json"
 const KINDS := ["todo", "reminder", "note", "waiting", "project"]
@@ -15,6 +16,9 @@ const MAX_TEXT := 500
 const MAX_LIST := 50
 const DAY := 86400.0
 const WAIT_DAYS := 3
+const MAX_NAME := 80
+const AGENDA_LEAD := 900.0
+const AGENDA_LINGER := 3600.0
 const E_AT := "at is ISO 8601: 2026-11-21T09:00 (local) or with a zone, 2026-11-21T09:00:00Z"
 const E_RANGE := "at is no more than a year back or 20 years ahead"
 const E_EVERY := "every is day, week or month, or a number then one of them: 6 week"
@@ -22,7 +26,7 @@ const E_EVERY := "every is day, week or month, or a number then one of them: 6 w
 var path := ""
 var clock := Callable()
 var bias := 0.0
-var doc := {"v": 1, "next_id": 1, "things": []}
+var doc := {"v": 1, "next_id": 1, "things": [], "agendas": []}
 var notice := ""
 # a list that cannot be read is moved aside only by a house that keeps its list
 var keep := true
@@ -167,10 +171,16 @@ static func _whole(t: Variant) -> bool:
 func adopt(d: Dictionary) -> void:
 	doc = d
 	doc["v"] = 1
+	if not doc.get("agendas") is Array:
+		doc["agendas"] = []
+	for a in doc["agendas"]:
+		for k in ["id", "every_day"]:
+			if a.get(k) is float:
+				a[k] = int(a[k])
 	for t in doc["things"]:
 		if t.get("since") == null:
 			t["since"] = iso(now())
-		for k in ["id", "nudges", "every_day", "project_id"]:
+		for k in ["id", "nudges", "every_day", "project_id", "agenda_id"]:
 			if t.get(k) is float:
 				t[k] = int(t[k])
 	doc["next_id"] = maxi(int(doc.get("next_id", 1)), _top() + 1)
@@ -330,12 +340,13 @@ func status() -> Dictionary:
 		"note_rows": [],
 		"done": [],
 		"done_week": 0,
+		"agendas": doc["agendas"].map(_agenda_row),
 	}
 	for t in things():
 		var s := _state(t)
 		if s == "someday" and str(t["kind"]) in ["todo", "reminder"]:
 			out["someday"].append(_row(t))
-		elif s == "done" and at_of(t["done_at"]) > n - 7 * DAY:
+		elif s == "done" and t.get("agenda_id") == null and at_of(t["done_at"]) > n - 7 * DAY:
 			out["done"].append({"text": t["text"], "done_at": t["done_at"]})
 		elif s == "open":
 			match str(t["kind"]):
@@ -354,7 +365,7 @@ func status() -> Dictionary:
 					out["waiting"].append(_row(t))
 				"project":
 					out["projects"].append(_row(t))
-				"note":
+				"note" when t.get("agenda_id") == null:
 					out["note_rows"].append({"id": int(t["id"]), "text": t["text"]})
 	out["coming"].sort_custom(func(a, b): return [str(a["due_at"]), a["id"]] < [str(b["due_at"]), b["id"]])
 	out["note_rows"].reverse()
@@ -804,6 +815,183 @@ func tick() -> bool:
 			t["nudges"] = count + 1
 			changed = true
 			told.emit(_row(t))
+	changed = _tick_agendas(n) or changed
 	if changed:
 		save()
+	return changed
+
+
+# an agenda: a named standing pile of notes (things of kind note with its `agenda_id`) with an
+# optional rhythm. Told once AGENDA_LEAD ahead of its time; the time moves on AGENDA_LINGER after it.
+func _agenda(id: int) -> Dictionary:
+	for a in doc["agendas"]:
+		if int(a["id"]) == id:
+			return a
+	return {}
+
+
+func _named(name: String) -> Dictionary:
+	for a in doc["agendas"]:
+		if str(a["name"]).to_lower() == name.to_lower():
+			return a
+	return {}
+
+
+func _pile(a: Dictionary, states: Array = ["open"]) -> Array:
+	return things().filter(
+		func(t):
+			return (
+				t.get("agenda_id") != null
+				and int(t["agenda_id"]) == int(a["id"])
+				and _state(t) in states
+			)
+	)
+
+
+func _agenda_row(a: Dictionary) -> Dictionary:
+	return {
+		"id": int(a["id"]),
+		"name": a["name"],
+		"every": a.get("every"),
+		"next_at": a.get("next_at"),
+		"notes":
+		_pile(a).map(func(t): return {"id": int(t["id"]), "text": t["text"], "since": t.get("since")}),
+	}
+
+
+static func _agenda_name(v: Variant) -> String:
+	return v.strip_edges().substr(0, MAX_NAME) if v is String else ""
+
+
+# the rhythm `body` gives an agenda that has `a`'s: `every` and `at`, either null to clear it
+func _timing(body: Dictionary, a: Dictionary) -> Dictionary:
+	var every: Variant = a.get("every")
+	var at: Variant = a.get("next_at")
+	var given := false
+	if body.has("every"):
+		given = true
+		every = null
+		if body["every"] != null:
+			every = every_of(body["every"])
+			if every == "":
+				return _line(E_EVERY)
+	if body.has("at"):
+		given = true
+		at = null
+		if body["at"] != null:
+			var when: Variant = _when(body["at"])
+			if _err(when):
+				return when
+			at = iso(float(when))
+	var anchor: Variant = _anchor(every, at) if given else a.get("every_day")
+	if every != null and at != null and at_of(at) <= now():
+		at = iso(next(at_of(at), every, now(), int(anchor) if anchor != null else 0))
+	return {"every": every, "every_day": anchor, "next_at": at}
+
+
+func agenda_add(body: Dictionary) -> Dictionary:
+	var name := _agenda_name(body.get("name"))
+	if name == "":
+		return _bad("name is required")
+	var timing := _timing(body, {})
+	if _err(timing):
+		return _bad(timing["error"])
+	if not _named(name).is_empty():
+		return _bad("there is already an agenda called %s" % name)
+	var a := {"id": int(doc["next_id"]), "name": name, "told_for": null}
+	doc["next_id"] = int(doc["next_id"]) + 1
+	a.merge(timing, true)
+	doc["agendas"].append(a)
+	save()
+	return _ok(_agenda_row(a))
+
+
+func agenda_edit(id: int, body: Dictionary) -> Dictionary:
+	var a := _agenda(id)
+	if a.is_empty():
+		return _gone()
+	var timing := _timing(body, a)
+	if _err(timing):
+		return _bad(timing["error"])
+	if body.has("name"):
+		var name := _agenda_name(body["name"])
+		if name == "":
+			return _bad("name is required")
+		var other := _named(name)
+		if not other.is_empty() and int(other["id"]) != id:
+			return _bad("there is already an agenda called %s" % name)
+		a["name"] = name
+	a.merge(timing, true)
+	save()
+	return _ok(_agenda_row(a))
+
+
+func agenda_note(id: int, body: Dictionary) -> Dictionary:
+	var a := _agenda(id)
+	if a.is_empty():
+		return _gone()
+	var text: Variant = _text(body.get("text"))
+	if _err(text):
+		return _bad(text["error"])
+	var t := _new("note", text, {"agenda_id": id})
+	save()
+	return _ok(_plain_row(t))
+
+
+# the notes are kept, done, and the agenda stands empty
+func agenda_clear(id: int) -> Dictionary:
+	var a := _agenda(id)
+	if a.is_empty():
+		return _gone()
+	for t in _pile(a):
+		t["state"] = "done"
+		t["done_at"] = iso(now())
+	save()
+	return _ok(_agenda_row(a))
+
+
+func agenda_drop(id: int) -> Dictionary:
+	var a := _agenda(id)
+	if a.is_empty():
+		return _gone()
+	doc["things"] = things().filter(
+		func(t): return not (t.get("agenda_id") != null and int(t["agenda_id"]) == id)
+	)
+	doc["agendas"] = doc["agendas"].filter(func(x): return x != a)
+	save()
+	return _ok({"id": id, "name": a["name"]})
+
+
+func _agenda_told(a: Dictionary, pile: Array) -> String:
+	var name := str(a["name"])
+	return (
+		"%s in 15 — %d thing%s: %s"
+		% [
+			name.substr(0, 1).to_upper() + name.substr(1),
+			pile.size(),
+			"" if pile.size() == 1 else "s",
+			"; ".join(pile.map(func(t): return str(t["text"]))),
+		]
+	)
+
+
+# once a second as well: an agenda's pile is told once as its time comes within the lead, and its
+# time moves on by the rhythm (a one-off time is dropped) after the linger
+func _tick_agendas(n: float) -> bool:
+	var changed := false
+	for a in doc["agendas"]:
+		var upcoming: Variant = a.get("next_at")
+		if upcoming == null:
+			continue
+		var due := at_of(upcoming)
+		if due > n and due - n <= AGENDA_LEAD and a.get("told_for") != upcoming:
+			a["told_for"] = upcoming
+			changed = true
+			var pile := _pile(a)
+			if not pile.is_empty():
+				told_agenda.emit(_agenda_told(a, pile))
+		elif due <= n - AGENDA_LINGER:
+			var anchor := int(a["every_day"]) if a.get("every_day") != null else 0
+			a["next_at"] = iso(next(due, a["every"], n, anchor)) if a.get("every") != null else null
+			changed = true
 	return changed

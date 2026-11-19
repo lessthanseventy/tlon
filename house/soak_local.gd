@@ -61,6 +61,7 @@ func run() -> void:
 	_done_and_projects()
 	_edits()
 	_later_revive_plan()
+	_agendas()
 	_pick()
 	_rings()
 	_files()
@@ -599,6 +600,65 @@ func _later_revive_plan() -> void:
 	_eq(l.plan(p["id"], {"plan": []})["body"]["plan"], [], "an empty plan")
 	_eq(l.answer(todo, {"choice": "nottoday"})["code"], 200, "not today")
 	_line(l.answer(todo, {"choice": "later"}), 400, "choice is nottoday", "another choice")
+
+
+func _agendas() -> void:
+	t = at(2026, 11, 18, 12)
+	var l := _list()
+	var said: Array = []
+	l.told_agenda.connect(func(text: String) -> void: said.append(text))
+	_line(l.agenda_add({"every": "week"}), 400, "name is required", "an agenda needs a name")
+	_line(l.agenda_add({"name": "retro", "every": "often"}), 400, LocalList.E_EVERY, "a bad every")
+	var r: Dictionary = l.agenda_add({"name": " retro ", "every": "2 week", "at": "2026-11-19T14:00"})
+	var id := int(r["body"]["id"])
+	_eq(
+		[r["code"], r["body"]["name"], r["body"]["every"], r["body"]["next_at"], r["body"]["notes"]],
+		[200, "retro", "2 week", "2026-11-19T14:00:00Z", []],
+		"an agenda with a rhythm"
+	)
+	_line(l.agenda_add({"name": "RETRO"}), 400, "there is already an agenda called RETRO", "a name is taken in any case")
+	_eq(l.agenda_note(id, {"text": " flaky gate "})["body"]["text"], "flaky gate", "a note on the pile")
+	l.agenda_note(id, {"text": "deploy took three tries"})
+	_line(l.agenda_note(id, {"text": " "}), 400, "text is required", "a note needs text")
+	_eq(l.agenda_note(99, {"text": "x"})["code"], 404, "no such agenda")
+	var st: Dictionary = l.status()
+	_eq(
+		[st["notes"], st["note_rows"], st["agendas"][0]["notes"].map(func(x): return x["text"])],
+		[[], [], ["flaky gate", "deploy took three tries"]],
+		"a pile's notes are in no plain list"
+	)
+	t = at(2026, 11, 19, 13, 40)
+	l.tick()
+	_eq(said.size(), 0, "not told before the lead")
+	t = at(2026, 11, 19, 13, 46)
+	_eq(l.tick(), true, "told within the lead")
+	_eq(said, ["Retro in 15 — 2 things: flaky gate; deploy took three tries"], "the pile is told once")
+	t = at(2026, 11, 19, 13, 59)
+	l.tick()
+	_eq(said.size(), 1, "and not again")
+	t = at(2026, 11, 19, 14, 30)
+	l.tick()
+	_eq(l.status()["agendas"][0]["next_at"], "2026-11-19T14:00:00Z", "the time stands while it is on")
+	t = at(2026, 11, 19, 15, 1)
+	l.tick()
+	_eq(l.status()["agendas"][0]["next_at"], "2026-12-03T14:00:00Z", "an hour after, the time moves on by the rhythm")
+	_eq(l.agenda_clear(id)["body"]["notes"], [], "clearing empties the pile")
+	st = l.status()
+	_eq([st["done"], st["done_week"], st["agendas"].size()], [[], 0, 1], "cleared notes are kept, not counted as done")
+	var e: Dictionary = l.agenda_edit(id, {"name": "weekly retro", "every": null, "at": null})
+	_eq([e["body"]["name"], e["body"]["every"], e["body"]["next_at"]], ["weekly retro", null, null], "an agenda is edited, a rhythm cleared")
+	l.agenda_note(id, {"text": "a"})
+	_eq(l.agenda_drop(id)["code"], 200, "an agenda is deleted")
+	_eq([l.status()["agendas"], l.things().size()], [[], 0], "with its notes")
+	_eq(l.agenda_drop(id)["code"], 404, "once")
+	_wipe()
+	var kept := _list(FILE)
+	kept.agenda_add({"name": "offsite"})
+	kept.agenda_note(int(kept.status()["agendas"][0]["id"]), {"text": "venue"})
+	var again := _list(FILE)
+	again.load_file()
+	_eq(again.status()["agendas"].map(func(a): return [a["name"], a["notes"].size()]), [["offsite", 1]], "agendas are kept in the list file")
+	_wipe()
 
 
 func _pick() -> void:
@@ -1678,6 +1738,7 @@ func _real_pass(main) -> void:
 	main._on_act(tea, "done")
 	await _wait()
 	_eq(h.ring_ids.has(tea), false, "done stops it")
+	await preload("res://soak_sidebar.gd").new(s, main).local_agendas()
 	t = at(2026, 11, 18, 14)
 	await _where(main)
 	await _first_start(main)
