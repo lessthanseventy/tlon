@@ -841,6 +841,8 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 	elif method == "POST" and path.ends_with("/drop"):
 		var id := int(path.get_slice("/", 3))
 		_state["open"] = _state["open"].filter(func(t): return int(t["id"]) != id)
+		if _state.has("note_rows"):
+			_state["note_rows"] = _state["note_rows"].filter(func(t): return int(t["id"]) != id)
 		out = {"id": id, "text": "x"}
 	elif method == "POST" and (path == "/api/home/add" or path.get_slice("/", 4) in ["edit", "plan", "revive", "answer"]):
 		if _mode == "400":

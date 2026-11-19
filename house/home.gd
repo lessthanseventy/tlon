@@ -1594,12 +1594,9 @@ func card_blocks() -> Array:
 
 
 func _shelf_block() -> Dictionary:
-	var notes_rows: Array = things.note_rows
-	if notes_rows.is_empty():
-		notes_rows = notes.map(func(n): return {"id": 0, "text": str(n)})
 	return {
 		"t": "shelf",
-		"notes": notes_rows,
+		"notes": things.note_list(),
 		"someday": things.someday.map(func(s): return {"id": s["id"], "text": s["text"]}),
 		"projects": things.projects.map(_project_row),
 	}
