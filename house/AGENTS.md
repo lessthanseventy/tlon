@@ -105,7 +105,7 @@ runs on the local list.
 - **The room** is 10x10 cells and, in the 1100x700 window beside the panel, drawn at scale 2 (scale 3
   needs 976 px). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
   (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
-  board, calendar, jar and the pets' corner, none of them movable) and the plain ones (the rest of
+  board, calendar, jar, none of them movable) and the plain ones (the rest of
   the default room: armchair, plants, paintings, clock, rugs, fireplace with its fire, bookshelf,
   piano, dining set, mirror...), plus the wall and floor style. `room.gd` draws what it hands over.
 - **Surprises** (`eggs.gd` the director and the pets' scenes, `hearth.gd`, `sound.gd`; more files below as
@@ -202,7 +202,7 @@ runs on the local list.
   The layout is saved on every change to `user://house_layout.json`
   (`{"v": 1, "wall": "brick", "floor": "oak", "pieces": [{"p": "bookshelf", "f": "se", "c": 9, "r": 0}]}`:
   `p` the catalogue name, `f` the side or `""`, `c`/`r` the back cell; the fixed pieces are not
-  saved) and read at start; a missing or unparsable file, an unknown name or side, or a piece that can no longer
+  saved; the pets' things are saved too, as `pet.<key>` with `"own": true` for one he put out for animals not here, and the file's `pets_seen`) and read at start; a missing or unparsable file, an unknown name or side, or a piece that can no longer
   stand is skipped and the rest kept. `--demo` and `--shot` neither read nor write it unless
   `--layout PATH` names a file (read and written). With no art there is no decorating (one line
   says so) and the default room is boxes.
@@ -210,7 +210,7 @@ runs on the local list.
   farm packs when they are under the art dir (a missing one adds nothing, silently): `Packs.PACKS` lists
   the curated pieces, walls and floors of each, merged into `room._index` as `<pack>.<name>` ids
   (`castle.throne`, wall style `castle.ashlar`); an id without a dot is the interiors', so old layout
-  files load as they were. The panel has tabs home / castle / mansion / garden (the farm pack); `--pick`
+  files load as they were. The panel has tabs home / castle / mansion / garden (the farm pack) / pets (the pets' things, below); `--pick`
   switches to the piece's tab. A saved piece of a pack that is missing is not placed but is kept in the
   file when saving (until `reset`). All packs share the interiors' grid, anchors and footprints. Add a
   piece: a row in `Packs.PACKS` (options `faces`, `still`, `as`).
@@ -412,14 +412,6 @@ runs on the local list.
   sound a species makes, none for a rabbit, fox or deer; only a cat purrs, only a dog barks), `Voices.SPECIES`
   (house lines that suit one species) and `Voices.OWN` (what a species says offline).
   A new kind is a row in `KINDS`, and its sheets are in the art pack at once (`art_pack.gd`).
-- **The pets' things** (`petlife.gd`; the settings `litter_box`, `bowls`, `pet_things`, all on): in the pets' corner, a
-  food and a water bowl for both pets (a click fills one: a toy, nothing is ever empty-and-sad, the level only shows;
-  `bowl` and `water` spots, the `eat` animation), a litter box (code-drawn, two items so the pet stands inside it; only when a
-  cat-species pet lives here, every 7-15 minutes, a sand flick) and a scratching post for a cat, a blanket for a pig, boar or
-  bear (a bone on it for a dog, wolf or fox), and a hay bale for the farm animals (the farm pack's sprite, lent through
-  `layout.guests` so it blocks its cell; a chicken sleeps on it, the rest eat from it). The pets reach them through
-  `Pets.life_options` (extra rows for `_decide_*`) and a spot's `use` key. A thing is not there when the owner's furniture
-  stands on its cell; none of it is saved or movable in decorate mode.
 - **Antics** (`antics.gd`; the setting `pet_antics` `few|some|lots`, default `some`, with `pet_chatter`): short
   (2-12 s) rare behaviours by species and personality, one at a time and never over a card, form, menu or ring;
   they read cells from `pets.spots` and need nothing of the art folder. The table is `ANTICS`: to add one, a row
@@ -428,6 +420,23 @@ runs on the local list.
   lines in `LINES` (dry; never about what is undone, late or counted). `_need` holds the conditions (hour,
   weather, tv, visitor). `--antic <name> [--antic-who nina|argos] [--antic-t <s>]` stages one for a picture.
   `soak_antics.gd` forces every row for every species it allows and checks the pet is released and normal.
+- **The pets' things** (`petlife.gd` the logic, `pet_things.gd` the table and the code-drawn pictures; the settings `litter_box`,
+  `bowls`, `pet_things`, all on, are master switches): each thing is a layout piece named `pet.<key>` (`THINGS`: who it is for,
+  `flat` walked over, `walk` flat with walls a pet stands in, `solid` blocks and is used from beside it, height, the sides it turns
+  to, whether it is put out by itself). Bowls, round bed, cushion bed (sized to its pet), litter box, scratching post, cat tower
+  (pink, three platforms and a cube; both sides), cardboard box, fish toy, aquarium, bone, rope toy, tennis balls, chicken perch
+  and nest box, bunny house, carrot, hay bale (the farm pack's sprite), trough, salt lick, kiddie pool, blanket, scratching log,
+  honey pot. A thing is put out once, at a free cell against a wall or the room's edge (`PLACES`, then the cells nearest a wall;
+  never the open middle), when an animal that uses it lives here and its `def` is set; `layout.pets_seen` (saved as `pets_seen`)
+  remembers it, so one he took away is not put back, and an old layout file gets the things at cells that miss what is
+  there. Putting them out is computed in memory and never writes `user://`: the layout file is written only by a change in
+  decorate mode (`place`/`remove`/`reset`), so an untouched house leaves none. Hidden (`hide`, not deleted, not blocking, not drawn) when no animal here uses it or its switch is off, and back in its place; one
+  he put out for animals not here is `own` and stays. The pets tab of decorate lists what fits the animals here ("all animals"
+  lists every one); a thing is placed once, a click on a placed one picks it up. Spots follow the piece (`_register`, on every
+  layout change); a pet's use of a thing is its `_habits` row and the spot's `use` key. Nothing scores or nags; a bowl's level only shows.
+  Add a thing: a row in `THINGS`, its `_name(s, ...)` drawer in `pet_things.gd` (a `Pen` draws in the cell's own 0..1 coordinates,
+  `box`, `ell`, `diamond`, `line`; `part` "back" and "front" for a `walk` thing), a `_register_one` arm for its spot and a `_habits`
+  row (or an entry in `_plain`); `soak_petthings.gd` covers every thing by itself.
 - Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
   (sweet, not bright). Clicking one pets it; a right click opens its card, "who is this?" (`pet_view.gd`: the animal as a grid of idling sprites and `none`, the name and the way; the same `pet1`/`pet2`, `cat`/`dog` the settings screen writes; `--pet-card nina|argos` stages it). Their lines are `voices.gd`: `GET /api/home/pets` (with `nina_name`, `nina_species`, `nina_personality` and the same three for `argos`, URL-encoded: the first and second pet as set; a pet that is `none` sends none; an older server ignores them; any of the six changing asks once more), a batch a
   model wrote for the home as it is now, `{Nina: {occasion: [lines]}, Argos: {...}, duo: [[
