@@ -1058,6 +1058,50 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"open" => [], "done_week" => 1, "done" => [%{"text" => "buy milk"}]}} = get_json("/api/home")
     end
 
+    test "agendas: start, put notes on, edit, clear and delete over HTTP" do
+      Server.TestDB.clean!()
+      assert {200, %{"agendas" => []}} = get_json("/api/home")
+
+      assert {400, %{"error" => "name is required"}} = post_json("/api/home/agendas", %{every: "week"})
+      assert {400, %{"error" => "every is" <> _}} = post_json("/api/home/agendas", %{name: "retro", every: "often"})
+      assert {400, %{"error" => "at is ISO" <> _}} = post_json("/api/home/agendas", %{name: "retro", at: "thursday"})
+
+      assert {200, %{"id" => id, "name" => "retro", "every" => nil, "next_at" => nil, "notes" => []}} =
+               post_json("/api/home/agendas", %{name: "retro"})
+
+      assert {400, %{"error" => "there is already an agenda called Retro"}} =
+               post_json("/api/home/agendas", %{name: "Retro"})
+
+      assert {200, %{"id" => ^id, "every" => "2 week", "next_at" => "2030-01-07T14:00:00Z"}} =
+               post_json("/api/home/agendas/#{id}/edit", %{every: "2 week", at: "2030-01-07T14:00:00Z"})
+
+      assert {200, %{"text" => "flaky gate", "kind" => "note", "id" => note}} =
+               post_json("/api/home/agendas/#{id}/add", %{text: " flaky gate "})
+
+      assert {400, %{"error" => "text is required"}} = post_json("/api/home/agendas/#{id}/add", %{text: " "})
+      assert {404, _} = post_json("/api/home/agendas/99999/add", %{text: "x"})
+      assert {404, _} = post_json("/api/home/agendas/nope/clear", %{})
+
+      assert {200, %{"notes" => [%{"id" => ^note, "text" => "flaky gate", "since" => since}]}} =
+               post_json("/api/home/agendas/#{id}/edit", %{name: "retro!"})
+
+      assert is_binary(since)
+
+      assert {200, %{"id" => ^note, "text" => "flaky gate!"}} =
+               post_json("/api/home/#{note}/edit", %{text: "flaky gate!"})
+
+      assert {200, _} = post_json("/api/home/agendas/#{id}/add", %{text: "second"})
+      assert {200, %{"id" => ^id, "notes" => []}} = post_json("/api/home/agendas/#{id}/clear", %{})
+
+      assert {200, %{"notes" => [], "note_rows" => [], "done" => [], "done_week" => 0, "agendas" => [agenda]}} =
+               get_json("/api/home")
+
+      assert %{"name" => "retro!", "notes" => []} = agenda
+      assert {200, %{"id" => ^id, "name" => "retro!"}} = post_json("/api/home/agendas/#{id}/drop", %{})
+      assert {404, _} = post_json("/api/home/agendas/#{id}/drop", %{})
+      assert {200, %{"agendas" => []}} = get_json("/api/home")
+    end
+
     test "forms: add, edit, plan and revive over HTTP, with a reason on a bad body and 404 on a thing not live" do
       Server.TestDB.clean!()
 

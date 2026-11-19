@@ -51,6 +51,19 @@ defmodule Server.Home.Form do
     end
   end
 
+  @doc """
+  What an agenda form puts in or changes, from its body: `name` (required to add), `every` (null stops
+  it) and `at` (null clears it), as the fields present: `%{name, every, next_at}`. `at` is as in `add/2`.
+  """
+  @spec agenda(map(), DateTime.t(), :add | :edit) :: {:ok, map()} | {:error, String.t()}
+  def agenda(params, now, mode) do
+    with {:ok, name} <- agenda_name(params, mode),
+         {:ok, every} <- agenda_every(params),
+         {:ok, at} <- agenda_at(params, now) do
+      {:ok, name |> Map.merge(every) |> Map.merge(at)}
+    end
+  end
+
   @doc "A list of texts, trimmed and without blanks, as a plan: `{:ok, texts}`, `:error` when it is not one."
   @spec texts(term()) :: {:ok, [String.t()]} | :error
   def texts(list) when is_list(list) and length(list) <= @max_list do
@@ -61,6 +74,32 @@ defmodule Server.Home.Form do
   end
 
   def texts(_other), do: :error
+
+  defp agenda_name(%{"name" => name}, _mode) do
+    case Server.Agenda.clean(name) do
+      nil -> {:error, "name is required"}
+      name -> {:ok, %{name: name}}
+    end
+  end
+
+  defp agenda_name(_params, :add), do: {:error, "name is required"}
+  defp agenda_name(_params, :edit), do: {:ok, %{}}
+
+  defp agenda_every(%{"every" => nil}), do: {:ok, %{every: nil}}
+
+  defp agenda_every(%{"every" => every}) do
+    with {:ok, every} <- every(every), do: {:ok, %{every: every}}
+  end
+
+  defp agenda_every(_params), do: {:ok, %{}}
+
+  defp agenda_at(%{"at" => nil}, _now), do: {:ok, %{next_at: nil}}
+
+  defp agenda_at(%{"at" => at}, now) do
+    with {:ok, at} <- parse(at, now), do: {:ok, %{next_at: at}}
+  end
+
+  defp agenda_at(_params, _now), do: {:ok, %{}}
 
   defp text(text) when is_binary(text) do
     case String.trim(text) do
