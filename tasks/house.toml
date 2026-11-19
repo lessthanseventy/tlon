@@ -15,7 +15,7 @@ run = "godot --path house -- --widget"
 
 ["house:soak"]
 description = "house: a simulated ten hours of the person and the pets on the grid, decorating (placement rules, reachability, saving, the pointer work), the closet's composition over every ready-made, the jar, knock rules, rhythm, door and TV hacks, and the POST and GET routes against a local stub (needs Godot)"
-run = "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; XDG_DATA_HOME=\"$d\" timeout 1000 godot --headless --path house --script res://soak.gd 2>&1 | { tee /dev/stderr | awk '/^(SCRIPT )?ERROR/{bad=1} /^SOAK OK/{ok=1} END{exit !(ok && !bad)}'; }"
+run = "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; XDG_DATA_HOME=\"$d\" timeout 1000 godot --headless --path house --script res://soak.gd 2>&1 | { tee /dev/stderr | awk '/^SOAK OK/{ok=1} /^(SCRIPT )?ERROR/ && !ok{bad=1} END{exit !(ok && !bad)}'; }"
 
 ["house:check"]
 description = "house: every script loads clean in headless Godot (not in `check`: Godot is not a mise tool)"

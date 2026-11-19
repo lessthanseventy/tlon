@@ -489,8 +489,6 @@ func _fetch_meetings(key: String, from: String, to: String) -> void:
 		func(reached: bool, code: int, body: Variant) -> void:
 			if reached and code == 200 and body is Array:
 				things.set_meetings(key, body)
-			else:
-				things.forget_meetings(key)
 	)
 
 

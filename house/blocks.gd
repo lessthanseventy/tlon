@@ -275,7 +275,11 @@ static func build(parent: Control, blocks: Array, act: Callable) -> void:
 			"dim":
 				parent.add_child(wrapped(str(b["text"]), 13, Paper.QUIET))
 			"meet":
-				var color := Color(Paper.INK, 0.55) if b.get("dim", false) else Paper.INK
+				var color := Paper.INK
+				if b.get("past", false):
+					color = Color(Paper.INK, 0.35)
+				elif b.get("dim", false):
+					color = Color(Paper.INK, 0.55)
 				var m := wrapped(str(b["text"]), 14, color)
 				parent.add_child(m)
 			"gap":

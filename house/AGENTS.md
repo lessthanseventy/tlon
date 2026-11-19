@@ -41,11 +41,13 @@ brings it up. While a LineEdit or TextEdit has focus no letter hotkey fires (`ma
 **Meetings** are `meetings` of `GET /api/home` (`Server.Home.Day`: today's remaining and tomorrow's, already
 cleaned, UTC, `home.meetings`; `[]` over the local list, which shows nothing extra); Next up shows
 `home.next_meeting`. The wall calendar's card reads the month in view from `GET /api/home/meetings` (once per
-month while the view is open, again when it is reopened: `things.want_meetings`, `month_meetings`; the local
-list answers `[]`). With no date picked it shows Today and Tomorrow, each headed with its date, its meetings
+month while the view is open, again when it is reopened; `things.calendar_blocks` asks, so every way of opening
+the card does: `things.want_meetings`, `month_meetings`; the local list answers `[]`). A month's rows stay as
+last fetched: a failed refetch keeps the last good copy, and a failed first one shows "nothing" until the card
+is reopened. With no date picked it shows Today and Tomorrow, each headed with its date, its meetings
 then the home's own things, "nothing" when it has neither; a clicked date shows its own block (headed "Today ·"
-or "Tomorrow ·" when it is), and clicking it again goes back. A tentative meeting is dimmed (the `meet`
-block). The grid marks a day with meetings with a blue dot beside the red one for the home's own things, and
+or "Tomorrow ·" when it is), and clicking it again goes back. A tentative meeting is dimmed, one that
+has ended dimmer still (the `meet` block; the same ink, a lower alpha, no new colour). The grid marks a day with meetings with a blue dot beside the red one for the home's own things, and
 tomorrow with a pale disc beside today's filled one. Nothing in the house writes a calendar, scores a meeting
 or says a word about one. `--demo` makes its meetings from `demo.json` relative to now.
 
