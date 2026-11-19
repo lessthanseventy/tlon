@@ -5,13 +5,13 @@ signal done
 
 const Pets := preload("res://pets.gd")
 const PetThings := preload("res://pet_things.gd")
-const BG := Color("2a2530")
-const INK := Color("f1e9dc")
-const QUIET := Color("a89fb0")
-const ACCENT := Color("e8b86d")
-const WARM := Color("f0a07a")
+const BG := Color("f3ead6")
+const INK := Color("2a2530")
+const QUIET := Color("6f6577")
+const ACCENT := Color("c98a2e")
+const WARM := Color("b0482a")
 const PAD := 14.0
-const TOP := 84.0
+const TOP := 48.0
 const FOOT := 88.0
 const CHIP_H := 24.0
 const CELL_H := 46.0
@@ -100,7 +100,6 @@ func _draw() -> void:
 	draw_rect(Rect2(0, 0, size.x, TOP), BG)
 	draw_rect(Rect2(0, size.y - FOOT, size.x, FOOT), BG)
 	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(PAD, 34), "decorate", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, ACCENT)
 	_tabs()
 	var lines := [
 		"click a piece to place it or move one", "R turns - X or right click removes", "Esc done"
@@ -163,8 +162,8 @@ func _tabs() -> void:
 	var x := PAD
 	for t in home.layout.tabs:
 		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT).x + 16.0
-		var r := Rect2(x, 46.0, w, CHIP_H)
-		draw_rect(r, Color(ACCENT, 0.35) if t == tab else Color(1, 1, 1, 0.08))
+		var r := Rect2(x, 10.0, w, CHIP_H)
+		draw_rect(r, Color(ACCENT, 0.35) if t == tab else Color(0, 0, 0, 0.08))
 		draw_string(font, r.position + Vector2(8, 16), t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT, INK)
 		_hits.append({"rect": r, "act": "tab:" + t})
 		x += w + 6.0
@@ -187,7 +186,7 @@ func _chips(kind: String, names: Array, current: String, y: float) -> float:
 			x = PAD
 			y += CHIP_H + 6.0
 		var r := Rect2(x, y, w, CHIP_H)
-		draw_rect(r, Color(ACCENT, 0.35) if n == current else Color(1, 1, 1, 0.08))
+		draw_rect(r, Color(ACCENT, 0.35) if n == current else Color(0, 0, 0, 0.08))
 		draw_string(font, r.position + Vector2(8, 16), label, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT, INK)
 		_hit(r, kind + ":" + n if kind != "" else n)
 		x += w + 6.0

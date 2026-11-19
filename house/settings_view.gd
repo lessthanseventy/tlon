@@ -170,10 +170,10 @@ func _ready() -> void:
 	var col: VBoxContainer = self
 
 	_head(col, "you")
-	var r := Paper.row(col)
+	var r := _flow(col)
 	r.add_child(Paper.label("name", 14, Paper.QUIET))
 	_name = _field(r, "no name shown", "name")
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("birthday", 14, Paper.QUIET))
 	_month = OptionButton.new()
 	_month.add_item("none")
@@ -189,44 +189,44 @@ func _ready() -> void:
 	_day.item_selected.connect(func(_i: int) -> void: _birthday())
 
 	_head(col, "the pets")
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("the first pet", 14, Paper.QUIET))
 	_cat = _field(r, Settings.CAT, "cat")
 	_cat.custom_minimum_size.x = 100
 	_kind1 =_kind_picker(r, "pet1")
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("the second pet", 14, Paper.QUIET))
 	_dog = _field(r, Settings.DOG, "dog")
 	_dog.custom_minimum_size.x = 100
 	_kind2 =_kind_picker(r, "pet2")
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("first pet's way", 14, Paper.QUIET))
 	_menu(r, "pet1_personality", Pets.PERSONALITIES)
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("second pet's way", 14, Paper.QUIET))
 	_menu(r, "pet2_personality", Pets.PERSONALITIES)
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("how much they talk", 14, Paper.QUIET))
 	_menu(r, "pet_chatter", Pets.CHATTER.keys())
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("how much they get up to", 14, Paper.QUIET))
 	_menu(r, "pet_antics", ["few", "some", "lots"])
 	for key in THINGS:
-		r = Paper.row(col)
+		r = _flow(col)
 		var put := func() -> void: _put(key, _things[key].button_pressed)
 		_things[key] = Paper.chip(THINGS[key], r, put, true)
 
 	_head(col, "visitors")
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("who comes", 14, Paper.QUIET))
 	_menu(r, "visitors", ["all", "calm", "none"])
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("how often", 14, Paper.QUIET))
 	_menu(r, "visitors_rate", ["rare", "sometimes", "often"])
 
 
 	_head(col, "sound")
-	r = Paper.row(col)
+	r = _flow(col)
 	_sound = Paper.chip("sound", r, _toggle_sound, true)
 	if "volume" in home.sound:
 		_volume = HSlider.new()
@@ -239,50 +239,50 @@ func _ready() -> void:
 		r.add_child(_volume)
 
 	_head(col, "window")
-	r = Paper.row(col)
+	r = _flow(col)
 	_widget = Paper.chip("start as the small widget", r, func() -> void: _put("widget", _widget.button_pressed), true)
-	r = Paper.row(col)
+	r = _flow(col)
 	_top = Paper.chip("widget stays on top", r, func() -> void: _put("on_top", _top.button_pressed), true)
 
 	_head(col, "weather")
-	r = Paper.row(col)
+	r = _flow(col)
 	r.add_child(Paper.label("degrees", 14, Paper.QUIET))
 	_menu(r, "degrees", ["f", "c"], ["°F", "°C"])
 	_weather_box = VBoxContainer.new()
 	_weather_box.add_theme_constant_override("separation", 7)
 	col.add_child(_weather_box)
-	r = Paper.row(_weather_box)
+	r = _flow(_weather_box)
 	var toggle := func() -> void: _put("weather", _weather_on.button_pressed)
 	_weather_on = Paper.chip("weather outside the window", r, toggle, true)
-	r = Paper.row(_weather_box)
+	r = _flow(_weather_box)
 	r.add_child(Paper.label("town", 14, Paper.QUIET))
 	_town = _field(r, "empty: found from your internet address", "weather_town")
 	_quiet(_weather_box).text = "asks wttr.in about every half hour; nothing of yours is sent"
 
 	_head(col, "looks")
 	for key in LOOKS:
-		r = Paper.row(col)
+		r = _flow(col)
 		var put := func() -> void: _put(key, _looks[key].button_pressed)
 		_looks[key] = Paper.chip(LOOKS[key], r, put, true)
 
 	_head(col, "things to find")
-	r = Paper.row(col)
+	r = _flow(col)
 	_found = Paper.label("", 14, Paper.INK)
 	r.add_child(_found)
 	_forget = Paper.chip("forget them all", r, _forget_found)
 
 	_head(col, "the room")
-	r = Paper.row(col)
+	r = _flow(col)
 	_reset = Paper.chip("reset the room to how it came", r, _reset_room)
 
 	_head(col, "the phone's chat")
-	r = Paper.row(col)
+	r = _flow(col)
 	_chat_n = Paper.label("", 14, Paper.INK)
 	r.add_child(_chat_n)
 	_clear = Paper.chip("clear", r, _clear_chat)
 
 	_head(col, "where the list lives")
-	r = Paper.row(col)
+	r = _flow(col)
 	_where_server = Paper.chip("a tlon server", r, func() -> void: _put("where", "server"), true)
 	_where_local = Paper.chip("this computer", r, func() -> void: _put("where", "local"), true)
 	_local_say = Paper.label("", 13, Paper.QUIET)
@@ -290,7 +290,7 @@ func _ready() -> void:
 	col.add_child(_local_say)
 	_server_box = VBoxContainer.new()
 	col.add_child(_server_box)
-	r = Paper.row(_server_box)
+	r = _flow(_server_box)
 	_url = Paper.edit(Settings.default_url(), r)
 	_url.text_submitted.connect(func(_t: String) -> void: _check())
 	Paper.chip("check", r, _check)
@@ -384,7 +384,7 @@ func _head(parent: Control, text: String) -> void:
 
 func _telegram_section(box: VBoxContainer) -> void:
 	_head(box, "Telegram")
-	var r := Paper.row(box)
+	var r := _flow(box)
 	_tg_on = Paper.chip(
 		"a Telegram bot in the house", r, func() -> void: _put("telegram", _tg_on.button_pressed), true
 	)
@@ -395,7 +395,7 @@ func _telegram_section(box: VBoxContainer) -> void:
 		"1. message @BotFather in Telegram\n2. send it /newbot and follow the steps\n"
 		+ "3. paste the token it gives you here"
 	)
-	r = Paper.row(_tg_box)
+	r = _flow(_tg_box)
 	_tg_token = Paper.edit("the bot's token", r)
 	_tg_token.secret = true
 	_tg_token.text_submitted.connect(func(_t: String) -> void: _tg_connect())
@@ -403,7 +403,7 @@ func _telegram_section(box: VBoxContainer) -> void:
 	_tg_say = _quiet(_tg_box)
 	_tg_state = _quiet(_tg_box)
 	_tg_reached = _quiet(_tg_box)
-	r = Paper.row(_tg_box)
+	r = _flow(_tg_box)
 	r.add_child(Paper.label("the day's list at", 14, Paper.QUIET))
 	_tg_at = Paper.edit("17:30, or off", r)
 	_tg_at.text_submitted.connect(func(_t: String) -> void: _tg_list_at())
@@ -464,14 +464,14 @@ func _tg_lines() -> void:
 
 func _claude_section(box: VBoxContainer) -> void:
 	_head(box, "reading with Claude")
-	var r := Paper.row(box)
+	var r := _flow(box)
 	_claude_on = Paper.chip(
 		"read my messages with Claude", r, func() -> void: _put("claude", _claude_on.button_pressed), true
 	)
 	_claude_box = VBoxContainer.new()
 	_claude_box.add_theme_constant_override("separation", 7)
 	box.add_child(_claude_box)
-	r = Paper.row(_claude_box)
+	r = _flow(_claude_box)
 	r.add_child(Paper.label("command", 14, Paper.QUIET))
 	_claude_cmd = _field(r, "claude", "claude_command")
 	Paper.chip("test", r, _claude_test)
@@ -512,6 +512,7 @@ func _claude_test() -> void:
 
 func _field(parent: Control, hint: String, key: String) -> LineEdit:
 	var e := Paper.edit(hint, parent)
+	e.custom_minimum_size.x = 150
 	e.text_submitted.connect(func(t: String) -> void: _put(key, t.strip_edges()))
 	e.focus_exited.connect(func() -> void: _put(key, e.text.strip_edges()))
 	return e
@@ -613,3 +614,12 @@ func _refresh() -> void:
 	_chat_n.text = "%d messages" % home.chat.messages.size()
 	for pair in [[_forget, "forget", "forget them all"], [_reset, "reset", "reset the room to how it came"], [_clear, "clear", "clear"], [_tg_off, "tg", "disconnect"]]:
 		(pair[0] as Button).text = "sure?" if sure.armed(pair[1]) else pair[2]
+
+
+# a row that wraps, so a wide one still fits the sidebar
+func _flow(parent: Control) -> HFlowContainer:
+	var r := HFlowContainer.new()
+	r.add_theme_constant_override("h_separation", 6)
+	r.add_theme_constant_override("v_separation", 4)
+	parent.add_child(r)
+	return r
