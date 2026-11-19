@@ -60,15 +60,17 @@ defmodule Server.Home.Sources do
 
     case pull(via, module, now) do
       {:ok, refused} ->
-        for key <- refused, into: %{} do
-          if failed[{name, key}] != :seen, do: Logger.warning("home source #{name}: #{key} could not be filed")
-          {{name, key}, :seen}
-        end
+        for key <- refused, into: %{}, do: {{name, key}, refused(failed, name, key)}
 
       {:error, reason} ->
         if failed[name] != reason, do: Logger.warning("home source #{name}: #{inspect(reason)}")
         %{name => reason}
     end
+  end
+
+  defp refused(failed, name, key) do
+    if failed[{name, key}] != :seen, do: Logger.warning("home source #{name}: #{key} could not be filed")
+    :seen
   end
 
   defp unknown(name, failed) do
