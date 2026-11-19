@@ -139,9 +139,9 @@ func _names() -> void:
 	h.pets.play_duo(h.pets.voices.duo())
 	s._check(nina.say_text == "ask Rex", "a duo turn too: %s" % nina.say_text)
 	h.finds.book = {"title": "T", "about": "a", "who": "Argos", "blurb": "Nina approves"}
-	var block: String = str(h.finds.blocks("book")[-1]["text"])
+	var block: String = h.finds.remark()
 	s._check(block == "Rex: Mimi approves", "the book card: %s" % block)
-	var texts: Array = h.finds.blocks("found").map(func(b): return str(b.get("text", "")))
+	var texts: Array = h.finds.found_blocks().map(func(b): return str(b.get("text", "")))
 	s._check(not "\n".join(texts).contains("Nina"), "the found card uses the names")
 	h.settings.put("name", "Sam")
 	h.pets.set_voices({"Nina": {"muse": ["Hello {name}", "plain"]}})

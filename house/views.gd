@@ -9,9 +9,10 @@ const Card := preload("res://card.gd")
 const Forecast := preload("res://forecast.gd")
 const Sure := preload("res://sure.gd")
 const Settings := preload("res://settings.gd")
+const Shelf := preload("res://shelf.gd")
 const OPEN_SHOWN := 6
 const NEXT_SHOWN := 3
-const SHORT := ["jar", "plant", "clock", "book", "found", "globe", "piano", "weather"]
+const SHORT := ["jar", "plant", "clock", "found", "globe", "piano", "weather"]
 const GOOD := Color("3f7a47")
 const KINDS := {
 	"todo": "a to-do",
@@ -23,11 +24,13 @@ const KINDS := {
 
 var home
 var sb
+var shelf
 
 
 func _init(the_sidebar, the_home) -> void:
 	sb = the_sidebar
 	home = the_home
+	shelf = Shelf.new(sb, home)
 
 
 static func heading(box: Control, text: String) -> void:
@@ -127,6 +130,9 @@ func _weather(box: VBoxContainer) -> void:
 
 
 func card_view(box: VBoxContainer) -> void:
+	if home.card.kind == "book":
+		shelf.build(box, home.card_blocks()[0])
+		return
 	Blocks.build(box, home.card_blocks(), func(a: String) -> void: home.card_act(a))
 	if home.card.kind in SHORT:
 		_now(box)

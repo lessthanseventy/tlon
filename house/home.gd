@@ -1586,9 +1586,29 @@ func card_blocks() -> Array:
 			]
 		"plant":
 			return _plant_blocks()
-		"book", "found":
-			return finds.blocks(card.kind)
+		"book":
+			return [_shelf_block()]
+		"found":
+			return finds.found_blocks()
 	return []
+
+
+func _shelf_block() -> Dictionary:
+	var notes_rows: Array = things.note_rows
+	if notes_rows.is_empty():
+		notes_rows = notes.map(func(n): return {"id": 0, "text": str(n)})
+	return {
+		"t": "shelf",
+		"notes": notes_rows,
+		"someday": things.someday.map(func(s): return {"id": s["id"], "text": s["text"]}),
+		"projects": things.projects.map(_project_row),
+	}
+
+
+func _project_row(p: Dictionary) -> Dictionary:
+	var next: Variant = p.get("next")
+	var sub := "next: " + str(next["text"]) if next is Dictionary else ""
+	return {"id": p["id"], "text": p["text"], "sub": sub}
 
 
 func _jar_blocks() -> Array:
@@ -1763,7 +1783,7 @@ func click(pos: Vector2) -> bool:
 	if wants != "":
 		things.reset()
 		if wants == "book":
-			finds.pick_book()
+			finds.book = {}
 		card.open(wants, key)
 		if wants == "piano":
 			hearth.piano_click()

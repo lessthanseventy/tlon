@@ -1553,6 +1553,7 @@ func _frozen_pass(main) -> void:
 	_eq(main._data["open"].size(), 3, "the local list fills the room: two to-dos and a project's step")
 	await FormSoak.new(s, main).run()
 	await ChatSoak.new(s, main).run()
+	await preload("res://soak_sidebar.gd").new(s, main).shelf_local()
 	s.served = true
 	s._local = null
 	s._log = server_log

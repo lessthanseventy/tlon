@@ -508,7 +508,7 @@ func finds() -> void:
 	f._t = 5000.0
 	s._check(not f.quiet_night(), "never by day")
 
-	var b: Array = f.blocks("found")
+	var b: Array = f.found_blocks()
 	s._check(str(b[1]["text"]).begins_with("%d of %d" % [h.eggs.found.size(), h.eggs.CATALOGUE.size()]), "the found card counts")
 	made[0].queue_free()
 

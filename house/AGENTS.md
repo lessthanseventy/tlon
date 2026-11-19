@@ -19,7 +19,10 @@ turns a card's blocks (title, text, dim, gap, month, buttons, row, foot, day) in
 Views: `home` (the Now line with Done / Something else / Not today, "Next up" three coming things, "Open"
 six with "N more...", the weather line with three day chips, "Notes (N)" collapsed), `card`
 (calendar, jar, window, clock, board, plant, book, mousehole, fireplace, piano, globe: `home.card`
-holds which, `home.card_blocks` the blocks), `item`, `open`, `add` (`jot.gd` the free-text line and
+holds which, `home.card_blocks` the blocks; the "book" card is the shelf, `shelf.gd`: every note newest
+first, Someday, Projects (each shows 8 then "N more...", a filter line over 8 rows) and all the Borges
+titles, a click on a title showing the pet's remark under it and granting the "book" find; a note
+opens the board's notes, a someday or project row its item), `item`, `open`, `add` (`jot.gd` the free-text line and
 `form.gd` the typed form), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
 (`settings_view.gd`), `decorate`. A click on a thing replaces the view; "< home", Esc and a click on
 empty floor go back. The chat dock (`chat_view.gd`) shows the phone's last messages and its input:
@@ -150,8 +153,8 @@ runs on the local list.
   apart on the seeded dice, only in the weather and hour that suit it; `--egg bird|balloon|plane|nightcat|star|fireworks`
   (use `--at 23:00` for the night ones).
 - **Finds** (`finds.gd`): a birthday (the settings' `birthday`, `"MM-DD"`, set by the calendar
-  card's quiet line while none is set; `--birthday` forces it) puts a cake on the table; a click on a book gives a Borges card in
-  Nina's or Argos's voice (the `muse` lines, built-in fallback); a mouse leaves its hole on a quiet night
+  card's quiet line while none is set; `--birthday` forces it) puts a cake on the table; a click on a title on the bookshelf's
+  shelf view shows Nina's or Argos's remark (the `muse` lines, built-in fallback); a mouse leaves its hole on a quiet night
   (`--egg mouse`) and flees a pet or a click; the snow globe shakes on a click. The "found" card (`--egg found`,
   click the mouse hole) says only "N of M found"; `eggs.CATALOGUE` is the list, `user://house_found.json`
   `{"found":[ids]}` the state.

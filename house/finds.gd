@@ -143,8 +143,12 @@ func mouse_pos() -> Vector2:
 
 
 func pick_book() -> void:
+	read(h.eggs.rng.randi() % TITLES.size())
+
+
+func read(i: int) -> void:
 	var r: RandomNumberGenerator = h.eggs.rng
-	var t: Array = TITLES[r.randi() % TITLES.size()]
+	var t: Array = TITLES[i]
 	var who: String = "Nina" if r.randf() < 0.5 else "Argos"
 	if h.pets.critter(who.to_lower()).away:
 		who = "Argos" if who == "Nina" else "Nina"
@@ -170,14 +174,11 @@ func glow_book() -> void:
 	h.eggs.find("borges")
 
 
-func blocks(kind: String) -> Array:
-	if kind == "book":
-		return [
-			{"t": "title", "text": str(book.get("title", ""))},
-			{"t": "dim", "text": "Jorge Luis Borges - " + str(book.get("about", ""))},
-			{"t": "gap"},
-			{"t": "text", "text": Settings.pets(_said(book))},
-		]
+func remark() -> String:
+	return Settings.pets(_said(book))
+
+
+func found_blocks() -> Array:
 	var out: Array = [{"t": "title", "text": "Found so far"}]
 	var n: int = h.eggs.found.size()
 	out.append({"t": "text", "text": "%d of %d" % [n, h.eggs.CATALOGUE.size()]})

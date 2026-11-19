@@ -6,6 +6,7 @@ extends RefCounted
 const Sidebar := preload("res://sidebar.gd")
 const SIZES :=[Vector2(900, 600), Vector2(1100, 700), Vector2(1920, 1080)]
 const VIEWS := ["home", "item", "open", "add", "pet", "closet", "settings", "decorate", "card"]
+const Blocks := preload("res://blocks.gd")
 
 var s
 var main
@@ -27,10 +28,120 @@ func _frames(n: int = 3) -> void:
 
 func run() -> void:
 	await _things()
+	await _shelf()
 	await _fit()
 	await _pet()
 	await _banner()
 	await _decorate_tabs()
+
+
+func _texts(node: Node, out: Array = []) -> Array:
+	for c in node.get_children():
+		if c is Label:
+			out.append(c.text)
+		_texts(c, out)
+	return out
+
+
+func _row(node: Node, text: String) -> Variant:
+	for c in node.get_children():
+		if c is Blocks.Row and _texts(c)[0] == text:
+			return c
+		var r: Variant = _row(c, text)
+		if r != null:
+			return r
+	return null
+
+
+func _press(text: String) -> void:
+	var r: Variant = _row(sb._dyn, text)
+	s._check(r != null, "the shelf has a row: %s" % text)
+	if r != null:
+		r.pressed.emit()
+	await _frames()
+
+
+func _open_shelf() -> void:
+	main._at = "home"
+	sb.back()
+	h.decorating = false
+	await _frames()
+	var c: Variant = _centre("furn:bookshelf")
+	s._check(c != null, "the room has a bookshelf to click")
+	if c != null:
+		h.click(c)
+	await _frames()
+
+
+func _filter(text: String) -> void:
+	for c in sb._dyn.find_children("*", "LineEdit", true, false):
+		c.text = text
+		c.text_changed.emit(text)
+	await _frames()
+
+
+# one click on the bookshelf shows the notes, what is put off, the projects and every title
+func _shelf() -> void:
+	var keep: Dictionary = s._state.duplicate(true)
+	var notes: Array = []
+	var rows: Array = []
+	for i in range(1, 11):
+		notes.append("note %d" % i)
+		rows.append({"id": 200 + i, "text": "note %d" % i})
+	var project := {"id": 61, "kind": "project", "text": "Move", "next": {"id": 62, "text": "book the van"}}
+	var put_off := {"id": 51, "kind": "todo", "text": "learn sourdough", "due_at": null, "every": null}
+	var extra := {"notes": notes, "note_rows": rows, "someday": [put_off], "projects": [project]}
+	var before: int = s._count("/api/home")
+	s.seed(keep["open"], keep["coming"], extra)
+	main._poll()
+	for i in 30:
+		if s._count("/api/home") > before:
+			break
+		await s.create_timer(0.1).timeout
+	await s.create_timer(0.45).timeout
+	await _open_shelf()
+	s._check(sb.view == "card" and h.card.kind == "book", "the bookshelf opens the shelf")
+	var texts: Array = _texts(sb._dyn)
+	for t in ["Notes (10)", "note 1", "note 8", "Someday (1)", "learn sourdough", "Projects (1)"]:
+		s._check(t in texts, "the shelf lists %s" % t)
+	for t in ["Move", "Books", "Ficciones", "Seven Nights"]:
+		s._check(t in texts, "the shelf lists %s" % t)
+	s._check("2 more..." in texts and "note 9" not in texts, "a long list shows eight and a more row")
+	await _press("2 more...")
+	s._check("note 10" in _texts(sb._dyn), "more opens the rest in place")
+	await _filter("sourdough")
+	texts = _texts(sb._dyn)
+	s._check("learn sourdough" in texts and not "note 1" in texts and not "Books" in texts, "the filter narrows every section")
+	await _filter("")
+	h.eggs.found.erase("book")
+	await _press("Ficciones")
+	s._check(h.eggs.found.has("book"), "opening a title grants the book find")
+	s._check(h.finds.remark() in _texts(sb._dyn), "a title shows its remark under it")
+	await _press("The Aleph")
+	s._check(_texts(sb._dyn).count(h.finds.remark()) == 1 and h.finds.book["title"] == "The Aleph", "one title is open at a time")
+	s._check(sb.view == "card" and h.card.kind == "book", "a title does not leave the shelf")
+	s._check(sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the shelf keeps the pane %d wide" % sb.WIDTH)
+	await _press("note 3")
+	s._check(h.card.kind == "board" and h.things.tab == "notes", "a note opens the board's notes")
+	await _open_shelf()
+	s._check("2 more..." in _texts(sb._dyn), "the shelf opens collapsed again")
+	await _press("learn sourdough")
+	s._check(sb.view == "item" and int(sb.arg) == 51, "a someday row opens that item")
+	sb.back()
+	s._state = keep
+	main._poll()
+	await s.create_timer(0.45).timeout
+
+
+# the local list's own data builds the same view
+func shelf_local() -> void:
+	await _open_shelf()
+	s._check(sb.view == "card" and h.card.kind == "book", "the local list's shelf opens")
+	var texts: Array = _texts(sb._dyn)
+	s._check("Books" in texts and "Move" in texts, "the local list's shelf lists its projects and the books: %s" % str(texts.slice(0, 6)))
+	s._check(sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the local shelf keeps the pane %d wide" % sb.WIDTH)
+	sb.back()
+	await _frames()
 
 
 func _centre(key: String) -> Variant:
