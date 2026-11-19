@@ -12,7 +12,9 @@ defmodule Server.Home.Inbox do
   jot's reading; with no reading the answer is "got it" and the jot stays raw. A message can also
   ask the helper for something, and is then nothing to keep: that things are done, what is open
   (`digest/2`, each open thing with a button that ticks it off), or a question its notes answer.
-  Once a day, at the `home_list_at` setting, what is open is said unasked (`daily/6`). Before each poll the
+  Once a day, at the `home_list_at` setting, what is open is said unasked (`daily/6`), with what sources proposed
+  (`Server.Proposal`, an Add and a No under each) and the waiting-ons they settled; once a day at `home_morning_at`
+  the morning message is (`morning/6`, `Server.Home.Morning`). A proposal is never said when it arrives. Before each poll the
   reminders that have come due are said in the chat (`nudge/4`) with three choices under each: done,
   in an hour, tomorrow, and delete under them. One left unanswered is said again, after 30 minutes and then at doubling
   gaps up to four hours, never between 22:00 and 08:00, six times in all. "done" typed in the chat
@@ -32,11 +34,13 @@ defmodule Server.Home.Inbox do
   alias Server.Home
   alias Server.Home.Agendas
   alias Server.Home.Clock
+  alias Server.Home.Morning
   alias Server.Home.Organize
   alias Server.Home.Proposals
   alias Server.Home.Reader
   alias Server.Home.Slot
   alias Server.Jot
+  alias Server.Proposal
 
   require Logger
 
@@ -277,20 +281,33 @@ defmodule Server.Home.Inbox do
     via = messenger.name()
     guarded(:ok, fn -> Organize.waiting(via, chat, say, now) end)
 
-    slots(
+    morning_at = Server.OperatorConfig.setting("home_morning_at")
+
+    state =
+      slots(
+        state,
+        via,
+        chat,
+        say,
+        now,
+        Server.OperatorConfig.setting("home_list_at"),
+        Server.OperatorConfig.setting("home_review_on")
+      )
+
+    Map.put(
       state,
-      via,
-      chat,
-      say,
-      now,
-      Server.OperatorConfig.setting("home_list_at"),
-      Server.OperatorConfig.setting("home_review_on")
+      :morning,
+      slot("morning", Map.get(state, :morning), morning_at, &morning(via, chat, say, now, morning_at, &1))
     )
   end
 
   @doc "The slots kept from before the inbox started: `%{listed, reviewed}`, each `{date, setting}` or nil."
-  @spec kept() :: %{listed: {Date.t(), String.t()} | nil, reviewed: {Date.t(), String.t()} | nil}
-  def kept, do: %{listed: Slot.get("daily"), reviewed: Slot.get("weekly")}
+  @spec kept() :: %{
+          listed: {Date.t(), String.t()} | nil,
+          reviewed: {Date.t(), String.t()} | nil,
+          morning: {Date.t(), String.t()} | nil
+        }
+  def kept, do: %{listed: Slot.get("daily"), reviewed: Slot.get("weekly"), morning: Slot.get("morning")}
 
   @doc """
   Say what is due on a schedule at `now`, with the list at `at` and the review on `on`: the daily
@@ -584,12 +601,54 @@ defmodule Server.Home.Inbox do
 
   defp said(via, chat, say, now) do
     Organize.shrink(via, now)
+    settled = Proposal.settled()
 
     with true <- chat != "",
-         {text, opts} <- digest(via, now) do
-      say.(chat, "Before you clock out:\n\n" <> text, opts)
+         {text, opts} <- together(digest(via, now), Proposals.tail(Proposal.open(), settled)),
+         :ok <- say.(chat, "Before you clock out:\n\n" <> text, opts) do
+      Proposal.settled_said(settled, now)
     end
 
     :ok
   end
+
+  @doc """
+  The morning message: when a day's slot at `at` (`"08:30"`, local; `""` is never) has come round and
+  was not said (`Server.Home.Clock.due/4`), `Server.Home.Morning` is said in `chat` (nothing with no
+  chat: the desktop raises it, `Server.Home.morning/1`), once, in waking hours. `last` is the date of
+  the last slot said, `:boot` when none is kept under the present setting; the date of the slot now
+  said is answered.
+  """
+  @spec morning(
+          String.t(),
+          String.t(),
+          (String.t(), String.t(), keyword() -> term()) | nil,
+          DateTime.t(),
+          String.t(),
+          Date.t() | :boot
+        ) :: Date.t()
+  def morning(_via, _chat, _say, now, at, :boot),
+    do: Clock.slot(now, at) || now |> Clock.local() |> NaiveDateTime.to_date() |> Date.add(-1)
+
+  def morning(via, chat, say, now, at, %Date{} = last) do
+    case Clock.due(last, now, at) do
+      {:say, slot} ->
+        with true <- chat != "",
+             {text, opts, settled} <- Morning.compose(via, now),
+             :ok <- say.(chat, text, opts) do
+          Proposal.settled_said(settled, now)
+        end
+
+        slot
+
+      :wait ->
+        last
+    end
+  end
+
+  defp together(nil, tail), do: tail
+  defp together(head, nil), do: head
+
+  defp together({head, head_opts}, {tail, tail_opts}),
+    do: {head <> "\n\n" <> tail, choices: head_opts[:choices] ++ Keyword.get(tail_opts, :choices, [])}
 end

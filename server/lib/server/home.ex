@@ -169,12 +169,44 @@ defmodule Server.Home do
 
     with {:ok, at} <- Time.from_iso8601(Server.OperatorConfig.setting("home_list_at") <> ":00"),
          since when since in 0..599 <- Time.diff(NaiveDateTime.to_time(local), at),
-         [_ | _] <- open do
+         from = DateTime.add(now, -since),
+         settled = Server.Proposal.settled(from),
+         [_ | _] = parts <-
+           List.wrap(if open != [], do: "Still open: " <> Enum.map_join(open, " · ", &label(&1, projects))) ++
+             List.wrap(Server.Home.Proposals.settled(settled)) ++
+             List.wrap(Server.Home.Proposals.plain(Server.Proposal.open())) do
+      Server.Proposal.settled_said(settled, now)
+
       %{
         id: Date.to_iso8601(NaiveDateTime.to_date(local)),
-        created_at: DateTime.add(now, -since),
+        created_at: from,
         thread_id: nil,
-        body: "Still open: " <> Enum.map_join(open, " · ", &label(&1, projects))
+        body: Enum.join(parts, "\n\n")
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  The morning message for a desktop: `%{id, created_at, thread_id, body}` for the ten minutes after
+  `home_morning_at` (local) when `Server.Home.Morning` has something to say (plain text), nil otherwise.
+  """
+  @spec morning(DateTime.t()) :: map() | nil
+  def morning(now) do
+    local = Server.Home.Clock.local(now)
+
+    with {:ok, at} <- Time.from_iso8601(Server.OperatorConfig.setting("home_morning_at") <> ":00"),
+         since when since in 0..599 <- Time.diff(NaiveDateTime.to_time(local), at),
+         from = DateTime.add(now, -since),
+         {body, settled} <- Server.Home.Morning.plain(via(), now, from) do
+      Server.Proposal.settled_said(settled, now)
+
+      %{
+        id: "morning:" <> Date.to_iso8601(NaiveDateTime.to_date(local)),
+        created_at: from,
+        thread_id: nil,
+        body: body
       }
     else
       _ -> nil
