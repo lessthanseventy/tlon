@@ -36,6 +36,40 @@ defmodule Server.Calendar do
   end
 
   @doc """
+  Meetings as a person would list them: cancelled ones dropped, all-day events shown as free (other
+  people's out-of-office, holidays) dropped, and exact doubles dropped (the same title and start once
+  `title/1` has stripped what an outside calendar adds: the "Synced invitation: " copies). The title
+  of each is the stripped one. Order is kept; the first of a double stays.
+  """
+  @spec clean([map()]) :: [map()]
+  def clean(meetings) do
+    meetings
+    |> Enum.reject(&(&1.cancelled or (&1.all_day and &1.busy == :free)))
+    |> Enum.map(&Map.update!(&1, :title, fn t -> title(t) end))
+    |> Enum.uniq_by(&{String.downcase(&1.title), &1.start})
+  end
+
+  @doc """
+  The meetings worth an alarm: `clean/1`, without all-day events and without ones shown as free (not
+  accepted as busy time). A tentative one stays.
+  """
+  @spec alarmable([map()]) :: [map()]
+  def alarmable(meetings), do: meetings |> clean() |> Enum.reject(&(&1.all_day or &1.busy == :free))
+
+  @doc """
+  A meeting title without a leading "[EXT] " or "Synced invitation: " and without the trailing
+  " @ Wed Nov 4 … (name@example.com)" an outside calendar puts on a recurring copy.
+  """
+  @spec title(String.t()) :: String.t()
+  def title(title) do
+    title
+    |> String.trim()
+    |> String.replace(~r/^(?:\[EXT\]\s*|Synced invitation:\s*)+/i, "")
+    |> String.replace(~r/\s+@\s.*\([^()]*\)\s*$/, "")
+    |> String.trim()
+  end
+
+  @doc """
   The day's birthdays and anniversaries across the calendars (`Feed.celebrations/2`); [] when off.
   Computed once per day per fetch and kept, since `Server.Office.status/0` asks on every poll.
   """
