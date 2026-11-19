@@ -4,6 +4,7 @@ extends Control
 signal done
 
 const Pets := preload("res://pets.gd")
+const PetThings := preload("res://pet_things.gd")
 const BG := Color("2a2530")
 const INK := Color("f1e9dc")
 const QUIET := Color("a89fb0")
@@ -25,6 +26,7 @@ var face := ""
 var tab := "home"
 var held: Variant = null
 var pin: Variant = null
+var everyone := false
 
 var _hits: Array = []
 var _scroll := 0.0
@@ -134,11 +136,13 @@ func _sections(y: float) -> float:
 		y = _chips("floor", floors, layout.floor_style, y)
 	if tab == "home":
 		y = _chips("", ["reset"], "", y + 4.0)
+	if tab == "pets":
+		y = _chips("", ["all animals"], "all animals" if everyone else "", y + 4.0)
 	var cw := (size.x - 2.0 * PAD) / 2.0
 	var group := ""
 	var col := 0
 	for e in layout.catalogue:
-		if e["tab"] != tab:
+		if e["tab"] != tab or (tab == "pets" and not _listed(e)):
 			continue
 		if e["group"] != group:
 			if col == 1:
@@ -190,10 +194,27 @@ func _chips(kind: String, names: Array, current: String, y: float) -> float:
 	return y + CHIP_H + 8.0
 
 
+func _listed(e: Dictionary) -> bool:
+	return home.petlife.listed(PetThings.key_of({"p": e["key"]}), everyone)
+
+
+func _pet_icon(e: Dictionary, r: Rect2) -> void:
+	var key := PetThings.key_of({"p": e["key"]})
+	var span: float = PetThings.THINGS[key]["h"] + 16.0
+	var k := minf(0.9, 34.0 / span)
+	var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + (ICON - span * k) / 2.0)
+	origin.y += (span - 16.0) * k
+	PetThings.draw_all(PetThings.Pen.new(self, origin, k), key, {"level": {"food": 1.0, "water": 1.0}})
+
+
 func _entry(e: Dictionary, r: Rect2) -> void:
 	if e["key"] == sel:
 		draw_rect(r.grow(-2), Color(ACCENT, 0.22))
 	var id: String = home.layout.sprite_id({"p": e["key"], "f": _first_face(e)})
+	if e["key"] == PetThings.PREFIX + "hay":
+		id = home.petlife.HAY_PIECE
+	elif e["tab"] == "pets":
+		_pet_icon(e, r)
 	var tex: Texture2D = room.icon(id)
 	if tex != null:
 		var t := tex.get_size()
@@ -249,6 +270,9 @@ func _act(act: String) -> void:
 		"tab":
 			tab = parts[1]
 			_scroll = 0.0
+		"all animals":
+			everyone = not everyone
+			_scroll = 0.0
 		"reset":
 			layout.reset(home.busy_cells())
 			home.apply_layout()
@@ -259,6 +283,10 @@ func _act(act: String) -> void:
 			held = null
 			sel = parts[1]
 			face = _first_face(layout.entry(sel))
+			var out: Dictionary = home.petlife.out(sel)
+			if not out.is_empty():
+				held = out
+				face = out["f"]
 	queue_redraw()
 
 
@@ -301,6 +329,8 @@ func _turn() -> void:
 func _click() -> void:
 	if sel != "":
 		var p := _ghost()
+		if held == null and PetThings.is_pet(p):
+			p["own"] = not PetThings.fits(PetThings.key_of(p), home.pets.species_here())
 		var why: String = home.layout.place(p, held, home.busy_cells())
 		if why != "":
 			_nope(why)
@@ -343,7 +373,7 @@ func _stays(pos: Vector2) -> bool:
 	var key: String = home._topmost(pos)
 	if key in ["window", "cal", "jar"] or key.begins_with("note:"):
 		return true
-	return room._door_hit(pos) or home.layout.PETS_CORNER.has_point(Vector2i(_cell(pos)))
+	return room._door_hit(pos)
 
 
 func _cell(pos: Vector2) -> Vector2:
@@ -396,6 +426,8 @@ func _piece_at(pos: Vector2) -> Variant:
 
 
 func _opaque(p: Dictionary, pos: Vector2) -> bool:
+	if PetThings.is_pet(p):
+		return _over_pet(p, pos)
 	var s: Dictionary = room._sprite(room._furn_id([home.layout.sprite_id(p)]))
 	if s.is_empty():
 		return false
@@ -405,6 +437,17 @@ func _opaque(p: Dictionary, pos: Vector2) -> bool:
 	if local.x < 0 or local.y < 0 or local.x >= tex.get_width() or local.y >= tex.get_height():
 		return false
 	return tex.get_image().get_pixelv(Vector2i(local)).a > 0.1
+
+
+# the thing's footprint and its height, as one outline
+func _over_pet(p: Dictionary, pos: Vector2) -> bool:
+	var up := Vector2(0, -maxf(8.0, home.layout.height(p)) * room._k)
+	var pts := PackedVector2Array()
+	for d in [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]:
+		var at: Vector2 = room._p(room._origin, p["c"] + d.x, p["r"] + d.y)
+		pts.append(at)
+		pts.append(at + up)
+	return Geometry2D.is_point_in_polygon(pos, Geometry2D.convex_hull(pts))
 
 
 func draw_ghost() -> void:
@@ -421,7 +464,15 @@ func draw_ghost() -> void:
 		var r: Rect2i = layout.rect(p)
 		var pts := _quad(r)
 		room.draw_colored_polygon(pts, Color(0.4, 1, 0.5, 0.28) if ok else Color(1, 0.3, 0.3, 0.32))
+	if PetThings.is_pet(p) and not home.petlife.hay(p):
+		var pen := PetThings.Pen.new(
+			room, room._p(room._origin, p["c"], p["r"]), room._k, p["f"] == "se", tint
+		)
+		PetThings.draw_all(pen, PetThings.key_of(p), {"level": home.petlife.level})
+		return
 	var s: Dictionary = room._sprite(room._furn_id([layout.sprite_id(p)]))
+	if home.petlife.hay(p):
+		s = room._sprite(home.petlife.HAY_PIECE)
 	if not s.is_empty():
 		var at: Vector2 = room._p(room._origin, p["c"], p["r"]) - s["anchor"]
 		room.draw_texture(s["tex"], at.round(), tint)

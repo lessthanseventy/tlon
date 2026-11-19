@@ -346,6 +346,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	eggs.setup(self, seed_value, keeps)
 	petlife.setup(self)
 	pets.life_options = petlife.options
+	petlife.sync()
 	hearth.setup(self)
 	outside.setup(self)
 	finds.setup(self)
@@ -359,6 +360,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	if pets.is_night:
 		pets.place(pets.critter("nina"), "desk", "sleep")
 		pets.place(pets.critter("argos"), "bed", "sleep")
+		petlife.night_place()
 	_place_arg("nina", nina_at)
 	_place_arg("argos", argos_at)
 
@@ -1105,7 +1107,6 @@ func draw_floor() -> void:
 	Props.sun_patch(
 		room, _o, _k, lerpf(0.4, 2.2, clampf((hour - 8.0) / 9.0, 0.0, 1.0)), 5.05, _env["sun"]
 	)
-	_draw_bed()
 	petlife.draw_floor()
 	for c in pets.critters:
 		if c.id != "person":
@@ -1122,12 +1123,6 @@ func _ellipse(x: float, y: float, rx: float, ry: float, z: float = 0.0) -> Packe
 		var a := TAU * i / 24.0
 		pts.append(mid + Vector2(cos(a) * rx, sin(a) * ry) * _k)
 	return pts
-
-
-func _draw_bed() -> void:
-	room.draw_colored_polygon(_ellipse(6.5, 6.5, 17.0, 8.5), Color("5e3a36"))
-	room.draw_colored_polygon(_ellipse(6.5, 6.5, 14.5, 7.2, 1.0), Color("a8605a"))
-	room.draw_colored_polygon(_ellipse(6.5, 6.5, 10.0, 5.0, 1.0), Color("c98577"))
 
 
 func draw_plant(f: Array) -> void:

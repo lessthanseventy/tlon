@@ -4,6 +4,7 @@ extends RefCounted
 # tied to are FIXED; everything else is plain and can be moved, saved and loaded.
 const Pets := preload("res://pets.gd")
 const Packs := preload("res://packs.gd")
+const PetThings := preload("res://pet_things.gd")
 
 const SIDES := ["sw", "se", "ne", "nw", "nwse", "nesw"]
 const GROUPS := [
@@ -87,6 +88,9 @@ const STAYS := "that one stays"
 const NO_ROOM := "no room there"
 const BUSY := "someone is there"
 const SHUTS := "that would shut a path"
+const ONCE := "that one is already out"
+# the pets' spots that move with their thing: their old cells stay free ground
+const MOVING_SPOTS := ["bed", "bowl"]
 
 var index := {}
 var art := false
@@ -103,6 +107,8 @@ var tabs: Array = []
 # way of a piece being placed (they step aside on the next change)
 var guests: Array = []
 var version := 0
+# the pet things put out once, so one the owner took away is not put back
+var pets_seen: Array = []
 
 var _fixed: Array = []
 # what the file holds of a pack that is not here, kept so saving does not delete it
@@ -116,9 +122,14 @@ func setup(sprites: Dictionary, with_art: bool, file: String, save_it: bool) -> 
 	art = with_art
 	path = file
 	persist = save_it
+	pets_seen = []
+	catalogue = []
+	version += 1
 	_fixed = FIXED.map(func(r): return _piece(r, true))
 	if art:
 		_scan()
+	else:
+		catalogue.append_array(PetThings.entries())
 	pieces = _defaults([])
 	if art and path != "":
 		load_file()
@@ -196,6 +207,7 @@ func _scan() -> void:
 			catalogue.append(e)
 		if face != "" and face not in e["faces"]:
 			e["faces"].append(face)
+	catalogue.append_array(PetThings.entries())
 	for i in catalogue.size():
 		var e: Dictionary = catalogue[i]
 		e["faces"].sort_custom(func(a, b): return SIDES.find(a) < SIDES.find(b))
@@ -253,6 +265,8 @@ func kind(p: Dictionary) -> String:
 
 
 func footprint(p: Dictionary) -> Vector2i:
+	if PetThings.is_pet(p):
+		return Vector2i(1, 1)
 	var base := _base(p)
 	if index.has(base):
 		var f: Array = index[base]["footprint"]
@@ -263,6 +277,8 @@ func footprint(p: Dictionary) -> Vector2i:
 
 
 func height(p: Dictionary) -> int:
+	if PetThings.is_pet(p):
+		return int(PetThings.THINGS[PetThings.key_of(p)]["h"])
 	var base := _base(p)
 	if index.has(base):
 		return int(index[base].get("height", 0))
@@ -270,11 +286,17 @@ func height(p: Dictionary) -> int:
 
 
 func all() -> Array:
-	return _fixed + pieces + guests
+	return _solid() + guests
 
 
+# a pet thing that is not out (its animal or its switch is gone) takes no room
 func _solid() -> Array:
-	return _fixed + pieces
+	return _fixed + pieces.filter(func(p): return not p.get("hide", false))
+
+
+# the pet things standing in the room, hidden ones not counted
+func pet_pieces() -> Array:
+	return pieces.filter(func(p): return PetThings.is_pet(p) and not p.get("hide", false))
 
 
 func rect(p: Dictionary) -> Rect2i:
@@ -294,6 +316,8 @@ func draw_key(p: Dictionary) -> int:
 func rows() -> Dictionary:
 	var out := {"furniture": [], "decor": [], "rugs": []}
 	for p in all():
+		if PetThings.is_pet(p):
+			continue
 		var id := sprite_id(p)
 		var f := footprint(p)
 		var box: Array = BOXES.get(_base(p), [1, 1, 0, Color("8a7a6a")])
@@ -314,7 +338,7 @@ func blocked(extra: Variant = null, skip: Variant = null) -> Dictionary:
 	if extra != null:
 		list = list + [extra]
 	for p in list:
-		if is_same(p, skip) or kind(p) in ["rug", "wall"]:
+		if is_same(p, skip) or kind(p) in ["rug", "wall", "flat"]:
 			continue
 		var r := rect(p)
 		for x in range(maxi(r.position.x, 1), r.end.x):
@@ -342,6 +366,8 @@ func check(p: Dictionary, skip: Variant, busy: Array) -> String:
 		return NO_ROOM
 	if k == "rug":
 		return ""
+	if PetThings.is_pet(p):
+		return _check_pet(p, skip, busy, r)
 	for o in _solid():
 		if is_same(o, skip) or kind(o) == "rug":
 			continue
@@ -358,11 +384,56 @@ func check(p: Dictionary, skip: Variant, busy: Array) -> String:
 			for y in range(r.position.y, r.end.y):
 				if _wall_fixed(Vector2i(x, y)):
 					return STAYS
-	var spots := Pets.SPOTS.values().map(func(s): return s["cell"])
-	for cell in spots + busy:
+	for cell in _spot_cells() + busy:
 		if r.has_point(cell):
 			return BUSY
 	return "" if reaches(blocked(p, skip), busy) else SHUTS
+
+
+# a pet thing: once, never on another piece, and a pet can get to it
+func _check_pet(p: Dictionary, skip: Variant, busy: Array, r: Rect2i) -> String:
+	var flat: bool = kind(p) == "flat"
+	if flat and (r.position.x < 1 or r.position.y < 1):
+		return NO_ROOM
+	for o in _solid():
+		if is_same(o, skip) or kind(o) == "rug":
+			continue
+		var why := ""
+		if kind(o) == "wall":
+			why = NO_ROOM if height(p) >= TALL and r.has_point(Vector2i(o["c"], o["r"])) else ""
+		elif PetThings.is_pet(o) and o["p"] == p["p"]:
+			why = ONCE
+		elif r.intersects(rect(o)):
+			why = STAYS if o.has("fixed") else NO_ROOM
+		if why != "":
+			return why
+	if (height(p) > LOW and _wall_fixed(r.position)) or (not flat and _on_spot(r, busy)):
+		return STAYS if height(p) > LOW else BUSY
+	var shut := blocked(p, skip)
+	if not reaches(shut, busy):
+		return SHUTS
+	return "" if _usable(r.position, flat, _flood(shut)) else SHUTS
+
+
+func _on_spot(r: Rect2i, busy: Array) -> bool:
+	return (_spot_cells() + busy).any(func(c): return r.has_point(c))
+
+
+# a walk-over thing is walked to, a solid one from a cell beside it
+func _usable(cell: Vector2i, flat: bool, seen: Dictionary) -> bool:
+	if flat:
+		return seen.has(cell)
+	return [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)].any(
+		func(d): return seen.has(cell + d)
+	)
+
+
+func _spot_cells() -> Array:
+	var out: Array = []
+	for name in Pets.SPOTS:
+		if name not in MOVING_SPOTS:
+			out.append(Pets.SPOTS[name]["cell"])
+	return out
 
 
 func _faces(p: Dictionary) -> Array:
@@ -394,6 +465,18 @@ func _check_wall(p: Dictionary, skip: Variant) -> String:
 
 # every spot and every cell in `busy` can be walked to from the door
 func reaches(blocked_cells: Dictionary, busy: Array) -> bool:
+	var seen := _flood(blocked_cells)
+	for cell in _spot_cells():
+		if not seen.has(cell):
+			return false
+	for cell in busy:
+		if not seen.has(cell) and not blocked_cells.has(cell):
+			return false
+	return true
+
+
+# every cell that can be walked to from the door
+func _flood(blocked_cells: Dictionary) -> Dictionary:
 	var seen := {DOOR_FRONT: true}
 	var queue: Array = [DOOR_FRONT]
 	while not queue.is_empty():
@@ -411,13 +494,7 @@ func reaches(blocked_cells: Dictionary, busy: Array) -> bool:
 				continue
 			seen[n] = true
 			queue.append(n)
-	for s in Pets.SPOTS.values():
-		if not seen.has(s["cell"]):
-			return false
-	for cell in busy:
-		if not seen.has(cell) and not blocked_cells.has(cell):
-			return false
-	return true
+	return seen
 
 
 # put a new piece down, or with `moving` set move that piece to where `p` says
@@ -466,6 +543,7 @@ func reset(busy: Array) -> void:
 	_dormant = []
 	_dormant_wall = ""
 	_dormant_floor = ""
+	pets_seen = []
 	pieces = _defaults(busy)
 	version += 1
 	save()
@@ -476,20 +554,28 @@ func save() -> void:
 		return
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f != null:
-		var saved: Array = pieces.map(
-			func(p): return {"p": p["p"], "f": p["f"], "c": p["c"], "r": p["r"]}
-		)
+		var saved: Array = pieces.map(_row)
 		var doc := {
 			"v": 1,
 			"wall": _dormant_wall if _dormant_wall != "" else wall,
 			"floor": _dormant_floor if _dormant_floor != "" else floor_style,
 			"pieces": saved + _dormant,
 		}
+		if not pets_seen.is_empty():
+			doc["pets_seen"] = pets_seen
 		f.store_string(JSON.stringify(doc))
 
 
+func _row(p: Dictionary) -> Dictionary:
+	var row := {"p": p["p"], "f": p["f"], "c": p["c"], "r": p["r"]}
+	if p.get("own", false):
+		row["own"] = true
+	return row
+
+
 # a missing or unreadable file leaves the default; a piece that cannot stand is skipped, one of a
-# pack that is not here is kept for the file
+# pack that is not here is kept for the file. The furniture is read before the pets' things, so a
+# thing that was hidden under a piece put there since is the one that gives way.
 func load_file() -> bool:
 	if not FileAccess.file_exists(path):
 		return false
@@ -510,13 +596,23 @@ func load_file() -> bool:
 		floor_style = d["floor"]
 	elif _absent(str(d.get("floor"))):
 		_dormant_floor = d["floor"]
+	var rows: Array = []
+	for i in d["pieces"].size():
+		rows.append([i, d["pieces"][i]])
+	rows.sort_custom(
+		func(a, b): return [_pet_row(a[1]), a[0]] < [_pet_row(b[1]), b[0]]
+	)
 	var out: Array = []
-	for row in d["pieces"]:
+	var dropped: Array = []
+	for pair in rows:
+		var row: Variant = pair[1]
 		if not row is Dictionary or not (row.get("p") is String and row.get("f") is String):
 			continue
 		if not (row.get("c") is float and row.get("r") is float):
 			continue
-		var p := {"p": row["p"], "f": row["f"], "c": int(row["c"]), "r": int(row["r"])}
+		var p := {"p": row["p"], "f": row["f"], "c": int(row["c"]), "r": int(row["r"]), "_i": pair[0]}
+		if row.get("own", false) == true:
+			p["own"] = true
 		if _entry(p["p"]).is_empty():
 			if _absent(p["p"]):
 				_dormant.append(p)
@@ -524,9 +620,21 @@ func load_file() -> bool:
 		pieces = out
 		if check(p, null, []) == "":
 			out.append(p)
+		elif PetThings.is_pet(p):
+			dropped.append(PetThings.key_of(p))
+	out.sort_custom(func(a, b): return a["_i"] < b["_i"])
+	for p in out:
+		p.erase("_i")
 	pieces = out
+	pets_seen = []
+	if d.get("pets_seen") is Array:
+		pets_seen = d["pets_seen"].filter(func(k): return k is String and k not in dropped)
 	version += 1
 	return true
+
+
+func _pet_row(row: Variant) -> bool:
+	return row is Dictionary and str(row.get("p", "")).begins_with(PetThings.PREFIX)
 
 
 # named for one of our packs, and that pack is not in the catalogue
