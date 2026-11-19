@@ -6,6 +6,7 @@ extends VBoxContainer
 signal check_requested(url: String)
 
 const Paper := preload("res://paper.gd")
+const Chooser := preload("res://chooser.gd")
 const Settings := preload("res://settings.gd")
 const Pets := preload("res://pets.gd")
 const Sure := preload("res://sure.gd")
@@ -39,8 +40,8 @@ var claude: RefCounted
 var phone: Node
 
 var _name: LineEdit
-var _month: OptionButton
-var _day: OptionButton
+var _month
+var _day
 var _cat: LineEdit
 var _dog: LineEdit
 var _kind1: KindPicker
@@ -92,7 +93,7 @@ class KindPicker:
 	var pets
 	var kind := ""
 	var _ids: Array = Pets.KINDS.keys() + [Pets.NONE]
-	var _list := OptionButton.new()
+	var _list := Chooser.new()
 	var _t := 0.0
 
 	func _init(the_pets) -> void:
@@ -100,8 +101,7 @@ class KindPicker:
 		add_theme_constant_override("separation", 6)
 		for id in _ids:
 			_list.add_item(Pets.KINDS[id]["label"] if id != Pets.NONE else "none")
-		Paper.skin(_list)
-		_list.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
 		_list.item_selected.connect(
 			func(i: int) -> void:
 				kind = _ids[i]
@@ -175,15 +175,14 @@ func _ready() -> void:
 	_name = _field(r, "no name shown", "name")
 	r = _flow(col)
 	r.add_child(Paper.label("birthday", 14, Paper.QUIET))
-	_month = OptionButton.new()
+	_month = Chooser.new()
 	_month.add_item("none")
 	for m in MONTHS:
 		_month.add_item(m)
-	_day = OptionButton.new()
+	_day = Chooser.new()
 	for d in 31:
 		_day.add_item(str(d + 1))
 	for o in [_month, _day]:
-		Paper.skin(o)
 		r.add_child(o)
 	_month.item_selected.connect(func(_i: int) -> void: _birthday())
 	_day.item_selected.connect(func(_i: int) -> void: _birthday())
@@ -519,12 +518,12 @@ func _field(parent: Control, hint: String, key: String) -> LineEdit:
 
 
 func _menu(parent: Control, key: String, values: Array, labels: Array = []) -> void:
-	var o := OptionButton.new()
+	var o := Chooser.new()
 	for i in values.size():
 		o.add_item(str(labels[i] if i < labels.size() else values[i]))
-	Paper.skin(o)
 	o.item_selected.connect(func(i: int) -> void: _put(key, values[i]))
-	parent.add_child(o)
+	o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.get_parent().add_child(o)
 	_menus[key] = [o, values]
 
 
