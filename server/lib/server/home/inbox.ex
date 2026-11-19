@@ -508,9 +508,7 @@ defmodule Server.Home.Inbox do
 
     case reader.(jot.body, context) do
       {:ok, %{amends: true, kind: kind} = reading} when context.previous != nil and kind in @kept ->
-        reply = amended(context.previous, reading, now)
-        Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
-        {"changed: " <> reply, []}
+        amend(jot, context.previous, reading, now)
 
       {:ok, %{kind: "answer", text: text} = reading} ->
         Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
@@ -647,6 +645,16 @@ defmodule Server.Home.Inbox do
   defp together({head, head_opts}, {tail, tail_opts}),
     do: {head <> "\n\n" <> tail, choices: head_opts[:choices] ++ Keyword.get(tail_opts, :choices, [])}
 
-  defp amended(previous, %{kind: "agenda"} = reading, now), do: Agendas.file(previous, reading, now)
-  defp amended(previous, reading, now), do: Organize.file(previous, reading, now)
+  # a project is left as it is: its steps point at it, so a note for a pile is a new one
+  defp amend(jot, %Jot{kind: "project"}, %{kind: "agenda"} = reading, now), do: {Agendas.file(jot, reading, now), []}
+
+  defp amend(jot, previous, reading, now) do
+    reply =
+      if reading.kind == "agenda",
+        do: Agendas.file(previous, reading, now),
+        else: Organize.file(previous, reading, now)
+
+    Jot.file(jot, %{kind: "amend", text: nil, due_at: nil}, now)
+    {"changed: " <> reply, []}
+  end
 end

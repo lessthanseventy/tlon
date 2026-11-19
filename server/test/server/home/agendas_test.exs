@@ -170,6 +170,22 @@ defmodule Server.Home.AgendasTest do
     assert [%{text: "call the vendor"}] = "telegram" |> Jot.notes(20) |> Enum.map(&%{text: &1})
   end
 
+  test "a correction onto a pile leaves a project as it is and files a new note", %{say: say} do
+    reading = %{kind: "project", text: "plan the trip", steps: ["book the flights"]}
+    say_it("plan the trip", reading, say, 1)
+    replied()
+    assert [%{id: project_id}] = Jot.projects("telegram")
+
+    say_it("no, that's for retro", %{kind: "agenda", agenda: "retro", text: "plan the trip", amends: true}, say, 2)
+    assert replied() == "Started a new agenda, retro. On the retro pile (1)."
+
+    assert [%{id: ^project_id, kind: "project"}] = Jot.projects("telegram")
+    assert [%{agenda_id: nil, project_id: ^project_id}] = Jot.steps(project_id)
+    assert %{id: id} = Agenda.named("telegram", "retro")
+    assert [%{id: note_id, text: "plan the trip"}] = Jot.agenda_notes(id)
+    assert note_id != project_id
+  end
+
   describe "telling the pile" do
     setup %{say: say} do
       say_it("for retro: a", %{kind: "agenda", agenda: "retro", text: "deploy took three tries"}, say, 1)
