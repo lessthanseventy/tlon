@@ -198,6 +198,7 @@ func calendar_blocks() -> Array:
 			}
 		)
 	)
+	blocks.append_array(h.meeting_blocks())
 	if day > 0:
 		var wd: int = (
 			Time.get_datetime_dict_from_unix_time(int(Card.unix(s["y"], s["m"], day)))["weekday"]

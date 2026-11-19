@@ -16,7 +16,8 @@ room click), then the header (a "< home" back button and the title, the door, `a
 cog) and the context pane, a paper sheet. Bottom: the chat dock. `sidebar.gd` owns the views and the
 chat modes; `views.gd` builds Home, an item, the "On the desk" list and the office view; `blocks.gd`
 turns a card's blocks (title, text, dim, gap, month, buttons, row, foot, day) into Controls.
-Views: `home` (the Now line with Done / Something else / Not today, "Next up" three coming things, "Open"
+Views: `home` (the Now line with Done / Something else / Not today, "Next up" today's next meeting first when
+there is one (a quiet line, "Standup  ·  09:00": no tick, no click) then three coming things, "Open"
 six with "N more...", the weather line with three day chips, "Notes (N)" collapsed), `card`
 (calendar, jar, window, clock, board, plant, book, mousehole, fireplace, piano, globe: `home.card`
 holds which, `home.card_blocks` the blocks; the "book" card is the shelf, `shelf.gd`: Agendas (a row each
@@ -36,6 +37,12 @@ empty floor go back. The chat dock (`chat_view.gd`) shows the phone's last messa
 about 40% of the sidebar at home, a handle to collapse it to the input line or to take the whole
 sidebar; it is the input line alone while a thing's view is open, and `K` or a click on the phone
 brings it up. While a LineEdit or TextEdit has focus no letter hotkey fires (`main.gd` `_input`).
+
+**Meetings** are `meetings` of `GET /api/home` (`Server.Home.Day`: today's remaining and tomorrow's, already
+cleaned, UTC, `home.meetings`; `[]` over the local list, which shows nothing extra). The wall calendar's card
+lists them under the month by day, a tentative one dimmed (`home.meeting_blocks`, the `meet` block); Next up
+shows `home.next_meeting`. Nothing in the house writes a calendar, scores a meeting or says a word about one.
+`--demo` makes its meetings from `demo.json` relative to now.
 
 The home is a lived-in room, not a dashboard. `home.gd` owns its state and the order it draws in
 (it hands `room.gd` sortable items); `pets.gd` is Nina, Argos and the grid they and the person walk

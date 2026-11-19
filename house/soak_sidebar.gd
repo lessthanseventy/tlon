@@ -34,6 +34,31 @@ func run() -> void:
 	await _pet()
 	await _banner()
 	await _decorate_tabs()
+	_meetings()
+
+
+func _meeting(title: String, from: String, to: String, tentative: bool, day: String) -> Dictionary:
+	return {"title": title, "starts_at": from, "ends_at": to, "tentative": tentative, "day": day}
+
+
+func _meetings() -> void:
+	var was: Array = h.meetings
+	var now: float = h._now_local() - h._bias()
+	var iso := func(at: float) -> String:
+		return Time.get_datetime_string_from_unix_time(int(at)) + "Z"
+	h.meetings = [
+		_meeting("Over", iso.call(now - 7200), iso.call(now - 3600), false, "today"),
+		_meeting("Standup", iso.call(now + 600), iso.call(now + 1500), false, "today"),
+		_meeting("Review", iso.call(now + 90000), iso.call(now + 92000), true, "tomorrow"),
+	]
+	var meet := func(b: Dictionary) -> bool: return b["t"] == "meet"
+	s._check(h.next_meeting().get("title") == "Standup", "Next up shows today's next meeting")
+	var blocks: Array = h.meeting_blocks().filter(meet)
+	s._check(blocks.size() == 3 and blocks[2]["dim"], "the calendar lists them, tentative dimmed")
+	s._check(h.things.calendar_blocks().any(meet), "the calendar card has them")
+	h.meetings = []
+	s._check(h.next_meeting().is_empty() and h.meeting_blocks().is_empty(), "none shows nothing")
+	h.meetings = was
 
 
 func _texts(node: Node, out: Array = []) -> Array:
