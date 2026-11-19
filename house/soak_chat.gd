@@ -37,9 +37,9 @@ func _stamp() -> Dictionary:
 	return out
 
 
-# `secs`, then until no request is in flight (bounded): a slow machine is slower, not wrong
-func _wait(secs: float = 0.6) -> void:
-	await s.create_timer(secs).timeout
+# a moment, then until no request is in flight (bounded): a slow machine is slower, not wrong
+func _wait(_secs: float = 0.0) -> void:
+	await s.create_timer(0.15).timeout
 	var quiet := 0
 	var end := Time.get_ticks_msec() + 8000
 	while quiet < 3 and Time.get_ticks_msec() < end:
