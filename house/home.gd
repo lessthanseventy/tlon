@@ -672,23 +672,7 @@ func meeting_time(m: Dictionary) -> String:
 	return "%02d:%02d" % [t["hour"], t["minute"]]
 
 
-# the calendar card's meetings: a quiet block per day that has any, a tentative one dimmed
-func meeting_blocks() -> Array:
-	var out: Array = []
-	for day in ["today", "tomorrow"]:
-		var rows: Array = meetings.filter(func(m: Dictionary) -> bool: return m.get("day") == day)
-		if rows.is_empty():
-			continue
-		out.append({"t": "dim", "text": day.capitalize()})
-		for m in rows:
-			out.append(
-				{
-					"t": "meet",
-					"text": "%s  %s" % [meeting_time(m), str(m["title"])],
-					"dim": m.get("tentative", false),
-				}
-			)
-	return out
+
 
 
 func _due(item: Dictionary) -> float:
@@ -1954,6 +1938,8 @@ func open_card(name: String) -> void:
 			if parts[0] == "calendar" and parts.size() > 1:
 				things.day = int(parts[1])
 				things.mo = int(parts[2]) if parts.size() > 2 else 0
+			if parts[0] == "calendar":
+				things.want_meetings()
 			if parts[0] == "board" and parts.size() > 1:
 				things.tab = parts[1]
 				things.proj = int(parts[2]) if parts.size() > 2 else 0

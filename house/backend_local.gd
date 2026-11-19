@@ -121,6 +121,8 @@ func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 		return {"code": 200, "body": list.status()}
 	if p.size() == 3 and p[1] == "home" and p[2] == "pets":
 		return {"code": 200, "body": {}}
+	if p.size() == 3 and p[1] == "home" and p[2] == "meetings":
+		return {"code": 200, "body": []}
 	if p.size() == 3 and p[1] == "home" and p[2] == "now":
 		var skip := []
 		if query.begins_with("skip="):

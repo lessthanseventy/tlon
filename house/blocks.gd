@@ -1,8 +1,8 @@
 extends RefCounted
 
 # Turns the blocks a thing's view is told to show into Controls on the paper sheet:
-# {"t": "title"|"text"|"dim", "text"}, {"t": "gap"}, {"t": "month", "year", "month", "today",
-# "marks": {day: true}, "pick": bool, "sel": day} (arrows and the name act "mprev" "mnext" "mtoday",
+# {"t": "title"|"text"|"dim", "text"}, {"t": "gap"}, {"t": "month", "year", "month", "today", "tomorrow",
+# "marks": {day: true}, "meet_marks": {day: true}, "pick": bool, "sel": day} (arrows and the name act "mprev" "mnext" "mtoday",
 # a day "day:N"), {"t": "buttons", "items": [{"label", "act", "on", "s"}]}, {"t": "row", "text",
 # "act", "dim", "marks": [{"label", "act"}]}, {"t": "foot", "text", "act"}, {"t": "day", "name",
 # "kind", "temps", "wet"} (a forecast row with its icon). Every click calls `act.call(String)`.
@@ -210,13 +210,19 @@ class MonthGrid:
 			var mid := cell + CELL / 2.0
 			if d == int(b.get("sel", 0)):
 				draw_arc(mid + Vector2(0, -1), 12.0, 0.0, TAU, 24, Paper.INK, 2.0)
+			if d == int(b.get("tomorrow", 0)):
+				draw_circle(mid + Vector2(0, -1), 11.0, Color("e8b86d", 0.3))
 			if d == int(b.get("today", 0)):
 				draw_circle(mid + Vector2(0, -1), 11.0, Color("e8b86d"))
 			var label := str(d)
 			var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 			draw_string(font, cell + Vector2((CELL.x - w) / 2.0, 17), label, 0, -1, 14, Paper.INK)
+			var meet := (b.get("meet_marks", {}) as Dictionary).has(d)
+			var spread := 4.0 if marks.has(d) and meet else 0.0
 			if marks.has(d):
-				draw_circle(mid + Vector2(0, 11), 2.6, Color("c8483f"))
+				draw_circle(mid + Vector2(-spread, 11), 2.6, Color("c8483f"))
+			if meet:
+				draw_circle(mid + Vector2(spread, 11), 2.6, Color("3f6fb0"))
 
 
 class DayRow:

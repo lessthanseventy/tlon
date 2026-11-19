@@ -6,6 +6,7 @@ extends RefCounted
 # done or deleted (told to the home's `acted`).
 signal form_wanted(mode: String, spec: Dictionary)
 signal post(path: String, body: Dictionary)
+signal meetings_wanted(key: String, from: String, to: String)
 
 const Card := preload("res://card.gd")
 const Sure := preload("res://sure.gd")
@@ -21,6 +22,9 @@ var agendas: Array = []
 var proposals: Array = []
 var mo := 0
 var day := 0
+# "YYYY-MM" -> the server's meeting rows for that month, kept while the view is open
+var month_meetings := {}
+var _asked := {}
 var tab := "notes"
 var proj := 0
 var flash := ""
@@ -49,6 +53,7 @@ func set_data(d: Dictionary) -> void:
 func reset() -> void:
 	mo = 0
 	day = 0
+	_asked.clear()
 	proj = 0
 	flash = ""
 
@@ -63,6 +68,81 @@ func shown() -> Dictionary:
 	var t := today()
 	var idx: int = int(t["y"]) * 12 + int(t["m"]) - 1 + mo
 	return {"y": idx / 12, "m": idx % 12 + 1, "today": t["d"] if mo == 0 else 0}
+
+
+func _month_key() -> String:
+	var s := shown()
+	return "%04d-%02d" % [int(s["y"]), int(s["m"])]
+
+
+# asks for the month in view once while the view stays open (`reset` lets it ask again)
+func want_meetings() -> void:
+	var s := shown()
+	_ask(int(s["y"]), int(s["m"]))
+	var tomorrow := _plus_day(today())
+	_ask(int(tomorrow["y"]), int(tomorrow["m"]))
+
+
+func _ask(y: int, m: int) -> void:
+	var key := "%04d-%02d" % [y, m]
+	if _asked.has(key):
+		return
+	_asked[key] = true
+	meetings_wanted.emit(key, "%s-01" % key, "%s-%02d" % [key, Card.month_info(y, m)["days"]])
+
+
+func set_meetings(key: String, rows: Array) -> void:
+	month_meetings[key] = rows
+
+
+# a request that failed is asked again the next time the month is shown
+func forget_meetings(key: String) -> void:
+	_asked.erase(key)
+
+
+func _plus_day(d: Dictionary) -> Dictionary:
+	var t := Time.get_datetime_dict_from_unix_time(int(Card.unix(d["y"], d["m"], d["d"]) + 86400.0))
+	return {"y": t["year"], "m": t["month"], "d": t["day"]}
+
+
+# the meetings on a date ({y, m, d}), from the month it falls in
+func meetings_on(d: Dictionary) -> Array:
+	var key := "%04d-%02d" % [int(d["y"]), int(d["m"])]
+	var date := "%s-%02d" % [key, int(d["d"])]
+	return (month_meetings.get(key, []) as Array).filter(
+		func(m: Dictionary) -> bool: return m.get("date") == date
+	)
+
+
+# one day's block: its heading (named Today or Tomorrow when it is), its meetings, then the
+# home's own things; "nothing" when it has neither
+func _day_blocks(d: Dictionary) -> Array:
+	var at := Card.unix(d["y"], d["m"], d["d"])
+	var wd: int = Time.get_datetime_dict_from_unix_time(int(at))["weekday"]
+	var head := "%s %d %s" % [h.DAYS[wd], int(d["d"]), Card.MONTHS[int(d["m"]) - 1].substr(0, 3)]
+	var t := today()
+	if d == t:
+		head = "Today · " + head
+	elif d == _plus_day(t):
+		head = "Tomorrow · " + head
+	var blocks: Array = [{"t": "title", "text": head}]
+	var meets := meetings_on(d)
+	for m in meets:
+		blocks.append({"t": "meet", "text": _meeting_line(m), "dim": m.get("tentative", false)})
+	var entries: Array = []
+	for item in h._timed():
+		for when in Card.occurrences(h._due(item), h._every(item), at, at + 86400.0):
+			entries.append([when, item])
+	entries.sort_custom(func(a, b): return a[0] < b[0])
+	for e in entries:
+		blocks.append({"t": "row", "text": _line(e[0], e[1]), "act": "edit:%d" % int(e[1]["id"])})
+	if entries.is_empty() and meets.is_empty():
+		blocks.append({"t": "dim", "text": "nothing"})
+	return blocks
+
+
+func _meeting_line(m: Dictionary) -> String:
+	return "%s  %s" % [h.meeting_time(m), str(m["title"])]
 
 
 func find(id: int) -> Dictionary:
@@ -179,12 +259,15 @@ func calendar_blocks() -> Array:
 	var from := Card.unix(s["y"], s["m"], 1)
 	var to := Card.unix(int(s["y"]) + int(s["m"]) / 12, int(s["m"]) % 12 + 1, 1)
 	var marks := {}
-	var by_day := {}
+
 	for item in h._timed():
 		for at in Card.occurrences(h._due(item), h._every(item), from, to):
 			var d: int = Time.get_datetime_dict_from_unix_time(int(at))["day"]
 			marks[d] = true
-			by_day[d] = by_day.get(d, []) + [[at, item]]
+	var tomorrow := _plus_day(today())
+	var meet_marks := {}
+	for m in month_meetings.get(_month_key(), []):
+		meet_marks[int(str(m["date"]).substr(8, 2))] = true
 	var blocks: Array = _head()
 	(
 		blocks
@@ -194,33 +277,22 @@ func calendar_blocks() -> Array:
 				"year": s["y"],
 				"month": s["m"],
 				"today": s["today"],
+				"tomorrow":
+				tomorrow["d"] if tomorrow["y"] == s["y"] and tomorrow["m"] == s["m"] else 0,
 				"marks": marks,
+				"meet_marks": meet_marks,
 				"pick": true,
 				"sel": day,
 			}
 		)
 	)
-	blocks.append_array(h.meeting_blocks())
 	if day > 0:
-		var wd: int = (
-			Time.get_datetime_dict_from_unix_time(int(Card.unix(s["y"], s["m"], day)))["weekday"]
-		)
-		blocks.append(
-			{
-				"t": "title",
-				"text": "%s %d %s" % [h.DAYS[wd], day, Card.MONTHS[int(s["m"]) - 1].substr(0, 3)]
-			}
-		)
-		var entries: Array = by_day.get(day, [])
-		entries.sort_custom(func(a, b): return a[0] < b[0])
-		for e in entries:
-			blocks.append(
-				{"t": "row", "text": _line(e[0], e[1]), "act": "edit:%d" % int(e[1]["id"])}
-			)
-		if entries.is_empty():
-			blocks.append({"t": "dim", "text": "nothing that day"})
+		blocks.append_array(_day_blocks({"y": s["y"], "m": s["m"], "d": day}))
 		blocks.append({"t": "buttons", "items": [{"label": "add", "act": "add_day"}]})
 	else:
+		var t := today()
+		blocks.append_array(_day_blocks(t))
+		blocks.append_array(_day_blocks(_plus_day(t)))
 		blocks.append({"t": "title", "text": "Coming up"})
 		var next: Array = h._upcoming(h.coming.filter(func(i): return i.get("due_at") != null), 5)
 		for item in next:
@@ -486,12 +558,15 @@ func act(a: String) -> bool:
 		"mprev":
 			mo -= 1
 			day = 0
+			want_meetings()
 		"mnext":
 			mo += 1
 			day = 0
+			want_meetings()
 		"mtoday":
 			mo = 0
 			day = 0
+			want_meetings()
 		"dayoff":
 			day = 0
 		"add_day":
