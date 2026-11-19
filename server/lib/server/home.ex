@@ -14,7 +14,7 @@ defmodule Server.Home do
   for naming one to delete), `projects` the open projects with their
   `next` step and how many are `done`, `waiting` what others owe the operator, `done` what was done in
   the last seven days by name (`text`, `done_at`, the newest first), and `done_week` how many
-  things were done in the last seven days. A row's `since` is when it was said, its `told_at` when the
+  things were done in the last seven days, and `agendas` the standing piles (`agenda_row/1`). A row's `since` is when it was said, its `told_at` when the
   operator was last told a reminder that is due (nil before that), its `project` the project it is a step
   of (nil when none). Things put off to someday or dropped are in none of these.
   """
@@ -27,7 +27,8 @@ defmodule Server.Home do
           waiting: [map()],
           someday: [map()],
           done: [map()],
-          done_week: non_neg_integer()
+          done_week: non_neg_integer(),
+          agendas: [map()]
         }
   def status(now) do
     {coming, open} = board(via(), now)
@@ -44,7 +45,8 @@ defmodule Server.Home do
       waiting: Enum.map(Jot.waiting(via()), &waiting/1),
       someday: Enum.map(Jot.somedays(via()), &row(&1, named)),
       done: Enum.map(done, &%{text: &1.text, done_at: &1.done_at}),
-      done_week: length(done)
+      done_week: length(done),
+      agendas: Enum.map(Server.Agenda.all(via()), &agenda_row/1)
     }
   end
 
@@ -245,6 +247,18 @@ defmodule Server.Home do
   end
 
   defp via, do: Application.get_env(:server, :home_messenger, Server.Home.Telegram).name()
+
+  @doc "An agenda as `status/1` shows it: `%{id, name, every, next_at, notes: [%{id, text, since}]}`."
+  @spec agenda_row(Server.Agenda.t()) :: map()
+  def agenda_row(agenda) do
+    %{
+      id: agenda.id,
+      name: agenda.name,
+      every: agenda.every,
+      next_at: agenda.next_at,
+      notes: for(note <- Jot.agenda_notes(agenda.id), do: %{id: note.id, text: note.text, since: note.received_at})
+    }
+  end
 
   defp row(jot, projects) do
     %{
