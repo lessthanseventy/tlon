@@ -887,6 +887,12 @@ func send_later(id: int) -> void:
 	)
 
 
+# an agenda's pile, from the shelf or from Next up
+func open_agenda(id: int) -> void:
+	if not things.agenda(id).is_empty():
+		viewed.emit("agenda", id)
+
+
 # a thing on the desk, the stack or a row: its view opens in the sidebar
 func open_item(id: int) -> void:
 	if things.find(id).is_empty():
@@ -1599,6 +1605,7 @@ func _shelf_block() -> Dictionary:
 		"notes": things.note_list(),
 		"someday": things.someday.map(func(s): return {"id": s["id"], "text": s["text"]}),
 		"projects": things.projects.map(_project_row),
+		"agendas": things.agendas,
 	}
 
 

@@ -19,11 +19,17 @@ turns a card's blocks (title, text, dim, gap, month, buttons, row, foot, day) in
 Views: `home` (the Now line with Done / Something else / Not today, "Next up" three coming things, "Open"
 six with "N more...", the weather line with three day chips, "Notes (N)" collapsed), `card`
 (calendar, jar, window, clock, board, plant, book, mousehole, fireplace, piano, globe: `home.card`
-holds which, `home.card_blocks` the blocks; the "book" card is the shelf, `shelf.gd`: every note newest
+holds which, `home.card_blocks` the blocks; the "book" card is the shelf, `shelf.gd`: Agendas (a row each
+with its note count and when it is next, "Thu 14:00"; "new agenda" asks a name), then every note newest
 first, Someday, Projects (each shows 8 then "N more...", a filter line over 8 rows) and all the Borges
 titles, a click on a title showing the pet's remark under it and granting the "book" find; a note,
 someday or project row opens its item view; a note's has Edit and Delete, and the board's notes tab,
-Home's expanded notes and the shelf all open it; a note with no id opens the board's notes), `item`, `open`, `add` (`jot.gd` the free-text line and
+Home's expanded notes and the shelf all open it; a note with no id opens the board's notes), `agenda` (an
+agenda's pile, `views.gd` `agenda_view`: its rhythm as text, its notes, each opening as a note, an add line where
+Enter puts a note on it, and Clear, which archives the pile; opened from a shelf row or from Home's quiet "Retro
+at 14:00 - 3 things" row under "Next up" when an agenda with notes is due today; back from it goes to the shelf
+it came from. The data is `agendas` of `GET /api/home`: `{id, name, every, next_at, notes}`; the notes are in no
+other list), `item`, `open`, `add` (`jot.gd` the free-text line and
 `form.gd` the typed form), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
 (`settings_view.gd`), `decorate`. A click on a thing replaces the view; "< home", Esc and a click on
 empty floor go back. The chat dock (`chat_view.gd`) shows the phone's last messages and its input:
@@ -43,7 +49,9 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 `decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet view) and `pet_now.gd` (its "right now" phrase). `drive.gd` (`--drive`: the live house driven over TCP). `soak.gd` is the scripted check.
 
 Where the list lives is one `Backend` (`backend.gd`): `backend_http.gd` is the tlon server, `backend_local.gd`
-the house's own file (`local_list.gd` the list, `reader_rules.gd` the loose-line reader). `main.gd` holds one and
+the house's own file (`local_list.gd` the list, `reader_rules.gd` the loose-line reader; agendas are there too,
+added through the shelf only: the reader has none, and an agenda's pile is told once, 15 minutes ahead, to the
+house's own Telegram chat as reminders are, `told_agenda`). `main.gd` holds one and
 never asks which. The sections below describe the server's list; with `where` = `local` (below) the same room
 runs on the local list.
 

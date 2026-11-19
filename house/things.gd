@@ -17,6 +17,7 @@ var waiting: Array = []
 var someday: Array = []
 var projects: Array = []
 var note_rows: Array = []
+var agendas: Array = []
 var mo := 0
 var day := 0
 var tab := "notes"
@@ -40,6 +41,7 @@ func set_data(d: Dictionary) -> void:
 	someday = d.get("someday", [])
 	projects = d.get("projects", [])
 	note_rows = d.get("note_rows", [])
+	agendas = d.get("agendas", [])
 
 
 func reset() -> void:
@@ -69,7 +71,66 @@ func find(id: int) -> Dictionary:
 	for row in note_rows:
 		if int(row["id"]) == id:
 			return {"kind": "note"}.merged(row)
+	for a in agendas:
+		for row in a["notes"]:
+			if int(row["id"]) == id:
+				return {"kind": "note", "agenda": int(a["id"])}.merged(row)
 	return {}
+
+
+func agenda(id: int) -> Dictionary:
+	for a in agendas:
+		if int(a["id"]) == id:
+			return a
+	return {}
+
+
+func _agenda_at(a: Dictionary) -> float:
+	return h._due({"due_at": a["next_at"]})
+
+
+# "Thu 14:00", or "" when it has no time
+func agenda_when(a: Dictionary) -> String:
+	if a.get("next_at") == null:
+		return ""
+	var d := Time.get_datetime_dict_from_unix_time(int(_agenda_at(a)))
+	return "%s %02d:%02d" % [h.DAYS[d["weekday"]], d["hour"], d["minute"]]
+
+
+# its rhythm as text: "every other week, next Thu 14:00", or "no rhythm"
+func agenda_rhythm(a: Dictionary) -> String:
+	var parts: Array[String] = []
+	if a.get("every") != null:
+		parts.append(Card.every_words(str(a["every"])))
+	var when := agenda_when(a)
+	if when != "":
+		parts.append(("next " if a.get("every") != null else "") + when)
+	return ", ".join(parts) if not parts.is_empty() else "no rhythm"
+
+
+# the agendas with notes whose time is today
+func agendas_today() -> Array:
+	return agendas.filter(
+		func(a: Dictionary) -> bool:
+			return (
+				a.get("next_at") != null
+				and not (a["notes"] as Array).is_empty()
+				and (
+					Time.get_date_string_from_unix_time(int(_agenda_at(a))) == h.today()
+				)
+			)
+	)
+
+
+# "Retro at 14:00 - 3 things"
+func agenda_line(a: Dictionary) -> String:
+	var d := Time.get_datetime_dict_from_unix_time(int(_agenda_at(a)))
+	var name := str(a["name"])
+	var n: int = (a["notes"] as Array).size()
+	return (
+		"%s at %02d:%02d - %d thing%s"
+		% [name.substr(0, 1).to_upper() + name.substr(1), d["hour"], d["minute"], n, "" if n == 1 else "s"]
+	)
 
 
 # a note with an id opens its item view; a plain text has none, so the board's notes open
@@ -485,6 +546,8 @@ func _act_arg(a: String) -> bool:
 			edit(n)
 		"item":
 			h.open_item(n)
+		"agenda":
+			h.open_agenda(n)
 		"timer":
 			var t := Time.get_datetime_dict_from_unix_time(int(h._now_local() + n * 60.0))
 			var stamp := (

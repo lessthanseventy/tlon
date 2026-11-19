@@ -158,6 +158,7 @@ func _ready() -> void:
 		if "--visitor" in args:
 			_room.home.set_office(_office)
 		demo["forecast"] = _dated(demo.get("forecast", []))
+		demo["agendas"] = _demo_agendas(demo.get("agendas", []))
 		_apply(demo)
 		if "--tick-demo" in args:
 			get_tree().create_timer(0.75).timeout.connect(func(): _on_ticked(1))
@@ -310,6 +311,11 @@ func _install(node: Node) -> void:
 			if _phone_on():
 				_phone.on_told(row)
 	)
+	_backend.told_agenda.connect(
+		func(text: String) -> void:
+			if _phone_on():
+				_phone.on_agenda(text)
+	)
 	add_child(_backend)
 	_apply_where()
 	_apply_weather()
@@ -452,6 +458,7 @@ static func _home_data(d: Dictionary) -> Dictionary:
 		"someday": d.get("someday", []),
 		"projects": d.get("projects", []),
 		"note_rows": d.get("note_rows", []),
+		"agendas": d.get("agendas", []),
 		"forecast": d.get("forecast", []),
 	}
 
@@ -630,6 +637,8 @@ func _on_viewed(kind: String, arg: Variant) -> void:
 	match kind:
 		"item":
 			_sidebar.open_item(int(arg))
+		"agenda":
+			_sidebar.open_agenda(int(arg))
 		"open":
 			_sidebar.open_desk()
 		"add":
@@ -921,6 +930,46 @@ func _demo_write(path: String, body: Dictionary) -> void:
 		_apply(_data)
 	elif parts.size() == 5 and parts[4] == "drop":
 		_gone(int(parts[3]))
+	elif parts.size() >= 4 and parts[3] == "agendas":
+		_demo_agenda(parts, body)
+
+
+# a staged agenda's `in_days` and `at` ("14:00") stand where its `next_at` would, so a demo never goes stale
+func _demo_agendas(rows: Array) -> Array:
+	var today := Time.get_unix_time_from_datetime_string(_room.home.today() + "T00:00:00")
+	var bias := float(Time.get_time_zone_from_system()["bias"]) * 60.0
+	return rows.map(
+		func(row: Dictionary) -> Dictionary:
+			if not row.has("in_days"):
+				return row
+			var at := str(row["at"]).split(":")
+			var local := today + int(row["in_days"]) * 86400 + int(at[0]) * 3600 + int(at[1]) * 60
+			return row.merged({"next_at": Time.get_datetime_string_from_unix_time(int(local - bias)) + "Z"})
+	)
+
+
+func _demo_agenda(parts: PackedStringArray, body: Dictionary) -> void:
+	var agendas: Array = _data["agendas"]
+	if parts.size() == 4:
+		_demo_ids += 1
+		agendas.append(
+			{"id": _demo_ids, "name": str(body["name"]), "every": null, "next_at": null, "notes": []}
+		)
+	else:
+		for a in agendas:
+			if int(a["id"]) != int(parts[4]):
+				continue
+			match parts[5]:
+				"add":
+					_demo_ids += 1
+					var since := Time.get_datetime_string_from_system(true) + "Z"
+					a["notes"].append({"id": _demo_ids, "text": str(body["text"]), "since": since})
+				"clear":
+					a["notes"] = []
+				"drop":
+					agendas.erase(a)
+			break
+	_apply(_data)
 
 
 func _post(path: String, payload: Dictionary, done: Callable, timeout: float = 6.0) -> void:

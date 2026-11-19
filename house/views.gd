@@ -68,10 +68,15 @@ func home_view(box: VBoxContainer) -> void:
 	var next: Array = home._upcoming(
 		home.coming.filter(func(i: Dictionary) -> bool: return i.get("due_at") != null), NEXT_SHOWN
 	)
-	if not next.is_empty():
+	var due: Array = home.things.agendas_today()
+	if not next.is_empty() or not due.is_empty():
 		heading(box, "Next up")
 		for item in next:
 			_row(box, item, false, _when(item))
+		for a in due:
+			var row := Blocks.Row.new(home.things.agenda_line(a), "", false, true)
+			row.pressed.connect(func() -> void: home.open_agenda(int(a["id"])))
+			box.add_child(row)
 	if not home.open.is_empty():
 		heading(box, "Open")
 		var shown: Array = home.open if sb.open_expanded else home.open.slice(0, OPEN_SHOWN)
@@ -174,6 +179,44 @@ func item_view(box: VBoxContainer, id: int) -> void:
 		heading(box, "Other open")
 		for other in others.slice(0, 3):
 			_row(box, other, true, _when(other))
+
+
+# an agenda's pile: its rhythm as text, the notes (each opens as a note), a line to add one, Clear
+func agenda_view(box: VBoxContainer, id: int) -> void:
+	var a: Dictionary = home.things.agenda(id)
+	if a.is_empty():
+		return
+	var title := Paper.heading(str(a["name"]), 18, Paper.INK)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.custom_minimum_size.x = 40
+	box.add_child(title)
+	box.add_child(quiet(home.things.agenda_rhythm(a), 14))
+	var notes: Array = a["notes"]
+	if notes.is_empty():
+		box.add_child(quiet("Nothing on this pile yet.", 14))
+	for n in notes:
+		var said: String = "" if n.get("since") == null else "said " + home._ago(str(n["since"]))
+		var row := Blocks.Row.new(str(n["text"]), said)
+		row.pressed.connect(func() -> void: home.open_item(int(n["id"])))
+		box.add_child(row)
+	var edit := Paper.edit("add a note", box)
+	edit.text_submitted.connect(
+		func(text: String) -> void:
+			if text.strip_edges() == "":
+				return
+			edit.clear()
+			sb.agenda_typing = true
+			home.things.post.emit("/api/home/agendas/%d/add" % id, {"text": text})
+	)
+	if sb.agenda_typing:
+		edit.grab_focus.call_deferred()
+	if not notes.is_empty():
+		_chips(
+			box,
+			[{"label": "Clear", "act": "clear"}],
+			func(_a: String) -> void:
+				home.things.post.emit("/api/home/agendas/%d/clear" % id, {})
+		)
 
 
 func _actions(item: Dictionary, kind: String) -> Array:

@@ -29,6 +29,7 @@ func _frames(n: int = 3) -> void:
 func run() -> void:
 	await _things()
 	await _shelf()
+	await _agendas()
 	await _fit()
 	await _pet()
 	await _banner()
@@ -143,6 +144,128 @@ func _shelf() -> void:
 	s._state = keep
 	main._poll()
 	await s.create_timer(0.45).timeout
+
+
+func _edit(placeholder: String) -> Variant:
+	for e in sb._dyn.find_children("*", "LineEdit", true, false):
+		if e.placeholder_text == placeholder:
+			return e
+	return null
+
+
+func _button(text: String) -> Variant:
+	for b in sb._dyn.find_children("*", "Button", true, false):
+		if b.text == text:
+			return b
+	return null
+
+
+func _posted(path: String) -> Array:
+	return s._log.filter(func(l: Array) -> bool: return l[0] == "POST" and l[1] == path)
+
+
+# the agendas: on the shelf above the notes, an agenda's pile with its add line and Clear, and the
+# one due today under Next up
+func _agendas() -> void:
+	var keep: Dictionary = s._state.duplicate(true)
+	var today := Time.get_unix_time_from_datetime_string(h.today() + "T14:00:00")
+	var due_at := Time.get_datetime_string_from_unix_time(int(today - h._bias())) + "Z"
+	var retro := {
+		"id": 71, "name": "retro", "every": "2 week", "next_at": due_at,
+		"notes": [
+			{"id": 711, "text": "the deploy took three tries", "since": "2026-11-16T10:00:00Z"},
+			{"id": 712, "text": "flaky gate again", "since": "2026-11-17T15:30:00Z"},
+		],
+	}
+	var sam := {"id": 72, "name": "1:1 with Sam", "every": null, "next_at": null, "notes": []}
+	var before: int = s._count("/api/home")
+	s.seed(keep["open"], keep["coming"], {"agendas": [retro, sam]})
+	main._poll()
+	for i in 30:
+		if s._count("/api/home") > before:
+			break
+		await s.create_timer(0.1).timeout
+	await s.create_timer(0.45).timeout
+	sb.back()
+	await _frames()
+	var texts: Array = _texts(sb._dyn)
+	s._check("Next up" in texts and "Retro at 14:00 - 2 things" in texts, "Home has a quiet row for an agenda due today: %s" % str(texts))
+	await _press("Retro at 14:00 - 2 things")
+	s._check(sb.view == "agenda" and int(sb.arg) == 71, "the row opens the agenda")
+	texts = _texts(sb._dyn)
+	var rhythm: String = h.things.agenda_rhythm(retro)
+	s._check("retro" in texts and rhythm in texts and rhythm.begins_with("every other week, next "), "the agenda shows its name and its rhythm as text: %s" % rhythm)
+	s._check("the deploy took three tries" in texts and "flaky gate again" in texts, "the agenda lists its notes")
+	s._check(sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the agenda keeps the pane %d wide" % sb.WIDTH)
+	await _press("flaky gate again")
+	s._check(sb.view == "item" and int(sb.arg) == 712, "a note on a pile opens as a note")
+	sb.back()
+	await _open_shelf()
+	texts = _texts(sb._dyn)
+	var at := func(t: String) -> int: return texts.find(t)
+	s._check("Agendas (2)" in texts and "retro" in texts and "1:1 with Sam" in texts and "new agenda" in texts, "the shelf lists the agendas")
+	s._check("2 - " + h.things.agenda_when(retro) in texts and "0" in texts, "each agenda shows its count and when it is next")
+	s._check(at.call("Agendas (2)") == 0, "the agendas come first on the shelf")
+	await _press("retro")
+	s._check(sb.view == "agenda", "an agenda row opens the agenda")
+	var edit: Variant = _edit("add a note")
+	s._check(edit != null, "the agenda has an add line")
+	if edit != null:
+		edit.text_submitted.emit("nobody owned the rollback")
+	await _frames()
+	var posts := _posted("/api/home/agendas/71/add")
+	s._check(posts.size() == 1 and JSON.parse_string(posts[0][2]) == {"text": "nobody owned the rollback"}, "Enter adds the note to this agenda: %s" % str(posts))
+	var clear: Variant = _button("Clear")
+	s._check(clear != null, "a pile with notes has Clear")
+	if clear != null:
+		clear.pressed.emit()
+	await _frames()
+	s._check(_posted("/api/home/agendas/71/clear").size() == 1, "Clear asks the home to archive the pile")
+	sb.back()
+	await _frames()
+	s._check(sb.view == "card" and h.card.kind == "book", "back from an agenda opened on the shelf is the shelf")
+	await _press("new agenda")
+	var name_edit: Variant = _edit("name the agenda")
+	s._check(name_edit != null, "new agenda opens a line for the name")
+	if name_edit != null:
+		name_edit.text_submitted.emit("offsite")
+	await _frames()
+	s._check(_posted("/api/home/agendas").size() == 1, "a name makes a new agenda")
+	sb.back()
+	s._state = keep
+	main._poll()
+	await s.create_timer(0.45).timeout
+
+
+# the local list keeps agendas the same way: new agenda, a note, Clear
+func local_agendas() -> void:
+	await _open_shelf()
+	var texts: Array = _texts(sb._dyn)
+	s._check("Agendas (0)" in texts and "new agenda" in texts, "the local shelf has Agendas and a new agenda row")
+	await _press("new agenda")
+	var name_edit: Variant = _edit("name the agenda")
+	if name_edit != null:
+		name_edit.text_submitted.emit("retro")
+	await s.create_timer(1.2).timeout
+	texts = _texts(sb._dyn)
+	s._check("Agendas (1)" in texts and "retro" in texts, "the local list makes the agenda: %s" % str(texts.slice(0, 5)))
+	await _press("retro")
+	s._check(sb.view == "agenda", "the local agenda opens")
+	var edit: Variant = _edit("add a note")
+	if edit != null:
+		edit.text_submitted.emit("flaky gate")
+	await s.create_timer(1.2).timeout
+	s._check("flaky gate" in _texts(sb._dyn), "the local list puts the note on the pile")
+	var clear: Variant = _button("Clear")
+	if clear != null:
+		clear.pressed.emit()
+	await s.create_timer(1.2).timeout
+	s._check("Nothing on this pile yet." in _texts(sb._dyn), "Clear leaves the local agenda empty")
+	s._check("flaky gate" not in h.notes and h.things.note_list().all(func(n): return n["text"] != "flaky gate"), "a pile's notes are not in the plain notes")
+	sb.back()
+	await _frames()
+	sb.back()
+	await _frames()
 
 
 # the local list's own data builds the same view
