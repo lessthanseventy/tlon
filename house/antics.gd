@@ -18,6 +18,7 @@ const ANTICS := {
 	"slow_blink": {"who": {"cat": 1.4}, "dur": [3.2, 4.4], "pers": {"sweet": 2.0, "sassy": 0.7}},
 	"knead": {"who": {"cat": 1.0}, "go": ["sofa"], "dur": [5.0, 8.0], "e": "lo"},
 	"bird_chatter": {"who": {"cat": 4.0}, "need": "bird", "go": ["sill"], "dur": [6.0, 9.0]},
+	"cage_watch": {"who": {"cat": 1.5}, "need": "cage", "go": ["@cage"], "dur": [8.0, 12.0]},
 	"pounce":
 	{
 		"who": {"cat": 1.2, "fox": 1.5, "dog": 0.4},
@@ -363,6 +364,11 @@ const LINES := {
 	"knead": {"cat": ["making biscuits. professionally.", "mine now. softer."]},
 	"bird_chatter":
 	{"cat": ["ek ek ek ek", "it knows. it KNOWS."], "sassy": ["come in, then. I'll wait."]},
+	"cage_watch":
+	{
+		"cat": ["ek ek ek. it can't leave.", "it sings. I listen. for science."],
+		"sassy": ["we'll talk."]
+	},
 	"pounce":
 	{"*": ["got it. it was nothing.", "dust. my nemesis."], "mischievous": ["it moved first."]},
 	"stretch": {"*": ["aaah.", "all legs accounted for."], "lazy": ["that's the day's exercise."]},
@@ -732,6 +738,8 @@ func _need(need: String, c) -> bool:
 			return c.mode == "sleep"
 		"bird":
 			return h.outside.act.has("bird")
+		"cage":
+			return h.petlife.has("birdcage")
 		"bone":
 			return h.petlife.has("bone") and c.species in ["dog", "wolf", "fox"]
 		"toy":
@@ -908,6 +916,8 @@ func _resolve(tok: String, c, mate, mate_cell: Vector2i) -> String:
 				if toy.is_empty()
 				else next_to(h.pets._cell_of(toy["pos"]), c, int(tok == "@toy2"))
 			)
+		"@cage":
+			return "cage" if h.petlife.has("birdcage") else "mid"
 		"@pspot":
 			var s: String = mate.spot if mate != null else ""
 			return s if h.pets.spots.has(s) and s not in ["bowl", "water", ""] else ""
@@ -1162,8 +1172,9 @@ func _pose(name: String, c, t: float, dur: float, p) -> void:
 			c.lift = 0.8 * absf(sin(t * 6.0))
 			if u > 0.4:
 				_hearts(c, 2)
-		"bird_chatter":
-			c.dir = Pets.DIRS["nw"]
+		"bird_chatter", "cage_watch":
+			if name == "bird_chatter":
+				c.dir = Pets.DIRS["nw"]
 			c.anim = "attack" if _pulse(t, 0.35, 0.9) else "idle"
 			c.lift = 0.7 * sin(t * 30.0) if c.anim == "attack" else 0.0
 			if _pulse(t, 0.05, 1.8):

@@ -23,6 +23,7 @@ func run() -> void:
 	_switches()
 	_moved()
 	_window()
+	await _cage()
 	_decorating()
 	_pointer()
 	_migration()
@@ -287,6 +288,33 @@ func _window() -> void:
 	h.apply_layout()
 	h.petlife.sync()
 	s._check(h.pets.spots["sill"]["z"] == Pets.SPOTS["sill"]["z"], "the sill is its own without it")
+	room.queue_free()
+
+
+# a bird cage is not put out by itself; once added it is hit by a click, and a cat goes to watch it
+func _cage() -> void:
+	var room := _home(96, "cat_grey", "dog_golden")
+	room.size = Vector2(800, 700)
+	var h = room.home
+	var cat = h.pets.critter("nina")
+	s._check(h.petlife.piece("birdcage").is_empty(), "no bird cage unless he adds one")
+	s._check(not h.antics._need("cage", cat), "and nothing to watch")
+	var at: Dictionary = h.petlife._default("birdcage")
+	var p := {"p": "pet.birdcage", "f": "", "c": at["c"], "r": at["r"]}
+	s._check(h.layout.place(p, null, h.busy_cells()) == "", "a bird cage is added")
+	h.apply_layout()
+	h.petlife.sync()
+	_sound(h, "bird cage")
+	s._check(h.pets.spots.has("cage") and h.antics._need("cage", cat), "a cat has the cage to watch")
+	h.antics.force("cage_watch", "nina")
+	s._check(h.antics.act.get("legs") == ["cage"], "and goes beside it")
+	room.queue_redraw()
+	await s.process_frame
+	await s.process_frame
+	var hit := h._hits.filter(func(x): return x["key"] == "cage")
+	var inside: Vector2 = hit[0]["below"] - Vector2(0, 8) if hit.size() == 1 else Vector2.ZERO
+	s._check(hit.size() == 1 and h._topmost(inside) == "cage", "the cage is hit")
+	s._check(h.petlife.click("cage") and h.sound.requested.has("squeak"), "a click makes it sing")
 	room.queue_free()
 
 
