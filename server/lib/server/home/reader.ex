@@ -42,7 +42,8 @@ defmodule Server.Home.Reader do
           required(:notes) => [String.t()],
           optional(:projects) => [Server.Jot.t()],
           optional(:someday) => [Server.Jot.t()],
-          optional(:agendas) => [String.t()]
+          optional(:agendas) => [String.t()],
+          optional(:meetings) => [Server.Home.Day.meeting()]
         }
 
   @kept ["reminder", "todo", "note", "project", "waiting", "agenda"]
@@ -272,8 +273,10 @@ defmodule Server.Home.Reader do
     - "now": they ask what to do now ("what now", "what should I do", "I have ten minutes").
       "minutes" is the time they say they have, else null.
     - "someday": they ask what is on someday, or what they have put off.
-    - "answer": they ask a question. "text" is the answer, short, from the NOTES and the OPEN
-      things alone; when those do not hold it, "text" is only "I have nothing on that."
+    - "answer": they ask a question. "text" is the answer, short, from the NOTES, the OPEN things
+      and the MEETINGS alone ("what's on today?" and "what meetings do I have tomorrow?" are
+      answered from the MEETINGS, in time order, or "No meetings today."); when those do not hold
+      it, "text" is only "I have nothing on that."
     - "agenda": a thing to remember for a recurring occasion, a standing pile of notes (a retro, a
       1:1, a weekly): "for retro: the deploy took three tries", "retro - flaky gate again", "tell Sam
       about the conference budget in our 1:1", "add to weekly: ...". "agenda" names the occasion and
@@ -325,6 +328,8 @@ defmodule Server.Home.Reader do
     #{open(Map.get(context, :someday, []))}
     AGENDAS:
     #{agendas(Map.get(context, :agendas, []))}
+    MEETINGS:
+    #{meetings(Map.get(context, :meetings, []))}
     #{previous(context.previous)}
     MESSAGE: #{body}
     """
@@ -343,6 +348,14 @@ defmodule Server.Home.Reader do
 
   defp agendas([]), do: "(none)"
   defp agendas(names), do: Enum.map_join(names, "\n", &"- #{&1}")
+  defp meetings([]), do: "(none)"
+
+  defp meetings(meetings),
+    do:
+      Enum.map_join(meetings, "\n", &"#{&1.day}: #{meeting_time(&1)} #{&1.title}#{if &1.tentative, do: " (tentative)"}")
+
+  defp meeting_time(%{all_day: true}), do: "all day"
+  defp meeting_time(m), do: Calendar.strftime(Server.Home.Clock.local(m.starts_at), "%H:%M")
 
   defp notes([]), do: "(none)"
   defp notes(notes), do: Enum.map_join(notes, "\n", &"- #{&1}")

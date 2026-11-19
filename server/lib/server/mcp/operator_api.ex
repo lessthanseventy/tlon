@@ -161,7 +161,10 @@ defmodule Server.MCP.OperatorAPI do
                                          project {id, text} or nil, a project its next step, how many are done, its plan and steps_done,
                                          a waiting-on its who; someday are the put-off things; note_rows is notes as {id, text};
                                          forecast is Server.Office.Weather.forecast: up to three days, today first, each
-                                         {date, high_c, low_c, kind, wet} ([] when there is none)
+                                         {date, high_c, low_c, kind, wet} ([] when there is none);
+                                         meetings is Server.Home.Day.meetings: today's remaining and tomorrow's,
+                                         cleaned, each {title, starts_at, ends_at, tentative, all_day, day:
+                                         "today"|"tomorrow"} ([] with no calendars)
       GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open
                                          thing to do now; skip is ids joined by commas, minutes the time there is; 400 on either not numbers
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion; ?nina_|argos_ + name|species|personality (sassy sweet lazy mischievous shy bold) choose the cast
@@ -595,7 +598,16 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "POST", "life", ["quests", id, "done"]), do: with_row(conn, Server.Quest, id, &done_quest(conn, &1))
 
   defp route(conn, "GET", "home", []) do
-    json(conn, 200, Map.put(Server.Home.status(DateTime.utc_now()), :forecast, Server.Office.Weather.forecast()))
+    now = DateTime.utc_now()
+
+    json(
+      conn,
+      200,
+      now
+      |> Server.Home.status()
+      |> Map.put(:forecast, Server.Office.Weather.forecast())
+      |> Map.put(:meetings, Server.Home.Day.meetings(now))
+    )
   end
 
   defp route(conn, "GET", "home", ["pets"]) do
