@@ -19,8 +19,8 @@ Output, in `~/.cache/tlon/house-dist/`:
 
 - `the-house-windows.zip`: one file, `the-house.exe`, the code and the art together (the art is raw files in
   the executable's embedded pck, so the file is large).
-- `the-house-mac.zip`: `the house.app` (universal, Intel and Apple silicon), with `house-art.zip` in
-  `Contents/Resources`.
+- `the-house-mac.zip`: `the house.app` (universal, Intel and Apple silicon), the art in its pck like the others,
+  ad-hoc signed by the export (nothing is added to the app after it, which would break the seal).
 - `the-house-linux.zip`: one file, `the-house`, the same as Windows, for a Linux machine.
 
 The build stages a throwaway copy of `house/` under the dist dir, puts the pack's files in its `art/` with a
@@ -28,7 +28,7 @@ The build stages a throwaway copy of `house/` under the dist dir, puts the pack'
 `TLON_HOUSE_DIST` moves the dist dir (still outside any git work tree).
 
 The house looks for its art in this order: `--art <folder or pack>`, the art inside the program, a
-`house-art.zip` beside the program (a Mac app: in Resources; also how a build made without art can be given
+`house-art.zip` beside the program (also how a build made without art can be given
 some), the `TLON_ART_DIR` folder, none (flat shapes, and it says so).
 
 ## What to hand over
@@ -40,7 +40,7 @@ nothing else; "weather" in its settings names a town or switches it off.
 
 ## First run
 
-Neither build is signed: Windows and macOS warn about any program they do not know, and this build cannot be
+Neither build is signed by a developer account: Windows and macOS warn about any program they do not know, and this build cannot be
 notarized from Linux (that takes an Apple developer account and a Mac).
 
 **Windows.** Unzip it anywhere it can stay (not the Downloads' temporary view of the zip: use "Extract
@@ -48,13 +48,16 @@ all"). Double-click `the-house.exe`. SmartScreen says "Windows protected your PC
 **Run anyway**. If the zip came by browser download, right-click the zip first, Properties, tick Unblock, and the
 warning does not come.
 
-**macOS.** Unzip, drag `the house.app` to Applications (or leave it). Right-click it, choose **Open**, then
-**Open** in the dialog (a double-click only offers Cancel the first time). If macOS says the app "is damaged" or
-will not open at all, run this once in Terminal, then open it again:
+**macOS.** Unzip with Finder (double-click the zip), not a third-party tool, and drag `the house.app` to
+Applications. The first time, right-click it, choose **Open**, then **Open** in the dialog (a double-click only
+offers Cancel). If macOS says the app "is damaged", run these two lines once in Terminal (use the path it is
+really at), then right-click, **Open** again:
 
-    xattr -dr com.apple.quarantine "/Applications/the house.app"
+    xattr -cr "/Applications/the house.app"
+    codesign --force --deep --sign - "/Applications/the house.app"
 
-(use the path it is really at). It is the same program, the quarantine mark a download carries is what is removed.
+Why: the app is ad-hoc signed here, not by an Apple developer account, and not notarized; the second line signs
+it again on the Mac itself.
 
 ## Where it keeps its files
 
