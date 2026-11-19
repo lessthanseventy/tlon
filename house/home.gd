@@ -1751,6 +1751,8 @@ func hover(pos: Vector2) -> bool:
 # what a click on the room does: a thing with a view of its own tells the sidebar (`viewed`), the
 # rest answer on the spot; true when something was there
 func click(pos: Vector2) -> bool:
+	if decorating:
+		return false
 	finds.touch()
 	var key := _topmost(pos)
 	var wants := _card_kind(key)
@@ -1825,7 +1827,7 @@ func click(pos: Vector2) -> bool:
 
 
 func _cards_blocked() -> bool:
-	return jot_open or closet_open or decorating or form_open
+	return decorating
 
 
 func _card_kind(key: String) -> String:

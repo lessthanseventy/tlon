@@ -649,28 +649,29 @@ func _on_empty() -> void:
 		_sidebar.back()
 
 
-func _open_settings() -> void:
-	if _at == "home":
-		_set_widget(false)
-		_sidebar.open_settings()
+func _open_settings() -> bool:
+	return _show(func() -> void: _sidebar.open_settings())
 
 
-func _open_chat() -> void:
-	if _at == "home":
-		_set_widget(false)
-		_sidebar.focus_chat()
+func _open_chat() -> bool:
+	return _show(func() -> void: _sidebar.focus_chat())
 
 
-func _open_closet() -> void:
-	if _at == "home":
-		_set_widget(false)
-		_sidebar.open_closet()
+func _open_closet() -> bool:
+	return _show(func() -> void: _sidebar.open_closet())
 
 
-func _open_add(jot_first: bool) -> void:
-	if _at == "home":
-		_set_widget(false)
-		_sidebar.open_add(jot_first)
+func _open_add(jot_first: bool) -> bool:
+	return _show(func() -> void: _sidebar.open_add(jot_first))
+
+
+# the home view of the sidebar is where every view opens, from the room only
+func _show(open: Callable) -> bool:
+	if _at != "home":
+		return false
+	_set_widget(false)
+	open.call()
+	return true
 
 
 # mode "new" (a preset for the form) or "edit" ({row, due})
@@ -972,8 +973,6 @@ func _send_jot(text: String) -> void:
 	_tell(
 		text,
 		func(ok: bool, reply: String) -> void:
-			if not jot.visible:
-				return
 			if ok:
 				_room.home.sound.request("save")
 				_room.home.show_reply(reply)
