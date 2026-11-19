@@ -41,8 +41,10 @@ runs on the local list.
   cell; pets treat the person as air (they never route around or get stuck on him). Click him for a
   line. Seated on the sofa he sorts after the window, so head and shoulders show over the back.
 - **The TV** (`tv.gd`, `hacks.gd`) is just a TV: it knows nothing of the computer. It is on while
-  the person watches and off otherwise and in the deep night; its card's button turns it on for 90 s
-  or changes the channel. On, it runs one of the code-drawn screen hacks (`spectrum stars plasma logo
+  the person watches and off otherwise and in the deep night. A click on it (no card, no tooltip)
+  turns it off if on and on if off, and that choice holds until the next click or until the
+  automatic state changes (he sits down or leaves, or the deep night begins), whichever is first.
+  On, it runs one of the code-drawn screen hacks (`spectrum stars plasma logo
   rain life pipes moire scope sunset fireworks toasters note`), a new one every 2-4 minutes through
   a short static flicker, never the same twice in a row.
   Add a hack: a `_name(c, q, t)` drawer in `hacks.gd` and its name in `NAMES`. Nina sometimes sits
@@ -52,7 +54,7 @@ runs on the local list.
   bounce and a clink mark; a new week (Monday) starts it empty, quietly. Hover: "N done this week".
   The count is `done_week`; names come only from a `done` list in the status.
 - **Cards** (`card.gd`; blocks built in `home.gd` `card_blocks`): a click on the calendar, jar, window,
-  clock, board (cork, a note or the "+N" tag), large plant or TV opens one paper popup near it, at
+  clock, board (cork, a note or the "+N" tag), large plant opens one paper popup near it, at
   readable size; hover keeps the small tooltip and the pointing hand. One at a time: Esc, a click
   outside, or a click on another thing closes it (the same thing again too); none opens while a menu,
   the notepad, the closet, decorate mode or the day's slip is up, and one open closes when they do.
@@ -508,7 +510,7 @@ and seeds their dice (`--seed N` to pick another):
 - `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a card, a
   name tag or a pat can be photographed without a pointer.
 - `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--wave "text"` a coworker at the door; `--plane "title"` a landed plane; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--plain` / `--looks glow,weather_art,spells,font` the looks all off / only the named on; `--visitor` feed the demo office to the door; `--person
-  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--card calendar|jar|weather|clock|board|plant|tv` opens that card at 0.45 s (`calendar:DAY[:MONTHS_AHEAD]`, `board:projects|waiting|someday[:PROJECT_ID]`); `--form "KIND;key=value;..."` opens a form at 0.4 s (`todo reminder note waiting project`, or `edit:ID`; keys `kinds text who steps date time every error`, `date` as `MM-DD` or `YYYY-MM-DD`, `steps` lines split by `\n`); `--what-now` the slip; `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
+  desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--card calendar|jar|weather|clock|board|plant` opens that card at 0.45 s (`calendar:DAY[:MONTHS_AHEAD]`, `board:projects|waiting|someday[:PROJECT_ID]`); `--form "KIND;key=value;..."` opens a form at 0.4 s (`todo reminder note waiting project`, or `edit:ID`; keys `kinds text who steps date time every error`, `date` as `MM-DD` or `YYYY-MM-DD`, `steps` lines split by `\n`); `--what-now` the slip; `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
   "text"` opens the jot field (`--sending` shows the scribble); `--reply "text"` the reply slip;
   `--menu ID` the paper menu on thing ID; `--ring ID` rings the phone for thing ID; `--now
   ID[:MINUTES[:DONE_FRACTION]]` pins thing ID with a running timer (nothing saved); `--widget`;

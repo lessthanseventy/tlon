@@ -1,12 +1,13 @@
 extends RefCounted
 
 const Hacks := preload("res://hacks.gd")
-const MANUAL_SECONDS := 90.0
 
 var on := false
 var hacks := Hacks.new()
 var forced := false
-var manual := 0.0
+var override := 0
+var _auto := false
+var _deep := false
 
 
 func setup(seed_value: int) -> void:
@@ -19,21 +20,22 @@ func force_on(value: bool) -> void:
 
 
 func process(dt: float, watching: bool, deep_night: bool) -> void:
-	manual = maxf(0.0, manual - dt)
+	var auto := watching and not deep_night
+	if auto != _auto or (deep_night and not _deep):
+		override = 0
+	_auto = auto
+	_deep = deep_night
 	if not forced:
-		on = manual > 0.0 or (watching and not deep_night)
+		on = auto if override == 0 else override > 0
 	hacks.update(dt, on)
 
 
 func click() -> void:
-	if on:
-		hacks.advance()
-	elif not forced:
-		manual = MANUAL_SECONDS
-		on = true
+	if forced:
+		on = not on
 	else:
-		on = true
-		hacks.advance()
+		override = -1 if on else 1
+		on = override > 0
 
 
 static func sub(

@@ -48,7 +48,6 @@ const CARD_KEYS := {
 	"window": "weather",
 	"clock": "clock",
 	"plant": "plant",
-	"tv": "tv",
 	"board": "board",
 	"more": "board",
 	"mousehole": "found",
@@ -1621,8 +1620,6 @@ func card_blocks() -> Array:
 			return things.pick_blocks()
 		"plant":
 			return _plant_blocks()
-		"tv":
-			return _tv_blocks()
 		"book", "found":
 			return finds.blocks(card.kind)
 	return []
@@ -1733,14 +1730,6 @@ func _plant_blocks() -> Array:
 	return blocks
 
 
-func _tv_blocks() -> Array:
-	return [
-		{"t": "title", "text": "The TV"},
-		{"t": "text", "text": "Playing: " + tv.hacks.current if tv.on else "It is off."},
-		{"t": "buttons", "items": [{"label": "Next" if tv.on else "Turn on", "act": "tv_next"}]},
-	]
-
-
 # the pet under the pointer, "" when none
 func pet_at(pos: Vector2) -> String:
 	var key := _topmost(pos)
@@ -1813,9 +1802,6 @@ func click(pos: Vector2) -> bool:
 		var hit := card.click(pos)
 		if hit == "inside":
 			return true
-		if hit == "tv_next":
-			tv.click()
-			return true
 		if hit == "birthday":
 			finds.toggle_birthday()
 			card.close()
@@ -1869,6 +1855,9 @@ func click(pos: Vector2) -> bool:
 		open_item_menu(int(key.substr(5)))
 		return true
 	match key:
+		"tv":
+			tv.click()
+			return true
 		"stack":
 			_open_pick()
 			return true
@@ -1919,7 +1908,7 @@ func key(code: int) -> bool:
 	return eggs.key(code)
 
 
-# `name` is a card kind: calendar jar weather clock plant tv board; a staged one may follow
+# `name` is a card kind: calendar jar weather clock plant board; a staged one may follow
 # its kind after a colon: calendar:DAY[:MONTHS_AHEAD], board:TAB[:PROJECT_ID]
 func open_card(name: String) -> void:
 	if _cards_blocked():
