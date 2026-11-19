@@ -319,7 +319,6 @@ func _draw() -> void:
 				_draw_person(origin, it["fig"])
 	for fig in _desc["figures"]:
 		_draw_tags(origin, fig)
-	_draw_door_label(origin)
 	_draw_caption()
 	if _desc == HOME:
 		home.draw_over()
@@ -513,28 +512,6 @@ func _draw_tags(origin: Vector2, fig: Dictionary) -> void:
 		draw_circle(m, 10, MARK_COLOR)
 		var bang := font.get_string_size("!", HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
 		draw_string(font, m + Vector2(-bang / 2.0, 6), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, INK)
-
-
-func _draw_door_label(origin: Vector2) -> void:
-	if not office_door:
-		return
-	var door: Dictionary = _desc["door"]
-	var font := ThemeDB.fallback_font
-	var fs := 13
-	var text: String = door["label"]
-	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var at := _p(origin, 0, door["row"]) + Vector2(-8 * _k, (4 - WALL_H) * _k - 8)
-	at.x = clampf(at.x, w / 2.0 + 10, size.x - w / 2.0 - 10)
-	draw_rect(Rect2(at + Vector2(-w / 2.0 - 5, -13), Vector2(w + 10, 19)), Color(INK, 0.85))
-	draw_string(
-		font,
-		at + Vector2(-w / 2.0, 1),
-		text,
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		fs,
-		MARK_COLOR if _hover_door else Color("f1e9dc")
-	)
 
 
 func _draw_caption() -> void:
