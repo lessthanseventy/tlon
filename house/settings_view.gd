@@ -82,7 +82,7 @@ var _claude_cmd: LineEdit
 var _claude_found: Label
 var _claude_say: Label
 var _claude_last: Label
-var _cmd_seen := "\u0000"
+var _cmd_seen := "\n"
 var _loading := false
 
 
