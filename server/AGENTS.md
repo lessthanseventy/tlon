@@ -200,7 +200,7 @@ and every layer the spine design's re-laid §9 asked for
   "1:1 with Sam"), with or without a rhythm (`every`, `next_at`): the reader files "for retro: …" on it (a new name starts
   one, and the reply says so; it is shown the existing names to match loosely), sets its rhythm, and answers what is on it, what
   was on it, and "retro's done" (archives the notes as done). Its notes (`jot.agenda_id`) are in no plain list. The pile is told
-  once, 15 minutes before `next_at` (the chat, else an info `home_agenda` alert), and the time moves on an hour after it.
+  once, 15 minutes before `next_at` (in the chat, and as an info `home_agenda` alert on the desktop, as reminders are), and the time moves on an hour after it.
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
   open next step or a question about it, a waiting-on is asked about after three days, a weekly review
   (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28

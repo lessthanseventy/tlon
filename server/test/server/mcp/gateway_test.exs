@@ -1072,8 +1072,10 @@ defmodule Server.MCP.GatewayTest do
       assert {400, %{"error" => "there is already an agenda called Retro"}} =
                post_json("/api/home/agendas", %{name: "Retro"})
 
-      assert {200, %{"id" => ^id, "every" => "2 week", "next_at" => "2030-01-07T14:00:00Z"}} =
-               post_json("/api/home/agendas/#{id}/edit", %{every: "2 week", at: "2030-01-07T14:00:00Z"})
+      soon = Date.utc_today() |> Date.add(30) |> Date.to_iso8601() |> Kernel.<>("T14:00:00Z")
+
+      assert {200, %{"id" => ^id, "every" => "2 week", "next_at" => ^soon}} =
+               post_json("/api/home/agendas/#{id}/edit", %{every: "2 week", at: soon})
 
       assert {200, %{"text" => "flaky gate", "kind" => "note", "id" => note}} =
                post_json("/api/home/agendas/#{id}/add", %{text: " flaky gate "})

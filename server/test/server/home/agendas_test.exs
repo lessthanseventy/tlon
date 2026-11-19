@@ -82,16 +82,14 @@ defmodule Server.Home.AgendasTest do
   test "\"retro is every other Thursday at 2\" creates the agenda with its rhythm, and sets it on an existing one", %{
     say: say
   } do
-    say_it(
-      "retro is every other Thursday at 2",
-      %{kind: "agenda_set", agenda: "retro", due_at: thursday(), every: "2 week"},
-      say,
-      1
-    )
+    {:ok, jot} = Jot.take("telegram", 1, "retro is every other Thursday at 2")
+    reading = %{kind: "agenda_set", agenda: "retro", due_at: thursday(), every: "2 week", text: ""}
 
-    assert replied() == "Started a new agenda, retro. retro is every 2 weeks, next Thu 19 Nov 14:00."
+    assert Server.Home.Agendas.ask(jot, reading, DateTime.add(thursday(), -1, :day)) ==
+             "Started a new agenda, retro. retro is every 2 weeks, next Thu 19 Nov 14:00."
+
     assert %{every: "2 week", next_at: at} = Agenda.named("telegram", "retro")
-    assert at == thursday() or DateTime.after?(at, DateTime.utc_now())
+    assert at == thursday()
 
     say_it(
       "my 1:1 with Sam is weekly on Mondays at 10",
@@ -132,6 +130,16 @@ defmodule Server.Home.AgendasTest do
 
     say_it("what did we cover last retro?", %{kind: "agenda_past", agenda: "retro"}, say, 6)
     assert replied() =~ ~r/^On the retro pile when it was cleared, \w+ \d+ \w+:\n• a\n• b$/
+  end
+
+  test "a correction of the note just said edits it in place, and it stays on its pile", %{say: say} do
+    say_it("for retro: flaky gate", %{kind: "agenda", agenda: "retro", text: "flaky gate"}, say, 1)
+    replied()
+    say_it("no, flaky gate again", %{kind: "note", text: "flaky gate again", amends: true}, say, 2)
+    assert replied() == "changed: noted: flaky gate again"
+    assert %{id: id} = Agenda.named("telegram", "retro")
+    assert ["flaky gate again"] = Enum.map(Jot.agenda_notes(id), & &1.text)
+    assert Jot.notes("telegram", 20) == []
   end
 
   describe "telling the pile" do
@@ -180,7 +188,7 @@ defmodule Server.Home.AgendasTest do
 
     test "the desktop raises what was told, while it has notes", %{agenda: agenda} do
       Server.Home.Agendas.tell("telegram", "", nil, DateTime.add(thursday(), -10, :minute))
-      since = DateTime.add(DateTime.utc_now(), -600)
+      since = DateTime.add(thursday(), -20, :minute)
 
       assert [%{id: id, body: "Retro in 15 — 2 things: deploy took three tries; flaky gate"}] =
                Server.Home.told_agendas(since)
