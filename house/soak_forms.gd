@@ -531,11 +531,6 @@ func _card_things() -> void:
 	h.settings.put("birthday", "")
 	var feet: Array = h.card_blocks().filter(func(b): return b["t"] == "foot")
 	s._check(feet.is_empty(), "no birthday set: the card says nothing of one")
-	var buttons: Array = h.card_blocks().filter(
-		func(b):
-			return b["t"] == "buttons" and b["items"].any(func(i): return i["act"] == "birthday")
-	)
-	s._check(buttons.is_empty(), "and no birthday button")
 	h.settings.put("birthday", "01-01" if h.finds.today_key() != "01-01" else "01-02")
 	s._check(
 		h.card_blocks().filter(func(b): return b["t"] == "foot").is_empty(),

@@ -613,7 +613,6 @@ func _birthday() -> void:
 	_birth.text = birthday_text(parsed)
 	_birth_say.text = _birth_line()
 	_birth_say.add_theme_color_override("font_color", Paper.QUIET)
-	_birth_say.add_theme_color_override("font_color", Paper.QUIET)
 
 
 func _birth_line() -> String:
