@@ -24,7 +24,9 @@ defmodule Server.Home.Source.Mail do
   not shown three times. A batch whose pending mark `kept/0`
   never promoted (the filing failed) is found again at the next fetch and counted the same way: the
   third fetch of it skips it. Each skip is one warning with the count, so mail that cannot get
-  through is not read again for good.
+  through is not read again for good. A struck batch whose messages are gone when it is tried again
+  (expunged, or with no mark pushed out of the newest 40) is dropped with its strikes and the mark
+  where it was: the next poll reads what is there, unfrozen.
   """
   @behaviour Server.Home.Source
 
@@ -89,7 +91,7 @@ defmodule Server.Home.Source.Mail do
   end
 
   # a batch with a strike is tried again as it was first read: later mail is left for the poll after
-  # the batch is filed or skipped, so nothing is skipped that the model was not shown three times
+  # the batch is filed or skipped
   defp frozen(state, validity, from, messages) do
     case Enum.find_value(["pending", "bad"], &struck_top(state, &1, validity, from)) do
       nil -> messages
@@ -128,7 +130,7 @@ defmodule Server.Home.Source.Mail do
   defp tries(_state, _batch), do: 0
 
   # a batch given up on, so one the poller or the model cannot get through is not read for good; the
-  # mark moves past everything read now
+  # mark moves to the top of the batch (the frozen one), not past mail that arrived since it was first read
   defp skip(state, batch, why) do
     Logger.warning("home source mail: skipped #{length(batch.messages)} messages that #{why}")
     save(pending(Map.delete(state, "bad"), batch, 1))

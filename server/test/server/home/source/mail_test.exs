@@ -237,6 +237,25 @@ defmodule Server.Home.Source.MailTest do
     assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 7}
   end
 
+  test "a struck batch whose messages are gone is dropped, the mark where it was; the next poll reads the new mail" do
+    both()
+    {:error, _} = run(model: model("no"))
+    assert %{"bad" => _} = JSON.decode!(Keep.get("home_mail_mark"))
+
+    server([7], fetch_line(1, 7, "Message-ID: <new-7@x>\r\n\r\n", "parcel arriving"))
+    assert {:ok, [], []} = run(model: seen("no"))
+    refute_received {:prompt, _}
+    :ok = Mail.kept()
+    assert JSON.decode!(Keep.get("home_mail_mark")) == %{}
+
+    reply = ~s([{"n":1,"kind":"package","text":"Parcel arriving","why":"w"}])
+    assert {:ok, [%{key: _}], []} = run(model: seen(reply))
+    assert_received {:prompt, next}
+    assert next =~ "parcel arriving"
+    :ok = Mail.kept()
+    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 7}
+  end
+
   test "with a mark and more than 40 new messages the oldest 40 are read, then the rest, each once" do
     Keep.put("home_mail_mark", JSON.encode!(%{validity: 77, uid: 10}))
     uids = Enum.to_list(11..70)
