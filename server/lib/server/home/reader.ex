@@ -19,6 +19,9 @@ defmodule Server.Home.Reader do
   one, matched loosely, else a new name): `"agenda"` (`text` is a note for its pile),
   `"agenda_set"` (`due_at` and `every` are its rhythm, either may be nil), and the asks
   `"agenda_show"`, `"agenda_past"` (what was on it before it was cleared) and `"agenda_clear"`.
+  The pile by the door and people are read too: `"door"` (`text` goes by the door), `"door_show"` (what
+  is by the door), `"person"` (`person` has the birthday `birthday`, `MM-DD`, or `YYYY-MM-DD` with a
+  year) and `"person_note"` (`text` is a note on the pile of `person`).
   Proposals (`Server.Proposal`) have three asks: `"proposals"` (what is proposed), `"take"` (yes to the
   proposals numbered `ids`) and `"dismiss"` (no to them).
   The model is shown what it needs for that: the jot before, the open things, the newest notes, the
@@ -45,11 +48,12 @@ defmodule Server.Home.Reader do
           optional(:projects) => [Server.Jot.t()],
           optional(:someday) => [Server.Jot.t()],
           optional(:agendas) => [String.t()],
+          optional(:people) => [String.t()],
           optional(:meetings) => [Server.Home.Day.meeting()],
           optional(:proposals) => [Server.Proposal.t()]
         }
 
-  @kept ["reminder", "todo", "note", "project", "waiting", "agenda"]
+  @kept ["reminder", "todo", "note", "project", "waiting", "agenda", "door", "person", "person_note"]
   @asked [
     "done",
     "delete",
@@ -61,6 +65,7 @@ defmodule Server.Home.Reader do
     "agenda_show",
     "agenda_past",
     "agenda_clear",
+    "door_show",
     "proposals",
     "take",
     "dismiss"
@@ -75,6 +80,7 @@ defmodule Server.Home.Reader do
     "agenda_show",
     "agenda_past",
     "agenda_clear",
+    "door_show",
     "proposals",
     "take",
     "dismiss"
@@ -117,8 +123,9 @@ defmodule Server.Home.Reader do
     with [json] <- Regex.run(~r/\{.*\}/s, out),
          {:ok, %{"kind" => kind} = map} when kind in @kept or kind in @asked <- JSON.decode(json),
          {:ok, text} <- text(kind, map["text"]),
-         {:ok, agenda} <- agenda(kind, map["agenda"]) do
-      {:ok, kind |> reading(text, at(map["at"]), map) |> extras(map) |> Map.merge(agenda)}
+         {:ok, agenda} <- agenda(kind, map["agenda"]),
+         {:ok, person} <- person(kind, map["person"], map["birthday"]) do
+      {:ok, kind |> reading(text, at(map["at"]), map) |> extras(map) |> Map.merge(agenda) |> Map.merge(person)}
     else
       _ -> :error
     end
@@ -269,7 +276,7 @@ defmodule Server.Home.Reader do
     Where they are it is now #{Calendar.strftime(now, "%A %Y-%m-%d %H:%M")}.
 
     Answer with one line of JSON and nothing else:
-    {"kind": "...", "text": "...", "at": "YYYY-MM-DDTHH:MM" or null, "every": "day" or "week" or "month" or a number then one of them like "6 week" or null, "updates": null, "ids": [], "amends": true or false, "steps": [], "who": null, "mins": null, "minutes": null, "project": null, "assumed": null, "ask": null, "revive": [], "agenda": null}
+    {"kind": "...", "text": "...", "at": "YYYY-MM-DDTHH:MM" or null, "every": "day" or "week" or "month" or a number then one of them like "6 week" or null, "updates": null, "ids": [], "amends": true or false, "steps": [], "who": null, "mins": null, "minutes": null, "project": null, "assumed": null, "ask": null, "revive": [], "agenda": null, "person": null, "birthday": null}
 
     "kind" is one of:
     - "reminder": a thing to keep that names or implies a time they should be told. "at" is that
@@ -309,6 +316,15 @@ defmodule Server.Home.Reader do
       retro?"). "agenda" names it.
     - "agenda_clear": they say an occasion is over and its pile is done ("retro's done", "clear retro").
       "agenda" names it.
+    - "door": a thing to take along or an errand for the next time they go out ("by the door:
+      umbrella", "take the library books with me", "errand: return the parcel"). "text" is the thing, short.
+    - "door_show": they are heading out or ask what is by the door ("heading out", "leaving now",
+      "what's by the door?").
+    - "person": they say when a person's birthday is ("Sam's birthday is March 3"). "person" is the
+      name as they say it, or the matching one in PEOPLE; "birthday" is "MM-DD", or "YYYY-MM-DD" when
+      they give the year.
+    - "person_note": a thing to remember about a person, a gift idea or anything else ("gift idea for
+      Sam: a kettle"). "person" is as above, "text" the thing, short.
     - "proposals": they ask what is proposed, or whether anything is new ("what's proposed?", "anything new?").
     - "take": they say yes to one or more of the PROPOSED things ("take the first", "yes to the Sam
       one", "add them all"). "ids" are the numbers of those things; the first is the first listed.
@@ -352,6 +368,8 @@ defmodule Server.Home.Reader do
     #{open(Map.get(context, :someday, []))}
     AGENDAS:
     #{agendas(Map.get(context, :agendas, []))}
+    PEOPLE:
+    #{agendas(Map.get(context, :people, []))}
     MEETINGS:
     #{meetings(Map.get(context, :meetings, []))}
     PROPOSED:
@@ -397,6 +415,8 @@ defmodule Server.Home.Reader do
   defp previous(nil), do: ""
   defp previous(jot), do: "\nPREVIOUS MESSAGE: #{jot.body}\nIT WAS FILED AS: #{say(jot)}\n"
 
+  defp text("person", _any), do: {:ok, ""}
+
   defp text(kind, text) when is_binary(text) do
     case String.trim(text) do
       "" when kind in @kept or kind == "answer" -> :error
@@ -418,4 +438,22 @@ defmodule Server.Home.Reader do
   end
 
   defp agenda(_kind, _name), do: {:ok, %{}}
+
+  defp person("person", name, birthday) do
+    with name when is_binary(name) <- Server.Agenda.clean(name),
+         {:ok, birthday} <- Server.Agenda.birthday(birthday) do
+      {:ok, %{person: name, birthday: birthday}}
+    else
+      _ -> :error
+    end
+  end
+
+  defp person("person_note", name, _birthday) do
+    case Server.Agenda.clean(name) do
+      nil -> :error
+      name -> {:ok, %{person: name}}
+    end
+  end
+
+  defp person(_kind, _name, _birthday), do: {:ok, %{}}
 end

@@ -4,7 +4,8 @@ defmodule Server.Home.Agendas do
   at the time one comes round. A reading from `Server.Home.Reader` names its agenda: an existing one
   (the reader matched it loosely against the names it was shown) or a new name, which starts a new
   agenda, and the reply says so. Nothing here asks for an answer: a pile is told once, ahead of its
-  time (`tell/4`), and that is all.
+  time (`tell/4`), and that is all. The piles of people and the one by the door are filed on the same
+  way (`person/3`, `person_note/3`, `door/3`, `door_ask/2`); they are never told.
   """
 
   alias Server.Agenda
@@ -21,6 +22,57 @@ defmodule Server.Home.Agendas do
     Agenda.note(agenda, jot, text, now)
     pile = Agenda.say_pile(agenda, length(Jot.agenda_notes(agenda.id)))
     started(state, agenda, pile)
+  end
+
+  @doc """
+  File the kept `jot` as the note `reading.text` on the pile by the door, at `now`. The reply the helper says.
+  """
+  @spec door(Jot.t(), map(), DateTime.t()) :: String.t()
+  def door(%Jot{via: via} = jot, %{text: text}, now) do
+    door = Agenda.ensure_door(via, now)
+    Agenda.note(door, jot, text, now)
+    "By the door (#{length(Jot.agenda_notes(door.id))})."
+  end
+
+  @doc "Answer the ask of what is by the door: the `jot` is kept as talk, nothing to keep. The reply the helper says."
+  @spec door_ask(Jot.t(), DateTime.t()) :: String.t()
+  def door_ask(%Jot{via: via} = jot, now) do
+    Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
+
+    via
+    |> Agenda.door()
+    |> pile()
+    |> case do
+      [] -> "Nothing by the door."
+      notes -> Enum.join(["By the door (#{length(notes)}):" | Enum.map(notes, &"• #{&1.text}")], "\n")
+    end
+  end
+
+  @doc """
+  Make the person `reading.person` with the birthday `reading.birthday`, or change the birthday of the one
+  there is, at `now`: the `jot` is kept as talk, nothing to keep. The reply the helper says.
+  """
+  @spec person(Jot.t(), map(), DateTime.t()) :: String.t()
+  def person(%Jot{via: via} = jot, %{person: name, birthday: birthday}, now) do
+    Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
+    {state, person} = find_person(via, name, %{birthday: birthday}, now)
+
+    case state do
+      :new -> "Added #{person.name}. Birthday: #{birthday_said(birthday)}."
+      :old -> change_birthday(person, birthday, now)
+    end
+  end
+
+  @doc """
+  File the kept `jot` as the note `reading.text` on the pile of the person `reading.person`, made when
+  they are not known, at `now`. The reply the helper says.
+  """
+  @spec person_note(Jot.t(), map(), DateTime.t()) :: String.t()
+  def person_note(%Jot{via: via} = jot, %{person: name, text: text}, now) do
+    {state, person} = find_person(via, name, %{}, now)
+    Agenda.note(person, jot, text, now)
+    noted = "Noted for #{person.name} (#{length(Jot.agenda_notes(person.id))})."
+    if state == :new, do: "Added #{person.name}. #{noted}", else: noted
   end
 
   @doc """
@@ -105,6 +157,35 @@ defmodule Server.Home.Agendas do
         end
     end
   end
+
+  defp find_person(via, name, attrs, now) do
+    case Agenda.named(via, name, "person") do
+      %Agenda{} = person ->
+        {:old, person}
+
+      nil ->
+        case Agenda.create(via, Agenda.clean(name), Map.put(attrs, :kind, "person"), now) do
+          {:ok, person} -> {:new, person}
+          {:error, _taken} -> {:old, Agenda.named(via, name, "person")}
+        end
+    end
+  end
+
+  defp change_birthday(%Agenda{birthday: birthday} = person, birthday, _now),
+    do: "#{person.name}'s birthday was already #{birthday_said(birthday)}."
+
+  defp change_birthday(person, birthday, now) do
+    {:ok, person} = Agenda.edit(person, %{birthday: birthday}, now)
+    "Birthday for #{person.name}: #{birthday_said(person.birthday)}."
+  end
+
+  defp birthday_said(birthday) do
+    [month, day] = birthday |> String.slice(-5, 5) |> String.split("-") |> Enum.map(&String.to_integer/1)
+    Calendar.strftime(Date.new!(2000, month, day), "%B %-d")
+  end
+
+  defp pile(nil), do: []
+  defp pile(%Agenda{id: id}), do: Jot.agenda_notes(id)
 
   defp started(:new, agenda, said), do: "Started a new agenda, #{agenda.name}. #{said}"
   defp started(:old, _agenda, said), do: said

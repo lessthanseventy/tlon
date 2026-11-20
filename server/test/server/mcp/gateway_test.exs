@@ -1164,6 +1164,63 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"agendas" => []}} = get_json("/api/home")
     end
 
+    test "people and the door over HTTP" do
+      Server.TestDB.clean!()
+
+      assert {200, %{"people" => [], "door" => %{"id" => nil, "notes" => []}}} = get_json("/api/home")
+
+      assert {400, %{"error" => "birthday must be" <> _}} =
+               post_json("/api/home/agendas", %{name: "Sam", kind: "person", birthday: "soon"})
+
+      assert {400, %{"error" => "kind is agenda or person"}} =
+               post_json("/api/home/agendas", %{name: "Sam", kind: "door"})
+
+      assert {200,
+              %{
+                "id" => id,
+                "name" => "Sam",
+                "birthday" => "2000-01-15",
+                "next_birthday" => next,
+                "notes" => [],
+                "todos" => []
+              }} =
+               post_json("/api/home/agendas", %{name: "Sam", kind: "person", birthday: "2000-01-15"})
+
+      assert next =~ ~r/^\d{4}-01-15$/
+
+      assert {400, %{"error" => "there is already a person called sam"}} =
+               post_json("/api/home/agendas", %{name: "sam", kind: "person"})
+
+      assert {200, %{"id" => idea}} = post_json("/api/home/agendas/#{id}/add", %{text: "a kettle"})
+      assert {200, %{"id" => _}} = post_json("/api/home/add", %{kind: "todo", text: "ring Sam"})
+
+      assert {200,
+              %{
+                "people" => [%{"id" => ^id, "notes" => [%{"id" => ^idea}], "todos" => [%{"text" => "ring Sam"}]}],
+                "agendas" => []
+              }} =
+               get_json("/api/home")
+
+      assert {200, %{"id" => ^id, "birthday" => nil, "next_birthday" => nil}} =
+               post_json("/api/home/agendas/#{id}/edit", %{birthday: nil})
+
+      assert {400, %{"error" => "text is required"}} = post_json("/api/home/door/add", %{text: " "})
+
+      assert {200, %{"id" => umbrella, "text" => "umbrella", "kind" => "note"}} =
+               post_json("/api/home/door/add", %{text: "umbrella"})
+
+      assert {200, %{"id" => _}} = post_json("/api/home/door/add", %{text: "parcel"})
+
+      assert {200, %{"door" => %{"id" => door, "notes" => [%{"id" => ^umbrella}, %{"text" => "parcel"}]}}} =
+               get_json("/api/home")
+
+      assert is_integer(door)
+
+      assert {404, _} = post_json("/api/home/#{umbrella}/done", %{})
+      assert {200, %{"id" => ^umbrella}} = post_json("/api/home/#{umbrella}/drop", %{})
+      assert {200, %{"door" => %{"id" => ^door, "notes" => [%{"text" => "parcel"}]}}} = get_json("/api/home")
+    end
+
     test "forms: add, edit, plan and revive over HTTP, with a reason on a bad body and 404 on a thing not live" do
       Server.TestDB.clean!()
 

@@ -156,7 +156,7 @@ defmodule Server.MCP.OperatorAPI do
       PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe; the page it replaces is kept
       GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
       GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
-      GET    /api/home                   Server.Home.status; {open, coming, notes, note_rows, projects, waiting, someday, done, done_week, agendas, meetings, proposals}:
+      GET    /api/home                   Server.Home.status; {open, coming, notes, note_rows, projects, waiting, someday, done, done_week, agendas, people, door, meetings, proposals}:
                                          what the operator's jots have left open; a row has id/kind/text/due_at/every/since/told_at and its
                                          project {id, text} or nil, a project its next step, how many are done, its plan and steps_done,
                                          a waiting-on its who; someday are the put-off things; note_rows is notes as {id, text};
@@ -165,7 +165,13 @@ defmodule Server.MCP.OperatorAPI do
                                          meetings is Server.Home.Day.meetings: today's remaining and tomorrow's,
                                          cleaned, each {title, starts_at, ends_at, tentative, all_day, day:
                                          "today"|"tomorrow"} ([] with no calendars); proposals is what sources suggest
-                                         and the operator has not answered, as {id, source, text, why, url}
+                                         and the operator has not answered, as {id, source, text, why, url};
+                                         people is the piles of kind person, soonest birthday first and those with none last
+                                         by name, each {id, name, birthday ("MM-DD", "YYYY-MM-DD" or nil), next_birthday (the
+                                         local date it next falls, today counts, or nil), notes: [{id, text, since}], todos:
+                                         [open to-do/reminder/waiting rows, as in open, whose text, or a waiting-on's who,
+                                         names the person as a whole word in any case]}; door is the pile by the door,
+                                         {id (nil before the first note), notes: [{id, text, since}]}; agendas holds agendas alone
       GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open
                                          thing to do now; skip is ids joined by commas, minutes the time there is; 400 on either not numbers
       GET    /api/home/meetings?from=&to=  Server.Home.Day.between; [{title, starts_at, ends_at, tentative, all_day, date}]: the
@@ -181,13 +187,18 @@ defmodule Server.MCP.OperatorAPI do
                                          400 {error} (one line) on a bad body, 404 when project is not an open project
       POST   /api/home/:id/edit          {text?, at?, every? (null stops it), kind? (todo|reminder only)} → Server.Home.edit; the row,
                                          a touch; 400 {error}, 404 when the thing is not live
-      POST   /api/home/agendas           {name, every?, at?} → Server.Home.agenda_add; the agenda as GET /api/home shows it in agendas
-                                         ({id, name, every, next_at, notes: [{id, text, since}]}); 400 {error}
-      POST   /api/home/agendas/:id/edit  {name?, every? (null stops it), at? (null clears it)} → the agenda; 400, 404
+      POST   /api/home/agendas           {name, kind? (agenda|person), every?, at?, birthday?} → Server.Home.agenda_add; the agenda as GET /api/home
+                                         shows it in agendas ({id, name, every, next_at, notes: [{id, text, since}]}), a person as in people;
+                                         birthday (a person's) is "MM-DD" or "YYYY-MM-DD"; 400 {error}, one line, for a bad birthday or kind
+      POST   /api/home/agendas/:id/edit  {name?, every? (null stops it), at? (null clears it), birthday? (null clears it)} → the agenda
+                                         (a person as in people); 400, 404
       POST   /api/home/agendas/:id/add   {text} → the note put on its pile, as a note row; 400, 404
       POST   /api/home/agendas/:id/clear the pile archived (its notes kept, done) → the agenda, empty; 404
-      POST   /api/home/agendas/:id/drop  the agenda and its pile deleted → {id, name}; 404
-                                         (a note on a pile is edited and dropped by /api/home/:id/edit and /drop)
+      POST   /api/home/agendas/:id/drop  the agenda and its pile deleted → {id, name}; 404 (the same four routes act on a person)
+                                         (a note on a pile is edited and dropped by /api/home/:id/edit and /drop; /done is for
+                                         reminders and to-dos alone and is 404 for a note)
+      POST   /api/home/door/add          {text} → Server.Home.door_add; the note put by the door (the pile is made by the first),
+                                         as a note row; 400. A note comes off by POST /api/home/:id/drop, the one the house calls
       POST   /api/home/proposals/:id/take     Server.Home.take_proposal; the proposal's row; filed as a to-do or a waiting-on; 404 when it is not open, 409 {error} when it could not be filed (it stays open)
       POST   /api/home/proposals/:id/dismiss  Server.Home.dismiss_proposal; the proposal's row; final for its key; 404 when it is not open
       POST   /api/home/:id/plan          {plan: [text]} → Server.Home.plan; the project's row, its planned steps replaced; 400, 404
@@ -684,6 +695,11 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "POST", "home", ["add"]) do
     {b, conn} = body(conn)
     home_form(conn, Server.Home.add(b, DateTime.utc_now()))
+  end
+
+  defp route(conn, "POST", "home", ["door", "add"]) do
+    {b, conn} = body(conn)
+    home_form(conn, Server.Home.door_add(b["text"], DateTime.utc_now()))
   end
 
   defp route(conn, "POST", "home", ["agendas"]) do
