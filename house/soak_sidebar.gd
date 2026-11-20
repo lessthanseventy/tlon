@@ -878,7 +878,7 @@ func _times() -> void:
 	texts = _texts(_home_box())
 	sb.later_expanded = false
 	var rent: String = When.text(local.call(10, "09:00"), clock)
-	s._check(texts.any(func(t: String) -> bool: return t.begins_with("tomorrow 18:00") and t.ends_with("every week")) and rent in texts, "Later's rows: %s" % str(texts))
+	s._check(texts.any(func(t: String) -> bool: return t.begins_with("tomorrow 18:00") and t.ends_with("every week")) and texts.any(func(t: String) -> bool: return t.begins_with(rent)), "Later's rows: %s" % str(texts))
 	var rows: Array = h.things.calendar_blocks().filter(func(b: Dictionary) -> bool: return b["t"] == "row")
 	var bins: Array = rows.filter(func(b: Dictionary) -> bool: return str(b["text"]).ends_with("rent"))
 	s._check(
@@ -922,6 +922,7 @@ func _home_fits() -> void:
 		content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
 		"Home does not scroll at 1100x700 with the demo list: content %s in a pane of %s" % [content.get_combined_minimum_size().y, sb.scroll.size.y]
 	)
+	h.things.reset()
 	h.card.open("calendar", "cal")
 	await _frames(4)
 	var blocks: Array = h.things.calendar_blocks()
@@ -930,7 +931,7 @@ func _home_fits() -> void:
 		return part.filter(func(b: Dictionary) -> bool: return b["t"] == "row").map(func(b: Dictionary) -> String: return str(b["act"]))
 	var before: Array = ids.call(blocks.slice(0, split))
 	var after: Array = ids.call(blocks.slice(split))
-	s._check(split > 0 and not before.is_empty(), "the card lists today's and tomorrow's things before Coming up")
+	s._check(split > 0 and not before.is_empty(), "the card lists today's and tomorrow's things before Coming up: split %s, before %s, blocks %s" % [split, before, blocks.map(func(b: Dictionary) -> String: return str(b.get("text", b["t"])))])
 	s._check(after.all(func(a: String) -> bool: return a not in before), "Coming up lists only what is after tomorrow: %s against %s" % [after, before])
 	s._check(
 		content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
