@@ -17,8 +17,9 @@ defmodule Server.Home.Source.Mail do
   UTF-8 first. Each proposal is a to-do keyed by `mid:` and the SHA-256 of the message's Message-ID
   (never the raw text, which can be any length), else `uid:<validity>:<uid>`, so a dismissed one
   never returns; nothing is filed without a yes (`auto/0` is empty). A failed model call or IMAP
-  session never moves the mark. A reply that came back with no list is counted for its batch beside
-  the mark; the third such reply for the same batch skips it. A batch whose pending mark `kept/0`
+  session never moves the mark. A reply that came back with no list is counted for its batch (what is
+  read from one mark, so mail arriving meanwhile does not reset the count) beside the mark; the third
+  such reply for the batch skips it, the mark moving past all that was read then. A batch whose pending mark `kept/0`
   never promoted (the filing failed) is found again at the next fetch and counted the same way: the
   third fetch of it skips it. Each skip is one warning with the count, so mail that cannot get
   through is not read again for good.
@@ -67,21 +68,31 @@ defmodule Server.Home.Source.Mail do
     state = state()
 
     with {:ok, validity, messages} <- Imap.new_messages(config, mark(state), since, @limit) do
-      case tries(state, validity, messages) do
-        tries when tries >= @tries - 1 -> skip(state, validity, messages, "could not be filed")
-        tries -> judged(state, {validity, messages, tries}, now, opts)
+      batch = %{validity: validity, from: from(state, validity), messages: messages}
+
+      case tries(state, batch) do
+        tries when tries >= @tries - 1 -> skip(state, batch, "could not be filed")
+        tries -> judged(state, batch, tries, now, opts)
       end
     end
   end
 
-  defp judged(state, {validity, messages, tries}, now, opts) do
-    case judge(validity, messages, now, opts) do
+  # where a batch starts: the mark it reads from, so mail arriving meanwhile does not make it another batch
+  defp from(state, validity) do
+    case mark(state) do
+      %{validity: ^validity, uid: uid} -> uid
+      _ -> "first"
+    end
+  end
+
+  defp judged(state, batch, tries, now, opts) do
+    case judge(batch.validity, batch.messages, now, opts) do
       {:ok, proposals} ->
-        save(pending(Map.delete(state, "bad"), validity, messages, tries + 1))
+        save(pending(Map.delete(state, "bad"), batch, tries + 1))
         {:ok, proposals, []}
 
       :unusable ->
-        unusable(state, validity, messages)
+        unusable(state, batch)
 
       {:error, _} = error ->
         error
@@ -90,16 +101,18 @@ defmodule Server.Home.Source.Mail do
 
   # the pending mark of an earlier fetch of this very batch that `kept/0` never promoted: the filing
   # failed, how many times
-  defp tries(%{"pending" => %{"validity" => validity, "uid" => uid} = pending}, validity, [_ | _] = messages) do
-    if uid == top(messages), do: Map.get(pending, "tries", 1), else: 0
-  end
+  defp tries(_state, %{messages: []}), do: 0
 
-  defp tries(_state, _validity, _messages), do: 0
+  defp tries(%{"pending" => %{"validity" => validity, "from" => from} = pending}, %{validity: validity, from: from}),
+    do: Map.get(pending, "tries", 1)
 
-  # a batch given up on, so one the poller or the model cannot get through is not read for good
-  defp skip(state, validity, messages, why) do
-    Logger.warning("home source mail: skipped #{length(messages)} messages that #{why}")
-    save(pending(Map.delete(state, "bad"), validity, messages, 1))
+  defp tries(_state, _batch), do: 0
+
+  # a batch given up on, so one the poller or the model cannot get through is not read for good; the
+  # mark moves past everything read now
+  defp skip(state, batch, why) do
+    Logger.warning("home source mail: skipped #{length(batch.messages)} messages that #{why}")
+    save(pending(Map.delete(state, "bad"), batch, 1))
     {:ok, [], []}
   end
 
@@ -122,31 +135,29 @@ defmodule Server.Home.Source.Mail do
 
   # a reply that came back but holds no list: counted for this batch; the third skips it, so mail the
   # model can never read is not asked about every 15 minutes for good
-  defp unusable(state, validity, messages) do
-    top = top(messages)
-
+  defp unusable(state, %{validity: validity, from: from} = batch) do
     count =
       case state do
-        %{"bad" => %{"validity" => ^validity, "uid" => ^top, "count" => count}} -> count + 1
+        %{"bad" => %{"validity" => ^validity, "from" => ^from, "count" => count}} -> count + 1
         _ -> 1
       end
 
     if count >= @tries do
-      Logger.warning("home source mail: skipped #{length(messages)} messages the model's reply could not be read for")
-      save(pending(Map.delete(state, "bad"), validity, messages, 1))
+      Logger.warning("home source mail: skipped #{length(batch.messages)} messages the model's reply could not be read for")
+      save(pending(Map.delete(state, "bad"), batch, 1))
       {:ok, [], []}
     else
-      save(Map.put(state, "bad", %{"validity" => validity, "uid" => top, "count" => count}))
+      save(Map.put(state, "bad", %{"validity" => validity, "from" => from, "count" => count}))
       {:error, "the model's reply was not usable"}
     end
   end
 
   defp top(messages), do: messages |> Enum.map(& &1.uid) |> Enum.max()
 
-  defp pending(state, _validity, [], _tries), do: Map.delete(state, "pending")
+  defp pending(state, %{messages: []}, _tries), do: Map.delete(state, "pending")
 
-  defp pending(state, validity, messages, tries),
-    do: Map.put(state, "pending", %{"validity" => validity, "uid" => top(messages), "tries" => tries})
+  defp pending(state, %{validity: validity, from: from, messages: messages}, tries),
+    do: Map.put(state, "pending", %{"validity" => validity, "uid" => top(messages), "from" => from, "tries" => tries})
 
   defp user do
     case Server.OperatorConfig.setting("home_mail_user") do
