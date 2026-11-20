@@ -622,12 +622,14 @@ func _routes() -> void:
 		is_equal_approx(home.rhythm.list_at, 9.25),
 		"home_list_at read from /api/settings (%s)" % home.rhythm.list_at
 	)
+	_weather = {"weather": {"kind": "snow", "desc": "Light snow", "temp_c": -2}}
 	main._watch_weather()
 	await create_timer(1.0).timeout
 	_check(
-		home.weather == "rain" and home.weather_desc == "Light rain",
+		home.weather == "snow" and home.weather_desc == "Light snow",
 		"the weather comes from /api/office"
 	)
+	_weather = {"weather": {"kind": "rain", "desc": "Light rain", "temp_c": 9}}
 	_where = "forms"
 	await FormSoak.new(self, main).run()
 	_where = "sidebar"
