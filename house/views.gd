@@ -106,20 +106,57 @@ func _today(box: VBoxContainer) -> void:
 	entries.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return x["at"] < y["at"])
 	heading(box, "Today")
 	for e in entries:
+		var at: float = e["at"]
 		if e.has("meeting"):
 			var m: Dictionary = e["meeting"]
-			var line := quiet("%s  ·  %s" % [m["title"], home.meeting_time(m)], Fonts.BODY)
-			var pad := StyleBoxEmpty.new()
-			pad.content_margin_left = 5
-			line.add_theme_stylebox_override("normal", pad)
-			box.add_child(line)
+			var line := HBoxContainer.new()
+			line.add_theme_constant_override("separation", 8)
+			var pad := MarginContainer.new()
+			pad.add_theme_constant_override("margin_left", 5)
+			pad.add_child(line)
+			line.add_child(_time_col(home.meeting_time(m)))
+			var title := quiet(str(m["title"]), Fonts.BODY)
+			title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			line.add_child(title)
+			box.add_child(pad)
 		elif e.has("item"):
-			_row(box, e["item"], false, _when(e["item"]))
+			var item: Dictionary = e["item"]
+			var id := int(item["id"])
+			var every := "" if item.get("every") == null else Card.every_words(str(item["every"]))
+			var row := Blocks.Row.new(str(item["text"]), every, false, false, true)
+			row.pressed.connect(func() -> void: home.open_item(id))
+			_put_time(row, _hm(at))
+			box.add_child(row)
 		else:
 			var a: Dictionary = e["agenda"]
-			var row := Blocks.Row.new(home.things.agenda_line(a), "", false, true)
+			var n: int = (a["notes"] as Array).size()
+			var name := str(a["name"])
+			var text := "%s · %d thing%s" % [name.substr(0, 1).to_upper() + name.substr(1), n, "" if n == 1 else "s"]
+			var row := Blocks.Row.new(text, "", false, true, true)
 			row.pressed.connect(func() -> void: home.open_agenda(int(a["id"])))
+			_put_time(row, _hm(at))
 			box.add_child(row)
+
+
+static func _hm(at: float) -> String:
+	var d := Time.get_datetime_dict_from_unix_time(int(at))
+	return "%02d:%02d" % [d["hour"], d["minute"]]
+
+
+# the one column the times of Today line up in
+static func _time_col(text: String) -> Label:
+	var l := Paper.label(text, Fonts.SMALL, Paper.QUIET)
+	l.custom_minimum_size.x = 44
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
+
+
+static func _put_time(row: Blocks.Row, text: String) -> void:
+	var h: HBoxContainer = row.get_child(0)
+	var col := _time_col(text)
+	h.add_child(col)
+	h.move_child(col, 0)
 
 
 func _open(box: VBoxContainer) -> void:

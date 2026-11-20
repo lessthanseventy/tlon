@@ -27,7 +27,7 @@ selected. Arrows, the plus and the chat's handle are `icons.gd` drawings (`icon_
 button), never characters; a shortcut is in the tooltip.
 Views: `home` (in this order, an empty section drawing nothing, not even its label: "Now", the pick with Done /
 Something else / Not today, and the pinned thing with its timer; "Today", what has a time today in time
-order: meetings still on (a quiet line, "Standup  ·  09:00": no tick, no click), reminders due today and an
+order, each row time-first in one aligned column: meetings still on (a quiet line, "09:00  Standup": no tick, no click), reminders due today and an
 agenda due today; "Open", the to-dos but not the pick or the pinned thing, six with "N more..."; "Proposed (N)" when sources have suggested things (`proposals` of `GET /api/home`: `{id, source, text, why, url}`; `views.gd` `_proposed`: three rows, each its text with the why line small under it and two small buttons, "add" and "no", which post `/api/home/proposals/:id/take|dismiss`; then "N more..." in place; never a banner, a ring or a badge; the family's local list has no sources and answers none; "Later (N)", the coming things after today, one line that opens in place; the weather in one line, which opens the window's view; "Notes (N)" collapsed. At 1100x700 with the demo list Home does not scroll), `card`
 (calendar, jar, window, clock, board, plant, book, mousehole, fireplace, piano, globe: `home.card`
 holds which, `home.card_blocks` the blocks; the "book" card is the shelf, `shelf.gd`: Agendas (a row each
@@ -37,14 +37,14 @@ titles, a click on a title showing the pet's remark under it and granting the "b
 someday or project row opens its item view; a note's has Edit and Delete, and the board's notes tab,
 Home's expanded notes and the shelf all open it; a note with no id opens the board's notes), `agenda` (an
 agenda's pile, `views.gd` `agenda_view`: its rhythm as text, its notes, each opening as a note, an add line where
-Enter puts a note on it, and Clear, which archives the pile; opened from a shelf row or from Home's quiet "Retro
-at 14:00 - 3 things" row under "Today" when an agenda with notes is due today; back from it goes to the shelf
+Enter puts a note on it, and Clear, which archives the pile; opened from a shelf row or from Home's row
+"14:00  Retro · 3 things" under "Today" when an agenda with notes is due today; back from it goes to the shelf
 it came from. The data is `agendas` of `GET /api/home`: `{id, name, every, next_at, notes}`; the notes are in no
 other list), `item`, `open`, `add` (`jot.gd` the free-text line and
 `form.gd` the typed form), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
 (`settings_view.gd`), `decorate`. A click on a thing replaces the view; the back chevron, Esc and a click on
-empty floor go back. The chat dock (`chat_view.gd`, "Chat") is its input line alone while there are no
-messages to show, and grows to its docked size (30% of the sidebar, 176 px at least) when one exists; its handle
+empty floor go back. The chat dock (`chat_view.gd`, "Chat") is its input line alone until there is a real exchange: a line he typed or the house's word to him (a pet's passing remark is logged and shown once the dock is open, but never grows it). It grows
+to its docked size (30% of the sidebar, 176 px at least); its handle
 (two drawn chevrons) collapses it to the input line or gives it the whole sidebar; it is the input line alone
 while a thing's view is open, and `K` or a click on the phone brings it up. While a LineEdit or TextEdit has focus no letter hotkey fires (`main.gd` `_input`).
 

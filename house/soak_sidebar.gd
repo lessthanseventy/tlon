@@ -256,7 +256,7 @@ func _texts(node: Node, out: Array = []) -> Array:
 
 func _row(node: Node, text: String) -> Variant:
 	for c in node.get_children():
-		if c is Blocks.Row and _texts(c)[0] == text:
+		if c is Blocks.Row and text in _texts(c):
 			return c
 		var r: Variant = _row(c, text)
 		if r != null:
@@ -398,8 +398,8 @@ func _agendas() -> void:
 	sb.back()
 	await _frames()
 	var texts: Array = _texts(sb._dyn)
-	s._check("Today" in texts and "Retro at 14:00 - 2 things" in texts, "Home has a quiet row for an agenda due today: %s" % str(texts))
-	await _press("Retro at 14:00 - 2 things")
+	s._check("Today" in texts and "14:00" in texts and "Retro · 2 things" in texts, "Home has a time-first row for an agenda due today: %s" % str(texts))
+	await _press("Retro · 2 things")
 	s._check(sb.view == "agenda" and int(sb.arg) == 71, "the row opens the agenda")
 	texts = _texts(sb._dyn)
 	var rhythm: String = h.things.agenda_rhythm(retro)
@@ -791,7 +791,10 @@ func _home_sections() -> void:
 	s._check(texts.count("pick me") == 1, "the pick is not repeated in Open")
 	s._check("second to-do" in texts and "water the plant" in texts, "Open has the to-dos, Today the reminder")
 	s._check(at.call("water the plant") > at.call("Today") and at.call("water the plant") < at.call("Open"), "a reminder due today sits under Today")
-	s._check("Standup  ·  %s" % h.meeting_time(h.meetings[0]) in texts, "Today has the meeting")
+	s._check("Standup" in texts, "Today has the meeting")
+	var meeting_time: String = h.meeting_time(h.meetings[0])
+	s._check(at.call(meeting_time) == at.call("Standup") - 1, "a meeting's time comes first: %s" % str(texts))
+	s._check(at.call("23:30") == at.call("water the plant") - 1, "so does a reminder's")
 	s._check(not ("dentist next week" in texts), "Later is one closed line")
 	sb.later_expanded = true
 	box = _home_box()
@@ -830,6 +833,15 @@ func _home_sections() -> void:
 	h.chat.messages = []
 	sb.chat_view.set_mode("dock")
 	s._check(not sb.chat_view.has_log(), "the dock with no messages is the input line alone")
+	h.chat.messages = [{"who": "cat", "text": "meow", "t": Time.get_unix_time_from_system()}]
+	s._check(not sb.chat_view.has_log(), "a pet's remark leaves the dock compact")
+	h.chat.messages = [
+		{"who": "cat", "text": "meow", "t": Time.get_unix_time_from_system()},
+		{"who": "me", "text": "hello", "t": Time.get_unix_time_from_system()},
+	]
+	s._check(sb.chat_view.has_log(), "his line grows it")
+	h.chat.messages = [{"who": "home", "text": "done", "t": Time.get_unix_time_from_system()}]
+	s._check(sb.chat_view.has_log(), "so does the house's word to him")
 	h.chat.messages = [{"who": "me", "text": "hello", "t": Time.get_unix_time_from_system()}]
 	s._check(sb.chat_view.has_log(), "a message grows the dock")
 	h.chat.messages = keep[5]
