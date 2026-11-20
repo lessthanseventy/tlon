@@ -13,11 +13,15 @@ defmodule Server.Home.Source.Mail do
   inbox stays with the one provider), says which of the batch is a bill or payment due, an
   appointment, a package or delivery, or a renewal or subscription charge coming. Everything else
   produces nothing. The mail is outside text, given to the model as quoted data to read, never to
-  obey; every field of its answer is validated here. Each proposal is a to-do keyed by the
-  message's Message-ID, so a dismissed one never returns; nothing is filed without a yes (`auto/0`
-  is empty). A failed model call or IMAP session never moves the mark. A reply that came back with no
-  list is counted for its batch beside the mark; the third such reply for the same batch skips it
-  (one warning with the count) so mail the model cannot read is not asked about for good.
+  obey; every field of its answer is validated here, and everything read from a message is made valid
+  UTF-8 first. Each proposal is a to-do keyed by `mid:` and the SHA-256 of the message's Message-ID
+  (never the raw text, which can be any length), else `uid:<validity>:<uid>`, so a dismissed one
+  never returns; nothing is filed without a yes (`auto/0` is empty). A failed model call or IMAP
+  session never moves the mark. A reply that came back with no list is counted for its batch beside
+  the mark; the third such reply for the same batch skips it. A batch whose pending mark `kept/0`
+  never promoted (the filing failed) is found again at the next fetch and counted the same way: the
+  third fetch of it skips it. Each skip is one warning with the count, so mail that cannot get
+  through is not read again for good.
   """
   @behaviour Server.Home.Source
 
@@ -63,18 +67,39 @@ defmodule Server.Home.Source.Mail do
     state = state()
 
     with {:ok, validity, messages} <- Imap.new_messages(config, mark(state), since, @limit) do
-      case judge(messages, now, opts) do
-        {:ok, proposals} ->
-          save(pending(Map.delete(state, "bad"), validity, messages))
-          {:ok, proposals, []}
+      tries = tries(state, validity, messages)
 
-        :unusable ->
-          unusable(state, validity, messages)
+      if tries >= @tries - 1 do
+        skip(state, validity, messages, "could not be filed")
+      else
+        case judge(validity, messages, now, opts) do
+          {:ok, proposals} ->
+            save(pending(Map.delete(state, "bad"), validity, messages, tries + 1))
+            {:ok, proposals, []}
 
-        {:error, _} = error ->
-          error
+          :unusable ->
+            unusable(state, validity, messages)
+
+          {:error, _} = error ->
+            error
+        end
       end
     end
+  end
+
+  # the pending mark of an earlier fetch of this very batch that `kept/0` never promoted: the filing
+  # failed, how many times
+  defp tries(%{"pending" => %{"validity" => validity, "uid" => uid} = pending}, validity, [_ | _] = messages) do
+    if uid == top(messages), do: Map.get(pending, "tries", 1), else: 0
+  end
+
+  defp tries(_state, _validity, _messages), do: 0
+
+  # a batch given up on, so one the poller or the model cannot get through is not read for good
+  defp skip(state, validity, messages, why) do
+    Logger.warning("home source mail: skipped #{length(messages)} messages that #{why}")
+    save(pending(Map.delete(state, "bad"), validity, messages, 1))
+    {:ok, [], []}
   end
 
   @doc """
@@ -107,7 +132,7 @@ defmodule Server.Home.Source.Mail do
 
     if count >= @tries do
       Logger.warning("home source mail: skipped #{length(messages)} messages the model's reply could not be read for")
-      save(pending(Map.delete(state, "bad"), validity, messages))
+      save(pending(Map.delete(state, "bad"), validity, messages, 1))
       {:ok, [], []}
     else
       save(Map.put(state, "bad", %{"validity" => validity, "uid" => top, "count" => count}))
@@ -117,10 +142,10 @@ defmodule Server.Home.Source.Mail do
 
   defp top(messages), do: messages |> Enum.map(& &1.uid) |> Enum.max()
 
-  defp pending(state, _validity, []), do: Map.delete(state, "pending")
+  defp pending(state, _validity, [], _tries), do: Map.delete(state, "pending")
 
-  defp pending(state, validity, messages),
-    do: Map.put(state, "pending", %{"validity" => validity, "uid" => top(messages)})
+  defp pending(state, validity, messages, tries),
+    do: Map.put(state, "pending", %{"validity" => validity, "uid" => top(messages), "tries" => tries})
 
   defp user do
     case Server.OperatorConfig.setting("home_mail_user") do
@@ -170,13 +195,15 @@ defmodule Server.Home.Source.Mail do
     :ok
   end
 
-  defp judge([], _now, _opts), do: {:ok, []}
+  defp judge(_validity, [], _now, _opts), do: {:ok, []}
 
-  defp judge(messages, now, opts) do
+  defp judge(validity, messages, now, opts) do
     read =
       messages
       |> Enum.with_index(1)
-      |> Enum.map(fn {message, n} -> {n, message, Mime.read(message.header, message.body, @body_chars)} end)
+      |> Enum.map(fn {message, n} ->
+        {n, Map.put(message, :validity, validity), Mime.read(message.header, message.body, @body_chars)}
+      end)
 
     with {:ok, reply} <- ask(prompt(read, now), opts[:model]),
          {:ok, items} <- items(reply) do
@@ -274,8 +301,9 @@ defmodule Server.Home.Source.Mail do
     |> Enum.map(&Map.delete(&1, :n))
   end
 
-  defp key(%{message_id: id}, _) when is_binary(id), do: id
-  defp key(_, %{uid: uid}), do: "uid:#{uid}"
+  # never the outside text itself: a Message-ID can be any length or any bytes, a key is a short string
+  defp key(%{message_id: id}, _) when is_binary(id), do: "mid:" <> Base.encode16(:crypto.hash(:sha256, id), case: :lower)
+  defp key(_, %{validity: validity, uid: uid}), do: "uid:#{validity}:#{uid}"
 
   defp why(why) when is_binary(why), do: why |> line() |> String.slice(0, @why_max)
   defp why(_), do: ""

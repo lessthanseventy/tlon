@@ -147,20 +147,36 @@ defmodule Server.Home.Source.Mail.Imap do
     what = "(UID BODY.PEEK[HEADER.FIELDS (#{@fields})] BODY.PEEK[TEXT]<0.#{@body_bytes}>)"
 
     with {:ok, lines, conn} <- command(conn, "UID FETCH #{Enum.join(uids, ",")} #{what}", "UID FETCH") do
-      {:ok, for(line <- lines, message = message(line), do: message), conn}
+      messages =
+        lines
+        |> Enum.flat_map(&fetch_fields/1)
+        |> Enum.reduce(%{}, fn {seq, fields}, by_seq -> Map.update(by_seq, seq, fields, &Map.merge(&1, fields)) end)
+        |> Map.values()
+        |> Enum.flat_map(&message/1)
+        |> Enum.sort_by(& &1.uid)
+
+      {:ok, messages, conn}
     end
   end
 
-  defp message(line) do
-    with [_, rest] <- Regex.run(~r/^\* \d+ FETCH (.*)$/s, line),
-         {[_ | _] = items, _} <- value(rest),
-         %{"UID" => uid} = fields <- fields(items),
-         {uid, ""} <- Integer.parse(uid) do
-      %{uid: uid, header: part(fields, "BODY[HEADER"), body: part(fields, "BODY[TEXT")}
+  # a server may spread one message's data over several responses, told apart by sequence number
+  defp fetch_fields(line) do
+    with [_, seq, rest] <- Regex.run(~r/^\* (\d+) FETCH (.*)$/s, line),
+         {[_ | _] = items, _} <- value(rest) do
+      [{seq, fields(items)}]
     else
-      _ -> nil
+      _ -> []
     end
   end
+
+  defp message(%{"UID" => uid} = fields) do
+    case Integer.parse(uid) do
+      {uid, ""} -> [%{uid: uid, header: part(fields, "BODY[HEADER"), body: part(fields, "BODY[TEXT")}]
+      _ -> []
+    end
+  end
+
+  defp message(_), do: []
 
   defp fields(items) do
     items
