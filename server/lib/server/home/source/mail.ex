@@ -18,8 +18,10 @@ defmodule Server.Home.Source.Mail do
   (never the raw text, which can be any length), else `uid:<validity>:<uid>`, so a dismissed one
   never returns; nothing is filed without a yes (`auto/0` is empty). A failed model call or IMAP
   session never moves the mark. A reply that came back with no list is counted for its batch (what is
-  read from one mark, so mail arriving meanwhile does not reset the count) beside the mark; the third
-  such reply for the batch skips it, the mark moving past all that was read then. A batch whose pending mark `kept/0`
+  read from one mark, so mail arriving meanwhile does not reset the count, and tried again only up to
+  its top as first read, later mail waiting) beside the mark; the third
+  such reply for the batch skips it, the mark moving to that top: nothing is skipped that the model was
+  not shown three times. A batch whose pending mark `kept/0`
   never promoted (the filing failed) is found again at the next fetch and counted the same way: the
   third fetch of it skips it. Each skip is one warning with the count, so mail that cannot get
   through is not read again for good.
@@ -68,7 +70,8 @@ defmodule Server.Home.Source.Mail do
     state = state()
 
     with {:ok, validity, messages} <- Imap.new_messages(config, mark(state), since, @limit) do
-      batch = %{validity: validity, from: from(state, validity), messages: messages}
+      from = from(state, validity)
+      batch = %{validity: validity, from: from, messages: frozen(state, validity, from, messages)}
 
       case tries(state, batch) do
         tries when tries >= @tries - 1 -> skip(state, batch, "could not be filed")
@@ -82,6 +85,22 @@ defmodule Server.Home.Source.Mail do
     case mark(state) do
       %{validity: ^validity, uid: uid} -> uid
       _ -> "first"
+    end
+  end
+
+  # a batch with a strike is tried again as it was first read: later mail is left for the poll after
+  # the batch is filed or skipped, so nothing is skipped that the model was not shown three times
+  defp frozen(state, validity, from, messages) do
+    case Enum.find_value(["pending", "bad"], &struck_top(state, &1, validity, from)) do
+      nil -> messages
+      top -> Enum.filter(messages, &(&1.uid <= top))
+    end
+  end
+
+  defp struck_top(state, key, validity, from) do
+    case state do
+      %{^key => %{"validity" => ^validity, "from" => ^from, "uid" => uid}} -> uid
+      _ -> nil
     end
   end
 
@@ -150,7 +169,7 @@ defmodule Server.Home.Source.Mail do
       save(pending(Map.delete(state, "bad"), batch, 1))
       {:ok, [], []}
     else
-      save(Map.put(state, "bad", %{"validity" => validity, "from" => from, "count" => count}))
+      save(Map.put(state, "bad", %{"validity" => validity, "from" => from, "uid" => top(batch.messages), "count" => count}))
       {:error, "the model's reply was not usable"}
     end
   end
