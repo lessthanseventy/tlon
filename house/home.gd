@@ -36,6 +36,7 @@ const Looks := preload("res://looks.gd")
 const Glow := preload("res://glow.gd")
 const Spells := preload("res://spells.gd")
 const Fonts := preload("res://fonts.gd")
+const When := preload("res://when.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -627,16 +628,8 @@ func _env_now() -> Dictionary:
 	return Props.env_at(_hour(), forced_weather if forced_weather != "" else weather)
 
 
-func _clock(unix: float) -> String:
-	var d := Time.get_datetime_dict_from_unix_time(int(unix))
-	var day := int(unix / 86400.0)
-	var today := int(_now_local() / 86400.0)
-	var at := "%02d:%02d" % [d["hour"], d["minute"]]
-	if day == today:
-		return "today " + at
-	if day == today + 1:
-		return "tomorrow " + at
-	return "%s %s" % [DAYS[d["weekday"]], at]
+func _clock(unix: float, past: String = "since ") -> String:
+	return When.text(unix, _now_local(), past)
 
 
 func meeting_time(m: Dictionary) -> String:
@@ -1534,14 +1527,6 @@ func _timed() -> Array:
 	return out
 
 
-func _stamp(unix: float) -> String:
-	var d := Time.get_datetime_dict_from_unix_time(int(unix))
-	return (
-		"%s %d %s  %02d:%02d"
-		% [DAYS[d["weekday"]], d["day"], Card.MONTHS[d["month"] - 1].substr(0, 3), d["hour"], d["minute"]]
-	)
-
-
 func _upcoming(items: Array, n: int) -> Array:
 	var now := _now_local()
 	var out := items.filter(func(i): return _due(i) >= now)
@@ -1617,7 +1602,7 @@ func _jar_blocks() -> Array:
 		for item in names.slice(0, 10):
 			var at := ""
 			if item.get("done_at") != null:
-				at = "  " + _clock(_local(str(item["done_at"])))
+				at = "  " + _clock(_local(str(item["done_at"])), "")
 			blocks.append({"t": "text", "text": "- %s%s" % [item["text"], at]})
 		if names.size() > 10:
 			blocks.append({"t": "dim", "text": "and %d more" % (names.size() - 10)})
@@ -1681,7 +1666,7 @@ func _clock_blocks() -> Array:
 		var at := _due(next[0])
 		blocks.append({"t": "dim", "text": "Next up"})
 		blocks.append({"t": "text", "text": str(next[0]["text"])})
-		blocks.append({"t": "text", "text": "%s, %s" % [_stamp(at), Card.until_text(at - now)]})
+		blocks.append({"t": "text", "text": "%s, %s" % [_clock(at), Card.until_text(at - now)]})
 	if rhythm.list_at >= 0.0:
 		var at := rhythm.list_at
 		blocks.append({"t": "gap"})
@@ -1733,7 +1718,7 @@ func _plant_blocks() -> Array:
 		return blocks
 	var at := _due(item)
 	blocks.append({"t": "text", "text": "Next: " + str(item["text"])})
-	blocks.append({"t": "text", "text": "%s, %s" % [_stamp(at), Card.until_text(at - _now_local())]})
+	blocks.append({"t": "text", "text": "%s, %s" % [_clock(at), Card.until_text(at - _now_local())]})
 	blocks.append({"t": "dim", "text": _repeats(item)})
 	return blocks
 
@@ -1853,10 +1838,6 @@ func close_card() -> void:
 # a click inside an open view's blocks; true when it was one of ours
 func card_act(a: String) -> bool:
 	match a:
-		"birthday":
-			finds.toggle_birthday()
-			card.close()
-			return true
 		"fire_toggle":
 			hearth.toggle()
 			return true
@@ -1996,7 +1977,7 @@ func _show_slip(which: String) -> void:
 			rows.append(
 				{
 					"id": -1,
-					"label": _clock(_due(item)).trim_prefix("today ") + "  " + _cap(str(item["text"]), 28),
+					"label": _clock(_due(item)) + "  " + _cap(str(item["text"]), 28),
 					"color": REMINDER_COLOR
 				}
 			)

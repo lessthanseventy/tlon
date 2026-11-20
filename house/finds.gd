@@ -73,12 +73,6 @@ func is_birthday() -> bool:
 	return birthday_forced or (birthday != "" and birthday == today_key())
 
 
-# the calendar card's button: today is, or is no longer, his birthday
-func toggle_birthday() -> void:
-	h.settings.put("birthday", "" if birthday == today_key() else today_key())
-	candles = true
-
-
 func touch() -> void:
 	last_touch = _t
 	if not mouse.is_empty():

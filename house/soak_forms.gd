@@ -530,9 +530,7 @@ func _card_things() -> void:
 	h.things.reset()
 	h.settings.put("birthday", "")
 	var feet: Array = h.card_blocks().filter(func(b): return b["t"] == "foot")
-	s._check(
-		feet.size() == 1 and feet[0].get("act") == "birthday", "no birthday set: one quiet line"
-	)
+	s._check(feet.is_empty(), "no birthday set: the card says nothing of one")
 	var buttons: Array = h.card_blocks().filter(
 		func(b):
 			return b["t"] == "buttons" and b["items"].any(func(i): return i["act"] == "birthday")
