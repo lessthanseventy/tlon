@@ -197,18 +197,41 @@ defmodule Server.Home.Source.MailTest do
     server(
       [5, 6, 7],
       fetch_line(1, 5, @bill_header, @bill_body) <>
-        fetch_line(2, 6, @spam_header, "buy now") <> fetch_line(3, 7, "Message-ID: <new-7@x>\r\n\r\n", "hi")
+        fetch_line(2, 6, @spam_header, "buy now") <> fetch_line(3, 7, "Message-ID: <new-7@x>\r\n\r\n", "parcel arriving")
     )
   end
 
-  test "mail arriving between unusable replies does not reset the count: the third still skips, past everything read" do
+  defp seen(reply) do
+    test = self()
+
+    fn prompt ->
+      send(test, {:prompt, prompt})
+      {:ok, reply}
+    end
+  end
+
+  test "mail arriving between unusable replies is not skipped with the batch: the third strike covers what was tried, the next poll reads the rest" do
     both()
     unusable = model("no")
     {:error, _} = run(model: unusable)
     {:error, _} = run(model: unusable)
     with_arrival()
-    log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, [], []} = run(model: unusable) end)
-    assert log =~ "skipped 3 messages"
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:ok, [], []} = run(model: seen("no"))
+      end)
+
+    assert_received {:prompt, third}
+    refute third =~ "parcel arriving"
+    assert log =~ "skipped 2 messages"
+    :ok = Mail.kept()
+    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
+
+    server([7], fetch_line(1, 7, "Message-ID: <new-7@x>\r\n\r\n", "parcel arriving"))
+    assert {:ok, [], []} = run(model: seen("[]"))
+    assert_received {:prompt, next}
+    assert next =~ "parcel arriving"
     :ok = Mail.kept()
     assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 7}
   end
@@ -312,10 +335,10 @@ defmodule Server.Home.Source.MailTest do
       assert [%{key: @bill_key}] = Proposal.open()
     end
 
-    test "mail arriving between failed fillings does not reset the count: the third fetch still skips" do
+    test "mail arriving between failed fillings is not skipped with the batch: the skip covers what was tried, the next poll reads the rest" do
       both()
       reply = ~s([{"n":1,"kind":"bill","text":"Pay the electric bill","why":"w"}])
-      Process.put(:mail_opts, now: @now, transport: Fake, password: "p", model: model(reply))
+      Process.put(:mail_opts, now: @now, transport: Fake, password: "p", model: seen(reply))
       Process.put(:break, true)
       poll = fn -> Server.Home.Sources.poll("telegram", ["mail"], %{"mail" => Via}, @now, %{}) end
 
@@ -326,7 +349,19 @@ defmodule Server.Home.Source.MailTest do
 
       with_arrival()
       log = capture_log(fn -> assert %{} == poll.() end)
-      assert log =~ "skipped 3 messages that could not be filed"
+      assert log =~ "skipped 2 messages that could not be filed"
+      assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
+      assert_received {:prompt, _first}
+      assert_received {:prompt, tried}
+      refute tried =~ "parcel arriving"
+      refute_received {:prompt, _}
+
+      Process.delete(:break)
+      Process.put(:mail_opts, now: @now, transport: Fake, password: "p", model: seen("[]"))
+      server([7], fetch_line(1, 7, "Message-ID: <new-7@x>\r\n\r\n", "parcel arriving"))
+      assert %{} == poll.()
+      assert_received {:prompt, next}
+      assert next =~ "parcel arriving"
       assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 7}
     end
   end
