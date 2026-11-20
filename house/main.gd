@@ -1058,10 +1058,10 @@ func _moved(id: int, due_at: String) -> void:
 func _send_jot(text: String) -> void:
 	var jot = _sidebar.jot
 	jot.sending(true)
-	var done := func(ok: bool, reply: String) -> void:
+	var done := func(ok: bool, _reply: String) -> void:
 		if ok:
 			_room.home.sound.request("save")
-			_room.home.show_reply(reply)
+			_room.home.pets.nudge("desk", "jot")
 		else:
 			jot.fail("couldn't reach tlon — not kept")
 			_room.home.sound.request("error")

@@ -315,7 +315,11 @@ func calendar_blocks() -> Array:
 		blocks.append_array(_day_blocks(t))
 		blocks.append_array(_day_blocks(_plus_day(t)))
 		blocks.append({"t": "title", "text": "Coming up"})
-		var next: Array = h._upcoming(h.coming.filter(func(i): return i.get("due_at") != null), 5)
+		var after := int(h._now_local() / 86400.0) + 1
+		var later: Array = h.coming.filter(
+			func(i: Dictionary) -> bool: return i.get("due_at") != null and int(h._due(i) / 86400.0) > after
+		)
+		var next: Array = h._upcoming(later, 5)
 		for item in next:
 			blocks.append(_line(h._due(item), item, true))
 		if next.is_empty():
