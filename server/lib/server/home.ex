@@ -132,13 +132,8 @@ defmodule Server.Home do
 
   @doc """
   Take what the operator typed somewhere other than the chat, at `now`, as a text in the chat is
-  taken: kept, read, and answered. The answer, as the chat would say it.
-  """
-  @spec say(String.t(), DateTime.t()) :: String.t()
-  def say(text, now), do: text |> say_row(now) |> elem(0)
-
-  @doc """
-  `say/2` with the thing the text made: `{reply, row}`, `row` as `status/1` shows that kind of thing
+  taken: kept, read, and answered as the chat would say it. `{reply, row}`, `row` the thing the text
+  made, as `status/1` shows that kind of thing
   (a to-do, reminder or waiting-on row, a project row, a note as `%{id, text}`), nil when the text
   made no single row of its own: an ask, a "done", a list, a correction of the thing before it, a
   note on an agenda's pile.
