@@ -65,6 +65,7 @@ defmodule Server.Home.Source.Mail do
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     since = now |> DateTime.add(-@first_days * 86_400) |> DateTime.to_date()
     state = state()
+
     with {:ok, validity, messages} <- Imap.new_messages(config, mark(state), since, @limit) do
       case tries(state, validity, messages) do
         tries when tries >= @tries - 1 -> skip(state, validity, messages, "could not be filed")
