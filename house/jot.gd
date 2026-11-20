@@ -1,12 +1,22 @@
 extends VBoxContainer
 
-# The free-text jot in the add view: one line the house's reader takes as it is; Enter sends it, and
-# while it is read a pencil scribbles. main.gd sends it and says how it went.
+# The add view: one free-text line the house's reader takes as it is; Enter sends it, and
+# while it is read a pencil scribbles. main.gd sends it and says how it went; the view then shows what
+# the house made of it.
 signal submitted(text: String)
+signal details_wanted
+signal accepted
+signal change_wanted
 
 const Paper := preload("res://paper.gd")
 const Fonts := preload("res://fonts.gd")
+const EXAMPLE := "Like: remind me to call Sam on Friday at 3pm"
 
+var _ask: VBoxContainer
+var _kept: VBoxContainer
+var _summary: Label
+var _said: Label
+var _change: Button
 var _edit: LineEdit
 var _hint: Label
 var _scribble: Scribble
@@ -43,16 +53,33 @@ class Scribble:
 
 func _ready() -> void:
 	visible = false
-	add_theme_constant_override("separation", 4)
-	add_child(Paper.section("Jot it"))
-	var row := Paper.row(self)
-	_edit = Paper.edit("remind me to..., buy..., a note..., or ask", row)
+	add_theme_constant_override("separation", 6)
+	_ask = VBoxContainer.new()
+	_ask.add_theme_constant_override("separation", 6)
+	add_child(_ask)
+	var row := Paper.row(_ask)
+	_edit = Paper.edit("Jot it down", row)
 	_edit.text_submitted.connect(_on_submit)
 	_scribble = Scribble.new()
 	row.add_child(_scribble)
 	_hint = Paper.label("", Fonts.SMALL, Paper.QUIET)
-	add_child(_hint)
-	_hint.text = "Enter keeps it"
+	_ask.add_child(_hint)
+	_hint.text = EXAMPLE
+	var more := Paper.chip("Fill in the details instead", _ask, func() -> void: details_wanted.emit(), false, "quiet")
+	more.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_kept = VBoxContainer.new()
+	_kept.add_theme_constant_override("separation", 6)
+	_kept.visible = false
+	add_child(_kept)
+	_summary = Paper.label("", Fonts.SMALL, Paper.QUIET)
+	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_kept.add_child(_summary)
+	_said = Paper.label("", Fonts.BODY, Paper.INK)
+	_said.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_kept.add_child(_said)
+	var buttons := Paper.row(_kept)
+	Paper.chip("OK", buttons, func() -> void: accepted.emit(), false, "primary")
+	_change = Paper.chip("Change", buttons, func() -> void: change_wanted.emit(), false)
 
 
 # shown with the cursor in it
@@ -66,10 +93,25 @@ func open(prefill: String = "") -> void:
 # shown, the cursor elsewhere
 func show_quiet() -> void:
 	visible = true
+	_ask.visible = true
+	_kept.visible = false
 	_edit.text = ""
 	sending(false)
-	_hint.text = "Enter keeps it"
+	_hint.text = EXAMPLE
 	_hint.add_theme_color_override("font_color", Paper.QUIET)
+
+
+# what the house made of the line: `summary` ("Reminder · Sat 10:00 · every week", empty when it made
+# nothing) over `said`; "Change" only when there is a thing to change
+func read_back(summary: String, said: String, can_change: bool) -> void:
+	sending(false)
+	_edit.release_focus()
+	_ask.visible = false
+	_kept.visible = true
+	_summary.text = summary
+	_summary.visible = summary != ""
+	_said.text = said
+	_change.visible = can_change
 
 
 func sending(on: bool) -> void:

@@ -597,7 +597,7 @@ func _routes() -> void:
 		main._data["open"].is_empty() and main._data["coming"].size() == 1,
 		"later moved the thing to coming"
 	)
-	main._open_add(true)
+	main._open_add()
 	main._sidebar.jot.open("buy stamps")
 	main._send_jot("buy stamps")
 	await create_timer(1.0).timeout
@@ -608,7 +608,7 @@ func _routes() -> void:
 	)
 	_check(not main._sidebar.jot.visible, "jot hid after a reply")
 	_fail_jot = true
-	main._open_add(true)
+	main._open_add()
 	main._sidebar.jot.open("keep me")
 	main._send_jot("keep me")
 	await create_timer(1.0).timeout

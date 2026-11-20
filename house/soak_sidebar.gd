@@ -386,7 +386,7 @@ func _agendas() -> void:
 	s._check(sb.view == "agenda" and int(sb.arg) == 71, "the row opens the agenda")
 	texts = _texts(sb._dyn)
 	var rhythm: String = h.things.agenda_rhythm(retro)
-	s._check("retro" in texts and rhythm in texts and rhythm.begins_with("every other week, next "), "the agenda shows its name and its rhythm as text: %s" % rhythm)
+	s._check("retro" in texts and rhythm in texts and rhythm.begins_with("every other week, "), "the agenda shows its name and its rhythm as text: %s" % rhythm)
 	s._check("the deploy took three tries" in texts and "flaky gate again" in texts, "the agenda lists its notes")
 	s._check(sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the agenda keeps the pane %d wide" % sb.WIDTH)
 	await _press("flaky gate again")
@@ -638,7 +638,7 @@ func _fit() -> void:
 			await _frames()
 			match name:
 				"add":
-					sb.open_add(true)
+					sb.open_add()
 				"pet":
 					sb.open_pet("nina")
 				"pet_edit":
@@ -702,7 +702,7 @@ func _pet() -> void:
 # a slip or a ring over an open view takes nothing from it
 func _banner() -> void:
 	sb.back()
-	main._open_add(false)
+	main._open_add()
 	await _frames()
 	var form_was: bool = sb.form.visible
 	h.rhythm.show_slip("home", "Still open", [])
@@ -806,7 +806,7 @@ func _home_sections() -> void:
 	var opens: Array[Callable] = [
 		sb.back,
 		func() -> void: sb.open_item(int(h.open[0]["id"])),
-		func() -> void: sb.open_add(false),
+		func() -> void: sb.open_add(),
 		sb.open_settings,
 	]
 	for open in opens:

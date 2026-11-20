@@ -149,7 +149,7 @@ func _tell(text: String, given: Dictionary = {}) -> Dictionary:
 		"add":
 			made = list.add(reading["body"])
 			if made["code"] != 200:
-				list.add({"kind": "todo", "text": text})
+				made = list.add({"kind": "todo", "text": text})
 				said = "To do: %s." % text.strip_edges()
 		"done":
 			made = list.done(int(reading["id"]))
@@ -158,4 +158,7 @@ func _tell(text: String, given: Dictionary = {}) -> Dictionary:
 	if made["code"] == 404:
 		said = "That one is not there any more. Nothing changed."
 	replied.emit(text, said)
-	return {"code": 200, "body": {"reply": said}}
+	var body := {"reply": said}
+	if reading["action"] == "add" and made["code"] == 200 and made["body"] is Dictionary:
+		body["row"] = made["body"]
+	return {"code": 200, "body": body}
