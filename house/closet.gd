@@ -8,6 +8,8 @@ signal closed
 signal tabbed
 
 const Paper := preload("res://paper.gd")
+const Fonts := preload("res://fonts.gd")
+const IconButton := preload("res://icon_button.gd")
 
 var look
 
@@ -205,21 +207,25 @@ func _build() -> void:
 			chip.set_pressed_no_signal(t == _tab)
 	var buttons := Paper.row(self)
 	Paper.chip("Random", buttons, _random, false)
-	Paper.chip("Keep", buttons, _apply, false)
+	Paper.chip("Keep", buttons, _apply, false, "primary")
 	_values = []
 	for i in _rows.size():
 		var row := Paper.row(self)
-		var name := Paper.label(str(_rows[i]["label"]), 14, Paper.INK)
+		var name := Paper.label(str(_rows[i]["label"]), Fonts.BODY, Paper.INK)
 		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(name)
-		Paper.chip("<", row, func() -> void: _step(i, -1), false)
-		var value := Paper.label("", 14, Paper.INK)
+		var less := IconButton.new("left", "Previous")
+		less.pressed.connect(func() -> void: _step(i, -1))
+		row.add_child(less)
+		var value := Paper.label("", Fonts.BODY, Paper.INK)
 		value.custom_minimum_size.x = 84
 		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		value.clip_text = true
 		row.add_child(value)
 		_values.append(value)
-		Paper.chip(">", row, func() -> void: _step(i, 1), false)
+		var more := IconButton.new("right", "Next")
+		more.pressed.connect(func() -> void: _step(i, 1))
+		row.add_child(more)
 	_refresh_values()
 
 

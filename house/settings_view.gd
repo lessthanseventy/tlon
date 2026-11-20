@@ -6,6 +6,7 @@ extends VBoxContainer
 signal check_requested(url: String)
 
 const Paper := preload("res://paper.gd")
+const Fonts := preload("res://fonts.gd")
 const Chooser := preload("res://chooser.gd")
 const Settings := preload("res://settings.gd")
 const Pets := preload("res://pets.gd")
@@ -171,10 +172,10 @@ func _ready() -> void:
 
 	_head(col, "you")
 	var r := _flow(col)
-	r.add_child(Paper.label("name", 14, Paper.QUIET))
+	r.add_child(Paper.label("name", Fonts.SMALL, Paper.QUIET))
 	_name = _field(r, "no name shown", "name")
 	r = _flow(col)
-	r.add_child(Paper.label("birthday", 14, Paper.QUIET))
+	r.add_child(Paper.label("birthday", Fonts.SMALL, Paper.QUIET))
 	_month = Chooser.new()
 	_month.add_item("none")
 	for m in MONTHS:
@@ -189,26 +190,26 @@ func _ready() -> void:
 
 	_head(col, "the pets")
 	r = _flow(col)
-	r.add_child(Paper.label("the first pet", 14, Paper.QUIET))
+	r.add_child(Paper.label("the first pet", Fonts.SMALL, Paper.QUIET))
 	_cat = _field(r, Settings.CAT, "cat")
 	_cat.custom_minimum_size.x = 100
 	_kind1 =_kind_picker(r, "pet1")
 	r = _flow(col)
-	r.add_child(Paper.label("the second pet", 14, Paper.QUIET))
+	r.add_child(Paper.label("the second pet", Fonts.SMALL, Paper.QUIET))
 	_dog = _field(r, Settings.DOG, "dog")
 	_dog.custom_minimum_size.x = 100
 	_kind2 =_kind_picker(r, "pet2")
 	r = _flow(col)
-	r.add_child(Paper.label("first pet's way", 14, Paper.QUIET))
+	r.add_child(Paper.label("first pet's way", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "pet1_personality", Pets.PERSONALITIES)
 	r = _flow(col)
-	r.add_child(Paper.label("second pet's way", 14, Paper.QUIET))
+	r.add_child(Paper.label("second pet's way", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "pet2_personality", Pets.PERSONALITIES)
 	r = _flow(col)
-	r.add_child(Paper.label("how much they talk", 14, Paper.QUIET))
+	r.add_child(Paper.label("how much they talk", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "pet_chatter", Pets.CHATTER.keys())
 	r = _flow(col)
-	r.add_child(Paper.label("how much they get up to", 14, Paper.QUIET))
+	r.add_child(Paper.label("how much they get up to", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "pet_antics", ["few", "some", "lots"])
 	for key in THINGS:
 		r = _flow(col)
@@ -217,10 +218,10 @@ func _ready() -> void:
 
 	_head(col, "visitors")
 	r = _flow(col)
-	r.add_child(Paper.label("who comes", 14, Paper.QUIET))
+	r.add_child(Paper.label("who comes", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "visitors", ["all", "calm", "none"])
 	r = _flow(col)
-	r.add_child(Paper.label("how often", 14, Paper.QUIET))
+	r.add_child(Paper.label("how often", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "visitors_rate", ["rare", "sometimes", "often"])
 
 
@@ -245,7 +246,7 @@ func _ready() -> void:
 
 	_head(col, "weather")
 	r = _flow(col)
-	r.add_child(Paper.label("degrees", 14, Paper.QUIET))
+	r.add_child(Paper.label("degrees", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "degrees", ["f", "c"], ["°F", "°C"])
 	_weather_box = VBoxContainer.new()
 	_weather_box.add_theme_constant_override("separation", 7)
@@ -254,7 +255,7 @@ func _ready() -> void:
 	var toggle := func() -> void: _put("weather", _weather_on.button_pressed)
 	_weather_on = Paper.chip("weather outside the window", r, toggle, true)
 	r = _flow(_weather_box)
-	r.add_child(Paper.label("town", 14, Paper.QUIET))
+	r.add_child(Paper.label("town", Fonts.SMALL, Paper.QUIET))
 	_town = _field(r, "empty: found from your internet address", "weather_town")
 	_quiet(_weather_box).text = "asks wttr.in about every half hour; nothing of yours is sent"
 
@@ -266,7 +267,7 @@ func _ready() -> void:
 
 	_head(col, "things to find")
 	r = _flow(col)
-	_found = Paper.label("", 14, Paper.INK)
+	_found = Paper.label("", Fonts.BODY, Paper.INK)
 	r.add_child(_found)
 	_forget = Paper.chip("forget them all", r, _forget_found)
 
@@ -276,7 +277,7 @@ func _ready() -> void:
 
 	_head(col, "the phone's chat")
 	r = _flow(col)
-	_chat_n = Paper.label("", 14, Paper.INK)
+	_chat_n = Paper.label("", Fonts.BODY, Paper.INK)
 	r.add_child(_chat_n)
 	_clear = Paper.chip("clear", r, _clear_chat)
 
@@ -284,7 +285,7 @@ func _ready() -> void:
 	r = _flow(col)
 	_where_server = Paper.chip("a tlon server", r, func() -> void: _put("where", "server"), true)
 	_where_local = Paper.chip("this computer", r, func() -> void: _put("where", "local"), true)
-	_local_say = Paper.label("", 13, Paper.QUIET)
+	_local_say = Paper.label("", Fonts.SMALL, Paper.QUIET)
 	_local_say.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	col.add_child(_local_say)
 	_server_box = VBoxContainer.new()
@@ -293,7 +294,7 @@ func _ready() -> void:
 	_url = Paper.edit(Settings.default_url(), r)
 	_url.text_submitted.connect(func(_t: String) -> void: _check())
 	Paper.chip("check", r, _check)
-	_url_say = Paper.label("", 13, Paper.QUIET)
+	_url_say = Paper.label("", Fonts.SMALL, Paper.QUIET)
 	_server_box.add_child(_url_say)
 	_plan = VBoxContainer.new()
 	_server_box.add_child(_plan)
@@ -305,7 +306,7 @@ func _ready() -> void:
 	_claude_section(_talk_box)
 
 	_head(col, "the art")
-	_art = Paper.label("", 13, Paper.INK)
+	_art = Paper.label("", Fonts.SMALL, Paper.INK)
 	_art.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	col.add_child(_art)
 
@@ -374,11 +375,7 @@ func url_result(ok: bool) -> void:
 
 
 func _head(parent: Control, text: String) -> void:
-	var gap := Control.new()
-	gap.custom_minimum_size.y = 4
-	parent.add_child(gap)
-	var l := Paper.label(text, 13, Paper.QUIET)
-	parent.add_child(l)
+	parent.add_child(Paper.section(text.substr(0, 1).to_upper() + text.substr(1)))
 
 
 func _telegram_section(box: VBoxContainer) -> void:
@@ -403,7 +400,7 @@ func _telegram_section(box: VBoxContainer) -> void:
 	_tg_state = _quiet(_tg_box)
 	_tg_reached = _quiet(_tg_box)
 	r = _flow(_tg_box)
-	r.add_child(Paper.label("the day's list at", 14, Paper.QUIET))
+	r.add_child(Paper.label("the day's list at", Fonts.SMALL, Paper.QUIET))
 	_tg_at = Paper.edit("17:30, or off", r)
 	_tg_at.text_submitted.connect(func(_t: String) -> void: _tg_list_at())
 	_tg_at.focus_exited.connect(_tg_list_at)
@@ -471,7 +468,7 @@ func _claude_section(box: VBoxContainer) -> void:
 	_claude_box.add_theme_constant_override("separation", 7)
 	box.add_child(_claude_box)
 	r = _flow(_claude_box)
-	r.add_child(Paper.label("command", 14, Paper.QUIET))
+	r.add_child(Paper.label("command", Fonts.SMALL, Paper.QUIET))
 	_claude_cmd = _field(r, "claude", "claude_command")
 	Paper.chip("test", r, _claude_test)
 	_claude_found = _quiet(_claude_box)
@@ -482,7 +479,7 @@ func _claude_section(box: VBoxContainer) -> void:
 
 # a wrapped quiet line
 func _quiet(parent: Control) -> Label:
-	var l := Paper.label("", 13, Paper.QUIET)
+	var l := Paper.label("", Fonts.SMALL, Paper.QUIET)
 	l.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	parent.add_child(l)
 	return l
@@ -593,7 +590,7 @@ func _plan_rows() -> void:
 		["home_review_on", "the weekly review on"],
 	]:
 		if home.knobs.has(pair[0]):
-			_plan.add_child(Paper.label("%s %s  (the server's)" % [pair[1], home.knobs[pair[0]]], 13, Paper.INK))
+			_plan.add_child(Paper.label("%s %s  (the server's)" % [pair[1], home.knobs[pair[0]]], Fonts.SMALL, Paper.INK))
 
 
 func _refresh() -> void:

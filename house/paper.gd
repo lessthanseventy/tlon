@@ -42,6 +42,16 @@ static func heading(text: String, size: int, color: Color) -> Label:
 	return l
 
 
+# a section's label: small, dim, with room above it; `indent` lines it up with a row's text
+static func section(text: String, indent: int = 0) -> Label:
+	var l := label(text, Fonts.LABEL, QUIET)
+	var gap := StyleBoxEmpty.new()
+	gap.content_margin_top = 6
+	gap.content_margin_left = indent
+	l.add_theme_stylebox_override("normal", gap)
+	return l
+
+
 static func row(parent: Control) -> HBoxContainer:
 	var r := HBoxContainer.new()
 	r.add_theme_constant_override("separation", 6)
@@ -56,42 +66,84 @@ static func edit(placeholder: String, parent: Control) -> LineEdit:
 	e.add_theme_color_override("font_color", INK)
 	e.add_theme_color_override("font_placeholder_color", Color(INK, 0.4))
 	e.add_theme_color_override("caret_color", INK)
-	e.add_theme_font_size_override("font_size", 17)
+	e.add_theme_font_size_override("font_size", Fonts.BODY)
 	for s in ["normal", "focus", "read_only"]:
 		e.add_theme_stylebox_override(s, flat())
 	parent.add_child(e)
 	return e
 
 
-static func chip(text: String, parent: Control, cb: Callable, toggle: bool = false) -> Button:
+# The three button styles of the sidebar, in one place. `primary`: filled, one per group at most.
+# `secondary`: a light outline. `quiet`: text only, an underline on hover. A toggle (a chip) is
+# the secondary look unselected and a tinted fill selected.
+static func chip(
+	text: String, parent: Control, cb: Callable, toggle: bool = false, kind: String = "secondary"
+) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.toggle_mode = toggle
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	skin(b)
+	skin(b, kind)
 	b.pressed.connect(cb)
 	parent.add_child(b)
 	return b
 
 
-static func skin(b: Button) -> void:
+static func _box(fill: Color, edge: Color, under: bool = false) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = fill
+	s.border_color = edge
+	if under:
+		s.border_width_bottom = 1
+	else:
+		s.set_border_width_all(1)
+	s.set_corner_radius_all(2)
+	s.content_margin_left = 9
+	s.content_margin_right = 9
+	s.content_margin_top = 4
+	s.content_margin_bottom = 4
+	return s
+
+
+static func skin(b: Button, kind: String = "secondary") -> void:
 	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_font_size_override("font_size", 14)
-	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
-		b.add_theme_color_override(c, INK)
-	b.add_theme_color_override("font_disabled_color", QUIET)
-	for pair in [
-		["normal", Color("e4d8bd")],
-		["hover", Color("f8efb8")],
-		["pressed", GOLD],
-		["hover_pressed", GOLD],
-		["disabled", Color("d8cfba")]
-	]:
-		var s := StyleBoxFlat.new()
-		s.bg_color = pair[1]
-		s.set_border_width_all(2)
-		s.border_color = INK
-		s.set_content_margin_all(4)
-		s.content_margin_left = 9
-		s.content_margin_right = 9
-		b.add_theme_stylebox_override(pair[0], s)
+	b.add_theme_font_size_override("font_size", Fonts.SMALL)
+	var none := Color(0, 0, 0, 0)
+	var line := Color(INK, 0.3)
+	var ink := INK
+	var disabled := QUIET
+	var look := {}
+	match kind:
+		"primary":
+			ink = PAPER
+			disabled = Color(PAPER, 0.7)
+			look = {
+				"normal": _box(INK, INK),
+				"hover": _box(Color(INK, 0.82), INK),
+				"pressed": _box(Color(INK, 0.7), INK),
+				"hover_pressed": _box(Color(INK, 0.7), INK),
+				"disabled": _box(Color(INK, 0.45), none),
+			}
+		"quiet":
+			ink = Color(INK, 0.7)
+			look = {
+				"normal": _box(none, none),
+				"hover": _box(none, INK, true),
+				"pressed": _box(none, INK, true),
+				"hover_pressed": _box(none, INK, true),
+				"disabled": _box(none, none),
+			}
+		_:
+			look = {
+				"normal": _box(none, line),
+				"hover": _box(Color(INK, 0.07), Color(INK, 0.5)),
+				"pressed": _box(Color(GOLD, 0.85), Color(INK, 0.6)),
+				"hover_pressed": _box(Color(GOLD, 0.85), Color(INK, 0.6)),
+				"disabled": _box(none, Color(INK, 0.15)),
+			}
+	for c in ["font_color", "font_pressed_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(c, ink)
+	b.add_theme_color_override("font_hover_color", INK if kind != "primary" else PAPER)
+	b.add_theme_color_override("font_disabled_color", disabled)
+	for state in look:
+		b.add_theme_stylebox_override(state, look[state])

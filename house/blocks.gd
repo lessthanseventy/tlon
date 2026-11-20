@@ -7,8 +7,10 @@ extends RefCounted
 # "act", "dim", "marks": [{"label", "act"}]}, {"t": "foot", "text", "act"}, {"t": "day", "name",
 # "kind", "temps", "wet"} (a forecast row with its icon). Every click calls `act.call(String)`.
 const Paper := preload("res://paper.gd")
+const Fonts := preload("res://fonts.gd")
 const Card := preload("res://card.gd")
 const Forecast := preload("res://forecast.gd")
+const Icons := preload("res://icons.gd")
 const CELL := Vector2(40.0, 26.0)
 const HOVER := Color("f8efb8")
 
@@ -41,14 +43,14 @@ class Row:
 			h.add_child(t)
 		var ink := Color(Paper.INK, 0.55) if dim else Paper.INK
 		if line:
-			var l := _text(text, 14, ink)
+			var l := _text(text, Fonts.SMALL if dim else Fonts.BODY, ink)
 			l.autowrap_mode = TextServer.AUTOWRAP_OFF
 			l.clip_text = true
 			l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 			l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			h.add_child(l)
 			if sub != "":
-				var q := _text(sub, 12, Paper.QUIET)
+				var q := _text(sub, Fonts.SMALL, Paper.QUIET)
 				q.autowrap_mode = TextServer.AUTOWRAP_OFF
 				q.size_flags_horizontal = Control.SIZE_SHRINK_END
 				q.custom_minimum_size.x = 0
@@ -60,9 +62,9 @@ class Row:
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		col.add_theme_constant_override("separation", 0)
 		h.add_child(col)
-		col.add_child(_text(text, 15, ink))
+		col.add_child(_text(text, Fonts.BODY, ink))
 		if sub != "":
-			col.add_child(_text(sub, 12, Paper.QUIET))
+			col.add_child(_text(sub, Fonts.SMALL, Paper.QUIET))
 
 	static func _text(text: String, size: int, color: Color) -> Label:
 		var l := Paper.label(text, size, color)
@@ -75,9 +77,13 @@ class Row:
 	func marks(items: Array, act: Callable) -> void:
 		var h: HBoxContainer = get_child(0)
 		for m in items:
-			var b := Paper.chip(str(m["label"]), h, func() -> void: act.call(str(m["act"])), false)
-			b.add_theme_font_size_override("font_size", 12)
-			b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			Paper.chip(
+				str(m["label"]),
+				h,
+				func() -> void: act.call(str(m["act"])),
+				false,
+				str(m.get("k", "secondary"))
+			)
 
 	func _set_lit(on: bool) -> void:
 		_lit = on
@@ -131,6 +137,35 @@ class Tick:
 		draw_arc(mid, 10.0, 0.0, TAU, 24, Paper.INK, 2.0)
 
 
+# a section's label that opens and closes in place: a chevron, then the label
+class Fold:
+	extends Row
+
+	func _init(text: String, open: bool) -> void:
+		super(text, "", false, true, true)
+		var h: HBoxContainer = get_child(0)
+		var l: Label = h.get_child(0)
+		l.add_theme_font_size_override("font_size", Fonts.LABEL)
+		l.add_theme_color_override("font_color", Paper.QUIET)
+		var chevron := Chevron.new("down" if open else "right")
+		h.add_child(chevron)
+		h.move_child(chevron, 0)
+
+
+class Chevron:
+	extends Control
+	var kind: String
+
+	func _init(the_kind: String) -> void:
+		kind = the_kind
+		custom_minimum_size = Vector2(14, 16)
+		size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		Icons.draw(self, kind, size / 2.0, Paper.QUIET, 3.0)
+
+
 class MonthGrid:
 	extends Control
 	signal act(what: String)
@@ -148,6 +183,15 @@ class MonthGrid:
 
 	func _arrows() -> Array:
 		return [Rect2(size.x - 62, 0, 28, 24), Rect2(size.x - 32, 0, 28, 24)]
+
+	func _get_tooltip(at: Vector2) -> String:
+		if b.get("pick", false):
+			var arrows := _arrows()
+			if (arrows[0] as Rect2).has_point(at):
+				return "Previous month"
+			if (arrows[1] as Rect2).has_point(at):
+				return "Next month"
+		return ""
 
 	func _gui_input(event: InputEvent) -> void:
 		if not (
@@ -181,25 +225,31 @@ class MonthGrid:
 		var font := ThemeDB.fallback_font
 		var title: String = "%s %d" % [Card.MONTHS[int(b["month"]) - 1], int(b["year"])]
 		draw_string(
-			font, Vector2(0, 18), title, HORIZONTAL_ALIGNMENT_LEFT, size.x - 66, 17, Paper.INK
+			font,
+			Vector2(0, 18),
+			title,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			size.x - 66,
+			Fonts.BODY,
+			Paper.INK
 		)
 		if b.get("pick", false):
-			var i := 0
-			for r: Rect2 in _arrows():
-				draw_rect(r, Paper.INK)
-				draw_rect(r.grow(-2), Color("e4d8bd"))
-				draw_string(font, r.position + Vector2(9, 18), "<>"[i], 0, -1, 16, Paper.INK)
-				i += 1
+			var kinds := ["left", "right"]
+			for i in 2:
+				var r: Rect2 = _arrows()[i]
+				Icons.draw(self, kinds[i], r.get_center() + Vector2(0, 1), Color(Paper.INK, 0.75))
 		var top := _origin()
 		for i in 7:
-			var w := font.get_string_size(Card.WEEK[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+			var w := (
+				font.get_string_size(Card.WEEK[i], HORIZONTAL_ALIGNMENT_LEFT, -1, Fonts.LABEL).x
+			)
 			draw_string(
 				font,
 				top + Vector2(i * CELL.x + (CELL.x - w) / 2.0, 16),
 				Card.WEEK[i],
 				HORIZONTAL_ALIGNMENT_LEFT,
 				-1,
-				12,
+				Fonts.LABEL,
 				Color(Paper.INK, 0.55)
 			)
 		var info := Card.month_info(b["year"], b["month"])
@@ -215,8 +265,10 @@ class MonthGrid:
 			if d == int(b.get("today", 0)):
 				draw_circle(mid + Vector2(0, -1), 11.0, Color("e8b86d"))
 			var label := str(d)
-			var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-			draw_string(font, cell + Vector2((CELL.x - w) / 2.0, 17), label, 0, -1, 14, Paper.INK)
+			var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, Fonts.BODY).x
+			draw_string(
+				font, cell + Vector2((CELL.x - w) / 2.0, 17), label, 0, -1, Fonts.BODY, Paper.INK
+			)
 			var meet := (b.get("meet_marks", {}) as Dictionary).has(d)
 			var spread := 4.0 if marks.has(d) and meet else 0.0
 			if marks.has(d):
@@ -236,21 +288,29 @@ class DayRow:
 	func _draw() -> void:
 		var font := ThemeDB.fallback_font
 		var base := 20.0
-		draw_string(font, Vector2(0, base), b["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Paper.INK)
+		draw_string(
+			font, Vector2(0, base), b["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, Fonts.BODY, Paper.INK
+		)
 		Forecast.draw_icon(self, b["kind"], Vector2(96.0, 14.0), 26.0)
 		draw_string(
-			font, Vector2(122, base), b["temps"], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Paper.INK
+			font,
+			Vector2(122, base),
+			b["temps"],
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			Fonts.BODY,
+			Paper.INK
 		)
 		var wet: String = b["wet"]
 		if wet != "":
-			var w := font.get_string_size(wet, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+			var w := font.get_string_size(wet, HORIZONTAL_ALIGNMENT_LEFT, -1, Fonts.SMALL).x
 			draw_string(
 				font,
 				Vector2(size.x - w, base),
 				wet,
 				HORIZONTAL_ALIGNMENT_LEFT,
 				-1,
-				13,
+				Fonts.SMALL,
 				Color(Paper.INK, 0.6)
 			)
 
@@ -266,21 +326,21 @@ static func build(parent: Control, blocks: Array, act: Callable) -> void:
 	for b in blocks:
 		match b["t"]:
 			"title":
-				var l := Paper.heading(str(b["text"]), 19, Paper.INK)
+				var l := Paper.label(str(b["text"]), Fonts.BODY, Paper.INK)
 				l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 				l.custom_minimum_size.x = 40
 				parent.add_child(l)
 			"text":
-				parent.add_child(wrapped(str(b["text"]), 15, Paper.INK))
+				parent.add_child(wrapped(str(b["text"]), Fonts.BODY, Paper.INK))
 			"dim":
-				parent.add_child(wrapped(str(b["text"]), 13, Paper.QUIET))
+				parent.add_child(wrapped(str(b["text"]), Fonts.SMALL, Paper.QUIET))
 			"meet":
 				var color := Paper.INK
 				if b.get("past", false):
 					color = Color(Paper.INK, 0.35)
 				elif b.get("dim", false):
 					color = Color(Paper.INK, 0.55)
-				var m := wrapped(str(b["text"]), 14, color)
+				var m := wrapped(str(b["text"]), Fonts.BODY, color)
 				parent.add_child(m)
 			"gap":
 				var g := Control.new()
@@ -299,21 +359,23 @@ static func build(parent: Control, blocks: Array, act: Callable) -> void:
 				parent.add_child(flow)
 				for item in b["items"]:
 					var chip := Paper.chip(
-						str(item["label"]), flow, func() -> void: act.call(str(item["act"])), false
+						str(item["label"]),
+						flow,
+						func() -> void: act.call(str(item["act"])),
+						false,
+						str(item.get("k", "secondary"))
 					)
 					if item.get("on", false):
 						chip.add_theme_stylebox_override(
 							"normal", chip.get_theme_stylebox("pressed")
 						)
-					if int(item.get("s", 14)) < 14:
-						chip.add_theme_font_size_override("font_size", int(item["s"]))
 			"row":
 				var r := Row.new(str(b["text"]), "", false, b.get("dim", false))
 				r.pressed.connect(func() -> void: act.call(str(b["act"])))
 				r.marks(b.get("marks", []), act)
 				parent.add_child(r)
 			"foot":
-				var f := wrapped(str(b["text"]), 12, Paper.QUIET)
+				var f := wrapped(str(b["text"]), Fonts.SMALL, Paper.QUIET)
 				if b.get("act", "") != "":
 					f.mouse_filter = Control.MOUSE_FILTER_STOP
 					f.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
