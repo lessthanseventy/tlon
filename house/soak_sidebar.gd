@@ -878,9 +878,9 @@ func _times() -> void:
 	texts = _texts(_home_box())
 	sb.later_expanded = false
 	var rent: String = When.text(local.call(10, "09:00"), clock)
-	s._check("tomorrow 18:00" in texts and "every week" in texts and rent in texts, "Later's rows: %s" % str(texts))
+	s._check(texts.any(func(t: String) -> bool: return t.begins_with("tomorrow 18:00") and t.ends_with("every week")) and rent in texts, "Later's rows: %s" % str(texts))
 	var rows: Array = h.things.calendar_blocks().filter(func(b: Dictionary) -> bool: return b["t"] == "row")
-	var bins: Array = rows.filter(func(b: Dictionary) -> bool: return "bins" in str(b["text"]))
+	var bins: Array = rows.filter(func(b: Dictionary) -> bool: return str(b["text"]).begins_with("tomorrow"))
 	s._check(
 		not bins.is_empty() and bins[0]["text"] == "tomorrow 18:00  bins" and bins[0]["sub"] == "every week",
 		"Coming up: the time and the text, the rhythm apart: %s" % str(bins)

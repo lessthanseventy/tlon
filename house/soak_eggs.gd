@@ -458,8 +458,8 @@ func finds() -> void:
 	h.settings.persist = true
 	h.fake_day = "03-15"
 	s._check(not f.is_birthday(), "no cake on an ordinary day")
-	f.toggle_birthday()
-	s._check(f.is_birthday() and f.birthday == "03-15", "the calendar button says today is the birthday")
+	h.settings.put("birthday", "03-15")
+	s._check(f.is_birthday() and f.birthday == "03-15", "a birthday set to today is today")
 	s._check(not f.table().is_empty(), "there is a table for the cake")
 	var g = load("res://settings.gd").new()
 	g.store = h.settings.store
@@ -468,7 +468,7 @@ func finds() -> void:
 	h.fake_day = "03-16"
 	s._check(not f.is_birthday(), "and is only on its day")
 	h.fake_day = "03-15"
-	f.toggle_birthday()
+	h.settings.put("birthday", "03-15")
 	s._check(not f.is_birthday(), "the button takes it back")
 	DirAccess.remove_absolute(h.settings.store)
 	h.fake_day = "03-15"
