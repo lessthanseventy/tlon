@@ -148,7 +148,11 @@ defmodule Server.Home.Source.MailTest do
     both()
     assert Keep.get("home_mail_mark") == nil
     {:ok, _, []} = run(model: model("[]"))
-    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"pending" => %{"validity" => 77, "uid" => 6, "tries" => 1, "from" => "first"}}
+
+    assert JSON.decode!(Keep.get("home_mail_mark")) == %{
+             "pending" => %{"validity" => 77, "uid" => 6, "tries" => 1, "from" => "first"}
+           }
+
     :ok = Mail.kept()
     assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
 
