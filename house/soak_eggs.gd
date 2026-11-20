@@ -468,8 +468,8 @@ func finds() -> void:
 	h.fake_day = "03-16"
 	s._check(not f.is_birthday(), "and is only on its day")
 	h.fake_day = "03-15"
-	h.settings.put("birthday", "03-15")
-	s._check(not f.is_birthday(), "the button takes it back")
+	h.settings.put("birthday", "")
+	s._check(not f.is_birthday(), "clearing it in settings takes it back")
 	DirAccess.remove_absolute(h.settings.store)
 	h.fake_day = "03-15"
 	h.settings.persist = false
