@@ -24,6 +24,15 @@ defmodule Server.Home.Agendas do
     started(state, agenda, pile)
   end
 
+  @doc "The reply to the reading of a message about a pile: an agenda's, a person's or the door's."
+  @spec piled(Jot.t(), map(), DateTime.t()) :: String.t()
+  def piled(jot, %{kind: "agenda"} = reading, now), do: file(jot, reading, now)
+  def piled(jot, %{kind: "agenda_" <> _} = reading, now), do: ask(jot, reading, now)
+  def piled(jot, %{kind: "door"} = reading, now), do: door(jot, reading, now)
+  def piled(jot, %{kind: "door_show"}, now), do: door_ask(jot, now)
+  def piled(jot, %{kind: "person"} = reading, now), do: person(jot, reading, now)
+  def piled(jot, %{kind: "person_note"} = reading, now), do: person_note(jot, reading, now)
+
   @doc """
   File the kept `jot` as the note `reading.text` on the pile by the door, at `now`. The reply the helper says.
   """
