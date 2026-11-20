@@ -1,10 +1,9 @@
-# house — the standalone window over the home and the office
+# house — the standalone window over the home
 
-A Godot 4.7 project: two isometric rooms and one sidebar. The home keeps in sight what the operator's
-jots left open, what is coming, and the newest notes; the office shows the crew at their desks and
-what waits on the operator. `main.gd` polls, posts and maps the office data, `room.gd` draws a room
-from a description (floor, walls, furniture, figures, door), `sidebar.gd` is everything that is not
-the room (below).
+A Godot 4.7 project: one isometric room and one sidebar. The home keeps in sight what the operator's
+jots left open, what is coming, and the newest notes. `main.gd` polls and posts the home's data,
+`room.gd` draws the room (floor, walls, furniture, a plain front door), `sidebar.gd` is everything
+that is not the room (below).
 
 **The sidebar** is one 360 px column on the right of the full window (`Sidebar.WIDTH`), always there;
 the room takes the rest and is drawn as large as whole steps of its art fit (`room.gd` `fit_scale`,
@@ -12,9 +11,9 @@ applied by `main.gd` `_fit_room` as the room Control's scale; the 3x art is the 
 floats over the room but pet bubbles, a short hover name (gone when the pointer leaves or has been
 still for 2 s) and the selected thing's gold outline. Top: an optional banner strip (the rhythm slip,
 a reply, a ringing reminder; buttons, never covering the pane, never closing a view, never taking a
-room click), then the header (a "< home" back button and the title, the door, `add`, the settings
+room click), then the header (a "< home" back button and the title, `add`, the settings
 cog) and the context pane, a paper sheet. Bottom: the chat dock. `sidebar.gd` owns the views and the
-chat modes; `views.gd` builds Home, an item, the "On the desk" list and the office view; `blocks.gd`
+chat modes; `views.gd` builds Home, an item, the "On the desk" list; `blocks.gd`
 turns a card's blocks (title, text, dim, gap, month, buttons, row, foot, day) into Controls.
 Views: `home` (the Now line with Done / Something else / Not today, "Next up" today's next meeting first when
 there is one (a quiet line, "Standup  ·  09:00": no tick, no click) then three coming things, "Open"
@@ -58,7 +57,7 @@ corkboard, calendar, phone, notepad, bubbles, light and weather). One file per t
 `person.gd` (the person's activities), `look.gd` (who they are: layered composition, flat fallback,
 saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (the window's scene),
 `closet.gd`, `jot.gd`, `focus.gd` (the now pin and its timer), `jar.gd`
-(the done jar), `knock.gd` (Nina's one nag), `door.gd` (what comes through the office door),
+(the done jar), `knock.gd` (Nina's one nag),
 `rhythm.gd` (the day's two beats and their banners), `layout.gd` (the furniture and the rules of placing it),
 `decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet view) and `pet_now.gd` (its "right now" phrase). `drive.gd` (`--drive`: the live house driven over TCP). `soak.gd` is the scripted check.
 
@@ -134,21 +133,15 @@ runs on the local list.
   (`knock.gd`); one at a time; it lies there until clicked, which opens its item view and puts it
   back on the desk. It is not kept across restarts, only the time of the last knock. She also sits on
   the notepad now and then while the jot field is closed.
-- **The door**: while the home is in view `/api/office` is read every 60 s. When something waits on
-  the operator (a roster row `waiting`, a thread with `awaiting` or `prompt`, or `awaiting` > 0) a
-  coworker leans in at the door, waves with a "!" and a one-line caption (the prompt summary or the
-  thread title); click goes to the office; they leave when nothing waits. A paused office (`pause`)
-  sends nobody. Each new entry in `landings` (`[{ref, subject, landed_at}]`, newest first; the first
-  read only records what is there) sends a paper plane through the door to the desk, with the subject
-  on a tag; click puts it away, it also goes by itself after 5 min.
+- **The door** is a plain front door: it opens a little when the person comes in or a visitor
+  calls, and a click on it does nothing.
 - **The day's rhythm** (`rhythm.gd`), each beat once a day, remembered in `user://house_rhythm.json`:
   at the server's `home_list_at` (`GET /api/settings`, `knobs[].key`; empty never; 17:30 until
   read) he comes home through the door with a bag, Argos greets him, and a banner of what is still open
   shows for 14 s (an item opens its view; "Put away" or Esc ends it; it waits while the pointer is on it); for 3 h after
   that time at most. In the morning (first run after 05:30, or the clock passing 08:00, before noon)
   he stretches and a banner shows what is coming today. Late at night with nothing due the lights dim
-  further, he sleeps, the TV is off, Nina sleeps on the sofa and Argos on the rug beside it. Coming
-  back to the home from the office after 20 s also brings him in through the door.
+  further, he sleeps, the TV is off, Nina sleeps on the sofa and Argos on the rug beside it.
 - Small things: a "water the plant" thing done perks the plant up for 10 min with a can and drops;
   a note, open thing or reminder due today that says birthday or anniversary hangs bunting; the
   window gets lights in December, a pumpkin from 25 Oct, hearts 10-14 Feb.
@@ -169,7 +162,7 @@ runs on the local list.
   front of it now and then, and the item view offers "Into the fire". A bed draws a nap; a click on the piano
   has the person play a few bars (a hero stands and plays badly); the soak pins both.
 - **Outside** (`outside.gd`, drawn in the window's glass and on its sill): a bird on the sill and a
-  balloon by day, a plane by day (not the door's paper plane, `--plane`), a cat on the fence at night that
+  balloon by day, a plane by day, a cat on the fence at night that
   Nina goes to stare at from the sill, a shooting star at night that a click turns into a wish (a one-line
   reply and a chime), snow on the sill Dec-Feb, fireworks 31 Dec 23:00 to 1 Jan 01:00. Each comes minutes
   apart on the seeded dice, only in the weather and hour that suit it; `--egg bird|balloon|plane|nightcat|star|fireworks`
@@ -325,7 +318,7 @@ runs on the local list.
   reminder also `id` and `told_at`), never in a scripted or staged run. A question the server holds for him is not
   shown: the house has no route that lists them. `--chat "talk,reminder,acted,pet,phone,reading,fail|empty"` and `--unread` stage it.
 - **One place for the list's calls**: `main.gd` `_post`, `_write`, `_act`, `_tell` and `_refresh` carry every
-  write and the notepad/chat line; the polls (`_poll`, `_slow_poll`, `_pets_ask`, `_watch_door`, `_ask_now`) are plain
+  write and the notepad/chat line; the polls (`_poll`, `_slow_poll`, `_pets_ask`, `_watch_weather`, `_ask_now`) are plain
   GETs there too. All of them are `Backend.fetch(route, cb, timeout)` and `Backend.send(route, body, cb, timeout)`,
   which answer `cb(reached, code, parsed)` on a later frame, never inside the call; `Backend.check(url, cb)` is the
   address check. `main.gd` `_make_backend` picks the server's (`backend_http.gd`, at `base`) or the house's own
@@ -420,8 +413,7 @@ runs on the local list.
   (`soak_weather.gd`) serves the stub of wttr.in from its own server (`base` is injectable); no check calls the real one.
   **First start**: no settings file, no `TLON_URL`, and nothing answering at the default address starts the house on
   its own list with a to-do "say hello to the cat", a weekly reminder "water the plant" and a note, once and only then.
-  **Not shown over the local list**: the office (the door in the room and its label, the header's "to the office"
-  button, Tab, the visitor, `--office`), the server's polls (`/api/office`, `/api/settings`: the daily list time stays
+  **Not shown over the local list**: the server's polls (`/api/office` for the weather, `/api/settings`: the daily list time stays
   17:30), the "couldn't reach tlon" states, and the address row of the settings. Choosing the other side applies at
   once and deletes neither side's data; the settings screen says where the file is kept.
 - **Jotting** (the notepad on the desk, `N`, `/` or Enter): a paper field; Enter sends the text to
@@ -530,32 +522,28 @@ runs on the local list.
   With no art the room is drawn in flat shapes (the pets too) and says so. Whatever the packs lack
   is drawn in code; never add a bought image.
 - **It talks to the server only over the operator API**, on `TLON_URL` (default
-  `http://127.0.0.1:4040`): the room in view is polled every 5 s — `GET /api/home` (rows carry
-  `since` and `told_at`; `done_week` fills the jar, an optional `done` list names what was done) or `GET /api/office` —
+  `http://127.0.0.1:4040`): the home is polled every 5 s — `GET /api/home` (rows carry
+  `since` and `told_at`; `done_week` fills the jar, an optional `done` list names what was done)
   (`GET /api/home` also carries `waiting`, `someday`, `projects` and `note_rows`) and posts
   `POST /api/home/:id/done`, `.../later` (`{"until": "hour"|"tomorrow"}`), `.../drop`, `.../revive`,
   `.../edit`, `.../plan`, `.../answer`, `POST /api/home/add`, asks `GET /api/home/now?skip=`, and
   `POST /api/home` (`{"text"}` → `{"reply"}`, slow: a model reads it). The home also asks
-  `/api/settings` and `/api/office` (weather, the door) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above), apart from one outward call, the weather from wttr.in (below), and only when he has switched them on to Telegram (`api.telegram.org`) and to the `claude` program (his own account). A server that does not answer leaves the
+  `/api/settings` every 5 min and `/api/office` (its `weather` only; the route is the server's, the house reads nothing else from it) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above), apart from one outward call, the weather from wttr.in (below), and only when he has switched them on to Telegram (`api.telegram.org`) and to the `claude` program (his own account). A server that does not answer leaves the
   last data on screen and a quiet line saying so; a post that fails moves nothing.
-- **Rooms.** The window starts in the home, or the office with `--office`. The door in each room, its
-  header button and Tab go between them. A coworker's state is the roster row's `status`
-  (`working`, `waiting` on the operator, `idle`, `cold`, `off`; no row is `off`), as `office/kit/crew.ts`
-  says it; the crew is `bench`, live seats first. `pause` closes the office.
+
 - **Nothing nags.** No scores, streaks or warnings; the only settings are the ones on the cog's screen (sound starts muted and is his to turn on); the only timer is the one you
   start on the pinned now. A bubble fades by itself and stays inside the room.
 
 ## Dev loop
 
 - `mise run house:run` — over the live server. `mise run house:demo` — on `demo.json` (the home at
-  the top level, with `weather`; the office under `office`, shaped like `/api/office`), no server.
-  Both take `-- --office`.
+  the top level, with `weather`), no server.
 - `mise run house:widget` — over the live server as the small always-on-top widget.
 - `mise run house:check` — every script loads in headless Godot. Godot is the machine's own, so
   this is not part of `mise run check`.
 - `mise run house:soak` (about 7 minutes quiet, up to twice that loaded; its own deadline is 15 minutes and the task wraps it in `timeout 1000`, so a caller's wrapper needs at least that) — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the door and the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), the weather (`soak_weather.gd`: degrees, the card's days, the j1 reader, the address, the pace and the switch, against a stub of wttr.in), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`; the task fails when an `ERROR` or `SCRIPT ERROR` line comes before it (the engine's own `ERROR` leak lines at exit, printed after it, are not counted).
+  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), the weather (`soak_weather.gd`: degrees, the card's days, the j1 reader, the address, the pace and the switch, against a stub of wttr.in), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`; the task fails when an `ERROR` or `SCRIPT ERROR` line comes before it (the engine's own `ERROR` leak lines at exit, printed after it, are not counted).
 - `mise run house:art-pack` / `mise run house:build -- windows|mac|linux|all` — the art the house can open, packed to
   `~/.cache/tlon/house-dist/house-art.zip` (`-- --list` prints the files only), and a build of the house per platform
   with it inside (Windows and Linux: one file; the Mac app ad-hoc signed by the export, nothing added to it after; the art raw in the pck), zipped as
@@ -567,8 +555,8 @@ runs on the local list.
 
 Headless Godot draws nothing. A picture of the real window, with none opened on the desktop:
 `gamescope --backend headless -W 1100 -H 700 -- godot --display-driver x11 --path house -- --demo --shot /tmp/house.png`
-(`--shot PATH` saves the viewport after 1.5 s and quits; add `--office` for the office). Look at the
-picture. The door's click and Tab need a pointer and keys, which that run has not.
+(`--shot PATH` saves the viewport after 1.5 s and quits). Look at the
+picture.
 
 ### Driving it
 
@@ -613,7 +601,7 @@ and seeds their dice (`--seed N` to pick another):
   at a spot (`pets.gd` `SPOTS`: `sofa`, `desk`, `rug`, `bed`, ...); `--wait SECONDS` when to shoot.
 - `--hover X,Y` and `--click X,Y` run the room's own hover and click at a window pixel, so a view, a
   name tag or a pat can be photographed without a pointer.
-- `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--wave "text"` a coworker at the door; `--plane "title"` a landed plane; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--plain` / `--looks glow,weather_art,spells,font` the looks all off / only the named on; `--visitor` feed the demo office to the door; `--person
+- `--tv on|off`, `--hack NAME` a TV state and screen hack (`spectrum stars plasma logo rain life pipes moire scope sunset fireworks toasters note`); `--jar N` the jar's marbles, `--jar-drop` one more at 0.7 s; `--knocked ID` that sticky on the floor with Nina; `--homecoming` / `--morning` the day beats; `--date MM-DD` the season; `--plain` / `--looks glow,weather_art,spells,font` the looks all off / only the named on; `--person
   desk|sofa|tv|coffee|sleep|board` the person's activity; `--closet` opens the closet (`--tab hero` on its hero tab); `--look k=v,...` sets look keys for the picture (not kept; `wear=hero,recipe=mage` then group keys such as `weapon=staff,weapon_c=royal` for a hero); `--card calendar|jar|weather|clock|board|plant` opens that view at 0.45 s (`calendar:DAY[:MONTHS_AHEAD]`, `board:projects|waiting|someday[:PROJECT_ID]`); `--form "KIND;key=value;..."` opens the form view at 0.4 s (`todo reminder note waiting project`, or `edit:ID`; keys `kinds text who steps date time every error`, `date` as `MM-DD` or `YYYY-MM-DD`, `steps` lines split by `\n`); `--what-now` asks for the Now line; `--then ACT` switches `--person` to ACT at 0.3 s so he is caught walking; `--typing
   "text"` opens the add view with the jot field filled (`--sending` shows the scribble); `--reply "text"` the reply banner;
   `--menu ID` the item view of thing ID; `--ring ID` rings the phone for thing ID; `--now

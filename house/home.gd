@@ -14,7 +14,6 @@ const View := preload("res://view.gd")
 const Focus := preload("res://focus.gd")
 const Jar := preload("res://jar.gd")
 const Knock := preload("res://knock.gd")
-const Door := preload("res://door.gd")
 const Rhythm := preload("res://rhythm.gd")
 const Layout := preload("res://layout.gd")
 const Card := preload("res://card.gd")
@@ -141,7 +140,6 @@ var secrets := Secrets.new()
 var quirks := Quirks.new()
 var delights := Delights.new()
 var antics := Antics.new()
-var door := Door.new()
 var rhythm := Rhythm.new()
 var layout := Layout.new()
 var perk_left := 0.0
@@ -210,8 +208,6 @@ var _ringing := 0
 var _arg_jar := -1
 var _arg_drop := false
 var _arg_knocked := -1
-var _arg_wave := ""
-var _arg_plane := ""
 var _arg_beat := ""
 var _slip_delay := -1.0
 var _slip_kind := ""
@@ -272,8 +268,6 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				_arg_drop = true
 			"--knocked":
 				_arg_knocked = int(next)
-			"--wave":
-				_arg_wave = next
 			"--egg":
 				eggs.forced = Array(next.split(",", false))
 			"--antic":
@@ -296,8 +290,6 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 				settings.forced["where"] = "local"
 			"--birthday":
 				finds.birthday_forced = true
-			"--plane":
-				_arg_plane = next
 			"--homecoming":
 				_arg_beat = "home"
 			"--morning":
@@ -569,11 +561,6 @@ func _first_data(ids: Array) -> void:
 		knock.id = _arg_knocked
 		_slots.erase(_arg_knocked)
 		pets.place(pets.critter("nina"), "knocked", "sit")
-	if _arg_wave != "":
-		door.show_visitor("hronir", _arg_wave)
-	if _arg_plane != "":
-		door.fly(_arg_plane)
-		door.plane["t"] = Door.FLIGHT + 1.0
 
 
 func _deep_night() -> bool:
@@ -726,8 +713,7 @@ func process(dt: float) -> void:
 		if pets.is_night and not deep and not pets.freeze:
 			pets.nudge("desk", "night")
 	jar.process(dt)
-	door.process(dt)
-	room.door_ajar = door.ajar() or person.arrive_left > 3.0 or not quirks.visitor.is_empty()
+	room.door_ajar = person.arrive_left > 3.0 or not quirks.visitor.is_empty()
 	rhythm.process(dt)
 	perk_left = maxf(0.0, perk_left - dt)
 	water_left = maxf(0.0, water_left - dt)
@@ -989,7 +975,6 @@ func items() -> Array:
 		{"key": 6.0, "pri": 1.5, "fn": _draw_bin_balls},
 		{"key": 6.0, "pri": 1.6, "fn": _draw_jar},
 		{"key": 3.0, "pri": 0.6, "fn": _draw_bunting},
-		{"key": 7.2, "pri": 2.4, "fn": _draw_visitor},
 	]
 	if knock.id >= 0:
 		out.append(
@@ -1386,9 +1371,6 @@ func draw_over() -> void:
 	for c in pets.critters:
 		if not c.away:
 			_draw_extras(c, bounds)
-	var plane_hit := door.draw_plane(room, _o, _k, bounds)
-	if plane_hit.size() > 0:
-		_register("plane", plane_hit, plane_hit[2])
 	_draw_water()
 	hearth.draw_over(room)
 	spells.draw(room, _k)
@@ -1504,8 +1486,6 @@ func _name_of(key: String) -> String:
 			return jar.hover_text()
 		"stack":
 			return "the desk: %d open" % open.size()
-		"plane":
-			return "click: put it away"
 		"phone":
 			for item in open:
 				if ring_ids.has(int(item["id"])):
@@ -1856,12 +1836,6 @@ func click(pos: Vector2) -> bool:
 		"person":
 			person.poke()
 			return true
-		"visitor":
-			acted.emit(0, "office")
-			return true
-		"plane":
-			door.dismiss_plane()
-			return true
 		"wardrobe":
 			viewed.emit("closet", null)
 			return true
@@ -1952,10 +1926,6 @@ func leave() -> void:
 	antics.trigger("door_wait")
 
 
-func set_office(d: Dictionary) -> void:
-	door.update_office(d)
-
-
 func _pet_said(id: String, text: String) -> void:
 	if id in ["nina", "argos"] and not pets.freeze:
 		chat.pet_said("cat" if id == "nina" else "dog", text)
@@ -1976,13 +1946,6 @@ func set_list_at(text: String) -> void:
 
 func dismiss_slip() -> void:
 	rhythm.dismiss()
-
-
-func came_back() -> void:
-	if _deep_night():
-		return
-	person.arrive(false)
-	pets.cheer(pets.critter("argos"), "door", 3, "home")
 
 
 func _open_ids() -> Array:
@@ -2131,12 +2094,6 @@ func _draw_bag() -> void:
 func _draw_jar() -> void:
 	var poly := jar.draw(room, _o, _k)
 	_register("jar", poly, (poly[2] + poly[3]) / 2.0)
-
-
-func _draw_visitor() -> void:
-	var poly := door.draw_visitor(room, room, _o, _k, Rect2(Vector2.ZERO, room.size))
-	if poly.size() > 0:
-		_register("visitor", poly, poly[2])
 
 
 func _draw_water() -> void:

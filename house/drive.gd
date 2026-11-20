@@ -537,7 +537,6 @@ func _mode() -> Dictionary:
 	var m := _main
 	var sb = m._sidebar
 	return {
-		"room": m._at,
 		"view": sb.view,
 		"selected": _home.selected,
 		"decorate": m._decorate.active,

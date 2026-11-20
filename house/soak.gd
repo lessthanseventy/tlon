@@ -6,7 +6,6 @@ const Look := preload("res://look.gd")
 const Person := preload("res://person.gd")
 const Jar := preload("res://jar.gd")
 const Knock := preload("res://knock.gd")
-const Door := preload("res://door.gd")
 const Rhythm := preload("res://rhythm.gd")
 const Hacks := preload("res://hacks.gd")
 const Tv := preload("res://tv.gd")
@@ -55,15 +54,7 @@ var _where := "start":
 		_mark = now
 		_where = v
 var _mark := 0
-var _office := {
-	"weather": {"kind": "rain", "desc": "Light rain", "temp_c": 9},
-	"pause": null,
-	"awaiting": 1,
-	"bench": [{"name": "lonnrot", "archetype": "reviewer"}],
-	"roster": [{"agent": "lonnrot", "status": "waiting", "title": "Review: door", "thread_id": 7}],
-	"threads": [{"id": 7, "title": "Review: door", "awaiting": "operator", "prompt": null}],
-	"landings": [{"ref": "pr/1", "subject": "first", "landed_at": "2026-11-09T23:05:14Z"}],
-}
+var _weather := {"weather": {"kind": "rain", "desc": "Light rain", "temp_c": 9}}
 var _pets_batch: Dictionary = {}
 var _failures: Array = []
 var _state := {
@@ -631,24 +622,11 @@ func _routes() -> void:
 		is_equal_approx(home.rhythm.list_at, 9.25),
 		"home_list_at read from /api/settings (%s)" % home.rhythm.list_at
 	)
-	_check(
-		not home.door.want.is_empty() and home.door.want["name"] == "lonnrot",
-		"the waiting coworker comes from /api/office"
-	)
-	_check(home.door.plane.is_empty(), "the first landings only prime the door")
-	_office["awaiting"] = 0
-	_office["roster"] = []
-	_office["threads"] = []
-	_office["landings"] = [
-		{"ref": "pr/2", "subject": "second", "landed_at": "2026-11-10T01:00:00Z"},
-		{"ref": "pr/1", "subject": "first", "landed_at": "2026-11-09T23:05:14Z"},
-	]
-	main._watch_door()
+	main._watch_weather()
 	await create_timer(1.0).timeout
-	_check(home.door.want.is_empty(), "nobody leans in once nothing awaits")
 	_check(
-		not home.door.plane.is_empty() and home.door.plane["title"] == "second",
-		"a new landing sends a plane"
+		home.weather == "rain" and home.weather_desc == "Light rain",
+		"the weather comes from /api/office"
 	)
 	_where = "forms"
 	await FormSoak.new(self, main).run()
@@ -823,7 +801,7 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 	elif method == "GET" and path.get_slice("?", 0) == "/api/home/pets":
 		out = _pets_batch
 	elif method == "GET" and path == "/api/office":
-		out = _office
+		out = _weather
 	elif method == "GET" and path == "/api/settings":
 		out = {"knobs": [{"key": "home_list_at", "value": "09:15"}]}
 	elif method == "POST" and path.ends_with("/done"):
@@ -899,7 +877,6 @@ func _logic() -> void:
 	_jar_logic()
 	_knock_logic()
 	_rhythm_logic()
-	_door_logic()
 	_tv_logic()
 	_voices_logic()
 	_home_logic()
@@ -997,41 +974,6 @@ func _rhythm_logic() -> void:
 	_check(r.due(17.6, "d1") == "home", "then the homecoming")
 	_check(r.due(17.7, "d1") == "", "and not again")
 	_check(r.due(9.0, "d2") == "morning", "the next day it all comes back")
-
-
-func _door_logic() -> void:
-	var waiting := _office.duplicate(true)
-	var v := Door.visitor(waiting)
-	_check(v.get("name") == "lonnrot" and v.get("text") == "Review: door", "a waiting coworker leans in")
-	var asked := {
-		"threads":
-		[{"id": 9, "title": "t", "awaiting": null, "prompt": {"summary": "run it?"}, "lead": "yu"}],
-		"bench": [{"name": "yu"}],
-		"roster": [],
-	}
-	_check(Door.visitor(asked).get("text") == "asks: run it?", "a prompt is the caption")
-	waiting["pause"] = "pencils_down"
-	_check(Door.visitor(waiting).is_empty(), "a paused office sends nobody")
-	var quiet := {"awaiting": 0, "roster": [], "threads": [], "bench": []}
-	_check(Door.visitor(quiet).is_empty(), "nothing waits, nobody comes")
-	var d := Door.new()
-	d.update_office(_office)
-	for i in 30:
-		d.process(0.1)
-	_check(d.present(), "the coworker is at the door")
-	d.update_office(quiet)
-	for i in 30:
-		d.process(0.1)
-	_check(d.lean == 0.0 and d.shown.is_empty() and not d.present(), "and leaves when nothing waits")
-	d = Door.new()
-	d.update_office({"landings": [{"ref": "a", "subject": "s"}]})
-	_check(d.plane.is_empty(), "landings seen at the start send nothing")
-	var two := {"landings": [{"ref": "b", "subject": "t"}, {"ref": "a", "subject": "s"}]}
-	d.update_office(two)
-	_check(not d.plane.is_empty() and d.plane["title"] == "t", "a new landing flies in")
-	d.dismiss_plane()
-	d.update_office(two)
-	_check(d.plane.is_empty(), "a dismissed plane does not come again")
 
 
 func _tv_logic() -> void:

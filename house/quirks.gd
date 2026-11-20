@@ -249,7 +249,7 @@ func _perks(dt: float) -> void:
 		_door_was = false
 		return
 	var weapon := str(look.hero_cfg.get("weapon", ""))
-	var here: bool = h.door.present()
+	var here := not visitor.is_empty()
 	if here and not _door_was and weapon not in STAFF and weapon not in BOW and weapon != "":
 		h.person.react_left = 2.4
 		h.eggs.find("salute")

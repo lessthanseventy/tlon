@@ -9,12 +9,8 @@ const STAGED_FLAGS := ["claude", "telegram", "litter_box", "bowls", "pet_things"
 const POLL_SECONDS := 5.0
 const SLOW_SECONDS := 300.0
 const WATCH_SECONDS := 60.0
-const AWAY_FOR_GREETING := 20.0
 const BACKDROP := Color("1f1b24")
 const RoomScript := preload("res://room.gd")
-const ORDER := ["waiting", "working", "idle", "cold", "off"]
-const LIVE := ["waiting", "working", "idle"]
-const WAITING_SHOWN := 5
 const DecorateScript := preload("res://decorate.gd")
 const Sidebar := preload("res://sidebar.gd")
 const WIDGET_SIZE := Vector2i(720, 464)
@@ -58,10 +54,6 @@ var _drag := false
 var _drag_mouse := Vector2i.ZERO
 var _drag_win := Vector2i.ZERO
 var _prev_size := Vector2i(1100, 700)
-var _office := {}
-var _at := "home"
-var _inflight := ""
-var _reach := {}
 var _busy := false
 var _slow_step := ""
 var _pets_busy := false
@@ -72,7 +64,6 @@ var _pets_since := 0.0
 var _ids: Array = []
 var _ids_known := false
 var _watch_busy := false
-var _away_at := 0.0
 
 var _room: Control
 var _sidebar: PanelContainer
@@ -87,8 +78,6 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 	_demo = "--demo" in args
-	if "--office" in args:
-		_at = "office"
 	if "--shot" in args:
 		_shot = args[args.find("--shot") + 1]
 
@@ -99,7 +88,6 @@ func _ready() -> void:
 
 	_room = RoomScript.new()
 	_room.art_dir = _art_dir()
-	_room.door_clicked.connect(_toggle)
 	add_child(_room)
 
 	talk_live = not _room.home.staged
@@ -113,7 +101,6 @@ func _ready() -> void:
 	_sidebar.offset_right = 0
 	add_child(_sidebar)
 	_sidebar.setup(_room.home, _claude, _phone)
-	_sidebar.door_pressed.connect(_toggle)
 	_sidebar.jot_submitted.connect(_send_jot)
 	_sidebar.chat_sent.connect(_send_chat)
 	_sidebar.chat_acted.connect(_chat_act)
@@ -151,14 +138,11 @@ func _ready() -> void:
 
 	if _demo:
 		var demo: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://demo.json"))
-		_office = demo.get("office", {})
 		if "--empty" in args:
 			demo.merge({"open": [], "coming": [], "notes": []}, true)
 		_room.home.set_weather(demo.get("weather"))
 		if "--no-voices" not in args:
 			_room.home.set_voices(demo.get("pets", {}))
-		if "--visitor" in args:
-			_room.home.set_office(_office)
 		demo["forecast"] = _dated(demo.get("forecast", []))
 		demo["agendas"] = _demo_agendas(demo.get("agendas", []))
 		_demo_rows = _demo_meetings(demo.get("meetings", []))
@@ -185,7 +169,7 @@ func _ready() -> void:
 		add_child(_pets_nudged)
 		var watch_timer := Timer.new()
 		watch_timer.wait_time = WATCH_SECONDS
-		watch_timer.timeout.connect(_watch_door)
+		watch_timer.timeout.connect(_watch_weather)
 		add_child(watch_timer)
 		watch_timer.start()
 		var timer := Timer.new()
@@ -198,8 +182,11 @@ func _ready() -> void:
 		else:
 			_slow_poll()
 			_pets_ask()
-			_watch_door()
-	_enter(_at)
+			_watch_weather()
+	get_window().title = "the house"
+	_apply(_data)
+	if not _demo:
+		_poll()
 	if _room.home.settings.value("widget"):
 		_set_widget(true)
 	if "--unread" in args:
@@ -270,8 +257,6 @@ func _use_backend(args: Array) -> void:
 	_probing = settings.fresh and not OS.has_environment("TLON_URL") and not _room.home.drive
 	if _fixture == "" and _room.home.drive:
 		_fixture = "starters"
-	if settings.is_local():
-		_at = "home"
 	_make_backend()
 
 
@@ -307,7 +292,6 @@ func _install(node: Node) -> void:
 	_pets_busy = false
 	_watch_busy = false
 	_slow_step = ""
-	_reach = {}
 	_backend = node
 	_backend.changed.connect(_refresh)
 	_backend.told.connect(
@@ -321,22 +305,12 @@ func _install(node: Node) -> void:
 				_phone.on_agenda(text)
 	)
 	add_child(_backend)
-	_apply_where()
+	_sidebar.set_reachable(true)
 	_apply_weather()
 	_apply_talk()
 	if _backend.local and _phone_on():
 		for row in _backend.started:
 			_phone.on_told(row)
-
-
-# what only means something with a server is not shown over the house's own list
-func _apply_where() -> void:
-	var served: bool = not _backend.local
-	_room.office_door = served
-	_sidebar.set_door(served)
-	_sidebar.set_reachable(true)
-	if not served and _at == "office":
-		_enter("home")
 
 
 func _set_up_phone() -> void:
@@ -425,7 +399,7 @@ func _first_start() -> void:
 				_starters = false
 			_slow_poll()
 			_pets_ask()
-			_watch_door()
+			_watch_weather()
 			_poll()
 	)
 
@@ -549,19 +523,12 @@ func _apply(data: Dictionary) -> void:
 		_pets_nudged.start(pets_nudge)
 	_ids = ids
 	_ids_known = true
-	if _at == "home":
-		_room.show_home()
-		if ids != _pick_ids:
-			_pick_ids = ids
-			_ask_now(true)
+	_room.show_home()
+	if ids != _pick_ids:
+		_pick_ids = ids
+		_ask_now(true)
 	if _room.home.take_attention() and _shot == "":
 		DisplayServer.window_request_attention()
-
-
-func _toggle() -> void:
-	if _backend.local:
-		return
-	_enter("office" if _at == "home" else "home")
 
 
 func _input(event: InputEvent) -> void:
@@ -574,45 +541,34 @@ func _input(event: InputEvent) -> void:
 		return
 	if typing or event.ctrl_pressed or event.alt_pressed:
 		return
-	if event.keycode == KEY_TAB:
-		get_viewport().set_input_as_handled()
-		_toggle()
-		return
 	if _decorate.active and _decorate.key(event.keycode):
 		get_viewport().set_input_as_handled()
 		return
-	if _at == "home" and not _decorate.active and _room.home.key(event.keycode):
+	if not _decorate.active and _room.home.key(event.keycode):
 		get_viewport().set_input_as_handled()
 		return
 	match event.keycode:
 		KEY_D:
-			if _at == "home":
-				get_viewport().set_input_as_handled()
-				_set_decorate(not _decorate.active)
+			get_viewport().set_input_as_handled()
+			_set_decorate(not _decorate.active)
 		KEY_N, KEY_SLASH, KEY_ENTER, KEY_KP_ENTER:
-			if _at == "home":
-				get_viewport().set_input_as_handled()
-				_open_add(true)
+			get_viewport().set_input_as_handled()
+			_open_add(true)
 		KEY_C:
-			if _at == "home":
-				get_viewport().set_input_as_handled()
-				_open_closet()
+			get_viewport().set_input_as_handled()
+			_open_closet()
 		KEY_I:
-			if _at == "home":
-				get_viewport().set_input_as_handled()
-				_add_thing()
+			get_viewport().set_input_as_handled()
+			_add_thing()
 		KEY_COMMA:
-			if _at == "home":
-				get_viewport().set_input_as_handled()
-				_open_settings()
+			get_viewport().set_input_as_handled()
+			_open_settings()
 		KEY_K:
-			if _at == "home":
-				get_viewport().set_input_as_handled()
-				_open_chat()
+			get_viewport().set_input_as_handled()
+			_open_chat()
 		KEY_H:
-			if _at == "home":
-				get_viewport().set_input_as_handled()
-				_what_now()
+			get_viewport().set_input_as_handled()
+			_what_now()
 		KEY_W:
 			get_viewport().set_input_as_handled()
 			_set_widget(not _widget)
@@ -639,13 +595,12 @@ func _process(_dt: float) -> void:
 	home.closet_open = view == "closet"
 	home.decorating = _decorate.active
 	home.form_open = _sidebar.takes_text()
-	if _widget and view not in ["home", "office"]:
+	if _widget and view != "home":
 		_set_widget(false)
 	_fit_room()
 	var at_mouse := _room.get_local_mouse_position()
 	home.eggs.set_laser(
-		_at == "home"
-		and Input.is_key_pressed(KEY_P)
+		Input.is_key_pressed(KEY_P)
 		and not home.jot_open
 		and not home.closet_open
 		and not _decorate.active
@@ -672,7 +627,7 @@ func _fit_room() -> void:
 func _set_decorate(on: bool) -> void:
 	if on == _decorate.active:
 		return
-	if on and (_at != "home" or _widget):
+	if on and _widget:
 		return
 	if on and not _room.home.layout.art:
 		_room.home.reply_text = "decorating needs the art, and it was not found"
@@ -685,8 +640,6 @@ func _set_decorate(on: bool) -> void:
 
 
 func _on_viewed(kind: String, arg: Variant) -> void:
-	if _at != "home":
-		return
 	match kind:
 		"item":
 			_sidebar.open_item(int(arg))
@@ -729,8 +682,6 @@ func _open_add(jot_first: bool) -> bool:
 
 # the home view of the sidebar is where every view opens, from the room only
 func _show(open: Callable) -> bool:
-	if _at != "home":
-		return false
 	_set_widget(false)
 	open.call()
 	return true
@@ -738,8 +689,6 @@ func _show(open: Callable) -> bool:
 
 # mode "new" (a preset for the form) or "edit" ({row, due})
 func _open_form(mode: String, spec: Dictionary) -> bool:
-	if _at != "home":
-		return false
 	_set_widget(false)
 	_sidebar.open_form(mode, spec)
 	_room.home.form_open = true
@@ -753,7 +702,7 @@ func _add_thing() -> void:
 # H: the Now line on the home view, asked again from the top
 func _what_now() -> void:
 	_skip = []
-	if _sidebar.view != "home" and _at == "home":
+	if _sidebar.view != "home":
 		_sidebar.back()
 	_ask_now(true)
 
@@ -881,8 +830,6 @@ func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 					_room.home.focus.set_now(id, str(item["text"]))
 		"unnow":
 			_room.home.focus.clear()
-		"office":
-			_enter("office")
 		"closet":
 			_open_closet()
 		"jot":
@@ -953,7 +900,7 @@ func _trouble(line: String) -> void:
 
 # read the room again now; one already on its way may have started before the change
 func _refresh() -> void:
-	if _demo or _at != "home":
+	if _demo:
 		return
 	if _busy:
 		_again = true
@@ -1178,8 +1125,6 @@ func _on_setting(key: String) -> void:
 			_room.home.clear_weather()
 			_make_backend()
 			_room.home.set_voices({})
-			if _backend.local:
-				_room.home.set_office({})
 			_refresh()
 		"cat", "dog", "pet1", "pet2", "pet1_personality", "pet2_personality":
 			_pets_changed()
@@ -1190,37 +1135,11 @@ func _on_setting(key: String) -> void:
 			_apply_talk()
 
 
-func _enter(where: String) -> void:
-	if where == "office" and _backend.local:
-		return
-	_room.home.close_card()
-	if where == "home" and _at == "office" and _away_at > 0.0:
-		if Time.get_ticks_msec() / 1000.0 - _away_at >= AWAY_FOR_GREETING:
-			_room.home.came_back()
-	if where == "office":
-		_away_at = Time.get_ticks_msec() / 1000.0
-	if where == "home" and not _demo:
-		_watch_door()
-	_set_decorate(false)
-	_at = where
-	var other := "office" if where == "home" else "home"
-	get_window().title = "the house - the " + where
-	_sidebar.set_room(where, "to the " + other + "  >", not _backend.local)
-	_sidebar.set_reachable(_reach.get(where, true))
-	if where == "home":
-		_apply(_data)
-	else:
-		_show_office()
-	if not _demo:
-		_poll()
-
-
 func _poll() -> void:
 	if _busy or _probing:
 		return
 	_busy = true
-	_inflight = _at
-	_backend.fetch("/api/home" if _at == "home" else "/api/office", _on_polled, 4.0)
+	_backend.fetch("/api/home", _on_polled, 4.0)
 
 
 func _on_polled(reached: bool, code: int, body: Variant) -> void:
@@ -1228,137 +1147,21 @@ func _on_polled(reached: bool, code: int, body: Variant) -> void:
 	if _again:
 		_again = false
 		_poll.call_deferred()
-	var polled := _inflight
 	var parsed: Variant = body if code == 200 else null
 	var ok: bool = reached and parsed is Dictionary
-	_reach[polled] = ok
 	if ok:
-		if polled == "home":
-			_data = _home_data(parsed)
-			_room.home.sync_chat(_data)
-			if _phone_on():
-				_phone.sync(
-					_data["open"]
-					. filter(func(t): return t.get("told_at") != null)
-					. map(func(t): return int(t["id"]))
-				)
-		else:
-			_office = parsed
-			_room.home.set_weather(parsed.get("weather"))
-	if polled == _at:
-		_sidebar.set_reachable(ok)
-		if ok:
-			_enter_view()
-	else:
-		_poll()
-
-
-func _enter_view() -> void:
-	if _at == "home":
-		_apply(_data)
-	else:
-		_show_office()
-
-
-func _show_office() -> void:
-	var view := _office_view(_office)
-	_room.show_office(view["figures"], view["caption"])
-	_sidebar.show_office(view["panel"])
-
-
-
-func _office_view(d: Dictionary) -> Dictionary:
-	var roster: Array = d.get("roster", [])
-	var threads: Array = d.get("threads", [])
-	var ranked: Array = []
-	for i in d.get("bench", []).size():
-		var who: Dictionary = d["bench"][i]
-		var best := {}
-		for r in roster:
-			if (
-				r["agent"] == who["name"]
-				and (
-					best.is_empty()
-					or ORDER.find(r.get("status", "off")) < ORDER.find(best["status"])
-				)
-			):
-				best = r
-		var status: String = best.get("status", "off")
-		var asks := ""
-		for t in threads:
-			if (
-				t["id"] == best.get("thread_id")
-				and (t.get("awaiting") != null or t.get("prompt") != null)
-			):
-				asks = _asks(t)
-		var doing := "off shift"
-		match status:
-			"waiting":
-				doing = asks if asks != "" else "waiting on you"
-			"working":
-				doing = str(best.get("title", "working"))
-			"idle":
-				doing = (
-					"idle" + ("" if best.get("title", "") == "" else "  -  " + str(best["title"]))
-				)
-			"cold":
-				doing = "cold"
-		(
-			ranked
-			. append(
-				{
-					"name": who["name"],
-					"role": who.get("archetype", "") if who.get("archetype") != null else "",
-					"status": status,
-					"doing": doing,
-					"skin": i,
-					"tier": 0 if status in LIVE else 1,
-					"seq": i,
-				}
+		_data = _home_data(parsed)
+		_room.home.sync_chat(_data)
+		if _phone_on():
+			_phone.sync(
+				_data["open"]
+				. filter(func(t): return t.get("told_at") != null)
+				. map(func(t): return int(t["id"]))
 			)
-		)
-	ranked.sort_custom(
-		func(a, b): return a["tier"] < b["tier"] or (a["tier"] == b["tier"] and a["seq"] < b["seq"])
-	)
+	_sidebar.set_reachable(ok)
+	if ok:
+		_apply(_data)
 
-	var waiting: Array = []
-	for t in threads:
-		if t.get("awaiting") != null or t.get("prompt") != null:
-			waiting.append({"title": t["title"], "why": _asks(t)})
-	var live := ranked.filter(func(c): return c["status"] in ["waiting", "working"]).size()
-	var pause: Variant = d.get("pause")
-	var paused := ""
-	var caption := ""
-	match pause:
-		"pencils_down":
-			paused = "Pencils down: nothing new starts, everyone stops after their turn."
-			caption = "the office is closed - pencils down"
-		"lights_out":
-			paused = "Lights out: the office is closed."
-			caption = "the office is closed - lights out"
-		_:
-			if live == 0:
-				caption = "the office is quiet"
-
-	var shown: Array = ranked.slice(0, RoomScript.DESK_SLOTS)
-	return {
-		"figures": shown,
-		"caption": caption,
-		"panel":
-		{
-			"crew": shown,
-			"more": ranked.size() - shown.size(),
-			"waiting": waiting.slice(0, WAITING_SHOWN),
-			"waiting_count": maxi(int(d.get("awaiting", 0)), waiting.size()),
-			"paused": paused,
-		},
-	}
-
-
-func _asks(t: Dictionary) -> String:
-	if t.get("prompt") != null:
-		return "asks: " + str(t["prompt"]["summary"])
-	return "awaits " + str(t["awaiting"])
 
 
 func _on_ticked(id: int) -> void:
@@ -1372,27 +1175,14 @@ func _slow_poll() -> void:
 	_backend.fetch("/api/settings", _on_slow, 8.0)
 
 
-func _slow_office() -> void:
-	_slow_step = "office"
-	_backend.fetch("/api/office", _on_slow, 8.0)
-
-
 func _on_slow(reached: bool, code: int, body: Variant) -> void:
-	var step := _slow_step
 	_slow_step = ""
 	var parsed: Variant = body if code == 200 else null
-	if step == "settings":
-		if reached and parsed is Dictionary:
-			for knob in parsed.get("knobs", []):
-				_room.home.knobs[str(knob.get("key"))] = knob.get("value")
-				if knob.get("key") == "home_list_at":
-					_room.home.set_list_at(str(knob.get("value", "")))
-		_slow_office()
-		return
-	if not reached or not parsed is Dictionary:
-		return
-	if step == "office":
-		_room.home.set_weather(parsed.get("weather"))
+	if reached and parsed is Dictionary:
+		for knob in parsed.get("knobs", []):
+			_room.home.knobs[str(knob.get("key"))] = knob.get("value")
+			if knob.get("key") == "home_list_at":
+				_room.home.set_list_at(str(knob.get("value", "")))
 
 
 # the pets' own names, animals and personalities, for a server that writes lines to suit them; a pet
@@ -1448,8 +1238,8 @@ func _pets_later() -> void:
 	_pets_timer.start(wait)
 
 
-func _watch_door() -> void:
-	if _at != "home" or _watch_busy or _probing or _backend.local:
+func _watch_weather() -> void:
+	if _watch_busy or _probing or _backend.local:
 		return
 	_watch_busy = true
 	_backend.fetch("/api/office", _on_watch, 6.0)
@@ -1460,7 +1250,6 @@ func _on_watch(reached: bool, code: int, body: Variant) -> void:
 	var parsed: Variant = body if code == 200 else null
 	if reached and parsed is Dictionary:
 		_room.home.set_weather(parsed.get("weather"))
-		_room.home.set_office(parsed)
 
 
 func _remove(id: int) -> void:
