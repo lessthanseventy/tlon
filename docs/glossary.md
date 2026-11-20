@@ -32,4 +32,4 @@ begins `pending:` records a rename not yet made; the gate skips it. The source o
 | at their desk | A coworker's home window: the tmux window that is theirs. | `Server.Arbiter` | "lounge" for a live window |
 | the office | The operator's surface: the standalone TUI over the server. | `office/tui`, `mise run office:check` | "console", "cockpit" |
 | funes | The Erlang node name of the server (`funes@`) and nothing else. The product is Tlön. | `server/rel/env.sh.eex` (`RELEASE_NODE`) | "funes" as a product name |
-| the door | The one pile per messenger, of kind `door`, of what to take along and errands for the next time the operator goes out. Not an agenda: it has no rhythm and is never told. | `Server.Agenda` (`door/1`) | "inbox", "bag" |
+| the door | The one pile per messenger, of kind `door`, of what to take along and errands for the next time the operator goes out. Not an agenda: it has no rhythm and is never told; it is found by its kind and is not renamed or dropped. | `Server.Agenda` (`door/1`) | "inbox", "bag" |

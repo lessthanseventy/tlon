@@ -189,12 +189,13 @@ defmodule Server.MCP.OperatorAPI do
                                          a touch; 400 {error}, 404 when the thing is not live
       POST   /api/home/agendas           {name, kind? (agenda|person), every?, at?, birthday?} → Server.Home.agenda_add; the agenda as GET /api/home
                                          shows it in agendas ({id, name, every, next_at, notes: [{id, text, since}]}), a person as in people;
-                                         birthday (a person's) is "MM-DD" or "YYYY-MM-DD"; 400 {error}, one line, for a bad birthday or kind
+                                         birthday (a person's) is "MM-DD" or "YYYY-MM-DD"; 400 {error}, one line, for a bad birthday or kind,
+                                         or for every/at on a person (they mean nothing there)
       POST   /api/home/agendas/:id/edit  {name?, every? (null stops it), at? (null clears it), birthday? (null clears it)} → the agenda
-                                         (a person as in people); 400, 404
+                                         (a person as in people; every/at on a person are 400); 400, 404; the door pile is 400 (never renamed)
       POST   /api/home/agendas/:id/add   {text} → the note put on its pile, as a note row; 400, 404
       POST   /api/home/agendas/:id/clear the pile archived (its notes kept, done) → the agenda, empty; 404
-      POST   /api/home/agendas/:id/drop  the agenda and its pile deleted → {id, name}; 404 (the same four routes act on a person)
+      POST   /api/home/agendas/:id/drop  the agenda and its pile deleted → {id, name}; 404 (the same four routes act on a person; the door pile is 400 for edit and drop, clear and add work)
                                          (a note on a pile is edited and dropped by /api/home/:id/edit and /drop; /done is for
                                          reminders and to-dos alone and is 404 for a note)
       POST   /api/home/door/add          {text} → Server.Home.door_add; the note put by the door (the pile is made by the first),

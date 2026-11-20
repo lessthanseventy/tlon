@@ -117,6 +117,33 @@ defmodule Server.Home.PeopleTest do
       assert {:error, "text is required"} = Home.door_add(" ", friday())
     end
 
+    test "the door is found by its kind, and the agenda routes neither rename nor drop it, but clear it" do
+      {:ok, %{id: note}} = Home.door_add("umbrella", friday())
+      %Agenda{id: id} = door = Agenda.door("telegram")
+      {:ok, _} = Agenda.edit(door, %{name: "x"}, friday())
+      assert %Agenda{id: ^id} = Agenda.door("telegram")
+      assert %Agenda{id: ^id} = Agenda.ensure_door("telegram", friday())
+
+      assert {:error, "the door pile cannot be edited or dropped" <> _} =
+               Home.agenda_edit(id, %{"name" => "y"}, friday())
+
+      assert {:error, "the door pile cannot be edited or dropped" <> _} = Home.agenda_drop(id, friday())
+      assert %{door: %{id: ^id, notes: [%{id: ^note}]}} = Home.status(friday())
+      assert {:ok, %{id: ^id, notes: []}} = Home.agenda_clear(id, friday())
+    end
+
+    test "a person has no every or at, on add or edit" do
+      for rhythm <- [%{"every" => "week"}, %{"at" => nil}] do
+        assert {:error, "a person has no every or at"} =
+                 Home.agenda_add(Map.merge(%{"name" => "Sam", "kind" => "person"}, rhythm), friday())
+      end
+
+      assert {:ok, %{id: id}} = Home.agenda_add(%{"name" => "Sam", "kind" => "person"}, friday())
+      assert {:error, "a person has no every or at"} = Home.agenda_edit(id, %{"every" => nil}, friday())
+      assert {:ok, %{name: "Sam2"}} = Home.agenda_edit(id, %{"name" => "Sam2"}, friday())
+      assert {:ok, %{every: nil}} = Home.agenda_add(%{"name" => "retro", "every" => nil}, friday())
+    end
+
     test "a note by the door comes off by drop, not by done" do
       {:ok, %{id: note}} = Home.door_add("umbrella", friday())
       assert :error = Home.done(note, friday())
