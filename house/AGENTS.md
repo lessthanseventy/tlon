@@ -28,10 +28,10 @@ button), never characters; a shortcut is in the tooltip.
 Views: `home` (in this order, an empty section drawing nothing, not even its label: "Now", the pick with Done /
 Something else / Not today, and the pinned thing with its timer; "Today", what has a time today in time
 order, each row time-first in one aligned column: meetings still on (a quiet line, "09:00  Standup": no tick, no click), reminders due today and an
-agenda due today; "Open", the to-dos but not the pick or the pinned thing, six with "N more..."; "Proposed (N)" when sources have suggested things (`proposals` of `GET /api/home`: `{id, source, text, why, url}`; `views.gd` `_proposed`: three rows, each its text with the why line small under it and two small buttons, "add" and "no", which post `/api/home/proposals/:id/take|dismiss`; then "N more..." in place; never a banner, a ring or a badge; the family's local list has no sources and answers none; "Later (N)", the coming things after today, one line that opens in place; the weather in one line, which opens the window's view; "Notes (N)" collapsed. At 1100x700 with the demo list Home does not scroll), `card`
+agenda due today; "Open", the to-dos but not the pick or the pinned thing, six with "N more..."; "Proposed (N)" when sources have suggested things (`proposals` of `GET /api/home`: `{id, source, text, why, url}`; `views.gd` `_proposed`: three rows, each its text with the why line small under it and two small buttons, "add" and "no", which post `/api/home/proposals/:id/take|dismiss`; then "N more..." in place; never a banner, a ring or a badge; the family's local list has no sources and answers none; "Later (N)", the coming things after today, one line that opens in place; the weather in one line, which opens the window's view; "Notes (N)" collapsed. At 1100x700 with the demo list and the dock compact Home does not scroll; the soak holds it), `card`
 (calendar, jar, window, clock, board, plant, book, mousehole, fireplace, piano, globe: `home.card`
 holds which, `home.card_blocks` the blocks; the "book" card is the shelf, `shelf.gd`: Agendas (a row each
-with its note count and when it is next, "Thu 14:00"; "new agenda" asks a name), then every note newest
+with its note count and when it is next, worded by the time rule below; "new agenda" asks a name), then every note newest
 first, Someday, Projects (each shows 8 then "N more...", a filter line over 8 rows) and all the Borges
 titles, a click on a title showing the pet's remark under it and granting the "book" find; a note,
 someday or project row opens its item view; a note's has Edit and Delete, and the board's notes tab,
@@ -40,8 +40,8 @@ agenda's pile, `views.gd` `agenda_view`: its rhythm as text, its notes, each ope
 Enter puts a note on it, and Clear, which archives the pile; opened from a shelf row or from Home's row
 "14:00  Retro · 3 things" under "Today" when an agenda with notes is due today; back from it goes to the shelf
 it came from. The data is `agendas` of `GET /api/home`: `{id, name, every, next_at, notes}`; the notes are in no
-other list), `item`, `open`, `add` (`jot.gd` the free-text line and
-`form.gd` the typed form), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
+other list), `item`, `open`, `add` (`jot.gd` the jot line alone and what the house read it as; `form.gd` the
+typed form, behind its "Fill in the details instead" link), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
 (`settings_view.gd`), `decorate`. A click on a thing replaces the view; the back chevron, Esc and a click on
 empty floor go back. The chat dock (`chat_view.gd`, "Chat") is its input line alone until there is a real exchange: a line he typed or the house's word to him (a pet's passing remark is logged and shown once the dock is open, but never grows it). It grows
 to its docked size (30% of the sidebar, 176 px at least); its handle
@@ -82,6 +82,12 @@ runs on the local list.
   whole note, a click opens the board view. Open things are stickies on and around the monitor and a stack of paper on the desk
   whose height and small badge follow the count. A reminder's next due time is the wall calendar
   and the caption above the room, in local time.
+  **Times** (`when.gd`, the one function every due time the sidebar prints goes through: Home's rows, Later, the item
+  view, the calendar's rows and "Coming up", the clock and plant cards, the shelf's agendas, the caption above the
+  room): today the time alone ("14:00"), tomorrow "tomorrow 14:00", the next six days "Sat 14:00", later the date
+  ("28 Nov"); past due "since 09:00" today, "since Tue" before, the date a week back; never red. A repeating
+  thing's rhythm is a small dim suffix, never part of the title. `--demo`'s rows carry `in_days` and a local `at`, so
+  they never go stale; due times are UTC `Z` and shown local.
 - Ticking a thing off (after the server says 200) crumples its paper into a ball that arcs into the
   bin; sometimes it misses and Nina chases it in. The last one ticked is a little confetti.
 - The room keeps the machine's clock and `weather` from `/api/office` (light, lamp, a sun patch).
@@ -121,8 +127,8 @@ runs on the local list.
   `every` being `day|week|month` or `"N unit"`, worded "every other week", "every 6 weeks"), today
   marked, two drawn arrows (and the arrow keys) for the month and a click on its name for today's; a click on a
   day lists that day's things and an "add" button; the next five coming up when no day is picked.
-  A click on a thing opens its item view. A quiet "today is my birthday" line shows only while no birthday
-  is set (the file's `birthday` wins; on the day the view says so). Jar: the count, and the names newest
+  A click on a thing opens its item view. The card says nothing of a birthday (it is set in Settings) except on the day itself, in a
+  line. "Coming up" rows are one clipped line each: the time by the time rule and the text, the rhythm ("every week") small and dim at the end. Jar: the count, and the names newest
   first when the status has `done` (`[{text, done_at}]`; ten shown). Window: the weather in words
   and the temperature in his `degrees`, then up to three forecast rows (Today, Tomorrow, the weekday; an icon
   from `forecast.gd`, high / low, the chance of rain or snow from 20%; none when there is none, no "unavailable"
@@ -177,8 +183,8 @@ runs on the local list.
   reply and a chime), snow on the sill Dec-Feb, fireworks 31 Dec 23:00 to 1 Jan 01:00. Each comes minutes
   apart on the seeded dice, only in the weather and hour that suit it; `--egg bird|balloon|plane|nightcat|star|fireworks`
   (use `--at 23:00` for the night ones).
-- **Finds** (`finds.gd`): a birthday (the settings' `birthday`, `"MM-DD"`, set by the calendar
-  card's quiet line while none is set; `--birthday` forces it) puts a cake on the table; a click on a title on the bookshelf's
+- **Finds** (`finds.gd`): a birthday (the settings' `birthday`, `"MM-DD"`, set in
+  Settings; `--birthday` forces it) puts a cake on the table; a click on a title on the bookshelf's
   shelf view shows Nina's or Argos's remark (the `muse` lines, built-in fallback); a mouse leaves its hole on a quiet night
   (`--egg mouse`) and flees a pet or a click; the snow globe shakes on a click. The "found" card (`--egg found`,
   click the mouse hole) says only "N of M found"; `eggs.CATALOGUE` is the list, `user://house_found.json`
@@ -289,6 +295,12 @@ runs on the local list.
   pickup: `thrust`; walk: `walk`). Changing between the two re-places the person.
 - **Settings** (`settings.gd` the store, `settings_view.gd` the settings view): the cog in the sidebar header
   or `,` opens it in the pane, replacing any view; the back chevron or Esc closes. A banner never closes it.
+  Five groups, chips across the top ("You", "Pets", "Look", "Sound", "Connections"), one open at a time: You (name,
+  birthday, temperature), Pets (each pet's name, animal and personality, talk, antics, the pets' things, visitors),
+  Look (the four looks, the widget, the room's reset, the finds, the art), Sound, Connections (where the list lives,
+  weather, Telegram, Claude, the phone's chat). Captions are sentence case. The birthday is one field that reads "8 June",
+  "June 8" or "06-08" (`parse_birthday`), says what it kept ("Kept as 8 June.", "No birthday set.") or that it is
+  not a day, and "none" or empty clears it.
   One flat object in `user://house_settings.json`, written on a change only, other keys kept as found, never in a
   scripted or staged run: `name` (used in the birthday line and a server line's `{name}`; a line with `{name}` and
   no name is skipped), `birthday` (`"MM-DD"`, `""`), `cat` and `dog` (default Nina and Argos: shown everywhere the
@@ -311,7 +323,7 @@ runs on the local list.
   looks, `glow`, `weather_art`, `spells`, `font` (above, "Looks").
   **Precedence: a command-line arg beats the settings file beats the default** (`--widget`
   is the arg of `widget`; `Settings.forced`). The screen also shows sound (`sound.gd`'s own file keeps it), "N of M
-  found" with "forget them all", "reset the room to how it came" (`layout.reset`) and "clear" for the chat, each
+  found" with "Forget them all", "Reset the room to how it came" (`layout.reset`) and "Clear" for the chat, each
   asking for a second click (`sure.gd`), "where the list lives" (`where`: "a tlon server" with its address and a
   "check" (`GET /api/home`), or "this computer" with one quiet line of where the file is kept), the art folder, and the morning message time, the daily list time and weekly review day only
   when `GET /api/settings` already returned them (`home_morning_at`, `home_list_at`, `home_review_on`). Quiet hours are the server's and
@@ -426,16 +438,19 @@ runs on the local list.
   **Not shown over the local list**: the server's polls (`/api/office` for the weather, `/api/settings`: the daily list time stays
   17:30), the "couldn't reach tlon" states, and the address row of the settings. Choosing the other side applies at
   once and deletes neither side's data; the settings screen says where the file is kept.
-- **Jotting** (the notepad on the desk, `N`, `/` or Enter): a paper field; Enter sends the text to
-  the server (a model reads it, so a pencil scribbles while it waits) and the reply shows as a banner
-  for a few seconds. A server that does not answer says "couldn't reach tlon — not kept" and keeps
-  the text in the field.
+- **Jotting** (the notepad on the desk, `N`, `/` or Enter): the add view's one paper line, focused,
+  with one line of example under it; Enter sends the text to the server (a model reads it, so a pencil scribbles
+  while it waits). The view then says what the house read it as ("Reminder · tomorrow 10:00 · every week" over the
+  text) with a primary "OK" (back) and a secondary "Change", which opens that thing's edit form. The kept row is
+  `row` of the local list's answer; the server answers `{reply}` alone, so it is the one id new in the next status
+  (`main.gd` `_keep`; none or several, an ask or a correction, shows the reply with OK only). A server that does not
+  answer says "couldn't reach tlon — not kept" and keeps the text in the field.
 - **Acting on a thing**: click a sticky, a row of the Home view or a stack (which lists "On the desk") for its item
   view: Done (the crumple), Into the fire (while it burns), In an hour, Tomorrow (the paper flies to the wall calendar), Now, Edit, Delete (and Plan for a project).
   Each row's tick circle ticks. Delete asks nothing of a one-off; a repeating reminder or a
   project asks again on the same button ("Delete for good?", 4 s, `sure.gd`).
-- **Forms** (`form.gd`, `things.gd`): `I` or the header's plus opens the add view, `N` its free-text jot line first (`jot.gd`; same reader and route, Enter keeps it): the form: to-do, reminder,
-  note, waiting-on or project; a reminder has a date (a month grid), a time (typed `HH:MM`, default
+- **Forms** (`form.gd`, `things.gd`): `I`, `N` or the header's plus opens the add view, the jot line (`jot.gd`; same reader and route, Enter keeps it); its quiet link "Fill in the details instead" swaps to the typed form: kind chips "To-do" (selected first),
+  "Reminder", "Note", "Waiting on someone" and "Project (several steps)", the field's placeholder following the kind; a reminder has a date (a month grid), a time (typed `HH:MM`, default
   09:00, chips morning/noon/evening) and a repeat (once, every day/week/month, or every N day/week/month).
   The calendar's day and its things, the clock's named timer, the board and its tabs open it too, and a
   thing is changed the same way (to-do or reminder, text, date, time, repeat; Done, Delete, "Stop

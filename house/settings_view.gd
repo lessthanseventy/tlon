@@ -13,6 +13,9 @@ const Pets := preload("res://pets.gd")
 const Sure := preload("res://sure.gd")
 const LocalList := preload("res://local_list.gd")
 const Claude := preload("res://reader_claude.gd")
+const PAGES := {
+	"you": "You", "pets": "Pets", "look": "Look", "sound": "Sound", "connections": "Connections"
+}
 const MONTHS := [
 	"January", "February", "March", "April", "May", "June", "July", "August", "September",
 	"October", "November", "December",
@@ -20,15 +23,15 @@ const MONTHS := [
 const DAYS := [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 # the keys of `Looks.KEYS` and what their switch says
 const THINGS := {
-	"litter_box": "a litter box for a cat",
-	"bowls": "food and water bowls",
-	"pet_things": "a post, a blanket, hay and a bone",
+	"litter_box": "A litter box for a cat",
+	"bowls": "Food and water bowls",
+	"pet_things": "A post, a blanket, hay and a bone",
 }
 const LOOKS := {
-	"glow": "a soft glow at the lights after dark",
-	"weather_art": "pixel weather in the window",
-	"spells": "spell effects",
-	"font": "a pixel font for headings",
+	"glow": "A soft glow at the lights after dark",
+	"weather_art": "Pixel weather in the window",
+	"spells": "Spell effects",
+	"font": "A pixel font for headings",
 }
 
 var settings
@@ -41,8 +44,12 @@ var claude: RefCounted
 var phone: Node
 
 var _name: LineEdit
-var _month
-var _day
+var _birth: LineEdit
+var _birth_say: Label
+var _tabs: HBoxContainer
+var _pages := {}
+var _tab_chips := {}
+var page := "you"
 var _cat: LineEdit
 var _dog: LineEdit
 var _kind1: KindPicker
@@ -168,66 +175,74 @@ func setup(the_settings, the_home) -> void:
 func _ready() -> void:
 	visible = false
 	add_theme_constant_override("separation", 7)
-	var col: VBoxContainer = self
+	_tabs = HBoxContainer.new()
+	_tabs.add_theme_constant_override("separation", 4)
+	add_child(_tabs)
+	for p in PAGES:
+		_pages[p] = _page()
+		_tab_chips[p] = Paper.chip(PAGES[p], _tabs, func() -> void: show_page(p), true)
+	var col: VBoxContainer = _pages["you"]
 
-	_head(col, "you")
 	var r := _flow(col)
-	r.add_child(Paper.label("name", Fonts.SMALL, Paper.QUIET))
-	_name = _field(r, "no name shown", "name")
+	_caption(r, "Name")
+	_name = _field(r, "No name shown", "name")
 	r = _flow(col)
-	r.add_child(Paper.label("birthday", Fonts.SMALL, Paper.QUIET))
-	_month = Chooser.new()
-	_month.add_item("none")
-	for m in MONTHS:
-		_month.add_item(m)
-	_day = Chooser.new()
-	for d in 31:
-		_day.add_item(str(d + 1))
-	for o in [_month, _day]:
-		r.add_child(o)
-	_month.item_selected.connect(func(_i: int) -> void: _birthday())
-	_day.item_selected.connect(func(_i: int) -> void: _birthday())
+	_caption(r, "Birthday")
+	_birth = Paper.edit("8 June, or 06-08", r)
+	_birth.text_submitted.connect(func(_t: String) -> void: _birthday())
+	_birth.focus_exited.connect(_birthday)
+	_birth_say = _quiet(col)
+	r = _flow(col)
+	r.add_child(Paper.label("Temperature", Fonts.SMALL, Paper.QUIET))
+	_menu(r, "degrees", ["f", "c"], ["°F", "°C"])
 
-	_head(col, "the pets")
+	col = _pages["pets"]
+	_pet_block(col, "First pet", "cat", Settings.CAT, "pet1", "pet1_personality")
+	_pet_block(col, "Second pet", "dog", Settings.DOG, "pet2", "pet2_personality")
+	_head(col, "Both")
 	r = _flow(col)
-	r.add_child(Paper.label("the first pet", Fonts.SMALL, Paper.QUIET))
-	_cat = _field(r, Settings.CAT, "cat")
-	_cat.custom_minimum_size.x = 100
-	_kind1 =_kind_picker(r, "pet1")
-	r = _flow(col)
-	r.add_child(Paper.label("the second pet", Fonts.SMALL, Paper.QUIET))
-	_dog = _field(r, Settings.DOG, "dog")
-	_dog.custom_minimum_size.x = 100
-	_kind2 =_kind_picker(r, "pet2")
-	r = _flow(col)
-	r.add_child(Paper.label("first pet's way", Fonts.SMALL, Paper.QUIET))
-	_menu(r, "pet1_personality", Pets.PERSONALITIES)
-	r = _flow(col)
-	r.add_child(Paper.label("second pet's way", Fonts.SMALL, Paper.QUIET))
-	_menu(r, "pet2_personality", Pets.PERSONALITIES)
-	r = _flow(col)
-	r.add_child(Paper.label("how much they talk", Fonts.SMALL, Paper.QUIET))
+	r.add_child(Paper.label("How much they talk", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "pet_chatter", Pets.CHATTER.keys())
 	r = _flow(col)
-	r.add_child(Paper.label("how much they get up to", Fonts.SMALL, Paper.QUIET))
+	r.add_child(Paper.label("How much they get up to", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "pet_antics", ["few", "some", "lots"])
 	for key in THINGS:
 		r = _flow(col)
 		var put := func() -> void: _put(key, _things[key].button_pressed)
 		_things[key] = Paper.chip(THINGS[key], r, put, true)
-
-	_head(col, "visitors")
+	_head(col, "Visitors")
 	r = _flow(col)
-	r.add_child(Paper.label("who comes", Fonts.SMALL, Paper.QUIET))
+	r.add_child(Paper.label("Who comes", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "visitors", ["all", "calm", "none"])
 	r = _flow(col)
-	r.add_child(Paper.label("how often", Fonts.SMALL, Paper.QUIET))
+	r.add_child(Paper.label("How often", Fonts.SMALL, Paper.QUIET))
 	_menu(r, "visitors_rate", ["rare", "sometimes", "often"])
 
-
-	_head(col, "sound")
+	col = _pages["look"]
+	for key in LOOKS:
+		r = _flow(col)
+		var put := func() -> void: _put(key, _looks[key].button_pressed)
+		_looks[key] = Paper.chip(LOOKS[key], r, put, true)
+	_head(col, "Window")
 	r = _flow(col)
-	_sound = Paper.chip("sound", r, _toggle_sound, true)
+	_widget = Paper.chip("Start as the small widget", r, func() -> void: _put("widget", _widget.button_pressed), true)
+	r = _flow(col)
+	_top = Paper.chip("Widget stays on top", r, func() -> void: _put("on_top", _top.button_pressed), true)
+	_head(col, "The room")
+	r = _flow(col)
+	_reset = Paper.chip("Reset the room to how it came", r, _reset_room)
+	r = _flow(col)
+	_found = Paper.label("", Fonts.BODY, Paper.INK)
+	r.add_child(_found)
+	_forget = Paper.chip("Forget them all", r, _forget_found)
+	_head(col, "The art")
+	_art = Paper.label("", Fonts.SMALL, Paper.INK)
+	_art.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	col.add_child(_art)
+
+	col = _pages["sound"]
+	r = _flow(col)
+	_sound = Paper.chip("Sound", r, _toggle_sound, true)
 	if "volume" in home.sound:
 		_volume = HSlider.new()
 		_volume.min_value = 0.0
@@ -238,53 +253,11 @@ func _ready() -> void:
 		_volume.value_changed.connect(func(v: float) -> void: home.sound.volume = v)
 		r.add_child(_volume)
 
-	_head(col, "window")
+	col = _pages["connections"]
+	_head(col, "Where the list lives")
 	r = _flow(col)
-	_widget = Paper.chip("start as the small widget", r, func() -> void: _put("widget", _widget.button_pressed), true)
-	r = _flow(col)
-	_top = Paper.chip("widget stays on top", r, func() -> void: _put("on_top", _top.button_pressed), true)
-
-	_head(col, "weather")
-	r = _flow(col)
-	r.add_child(Paper.label("degrees", Fonts.SMALL, Paper.QUIET))
-	_menu(r, "degrees", ["f", "c"], ["°F", "°C"])
-	_weather_box = VBoxContainer.new()
-	_weather_box.add_theme_constant_override("separation", 7)
-	col.add_child(_weather_box)
-	r = _flow(_weather_box)
-	var toggle := func() -> void: _put("weather", _weather_on.button_pressed)
-	_weather_on = Paper.chip("weather outside the window", r, toggle, true)
-	r = _flow(_weather_box)
-	r.add_child(Paper.label("town", Fonts.SMALL, Paper.QUIET))
-	_town = _field(r, "empty: found from your internet address", "weather_town")
-	_quiet(_weather_box).text = "asks wttr.in about every half hour; nothing of yours is sent"
-
-	_head(col, "looks")
-	for key in LOOKS:
-		r = _flow(col)
-		var put := func() -> void: _put(key, _looks[key].button_pressed)
-		_looks[key] = Paper.chip(LOOKS[key], r, put, true)
-
-	_head(col, "things to find")
-	r = _flow(col)
-	_found = Paper.label("", Fonts.BODY, Paper.INK)
-	r.add_child(_found)
-	_forget = Paper.chip("forget them all", r, _forget_found)
-
-	_head(col, "the room")
-	r = _flow(col)
-	_reset = Paper.chip("reset the room to how it came", r, _reset_room)
-
-	_head(col, "the phone's chat")
-	r = _flow(col)
-	_chat_n = Paper.label("", Fonts.BODY, Paper.INK)
-	r.add_child(_chat_n)
-	_clear = Paper.chip("clear", r, _clear_chat)
-
-	_head(col, "where the list lives")
-	r = _flow(col)
-	_where_server = Paper.chip("a tlon server", r, func() -> void: _put("where", "server"), true)
-	_where_local = Paper.chip("this computer", r, func() -> void: _put("where", "local"), true)
+	_where_server = Paper.chip("A tlon server", r, func() -> void: _put("where", "server"), true)
+	_where_local = Paper.chip("This computer", r, func() -> void: _put("where", "local"), true)
 	_local_say = Paper.label("", Fonts.SMALL, Paper.QUIET)
 	_local_say.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	col.add_child(_local_say)
@@ -293,11 +266,23 @@ func _ready() -> void:
 	r = _flow(_server_box)
 	_url = Paper.edit(Settings.default_url(), r)
 	_url.text_submitted.connect(func(_t: String) -> void: _check())
-	Paper.chip("check", r, _check)
+	Paper.chip("Check", r, _check)
 	_url_say = Paper.label("", Fonts.SMALL, Paper.QUIET)
 	_server_box.add_child(_url_say)
 	_plan = VBoxContainer.new()
 	_server_box.add_child(_plan)
+
+	_weather_box = VBoxContainer.new()
+	_weather_box.add_theme_constant_override("separation", 7)
+	col.add_child(_weather_box)
+	_head(_weather_box, "Weather")
+	r = _flow(_weather_box)
+	var toggle := func() -> void: _put("weather", _weather_on.button_pressed)
+	_weather_on = Paper.chip("Weather outside the window", r, toggle, true)
+	r = _flow(_weather_box)
+	_caption(r, "Town")
+	_town = _field(r, "Automatic", "weather_town")
+	_quiet(_weather_box).text = "Asks wttr.in about every half hour; nothing of yours is sent."
 
 	_talk_box = VBoxContainer.new()
 	_talk_box.add_theme_constant_override("separation", 7)
@@ -305,20 +290,65 @@ func _ready() -> void:
 	_telegram_section(_talk_box)
 	_claude_section(_talk_box)
 
-	_head(col, "the art")
-	_art = Paper.label("", Fonts.SMALL, Paper.INK)
-	_art.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
-	col.add_child(_art)
+	_head(col, "The phone's chat")
+	r = _flow(col)
+	_chat_n = Paper.label("", Fonts.BODY, Paper.INK)
+	r.add_child(_chat_n)
+	_clear = Paper.chip("Clear", r, _clear_chat)
+	show_page("you")
+
+
+# a row's caption, one width so the fields line up
+func _caption(row: Control, text: String) -> void:
+	var l := Paper.label(text, Fonts.SMALL, Paper.QUIET)
+	l.custom_minimum_size.x = 76
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(l)
+
+
+# one page of rows; only the shown one takes room
+func _page() -> VBoxContainer:
+	var p := VBoxContainer.new()
+	p.add_theme_constant_override("separation", 7)
+	add_child(p)
+	return p
+
+
+func show_page(name: String) -> void:
+	page = name
+	for p in _pages:
+		(_pages[p] as Control).visible = p == name
+		(_tab_chips[p] as Button).set_pressed_no_signal(p == name)
+
+
+# a pet's name, animal and personality
+func _pet_block(col: Control, title: String, key: String, hint: String, kind_key: String, way_key: String) -> void:
+	_head(col, title)
+	var r := _flow(col)
+	_caption(r, "Name")
+	var name_edit := _field(r, hint, key)
+	var picker := KindPicker.new(home.pets)
+	picker.picked.connect(func(kind: String) -> void: _put(kind_key, kind))
+	r = _flow(col)
+	_caption(r, "Animal")
+	r.add_child(picker)
+	r = _flow(col)
+	_caption(r, "Personality")
+	_menu(r, way_key, Pets.PERSONALITIES)
+	if key == "cat":
+		_cat = name_edit
+		_kind1 = picker
+	else:
+		_dog = name_edit
+		_kind2 = picker
 
 
 func open() -> void:
 	_loading = true
 	_name.text = settings.data.get("name", "")
-	var mmdd := str(settings.value("birthday"))
-	var parts := mmdd.split("-")
-	_month.select(int(parts[0]) if parts.size() == 2 else 0)
-	_day.select(int(parts[1]) - 1 if parts.size() == 2 else 0)
-	_day.disabled = _month.selected == 0
+	_birth.text = birthday_text(str(settings.value("birthday")))
+	_birth_say.text = _birth_line()
+	_birth_say.add_theme_color_override("font_color", Paper.QUIET)
 	_cat.text = settings.data.get("cat", "")
 	_dog.text = settings.data.get("dog", "")
 	_kind1.show_kind(Pets.kind_of(settings.value("pet1"), "nina"))
@@ -382,7 +412,7 @@ func _telegram_section(box: VBoxContainer) -> void:
 	_head(box, "Telegram")
 	var r := _flow(box)
 	_tg_on = Paper.chip(
-		"a Telegram bot in the house", r, func() -> void: _put("telegram", _tg_on.button_pressed), true
+		"A Telegram bot in the house", r, func() -> void: _put("telegram", _tg_on.button_pressed), true
 	)
 	_tg_box = VBoxContainer.new()
 	_tg_box.add_theme_constant_override("separation", 7)
@@ -395,16 +425,16 @@ func _telegram_section(box: VBoxContainer) -> void:
 	_tg_token = Paper.edit("the bot's token", r)
 	_tg_token.secret = true
 	_tg_token.text_submitted.connect(func(_t: String) -> void: _tg_connect())
-	Paper.chip("connect", r, _tg_connect)
+	Paper.chip("Connect", r, _tg_connect)
 	_tg_say = _quiet(_tg_box)
 	_tg_state = _quiet(_tg_box)
 	_tg_reached = _quiet(_tg_box)
 	r = _flow(_tg_box)
-	r.add_child(Paper.label("the day's list at", Fonts.SMALL, Paper.QUIET))
+	r.add_child(Paper.label("The day's list at", Fonts.SMALL, Paper.QUIET))
 	_tg_at = Paper.edit("17:30, or off", r)
 	_tg_at.text_submitted.connect(func(_t: String) -> void: _tg_list_at())
 	_tg_at.focus_exited.connect(_tg_list_at)
-	_tg_off = Paper.chip("disconnect", r, _tg_disconnect)
+	_tg_off = Paper.chip("Disconnect", r, _tg_disconnect)
 	_quiet(_tg_box).text = "works while this computer is on and the house is open"
 
 
@@ -459,18 +489,18 @@ func _tg_lines() -> void:
 
 
 func _claude_section(box: VBoxContainer) -> void:
-	_head(box, "reading with Claude")
+	_head(box, "Reading with Claude")
 	var r := _flow(box)
 	_claude_on = Paper.chip(
-		"read my messages with Claude", r, func() -> void: _put("claude", _claude_on.button_pressed), true
+		"Read my messages with Claude", r, func() -> void: _put("claude", _claude_on.button_pressed), true
 	)
 	_claude_box = VBoxContainer.new()
 	_claude_box.add_theme_constant_override("separation", 7)
 	box.add_child(_claude_box)
 	r = _flow(_claude_box)
-	r.add_child(Paper.label("command", Fonts.SMALL, Paper.QUIET))
+	_caption(r, "Command")
 	_claude_cmd = _field(r, "claude", "claude_command")
-	Paper.chip("test", r, _claude_test)
+	Paper.chip("Test", r, _claude_test)
 	_claude_found = _quiet(_claude_box)
 	_claude_say = _quiet(_claude_box)
 	_claude_last = _quiet(_claude_box)
@@ -524,27 +554,71 @@ func _menu(parent: Control, key: String, values: Array, labels: Array = []) -> v
 	_menus[key] = [o, values]
 
 
-func _kind_picker(parent: Control, key: String) -> KindPicker:
-	var p := KindPicker.new(home.pets)
-	p.picked.connect(func(kind: String) -> void: _put(key, kind))
-	parent.add_child(p)
-	return p
-
 
 func _put(key: String, v: Variant) -> void:
 	if not _loading:
 		settings.put(key, v)
 
 
+# "MM-DD" as "8 June", "" as ""
+static func birthday_text(mmdd: String) -> String:
+	var p := mmdd.split("-")
+	if p.size() != 2:
+		return ""
+	return "%d %s" % [int(p[1]), MONTHS[int(p[0]) - 1]]
+
+
+# "8 June", "June 8", "8 Jun", "06-08" or "6/8" as "MM-DD"; "" for none (or an empty field); null when it
+# is not a day of the year
+static func parse_birthday(text: String) -> Variant:
+	var t := text.strip_edges().to_lower()
+	if t in ["", "none", "no"]:
+		return ""
+	var words := t.replace("-", " ").replace("/", " ").replace(",", " ").split(" ", false)
+	if words.size() != 2:
+		return null
+	var m := _month_of(words[1] if words[0].is_valid_int() else words[0])
+	var d := -1
+	if words[0].is_valid_int() and words[1].is_valid_int():
+		m = int(words[0])
+		d = int(words[1])
+	elif words[0].is_valid_int():
+		d = int(words[0])
+	elif words[1].is_valid_int():
+		d = int(words[1])
+	if m < 1 or m > 12 or d < 1 or d > DAYS[m - 1]:
+		return null
+	return "%02d-%02d" % [m, d]
+
+
+# 1-12 for "june" or "jun", else -1
+static func _month_of(word: String) -> int:
+	if word.length() < 3:
+		return -1
+	for i in 12:
+		if (MONTHS[i] as String).to_lower().begins_with(word):
+			return i + 1
+	return -1
+
+
 func _birthday() -> void:
-	_day.disabled = _month.selected == 0
-	if _month.selected == 0:
-		_put("birthday", "")
+	if _loading:
 		return
-	var m: int = _month.selected
-	if _day.selected + 1 > DAYS[m - 1]:
-		_day.select(DAYS[m - 1] - 1)
-	_put("birthday", "%02d-%02d" % [m, _day.selected + 1])
+	var parsed: Variant = parse_birthday(_birth.text)
+	if parsed == null:
+		_birth_say.text = "That is not a day. Try 8 June or 06-08."
+		_birth_say.add_theme_color_override("font_color", Paper.WARM)
+		return
+	_put("birthday", parsed)
+	_birth.text = birthday_text(parsed)
+	_birth_say.text = _birth_line()
+	_birth_say.add_theme_color_override("font_color", Paper.QUIET)
+	_birth_say.add_theme_color_override("font_color", Paper.QUIET)
+
+
+func _birth_line() -> String:
+	var kept := str(settings.value("birthday"))
+	return "No birthday set." if kept == "" else "Kept as %s." % birthday_text(kept)
 
 
 func _toggle_sound() -> void:
@@ -612,7 +686,7 @@ func _refresh() -> void:
 		l.visible = l.text != ""
 	_found.text = "%d of %d found" % [home.eggs.found.size(), home.eggs.CATALOGUE.size()]
 	_chat_n.text = "%d messages" % home.chat.messages.size()
-	for pair in [[_forget, "forget", "forget them all"], [_reset, "reset", "reset the room to how it came"], [_clear, "clear", "clear"], [_tg_off, "tg", "disconnect"]]:
+	for pair in [[_forget, "forget", "Forget them all"], [_reset, "reset", "Reset the room to how it came"], [_clear, "clear", "Clear"], [_tg_off, "tg", "Disconnect"]]:
 		(pair[0] as Button).text = "sure?" if sure.armed(pair[1]) else pair[2]
 
 

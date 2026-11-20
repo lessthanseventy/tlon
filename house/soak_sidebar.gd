@@ -7,6 +7,7 @@ const Sidebar := preload("res://sidebar.gd")
 const SIZES :=[Vector2(900, 600), Vector2(1100, 700), Vector2(1920, 1080)]
 const VIEWS := ["home", "item", "open", "add", "pet", "closet", "settings", "decorate", "card"]
 const Blocks := preload("res://blocks.gd")
+const When := preload("res://when.gd")
 
 var s
 var main
@@ -38,6 +39,8 @@ func run() -> void:
 	_day_meetings()
 	_wall_click()
 	await _home_sections()
+	_times()
+	await _home_fits()
 
 
 func _meeting(title: String, from: String, to: String, tentative: bool, day: String) -> Dictionary:
@@ -832,3 +835,103 @@ func _home_sections() -> void:
 	s._check(sb.chat_view.has_log(), "a message grows the dock")
 	h.chat.messages = keep[5]
 	sb.chat_view.set_mode(sb._effective())
+
+
+# one rule words a due time: five cases against a pretended clock, and every row that prints one
+func _times() -> void:
+
+	var now := Time.get_unix_time_from_datetime_string("2026-11-18T12:00:00")
+	var at := func(day_gap: int, hm: String) -> float:
+		var p := hm.split(":")
+		return float(int(now / 86400.0) + day_gap) * 86400.0 + int(p[0]) * 3600.0 + int(p[1]) * 60.0
+	for case in [
+		[0, "14:00", "14:00", "today is the time alone"],
+		[1, "14:00", "tomorrow 14:00", "tomorrow"],
+		[3, "14:00", "Sat 14:00", "within six days, the weekday"],
+		[6, "09:30", "Tue 09:30", "the sixth day is still a weekday"],
+		[10, "14:00", "28 Nov", "later, the date"],
+		[0, "09:00", "since 09:00", "past due today"],
+		[-2, "09:00", "since Mon", "past due on an earlier day"],
+		[-9, "09:00", "since 9 Nov", "a week back is dated"],
+	]:
+		var got := When.text(at.call(case[0], case[1]), now)
+		s._check(got == case[2], "%s: '%s' (wanted '%s')" % [case[3], got, case[2]])
+	s._check(When.text(at.call(-2, "09:00"), now, "") == "Mon", "a time that is only a time has no since")
+	var was_hour: float = h.fake_hour
+	var was_day: String = h.fake_day
+	h.fake_day = "11-18"
+	h.fake_hour = 12.0
+	var clock: float = h._now_local()
+	var local := func(gap: int, hm: String) -> float:
+		var p := hm.split(":")
+		return floorf(clock / 86400.0) * 86400.0 + gap * 86400.0 + int(p[0]) * 3600.0 + int(p[1]) * 60.0
+	var keep := [h.open, h.coming]
+	h.open = [{"id": 1, "kind": "reminder", "text": "gone", "due_at": _iso(local.call(-2, "09:00")), "every": null}]
+	h.coming = [
+		{"id": 2, "kind": "reminder", "text": "bins", "due_at": _iso(local.call(1, "18:00")), "every": "week"},
+		{"id": 3, "kind": "reminder", "text": "rent", "due_at": _iso(local.call(10, "09:00")), "every": null},
+	]
+	var texts := _texts(_home_box())
+	var gone: String = When.text(local.call(-2, "09:00"), clock)
+	s._check(gone.begins_with("since ") and gone in texts, "Home's open row words a past due time: %s" % str(texts))
+	sb.later_expanded = true
+	texts = _texts(_home_box())
+	sb.later_expanded = false
+	var rent: String = When.text(local.call(10, "09:00"), clock)
+	s._check("tomorrow 18:00" in texts and "every week" in texts and rent in texts, "Later's rows: %s" % str(texts))
+	var rows: Array = h.things.calendar_blocks().filter(func(b: Dictionary) -> bool: return b["t"] == "row")
+	var bins: Array = rows.filter(func(b: Dictionary) -> bool: return "bins" in str(b["text"]))
+	s._check(
+		not bins.is_empty() and bins[0]["text"] == "tomorrow 18:00  bins" and bins[0]["sub"] == "every week",
+		"Coming up: the time and the text, the rhythm apart: %s" % str(bins)
+	)
+	s._check(rows.all(func(b: Dictionary) -> bool: return not "(" in str(b["text"])), "no rhythm is parenthesised into a title")
+	s._check(rows.all(func(b: Dictionary) -> bool: return b.get("line", false)), "a Coming up row is one line")
+	h.open = keep[0]
+	h.coming = keep[1]
+	h.fake_day = was_day
+	h.fake_hour = was_hour
+
+
+# at 1100x700 with the demo list and the dock compact, Home's content fits its pane: no scrolling
+func _home_fits() -> void:
+	var demo: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://demo.json"))
+	var keep := [
+		h.open, h.coming, h.notes, h.meetings, h.things.note_rows, h.things.agendas,
+		h.things.proposals, h.things.pick, h.weather_desc, h.temp_c, h.chat.messages,
+	]
+	var size_was: Vector2 = main.size
+	h.open = main._demo_due(demo["open"])
+	h.coming = main._demo_due(demo["coming"])
+	h.notes = demo["notes"]
+	h.things.note_rows = []
+	h.things.agendas = main._demo_agendas(demo["agendas"])
+	h.things.proposals = demo["proposals"]
+	h.things.pick = h.open[0]
+	h.meetings = main._demo_meetings(demo["meetings"]).filter(func(m: Dictionary) -> bool: return m["day"] != "")
+	h.weather_desc = "Sunny"
+	h.temp_c = 13
+	h.chat.messages = []
+	main.size = Vector2(1100, 700)
+	sb.back()
+	sb.chat_mode = "dock"
+	await _frames(4)
+	var content: Control = sb.scroll.get_child(0)
+	s._check(sb.view == "home" and not sb.chat_view.has_log(), "Home with the dock compact")
+	s._check(
+		content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
+		"Home does not scroll at 1100x700 with the demo list: content %s in a pane of %s" % [content.get_combined_minimum_size().y, sb.scroll.size.y]
+	)
+	h.open = keep[0]
+	h.coming = keep[1]
+	h.notes = keep[2]
+	h.meetings = keep[3]
+	h.things.note_rows = keep[4]
+	h.things.agendas = keep[5]
+	h.things.proposals = keep[6]
+	h.things.pick = keep[7]
+	h.weather_desc = keep[8]
+	h.temp_c = keep[9]
+	h.chat.messages = keep[10]
+	main.size = size_was
+	await _frames()

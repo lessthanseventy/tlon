@@ -602,11 +602,28 @@ func _routes() -> void:
 	main._send_jot("buy stamps")
 	await create_timer(1.0).timeout
 	_check(_seen("POST", "/api/home", "buy stamps"), "jot posted")
+	var jot = main._sidebar.jot
 	_check(
-		main._room.home.reply_text == "to do: buy stamps",
-		"reply shown: '%s'" % main._room.home.reply_text
+		jot._kept.visible and jot._said.text == "to do: buy stamps" and not jot._change.visible,
+		"a reply with no row is read back as it is, with OK only: '%s'" % jot._said.text
 	)
-	_check(not main._sidebar.jot.visible, "jot hid after a reply")
+	jot.accepted.emit()
+	_check(main._sidebar.view == "home", "OK is back to Home")
+	main._open_add()
+	jot.open("keep: hang the picture")
+	main._send_jot("keep: hang the picture")
+	await create_timer(1.5).timeout
+	_check(
+		jot._kept.visible and jot._summary.text == "To-do" and jot._said.text == "hang the picture" and jot._change.visible,
+		"the row that is new in the next status is what it was read as: '%s' '%s'" % [jot._summary.text, jot._said.text]
+	)
+	jot.change_wanted.emit()
+	await process_frame
+	_check(
+		main._sidebar.view == "edit" and main._sidebar.form._text.text == "hang the picture",
+		"Change opens that thing's form, prefilled"
+	)
+	main._sidebar.back()
 	_fail_jot = true
 	main._open_add()
 	main._sidebar.jot.open("keep me")
@@ -848,7 +865,12 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 		if _fail_jot:
 			code = 404
 		else:
-			out = {"reply": "to do: " + str(parsed.get("text", ""))}
+			var said := str(parsed.get("text", ""))
+			if said.begins_with("keep: "):
+				_state["open"].append(
+					{"id": 960, "kind": "todo", "text": said.trim_prefix("keep: "), "due_at": null, "every": null}
+				)
+			out = {"reply": "to do: " + said}
 	else:
 		code = 404
 	var payload := JSON.stringify(out).to_utf8_buffer()
