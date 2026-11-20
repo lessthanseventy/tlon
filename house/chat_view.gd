@@ -8,10 +8,12 @@ signal acted(id: int, what: String)
 signal mode_wanted(mode: String)
 
 const Paper := preload("res://paper.gd")
+const Fonts := preload("res://fonts.gd")
+const IconButton := preload("res://icon_button.gd")
 const Settings := preload("res://settings.gd")
 const Sure := preload("res://sure.gd")
-const SIZE := 15
-const SMALL := 11
+const SIZE := Fonts.BODY
+const SMALL := Fonts.LABEL
 const PAD := Vector2(9.0, 6.0)
 const GAP := 8.0
 const WHEEL := 48.0
@@ -37,6 +39,8 @@ var _log: Log
 var _edit: LineEdit
 var _note: Label
 var _head: HBoxContainer
+var _fold: Control
+var _grow: Control
 var _items: Array = []
 var _hits: Array = []
 var _total := 0.0
@@ -81,17 +85,17 @@ func _ready() -> void:
 	col.add_theme_constant_override("separation", 5)
 	add_child(col)
 	_head = Paper.row(col)
-	var title := Paper.heading("The phone", 15, Paper.INK)
+	var title := Paper.section("Chat")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_head.add_child(title)
-	Paper.chip("-", _head, func() -> void: mode_wanted.emit(_lower()), false)
-	Paper.chip("+", _head, func() -> void: mode_wanted.emit(_higher()), false)
+	_fold = _handle("down", "Collapse", func() -> void: mode_wanted.emit(_lower()))
+	_grow = _handle("up", "Expand", func() -> void: mode_wanted.emit(_higher()))
 	_log = Log.new(self)
 	col.add_child(_log)
-	_note = Paper.label("", 13, Paper.QUIET)
+	_note = Paper.label("", Fonts.SMALL, Paper.QUIET)
 	_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(_note)
-	_edit = Paper.edit("say something to the house", col)
+	_edit = Paper.edit("Say something to the house", col)
 	_edit.text_submitted.connect(_submit)
 	_edit.gui_input.connect(_edit_key)
 
@@ -104,13 +108,15 @@ func _higher() -> String:
 	return "full" if mode == "dock" else "dock"
 
 
-# "line": only the input; "dock": the log above it; "full": the log fills the sidebar
+# "line": only the input; "dock": the log above it once there is something to show; "full": the
+# log fills the sidebar
 func set_mode(m: String) -> void:
 	mode = m
 	var shown := m != "line"
-	_log.visible = shown
-	_note.visible = shown and _note.text != ""
 	chat.open = shown
+	_fold.visible = m != "line"
+	_grow.visible = m != "full"
+	_show_log()
 	if shown:
 		chat.unread = false
 		_off = 0.0
@@ -118,12 +124,29 @@ func set_mode(m: String) -> void:
 		_log.queue_redraw()
 
 
+# whether the log has anything to draw, or is asked for whole
+func has_log() -> bool:
+	return mode == "full" or (mode == "dock" and (not chat.messages.is_empty() or reading))
+
+
+func _show_log() -> void:
+	_log.visible = has_log()
+	_note.visible = mode != "line" and _note.text != ""
+
+
+func _handle(kind: String, tip: String, cb: Callable) -> Control:
+	var b := IconButton.new(kind, tip)
+	b.pressed.connect(cb)
+	_head.add_child(b)
+	return b
+
+
 func focus_input() -> void:
 	_edit.grab_focus()
 
 
 func _process(dt: float) -> void:
-	_note.visible = _log.visible and _note.text != ""
+	_show_log()
 	sure.tick(dt)
 
 
@@ -359,12 +382,21 @@ func _actions(c: Control, m: Dictionary, box: Rect2) -> void:
 		var label: String = b[0]
 		if b[1] == "delete" and sure.armed("del:%d" % id):
 			label = "Delete for good?"
-		var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 14.0
+		var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, Fonts.SMALL).x + 14.0
 		var r := Rect2(x, y, w, 22.0)
 		_hits.append({"rect": r, "id": id, "what": b[1]})
 		var lit: bool = _hover == _hits.size() - 1 and acting < 0
-		c.draw_rect(r, Color("f8efb8") if lit else Color("f3ead6"))
-		c.draw_rect(r, Paper.INK, false, 2.0)
-		c.draw_string(font, r.position + Vector2(7, 16), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Paper.QUIET if acting >= 0 else Paper.INK)
+		var ink := Paper.QUIET if acting >= 0 else Paper.INK
+		match b[1]:
+			"done":
+				c.draw_rect(r, Color(Paper.INK, 0.82 if lit else 1.0))
+				ink = Paper.PAPER
+			"delete":
+				if lit:
+					c.draw_line(r.position + Vector2(7, 19), r.position + Vector2(w - 7, 19), ink, 1.0)
+			_:
+				c.draw_rect(r, Color(Paper.INK, 0.07 if lit else 0.0))
+				c.draw_rect(r, Color(Paper.INK, 0.5 if lit else 0.3), false, 1.0)
+		c.draw_string(font, r.position + Vector2(7, 16), label, HORIZONTAL_ALIGNMENT_LEFT, -1, Fonts.SMALL, ink)
 		x += w + 5.0
 

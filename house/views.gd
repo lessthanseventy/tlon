@@ -1,17 +1,16 @@
 extends RefCounted
 
 # What the sidebar's context pane shows for the things that are lists or blocks: the home view
-# (now, next up, open, weather, notes), one item with its actions, the whole desk and
-# the blocks of a thing the room's click opened. `sidebar.gd` owns when each is built.
+# (now, today, open, proposed, later, weather, notes), one item with its actions, the whole desk
+# and the blocks of a thing the room's click opened. `sidebar.gd` owns when each is built.
 const Paper := preload("res://paper.gd")
+const Fonts := preload("res://fonts.gd")
 const Blocks := preload("res://blocks.gd")
 const Card := preload("res://card.gd")
-const Forecast := preload("res://forecast.gd")
 const Sure := preload("res://sure.gd")
 const Settings := preload("res://settings.gd")
 const Shelf := preload("res://shelf.gd")
 const OPEN_SHOWN := 6
-const NEXT_SHOWN := 3
 const PROPOSED_SHOWN := 3
 const SHORT := ["jar", "plant", "clock", "found", "globe", "piano", "weather"]
 const KINDS := {
@@ -34,11 +33,10 @@ func _init(the_sidebar, the_home) -> void:
 
 
 static func heading(box: Control, text: String) -> void:
-	var l := Paper.heading(text, 14, Paper.INK)
-	box.add_child(l)
+	box.add_child(Paper.section(text, 5))
 
 
-static func quiet(text: String, size: int = 13) -> Label:
+static func quiet(text: String, size: int = Fonts.SMALL) -> Label:
 	return Blocks.wrapped(text, size, Paper.QUIET)
 
 
@@ -63,49 +61,121 @@ func _chips(box: Control, items: Array, act: Callable) -> void:
 	Blocks.build(box, [{"t": "buttons", "items": items}], act)
 
 
+# the pinned thing and the pick, which Open leaves out
+func _in_now() -> Array:
+	var ids: Array = []
+	if home.focus.active() and home.focus.text != "":
+		ids.append(int(home.focus.id))
+	if not home.things.pick.is_empty():
+		ids.append(int(home.things.pick["id"]))
+	return ids
+
+
 func home_view(box: VBoxContainer) -> void:
 	_now(box)
-	var next: Array = home._upcoming(
-		home.coming.filter(func(i: Dictionary) -> bool: return i.get("due_at") != null), NEXT_SHOWN
-	)
-	var due: Array = home.things.agendas_today()
-	var meeting: Dictionary = home.next_meeting()
-	if not next.is_empty() or not due.is_empty() or not meeting.is_empty():
-		heading(box, "Next up")
-		if not meeting.is_empty():
-			box.add_child(quiet("%s  ·  %s" % [meeting["title"], home.meeting_time(meeting)], 14))
-		for item in next:
-			_row(box, item, false, _when(item))
-		for a in due:
+	_today(box)
+	_open(box)
+	_proposed(box)
+	_later(box)
+	_weather(box)
+	_notes(box)
+	if box.get_child_count() == 0:
+		box.add_child(quiet("Nothing waiting. Enjoy it.", Fonts.BODY))
+
+
+# what has a time today, in time order: meetings still on, reminders, an agenda that is due
+func _today(box: VBoxContainer) -> void:
+	var now: float = home._now_local()
+	var today: String = home.today()
+	var entries: Array = []
+	for m in home.meetings:
+		if m.get("day") != "today" or home._local(str(m["ends_at"])) <= now:
+			continue
+		var at: float = -1.0 if m.get("all_day", false) else home._local(str(m["starts_at"]))
+		entries.append({"at": at, "meeting": m})
+	for item in home.coming:
+		if item.get("due_at") == null:
+			continue
+		var at: float = home._due(item)
+		if Time.get_date_string_from_unix_time(int(at)) == today:
+			entries.append({"at": at, "item": item})
+	for a in home.things.agendas_today():
+		entries.append({"at": home.things._agenda_at(a), "agenda": a})
+	if entries.is_empty():
+		return
+	entries.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return x["at"] < y["at"])
+	heading(box, "Today")
+	for e in entries:
+		if e.has("meeting"):
+			var m: Dictionary = e["meeting"]
+			var line := quiet("%s  ·  %s" % [m["title"], home.meeting_time(m)], Fonts.BODY)
+			var pad := StyleBoxEmpty.new()
+			pad.content_margin_left = 5
+			line.add_theme_stylebox_override("normal", pad)
+			box.add_child(line)
+		elif e.has("item"):
+			_row(box, e["item"], false, _when(e["item"]))
+		else:
+			var a: Dictionary = e["agenda"]
 			var row := Blocks.Row.new(home.things.agenda_line(a), "", false, true)
 			row.pressed.connect(func() -> void: home.open_agenda(int(a["id"])))
 			box.add_child(row)
-	if not home.open.is_empty():
-		heading(box, "Open")
-		var shown: Array = home.open if sb.open_expanded else home.open.slice(0, OPEN_SHOWN)
-		for item in shown:
-			_row(box, item, true, _when(item))
-		var more: int = home.open.size() - OPEN_SHOWN
-		if more > 0:
-			var label := "less" if sb.open_expanded else "%d more..." % more
-			var row := Blocks.Row.new(label, "", false, true)
-			row.pressed.connect(func() -> void: sb.open_expanded = not sb.open_expanded)
-			box.add_child(row)
-	_proposed(box)
-	_weather(box)
-	var notes: Array = home.things.note_list()
-	if not notes.is_empty():
-		var label := "Notes (%d)" % notes.size()
-		var row := Blocks.Row.new(("v " if sb.notes_expanded else "> ") + label, "", false)
-		row.pressed.connect(func() -> void: sb.notes_expanded = not sb.notes_expanded)
+
+
+func _open(box: VBoxContainer) -> void:
+	var skip := _in_now()
+	var rows: Array = home.open.filter(func(i: Dictionary) -> bool: return int(i["id"]) not in skip)
+	if rows.is_empty():
+		return
+	heading(box, "Open")
+	for item in rows if sb.open_expanded else rows.slice(0, OPEN_SHOWN):
+		_row(box, item, true, _when(item))
+	var more := rows.size() - OPEN_SHOWN
+	if more > 0:
+		var label := "less" if sb.open_expanded else "%d more..." % more
+		var row := Blocks.Row.new(label, "", false, true, true)
+		row.pressed.connect(func() -> void: sb.open_expanded = not sb.open_expanded)
 		box.add_child(row)
-		if sb.notes_expanded:
-			for n in notes:
-				var note := Blocks.Row.new("- " + str(n["text"]), "", false)
-				note.pressed.connect(func() -> void: home.things.open_note(n))
-				box.add_child(note)
-	if box.get_child_count() == 0:
-		box.add_child(quiet("Nothing waiting. Enjoy it.", 15))
+
+
+# the coming things after today, one line until opened
+func _later(box: VBoxContainer) -> void:
+	var today: String = home.today()
+	var rows: Array = home.coming.filter(
+		func(i: Dictionary) -> bool:
+			return (
+				i.get("due_at") == null
+				or Time.get_date_string_from_unix_time(int(home._due(i))) != today
+			)
+	)
+	if rows.is_empty():
+		return
+	rows.sort_custom(
+		func(x: Dictionary, y: Dictionary) -> bool:
+			if x.get("due_at") == null or y.get("due_at") == null:
+				return x.get("due_at") != null and y.get("due_at") == null
+			return home._due(x) < home._due(y)
+	)
+	var fold := Blocks.Fold.new("Later (%d)" % rows.size(), sb.later_expanded)
+	fold.pressed.connect(func() -> void: sb.later_expanded = not sb.later_expanded)
+	box.add_child(fold)
+	if sb.later_expanded:
+		for item in rows:
+			_row(box, item, false, _when(item))
+
+
+func _notes(box: VBoxContainer) -> void:
+	var notes: Array = home.things.note_list()
+	if notes.is_empty():
+		return
+	var fold := Blocks.Fold.new("Notes (%d)" % notes.size(), sb.notes_expanded)
+	fold.pressed.connect(func() -> void: sb.notes_expanded = not sb.notes_expanded)
+	box.add_child(fold)
+	if sb.notes_expanded:
+		for n in notes:
+			var note := Blocks.Row.new(str(n["text"]), "", false)
+			note.pressed.connect(func() -> void: home.things.open_note(n))
+			box.add_child(note)
 
 
 # what outside sources suggest: never a banner, a ring or a badge, only these rows
@@ -120,22 +190,26 @@ func _proposed(box: VBoxContainer) -> void:
 		var why = p.get("why")
 		var row := Blocks.Row.new(str(p["text"]), "" if why == null else str(why))
 		row.marks(
-			[{"label": "add", "act": "take"}, {"label": "no", "act": "no"}],
+			[{"label": "add", "act": "take"}, {"label": "no", "act": "no", "k": "quiet"}],
 			func(a: String) -> void: home.acted.emit(id, "propose_" + a)
 		)
 		box.add_child(row)
 	var more: int = rows.size() - PROPOSED_SHOWN
 	if more > 0:
 		var label := "less" if sb.proposed_expanded else "%d more..." % more
-		var row := Blocks.Row.new(label, "", false, true)
+		var row := Blocks.Row.new(label, "", false, true, true)
 		row.pressed.connect(func() -> void: sb.proposed_expanded = not sb.proposed_expanded)
 		box.add_child(row)
 
 
 func _now(box: VBoxContainer) -> void:
-	if home.focus.active() and home.focus.text != "":
-		box.add_child(PinCard.new(home.focus))
 	var pick: Dictionary = home.things.pick
+	var pinned: bool = home.focus.active() and home.focus.text != ""
+	if pick.is_empty() and not pinned:
+		return
+	heading(box, "Now")
+	if pinned:
+		box.add_child(PinCard.new(home.focus))
 	if pick.is_empty():
 		return
 	var id := int(pick["id"])
@@ -145,20 +219,18 @@ func _now(box: VBoxContainer) -> void:
 	_chips(
 		box,
 		[
-			{"label": "Done", "act": "pk_done", "s": 13},
-			{"label": "Something else", "act": "pk_else", "s": 13},
-			{"label": "Not today", "act": "pk_not", "s": 13},
+			{"label": "Done", "act": "pk_done", "k": "primary"},
+			{"label": "Something else", "act": "pk_else", "k": "quiet"},
+			{"label": "Not today", "act": "pk_not", "k": "quiet"},
 		],
 		func(a: String) -> void: home.card_act(a)
 	)
 
 
 func _weather(box: VBoxContainer) -> void:
-	var today: String = home.today()
-	var days := Forecast.upcoming(home.forecast, today)
-	if home.weather_desc == "" and home.temp_c == null and days.is_empty():
+	if home.weather_desc == "" and home.temp_c == null:
 		return
-	var strip := Strip.new(home, days, today)
+	var strip := Strip.new(home)
 	strip.pressed.connect(func() -> void: sb.open_card("weather"))
 	box.add_child(strip)
 
@@ -174,7 +246,7 @@ func card_view(box: VBoxContainer) -> void:
 
 func open_view(box: VBoxContainer) -> void:
 	if home.open.is_empty():
-		box.add_child(quiet("Nothing waiting. Enjoy it.", 15))
+		box.add_child(quiet("Nothing waiting. Enjoy it.", Fonts.BODY))
 	for item in home.open:
 		_row(box, item, true, _when(item))
 
@@ -184,7 +256,7 @@ func item_view(box: VBoxContainer, id: int) -> void:
 	if item.is_empty():
 		return
 	var kind := str(item.get("kind", "todo"))
-	var l := Paper.heading(str(item["text"]), 18, Paper.INK)
+	var l := Paper.label(str(item["text"]), Fonts.BODY, Paper.INK)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size.x = 40
 	box.add_child(l)
@@ -197,11 +269,11 @@ func item_view(box: VBoxContainer, id: int) -> void:
 		facts.append(Card.every_words(str(item["every"])))
 	if item.get("since") != null:
 		facts.append("said " + home._ago(str(item["since"])))
-	box.add_child(quiet("  -  ".join(facts), 14))
+	box.add_child(quiet("  -  ".join(facts)))
 	_chips(box, _actions(item, kind), func(a: String) -> void: sb.item_act(id, a))
 	var plan: Array = item.get("plan", [])
 	for step in plan.slice(0, 3):
-		box.add_child(quiet("then " + str(step), 13))
+		box.add_child(quiet("then " + str(step)))
 	var others: Array = home.open.filter(func(t: Dictionary) -> bool: return int(t["id"]) != id)
 	if kind != "note" and not others.is_empty():
 		heading(box, "Other open")
@@ -214,14 +286,14 @@ func agenda_view(box: VBoxContainer, id: int) -> void:
 	var a: Dictionary = home.things.agenda(id)
 	if a.is_empty():
 		return
-	var title := Paper.heading(str(a["name"]), 18, Paper.INK)
+	var title := Paper.label(str(a["name"]), Fonts.BODY, Paper.INK)
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.custom_minimum_size.x = 40
 	box.add_child(title)
-	box.add_child(quiet(home.things.agenda_rhythm(a), 14))
+	box.add_child(quiet(home.things.agenda_rhythm(a)))
 	var notes: Array = a["notes"]
 	if notes.is_empty():
-		box.add_child(quiet("Nothing on this pile yet.", 14))
+		box.add_child(quiet("Nothing on this pile yet."))
 	for n in notes:
 		var said: String = "" if n.get("since") == null else "said " + home._ago(str(n["since"]))
 		var row := Blocks.Row.new(str(n["text"]), said)
@@ -251,9 +323,9 @@ func _actions(item: Dictionary, kind: String) -> Array:
 	var id := int(item["id"])
 	var out: Array = []
 	if kind == "project":
-		out.append({"label": "Plan", "act": "plan"})
+		out.append({"label": "Plan", "act": "plan", "k": "primary"})
 	elif kind in ["todo", "reminder"]:
-		out.append({"label": "Done", "act": "done"})
+		out.append({"label": "Done", "act": "done", "k": "primary"})
 		if home.hearth.lit:
 			out.append({"label": "Into the fire", "act": "fire"})
 		out.append({"label": "In an hour", "act": "hour"})
@@ -261,10 +333,10 @@ func _actions(item: Dictionary, kind: String) -> Array:
 		var pinned: bool = home.focus.id == id
 		out.append({"label": "Not now" if pinned else "Now", "act": "unnow" if pinned else "now"})
 	elif kind == "waiting":
-		out.append({"label": "Got it", "act": "done"})
+		out.append({"label": "Got it", "act": "done", "k": "primary"})
 	out.append({"label": "Edit", "act": "edit"})
 	var sure: bool = Sure.needs(item) and home.sure.armed("del:%d" % id)
-	out.append({"label": "Delete for good?" if sure else "Delete", "act": "delete"})
+	out.append({"label": "Delete for good?" if sure else "Delete", "act": "delete", "k": "quiet"})
 	return out
 
 
@@ -301,8 +373,8 @@ class PinCard:
 		focus = f
 		var style := StyleBoxFlat.new()
 		style.bg_color = Color("f8efb8")
-		style.set_border_width_all(2)
-		style.border_color = Paper.INK
+		style.set_border_width_all(1)
+		style.border_color = Color(Paper.INK, 0.4)
 		style.set_content_margin_all(8)
 		add_theme_stylebox_override("panel", style)
 		var col := VBoxContainer.new()
@@ -310,11 +382,11 @@ class PinCard:
 		add_child(col)
 		var top := HBoxContainer.new()
 		col.add_child(top)
-		var tag := Paper.label("NOW", 12, Paper.QUIET)
+		var tag := Paper.label("Pinned", Fonts.LABEL, Paper.QUIET)
 		tag.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		top.add_child(tag)
-		Paper.chip("x", top, func() -> void: focus.clear(), false).tooltip_text = "not now"
-		_text = Blocks.wrapped(focus.text, 16, Paper.INK)
+		Paper.chip("Not now", top, func() -> void: focus.clear(), false, "quiet")
+		_text = Blocks.wrapped(focus.text, Fonts.BODY, Paper.INK)
 		col.add_child(_text)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
@@ -322,8 +394,8 @@ class PinCard:
 		_ring = Ring.new(focus)
 		row.add_child(_ring)
 		_len = Paper.chip("", row, func() -> void: focus.cycle(), false)
-		_len.tooltip_text = "click to change: 10 / 25 / 45"
-		_go = Paper.chip("", row, _toggle, false)
+		_len.tooltip_text = "Change: 10 / 25 / 45 min"
+		_go = Paper.chip("", row, _toggle, false, "primary")
 
 	func _toggle() -> void:
 		if focus.running():
@@ -334,23 +406,19 @@ class PinCard:
 	func _process(_dt: float) -> void:
 		_len.text = focus.clock() if focus.running() else "%d min" % focus.minutes
 		_len.disabled = focus.running()
-		_go.text = "stop" if focus.running() else "start"
+		_go.text = "Stop" if focus.running() else "Start"
 
 
-# the weather in one line and the next days as small chips; a click opens the window's view
+# the weather in one line; a click opens the window's view
 class Strip:
 	extends Control
 	signal pressed
 	var home
-	var days: Array
-	var today: String
 	var _lit := false
 
-	func _init(the_home, rows: Array, day: String) -> void:
+	func _init(the_home) -> void:
 		home = the_home
-		days = rows
-		today = day
-		custom_minimum_size = Vector2(0, 28.0 + (52.0 if not rows.is_empty() else 0.0))
+		custom_minimum_size = Vector2(0, 26)
 		mouse_filter = Control.MOUSE_FILTER_STOP
 		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		mouse_entered.connect(func() -> void: _light(true))
@@ -370,7 +438,6 @@ class Strip:
 			pressed.emit()
 
 	func _draw() -> void:
-		var font := ThemeDB.fallback_font
 		if _lit:
 			draw_rect(Rect2(Vector2.ZERO, size), Color("f8efb8"))
 		var sky: String = (
@@ -378,26 +445,12 @@ class Strip:
 		)
 		if home.temp_c != null:
 			sky += ", " + Settings.temp(home.temp_c, home.settings.degrees())
-		draw_string(font, Vector2(4, 19), sky, HORIZONTAL_ALIGNMENT_LEFT, size.x - 8, 15, Paper.INK)
-		var unit: String = home.settings.degrees()
-		var w := (size.x - 8.0) / 3.0
-		for i in days.size():
-			var d: Dictionary = days[i]
-			var at := Vector2(4.0 + i * w, 28.0)
-			draw_rect(Rect2(at, Vector2(w - 6.0, 46.0)), Color("e4d8bd"))
-			draw_rect(Rect2(at, Vector2(w - 6.0, 46.0)), Paper.INK, false, 1.0)
-			var name: String = Forecast.name_of(d["date"], today)
-			name = {"Today": "Today", "Tomorrow": "Tmrw"}.get(name, name.substr(0, 3))
-			draw_string(
-				font, at + Vector2(6, 15), name, HORIZONTAL_ALIGNMENT_LEFT, w - 14, 12, Paper.INK
-			)
-			Forecast.draw_icon(self, d["kind"], at + Vector2(14, 31), 18.0)
-			draw_string(
-				font,
-				at + Vector2(28, 38),
-				Settings.temp(d["high_c"], unit),
-				HORIZONTAL_ALIGNMENT_LEFT,
-				w - 34,
-				13,
-				Paper.INK
-			)
+		draw_string(
+			ThemeDB.fallback_font,
+			Vector2(5, 18),
+			sky,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			size.x - 8,
+			Fonts.BODY,
+			Paper.INK
+		)

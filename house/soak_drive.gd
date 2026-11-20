@@ -85,7 +85,7 @@ func _add_a_todo(h) -> void:
 	var things := await _send({"do": "things"})
 	_eq(things["ok"], true, "things answers")
 	_eq(things["window"].size(), 2, "things names the window size")
-	var add := _control(things, "Button", "text", "add")
+	var add := _control(things, "Control", "tooltip", "Add (I)")
 	_eq(add.is_empty(), false, "things finds the add button")
 	if add.is_empty():
 		return

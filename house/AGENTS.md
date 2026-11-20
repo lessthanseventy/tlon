@@ -11,13 +11,24 @@ applied by `main.gd` `_fit_room` as the room Control's scale; the 3x art is the 
 floats over the room but pet bubbles, a short hover name (gone when the pointer leaves or has been
 still for 2 s) and the selected thing's gold outline. Top: an optional banner strip (the rhythm slip,
 a reply, a ringing reminder; buttons, never covering the pane, never closing a view, never taking a
-room click), then the header (a "< home" back button and the title, `add`, the settings
-cog) and the context pane, a paper sheet. Bottom: the chat dock. `sidebar.gd` owns the views and the
+room click), then the header and the context pane, a paper sheet. The header has one layout in every
+view: a fixed left slot (a drawn back chevron, tooltip "Back (Esc)", empty at Home), the view's title
+in the pixel face ("Home", "Calendar", "Settings"), and on the right the drawn plus (tooltip "Add (I)")
+and the settings cog, always in the same place. Bottom: the chat dock. `sidebar.gd` owns the views and the
 chat modes; `views.gd` builds Home, an item, the "On the desk" list; `blocks.gd`
 turns a card's blocks (title, text, dim, gap, month, buttons, row, foot, day) into Controls.
-Views: `home` (the Now line with Done / Something else / Not today, "Next up" today's next meeting first when
-there is one (a quiet line, "Standup  ·  09:00": no tick, no click) then three coming things, "Open"
-six with "N more...", "Proposed (N)" under it when sources have suggested things (`proposals` of `GET /api/home`: `{id, source, text, why, url}`; `views.gd` `_proposed`: three rows, each its text with the why line small under it and two small buttons, "add" and "no", which post `/api/home/proposals/:id/take|dismiss`; then "N more..." in place; never a banner, a ring or a badge; the family's local list has no sources and answers none), the weather line with three day chips, "Notes (N)" collapsed), `card`
+**One look for the sidebar.** `fonts.gd` holds the type scale: the pixel face only for the view title
+(`TITLE`), one body face for everything else at `BODY`, `SMALL` and `LABEL` (a section's label: small, dim,
+`Paper.section`); text is sentence case. `paper.gd` holds the three button styles: primary (filled, at most one
+per group: Done, Save), secondary (a 1 px outline at low alpha, the default of `Paper.chip`) and quiet (text
+only, underlined on hover: Something else, Not today, Cancel, "no"); a block's button or a row's mark takes
+`"k": "primary"|"quiet"`. A chip (a kind or a personality) is the secondary look unselected and a gold fill
+selected. Arrows, the plus and the chat's handle are `icons.gd` drawings (`icon_button.gd` is one as a
+button), never characters; a shortcut is in the tooltip.
+Views: `home` (in this order, an empty section drawing nothing, not even its label: "Now", the pick with Done /
+Something else / Not today, and the pinned thing with its timer; "Today", what has a time today in time
+order: meetings still on (a quiet line, "Standup  ·  09:00": no tick, no click), reminders due today and an
+agenda due today; "Open", the to-dos but not the pick or the pinned thing, six with "N more..."; "Proposed (N)" when sources have suggested things (`proposals` of `GET /api/home`: `{id, source, text, why, url}`; `views.gd` `_proposed`: three rows, each its text with the why line small under it and two small buttons, "add" and "no", which post `/api/home/proposals/:id/take|dismiss`; then "N more..." in place; never a banner, a ring or a badge; the family's local list has no sources and answers none; "Later (N)", the coming things after today, one line that opens in place; the weather in one line, which opens the window's view; "Notes (N)" collapsed. At 1100x700 with the demo list Home does not scroll), `card`
 (calendar, jar, window, clock, board, plant, book, mousehole, fireplace, piano, globe: `home.card`
 holds which, `home.card_blocks` the blocks; the "book" card is the shelf, `shelf.gd`: Agendas (a row each
 with its note count and when it is next, "Thu 14:00"; "new agenda" asks a name), then every note newest
@@ -27,19 +38,18 @@ someday or project row opens its item view; a note's has Edit and Delete, and th
 Home's expanded notes and the shelf all open it; a note with no id opens the board's notes), `agenda` (an
 agenda's pile, `views.gd` `agenda_view`: its rhythm as text, its notes, each opening as a note, an add line where
 Enter puts a note on it, and Clear, which archives the pile; opened from a shelf row or from Home's quiet "Retro
-at 14:00 - 3 things" row under "Next up" when an agenda with notes is due today; back from it goes to the shelf
+at 14:00 - 3 things" row under "Today" when an agenda with notes is due today; back from it goes to the shelf
 it came from. The data is `agendas` of `GET /api/home`: `{id, name, every, next_at, notes}`; the notes are in no
 other list), `item`, `open`, `add` (`jot.gd` the free-text line and
 `form.gd` the typed form), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
-(`settings_view.gd`), `decorate`. A click on a thing replaces the view; "< home", Esc and a click on
-empty floor go back. The chat dock (`chat_view.gd`) shows the phone's last messages and its input:
-about 40% of the sidebar at home, a handle to collapse it to the input line or to take the whole
-sidebar; it is the input line alone while a thing's view is open, and `K` or a click on the phone
-brings it up. While a LineEdit or TextEdit has focus no letter hotkey fires (`main.gd` `_input`).
+(`settings_view.gd`), `decorate`. A click on a thing replaces the view; the back chevron, Esc and a click on
+empty floor go back. The chat dock (`chat_view.gd`, "Chat") is its input line alone while there are no
+messages to show, and grows to its docked size (30% of the sidebar, 176 px at least) when one exists; its handle
+(two drawn chevrons) collapses it to the input line or gives it the whole sidebar; it is the input line alone
+while a thing's view is open, and `K` or a click on the phone brings it up. While a LineEdit or TextEdit has focus no letter hotkey fires (`main.gd` `_input`).
 
 **Meetings** are `meetings` of `GET /api/home` (`Server.Home.Day`: today's remaining and tomorrow's, already
-cleaned, UTC, `home.meetings`; `[]` over the local list, which shows nothing extra); Next up shows
-`home.next_meeting`. The wall calendar's card reads the month in view from `GET /api/home/meetings` (once per
+cleaned, UTC, `home.meetings`; `[]` over the local list, which shows nothing extra); Today lists the ones still on. The wall calendar's card reads the month in view from `GET /api/home/meetings` (once per
 month while the view is open, again when it is reopened; `things.calendar_blocks` asks, so every way of opening
 the card does: `things.want_meetings`, `month_meetings`; the local list answers `[]`). A month's rows stay as
 last fetched: a failed refetch keeps the last good copy, and a failed first one shows "nothing" until the card
@@ -104,12 +114,12 @@ runs on the local list.
   `blocks.gd` in the sidebar pane): a click on the calendar, jar, window, clock, board (cork, a note
   or the "+N" tag), large plant, bookshelf, mouse hole, fireplace, piano or snow globe opens its view
   in the pane, replacing the one before, and outlines the thing in the room; hover shows only its
-  short name. "< home", Esc and a click on empty floor go back. No view opens in decorate mode. A
+  short name. the back chevron, Esc and a click on empty floor go back. No view opens in decorate mode. A
   rhythm banner never stops a click. The piano plays and the globe shakes on the click that opens
   its view; the fireplace view has a lit/unlit button and an "into the fire" list.
   Calendar: the month grid with a dot on each day a reminder falls (a repeating one on each of its days,
   `every` being `day|week|month` or `"N unit"`, worded "every other week", "every 6 weeks"), today
-  marked, `<` `>` (and the arrow keys) for the month and a click on its name for today's; a click on a
+  marked, two drawn arrows (and the arrow keys) for the month and a click on its name for today's; a click on a
   day lists that day's things and an "add" button; the next five coming up when no day is picked.
   A click on a thing opens its item view. A quiet "today is my birthday" line shows only while no birthday
   is set (the file's `birthday` wins; on the day the view says so). Jar: the count, and the names newest
@@ -265,7 +275,7 @@ runs on the local list.
   composes `Layers/<build>/<group>/…png` from `layers.json`'s layer order in GDScript (alpha-stacked,
   scaled nearest) and offers build, skin, hair and colour, beard, top and colour, trousers and
   colour, shoes and colour, hat, eyewear, scarf, backpack and apron (worn together, each with none), the 20 ready-made recipes and a random button; an arrow pair on each row;
-  Random and Keep; the person in the room wears the choice as it is made, and "< home" or Esc leaves with the old look back. Without the pack: skin, shirt, hat, glasses, scarf drawn
+  Random and Keep; the person in the room wears the choice as it is made, and the back chevron or Esc leaves with the old look back. Without the pack: skin, shirt, hat, glasses, scarf drawn
   in code. The choice is saved to `user://house_person.json` (an old `extra` loads into its slot).
   With the hero-creator pack there is a second tab, "hero" (a click switches; absent without the
   pack): its ready-mades, build, skin and every group of `layers.json` (cape, chest, gloves, beard, hair,
@@ -278,7 +288,7 @@ runs on the local list.
   `look.gd` (desk typing: `ready`; sofa, TV, coffee, sleep, talk: `idle`; wave: `block`; cheer: `cast`;
   pickup: `thrust`; walk: `walk`). Changing between the two re-places the person.
 - **Settings** (`settings.gd` the store, `settings_view.gd` the settings view): the cog in the sidebar header
-  or `,` opens it in the pane, replacing any view; "< home" or Esc closes. A banner never closes it.
+  or `,` opens it in the pane, replacing any view; the back chevron or Esc closes. A banner never closes it.
   One flat object in `user://house_settings.json`, written on a change only, other keys kept as found, never in a
   scripted or staged run: `name` (used in the birthday line and a server line's `{name}`; a line with `{name}` and
   no name is skipped), `birthday` (`"MM-DD"`, `""`), `cat` and `dog` (default Nina and Argos: shown everywhere the
@@ -424,7 +434,7 @@ runs on the local list.
   view: Done (the crumple), Into the fire (while it burns), In an hour, Tomorrow (the paper flies to the wall calendar), Now, Edit, Delete (and Plan for a project).
   Each row's tick circle ticks. Delete asks nothing of a one-off; a repeating reminder or a
   project asks again on the same button ("Delete for good?", 4 s, `sure.gd`).
-- **Forms** (`form.gd`, `things.gd`): `I` or the header's "add" opens the add view, `N` its free-text jot line first (`jot.gd`; same reader and route, Enter keeps it): the form: to-do, reminder,
+- **Forms** (`form.gd`, `things.gd`): `I` or the header's plus opens the add view, `N` its free-text jot line first (`jot.gd`; same reader and route, Enter keeps it): the form: to-do, reminder,
   note, waiting-on or project; a reminder has a date (a month grid), a time (typed `HH:MM`, default
   09:00, chips morning/noon/evening) and a repeat (once, every day/week/month, or every N day/week/month).
   The calendar's day and its things, the clock's named timer, the board and its tabs open it too, and a
