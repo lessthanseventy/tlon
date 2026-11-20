@@ -869,7 +869,7 @@ func _times() -> void:
 	h.open = [{"id": 1, "kind": "reminder", "text": "gone", "due_at": _iso(local.call(-2, "09:00")), "every": null}]
 	h.coming = [
 		{"id": 2, "kind": "reminder", "text": "bins", "due_at": _iso(local.call(1, "18:00")), "every": "week"},
-		{"id": 3, "kind": "reminder", "text": "rent", "due_at": _iso(local.call(10, "09:00")), "every": null},
+		{"id": 3, "kind": "reminder", "text": "rent", "due_at": _iso(local.call(10, "09:00")), "every": "month"},
 	]
 	var texts := _texts(_home_box())
 	var gone: String = When.text(local.call(-2, "09:00"), clock)
@@ -880,9 +880,9 @@ func _times() -> void:
 	var rent: String = When.text(local.call(10, "09:00"), clock)
 	s._check(texts.any(func(t: String) -> bool: return t.begins_with("tomorrow 18:00") and t.ends_with("every week")) and rent in texts, "Later's rows: %s" % str(texts))
 	var rows: Array = h.things.calendar_blocks().filter(func(b: Dictionary) -> bool: return b["t"] == "row")
-	var bins: Array = rows.filter(func(b: Dictionary) -> bool: return str(b["text"]).begins_with("tomorrow"))
+	var bins: Array = rows.filter(func(b: Dictionary) -> bool: return str(b["text"]).ends_with("rent"))
 	s._check(
-		not bins.is_empty() and bins[0]["text"] == "tomorrow 18:00  bins" and bins[0]["sub"] == "every week",
+		not bins.is_empty() and bins[0]["text"] == rent + "  rent" and bins[0]["sub"] == "every month",
 		"Coming up: the time and the text, the rhythm apart: %s" % str(bins)
 	)
 	s._check(rows.all(func(b: Dictionary) -> bool: return not "(" in str(b["text"])), "no rhythm is parenthesised into a title")
