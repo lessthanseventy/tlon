@@ -443,7 +443,7 @@ runs on the local list.
   while it waits). The view then says what the house read it as ("Reminder · tomorrow 10:00 · every week" over the
   text) with a primary "OK" (back) and a secondary "Change", which opens that thing's edit form. The kept row is
   `row` of the local list's answer; the server answers `{reply}` alone, so it is the one id new in the next status
-  (`main.gd` `_keep`; none or several, an ask or a correction, shows the reply with OK only); the reply also shows as a banner. A server that does not
+  (`main.gd` `_keep`; none or several, an ask or a correction, shows the reply with OK only). A server that does not
   answer says "couldn't reach tlon — not kept" and keeps the text in the field.
 - **Acting on a thing**: click a sticky, a row of the Home view or a stack (which lists "On the desk") for its item
   view: Done (the crumple), Into the fire (while it burns), In an hour, Tomorrow (the paper flies to the wall calendar), Now, Edit, Delete (and Plan for a project).

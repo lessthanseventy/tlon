@@ -922,6 +922,21 @@ func _home_fits() -> void:
 		content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
 		"Home does not scroll at 1100x700 with the demo list: content %s in a pane of %s" % [content.get_combined_minimum_size().y, sb.scroll.size.y]
 	)
+	h.card.open("calendar", "cal")
+	await _frames(4)
+	var blocks: Array = h.things.calendar_blocks()
+	var split: int = blocks.find_custom(func(b: Dictionary) -> bool: return b.get("text") == "Coming up")
+	var ids := func(part: Array) -> Array:
+		return part.filter(func(b: Dictionary) -> bool: return b["t"] == "row").map(func(b: Dictionary) -> String: return str(b["act"]))
+	var before: Array = ids.call(blocks.slice(0, split))
+	var after: Array = ids.call(blocks.slice(split))
+	s._check(split > 0 and not before.is_empty(), "the card lists today's and tomorrow's things before Coming up")
+	s._check(after.all(func(a: String) -> bool: return a not in before), "Coming up lists only what is after tomorrow: %s against %s" % [after, before])
+	s._check(
+		content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
+		"The calendar card does not scroll at 1100x700 with the demo list: content %s in a pane of %s" % [content.get_combined_minimum_size().y, sb.scroll.size.y]
+	)
+	h.close_card()
 	h.open = keep[0]
 	h.coming = keep[1]
 	h.notes = keep[2]

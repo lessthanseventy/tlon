@@ -535,10 +535,10 @@ func _claude_in_the_house(main) -> void:
 			}
 		)
 	)
-	h.reply_text = ""
+	main._open_add()
 	main._send_jot("stretch later")
-	await _until(func() -> bool: return h.reply_text != "")
-	_eq(h.reply_text, "Stretch at three.", "the notepad shows the reading's own line")
+	await _until(func() -> bool: return main._sidebar.jot._kept.visible)
+	_eq([main._sidebar.jot._summary.text.begins_with("Reminder"), main._sidebar.jot._said.text, h.chat.messages.back()["text"]], [true, "stretch", "Stretch at three."], "the pad reads back the thing; the reading's own line is in the chat")
 	_eq(
 		h.chat.messages.slice(-2).map(func(m): return m["who"]),
 		["me", "home"],
