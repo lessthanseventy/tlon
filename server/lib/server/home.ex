@@ -307,6 +307,7 @@ defmodule Server.Home do
   @spec agenda_add(map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()}
   def agenda_add(params, now) do
     with {:ok, %{name: name} = changes} <- Server.Home.Form.agenda(params, now, :add),
+         :ok <- no_rhythm(changes[:kind], params),
          {:ok, agenda} <- Server.Agenda.create(via(), name, changes, now) do
       {:ok, agenda_view(agenda, now)}
     end
@@ -319,6 +320,8 @@ defmodule Server.Home do
   @spec agenda_edit(integer(), map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
   def agenda_edit(id, params, now) do
     with %Server.Agenda{} = agenda <- Server.Agenda.get(via(), id) || :not_found,
+         :ok <- editable(agenda),
+         :ok <- no_rhythm(agenda.kind, params),
          {:ok, changes} <- Server.Home.Form.agenda(params, now, :edit),
          {:ok, agenda} <- Server.Agenda.edit(agenda, changes, now) do
       {:ok, agenda_view(agenda, now)}
@@ -360,15 +363,12 @@ defmodule Server.Home do
   end
 
   @doc "Delete the agenda `id` and its pile: `{:ok, %{id, name}}`, `:not_found`."
-  @spec agenda_drop(integer(), DateTime.t()) :: {:ok, map()} | :not_found
+  @spec agenda_drop(integer(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
   def agenda_drop(id, now) do
-    case Server.Agenda.get(via(), id) do
-      nil ->
-        :not_found
-
-      agenda ->
-        :ok = Server.Agenda.delete(agenda, now)
-        {:ok, %{id: agenda.id, name: agenda.name}}
+    with %Server.Agenda{} = agenda <- Server.Agenda.get(via(), id) || :not_found,
+         :ok <- editable(agenda) do
+      :ok = Server.Agenda.delete(agenda, now)
+      {:ok, %{id: agenda.id, name: agenda.name}}
     end
   end
 
@@ -539,4 +539,14 @@ defmodule Server.Home do
     {:ok, jot} = Jot.take(via(), -System.unique_integer([:positive, :monotonic]) - System.os_time(:second), text)
     agenda |> Server.Agenda.note(jot, text, now) |> view()
   end
+
+  defp editable(%Server.Agenda{kind: "door"}),
+    do: {:error, "the door pile cannot be edited or dropped; clear it or drop its notes"}
+
+  defp editable(_agenda), do: :ok
+
+  defp no_rhythm("person", params) when is_map_key(params, "every") or is_map_key(params, "at"),
+    do: {:error, "a person has no every or at"}
+
+  defp no_rhythm(_kind, _params), do: :ok
 end

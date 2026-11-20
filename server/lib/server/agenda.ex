@@ -68,7 +68,7 @@ defmodule Server.Agenda do
 
   @doc "The door pile of `via`, nil before anything was put on it."
   @spec door(String.t()) :: t() | nil
-  def door(via), do: named(via, @door_name, "door")
+  def door(via), do: Repo.one(from(a in __MODULE__, where: a.via == ^via and a.kind == "door"))
 
   @doc "The door pile of `via`, made at `now` when there is none yet."
   @spec ensure_door(String.t(), DateTime.t()) :: t()
