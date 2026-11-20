@@ -135,16 +135,21 @@ defmodule Server.Home do
   taken: kept, read, and answered. The answer, as the chat would say it.
   """
   @spec say(String.t(), DateTime.t()) :: String.t()
-  def say(text, now) do
-    {reply, opts} =
-      Server.Home.Inbox.keep(
-        via(),
-        -System.unique_integer([:positive, :monotonic]) - System.os_time(:second),
-        text,
-        now
-      )
+  def say(text, now), do: text |> say_row(now) |> elem(0)
 
-    Enum.join([reply | for({text, _opts} <- Keyword.get(opts, :then, []), do: text)], "\n\n")
+  @doc """
+  `say/2` with the thing the text made: `{reply, row}`, `row` as `status/1` shows that kind of thing
+  (a to-do, reminder or waiting-on row, a project row, a note as `%{id, text}`), nil when the text
+  made no single row of its own: an ask, a "done", a list, a correction of the thing before it, a
+  note on an agenda's pile.
+  """
+  @spec say_row(String.t(), DateTime.t()) :: {String.t(), map() | nil}
+  def say_row(text, now) do
+    external_id = -System.unique_integer([:positive, :monotonic]) - System.os_time(:second)
+    {reply, opts} = Server.Home.Inbox.keep(via(), external_id, text, now)
+    answer = Enum.join([reply | for({text, _opts} <- Keyword.get(opts, :then, []), do: text)], "\n\n")
+
+    {answer, made(Jot.by_external_id(via(), external_id))}
   end
 
   @doc ~s|Put the open thing `id` off `until` (`"hour"`, `"tomorrow"`) from `now`: `{:ok, jot}`, `:error` when it is none or is done.|
@@ -549,4 +554,11 @@ defmodule Server.Home do
     do: {:error, "a person has no every or at"}
 
   defp no_rhythm(_kind, _params), do: :ok
+
+  defp made(%Jot{dropped_at: nil, kind: "note", agenda_id: nil} = jot), do: %{id: jot.id, text: jot.text}
+
+  defp made(%Jot{dropped_at: nil, kind: kind} = jot) when kind in ["todo", "reminder", "waiting", "project"],
+    do: view(jot)
+
+  defp made(_jot), do: nil
 end

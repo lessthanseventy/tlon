@@ -474,6 +474,10 @@ defmodule Server.Jot do
 
   def anchor(_every, _due), do: nil
 
+  @doc "The jot `via` delivered as `external_id`, nil when there is none."
+  @spec by_external_id(String.t(), integer()) :: %__MODULE__{} | nil
+  def by_external_id(via, external_id), do: Repo.get_by(__MODULE__, via: via, external_id: external_id)
+
   @doc "The thing `id`, nil when there is none."
   @spec get(integer()) :: %__MODULE__{} | nil
   def get(id), do: Repo.get(__MODULE__, id)

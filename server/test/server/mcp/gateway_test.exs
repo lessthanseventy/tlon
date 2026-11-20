@@ -1335,6 +1335,40 @@ defmodule Server.MCP.GatewayTest do
                get_json("/api/home")
     end
 
+    test "a thing typed answers the row it made, as GET /api/home shows it; an ask answers null" do
+      Server.TestDB.clean!()
+      reader = Application.get_env(:server, :home_reader)
+
+      on_exit(fn ->
+        if reader,
+          do: Application.put_env(:server, :home_reader, reader),
+          else: Application.delete_env(:server, :home_reader)
+      end)
+
+      Application.put_env(:server, :home_reader, fn body, _context ->
+        case body do
+          "bins" -> {:ok, %{kind: "reminder", text: body, due_at: ~U[2099-01-01 09:00:00Z]}}
+          "wifi" -> {:ok, %{kind: "note", text: body, due_at: nil}}
+          "what is open" -> {:ok, %{kind: "list", text: nil, due_at: nil}}
+          _ -> {:ok, %{kind: "todo", text: body, due_at: nil}}
+        end
+      end)
+
+      assert {200, %{"row" => todo_row}} = post_json("/api/home", %{text: "buy stamps"})
+      assert {200, %{"row" => reminder_row}} = post_json("/api/home", %{text: "bins"})
+      assert {200, %{"row" => %{"id" => note} = note_row}} = post_json("/api/home", %{text: "wifi"})
+      assert {200, %{"reply" => _, "row" => nil}} = post_json("/api/home", %{text: "what is open"})
+
+      {200, home} = get_json("/api/home")
+      assert [^todo_row] = home["open"]
+      assert [^reminder_row] = home["coming"]
+      assert [^note_row] = home["note_rows"]
+
+      assert %{"kind" => "todo", "text" => "buy stamps"} = todo_row
+      assert %{"kind" => "reminder", "text" => "bins"} = reminder_row
+      assert note_row == %{"id" => note, "text" => "wifi"}
+    end
+
     test "the pets' cast is read from the query and reaches the writer's prompt" do
       Server.TestDB.clean!()
       writer = Application.get_env(:server, :home_pets_writer)
