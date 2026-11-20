@@ -145,6 +145,8 @@ defmodule Server.Home.Source.MailTest do
     both()
     assert Keep.get("home_mail_mark") == nil
     {:ok, _, []} = run(model: model("[]"))
+    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"pending" => %{"validity" => 77, "uid" => 6}}
+    :ok = Mail.kept()
     assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
 
     server([6], "")
@@ -153,11 +155,109 @@ defmodule Server.Home.Source.MailTest do
     assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
   end
 
-  test "a model failure or an unreadable reply is an error and the mark stays" do
+  test "a failed model call never moves the mark nor counts against the batch" do
     both()
-    assert {:error, "the model could not read the mail"} = run(model: fn _ -> {:error, :boom} end)
-    assert {:error, "the model's reply was not a list"} = run(model: model("sorry, no"))
+
+    for _ <- 1..5 do
+      assert {:error, "the model could not read the mail"} = run(model: fn _ -> {:error, :boom} end)
+    end
+
     assert Keep.get("home_mail_mark") == nil
+  end
+
+  test "a reply with trailing prose holding brackets still gives its list" do
+    both()
+    reply = ~s(Sure [as asked]:\n[{"n":1,"kind":"bill","text":"Pay the electric bill","why":"w"}]\nSee [1] and [2].)
+    assert {:ok, [%{text: "Pay the electric bill"}], []} = run(model: model(reply))
+    assert {:ok, [], []} = run(model: model(" [] "))
+  end
+
+  test "a reply that is never usable is counted per batch and skipped on the third, with one warning" do
+    both()
+    unusable = model("sorry, no")
+    assert {:error, "the model's reply was not usable"} = run(model: unusable)
+    assert {:error, "the model's reply was not usable"} = run(model: unusable)
+    assert %{"bad" => %{"count" => 2, "uid" => 6}} = JSON.decode!(Keep.get("home_mail_mark"))
+
+    log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, [], []} = run(model: unusable) end)
+    assert log =~ "skipped 2 messages"
+    refute log =~ "citypower"
+    :ok = Mail.kept()
+    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
+  end
+
+  test "an unusable reply for one batch does not count toward another" do
+    both()
+    unusable = model("no")
+    {:error, _} = run(model: unusable)
+    {:error, _} = run(model: unusable)
+    server([5, 6, 7], fetch_line(1, 7, @spam_header, "x"))
+    assert {:error, _} = run(model: unusable)
+    assert %{"bad" => %{"count" => 1, "uid" => 7}} = JSON.decode!(Keep.get("home_mail_mark"))
+  end
+
+  test "with a mark and more than 40 new messages the oldest 40 are read, then the rest, each once" do
+    Keep.put("home_mail_mark", JSON.encode!(%{validity: 77, uid: 10}))
+    uids = Enum.to_list(11..70)
+    batch = fn uids -> Enum.map_join(Enum.with_index(uids, 1), fn {uid, n} -> fetch_line(n, uid, "Message-ID: <m#{uid}@x>\r\n\r\n", "b") end) end
+
+    seen = self()
+
+    judged = fn prompt ->
+      send(seen, {:judged, Regex.scan(~r/"n":(\d+)/, prompt) |> length()})
+      {:ok, "[]"}
+    end
+
+    server(uids, batch.(Enum.take(uids, 40)))
+    assert {:ok, [], []} = run(model: judged)
+    :ok = Mail.kept()
+    assert_received {:judged, 40}
+    fetch = Enum.find(Process.get(:imap_log), &String.starts_with?(&1, "UID FETCH"))
+    assert fetch =~ "UID FETCH 11,12,"
+    assert fetch =~ ",50 "
+    assert %{"uid" => 50} = JSON.decode!(Keep.get("home_mail_mark"))
+
+    server(Enum.to_list(51..70), batch.(Enum.to_list(51..70)))
+    assert {:ok, [], []} = run(model: judged)
+    :ok = Mail.kept()
+    assert_received {:judged, 20}
+    assert %{"uid" => 70} = JSON.decode!(Keep.get("home_mail_mark"))
+  end
+
+  describe "the mark moves only after the filing" do
+    defmodule Via do
+      @moduledoc false
+      def name, do: "mail"
+      def auto, do: []
+
+      def fetch do
+        with {:ok, proposals, []} <- Server.Home.Source.Mail.fetch(Process.get(:mail_opts)) do
+          {:ok, if(Process.get(:break), do: [%{key: "k", kind: "bogus", text: "x"}], else: proposals), []}
+        end
+      end
+
+      def kept, do: Server.Home.Source.Mail.kept()
+    end
+
+    test "an offer that raises leaves the mark; the mail is read again" do
+      both()
+      reply = ~s([{"n":1,"kind":"bill","text":"Pay the electric bill","why":"w"}])
+      Process.put(:mail_opts, now: @now, transport: Fake, password: "p", model: model(reply))
+      Process.put(:break, true)
+
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert %{"mail" => _} = Server.Home.Sources.poll("telegram", ["mail"], %{"mail" => Via}, @now, %{})
+      end)
+
+      assert %{"pending" => _} = state = JSON.decode!(Keep.get("home_mail_mark"))
+      refute Map.has_key?(state, "uid")
+      assert [] = Proposal.open()
+
+      Process.delete(:break)
+      assert %{} = Server.Home.Sources.poll("telegram", ["mail"], %{"mail" => Via}, @now, %{})
+      assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
+      assert [%{key: "bill-1@citypower.example"}] = Proposal.open()
+    end
   end
 
   test "an IMAP failure is an error with a fixed reason and the mark stays" do
@@ -186,10 +286,11 @@ defmodule Server.Home.Source.MailTest do
     both()
     {:ok, _, []} = run(model: model("[]"))
     assert Enum.find(Process.get(:imap_log), &String.starts_with?(&1, "UID SEARCH")) =~ "SINCE"
+    :ok = Mail.kept()
     assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
   end
 
-  test "at most 40 messages are fetched, the newest" do
+  test "the first look-back fetches at most 40 messages, the newest" do
     server(Enum.to_list(1..60), "")
     {:ok, _, []} = run(model: model("[]"))
     fetch = Enum.find(Process.get(:imap_log), &String.starts_with?(&1, "UID FETCH"))

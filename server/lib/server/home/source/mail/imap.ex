@@ -64,7 +64,7 @@ defmodule Server.Home.Source.Mail.Imap do
 
   @doc """
   The messages of the inbox newer than `mark` (`%{validity: n, uid: n}`; nil or a changed UIDVALIDITY
-  starts over): `{:ok, validity, messages}`, the newest `limit` of them, each with its `uid`, the raw
+  starts over): `{:ok, validity, messages}`, the oldest `limit` of them after a mark, the newest with none, each with its `uid`, the raw
   `header` fields and the first bytes of the raw `body`; with no mark, only those since `since`
   (a `Date`). `{:error, reason}` on any failure.
   """
@@ -99,7 +99,7 @@ defmodule Server.Home.Source.Mail.Imap do
          {:ok, validity} <- validity(lines),
          mark = if(match?(%{validity: ^validity}, mark), do: mark),
          {:ok, found, conn} <- search(conn, mark, since),
-         {:ok, messages, conn} <- fetch(conn, newest(found, limit)) do
+         {:ok, messages, conn} <- fetch(conn, take(found, mark, limit)) do
       command(conn, "LOGOUT", "LOGOUT")
       {:ok, validity, messages}
     end
@@ -137,7 +137,9 @@ defmodule Server.Home.Source.Mail.Imap do
     end
   end
 
-  defp newest(uids, limit), do: uids |> Enum.uniq() |> Enum.sort() |> Enum.take(-limit)
+  # with a mark the oldest, so the mark only passes what was read; the first look-back keeps the newest
+  defp take(uids, nil, limit), do: uids |> Enum.uniq() |> Enum.sort() |> Enum.take(-limit)
+  defp take(uids, _mark, limit), do: uids |> Enum.uniq() |> Enum.sort() |> Enum.take(limit)
 
   defp fetch(conn, []), do: {:ok, [], conn}
 

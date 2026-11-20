@@ -82,6 +82,7 @@ defmodule Server.Home.Sources do
     with {:ok, proposals, resolved} <- module.fetch() do
       refused = Proposal.offer(via, module.name(), proposals, now, module.auto())
       Proposal.resolve(module.name(), resolved, now)
+      if Code.ensure_loaded?(module) and function_exported?(module, :kept, 0), do: module.kept()
       {:ok, refused}
     end
   rescue
