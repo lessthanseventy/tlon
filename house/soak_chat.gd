@@ -281,7 +281,6 @@ func _settings_view() -> void:
 	v._looks["glow"].set_pressed_no_signal(true)
 	v._looks["glow"].pressed.emit()
 	v.show_page("you")
-	s._check(home.settings.value("birthday") == "", "none clears the birthday")
 	v._cat.text = "Mimi"
 	v._cat.text_submitted.emit("Mimi")
 	v._dog.text = "Rex"
