@@ -49,7 +49,7 @@ defmodule Server.Home.Sources do
   @impl true
   def handle_info(:poll, %{every: every, failed: failed} = state) do
     messenger = Application.get_env(:server, :home_messenger, Server.Home.Telegram)
-    modules = Application.get_env(:server, :home_source_modules, %{})
+    modules = Application.get_env(:server, :home_source_modules, %{"mail" => Server.Home.Source.Mail})
     names = names(Server.OperatorConfig.setting("home_sources"))
     Process.send_after(self(), :poll, every)
     {:noreply, %{state | failed: poll(messenger.name(), names, modules, DateTime.utc_now(), failed)}}

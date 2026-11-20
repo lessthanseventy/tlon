@@ -561,8 +561,8 @@ an info `home_morning` alert for ten minutes after its time) and in the clock-ou
 proposed), `take` and `dismiss` (with the positions, as the chat numbers them, of the first five shown to it); Telegram taps `p:<id>:take|no`.
 
 Sources (`Server.Home.Source`: `name/0`, `fetch/0` answering `{:ok, proposals, resolved_keys}` or `{:error, why}`, `auto/0`)
-are polled every 15 minutes by `Server.Home.Sources` for the names in `home_sources` (comma list, default `""`: none; mail is the one
-coming), started with the home inbox; a failing source is logged once per distinct reason and leaves its proposals alone, and a name
+are polled every 15 minutes by `Server.Home.Sources` for the names in `home_sources` (comma list, default `""`: none), where `mail` is the one source:
+read-only over IMAP (`Server.Home.Source.Mail`: `EXAMINE` and `BODY.PEEK` only; `home_mail_host`, `home_mail_user`, the password from env `ZOHO_MAIL_PASSWORD` or the agenix secret `zoho-mail-password`): the messages after the mark kept in `home_keep` as `home_mail_mark` (UIDVALIDITY and last UID; none, or a UIDVALIDITY change, looks back 3 days, at most 40), one home-reader model call per fetch proposing only a bill or payment due, an appointment, a package or a renewal as a to-do keyed by Message-ID (nothing is auto-filed; the mark moves only on success); started with the home inbox; a failing source is logged once per distinct reason and leaves its proposals alone, and a name
 with no module is logged once as no such source. The settled waiting-ons are recorded told
 by the teller that says them (the chat's message, or with no chat the tick at the slot); a desktop read records nothing.
 

@@ -173,7 +173,20 @@ defmodule Server.OperatorConfig do
       type: "string",
       default: "",
       doc:
-        "the outside sources that propose things for the home's list, comma separated; polled every 15 minutes; empty for none"
+        "the outside sources that propose things for the home's list (`mail`), comma separated; polled every 15 minutes; empty for none"
+    },
+    %{
+      key: "home_mail_host",
+      type: "string",
+      default: "imap.zoho.com",
+      doc: "the IMAP host (TLS, port 993) of the inbox the `mail` source reads, read-only"
+    },
+    %{
+      key: "home_mail_user",
+      type: "string",
+      default: "",
+      doc:
+        "the account the `mail` source logs in as; its password is the env ZOHO_MAIL_PASSWORD or the machine secret zoho-mail-password; empty and the source reports it is not set"
     },
     %{
       key: "home_review_on",
