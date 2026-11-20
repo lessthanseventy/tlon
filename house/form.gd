@@ -19,19 +19,18 @@ const QUIET := Color(0.165, 0.145, 0.188, 0.6)
 const WARM := Color("a8453c")
 const GOLD := Color("e8c77a")
 const KINDS := {
-	"todo": "to-do",
-	"reminder": "reminder",
-	"note": "note",
-	"waiting": "waiting on",
-	"project": "project",
-}
-const TITLES := {
-	"todo": "A to-do",
-	"reminder": "A reminder",
-	"note": "A note",
+	"todo": "To-do",
+	"reminder": "Reminder",
+	"note": "Note",
 	"waiting": "Waiting on someone",
-	"project": "A project",
-	"step": "A step",
+	"project": "Project (several steps)",
+}
+const PLACEHOLDERS := {
+	"todo": "What needs doing?",
+	"reminder": "What should the house remind you of?",
+	"note": "What is the note?",
+	"waiting": "What are you waiting for?",
+	"project": "Name the project",
 }
 const EVERY := {"once": "once", "day": "every day", "week": "every week", "month": "every month"}
 const UNITS := ["day", "week", "month"]
@@ -285,9 +284,7 @@ func _set_kind(k: String) -> void:
 	_who_row.visible = k == "waiting" and id == 0
 	_steps.visible = k == "project" and id == 0
 	_when.visible = k == "reminder"
-	_text.placeholder_text = (
-		"name the project" if k == "project" else "what is it?" if k != "waiting" else "what for?"
-	)
+	_text.placeholder_text = PLACEHOLDERS[k]
 	_err.visible = false
 
 
@@ -309,6 +306,7 @@ func _set_unit(u: String) -> void:
 func _show(title: String, kinds: Array, today: Dictionary) -> void:
 	_today = today
 	_title.text = title
+	_title.visible = title != ""
 	_kind_row.visible = kinds.size() > 1
 	for key in _kind_chips:
 		(_kind_chips[key] as Button).visible = key in kinds
@@ -328,7 +326,7 @@ func open_new(preset: Dictionary, today: Dictionary) -> void:
 	_was_every = ""
 	project = int(preset.get("project", 0))
 	var kinds: Array = preset.get("kinds", ["reminder"])
-	_show(TITLES["step" if project > 0 else kinds[0]], kinds, today)
+	_show("A step" if project > 0 else (KINDS[kinds[0]] if kinds.size() == 1 else ""), kinds, today)
 	_done.visible = false
 	_stop.visible = false
 	_del.visible = false

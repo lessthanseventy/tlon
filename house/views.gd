@@ -491,3 +491,17 @@ class Strip:
 			Fonts.BODY,
 			Paper.INK
 		)
+
+
+# what a kept thing was read as, for the jot's read-back
+static func read_as(row: Dictionary) -> String:
+	match str(row.get("kind", "todo")):
+		"reminder":
+			return "Reminder"
+		"note":
+			return "Note"
+		"waiting":
+			return "Waiting on " + str(row.get("who", "someone"))
+		"project":
+			return "Project"
+	return "To-do"

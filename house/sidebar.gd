@@ -48,6 +48,7 @@ const TITLES := {
 	"globe": "The snow globe",
 }
 const FORM_TITLES := {"add": "Add", "edit": "Change"}
+const FORM_KINDS := ["todo", "reminder", "note", "waiting", "project"]
 const VIEW_TITLES := {
 	"open": "On the desk",
 	"closet": "The closet",
@@ -69,6 +70,7 @@ var chat_mode := "dock"
 var chat_popped := false
 var form: Control
 var jot: Control
+var _kept_row := {}
 var settings_view: Control
 var pet_view: Control
 var closet: Control
@@ -167,7 +169,7 @@ func _build_header(outer: VBoxContainer) -> void:
 	_title.clip_text = true
 	_header.add_child(_title)
 	_add = IconButton.new("plus", "Add (I)", LIGHT, SLOT)
-	_add.pressed.connect(func() -> void: open_add(false))
+	_add.pressed.connect(open_add)
 	_header.add_child(_add)
 	_cog = SettingsView.Cog.new()
 	_cog.tooltip_text = "Settings"
@@ -183,6 +185,9 @@ func _build_persistent(stack: VBoxContainer, claude: RefCounted, phone: Node) ->
 	stack.add_child(_add_root)
 	jot = Jot.new()
 	jot.submitted.connect(func(text: String) -> void: jot_submitted.emit(text))
+	jot.details_wanted.connect(open_details)
+	jot.accepted.connect(jot_done)
+	jot.change_wanted.connect(_change_kept)
 	_add_root.add_child(jot)
 	form = Form.new()
 	form.submitted.connect(func(req: Dictionary) -> void: form_submitted.emit(req))
@@ -392,18 +397,40 @@ func open_decorate() -> void:
 	decorate.enter()
 
 
-# the plain add: the jot field over the typed form; `jot_first` puts the cursor in the jot field
-func open_add(jot_first: bool) -> void:
+# the plain add: the jot line alone, the cursor in it
+func open_add() -> void:
 	_switch("add", null)
 	jot.visible = true
 	home.selected = selected_key()
-	form.open_new(
-		{"kinds": ["todo", "reminder", "note", "waiting", "project"]}, home.things.today()
-	)
-	if jot_first:
-		jot.open()
-	else:
-		jot.show_quiet()
+	form.close()
+	jot.open()
+
+
+# "Fill in the details instead": the typed form, the first kind chosen
+func open_details() -> void:
+	open_form("new", {"kinds": FORM_KINDS})
+
+
+# what the house made of the jot: the kind, when, how often, over the thing's text; with no row (a
+# question, a correction) its reply alone
+func show_kept(row: Dictionary, reply: String) -> void:
+	if view != "add" or not jot.visible:
+		return
+	if row.is_empty():
+		jot.read_back("", reply, false)
+		return
+	_kept_row = row
+	var parts: Array[String] = [Views.read_as(row)]
+	if row.get("due_at") != null:
+		parts.append(home._clock(home._due(row)))
+	if row.get("every") != null:
+		parts.append(Card.every_words(str(row["every"])))
+	jot.read_back(" · ".join(parts), str(row["text"]), true)
+
+
+func _change_kept() -> void:
+	var due: float = home._due(_kept_row) if _kept_row.get("due_at") != null else -1.0
+	open_form("edit", {"row": _kept_row, "due": due})
 
 
 # mode "new" (a preset) or "edit" ({row, due}): the form alone
