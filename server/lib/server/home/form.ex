@@ -54,13 +54,17 @@ defmodule Server.Home.Form do
   @doc """
   What an agenda form puts in or changes, from its body: `name` (required to add), `every` (null stops
   it) and `at` (null clears it), as the fields present: `%{name, every, next_at}`. `at` is as in `add/2`.
+  `kind` (`agenda` or `person`, to add only) and a person's `birthday` (`MM-DD` or `YYYY-MM-DD`, null
+  clears it) are carried the same way.
   """
   @spec agenda(map(), DateTime.t(), :add | :edit) :: {:ok, map()} | {:error, String.t()}
   def agenda(params, now, mode) do
-    with {:ok, name} <- agenda_name(params, mode),
+    with {:ok, kind} <- agenda_kind(params, mode),
+         {:ok, name} <- agenda_name(params, mode),
+         {:ok, birthday} <- agenda_birthday(params),
          {:ok, every} <- agenda_every(params),
          {:ok, at} <- agenda_at(params, now) do
-      {:ok, name |> Map.merge(every) |> Map.merge(at)}
+      {:ok, kind |> Map.merge(name) |> Map.merge(birthday) |> Map.merge(every) |> Map.merge(at)}
     end
   end
 
@@ -74,6 +78,18 @@ defmodule Server.Home.Form do
   end
 
   def texts(_other), do: :error
+
+  defp agenda_kind(%{"kind" => kind}, :add) when kind in ["agenda", "person"], do: {:ok, %{kind: kind}}
+  defp agenda_kind(%{"kind" => _other}, :add), do: {:error, "kind is agenda or person"}
+  defp agenda_kind(_params, _mode), do: {:ok, %{}}
+
+  defp agenda_birthday(%{"birthday" => nil}), do: {:ok, %{birthday: nil}}
+
+  defp agenda_birthday(%{"birthday" => birthday}) do
+    with {:ok, birthday} <- Server.Agenda.birthday(birthday), do: {:ok, %{birthday: birthday}}
+  end
+
+  defp agenda_birthday(_params), do: {:ok, %{}}
 
   defp agenda_name(%{"name" => name}, _mode) do
     case Server.Agenda.clean(name) do

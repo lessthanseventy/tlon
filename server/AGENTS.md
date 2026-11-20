@@ -201,6 +201,13 @@ and every layer the spine design's re-laid §9 asked for
   one, and the reply says so; it is shown the existing names to match loosely), sets its rhythm, and answers what is on it, what
   was on it, and "retro's done" (archives the notes as done). Its notes (`jot.agenda_id`) are in no plain list. The pile is told
   once, 15 minutes before `next_at` (in the chat, and as an info `home_agenda` alert on the desktop, as reminders are), and the time moves on an hour after it.
+  The same pile (`home_agenda.kind`, `agenda | person | door`) holds two more things, never told ahead and in none of `agendas`: a
+  **person** (`name`, an optional `birthday` `MM-DD` or `YYYY-MM-DD`, notes as gift ideas; `GET /api/home` `people`, each with its
+  `next_birthday` and the open to-dos, reminders and waiting-ons that name them as a whole word) and **the door**, one pile per `via` made by
+  its first note (`door`; `POST /api/home/door/add`): what to take along and errands for next time out. A note on any pile comes off
+  by `POST /api/home/:id/drop` (`/done` is for reminders and to-dos). The reader files "by the door: umbrella" (`door`), answers "heading
+  out" (`door_show`), makes a person from "Sam's birthday is March 3" (`person`) and files "gift idea for Sam: a kettle" (`person_note`).
+  Birthdays are said in the morning message alone, a week ahead and on the day, with the notes as ideas: no nudge, no alarm.
   A **proposal** (`Server.Proposal`, `Server.Home.Proposals`; table `home_proposal`) is what an outside source suggests he might
   want: `{source, key}` unique, `text`, `why`, `kind` todo or waiting, `url`, `state` open/taken/dismissed. Nothing a source offers
   is filed by itself except a `waiting` one from a source that is trusted for it (`Proposal.offer/5`'s `auto`): a waiting-on is a fact,
@@ -230,7 +237,7 @@ and every layer the spine design's re-laid §9 asked for
   follow as a message of their own (an Add and a No each; the chat's morning message has no buttons, and its proposals follow the
   same way). Once a day at `home_morning_at` (08:30; `""` never; same slot record and quiet hours as the list,
   `Server.Home.Inbox.morning/6`) the morning message is said (`Server.Home.Morning`): today's meetings (`Server.Home.Day.meetings/1`,
-  today's only: times local, "all day", a tentative one marked), what to start with, agendas due today with a pile, the
+  today's only: times local, "all day", a tentative one marked), what to start with, agendas due today with a pile, birthdays today and a week ahead, the
   settled waiting-ons and the proposals (five shown, "and N more"); it is skipped when there is nothing to say, and the desktop
   gets it as a `home_morning` info alert for ten minutes after its time (`Server.Home.morning/1`), and the daily list as a
   `home_list` one, each carrying the settled waiting-ons and recording them told the first time it is raised, so a desktop with no chat says them too. A message that corrects the jot before it

@@ -14,7 +14,8 @@ defmodule Server.Home do
   for naming one to delete), `projects` the open projects with their
   `next` step and how many are `done`, `waiting` what others owe the operator, `done` what was done in
   the last seven days by name (`text`, `done_at`, the newest first), and `done_week` how many
-  things were done in the last seven days, and `agendas` the standing piles (`agenda_row/1`), and `proposals` what sources suggest and the
+  things were done in the last seven days, and `agendas` the standing piles (`agenda_row/1`), `people` (`person_row/2`),
+  `door` the pile by the door (`%{id, notes}`, `id` nil before anything was put on it), and `proposals` what sources suggest and the
   operator has not answered (`proposal_row/1`). A row's `since` is when it was said, its `told_at` when the
   operator was last told a reminder that is due (nil before that), its `project` the project it is a step
   of (nil when none). Things put off to someday or dropped are in none of these.
@@ -30,6 +31,8 @@ defmodule Server.Home do
           done: [map()],
           done_week: non_neg_integer(),
           agendas: [map()],
+          people: [map()],
+          door: map(),
           proposals: [map()]
         }
   def status(now) do
@@ -49,6 +52,8 @@ defmodule Server.Home do
       done: Enum.map(done, &%{text: &1.text, done_at: &1.done_at}),
       done_week: length(done),
       agendas: Enum.map(Server.Agenda.all(via()), &agenda_row/1),
+      people: people(now),
+      door: door_row(Server.Agenda.door(via())),
       proposals: Enum.map(Server.Proposal.open(), &proposal_row/1)
     }
   end
@@ -303,29 +308,41 @@ defmodule Server.Home do
   def agenda_add(params, now) do
     with {:ok, %{name: name} = changes} <- Server.Home.Form.agenda(params, now, :add),
          {:ok, agenda} <- Server.Agenda.create(via(), name, changes, now) do
-      {:ok, agenda_row(agenda)}
+      {:ok, agenda_view(agenda, now)}
     end
   end
 
-  @doc "Change the agenda `id` (`name`, `every` or null, `at` or null): `{:ok, row}`, `{:error, reason}`, `:not_found`."
+  @doc """
+  Change the agenda or person `id` (`name`, `every` or null, `at` or null, a person's `birthday` or
+  null): `{:ok, row}`, `{:error, reason}`, `:not_found`.
+  """
   @spec agenda_edit(integer(), map(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
   def agenda_edit(id, params, now) do
     with %Server.Agenda{} = agenda <- Server.Agenda.get(via(), id) || :not_found,
          {:ok, changes} <- Server.Home.Form.agenda(params, now, :edit),
          {:ok, agenda} <- Server.Agenda.edit(agenda, changes, now) do
-      {:ok, agenda_row(agenda)}
+      {:ok, agenda_view(agenda, now)}
     end
   end
 
-  @doc "Put a note `text` on the pile of the agenda `id`: `{:ok, note row}`, `{:error, reason}`, `:not_found`."
+  @doc "Put a note `text` on the pile of the agenda `id` (a person's too): `{:ok, note row}`, `{:error, reason}`, `:not_found`."
   @spec agenda_note(integer(), term(), DateTime.t()) :: {:ok, map()} | {:error, String.t()} | :not_found
   def agenda_note(id, text, now) do
     with %Server.Agenda{} = agenda <- Server.Agenda.get(via(), id) || :not_found,
          {:ok, %{text: text}} <- Server.Home.Form.add(%{"kind" => "note", "text" => text}, now) do
-      {:ok, jot} =
-        Jot.take(via(), -System.unique_integer([:positive, :monotonic]) - System.os_time(:second), text)
+      {:ok, note_on(agenda, text, now)}
+    end
+  end
 
-      {:ok, agenda |> Server.Agenda.note(jot, text, now) |> view()}
+  @doc """
+  Put a note `text` on the pile by the door, which a first note makes: `{:ok, note row}`,
+  `{:error, reason}`. A note comes off it by `drop/2`, deleted (the item route `POST /api/home/:id/drop`):
+  `done/2` is for reminders and to-dos alone.
+  """
+  @spec door_add(term(), DateTime.t()) :: {:ok, map()} | {:error, String.t()}
+  def door_add(text, now) do
+    with {:ok, %{text: text}} <- Server.Home.Form.add(%{"kind" => "note", "text" => text}, now) do
+      {:ok, via() |> Server.Agenda.ensure_door(now) |> note_on(text, now)}
     end
   end
 
@@ -338,7 +355,7 @@ defmodule Server.Home do
 
       agenda ->
         Server.Agenda.clear(agenda, now)
-        {:ok, agenda_row(agenda)}
+        {:ok, agenda_view(agenda, now)}
     end
   end
 
@@ -383,6 +400,52 @@ defmodule Server.Home do
       notes: for(note <- Jot.agenda_notes(agenda.id), do: %{id: note.id, text: note.text, since: note.received_at})
     }
   end
+
+  @doc """
+  The people from `via` at `now` as `status/1` shows them: `%{id, name, birthday, next_birthday, notes,
+  todos}`. `birthday` is as kept (`MM-DD` or `YYYY-MM-DD`) or nil, `next_birthday` the local date it next
+  falls (today counts), `notes` as an agenda's, `todos` the open to-dos, reminders and waiting-ons whose
+  text (a waiting-on's `who` too) names the person as a whole word, in any case. Ordered by next
+  birthday, those with none last by name.
+  """
+  @spec people(DateTime.t()) :: [map()]
+  def people(now) do
+    open = Jot.opens(via()) ++ Jot.waiting(via())
+
+    via()
+    |> Server.Agenda.all("person")
+    |> Enum.map(&person_row(&1, now, open))
+    |> Enum.sort_by(&{&1.next_birthday == nil, &1.next_birthday && Date.to_erl(&1.next_birthday), &1.name})
+  end
+
+  @doc "A person as `people/1` shows them, `open` the things to look in for their to-dos."
+  @spec person_row(Server.Agenda.t(), DateTime.t(), [Jot.t()]) :: map()
+  def person_row(%Server.Agenda{} = person, now, open) do
+    today = now |> Server.Home.Clock.local() |> NaiveDateTime.to_date()
+    name = ~r/(?<![\p{L}\p{N}_])#{Regex.escape(person.name)}(?![\p{L}\p{N}_])/iu
+
+    %{
+      id: person.id,
+      name: person.name,
+      birthday: person.birthday,
+      next_birthday: Server.Agenda.next_birthday(person.birthday, today),
+      notes: agenda_row(person).notes,
+      todos: for(jot <- open, names?(jot, name), do: view(jot))
+    }
+  end
+
+  defp names?(%Jot{kind: "waiting", waiting_on: who} = jot, name),
+    do: Regex.match?(name, jot.text) or (is_binary(who) and Regex.match?(name, who))
+
+  defp names?(jot, name), do: Regex.match?(name, jot.text)
+
+  defp door_row(nil), do: %{id: nil, notes: []}
+  defp door_row(door), do: %{id: door.id, notes: agenda_row(door).notes}
+
+  defp agenda_view(%Server.Agenda{kind: "person"} = person, now),
+    do: person_row(person, now, Jot.opens(via()) ++ Jot.waiting(via()))
+
+  defp agenda_view(agenda, _now), do: agenda_row(agenda)
 
   defp row(jot, projects) do
     %{
@@ -471,4 +534,9 @@ defmodule Server.Home do
   end
 
   defp started(reading, _now), do: reading
+
+  defp note_on(agenda, text, now) do
+    {:ok, jot} = Jot.take(via(), -System.unique_integer([:positive, :monotonic]) - System.os_time(:second), text)
+    agenda |> Server.Agenda.note(jot, text, now) |> view()
+  end
 end

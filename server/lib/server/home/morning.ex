@@ -2,7 +2,8 @@ defmodule Server.Home.Morning do
   @moduledoc """
   The morning message, said once a day at `home_morning_at` (`Server.Home.Inbox.morning/6`): today's
   meetings (`Server.Home.Day.meetings/1`), the one thing to start with (`Server.Home.now/3`), the
-  agendas whose time is today and have a pile and the waiting-ons a source has since settled; what
+  agendas whose time is today and have a pile, the birthdays of people today and a week ahead
+  (with what is noted on them as ideas) and the waiting-ons a source has since settled; what
   sources proposed (`Server.Home.Proposals`) follows in a message of its own in the chat, and is in
   the text on the desktop. Nothing when there is nothing to say.
   """
@@ -45,6 +46,7 @@ defmodule Server.Home.Morning do
       meetings(meetings || Day.meetings(now)),
       start(now),
       agendas(via, now),
+      birthdays(via, now),
       Proposals.settled(settled),
       proposed
     ]
@@ -75,6 +77,25 @@ defmodule Server.Home.Morning do
       %{say: say} -> "Start with: #{say}"
     end
   end
+
+  defp birthdays(via, now) do
+    today = now |> Clock.local() |> NaiveDateTime.to_date()
+
+    lines =
+      for person <- Agenda.all(via, "person"),
+          date = Agenda.next_birthday(person.birthday, today),
+          when_said = birthday_when(Date.diff(date, today), date),
+          do: "• #{person.name}'s birthday is #{when_said}#{ideas(Jot.agenda_notes(person.id))}"
+
+    if lines != [], do: Enum.join(["Birthdays:" | lines], "\n")
+  end
+
+  defp birthday_when(0, _date), do: "today"
+  defp birthday_when(7, date), do: "next #{Calendar.strftime(date, "%A")}"
+  defp birthday_when(_days, _date), do: nil
+
+  defp ideas([]), do: ""
+  defp ideas(notes), do: ". Ideas: #{Enum.map_join(notes, "; ", & &1.text)}"
 
   defp agendas(via, now) do
     today = now |> Clock.local() |> NaiveDateTime.to_date()

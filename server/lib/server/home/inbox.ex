@@ -27,7 +27,8 @@ defmodule Server.Home.Inbox do
   is answered by a tap or, for a project's next step, by typing it. "What now" is answered with one
   open thing and Done, Something else, Not today and Delete under it (`Server.Home.Now`). "Delete the
   milk" typed is the same as the button. A note for a recurring occasion ("for retro: …") is filed
-  on that agenda's pile, and an agenda's pile is said once, ahead of its time (`Server.Home.Agendas`). Off unless `TLON_START_HOME_INBOX=1` (`:start_home_inbox`), which the service alone
+  on that agenda's pile, and an agenda's pile is said once, ahead of its time (`Server.Home.Agendas`); a
+  thing "by the door", a person's birthday and a note on a person are filed the same way, never said ahead. Off unless `TLON_START_HOME_INBOX=1` (`:start_home_inbox`), which the service alone
   sets: a second node polling the same bot would take the operator's messages from it. With no token
   on the machine it does not start.
   """
@@ -502,6 +503,7 @@ defmodule Server.Home.Inbox do
       projects: Jot.projects(via),
       someday: Jot.somedays(via),
       agendas: Enum.map(Server.Agenda.all(via), & &1.name),
+      people: Enum.map(Server.Agenda.all(via, "person"), & &1.name),
       meetings: Server.Home.Day.meetings(now),
       proposals: Proposals.listed()
     }
@@ -527,6 +529,18 @@ defmodule Server.Home.Inbox do
 
       {:ok, %{kind: "agenda_" <> _} = reading} ->
         {Agendas.ask(jot, reading, now), []}
+
+      {:ok, %{kind: "door"} = reading} ->
+        {Agendas.door(jot, reading, now), []}
+
+      {:ok, %{kind: "door_show"}} ->
+        {Agendas.door_ask(jot, now), []}
+
+      {:ok, %{kind: "person"} = reading} ->
+        {Agendas.person(jot, reading, now), []}
+
+      {:ok, %{kind: "person_note"} = reading} ->
+        {Agendas.person_note(jot, reading, now), []}
 
       {:ok, reading} ->
         {Organize.file(jot, reading, now), []}

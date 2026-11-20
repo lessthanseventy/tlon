@@ -50,6 +50,34 @@ defmodule Server.Home.ReaderTest do
     end
   end
 
+  describe "the door and people" do
+    test "a thing by the door has text; heading out is an ask that needs none" do
+      assert {:ok, %{kind: "door", text: "umbrella"}} = Reader.parse(~s({"kind":"door","text":"umbrella"}))
+      assert :error = Reader.parse(~s({"kind":"door","text":" "}))
+      assert {:ok, %{kind: "door_show", text: ""}} = Reader.parse(~s({"kind":"door_show"}))
+    end
+
+    test "a birthday names the person and a real day, with or without the year" do
+      assert {:ok, %{kind: "person", person: "Sam", birthday: "03-03", text: ""}} =
+               Reader.parse(~s({"kind":"person","person":" Sam ","birthday":"03-03"}))
+
+      assert {:ok, %{person: "Sam", birthday: "1985-03-03"}} =
+               Reader.parse(~s({"kind":"person","person":"Sam","birthday":"1985-03-03"}))
+
+      assert :error = Reader.parse(~s({"kind":"person","person":"Sam"}))
+      assert :error = Reader.parse(~s({"kind":"person","person":"Sam","birthday":"02-30"}))
+      assert :error = Reader.parse(~s({"kind":"person","birthday":"03-03"}))
+    end
+
+    test "a note for a person needs the person and the text" do
+      assert {:ok, %{kind: "person_note", person: "Sam", text: "a kettle"}} =
+               Reader.parse(~s({"kind":"person_note","person":"Sam","text":"a kettle"}))
+
+      assert :error = Reader.parse(~s({"kind":"person_note","text":"a kettle"}))
+      assert :error = Reader.parse(~s({"kind":"person_note","person":"Sam"}))
+    end
+  end
+
   test "what is proposed, and a yes or a no to some of it, are asks that need no text" do
     assert {:ok, %{kind: "proposals", text: ""}} = Reader.parse(~s({"kind":"proposals"}))
     assert {:ok, %{kind: "take", ids: [4, 5]}} = Reader.parse(~s({"kind":"take","ids":[4,5]}))
