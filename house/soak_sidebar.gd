@@ -36,6 +36,7 @@ func run() -> void:
 	await _banner()
 	await _decorate_tabs()
 	_meetings()
+	_wall_click()
 
 
 func _meeting(title: String, from: String, to: String, tentative: bool, day: String) -> Dictionary:
@@ -57,6 +58,48 @@ func _meetings() -> void:
 	s._check(h.next_meeting().is_empty(), "no meetings, nothing in Next up")
 	h.meetings = was
 	_day_meetings()
+
+
+# a click on the wall calendar opens the card, and the sidebar's own frame (not a call to the code
+# under test) draws it: the month must have been asked for by then, and today's meeting shows
+func _wall_click() -> void:
+	var date: String = h.today()
+	var wanted: Array = []
+	var serve := func(key: String, _from: String, _to: String) -> void:
+		wanted.append(key)
+		h.things.set_meetings(
+			key,
+			[
+				{
+					"title": "Clicked in",
+					"starts_at": date + "T23:00:00Z",
+					"ends_at": date + "T23:30:00Z",
+					"tentative": false,
+					"all_day": false,
+					"date": date,
+				}
+			]
+		)
+	h.things.meetings_wanted.connect(serve)
+	h.close_card()
+	var wall: Variant = _centre("cal")
+	s._check(wall != null, "the room has a calendar to click")
+	if wall == null:
+		h.things.meetings_wanted.disconnect(serve)
+		return
+	h.decorating = false
+	h.click(wall)
+	s._check(h.card.kind == "calendar" and wanted.is_empty(), "opening the card asks nothing yet")
+	sb._process(0.0)
+	s._check(not wanted.is_empty(), "the card's first frame asks for the month")
+	s._check(
+		h.card_blocks().any(func(b: Dictionary) -> bool: return b["t"] == "meet"),
+		"and today shows its meeting"
+	)
+	h.things.meetings_wanted.disconnect(serve)
+	h.things.month_meetings.clear()
+	h.close_card()
+	h.things.reset()
 
 
 # the wall calendar: Today and Tomorrow headed when nothing is picked, a clicked date its own block

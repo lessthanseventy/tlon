@@ -95,7 +95,6 @@ func set_meetings(key: String, rows: Array) -> void:
 	month_meetings[key] = rows
 
 
-
 func _plus_day(d: Dictionary) -> Dictionary:
 	var t := Time.get_datetime_dict_from_unix_time(int(Card.unix(d["y"], d["m"], d["d"]) + 86400.0))
 	return {"y": t["year"], "m": t["month"], "d": t["day"]}
