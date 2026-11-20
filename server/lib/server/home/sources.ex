@@ -1,7 +1,7 @@
 defmodule Server.Home.Sources do
   @moduledoc """
   The poller: every 15 minutes the sources named in the `home_sources` setting (a comma list, default
-  `github`; `""` is none) are asked what they suggest (`Server.Home.Source`) and what they offer is kept
+  `""`, none) are asked what they suggest (`Server.Home.Source`) and what they offer is kept
   as proposals (`Server.Proposal`), nothing said to anyone. A source that fails is logged once per
   distinct reason, again when the reason changes and after it has worked, and leaves what it proposed
   before alone. Started with the home inbox (`TLON_START_HOME_INBOX=1`), never in tests unless a test
@@ -49,7 +49,7 @@ defmodule Server.Home.Sources do
   @impl true
   def handle_info(:poll, %{every: every, failed: failed} = state) do
     messenger = Application.get_env(:server, :home_messenger, Server.Home.Telegram)
-    modules = Application.get_env(:server, :home_source_modules, %{"github" => Server.Home.Source.GitHub})
+    modules = Application.get_env(:server, :home_source_modules, %{})
     names = names(Server.OperatorConfig.setting("home_sources"))
     Process.send_after(self(), :poll, every)
     {:noreply, %{state | failed: poll(messenger.name(), names, modules, DateTime.utc_now(), failed)}}

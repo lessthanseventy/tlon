@@ -214,13 +214,9 @@ and every layer the spine design's re-laid §9 asked for
   those positions), and by Add/No buttons (`p:<id>:take|no`). `GET /api/home` has
   `proposals`; `POST /api/home/proposals/:id/take|dismiss`. A **source** is a module behind `Server.Home.Source` (`name/0`,
   `fetch/0` → `{:ok, proposals, resolved_keys} | {:error, why}`, `auto/0` the kinds it may file itself); `Server.Home.Sources` polls
-  the ones in `home_sources` (comma list, default `github`; `""` none) every 15 minutes, started with the inbox
-  (`TLON_START_HOME_INBOX=1`), logging a failure once per distinct reason and leaving the proposals alone. GitHub
-  (`Server.Home.Source.GitHub`) shells out to the signed-in `gh` through `:home_gh`: review requests and PRs with changes requested
-  are to-dos, his own open PRs with no review are waiting-ons it files itself; drafts, PRs by a bot and `home_github_ignore` repos
-  (default `lessthanseventy/tlon`, his own merge queue's churn) are left out. Review requests are those made of him by name
-  (`user-review-requested:@me`); the `home_github_team_reviews` setting (default off) widens them to a team's too
-  (`--review-requested=@me`), and switching it off withdraws the open team ones silently, as any key gone.
+  the ones in `home_sources` (comma list, default `""`: none; mail is the one coming) every 15 minutes, started with the inbox
+  (`TLON_START_HOME_INBOX=1`), logging a failure once per distinct reason and leaving the proposals alone; a name with no
+  module is logged once as no such source.
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
   open next step or a question about it, a waiting-on is asked about after three days, a weekly review
   (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28
