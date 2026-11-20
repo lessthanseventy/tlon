@@ -51,6 +51,17 @@ defmodule Server.Home.Inbox do
   @tick_ms 30_000
   @nudges 6
   @kept ["reminder", "todo", "note", "project", "waiting", "agenda"]
+  @piled [
+    "agenda",
+    "agenda_set",
+    "agenda_show",
+    "agenda_past",
+    "agenda_clear",
+    "door",
+    "door_show",
+    "person",
+    "person_note"
+  ]
   @done ["done", "did it", "did that"]
 
   @doc "Offer the smaller start `start` for the to-do `id` in the chat, once the model has written it."
@@ -524,23 +535,8 @@ defmodule Server.Home.Inbox do
         Jot.file(jot, %{kind: "talk", text: nil, due_at: nil}, now)
         asked(reading, via, now)
 
-      {:ok, %{kind: "agenda"} = reading} ->
-        {Agendas.file(jot, reading, now), []}
-
-      {:ok, %{kind: "agenda_" <> _} = reading} ->
-        {Agendas.ask(jot, reading, now), []}
-
-      {:ok, %{kind: "door"} = reading} ->
-        {Agendas.door(jot, reading, now), []}
-
-      {:ok, %{kind: "door_show"}} ->
-        {Agendas.door_ask(jot, now), []}
-
-      {:ok, %{kind: "person"} = reading} ->
-        {Agendas.person(jot, reading, now), []}
-
-      {:ok, %{kind: "person_note"} = reading} ->
-        {Agendas.person_note(jot, reading, now), []}
+      {:ok, %{kind: kind} = reading} when kind in @piled ->
+        {Agendas.piled(jot, reading, now), []}
 
       {:ok, reading} ->
         {Organize.file(jot, reading, now), []}
