@@ -197,7 +197,8 @@ defmodule Server.Home.Source.MailTest do
     server(
       [5, 6, 7],
       fetch_line(1, 5, @bill_header, @bill_body) <>
-        fetch_line(2, 6, @spam_header, "buy now") <> fetch_line(3, 7, "Message-ID: <new-7@x>\r\n\r\n", "parcel arriving")
+        fetch_line(2, 6, @spam_header, "buy now") <>
+        fetch_line(3, 7, "Message-ID: <new-7@x>\r\n\r\n", "parcel arriving")
     )
   end
 

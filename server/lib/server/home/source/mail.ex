@@ -169,7 +169,10 @@ defmodule Server.Home.Source.Mail do
       save(pending(Map.delete(state, "bad"), batch, 1))
       {:ok, [], []}
     else
-      save(Map.put(state, "bad", %{"validity" => validity, "from" => from, "uid" => top(batch.messages), "count" => count}))
+      save(
+        Map.put(state, "bad", %{"validity" => validity, "from" => from, "uid" => top(batch.messages), "count" => count})
+      )
+
       {:error, "the model's reply was not usable"}
     end
   end
