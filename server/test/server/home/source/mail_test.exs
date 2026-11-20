@@ -148,7 +148,7 @@ defmodule Server.Home.Source.MailTest do
     both()
     assert Keep.get("home_mail_mark") == nil
     {:ok, _, []} = run(model: model("[]"))
-    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"pending" => %{"validity" => 77, "uid" => 6, "tries" => 1}}
+    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"pending" => %{"validity" => 77, "uid" => 6, "tries" => 1, "from" => "first"}}
     :ok = Mail.kept()
     assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
 
@@ -180,7 +180,7 @@ defmodule Server.Home.Source.MailTest do
     unusable = model("sorry, no")
     assert {:error, "the model's reply was not usable"} = run(model: unusable)
     assert {:error, "the model's reply was not usable"} = run(model: unusable)
-    assert %{"bad" => %{"count" => 2, "uid" => 6}} = JSON.decode!(Keep.get("home_mail_mark"))
+    assert %{"bad" => %{"count" => 2, "from" => "first"}} = JSON.decode!(Keep.get("home_mail_mark"))
 
     log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, [], []} = run(model: unusable) end)
     assert log =~ "skipped 2 messages"
@@ -189,14 +189,24 @@ defmodule Server.Home.Source.MailTest do
     assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
   end
 
-  test "an unusable reply for one batch does not count toward another" do
+  defp with_arrival do
+    server(
+      [5, 6, 7],
+      fetch_line(1, 5, @bill_header, @bill_body) <>
+        fetch_line(2, 6, @spam_header, "buy now") <> fetch_line(3, 7, "Message-ID: <new-7@x>\r\n\r\n", "hi")
+    )
+  end
+
+  test "mail arriving between unusable replies does not reset the count: the third still skips, past everything read" do
     both()
     unusable = model("no")
     {:error, _} = run(model: unusable)
     {:error, _} = run(model: unusable)
-    server([5, 6, 7], fetch_line(1, 7, @spam_header, "x"))
-    assert {:error, _} = run(model: unusable)
-    assert %{"bad" => %{"count" => 1, "uid" => 7}} = JSON.decode!(Keep.get("home_mail_mark"))
+    with_arrival()
+    log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, [], []} = run(model: unusable) end)
+    assert log =~ "skipped 3 messages"
+    :ok = Mail.kept()
+    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 7}
   end
 
   test "with a mark and more than 40 new messages the oldest 40 are read, then the rest, each once" do
@@ -296,6 +306,24 @@ defmodule Server.Home.Source.MailTest do
       assert %{} == poll.()
       assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 7}
       assert [%{key: @bill_key}] = Proposal.open()
+    end
+
+    test "mail arriving between failed fillings does not reset the count: the third fetch still skips" do
+      both()
+      reply = ~s([{"n":1,"kind":"bill","text":"Pay the electric bill","why":"w"}])
+      Process.put(:mail_opts, now: @now, transport: Fake, password: "p", model: model(reply))
+      Process.put(:break, true)
+      poll = fn -> Server.Home.Sources.poll("telegram", ["mail"], %{"mail" => Via}, @now, %{}) end
+
+      capture_log(fn ->
+        poll.()
+        poll.()
+      end)
+
+      with_arrival()
+      log = capture_log(fn -> assert %{} == poll.() end)
+      assert log =~ "skipped 3 messages that could not be filed"
+      assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 7}
     end
   end
 
