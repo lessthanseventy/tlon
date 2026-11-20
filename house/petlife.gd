@@ -673,6 +673,9 @@ func _pen(p: Dictionary) -> PetThings.Pen:
 
 func _data(key: String) -> Dictionary:
 	var d := {"t": _t, "level": level, "flicks": _flicks, "sing": _sing}
+	if key == "bowls":
+		d["level"] = h.chore_levels(level)
+		d["chore"] = h.chore_state("bowls") != ""
 	if key == "bed_cushion":
 		var who = h.pets.critter("nina")
 		if _bed_of(who) != "bed_cushion":
@@ -712,6 +715,7 @@ func _bowls_fx(p: Dictionary) -> void:
 				var pt: Vector2 = h._p(x + (j - 1.5) * 0.12, y, 6.0 + 10.0 * u - j * 2.0)
 				h.room.draw_circle(pt, 1.2 * h._k, Color(tone, 1.0 - u))
 		h._register("bowl:" + which, h._ellipse(x, y, 6.0, 3.0), h._p(x, y))
+	h.chore_bowls_hit(p)
 
 
 func items() -> Array:

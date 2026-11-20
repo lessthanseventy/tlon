@@ -868,7 +868,7 @@ func _times() -> void:
 	var keep := [h.open, h.coming]
 	h.open = [{"id": 1, "kind": "reminder", "text": "gone", "due_at": _iso(local.call(-2, "09:00")), "every": null}]
 	h.coming = [
-		{"id": 2, "kind": "reminder", "text": "bins", "due_at": _iso(local.call(1, "18:00")), "every": "week"},
+		{"id": 2, "kind": "reminder", "text": "swim class", "due_at": _iso(local.call(1, "18:00")), "every": "week"},
 		{"id": 3, "kind": "reminder", "text": "rent", "due_at": _iso(local.call(10, "09:00")), "every": "month"},
 	]
 	var texts := _texts(_home_box())

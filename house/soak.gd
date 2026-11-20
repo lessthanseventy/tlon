@@ -23,6 +23,7 @@ const PetThingsSoak := preload("res://soak_petthings.gd")
 const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
 const SidebarSoak := preload("res://soak_sidebar.gd")
+const ChoreSoak := preload("res://soak_chores.gd")
 const LocalSoak := preload("res://soak_local.gd")
 const ArtSoak := preload("res://soak_art.gd")
 const PackLooksSoak := preload("res://soak_looks.gd")
@@ -651,6 +652,8 @@ func _routes() -> void:
 	await FormSoak.new(self, main).run()
 	_where = "sidebar"
 	await SidebarSoak.new(self, main).run()
+	_where = "chores"
+	await ChoreSoak.new(self, main).run()
 	_where = "settings and chat"
 	await ChatSoak.new(self, main).run()
 	_where = "local routes, forms and chat"
@@ -1329,6 +1332,14 @@ func _cards() -> void:
 		_check(pts.has(key), "%s has a hit area" % kind)
 		if not pts.has(key):
 			continue
+		if kind == "plant":
+			var seen: Array = []
+			var watch := func(k: String, a: Variant) -> void: seen.append([k, a])
+			h.viewed.connect(watch)
+			h.click(pts[key][0])
+			h.viewed.disconnect(watch)
+			_check(seen == [["item", 1]], "with a watering chore the plant opens its item view: %s" % str(seen))
+			continue
 		h.click(pts[key][0])
 		_check(h.card.kind == kind and h.card.key == key, "a click on %s opens its view" % key)
 		_check(not h.card_blocks().is_empty(), "the %s view has something to say" % kind)
@@ -1812,7 +1823,7 @@ func _packs_catalogue(l: RefCounted) -> void:
 	for e in l.catalogue:
 		count[e["tab"]] = int(count.get(e["tab"], 0)) + 1
 		_check(e["tab"] in l.tabs, "%s is on a tab that exists" % e["key"])
-		if e["tab"] == "pets":
+		if e["tab"] == "pets" or e["key"] == "laundry_basket":
 			continue
 		for f in (e["faces"] if not e["faces"].is_empty() else [""]):
 			var p := {"p": e["key"], "f": f, "c": 0, "r": 0}
@@ -1838,7 +1849,7 @@ func _packs_catalogue(l: RefCounted) -> void:
 	for tab in l.tabs:
 		shown.append("%s %d pieces %d walls %d floors" % [tab, count.get(tab, 0), l.walls_of(tab).size(), l.floors_of(tab).size()])
 	print("packs: ", "; ".join(shown))
-	_check(count.get("home", 0) == 45, "the interiors still give 45 pieces (%s)" % count.get("home", 0))
+	_check(count.get("home", 0) == 46, "the interiors still give 45 pieces and the laundry basket (%s)" % count.get("home", 0))
 
 
 func _write_layout(path: String, doc: Dictionary) -> void:

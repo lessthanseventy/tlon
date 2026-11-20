@@ -24,6 +24,7 @@ const LocalList := preload("res://local_list.gd")
 const ReaderClaude := preload("res://reader_claude.gd")
 const Telegram := preload("res://telegram.gd")
 const Wttr := preload("res://wttr.gd")
+const Chores := preload("res://chores.gd")
 
 # false in a staged or scripted run: nothing is sent to Claude or anywhere else
 var talk_live := false
@@ -1307,15 +1308,37 @@ func _on_watch(reached: bool, code: int, body: Variant) -> void:
 
 
 func _remove(id: int) -> void:
+	var chore: bool = _demo and _room.home.chore_thing_of(id) != ""
 	_room.home.tick_off(id)
 	var at := Time.get_datetime_string_from_system(true) + "Z"
 	for t in _data["open"]:
 		if int(t["id"]) == id and _data.get("done") is Array:
 			_data["done"] = [{"text": t["text"], "done_at": at}] + _data["done"]
+	if chore:
+		_demo_repeat(id)
 	var kept: Array = _data["open"].filter(func(t): return int(t["id"]) != id)
 	_data["open"] = kept
 	_data["done_week"] = int(_data.get("done_week", 0)) + 1
 	_apply(_data)
+
+
+# the demo has no server to move a repeating chore to its next time
+func _demo_repeat(id: int) -> void:
+	for key in ["open", "coming"]:
+		for row in _data[key]:
+			if int(row["id"]) != id:
+				continue
+			var gap: float = Chores.interval(str(row["every"]))
+			var due := Time.get_unix_time_from_datetime_string(str(row["due_at"]).trim_suffix("Z"))
+			var now: float = _room.home._now_local() - _room.home._bias()
+			due += gap
+			while due <= now:
+				due += gap
+			row["due_at"] = Time.get_datetime_string_from_unix_time(int(due)) + "Z"
+			row["told_at"] = null
+			_data[key] = _data[key].filter(func(t): return int(t["id"]) != id)
+			_data["coming"] = _data["coming"] + [row]
+			return
 
 
 # `--settings "key=value;scroll;armed=reset"` (keys name cat dog birthday widget), for a picture

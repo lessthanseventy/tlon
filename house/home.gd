@@ -37,6 +37,8 @@ const Glow := preload("res://glow.gd")
 const Spells := preload("res://spells.gd")
 const Fonts := preload("res://fonts.gd")
 const When := preload("res://when.gd")
+const Chores := preload("res://chores.gd")
+const PetThings := preload("res://pet_things.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -197,6 +199,9 @@ var _hover_at := Vector2.ZERO
 var selected := ""
 var _hover_time := 0.0
 var _bin_balls := 0
+var _chores := {}
+var _chore_sig: Array = []
+var _moment := {}
 var _next_text := ""
 var _had_open := false
 var _seen_data := false
@@ -697,6 +702,7 @@ func process(dt: float) -> void:
 	rhythm.process(dt)
 	perk_left = maxf(0.0, perk_left - dt)
 	water_left = maxf(0.0, water_left - dt)
+	_chore_moments(dt)
 	_beats(dt)
 	_knocking(dt)
 	sound.process(dt, self)
@@ -801,6 +807,7 @@ func _stack_top(n: int) -> Vector2:
 
 
 func tick_off(id: int) -> void:
+	_chore_done(id)
 	_geometry()
 	var found := {}
 	for item in open:
@@ -953,6 +960,10 @@ func items() -> Array:
 		{"key": 5.0, "pri": 1.5, "fn": _draw_desk_things},
 		{"key": 5.0, "pri": 1.55, "fn": _draw_pad_phone},
 		{"key": 6.0, "pri": 1.5, "fn": _draw_bin_balls},
+		{"key": 6.0, "pri": 1.52, "fn": _draw_chore_bin},
+		{"key": 7.0, "pri": 1.3, "fn": _draw_chore_bag},
+		{"key": 5.0, "pri": 1.56, "fn": _draw_chore_pills},
+		{"key": 2.0, "pri": 1.0, "fn": _draw_chore_basket},
 		{"key": 6.0, "pri": 1.6, "fn": _draw_jar},
 		{"key": 3.0, "pri": 0.6, "fn": _draw_bunting},
 	]
@@ -1123,6 +1134,9 @@ func draw_plant(f: Array) -> void:
 		room._flat_box(_o, f[1], f[2], f[3], f[4], f[5], f[6])
 		return
 	var stage := 0 if open.size() <= 2 or perk_left > 0.0 else (1 if open.size() <= 5 else 2)
+	var thirst := chore_state("plant")
+	if thirst != "":
+		stage = 0 if perk_left > 0.0 else Chores.urgency(thirst)
 	var tex: Texture2D = s["tex"]
 	var top: Vector2 = (room._p(_o, f[1], f[2]) - s["anchor"]).round()
 	var split := 27 * _k
@@ -1136,6 +1150,10 @@ func draw_plant(f: Array) -> void:
 	var lean: float = [0.0, 0.09, 0.2][stage]
 	var squash: float = [1.0, 0.94, 0.84][stage]
 	var tint: Color = [Color.WHITE, Color(0.97, 0.96, 0.78), Color(0.9, 0.82, 0.55)][stage]
+	if thirst != "":
+		lean = [0.0, 0.1, 0.36][stage]
+		squash = [1.0, 0.92, 0.72][stage]
+		tint = [Color.WHITE, Color(0.96, 0.93, 0.68), Color(0.84, 0.7, 0.4)][stage]
 	room.draw_set_transform(pivot, lean, Vector2(1, squash))
 	room.draw_texture_rect_region(
 		tex,
@@ -1446,6 +1464,9 @@ func _ago(iso: String) -> String:
 
 # the short name of what the pointer is on; it goes when the pointer leaves or has been still
 func _name_of(key: String) -> String:
+	var thing := chore_of_key(key)
+	if thing != "":
+		return _chore_name(thing)
 	if key.begins_with("note:"):
 		var i := int(key.substr(5))
 		return _cap(str(notes[i]), 34) if i < notes.size() else ""
@@ -1723,6 +1744,196 @@ func _plant_blocks() -> Array:
 	return blocks
 
 
+# The chore things: thing -> {item, state, due}. A repeating reminder that names a thing stands for
+# it; of two for one thing the more urgent does, and the other stays in the lists.
+func chores() -> Dictionary:
+	var now := _now_local()
+	var sig := [open, coming, int(now), Settings.cat, Settings.dog]
+	var same := _chore_sig.size() == 5 and sig.slice(2) == _chore_sig.slice(2)
+	if same and is_same(open, _chore_sig[0]) and is_same(coming, _chore_sig[1]):
+		return _chores
+	_chore_sig = sig
+	_chores = {}
+	for item in coming + open:
+		if item["kind"] != "reminder" or item.get("every") == null or item.get("due_at") == null:
+			continue
+		var thing := Chores.thing_of(str(item["text"]), [Settings.cat, Settings.dog])
+		if thing == "":
+			continue
+		var due := _due(item)
+		var row := {"item": item, "due": due, "state": Chores.state(due, str(item["every"]), now)}
+		if not _chores.has(thing) or _chore_before(row, _chores[thing]):
+			_chores[thing] = row
+	return _chores
+
+
+func _chore_before(a: Dictionary, b: Dictionary) -> bool:
+	var ua := Chores.urgency(a["state"])
+	var ub := Chores.urgency(b["state"])
+	if ua != ub:
+		return ua > ub
+	if a["due"] != b["due"]:
+		return a["due"] < b["due"]
+	return int(a["item"]["id"]) < int(b["item"]["id"])
+
+
+# is the thing in the room: the bin, the desk and the large plant always are
+func chore_present(thing: String) -> bool:
+	match thing:
+		"laundry":
+			return not layout.basket().is_empty()
+		"bowls":
+			return not (
+				layout
+				. pet_pieces()
+				. filter(func(p): return PetThings.key_of(p) == "bowls")
+				. is_empty()
+			)
+	return true
+
+
+# the thing the row stands for in the room, "" when it is in the lists
+func chore_thing_of(id: int) -> String:
+	var all := chores()
+	for thing in all:
+		if int(all[thing]["item"]["id"]) == id and chore_present(thing):
+			return thing
+	return ""
+
+
+# the state its thing shows, "" with no chore for it; a thing just done shows what it was a moment
+func chore_state(thing: String) -> String:
+	var all := chores()
+	if not all.has(thing) or not chore_present(thing):
+		return ""
+	var m: Variant = _moment.get(thing)
+	if m != null:
+		return m["from"] if m["t"] < Chores.PAUSE else "fine"
+	return all[thing]["state"]
+
+
+# 0..1 over the part of the moment after the thing has changed, -1 when none is on
+func chore_moment(thing: String) -> float:
+	var m: Variant = _moment.get(thing)
+	if m == null or m["t"] < Chores.PAUSE:
+		return -1.0
+	return clampf((m["t"] - Chores.PAUSE) / (Chores.MOMENT - Chores.PAUSE), 0.0, 1.0)
+
+
+func _chore_moments(dt: float) -> void:
+	for thing in _moment.keys():
+		_moment[thing]["t"] += dt
+		if _moment[thing]["t"] > Chores.MOMENT:
+			_moment.erase(thing)
+
+
+func _chore_done(id: int) -> void:
+	var thing := chore_thing_of(id)
+	if thing == "":
+		return
+	_moment[thing] = {"t": 0.0, "from": chore_state(thing)}
+	if thing == "bowls":
+		petlife.fill("food")
+
+
+func chore_hit(thing: String) -> String:
+	return "plant" if thing == "plant" else "chore:" + thing
+
+
+# the thing a hit key is, when a chore stands for it
+func chore_of_key(key: String) -> String:
+	var thing := key.substr(6) if key.begins_with("chore:") else ("plant" if key == "plant" else "")
+	return thing if thing != "" and chore_state(thing) != "" else ""
+
+
+# the hit key of the thing a row stands for, "" for a row that is in the lists
+func chore_hit_of(id: int) -> String:
+	var thing := chore_thing_of(id)
+	return chore_hit(thing) if thing != "" else ""
+
+
+func _chore_name(thing: String) -> String:
+	var row: Dictionary = chores()[thing]
+	return Chores.hover(thing, chore_state(thing), row["due"], _now_local())
+
+
+# a hit over a cell box from `z0` to `z1`
+func _chore_box(key: String, x0: float, y0: float, x1: float, y1: float, z1: float) -> void:
+	var pts := PackedVector2Array()
+	for at in [Vector2(x0, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x0, y1)]:
+		pts.append(_p(at.x, at.y))
+		pts.append(_p(at.x, at.y, z1))
+	_register(key, Geometry2D.convex_hull(pts), _p((x0 + x1) / 2.0, y1))
+
+
+func _draw_chore_basket() -> void:
+	var piece := layout.basket()
+	if piece.is_empty():
+		return
+	var c: int = piece["c"]
+	var r: int = piece["r"]
+	var state_name := chore_state("laundry")
+	var lift := chore_moment("laundry")
+	var pen := PetThings.Pen.new(room, _p(c, r), _k)
+	Chores.basket(pen, state_name if state_name != "" else "fine", maxf(lift, 0.0))
+	if state_name != "":
+		_chore_box("chore:laundry", c + 0.15, r + 0.15, c + 0.85, r + 0.85, 14.0)
+	if lift >= 0.0 and lift < 1.0:
+		Chores.sparks(room, _p(c + 0.5, r + 0.5, 12.0), _k, lift)
+
+
+func _draw_chore_bin() -> void:
+	var state_name := chore_state("bins")
+	if state_name == "":
+		return
+	var pen := PetThings.Pen.new(room, _o, _k)
+	Chores.bin_lid(pen, state_name)
+	_chore_box("chore:bins", 6.1, 0.1, 6.9, 0.9, 13.0)
+
+
+func _draw_chore_bag() -> void:
+	var state_name := chore_state("bins")
+	var gone := chore_moment("bins")
+	if state_name == "":
+		return
+	var pen := PetThings.Pen.new(room, _o, _k)
+	if state_name == "due":
+		Chores.lid_down(pen)
+		Chores.bag(pen)
+		Chores.fly(pen, _t)
+	elif gone >= 0.0 and gone < 1.0:
+		Chores.bag(pen, gone)
+		Chores.sparks(room, _p(6.78, 1.14, 8.0), _k, gone)
+
+
+func _draw_chore_pills() -> void:
+	var state_name := chore_state("pills")
+	if state_name == "":
+		return
+	var pen := PetThings.Pen.new(room, _o, _k)
+	Chores.bottle(pen, Chores.PILLS_AT, state_name)
+	var at := Chores.PILLS_AT
+	_chore_box("chore:pills", at.x - 0.16, at.y - 0.1, at.x + 0.16, at.y + 0.1, at.z + 10.0)
+	var done := chore_moment("pills")
+	if done >= 0.0:
+		Chores.sparks(room, _p(at.x, at.y, at.z + 8.0), _k, done)
+
+
+# the chore sets both bowls, so whichever one is in view shows it
+func chore_levels(level: Dictionary) -> Dictionary:
+	var state_name := chore_state("bowls")
+	if state_name == "":
+		return level
+	var shown: float = Chores.FOOD_LEVEL[state_name]
+	return {"food": shown, "water": shown}
+
+
+# the pets' bowls piece is one hit while a chore stands for it
+func chore_bowls_hit(p: Dictionary) -> void:
+	if chore_state("bowls") != "":
+		_chore_box("chore:bowls", p["c"] + 0.05, p["r"] + 0.05, p["c"] + 0.95, p["r"] + 0.95, 3.0)
+
+
 # the pet under the pointer, "" when none
 func pet_at(pos: Vector2) -> String:
 	var key := _topmost(pos)
@@ -1758,6 +1969,10 @@ func click(pos: Vector2) -> bool:
 		return false
 	finds.touch()
 	var key := _topmost(pos)
+	var thing := chore_of_key(key)
+	if thing != "":
+		open_item(int(chores()[thing]["item"]["id"]))
+		return true
 	var wants := _card_kind(key)
 	if wants != "":
 		things.reset()

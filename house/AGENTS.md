@@ -95,7 +95,7 @@ runs on the local list.
   with moon and stars), a skyline, hills and a tree, and the weather kinds of `weather.ex` on top
   (sun, drifting clouds, fog, rain with a wet glass, storm flashes, snow that settles on the sill).
   Hover shows the description and the temperature in his `degrees`. Nina sometimes sits on the sill. The plant droops a
-  little as more things are open; no text says so.
+  little as more things are open (with a watering chore it follows the chore, below); no text says so.
 - **The person** (`person.gd`) walks the pets' grid and picks by state: at the desk in the chair
   (typing) when things are open, on the sofa when clear, watching the TV now and then when nothing
   is open (10:00-23:00), at the board or with a coffee now and then (mornings), asleep on the sofa
@@ -161,6 +161,31 @@ runs on the local list.
 - Small things: a "water the plant" thing done perks the plant up for 10 min with a can and drops;
   a note, open thing or reminder due today that says birthday or anniversary hangs bunting; the
   window gets lights in December, a pumpkin from 25 Oct, hearts 10-14 Feb.
+- **Chores** (`chores.gd`, wired in `home.gd` `chores`): a repeating reminder (`kind` reminder, `every` and `due_at`
+  set) whose text names a chore thing is that thing in the room, so the operator glances at the room instead of a
+  list. `Chores.TABLE` is the one table, first match wins, words matched whole and case-insensitive ("binder" is not
+  "bin"): laundry, washing: the laundry basket; trash, bins, bin, garbage, recycling, rubbish: the bin; feed with
+  cat, dog, pets or a pet's own name (`Settings.cat`/`dog`): the pets' bowls; meds, medication, pills, vitamins:
+  a pill bottle on the desk; water with plant or plants: the large plant. Of two rows for one thing the more urgent
+  stands for it (due, then soon, then fine; the earlier time breaks a tie) and the other stays a list row.
+  Each thing shows three states, from the row's `due_at` and `every` and the house clock (`Chores.state`): *fine*
+  (far off), *soon* (less than half an interval left) and *due* (due today or gone by). Laundry: an empty basket, a
+  mound filling it, a heap over the rim with a sleeve down the side. Bin: lid shut, lid lifted, mouth open with the lid
+  on the floor, a tied bag and a fly. Bowls: full, low, empty and dark (both bowls follow, the food one can sit
+  behind a pet thing). Bottle: on its side, upright capped, upright with the cap off. Plant: perky and in flower,
+  soft and leaning, drooped and drab (with no watering chore it droops with the open count as before). No text, badge
+  or red. Hover says `short name · when` ("laundry · due today", "bins · Thursday", `Chores.hover`); a click opens the
+  chore's item view and outlines the thing (`chore:<thing>` hits, "plant" for the plant; `sidebar.gd`
+  `selected_key`); Done, through `main.gd` `_remove`, shows the thing's old state for `Chores.PAUSE`, then fine with a
+  moment of its own (clothes lift, the bag goes, sparks, the bowls pour, the can waters), and the server or the local
+  list moves the row to its next time (the demo does it in `_demo_repeat`). A chore whose thing is in the room is left
+  out of Home's Today, Open and Later (`home.chore_thing_of`); it stays on the calendar card and in its item view, and
+  the Now pick may pick it. With its thing not in the room (the basket taken away, the pet things off) it is a list
+  row as any other. The basket is the plain piece `laundry_basket` (default cell 1,1, in decorate's home tab), drawn in
+  code and never as a sprite row; the bin, desk and plant are fixed so their chores are always in the room. Add a
+  chore: a row in `TABLE`, a name in `NAMES`, a drawer in `chores.gd` and a hit in `home.gd`; `soak_chores.gd` covers
+  the table, the states, the hits, Done, the lists and the same over the local list. `--demo` has laundry (soon),
+  bins (due today) and feed the cat (fine).
 - **The room** is 11x11 cells (`Pets.COLS`/`ROWS`, which the home, the room and the walkers all follow; the back walls are column 0 and row 0, so a bigger room grows toward the front and a saved layout loads unchanged) and, in the 1100x700 window beside the sidebar, drawn with the 2x art (`fit_scale`; the 3x art needs a 1072 px area, which a 1450x980 window has). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
   (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
   board, calendar, jar, none of them movable) and the plain ones (the rest of

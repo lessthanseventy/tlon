@@ -5,6 +5,7 @@ extends RefCounted
 const Pets := preload("res://pets.gd")
 const Packs := preload("res://packs.gd")
 const PetThings := preload("res://pet_things.gd")
+const Chores := preload("res://chores.gd")
 
 const SIDES := ["sw", "se", "ne", "nw", "nwse", "nesw"]
 const FRONT := {
@@ -46,6 +47,7 @@ const FIXED := [
 ]
 const DEFAULTS := [
 	["plant_small", "", 0, 0],
+	["laundry_basket", "", 1, 1],
 	["armchair", "se", 0, 1],
 	["rug_blue", "nwse", 1, 4],
 	["painting", "ne", 0, 0],
@@ -78,6 +80,7 @@ const BOXES := {
 	"tv_stand_se": [1, 2, 40, Color("6f5a48")],
 	"sofa_se": [1, 2, 17, Color("9a4f58")],
 	"floor_lamp": [1, 1, 33, Color("d9b86a")],
+	"laundry_basket": [1, 1, 12, Color("c79a5c")],
 }
 # wall segments the board, window, calendar, jar and door use; nothing else goes there
 const WALL_FIXED := {"ne": [2, 3, 4, 5, 6], "nw": [1, 4, 5, 7]}
@@ -137,6 +140,7 @@ func setup(sprites: Dictionary, with_art: bool, file: String, save_it: bool) -> 
 		_scan()
 	else:
 		catalogue.append_array(PetThings.entries())
+		catalogue.append(Chores.entry())
 	pieces = _defaults([])
 	if art and path != "":
 		load_file()
@@ -215,6 +219,7 @@ func _scan() -> void:
 		if face != "" and face not in e["faces"]:
 			e["faces"].append(face)
 	catalogue.append_array(PetThings.entries())
+	catalogue.append(Chores.entry())
 	for i in catalogue.size():
 		var e: Dictionary = catalogue[i]
 		e["faces"].sort_custom(func(a, b): return SIDES.find(a) < SIDES.find(b))
@@ -301,6 +306,14 @@ func _solid() -> Array:
 	return _fixed + pieces.filter(func(p): return not p.get("hide", false))
 
 
+# the laundry basket where it stands, {} when it has been taken away
+func basket() -> Dictionary:
+	for p in _solid():
+		if Chores.is_basket(p):
+			return p
+	return {}
+
+
 # the pet things standing in the room, hidden ones not counted
 func pet_pieces() -> Array:
 	return pieces.filter(func(p): return PetThings.is_pet(p) and not p.get("hide", false))
@@ -323,7 +336,7 @@ func draw_key(p: Dictionary) -> int:
 func rows() -> Dictionary:
 	var out := {"furniture": [], "decor": [], "rugs": []}
 	for p in all():
-		if PetThings.is_pet(p):
+		if PetThings.is_pet(p) or Chores.is_basket(p):
 			continue
 		var id := sprite_id(p)
 		var f := footprint(p)

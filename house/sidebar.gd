@@ -251,7 +251,8 @@ func view_title() -> String:
 func selected_key() -> String:
 	match view:
 		"item":
-			return "item:%d" % int(arg)
+			var thing: String = home.chore_hit_of(int(arg))
+			return thing if thing != "" else "item:%d" % int(arg)
 		"card":
 			return home.card.key
 		"pet":

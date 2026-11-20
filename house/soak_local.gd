@@ -1580,6 +1580,7 @@ func push_state() -> void:
 func over(main) -> void:
 	await _frozen_pass(main)
 	await _real_pass(main)
+	await preload("res://soak_chores.gd").new(s, main).local()
 
 
 func _frozen_pass(main) -> void:
