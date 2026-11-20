@@ -212,7 +212,10 @@ defmodule Server.MCP.OperatorAPI do
                                          home_ask) answered: next: add|finish|step (text), review: keep|later|drop,
                                          waiting: got|chased|tomorrow, shrink: add|no; "nottoday" hides an open thing
                                          until tomorrow. 400 with no choice, 404 when there is no such question
-      POST   /api/home                   {text} → Server.Home.say; {reply}: kept and read as a text in the chat is
+      POST   /api/home                   {text} → Server.Home.say_row; {reply, row}: kept and read as a text in the chat is;
+                                         row is what the text made as GET /api/home shows that kind of row (to-do, reminder,
+                                         waiting-on, project; a note as {id, text}), null when it made none (an ask, a "done",
+                                         a list, a correction, a note on a pile)
   """
 
   import Plug.Conn
@@ -675,7 +678,8 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "POST", "home", []) do
     case body(conn) do
       {%{"text" => text}, conn} when is_binary(text) and text != "" ->
-        json(conn, 200, %{reply: Server.Home.say(text, DateTime.utc_now())})
+        {reply, row} = Server.Home.say_row(text, DateTime.utc_now())
+        json(conn, 200, %{reply: reply, row: row})
 
       {_, conn} ->
         json(conn, 400, %{error: "text is required"})

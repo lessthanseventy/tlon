@@ -196,6 +196,7 @@ and every layer the spine design's re-laid §9 asked for
   message can also ask the helper for something and is then kept as nothing: that things are done,
   what is open, what to do now (`Server.Home.Now`), what is on someday, that a thing is to be deleted, or a question its notes and today's and tomorrow's meetings (`Server.Home.Day`, from `Server.Calendar`) answer. The house's calendar view reads any run of dates from `GET /api/home/meetings` (`Day.between/3`).
   A form puts things in and changes them with no model call (`Server.Home.Form`, `POST /api/home/add|:id/edit|:id/plan|:id/revive`).
+  `POST /api/home {text}` reads a text as the chat does and answers `{reply, row}` (`Server.Home.say_row/2`): `row` the thing it made, in `GET /api/home`'s shape, null when it made none.
   An **agenda** (`Server.Agenda`, `Server.Home.Agendas`) is a named standing pile of notes for a recurring occasion ("retro",
   "1:1 with Sam"), with or without a rhythm (`every`, `next_at`): the reader files "for retro: …" on it (a new name starts
   one, and the reply says so; it is shown the existing names to match loosely), sets its rhythm, and answers what is on it, what
