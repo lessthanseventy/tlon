@@ -1,6 +1,6 @@
 defmodule Server.Home.Pets do
   @moduledoc """
-  What Nina and Argos say at home: lines written for the home as it is now (the time, the weather,
+  What Nina and Rocky say at home: lines written for the home as it is now (the time, the weather,
   what is open by name, what is coming, how much was done this week), a few for each occasion the
   house has (`occasions/0`), so a pat is answered at once from a batch and the batch is about this
   evening. A line about one open thing carries `{thing}` for the house to fill in.
@@ -45,7 +45,7 @@ defmodule Server.Home.Pets do
 
   @defaults %{
     nina: %{name: "Nina", species: "cat", personality: "sassy"},
-    argos: %{name: "Argos", species: "dog", personality: "sweet"}
+    argos: %{name: "Rocky", species: "dog", personality: "sweet"}
   }
 
   @sketches %{
