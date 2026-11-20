@@ -171,22 +171,9 @@ defmodule Server.OperatorConfig do
     %{
       key: "home_sources",
       type: "string",
-      default: "github",
+      default: "",
       doc:
-        "the outside sources that propose things for the home's list, comma separated (github); polled every 15 minutes; empty for none"
-    },
-    %{
-      key: "home_github_ignore",
-      type: "string",
-      default: "lessthanseventy/tlon",
-      doc: "GitHub repos (owner/repo) or owners the home's github source leaves out, comma separated; empty for none"
-    },
-    %{
-      key: "home_github_team_reviews",
-      type: "bool",
-      default: false,
-      doc:
-        "whether the home's github source proposes reviews requested of a team you are in too, not only those asked of you by name"
+        "the outside sources that propose things for the home's list, comma separated; polled every 15 minutes; empty for none"
     },
     %{
       key: "home_review_on",

@@ -1,6 +1,6 @@
 defmodule Server.Proposal do
   @moduledoc """
-  Something a source (GitHub, later Jira, Slack, mail) suggests the operator might want on their
+  Something a source (mail, when it comes) suggests the operator might want on their
   list: `text` is what it would become, `why` one short line of where it came from, `kind` `"todo"`
   or `"waiting"` (`who` owes it), `url` where to look. `{source, key}` is the source's own stable id
   for it, unique: offering it again never makes a second one and never opens one the operator

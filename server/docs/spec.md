@@ -551,18 +551,9 @@ an info `home_morning` alert for ten minutes after its time) and in the clock-ou
 proposed), `take` and `dismiss` (with the positions, as the chat numbers them, of the first five shown to it); Telegram taps `p:<id>:take|no`.
 
 Sources (`Server.Home.Source`: `name/0`, `fetch/0` answering `{:ok, proposals, resolved_keys}` or `{:error, why}`, `auto/0`)
-are polled every 15 minutes by `Server.Home.Sources` for the names in `home_sources` (comma list, default `github`, `""` none),
-started with the home inbox; a failing source is logged once per distinct reason and leaves its proposals alone. GitHub reads
-`gh search prs "user-review-requested:@me" --state=open` (reviews requested of him by name; a to-do "Review: <title>", why
-"<repo>#<n>, asked by <author>"; with `home_github_team_reviews` on, default off, `--review-requested=@me` instead, which counts a
-team's requests too, and switching it off withdraws the open team ones silently),
-`gh search prs --author=@me --state=open --review=changes_requested` (a to-do "Changes requested: <title>") and
-`--author=@me --state=open --review=none` (a waiting-on "Waiting on review: <title>", filed by itself, said as "Reviewed: <title>"
-once a review comes), each with `--draft=false --json number,title,url,author,repository,isDraft`; a key is the PR's URL and its
-role; a PR by a bot (`author.is_bot`, or a login ending `[bot]`) is left out of all three; a PR in a repo or owner listed in `home_github_ignore` (comma list, default `lessthanseventy/tlon`) is left out. A
-waiting-on whose PR left the search is looked up (`gh pr view <url> --json state,isDraft,reviewDecision,reviews`) and said by
-what became of it: "Reviewed: ...", "Merged: ..." or "Closed: ..."; a PR back to a draft keeps its waiting-on open, one whose
-repo is now ignored is dropped without a word, and a failed lookup settles nothing. The settled waiting-ons are recorded told
+are polled every 15 minutes by `Server.Home.Sources` for the names in `home_sources` (comma list, default `""`: none; mail is the one
+coming), started with the home inbox; a failing source is logged once per distinct reason and leaves its proposals alone, and a name
+with no module is logged once as no such source. The settled waiting-ons are recorded told
 by the teller that says them (the chat's message, or with no chat the tick at the slot); a desktop read records nothing.
 
 | Route | Request | Reply |
