@@ -35,30 +35,13 @@ func run() -> void:
 	await _pet()
 	await _banner()
 	await _decorate_tabs()
-	_meetings()
+	_day_meetings()
 	_wall_click()
 	await _home_sections()
 
 
 func _meeting(title: String, from: String, to: String, tentative: bool, day: String) -> Dictionary:
 	return {"title": title, "starts_at": from, "ends_at": to, "tentative": tentative, "day": day}
-
-
-func _meetings() -> void:
-	var was: Array = h.meetings
-	var now: float = h._now_local() - h._bias()
-	var iso := func(at: float) -> String:
-		return Time.get_datetime_string_from_unix_time(int(at)) + "Z"
-	h.meetings = [
-		_meeting("Over", iso.call(now - 7200), iso.call(now - 3600), false, "today"),
-		_meeting("Standup", iso.call(now + 600), iso.call(now + 1500), false, "today"),
-		_meeting("Review", iso.call(now + 90000), iso.call(now + 92000), true, "tomorrow"),
-	]
-	s._check(h.next_meeting().get("title") == "Standup", "Next up shows today's next meeting")
-	h.meetings = []
-	s._check(h.next_meeting().is_empty(), "no meetings, nothing in Next up")
-	h.meetings = was
-	_day_meetings()
 
 
 # a click on the wall calendar opens the card, and the sidebar's own frame (not a call to the code
@@ -374,7 +357,7 @@ func _posted(path: String) -> Array:
 
 
 # the agendas: on the shelf above the notes, an agenda's pile with its add line and Clear, and the
-# one due today under Next up
+# one due today under Today
 func _agendas() -> void:
 	var keep: Dictionary = s._state.duplicate(true)
 	var today := Time.get_unix_time_from_datetime_string(h.today() + "T14:00:00")
@@ -768,6 +751,8 @@ func _home_box() -> VBoxContainer:
 # opened; the header the same in every view; the dock the input line alone until there is a message
 func _home_sections() -> void:
 	var keep := [h.open, h.coming, h.meetings, h.things.pick, h.things.proposals, h.chat.messages]
+	var was_hour: float = h.fake_hour
+	h.fake_hour = 10.0
 	var day := Time.get_unix_time_from_datetime_string(h.today() + "T23:30:00")
 	var pick := {"id": 1, "kind": "todo", "text": "pick me", "why": "it has sat the longest"}
 	h.things.pick = pick
@@ -816,6 +801,7 @@ func _home_sections() -> void:
 	h.meetings = keep[2]
 	h.things.pick = keep[3]
 	h.things.proposals = keep[4]
+	h.fake_hour = was_hour
 	s._check(not h.open.is_empty(), "there is a to-do to open")
 	var opens: Array[Callable] = [
 		sb.back,

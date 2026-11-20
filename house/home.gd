@@ -639,19 +639,6 @@ func _clock(unix: float) -> String:
 	return "%s %s" % [DAYS[d["weekday"]], at]
 
 
-# today's next meeting that is not over, not an all-day one; {} when there is none
-func next_meeting() -> Dictionary:
-	var now := _now_local()
-	for m in meetings:
-		if (
-			m.get("day") == "today"
-			and not m.get("all_day", false)
-			and _local(str(m["ends_at"])) > now
-		):
-			return m
-	return {}
-
-
 func meeting_time(m: Dictionary) -> String:
 	if m.get("all_day", false):
 		return "all day"
@@ -896,7 +883,7 @@ func send_later(id: int) -> void:
 	)
 
 
-# an agenda's pile, from the shelf or from Next up
+# an agenda's pile, from the shelf or from Today
 func open_agenda(id: int) -> void:
 	if not things.agenda(id).is_empty():
 		viewed.emit("agenda", id)
