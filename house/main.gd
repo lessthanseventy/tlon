@@ -55,6 +55,7 @@ var _drag_mouse := Vector2i.ZERO
 var _drag_win := Vector2i.ZERO
 var _prev_size := Vector2i(1100, 700)
 var _busy := false
+var _watch := {}
 var _slow_step := ""
 var _pets_busy := false
 var _pets_stale := false
@@ -145,6 +146,8 @@ func _ready() -> void:
 			_room.home.set_voices(demo.get("pets", {}))
 		demo["forecast"] = _dated(demo.get("forecast", []))
 		demo["agendas"] = _demo_agendas(demo.get("agendas", []))
+		demo["open"] = _demo_due(demo.get("open", []))
+		demo["coming"] = _demo_due(demo.get("coming", []))
 		_demo_rows = _demo_meetings(demo.get("meetings", []))
 		demo["meetings"] = _demo_rows.filter(func(m: Dictionary) -> bool: return m["day"] != "")
 		_apply(demo)
@@ -226,7 +229,7 @@ func _ready() -> void:
 		var text: String = args[args.find("--typing") + 1]
 		get_tree().create_timer(0.3).timeout.connect(
 			func() -> void:
-					_open_add(true)
+					_open_add()
 					_sidebar.jot.open(text)
 					if "--sending" in args:
 						_sidebar.jot.sending(true)
@@ -524,6 +527,8 @@ func _apply(data: Dictionary) -> void:
 	_ids = ids
 	_ids_known = true
 	_room.show_home()
+	if not _watch.is_empty():
+		_check_watch()
 	if ids != _pick_ids:
 		_pick_ids = ids
 		_ask_now(true)
@@ -553,7 +558,7 @@ func _input(event: InputEvent) -> void:
 			_set_decorate(not _decorate.active)
 		KEY_N, KEY_SLASH, KEY_ENTER, KEY_KP_ENTER:
 			get_viewport().set_input_as_handled()
-			_open_add(true)
+			_open_add()
 		KEY_C:
 			get_viewport().set_input_as_handled()
 			_open_closet()
@@ -648,7 +653,7 @@ func _on_viewed(kind: String, arg: Variant) -> void:
 		"open":
 			_sidebar.open_desk()
 		"add":
-			_open_add(true)
+			_open_add()
 		"closet":
 			_open_closet()
 		"chat":
@@ -676,8 +681,8 @@ func _open_closet() -> bool:
 	return _show(func() -> void: _sidebar.open_closet())
 
 
-func _open_add(jot_first: bool) -> bool:
-	return _show(func() -> void: _sidebar.open_add(jot_first))
+func _open_add() -> bool:
+	return _show(func() -> void: _sidebar.open_add())
 
 
 # the home view of the sidebar is where every view opens, from the room only
@@ -696,7 +701,7 @@ func _open_form(mode: String, spec: Dictionary) -> bool:
 
 
 func _add_thing() -> void:
-	_open_add(false)
+	_open_add()
 
 
 # H: the Now line on the home view, asked again from the top
@@ -833,7 +838,7 @@ func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 		"closet":
 			_open_closet()
 		"jot":
-			_open_add(true)
+			_open_add()
 		"chat":
 			_open_chat()
 
@@ -968,6 +973,20 @@ func _demo_agendas(rows: Array) -> Array:
 	)
 
 
+# a demo row's `in_days` and local `at` ("HH:MM") become its UTC `due_at`, so the demo never goes stale
+func _demo_due(rows: Array) -> Array:
+	var today := Time.get_unix_time_from_datetime_string(_room.home.today() + "T00:00:00")
+	var bias: float = _room.home._bias()
+	return rows.map(
+		func(row: Dictionary) -> Dictionary:
+			if not row.has("in_days"):
+				return row
+			var at := str(row["at"]).split(":")
+			var local := today + int(row["in_days"]) * 86400 + int(at[0]) * 3600 + int(at[1]) * 60
+			return row.merged({"due_at": Time.get_datetime_string_from_unix_time(int(local - bias)) + "Z"})
+	)
+
+
 func _demo_agenda(parts: PackedStringArray, body: Dictionary) -> void:
 	var agendas: Array = _data["agendas"]
 	if parts.size() == 4:
@@ -1039,24 +1058,21 @@ func _moved(id: int, due_at: String) -> void:
 func _send_jot(text: String) -> void:
 	var jot = _sidebar.jot
 	jot.sending(true)
-	_tell(
-		text,
-		func(ok: bool, reply: String) -> void:
-			if ok:
-				_room.home.sound.request("save")
-				_room.home.show_reply(reply)
-				_sidebar.jot_done()
-			else:
-				jot.fail("couldn't reach tlon — not kept")
-				_room.home.sound.request("error")
-	)
+	var done := func(ok: bool, _reply: String) -> void:
+		if ok:
+			_room.home.sound.request("save")
+		else:
+			jot.fail("couldn't reach tlon — not kept")
+			_room.home.sound.request("error")
+	_tell(text, done, "", _sidebar.show_kept)
 
 
 # A line to the home, from the notepad or the chat: both are kept in the chat's history. `done`
 # gets (reached, the reply); the room is read again at once.
-func _tell(text: String, done: Callable, via: String = "") -> void:
+func _tell(text: String, done: Callable, via: String = "", kept: Callable = Callable()) -> void:
 	var chat = _room.home.chat
 	var marks := {"via": via} if via != "" else {}
+	var before: Array = _room.home.things.all_ids() if kept.is_valid() else []
 	chat.add("me", text, marks)
 	var finished := func(ok: bool, code: int, body: Variant) -> void:
 		var reached: bool = ok and code == 200
@@ -1065,6 +1081,8 @@ func _tell(text: String, done: Callable, via: String = "") -> void:
 			reply = body["reply"]
 		if reached:
 			chat.add("home", reply, marks)
+			if kept.is_valid():
+				_keep(body, reply, before, kept)
 			if _demo:
 				var id: int = 100 + _data["open"].size()
 				_data["open"] = _data["open"] + [
@@ -1082,6 +1100,41 @@ func _tell(text: String, done: Callable, via: String = "") -> void:
 		)
 	else:
 		_post("/api/home", {"text": text}, finished, 40.0)
+
+
+# the row a jot made, for `kept(row, reply)`: the local list hands it back; the server's reply is a
+# line only, so it is the one id that is new in the next status ({} when none or several are)
+func _keep(body: Variant, reply: String, before: Array, kept: Callable) -> void:
+	if body is Dictionary and body.get("row") is Dictionary:
+		kept.call(body["row"], reply)
+		return
+	var watch := {"before": before, "kept": kept, "reply": reply, "skip": 1 if _busy else 0}
+	_watch = watch
+	get_tree().create_timer(4.0).timeout.connect(
+		func() -> void:
+			if is_same(_watch, watch):
+				_settle_watch({})
+	)
+
+
+func _check_watch() -> void:
+	var things = _room.home.things
+	var fresh: Array = things.all_ids().filter(func(i: int) -> bool: return i not in _watch["before"])
+	var rows: Array = fresh.map(func(i: int) -> Dictionary: return things.find(i)).filter(
+		func(r: Dictionary) -> bool: return not r.is_empty() and r.get("project_id") == null
+	)
+	if rows.size() == 1:
+		_settle_watch(rows[0])
+	elif rows.size() > 1 or _watch["skip"] == 0:
+		_settle_watch({})
+	else:
+		_watch["skip"] -= 1
+
+
+func _settle_watch(row: Dictionary) -> void:
+	var watch := _watch
+	_watch = {}
+	(watch["kept"] as Callable).call(row, watch["reply"])
 
 
 func _send_chat(text: String) -> void:

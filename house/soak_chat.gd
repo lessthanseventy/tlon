@@ -172,9 +172,7 @@ func _names() -> void:
 	s._check(h.finds.is_birthday() and not h.finds.table().is_empty(), "the birthday in settings puts the cake out")
 	h.fake_day = "03-16"
 	s._check(not h.finds.is_birthday(), "and only on its day")
-	h.fake_day = "03-15"
-	h.finds.toggle_birthday()
-	s._check(h.settings.value("birthday") == "", "the calendar's line takes it back through settings")
+	h.settings.put("birthday", "")
 	h.settings.put("cat", "Nina")
 	h.settings.put("dog", "Argos")
 	h.fake_day = ""
@@ -347,7 +345,7 @@ func _conversation() -> void:
 	v._edit_key(_key(KEY_UP))
 	s._check(v._edit.text == "older", "Up recalls his last message")
 	v._edit.text = ""
-	main._open_add(true)
+	main._open_add()
 	main._sidebar.jot.open("from the pad")
 	main._send_jot("from the pad")
 	await _wait(1.0)
@@ -420,7 +418,7 @@ func _conversation() -> void:
 
 func _blockers() -> void:
 	var sb = main._sidebar
-	main._open_add(true)
+	main._open_add()
 	await s.process_frame
 	s._check(sb.view == "add" and sb.takes_text(), "the add view takes text")
 	main._input(_key(KEY_K))

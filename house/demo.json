@@ -153,7 +153,8 @@
       "id": 2,
       "kind": "reminder",
       "text": "call the dentist back about the appointment",
-      "due_at": "2026-11-17T09:30:00Z",
+      "in_days": 0,
+      "at": "09:30",
       "every": null,
       "since": "2026-11-15T20:00:00Z",
       "told_at": null
@@ -173,21 +174,24 @@
       "id": 4,
       "kind": "reminder",
       "text": "take the bins out",
-      "due_at": "2026-11-17T18:00:00Z",
+      "in_days": 1,
+      "at": "18:00",
       "every": "week"
     },
     {
       "id": 5,
       "kind": "reminder",
       "text": "pay rent",
-      "due_at": "2026-11-28T08:00:00Z",
+      "in_days": 8,
+      "at": "09:00",
       "every": "month"
     },
     {
       "id": 6,
       "kind": "reminder",
       "text": "water the plant",
-      "due_at": "2026-12-02T10:00:00Z",
+      "in_days": 3,
+      "at": "10:00",
       "every": "week"
     }
   ],

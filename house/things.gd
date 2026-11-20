@@ -137,7 +137,7 @@ func _day_blocks(d: Dictionary) -> Array:
 			entries.append([when, item])
 	entries.sort_custom(func(a, b): return a[0] < b[0])
 	for e in entries:
-		blocks.append({"t": "row", "text": _line(e[0], e[1]), "act": "edit:%d" % int(e[1]["id"])})
+		blocks.append(_line(e[0], e[1]))
 	if entries.is_empty() and meets.is_empty():
 		blocks.append({"t": "dim", "text": "nothing"})
 	return blocks
@@ -152,6 +152,18 @@ func _ended(m: Dictionary) -> bool:
 
 func _meeting_line(m: Dictionary) -> String:
 	return "%s  %s" % [h.meeting_time(m), str(m["title"])]
+
+
+# every id the room holds, a note's or an agenda's pile's too
+func all_ids() -> Array:
+	var ids: Array = []
+	for list in [h.open, h.coming, waiting, someday, projects, note_rows]:
+		for row in list:
+			ids.append(int(row["id"]))
+	for a in agendas:
+		for row in a["notes"]:
+			ids.append(int(row["id"]))
+	return ids
 
 
 func find(id: int) -> Dictionary:
@@ -180,22 +192,21 @@ func _agenda_at(a: Dictionary) -> float:
 	return h._due({"due_at": a["next_at"]})
 
 
-# "Thu 14:00", or "" when it has no time
+# "14:00", "Thu 14:00", "28 Nov" by the one rule, or "" when it has no time
 func agenda_when(a: Dictionary) -> String:
 	if a.get("next_at") == null:
 		return ""
-	var d := Time.get_datetime_dict_from_unix_time(int(_agenda_at(a)))
-	return "%s %02d:%02d" % [h.DAYS[d["weekday"]], d["hour"], d["minute"]]
+	return h._clock(_agenda_at(a))
 
 
-# its rhythm as text: "every other week, next Thu 14:00", or "no rhythm"
+# its rhythm as text: "every other week, Thu 14:00", or "no rhythm"
 func agenda_rhythm(a: Dictionary) -> String:
 	var parts: Array[String] = []
 	if a.get("every") != null:
 		parts.append(Card.every_words(str(a["every"])))
 	var when := agenda_when(a)
 	if when != "":
-		parts.append(("next " if a.get("every") != null else "") + when)
+		parts.append(when)
 	return ", ".join(parts) if not parts.is_empty() else "no rhythm"
 
 
@@ -306,28 +317,26 @@ func calendar_blocks() -> Array:
 		blocks.append({"t": "title", "text": "Coming up"})
 		var next: Array = h._upcoming(h.coming.filter(func(i): return i.get("due_at") != null), 5)
 		for item in next:
-			blocks.append(
-				{
-					"t": "row",
-					"text": _line(h._due(item), item, true),
-					"act": "edit:%d" % int(item["id"])
-				}
-			)
+			blocks.append(_line(h._due(item), item, true))
 		if next.is_empty():
 			blocks.append({"t": "text", "text": "Nothing coming up."})
 		blocks.append({"t": "buttons", "items": [{"label": "add", "act": "add_day"}]})
 	if h.finds.is_birthday():
 		blocks.append({"t": "foot", "text": "happy birthday" + ("." if Settings.person == "" else ", " + Settings.person + ".")})
-	elif h.finds.birthday == "":
-		blocks.append({"t": "foot", "text": "today is my birthday", "act": "birthday"})
 	return blocks
 
 
-func _line(at: float, item: Dictionary, with_day: bool = false) -> String:
+# one line: the time and the text, the rhythm small and dim at the end
+func _line(at: float, item: Dictionary, with_day: bool = false) -> Dictionary:
 	var t := Time.get_datetime_dict_from_unix_time(int(at))
-	var line: String = h._stamp(at) if with_day else "%02d:%02d" % [t["hour"], t["minute"]]
-	line += "  " + str(item["text"])
-	return line if h._every(item) == "" else line + "  (%s)" % h._repeats(item)
+	var when: String = h._clock(at) if with_day else "%02d:%02d" % [t["hour"], t["minute"]]
+	return {
+		"t": "row",
+		"text": "%s  %s" % [when, item["text"]],
+		"line": true,
+		"sub": h._repeats(item),
+		"act": "edit:%d" % int(item["id"])
+	}
 
 
 func clock_blocks(base: Array) -> Array:

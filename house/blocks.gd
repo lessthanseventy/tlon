@@ -4,7 +4,7 @@ extends RefCounted
 # {"t": "title"|"text"|"dim", "text"}, {"t": "gap"}, {"t": "month", "year", "month", "today", "tomorrow",
 # "marks": {day: true}, "meet_marks": {day: true}, "pick": bool, "sel": day} (arrows and the name act "mprev" "mnext" "mtoday",
 # a day "day:N"), {"t": "buttons", "items": [{"label", "act", "on", "s"}]}, {"t": "row", "text",
-# "act", "dim", "marks": [{"label", "act"}]}, {"t": "foot", "text", "act"}, {"t": "day", "name",
+# "act", "dim", "line" (one clipped line), "sub" (small and dim at its end), "marks": [{"label", "act"}]}, {"t": "foot", "text", "act"}, {"t": "day", "name",
 # "kind", "temps", "wet"} (a forecast row with its icon). Every click calls `act.call(String)`.
 const Paper := preload("res://paper.gd")
 const Fonts := preload("res://fonts.gd")
@@ -370,7 +370,8 @@ static func build(parent: Control, blocks: Array, act: Callable) -> void:
 							"normal", chip.get_theme_stylebox("pressed")
 						)
 			"row":
-				var r := Row.new(str(b["text"]), "", false, b.get("dim", false))
+				var sub := str(b.get("sub", ""))
+				var r := Row.new(str(b["text"]), sub, false, b.get("dim", false), b.get("line", false))
 				r.pressed.connect(func() -> void: act.call(str(b["act"])))
 				r.marks(b.get("marks", []), act)
 				parent.add_child(r)
