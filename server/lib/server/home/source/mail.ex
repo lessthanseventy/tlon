@@ -143,7 +143,10 @@ defmodule Server.Home.Source.Mail do
       end
 
     if count >= @tries do
-      Logger.warning("home source mail: skipped #{length(batch.messages)} messages the model's reply could not be read for")
+      Logger.warning(
+        "home source mail: skipped #{length(batch.messages)} messages the model's reply could not be read for"
+      )
+
       save(pending(Map.delete(state, "bad"), batch, 1))
       {:ok, [], []}
     else
