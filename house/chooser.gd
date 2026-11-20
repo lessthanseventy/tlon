@@ -6,6 +6,8 @@ extends VBoxContainer
 signal item_selected(index: int)
 
 const Paper := preload("res://paper.gd")
+const Fonts := preload("res://fonts.gd")
+const IconButton := preload("res://icon_button.gd")
 const CHIPS := 6
 
 var selected := 0
@@ -18,8 +20,8 @@ var _items: Array[String] = []
 var _chips: Array[Button] = []
 var _value: Label
 var _body: Container
-var _prev: Button
-var _next: Button
+var _prev: Control
+var _next: Control
 
 
 func add_item(text: String) -> void:
@@ -68,14 +70,14 @@ func _build() -> void:
 	row.add_theme_constant_override("separation", 4)
 	_body = row
 	add_child(_body)
-	_prev = Paper.chip("<", _body, func() -> void: _step(-1), false)
-	_value = Paper.label("", 14, Paper.INK)
+	_prev = _arrow("left", "Previous", -1)
+	_value = Paper.label("", Fonts.BODY, Paper.INK)
 	_value.custom_minimum_size.x = 96
 	_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_value.clip_text = true
 	_body.add_child(_value)
-	_next = Paper.chip(">", _body, func() -> void: _step(1), false)
+	_next = _arrow("right", "Next", 1)
 	_refresh()
 
 
@@ -91,3 +93,10 @@ func _refresh() -> void:
 		_value.text = _items[clampi(selected, 0, _items.size() - 1)]
 		_prev.disabled = disabled
 		_next.disabled = disabled
+
+
+func _arrow(kind: String, tip: String, dir: int) -> Control:
+	var b := IconButton.new(kind, tip)
+	b.pressed.connect(func() -> void: _step(dir))
+	_body.add_child(b)
+	return b

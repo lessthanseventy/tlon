@@ -5,6 +5,7 @@ extends VBoxContainer
 signal submitted(text: String)
 
 const Paper := preload("res://paper.gd")
+const Fonts := preload("res://fonts.gd")
 
 var _edit: LineEdit
 var _hint: Label
@@ -43,13 +44,13 @@ class Scribble:
 func _ready() -> void:
 	visible = false
 	add_theme_constant_override("separation", 4)
-	add_child(Paper.heading("Jot it", 15, Paper.INK))
+	add_child(Paper.section("Jot it"))
 	var row := Paper.row(self)
 	_edit = Paper.edit("remind me to..., buy..., a note..., or ask", row)
 	_edit.text_submitted.connect(_on_submit)
 	_scribble = Scribble.new()
 	row.add_child(_scribble)
-	_hint = Paper.label("", 12, Paper.QUIET)
+	_hint = Paper.label("", Fonts.SMALL, Paper.QUIET)
 	add_child(_hint)
 	_hint.text = "Enter keeps it"
 

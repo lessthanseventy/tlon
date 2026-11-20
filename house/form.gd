@@ -7,7 +7,9 @@ signal acted(id: int, what: String)
 signal cancelled
 
 const Card := preload("res://card.gd")
+const Paper := preload("res://paper.gd")
 const Fonts := preload("res://fonts.gd")
+const Icons := preload("res://icons.gd")
 const Sure := preload("res://sure.gd")
 
 
@@ -114,16 +116,14 @@ class MiniMonth:
 	func _draw() -> void:
 		var font := ThemeDB.fallback_font
 		var title := "%s %d" % [Card.MONTHS[month - 1], year]
-		draw_string(font, Vector2(0, 16), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, INK)
-		_name = Rect2(Vector2.ZERO, Vector2(font.get_string_size(title, 0, -1, 16).x, 22))
+		draw_string(font, Vector2(0, 16), title, HORIZONTAL_ALIGNMENT_LEFT, -1, Fonts.BODY, INK)
+		_name = Rect2(Vector2.ZERO, Vector2(font.get_string_size(title, 0, -1, Fonts.BODY).x, 22))
 		_prev = Rect2(size.x - 60, 0, 28, 22)
 		_next = Rect2(size.x - 30, 0, 28, 22)
-		for pair in [[_prev, "<"], [_next, ">"]]:
-			draw_rect(pair[0], INK)
-			draw_rect((pair[0] as Rect2).grow(-2), Color("e4d8bd"))
-			draw_string(font, pair[0].position + Vector2(9, 16), pair[1], 0, -1, 16, INK)
+		Icons.draw(self, "left", _prev.get_center(), Color(INK, 0.75))
+		Icons.draw(self, "right", _next.get_center(), Color(INK, 0.75))
 		for i in 7:
-			draw_string(font, Vector2(i * CELL.x + 12, 38), Card.WEEK[i], 0, -1, 12, QUIET)
+			draw_string(font, Vector2(i * CELL.x + 12, 38), Card.WEEK[i], 0, -1, Fonts.LABEL, QUIET)
 		var info := Card.month_info(year, month)
 		for d in range(1, int(info["days"]) + 1):
 			var idx: int = int(info["first"]) + d - 1
@@ -133,8 +133,8 @@ class MiniMonth:
 				draw_circle(mid, 10.0, Color("e8b86d"))
 			if sel.get("y") == year and sel.get("m") == month and sel.get("d") == d:
 				draw_arc(mid, 11.0, 0.0, TAU, 24, INK, 2.0)
-			var w := font.get_string_size(str(d), 0, -1, 14).x
-			draw_string(font, cell + Vector2((CELL.x - w) / 2.0, 16), str(d), 0, -1, 14, INK)
+			var w := font.get_string_size(str(d), 0, -1, Fonts.BODY).x
+			draw_string(font, cell + Vector2((CELL.x - w) / 2.0, 16), str(d), 0, -1, Fonts.BODY, INK)
 
 
 func _ready() -> void:
@@ -143,8 +143,7 @@ func _ready() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	add_child(col)
-	_title = _label("", 17, INK)
-	_title.theme_type_variation = Fonts.HEADING
+	_title = _label("", Fonts.BODY, INK)
 	col.add_child(_title)
 	_kind_row = _row(col)
 	for k in KINDS:
@@ -152,7 +151,7 @@ func _ready() -> void:
 	_who_row = HBoxContainer.new()
 	_who_row.add_theme_constant_override("separation", 6)
 	col.add_child(_who_row)
-	_who_row.add_child(_label("who", 14, QUIET))
+	_who_row.add_child(_label("who", Fonts.SMALL, QUIET))
 	_who = _edit("a name", _who_row)
 	_text = _edit("", col)
 	_steps = TextEdit.new()
@@ -161,7 +160,7 @@ func _ready() -> void:
 	_steps.add_theme_color_override("font_color", INK)
 	_steps.add_theme_color_override("caret_color", INK)
 	_steps.add_theme_color_override("font_placeholder_color", Color(INK, 0.4))
-	_steps.add_theme_font_size_override("font_size", 16)
+	_steps.add_theme_font_size_override("font_size", Fonts.BODY)
 	var flat := _flat()
 	for s in ["normal", "focus", "read_only"]:
 		_steps.add_theme_stylebox_override(s, flat)
@@ -173,7 +172,7 @@ func _ready() -> void:
 	_month = MiniMonth.new()
 	_when.add_child(_month)
 	var time_row := _row(_when)
-	time_row.add_child(_label("time", 14, QUIET))
+	time_row.add_child(_label("time", Fonts.SMALL, QUIET))
 	_time = _edit("09:00", time_row)
 	_time.custom_minimum_size.x = 70
 	_time.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -197,15 +196,15 @@ func _ready() -> void:
 	_n.text_changed.connect(func(_t: String) -> void: _set_mode("custom"))
 	for u in UNITS:
 		_unit_chips[u] = _chip(u, custom_row, func() -> void: _set_unit(u))
-	_err = _label("", 14, WARM)
+	_err = _label("", Fonts.SMALL, WARM)
 	_err.visible = false
 	col.add_child(_err)
 	var btns := _row(col)
-	_save = _chip("Save", btns, submit, false)
-	_chip("Cancel", btns, cancel, false)
+	_save = _chip("Save", btns, submit, false, "primary")
+	_chip("Cancel", btns, cancel, false, "quiet")
 	_done = _chip("Done", btns, func() -> void: _acted("done"), false)
 	_stop = _chip("Stop repeating", btns, _stop_repeating, false)
-	_del = _chip("Delete", btns, _delete, false)
+	_del = _chip("Delete", btns, _delete, false, "quiet")
 	_set_mode("once")
 	_set_unit("week")
 
@@ -264,7 +263,7 @@ func _edit(placeholder: String, parent: Control) -> LineEdit:
 	e.add_theme_color_override("font_color", INK)
 	e.add_theme_color_override("font_placeholder_color", Color(INK, 0.4))
 	e.add_theme_color_override("caret_color", INK)
-	e.add_theme_font_size_override("font_size", 17)
+	e.add_theme_font_size_override("font_size", Fonts.BODY)
 	var flat := _flat()
 	for s in ["normal", "focus", "read_only"]:
 		e.add_theme_stylebox_override(s, flat)
@@ -273,34 +272,10 @@ func _edit(placeholder: String, parent: Control) -> LineEdit:
 	return e
 
 
-func _chip(text: String, parent: Control, cb: Callable, toggle: bool = true) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.toggle_mode = toggle
-	b.focus_mode = Control.FOCUS_NONE
-	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	b.add_theme_font_size_override("font_size", 14)
-	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
-		b.add_theme_color_override(c, INK)
-	b.add_theme_color_override("font_disabled_color", QUIET)
-	for pair in [
-		["normal", Color("e4d8bd")],
-		["hover", Color("f8efb8")],
-		["pressed", GOLD],
-		["hover_pressed", GOLD],
-		["disabled", Color("d8cfba")]
-	]:
-		var s := StyleBoxFlat.new()
-		s.bg_color = pair[1]
-		s.set_border_width_all(2)
-		s.border_color = INK
-		s.set_content_margin_all(4)
-		s.content_margin_left = 9
-		s.content_margin_right = 9
-		b.add_theme_stylebox_override(pair[0], s)
-	b.pressed.connect(cb)
-	parent.add_child(b)
-	return b
+func _chip(
+	text: String, parent: Control, cb: Callable, toggle: bool = true, kind: String = "secondary"
+) -> Button:
+	return Paper.chip(text, parent, cb, toggle, kind)
 
 
 func _set_kind(k: String) -> void:

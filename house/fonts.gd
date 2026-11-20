@@ -1,7 +1,7 @@
 extends RefCounted
 
-# Gridwright Round, a chunky pixel font, for headings: the side panel's titles, card and form
-# titles, the settings' and the chat's. Body text keeps the default font: at the sizes the house
+# Gridwright Round, a chunky pixel font, for the sidebar's view title alone. Everything else keeps
+# the default font (BODY, SMALL, LABEL below): at the sizes the house
 # reads in (14-17 px) the pack's text fonts are a size short of their design size or wider than
 # the room's cards allow, and long lines turn to mush. Round is drawn at its design size (16 px)
 # or a whole multiple of it, whatever size is asked (`fixed_size`), with no smoothing, so it stays
@@ -12,6 +12,11 @@ const Looks := preload("res://looks.gd")
 const HEADING := "Heading"
 const FILE := "pixel-fonts-2/Gridwright Pixel Fonts 2/TTF/Gridwright-Round.ttf"
 const DESIGN_SIZE := 16
+# The sidebar's one scale: the pixel face for the view title only, the body face at three sizes.
+const TITLE := 22
+const BODY := 15
+const SMALL := 13
+const LABEL := 12
 
 static var _pixel: FontFile
 

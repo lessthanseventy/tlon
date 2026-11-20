@@ -4,6 +4,7 @@ extends RefCounted
 # title, a click on one showing the pet's remark under it. The filter and the opened sections live
 # here so a rebuild of the pane keeps them.
 const Paper := preload("res://paper.gd")
+const Fonts := preload("res://fonts.gd")
 const Blocks := preload("res://blocks.gd")
 const SHOWN := 8
 const FILTER_AT := 8
@@ -60,7 +61,7 @@ func _fill() -> void:
 			key, key.capitalize(), q, func(r: Dictionary) -> void: home.open_item(int(r["id"]))
 		)
 	if kept == 0 and filter == "":
-		_list.add_child(Blocks.wrapped("Nothing is kept here yet.", 15, Paper.QUIET))
+		_list.add_child(Blocks.wrapped("Nothing is kept here yet.", Fonts.BODY, Paper.QUIET))
 	_books(q)
 
 
@@ -70,7 +71,7 @@ func _agendas(q: String) -> int:
 	var rows: Array = held.filter(
 		func(a: Dictionary) -> bool: return q == "" or str(a["name"]).to_lower().contains(q)
 	)
-	_list.add_child(Paper.heading("Agendas (%d)" % rows.size(), 14, Paper.INK))
+	_list.add_child(Paper.section("Agendas (%d)" % rows.size(), 5))
 	for a in rows:
 		var sub := str((a["notes"] as Array).size())
 		var when: String = home.things.agenda_when(a)
@@ -108,7 +109,7 @@ func _section(key: String, name: String, q: String, open: Callable) -> int:
 	)
 	if rows.is_empty():
 		return held.size()
-	_list.add_child(Paper.heading("%s (%d)" % [name, rows.size()], 14, Paper.INK))
+	_list.add_child(Paper.section("%s (%d)" % [name, rows.size()], 5))
 	var all: bool = expanded.get(key, false)
 	for r in rows if all else rows.slice(0, SHOWN):
 		var row := Blocks.Row.new(str(r["text"]), str(r.get("sub", "")))
@@ -138,7 +139,7 @@ func _books(q: String) -> void:
 		if q != "" and not (t[0] + " " + t[1]).to_lower().contains(q):
 			continue
 		if shown == 0:
-			_list.add_child(Paper.heading("Books", 14, Paper.INK))
+			_list.add_child(Paper.section("Books", 5))
 		shown += 1
 		var opened: bool = finds.book.get("title", "") == t[0]
 		var row := Blocks.Row.new(t[0], t[1])
@@ -154,5 +155,5 @@ func _books(q: String) -> void:
 		if opened:
 			var pad := MarginContainer.new()
 			pad.add_theme_constant_override("margin_left", 10)
-			pad.add_child(Blocks.wrapped(finds.remark(), 14, Paper.INK))
+			pad.add_child(Blocks.wrapped(finds.remark(), Fonts.BODY, Paper.INK))
 			_list.add_child(pad)

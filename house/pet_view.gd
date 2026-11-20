@@ -5,6 +5,7 @@ extends VBoxContainer
 # settings screen does (the pet's animal, its name, its way) and the room follows at once.
 
 const Paper := preload("res://paper.gd")
+const Fonts := preload("res://fonts.gd")
 const Chooser := preload("res://chooser.gd")
 const Pets := preload("res://pets.gd")
 const Settings := preload("res://settings.gd")
@@ -139,11 +140,11 @@ func _build_page() -> void:
 	names.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	names.add_theme_constant_override("separation", 2)
 	head.add_child(names)
-	_title = Paper.heading("", 22, Paper.INK)
+	_title = Paper.label("", Fonts.BODY, Paper.INK)
 	_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_title.custom_minimum_size.x = 40
 	names.add_child(_title)
-	_sub = Blocks.wrapped("", 14, Paper.QUIET)
+	_sub = Blocks.wrapped("", Fonts.SMALL, Paper.QUIET)
 	names.add_child(_sub)
 	_alive = VBoxContainer.new()
 	_alive.add_theme_constant_override("separation", 8)
@@ -151,8 +152,8 @@ func _build_page() -> void:
 	var now := VBoxContainer.new()
 	now.add_theme_constant_override("separation", 0)
 	_alive.add_child(now)
-	now.add_child(Paper.label("right now", 12, Paper.QUIET))
-	_now = Blocks.wrapped("", 16, Paper.INK)
+	now.add_child(Paper.label("Right now", Fonts.LABEL, Paper.QUIET))
+	_now = Blocks.wrapped("", Fonts.BODY, Paper.INK)
 	now.add_child(_now)
 	_acts = VBoxContainer.new()
 	_alive.add_child(_acts)
@@ -169,15 +170,15 @@ func _build_page() -> void:
 func _build_edit() -> void:
 	var col := _edit
 	var r := Paper.row(col)
-	Paper.chip("< back", r, back, false)
-	col.add_child(Paper.heading("who is this?", 15, Paper.INK))
+	Paper.chip("Back", r, back, false, "quiet")
+	col.add_child(Paper.section("Who is this?"))
 	r = Paper.row(col)
-	r.add_child(Paper.label("name", 14, Paper.QUIET))
+	r.add_child(Paper.label("name", Fonts.SMALL, Paper.QUIET))
 	_name = Paper.edit("", r)
 	_name.text_submitted.connect(func(t: String) -> void: _put("name", t.strip_edges()))
 	_name.focus_exited.connect(func() -> void: _put("name", _name.text.strip_edges()))
 	r = Paper.row(col)
-	r.add_child(Paper.label("way", 14, Paper.QUIET))
+	r.add_child(Paper.label("way", Fonts.SMALL, Paper.QUIET))
 	_way = Chooser.new()
 	for p in Pets.PERSONALITIES:
 		_way.add_item(p)
@@ -196,7 +197,7 @@ func _build_edit() -> void:
 		tile.mouse_exited.connect(func() -> void: _say(_kind()))
 		grid.add_child(tile)
 		_tiles[kind] = tile
-	_kind_label = Paper.label("", 14, Paper.INK)
+	_kind_label = Paper.label("", Fonts.BODY, Paper.INK)
 	col.add_child(_kind_label)
 
 
