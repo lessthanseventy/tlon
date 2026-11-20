@@ -124,9 +124,14 @@ func set_mode(m: String) -> void:
 		_log.queue_redraw()
 
 
-# whether the log has anything to draw, or is asked for whole
+# whether the log has anything to draw, or is asked for whole: only a real exchange (his line, the
+# house's word to him) grows the dock, never a pet's passing remark
 func has_log() -> bool:
-	return mode == "full" or (mode == "dock" and (not chat.messages.is_empty() or reading))
+	return mode == "full" or (mode == "dock" and (_exchange() or reading))
+
+func _exchange() -> bool:
+	return chat.messages.any(func(m: Dictionary) -> bool: return m["who"] not in ["cat", "dog"])
+
 
 
 func _show_log() -> void:
@@ -317,7 +322,7 @@ func paint(c: Control) -> void:
 	var top := c.size.y - _total + _off
 	for it in _items:
 		var sy: float = top + it["y"]
-		if sy > c.size.y or sy + float(it.get("h", 24.0)) + 40.0 < 0.0:
+		if sy > c.size.y or sy + float(it.get("h", 24.0)) + float(it.get("head", 0.0)) + 12.0 < 14.0:
 			continue
 		if it["m"] == null:
 			c.draw_string(font, Vector2(2, sy + 16), "reading...", HORIZONTAL_ALIGNMENT_LEFT, -1, SIZE, Paper.QUIET)
@@ -334,11 +339,10 @@ func _paint_message(c: Control, it: Dictionary, sy: float) -> void:
 		var name := Settings.cat if m["who"] == "cat" else Settings.dog
 		c.draw_string(font, Vector2(left + 2, sy + 10), name, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL, Paper.QUIET)
 	var box := Rect2(left, sy + it["head"], it["w"], it["h"])
-	var fill := Paper.GOLD if mine else Color("e4d8bd")
-	if m["who"] in ["cat", "dog"]:
-		fill = Color("efe6cf")
-	c.draw_rect(box, fill)
-	c.draw_rect(box, Paper.INK, false, 2.0)
+	if mine:
+		c.draw_rect(box, Color(Paper.GOLD, 0.55))
+	else:
+		c.draw_rect(box, Color(Paper.INK, 0.3), false, 1.0)
 	var tx := box.position.x + PAD.x + (18.0 if it["bell"] else 0.0)
 	var ty := box.position.y + PAD.y + font.get_ascent(SIZE)
 	if it["bell"]:
