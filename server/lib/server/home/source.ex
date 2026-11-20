@@ -19,4 +19,12 @@ defmodule Server.Home.Source do
 
   @doc ~s{The kinds of proposal (`"waiting"`, `"todo"`) the operator trusts this source to file without a yes: facts, not asks.}
   @callback auto() :: [String.t()]
+
+  @doc """
+  Called by `Server.Home.Sources` after what `fetch/0` returned was filed (`offer` and `resolve`
+  returned): a source that keeps a position moves it here, so a fetch whose filing failed is made again.
+  """
+  @callback kept() :: :ok
+
+  @optional_callbacks kept: 0
 end

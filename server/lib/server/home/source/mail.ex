@@ -6,14 +6,18 @@ defmodule Server.Home.Source.Mail do
   and the password from the env `ZOHO_MAIL_PASSWORD` or `$XDG_RUNTIME_DIR/agenix/zoho-mail-password`,
   read at each fetch and never kept or logged.
   Only what arrived after the last message judged is read (`home_keep` `home_mail_mark`: UIDVALIDITY
-  and last UID; with none, or after a UIDVALIDITY change, the last 3 days, at most 40 messages), and
-  one model call, the home reader's (`:home_reader_cmd`, `:home_reader_model`: what is in a personal
+  and last UID). With a mark the oldest 40 new messages are read, so an outage's backlog is worked
+  through poll by poll; with none, or after a UIDVALIDITY change, the newest 40 of the last 3 days.
+  The mark moves in `kept/0`, after `Server.Home.Sources` has filed the proposals; until then the fetch
+  only records a pending mark beside it. One model call, the home reader's (`:home_reader_cmd`, `:home_reader_model`: what is in a personal
   inbox stays with the one provider), says which of the batch is a bill or payment due, an
   appointment, a package or delivery, or a renewal or subscription charge coming. Everything else
   produces nothing. The mail is outside text, given to the model as quoted data to read, never to
   obey; every field of its answer is validated here. Each proposal is a to-do keyed by the
   message's Message-ID, so a dismissed one never returns; nothing is filed without a yes (`auto/0`
-  is empty). The mark moves only when the whole fetch worked.
+  is empty). A failed model call or IMAP session never moves the mark. A reply that came back with no
+  list is counted for its batch beside the mark; the third such reply for the same batch skips it
+  (one warning with the count) so mail the model cannot read is not asked about for good.
   """
   @behaviour Server.Home.Source
 
@@ -21,9 +25,12 @@ defmodule Server.Home.Source.Mail do
   alias Server.Home.Source.Mail.Imap
   alias Server.Home.Source.Mail.Mime
 
+  require Logger
+
   @mark "home_mail_mark"
   @first_days 3
   @limit 40
+  @tries 3
   @body_chars 3000
   @text_max 80
   @why_max 120
@@ -53,13 +60,65 @@ defmodule Server.Home.Source.Mail do
   defp read(config, opts) do
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     since = now |> DateTime.add(-@first_days * 86_400) |> DateTime.to_date()
+    state = state()
 
-    with {:ok, validity, messages} <- Imap.new_messages(config, mark(), since, @limit),
-         {:ok, proposals} <- judge(messages, now, opts) do
-      if messages != [], do: keep(validity, Enum.max(Enum.map(messages, & &1.uid)))
-      {:ok, proposals, []}
+    with {:ok, validity, messages} <- Imap.new_messages(config, mark(state), since, @limit) do
+      case judge(messages, now, opts) do
+        {:ok, proposals} ->
+          save(pending(Map.delete(state, "bad"), validity, messages))
+          {:ok, proposals, []}
+
+        :unusable ->
+          unusable(state, validity, messages)
+
+        {:error, _} = error ->
+          error
+      end
     end
   end
+
+  @doc """
+  Move the mark to the last fetch's top message, once `Server.Home.Sources` has filed what that
+  fetch offered: a fetch whose filing failed leaves the mark where it was and the same mail is read
+  again (an offer is idempotent by key).
+  """
+  @impl true
+  @spec kept() :: :ok
+  def kept do
+    case state() do
+      %{"pending" => %{"validity" => validity, "uid" => uid}} = state ->
+        save(state |> Map.delete("pending") |> Map.merge(%{"validity" => validity, "uid" => uid}))
+
+      _ ->
+        :ok
+    end
+  end
+
+  # a reply that came back but holds no list: counted for this batch; the third skips it, so mail the
+  # model can never read is not asked about every 15 minutes for good
+  defp unusable(state, validity, messages) do
+    top = top(messages)
+
+    count =
+      case state do
+        %{"bad" => %{"validity" => ^validity, "uid" => ^top, "count" => count}} -> count + 1
+        _ -> 1
+      end
+
+    if count >= @tries do
+      Logger.warning("home source mail: skipped #{length(messages)} messages the model's reply could not be read for")
+      save(pending(Map.delete(state, "bad"), validity, messages))
+      {:ok, [], []}
+    else
+      save(Map.put(state, "bad", %{"validity" => validity, "uid" => top, "count" => count}))
+      {:error, "the model's reply was not usable"}
+    end
+  end
+
+  defp top(messages), do: messages |> Enum.map(& &1.uid) |> Enum.max()
+
+  defp pending(state, _validity, []), do: Map.delete(state, "pending")
+  defp pending(state, validity, messages), do: Map.put(state, "pending", %{"validity" => validity, "uid" => top(messages)})
 
   defp user do
     case Server.OperatorConfig.setting("home_mail_user") do
@@ -90,17 +149,24 @@ defmodule Server.Home.Source.Mail do
   defp non_empty(""), do: nil
   defp non_empty(text), do: text
 
-  defp mark do
+  defp state do
     with body when is_binary(body) <- Keep.get(@mark),
-         {:ok, %{"validity" => validity, "uid" => uid}} when is_integer(validity) and is_integer(uid) <-
-           JSON.decode(body) do
-      %{validity: validity, uid: uid}
+         {:ok, %{} = state} <- JSON.decode(body) do
+      state
     else
-      _ -> nil
+      _ -> %{}
     end
   end
 
-  defp keep(validity, uid), do: Keep.put(@mark, JSON.encode!(%{validity: validity, uid: uid}))
+  defp mark(%{"validity" => validity, "uid" => uid}) when is_integer(validity) and is_integer(uid),
+    do: %{validity: validity, uid: uid}
+
+  defp mark(_), do: nil
+
+  defp save(state) do
+    if state != state(), do: Keep.put(@mark, JSON.encode!(state))
+    :ok
+  end
 
   defp judge([], _now, _opts), do: {:ok, []}
 
@@ -115,6 +181,7 @@ defmodule Server.Home.Source.Mail do
       {:ok, proposals(items, Map.new(read, fn {n, message, readable} -> {n, {message, readable}} end))}
     end
   end
+
 
   @doc "The prompt for the `read` messages `{n, message, readable}` at `now`: the mail is JSON, data between the lines."
   @spec prompt([{pos_integer(), map(), Mime.readable()}], DateTime.t()) :: String.t()
@@ -163,13 +230,21 @@ defmodule Server.Home.Source.Mail do
     end
   end
 
+  # the model may wrap the list in prose that holds brackets of its own: the whole reply, else each
+  # span from a `[` to a later `]`, the longest first
   defp items(reply) do
-    with [json] <- Regex.run(~r/\[.*\]/s, reply),
-         {:ok, items} when is_list(items) <- JSON.decode(json) do
-      {:ok, items}
-    else
-      _ -> {:error, "the model's reply was not a list"}
-    end
+    reply = String.trim(reply)
+    opens = for {at, _} <- :binary.matches(reply, "["), do: at
+    closes = for {at, _} <- :binary.matches(reply, "]"), do: at
+
+    spans = for open <- opens, close <- Enum.sort(closes, :desc), close > open, do: binary_part(reply, open, close - open + 1)
+
+    Enum.find_value([reply | spans], :unusable, fn text ->
+      case JSON.decode(text) do
+        {:ok, items} when is_list(items) -> {:ok, items}
+        _ -> nil
+      end
+    end)
   end
 
   @doc """
