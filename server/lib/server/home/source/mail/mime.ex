@@ -34,6 +34,7 @@ defmodule Server.Home.Source.Mail.Mime do
   @spec headers(binary()) :: %{String.t() => String.t()}
   def headers(block) do
     block
+    |> String.replace_invalid()
     |> String.replace(~r/\r?\n[ \t]+/, " ")
     |> String.split(~r/\r?\n/, trim: true)
     |> Enum.flat_map(fn line ->
@@ -182,5 +183,5 @@ defmodule Server.Home.Source.Mail.Mime do
     |> String.replace("&amp;", "&")
   end
 
-  defp clean(text), do: text |> String.replace(~r/\s+/u, " ") |> String.trim()
+  defp clean(text), do: text |> String.replace_invalid() |> String.replace(~r/\s+/u, " ") |> String.trim()
 end

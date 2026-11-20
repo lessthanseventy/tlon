@@ -1,6 +1,8 @@
 defmodule Server.Home.Source.MailTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Server.Home.Keep
   alias Server.Home.Source.Mail
   alias Server.Home.Source.Mail.Imap
@@ -8,6 +10,7 @@ defmodule Server.Home.Source.MailTest do
   alias Server.Proposal
 
   @now ~U[2026-11-20 12:00:00Z]
+  @bill_key "mid:" <> Base.encode16(:crypto.hash(:sha256, "bill-1@citypower.example"), case: :lower)
 
   defmodule Fake do
     @moduledoc false
@@ -100,7 +103,7 @@ defmodule Server.Home.Source.MailTest do
     assert {:ok, [proposal], []} = run(model: model("Here:\n" <> reply))
 
     assert proposal == %{
-             key: "bill-1@citypower.example",
+             key: @bill_key,
              kind: "todo",
              text: "Pay the electric bill",
              why: "due Fri 27 Nov, from City Power"
@@ -145,7 +148,7 @@ defmodule Server.Home.Source.MailTest do
     both()
     assert Keep.get("home_mail_mark") == nil
     {:ok, _, []} = run(model: model("[]"))
-    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"pending" => %{"validity" => 77, "uid" => 6}}
+    assert JSON.decode!(Keep.get("home_mail_mark")) == %{"pending" => %{"validity" => 77, "uid" => 6, "tries" => 1}}
     :ok = Mail.kept()
     assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
 
@@ -237,7 +240,7 @@ defmodule Server.Home.Source.MailTest do
 
       def fetch do
         with {:ok, proposals, []} <- Server.Home.Source.Mail.fetch(Process.get(:mail_opts)) do
-          {:ok, if(Process.get(:break), do: [%{key: "k", kind: "bogus", text: "x"}], else: proposals), []}
+          {:ok, if(Process.get(:break, false) and proposals != [], do: [%{key: "k", kind: "bogus", text: "x"}], else: proposals), []}
         end
       end
 
@@ -261,7 +264,34 @@ defmodule Server.Home.Source.MailTest do
       Process.delete(:break)
       assert %{} = Server.Home.Sources.poll("telegram", ["mail"], %{"mail" => Via}, @now, %{})
       assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
-      assert [%{key: "bill-1@citypower.example"}] = Proposal.open()
+      assert [%{key: @bill_key}] = Proposal.open()
+    end
+
+    test "a filing that always fails is given up on the third fetch of the batch, then later mail is read" do
+      both()
+      reply = ~s([{"n":1,"kind":"bill","text":"Pay the electric bill","why":"w"}])
+      Process.put(:mail_opts, now: @now, transport: Fake, password: "p", model: model(reply))
+      Process.put(:break, true)
+      poll = fn -> Server.Home.Sources.poll("telegram", ["mail"], %{"mail" => Via}, @now, %{}) end
+
+      capture_log(fn ->
+        poll.()
+        poll.()
+      end)
+
+      assert %{"pending" => %{"tries" => 2}} = state = JSON.decode!(Keep.get("home_mail_mark"))
+      refute Map.has_key?(state, "uid")
+
+      log = capture_log(fn -> assert %{} == poll.() end)
+      assert log =~ "skipped 2 messages that could not be filed"
+      refute log =~ "citypower"
+      assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 6}
+
+      Process.delete(:break)
+      server([7], fetch_line(1, 7, @bill_header, @bill_body))
+      assert %{} == poll.()
+      assert JSON.decode!(Keep.get("home_mail_mark")) == %{"validity" => 77, "uid" => 7}
+      assert [%{key: @bill_key}] = Proposal.open()
     end
   end
 
@@ -303,6 +333,68 @@ defmodule Server.Home.Source.MailTest do
     assert fetch =~ ",60 "
   end
 
+  test "a Message-ID of any length or bytes becomes a short key the proposals table takes" do
+    long = String.duplicate("a", 300)
+    header = "Subject: Bill\r\nMessage-ID: <#{long}\xE9>\r\n\r\n"
+    server([5], fetch_line(1, 5, header, "due"))
+    reply = ~s([{"n":1,"kind":"bill","text":"Pay it","why":"w"}])
+    assert {:ok, [%{key: "mid:" <> hex} = proposal], []} = run(model: model(reply))
+    assert byte_size(proposal.key) <= 255 and hex =~ ~r/^[0-9a-f]{64}$/
+    assert [] == Proposal.offer("telegram", "mail", [proposal], @now, [])
+    assert [%{state: :open}] = Proposal.open()
+  end
+
+  test "a message with no Message-ID is keyed by its validity and uid" do
+    server([5], fetch_line(1, 5, "Subject: Bill\r\n\r\n", "due"))
+    reply = ~s([{"n":1,"kind":"bill","text":"Pay it","why":"w"}])
+    assert {:ok, [%{key: "uid:77:5"}], []} = run(model: model(reply))
+  end
+
+  test "a raw 8-bit Subject and a body with invalid bytes still arrive with their other fields" do
+    header = "From: a@b.example\r\nSubject: caf\xE9 due\r\nMessage-ID: <x@y>\r\n\r\n"
+    server([5], fetch_line(1, 5, header, "pay \xFF\xFE now"))
+    test = self()
+
+    {:ok, _, []} =
+      run(
+        model: fn prompt ->
+          send(test, {:prompt, prompt})
+          {:ok, "[]"}
+        end
+      )
+
+    assert_received {:prompt, prompt}
+    assert String.valid?(prompt)
+    assert prompt =~ "a@b.example"
+    assert prompt =~ "caf� due"
+    assert prompt =~ "pay"
+    assert prompt =~ "now"
+  end
+
+  test "Mime hands out only valid UTF-8, losing nothing around the bad bytes" do
+    header = "From: \xE9a@b\r\nSubject: =?utf-8?B?/w==?= ok\r\nDate: \xFF\r\nMessage-ID: <i\xE9d@y>\r\n"
+    read = Mime.read(header, "ab \xC3 cd", 3000)
+    assert String.valid?(read.from) and String.valid?(read.subject) and String.valid?(read.date)
+    assert String.valid?(read.message_id) and String.valid?(read.body)
+    assert read.subject =~ "ok"
+    assert read.body =~ "ab" and read.body =~ "cd"
+    assert JSON.encode!(read)
+  end
+
+  test "one message's FETCH data split over several responses is merged by sequence number" do
+    header = @bill_header
+    body = @bill_body
+
+    split =
+      "* 1 FETCH (UID 5)\r\n" <>
+        "* 1 FETCH (BODY[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID CONTENT-TYPE CONTENT-TRANSFER-ENCODING)] {#{byte_size(header)}}\r\n#{header})\r\n" <>
+        "* 1 FETCH (BODY[TEXT]<0> {#{byte_size(body)}}\r\n#{body})\r\n"
+
+    server([5], split)
+    reply = ~s([{"n":1,"kind":"bill","text":"Pay the electric bill","why":"w"}])
+    assert {:ok, [%{key: @bill_key}], []} = run(model: model(reply))
+  end
+
   test "with no user set the source says so", %{config: config} do
     :ok = Server.OperatorConfig.put("home_mail_user", "", config)
     assert {:error, "home_mail_user is not set"} = run()
@@ -324,7 +416,7 @@ defmodule Server.Home.Source.MailTest do
 
   describe "proposals/2 validates the model's answer" do
     defp by_n do
-      %{1 => {%{uid: 1}, %{message_id: "m1"}}, 2 => {%{uid: 2}, %{message_id: nil}}}
+      %{1 => {%{uid: 1, validity: 9}, %{message_id: "m1"}}, 2 => {%{uid: 2, validity: 9}, %{message_id: nil}}}
     end
 
     test "unknown kind, missing text, overlong text, unknown number are dropped; one per message" do
@@ -338,7 +430,7 @@ defmodule Server.Home.Source.MailTest do
         "junk"
       ]
 
-      assert [%{key: "uid:2", kind: "todo", text: "Expect the parcel", why: why}] = Mail.proposals(items, by_n())
+      assert [%{key: "uid:9:2", kind: "todo", text: "Expect the parcel", why: why}] = Mail.proposals(items, by_n())
       assert String.length(why) == 120
     end
   end
@@ -375,6 +467,6 @@ defmodule Server.Home.Source.MailTest do
     reply = ~s([{"n":1,"kind":"bill","text":"Pay the electric bill","why":"due Fri 27 Nov"}])
     {:ok, proposals, []} = run(model: model(reply))
     assert [] == Proposal.offer("telegram", "mail", proposals, @now, Mail.auto())
-    assert [%{key: "bill-1@citypower.example", kind: "todo", state: :open}] = Proposal.open()
+    assert [%{key: @bill_key, kind: "todo", state: :open}] = Proposal.open()
   end
 end
