@@ -168,7 +168,6 @@ func _homes() -> void:
 		h.delights.new_look()
 		h.secrets.word("argos")
 		h.tick_off(1)
-		h.came_back()
 		h.person.poke()
 		h.card.open("found", "mousehole")
 		s._run_home(h, 60.0)

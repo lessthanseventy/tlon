@@ -217,93 +217,6 @@
     {"in_days": 1, "high_c": 9, "low_c": 4, "kind": "rain", "wet": 60},
     {"in_days": 2, "high_c": 2, "low_c": -3, "kind": "snow", "wet": 40}
   ],
-  "office": {
-    "pause": null,
-    "awaiting": 2,
-    "bench": [
-      {
-        "name": "hronir",
-        "archetype": "builder"
-      },
-      {
-        "name": "lonnrot",
-        "archetype": "reviewer"
-      },
-      {
-        "name": "yu",
-        "archetype": "planner"
-      },
-      {
-        "name": "daneri",
-        "archetype": "builder"
-      },
-      {
-        "name": "runeberg",
-        "archetype": "reviewer"
-      },
-      {
-        "name": "tertius",
-        "archetype": "surveyor"
-      }
-    ],
-    "roster": [
-      {
-        "agent": "hronir",
-        "status": "working",
-        "title": "Retry the nightly cut when the gate is red",
-        "thread_id": 21,
-        "thinking": true
-      },
-      {
-        "agent": "lonnrot",
-        "status": "waiting",
-        "title": "Review: house door and Tab key",
-        "thread_id": 22
-      },
-      {
-        "agent": "yu",
-        "status": "working",
-        "title": "Plan the phone-chat home side",
-        "thread_id": 23,
-        "thinking": true
-      },
-      {
-        "agent": "daneri",
-        "status": "waiting",
-        "title": "Migration for the notes table",
-        "thread_id": 24
-      },
-      {
-        "agent": "tertius",
-        "status": "idle",
-        "title": "the front desk",
-        "thread_id": 1
-      }
-    ],
-    "threads": [
-      {
-        "id": 22,
-        "title": "Review: house door and Tab key",
-        "awaiting": "operator",
-        "prompt": null
-      },
-      {
-        "id": 24,
-        "title": "Migration for the notes table",
-        "awaiting": null,
-        "prompt": {
-          "id": 3,
-          "summary": "run the migration on the live db?"
-        }
-      },
-      {
-        "id": 21,
-        "title": "Retry the nightly cut when the gate is red",
-        "awaiting": null,
-        "prompt": null
-      }
-    ]
-  },
   "note_rows": [
     {
       "id": 31,
@@ -323,14 +236,8 @@
     }
   ],
   "proposals": [
-    {
-      "id": 91,
-      "source": "github",
-      "text": "Review: Fix the flaky gate",
-      "why": "lessthanseventy/tlon#12, asked by Sam",
-      "url": null
-    },
-    {"id": 92, "source": "github", "text": "Changes requested: Add the exports", "why": "acme/app#4", "url": null}
+    {"id": 91, "source": "mail", "text": "Pay the electric bill", "why": "due Fri 27 Nov, from City Power", "url": null},
+    {"id": 92, "source": "mail", "text": "Package arriving Tuesday", "why": "from the bookshop", "url": null}
   ],
   "agendas": [
     {

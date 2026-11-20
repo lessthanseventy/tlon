@@ -9,7 +9,6 @@ const Packs := preload("res://packs.gd")
 const Pets := preload("res://pets.gd")
 const Sound := preload("res://sound.gd")
 const Guests := preload("res://guests.gd")
-const Room := preload("res://room.gd")
 const Quirks := preload("res://quirks.gd")
 const Glow := preload("res://glow.gd")
 const Weather := preload("res://weather.gd")
@@ -109,8 +108,6 @@ func _pets() -> void:
 	for name in ["shadow_small", "shadow_medium", "shadow_large"]:
 		_scaled("%sEffects/1x/%s.png" % [animals, name])
 	_scaled(chars + "Effects/1x/shadow.png")
-	for name in Room.SKINS:
-		_scaled("%sSheets/1x/%s/%s_idle.png" % [chars, name, name])
 
 
 func _visitors() -> void:

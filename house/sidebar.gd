@@ -2,7 +2,7 @@ extends PanelContainer
 
 # The one sidebar: a banner strip on top (a ringing reminder, the day's slip, a short line from the
 # house), the context pane (what is clicked, else the home) with its header, and the chat at the
-# bottom. Views are `home`, `office`, `item` (an id), `open` (the desk), `card` (a thing's blocks,
+# bottom. Views are `home`, `item` (an id), `open` (the desk), `card` (a thing's blocks,
 # from `home.card`), `add` and `edit` (the form, with the jot field on a plain add), `pet`,
 # `closet`, `settings` and `decorate`. One is up at a time; `back` goes to the home, or from a form
 # to the card or item it came from.
@@ -12,7 +12,6 @@ signal jot_submitted(text: String)
 signal chat_sent(text: String)
 signal chat_acted(id: int, what: String)
 signal check_requested(url: String)
-signal door_pressed
 signal kept_closet
 
 const Paper := preload("res://paper.gd")
@@ -73,7 +72,6 @@ var closet: Control
 var chat_view: PanelContainer
 var decorate: Control
 var scroll: ScrollContainer
-var office := {}
 
 var _views: RefCounted
 var _dyn: VBoxContainer
@@ -83,7 +81,6 @@ var _banner_sig := ""
 var _header: HBoxContainer
 var _back: Button
 var _title: Label
-var _door: Button
 var _add: Button
 var _cog: Control
 var _status: Label
@@ -93,7 +90,6 @@ var _sig := ""
 var _seen_card := ""
 var _reach := true
 var _eff := ""
-var _door_on := true
 
 
 func setup(the_home, claude: RefCounted, phone: Node) -> void:
@@ -161,7 +157,6 @@ func _build_header(outer: VBoxContainer) -> void:
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title.clip_text = true
 	_header.add_child(_title)
-	_door = _head_button("", func() -> void: door_pressed.emit())
 	_add = _head_button("add  (I)", func() -> void: open_add(false))
 	_cog = SettingsView.Cog.new()
 	_cog.pressed.connect(toggle_settings)
@@ -220,28 +215,8 @@ func set_reachable(ok: bool) -> void:
 	_status.visible = not ok
 
 
-func set_room(room: String, door_text: String, served: bool) -> void:
-	_door.text = door_text
-	_door_on = served
-	if room == "office" and view != "office":
-		_switch("office", null)
-	elif room == "home" and view == "office":
-		_switch("home", null)
-	_apply()
-
-
-func set_door(served: bool) -> void:
-	_door_on = served
-	_apply()
-
-
-func show_office(data: Dictionary) -> void:
-	office = data
-	_sig = ""
-
-
 func is_open() -> bool:
-	return view not in ["home", "office"]
+	return view != "home"
 
 
 func takes_text() -> bool:
@@ -252,8 +227,6 @@ func view_title() -> String:
 	match view:
 		"home":
 			return "the home"
-		"office":
-			return "the office"
 		"item":
 			var row: Dictionary = home.things.find(int(arg))
 			return str(row.get("text", "")) if not row.is_empty() else "a thing"
@@ -352,7 +325,7 @@ func _leave(to: String) -> void:
 
 func back() -> void:
 	match view:
-		"home", "office":
+		"home":
 			return
 		"edit":
 			var id := int(arg)
@@ -453,8 +426,6 @@ func jot_done() -> void:
 
 
 func focus_chat() -> void:
-	if view == "office":
-		return
 	if _effective() == "line":
 		if view == "home":
 			chat_mode = "dock"
@@ -475,8 +446,6 @@ func _chat_mode_wanted(mode: String) -> void:
 
 
 func _effective() -> String:
-	if view == "office":
-		return "hidden"
 	if chat_mode == "full":
 		return "full"
 	if view == "home":
@@ -487,16 +456,14 @@ func _effective() -> String:
 func _apply() -> void:
 	if _header == null:
 		return
-	var home_like: bool = view in ["home", "office"]
-	_back.visible = not home_like
+	_back.visible = view != "home"
 	_title.text = view_title()
-	_door.visible = _door_on and home_like
 	_add.visible = view == "home"
 	_cog.visible = view != "settings"
 	if decorate != null:
 		decorate.visible = view == "decorate"
 	scroll.visible = view != "decorate"
-	_dyn.visible = view in ["home", "office", "item", "open", "card", "agenda"]
+	_dyn.visible = view in ["home", "item", "open", "card", "agenda"]
 	_add_root.visible = view in ["add", "edit"]
 	settings_view.visible = view == "settings"
 	pet_view.visible = view == "pet"
@@ -552,8 +519,6 @@ func _signature() -> String:
 					]
 				)
 			)
-		"office":
-			return JSON.stringify(office)
 		"item":
 			var row: Dictionary = home.things.find(int(arg))
 			var armed: bool = home.sure.armed("del:%d" % int(arg))
@@ -575,8 +540,6 @@ func _rebuild() -> void:
 	match view:
 		"home":
 			_views.home_view(_dyn)
-		"office":
-			_views.office_view(_dyn, office)
 		"item":
 			_views.item_view(_dyn, int(arg))
 		"agenda":
@@ -595,9 +558,6 @@ func _restore_scroll(v: int) -> void:
 
 func _layout() -> void:
 	var eff := _effective()
-	chat_view.visible = eff != "hidden"
-	if eff == "hidden":
-		return
 	var full := eff == "full"
 	_header.visible = not full
 	_pane.visible = not full

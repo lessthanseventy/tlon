@@ -272,7 +272,6 @@ func _press(text: String) -> void:
 
 
 func _open_shelf() -> void:
-	main._at = "home"
 	sb.back()
 	h.decorating = false
 	await _frames()
@@ -604,7 +603,6 @@ func _centre(key: String) -> Variant:
 
 # a click on each thing leaves the home view, or turns something on or off
 func _things() -> void:
-	main._at = "home"
 	sb.back()
 	h.decorating = false
 	await _frames()
@@ -690,7 +688,6 @@ func _outside(win: Rect2) -> String:
 
 # a click on a pet opens its view, not the controls; Esc goes back one level at a time
 func _pet() -> void:
-	main._at = "home"
 	sb.back()
 	await _frames()
 	var cat = h.pets.critter("nina")

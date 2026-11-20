@@ -77,7 +77,6 @@ const CUES := {
 	"ring": {"f": [UI + "Soft/text/notification.ogg"], "v": -8.0, "gap": 1.0},
 	"wish": {"f": [RT + "pickups/gem_01.ogg"], "v": -11.0, "gap": 1.0},
 	"timer_done": {"f": [RT + "jingles/shop_01.ogg"], "v": -9.0, "gap": 2.0},
-	"door": {"f": [RT + "doors/door_open_01.ogg"], "v": -12.0, "gap": 2.0},
 	"egg_konami": {"f": [RT + "jingles/victory_02.ogg"], "v": -10.0, "gap": 3.0},
 	"egg_zoomies":
 	{"f": [RT + "jumps/bounce_01.ogg", RT + "jumps/bounce_02.ogg"], "v": -12.0, "gap": 2.0},
@@ -131,7 +130,6 @@ func process(dt: float, h: Object = null) -> void:
 	_edge("jot", h.jot_open, "card_open", "card_close")
 	_edge("closet", h.closet_open, "closet_open", "closet_close")
 	_edge("decorate", h.decorating, "decorate_on", "decorate_off")
-	_edge("door", h.door.present(), "door", "")
 	_edge("timer", h.focus.running() and h.focus.progress() >= 1.0, "timer_done", "")
 
 

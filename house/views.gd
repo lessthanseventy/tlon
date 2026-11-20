@@ -1,7 +1,7 @@
 extends RefCounted
 
 # What the sidebar's context pane shows for the things that are lists or blocks: the home view
-# (now, next up, open, weather, notes), the office, one item with its actions, the whole desk and
+# (now, next up, open, weather, notes), one item with its actions, the whole desk and
 # the blocks of a thing the room's click opened. `sidebar.gd` owns when each is built.
 const Paper := preload("res://paper.gd")
 const Blocks := preload("res://blocks.gd")
@@ -14,7 +14,6 @@ const OPEN_SHOWN := 6
 const NEXT_SHOWN := 3
 const PROPOSED_SHOWN := 3
 const SHORT := ["jar", "plant", "clock", "found", "globe", "piano", "weather"]
-const GOOD := Color("3f7a47")
 const KINDS := {
 	"todo": "a to-do",
 	"reminder": "a reminder",
@@ -267,43 +266,6 @@ func _actions(item: Dictionary, kind: String) -> Array:
 	var sure: bool = Sure.needs(item) and home.sure.armed("del:%d" % id)
 	out.append({"label": "Delete for good?" if sure else "Delete", "act": "delete"})
 	return out
-
-
-func office_view(box: VBoxContainer, view: Dictionary) -> void:
-	if view.is_empty():
-		return
-	if view["paused"] != "":
-		box.add_child(Blocks.wrapped(view["paused"], 15, Paper.WARM))
-	heading(box, "Waiting on you")
-	if view["waiting"].is_empty() and view["waiting_count"] == 0:
-		box.add_child(quiet("Nothing needs you.", 15))
-	for w in view["waiting"]:
-		box.add_child(Blocks.wrapped(str(w["title"]), 15, Paper.INK))
-		box.add_child(Blocks.wrapped(str(w["why"]), 13, Paper.WARM))
-	if view["waiting_count"] > view["waiting"].size():
-		box.add_child(quiet("%d in all" % view["waiting_count"]))
-	heading(box, "The crew")
-	if view["crew"].is_empty():
-		box.add_child(quiet("Nobody on the bench.", 15))
-	for c in view["crew"]:
-		var who := str(c["name"])
-		if c["role"] != "":
-			who += "  -  " + str(c["role"])
-		box.add_child(Blocks.wrapped(who, 15, _status_color(c["status"])))
-		box.add_child(quiet(str(c["doing"])))
-	if view["more"] > 0:
-		box.add_child(quiet("+%d more" % view["more"], 15))
-
-
-static func _status_color(status: String) -> Color:
-	match status:
-		"working":
-			return GOOD
-		"waiting":
-			return Paper.WARM
-		"idle":
-			return Paper.INK
-	return Paper.QUIET
 
 
 # the pinned thing with its timer

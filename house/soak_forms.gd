@@ -49,7 +49,7 @@ func _iso_utc(y: int, m: int, d: int, hour: int, minute: int) -> String:
 
 # open a new form and fill it, send it, and answer the body it posted
 func _send(preset: Dictionary, fields: Dictionary, path: String = "/api/home/add") -> Variant:
-	s._check(main._open_form("new", preset), "a form opens for %s (at %s, widget %s)" % [str(fields), main._at, main._widget])
+	s._check(main._open_form("new", preset), "a form opens for %s (widget %s)" % [str(fields), main._widget])
 	main._sidebar.form.fill(fields)
 	var from: int = s._log.size()
 	main._sidebar.form.submit()

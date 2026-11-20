@@ -127,7 +127,7 @@ func _sound_files() -> void:
 	s._check(loud.played.count("done") == 2, "it sounds again past its gap")
 	if packed:
 		s._check(loud._rot["done"] == 2, "a repeat takes the next file")
-	for name in ["card_open", "save", "all_done", "egg_konami", "timer_done", "door", "closet_open"]:
+	for name in ["card_open", "save", "all_done", "egg_konami", "timer_done", "ring", "closet_open"]:
 		loud.request(name)
 	s._check(loud.active() <= Sound.MAX_VOICES, "voices stay within the cap (%d)" % loud.active())
 	s._check(loud._players.size() <= Sound.MAX_VOICES, "players stay within the cap")
