@@ -4,6 +4,7 @@ extends RefCounted
 # clock, the room's hits (hover, click, outline), Done, what leaves Home's lists, the layout's basket
 # and the same over the house's own list.
 const Chores := preload("res://chores.gd")
+const PetThings := preload("res://pet_things.gd")
 const BackendLocal := preload("res://backend_local.gd")
 const THINGS := {
 	"laundry": "do the laundry",
@@ -37,7 +38,7 @@ func run() -> void:
 	var was_busy: bool = main._busy
 	var was_bowls: Variant = h.settings.value("bowls")
 	var was_things: Variant = h.settings.value("pet_things")
-	var was_away := h.pets.critters.map(func(c): return c.away)
+	var was_away: Array = h.pets.critters.map(func(c): return c.away)
 	main._busy = true
 	h.settings.put("bowls", true)
 	h.settings.put("pet_things", true)
@@ -183,6 +184,9 @@ func _room() -> void:
 	var day := floorf(now / 86400.0) * 86400.0
 	sb.back()
 	h.petlife.sync()
+	for p in h.layout.pet_pieces():
+		if PetThings.key_of(p) == "bowls":
+			p["own"] = true
 	for c in h.pets.critters:
 		if c.id != "person":
 			c.away = true

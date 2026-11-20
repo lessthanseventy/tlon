@@ -412,8 +412,7 @@ func _conversation() -> void:
 	await s.process_frame
 	await s.process_frame
 	s._check(not chat.unread, "opening clears the unread mark")
-	await s.process_frame
-	await s.process_frame
+	await s.create_timer(0.4).timeout
 	s._check(v._hits.size() >= 4 and v._hits.size() % 4 == 0, "four buttons under each shown: %d" % v._hits.size())
 	v.press(7, "done")
 	await _wait()
