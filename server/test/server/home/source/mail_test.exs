@@ -240,7 +240,11 @@ defmodule Server.Home.Source.MailTest do
 
       def fetch do
         with {:ok, proposals, []} <- Server.Home.Source.Mail.fetch(Process.get(:mail_opts)) do
-          {:ok, if(Process.get(:break, false) and proposals != [], do: [%{key: "k", kind: "bogus", text: "x"}], else: proposals), []}
+          {:ok,
+           if(Process.get(:break, false) and proposals != [],
+             do: [%{key: "k", kind: "bogus", text: "x"}],
+             else: proposals
+           ), []}
         end
       end
 

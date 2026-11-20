@@ -65,25 +65,25 @@ defmodule Server.Home.Source.Mail do
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     since = now |> DateTime.add(-@first_days * 86_400) |> DateTime.to_date()
     state = state()
-
     with {:ok, validity, messages} <- Imap.new_messages(config, mark(state), since, @limit) do
-      tries = tries(state, validity, messages)
-
-      if tries >= @tries - 1 do
-        skip(state, validity, messages, "could not be filed")
-      else
-        case judge(validity, messages, now, opts) do
-          {:ok, proposals} ->
-            save(pending(Map.delete(state, "bad"), validity, messages, tries + 1))
-            {:ok, proposals, []}
-
-          :unusable ->
-            unusable(state, validity, messages)
-
-          {:error, _} = error ->
-            error
-        end
+      case tries(state, validity, messages) do
+        tries when tries >= @tries - 1 -> skip(state, validity, messages, "could not be filed")
+        tries -> judged(state, {validity, messages, tries}, now, opts)
       end
+    end
+  end
+
+  defp judged(state, {validity, messages, tries}, now, opts) do
+    case judge(validity, messages, now, opts) do
+      {:ok, proposals} ->
+        save(pending(Map.delete(state, "bad"), validity, messages, tries + 1))
+        {:ok, proposals, []}
+
+      :unusable ->
+        unusable(state, validity, messages)
+
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -302,7 +302,9 @@ defmodule Server.Home.Source.Mail do
   end
 
   # never the outside text itself: a Message-ID can be any length or any bytes, a key is a short string
-  defp key(%{message_id: id}, _) when is_binary(id), do: "mid:" <> Base.encode16(:crypto.hash(:sha256, id), case: :lower)
+  defp key(%{message_id: id}, _) when is_binary(id),
+    do: "mid:" <> Base.encode16(:crypto.hash(:sha256, id), case: :lower)
+
   defp key(_, %{validity: validity, uid: uid}), do: "uid:#{validity}:#{uid}"
 
   defp why(why) when is_binary(why), do: why |> line() |> String.slice(0, @why_max)
