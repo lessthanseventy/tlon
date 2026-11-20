@@ -239,17 +239,48 @@ func _settings_view() -> void:
 	s._check(v.visible, "the settings open")
 	v._name.text = "Sam"
 	v._name.text_submitted.emit("Sam")
-	v._month.select(3)
-	v._month.item_selected.emit(3)
-	v._day.select(14)
-	v._day.item_selected.emit(14)
+	var typed := func(text: String) -> void:
+		v._birth.text = text
+		v._birth.text_submitted.emit(text)
+	typed.call("15 March")
 	s._check(home.settings.value("birthday") == "03-15" and Settings.person == "Sam", "name and birthday apply at once")
-	v._month.select(2)
-	v._day.select(30)
-	v._month.item_selected.emit(2)
-	s._check(home.settings.value("birthday") == "02-29", "a day past the month's end is clipped")
-	v._month.select(0)
-	v._month.item_selected.emit(0)
+	s._check(v._birth.text == "15 March" and v._birth_say.text == "Kept as 15 March.", "the field says what was understood: %s" % v._birth_say.text)
+	for pair in [["June 8", "06-08"], ["8 jun", "06-08"], ["06-08", "06-08"], ["12/25", "12-25"], ["29 February", "02-29"]]:
+		typed.call(pair[0])
+		s._check(home.settings.value("birthday") == pair[1], "'%s' is read as %s" % [pair[0], pair[1]])
+	typed.call("31 February")
+	s._check(home.settings.value("birthday") == "02-29" and "not a day" in v._birth_say.text, "a day the month lacks is refused and the kept one stays")
+	typed.call("soon")
+	s._check(home.settings.value("birthday") == "02-29", "words that are no date change nothing")
+	typed.call("none")
+	s._check(home.settings.value("birthday") == "" and v._birth_say.text == "No birthday set.", "none clears the birthday and says so")
+	typed.call("")
+	s._check(home.settings.value("birthday") == "", "an empty field is none")
+	v.open()
+	s._check(v._birth.text == "", "no birthday: an empty field")
+	typed.call("8 June")
+	v.open()
+	s._check(v._birth.text == "8 June", "a kept birthday shows as written out")
+	v._tab_chips["pets"].pressed.emit()
+	s._check(v.page == "pets" and v._pages["pets"].visible and not v._pages["you"].visible, "a chip opens its group alone")
+	for p in v.PAGES:
+		v.show_page(p)
+		var open: Array = v._pages.keys().filter(func(k: String) -> bool: return v._pages[k].visible)
+		s._check(open == [p], "only %s is open" % p)
+	v._menus["degrees"][0].item_selected.emit(1)
+	s._check(home.settings.value("degrees") == "c", "You: the temperature unit saves")
+	v._menus["pet1_personality"][0].item_selected.emit(2)
+	s._check(home.settings.value("pet1_personality") == "lazy", "Pets: a personality saves")
+	v._looks["glow"].set_pressed_no_signal(false)
+	v._looks["glow"].pressed.emit()
+	s._check(home.settings.value("glow") == false, "Look: a switch saves")
+	v._town.text = "Oslo"
+	v._town.text_submitted.emit("Oslo")
+	s._check(home.settings.value("weather_town") == "Oslo", "Connections: the weather town saves")
+	v._menus["degrees"][0].item_selected.emit(0)
+	v._looks["glow"].set_pressed_no_signal(true)
+	v._looks["glow"].pressed.emit()
+	v.show_page("you")
 	s._check(home.settings.value("birthday") == "", "none clears the birthday")
 	v._cat.text = "Mimi"
 	v._cat.text_submitted.emit("Mimi")
@@ -351,6 +382,12 @@ func _conversation() -> void:
 	await _wait(1.0)
 	var texts: Array = chat.messages.map(func(m): return m["text"])
 	s._check(texts.has("from the pad") and texts.has(s.reply_for("from the pad")), "a notepad line and its reply are in the history")
+	var pad = main._sidebar.jot
+	s._check(pad._kept.visible and not pad._ask.visible, "the pad shows what the house made of the line")
+	s._check(
+		pad._change.visible == (not s.served) and pad._said.text == ("from the pad" if not s.served else s.reply_for("from the pad")),
+		"over the local list it hands the row back, from a server it is the reply alone: %s" % pad._said.text
+	)
 	main._sidebar.jot.finish()
 	for row in [
 		{"id": 7, "kind": "reminder", "text": "stretch", "due_at": null, "every": null, "told_at": "2026-11-18T10:00:00Z"},

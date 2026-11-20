@@ -92,8 +92,16 @@ func _add_a_todo(h) -> void:
 	await _click(add["center"])
 	await _send({"do": "wait", "seconds": 0.3})
 	things = await _send({"do": "things"})
-	_eq(things["mode"]["form"], "todo", "the add button opens the to-do form")
-	var field := _control(things, "LineEdit", "placeholder", "what is it")
+	_eq([things["mode"]["view"], things["mode"]["form"]], ["add", ""], "the add button opens the jot line alone")
+	var details := _control(things, "Button", "text", "Fill in the details")
+	_eq(details.is_empty(), false, "things finds the link to the typed form")
+	if details.is_empty():
+		return
+	await _click(details["center"])
+	await _send({"do": "wait", "seconds": 0.3})
+	things = await _send({"do": "things"})
+	_eq(things["mode"]["form"], "todo", "the link opens the typed form on to-do")
+	var field := _control(things, "LineEdit", "placeholder", "What needs doing")
 	await _click(field.get("center", [0, 0]))
 	await _send({"do": "type", "text": "buy milk"})
 	await _send({"do": "key", "key": "Enter"})

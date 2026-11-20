@@ -67,6 +67,10 @@ func _ready() -> void:
 	_hint.text = EXAMPLE
 	var more := Paper.chip("Fill in the details instead", _ask, func() -> void: details_wanted.emit(), false, "quiet")
 	more.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		var box: StyleBoxFlat = more.get_theme_stylebox(state).duplicate()
+		box.content_margin_left = 0
+		more.add_theme_stylebox_override(state, box)
 	_kept = VBoxContainer.new()
 	_kept.add_theme_constant_override("separation", 6)
 	_kept.visible = false
