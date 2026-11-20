@@ -16,6 +16,7 @@ signal kept_closet
 
 const Paper := preload("res://paper.gd")
 const Fonts := preload("res://fonts.gd")
+const IconButton := preload("res://icon_button.gd")
 const Card := preload("res://card.gd")
 const Blocks := preload("res://blocks.gd")
 const Views := preload("res://views.gd")
@@ -28,6 +29,7 @@ const Closet := preload("res://closet.gd")
 const Pets := preload("res://pets.gd")
 const Settings := preload("res://settings.gd")
 const WIDTH := 360
+const SLOT := 28
 const FRAME := Color("2a2530")
 const LIGHT := Color("f1e9dc")
 const ACCENT := Color("e8b86d")
@@ -59,6 +61,7 @@ var arg: Variant = null
 var open_expanded := false
 var proposed_expanded := false
 var notes_expanded := false
+var later_expanded := false
 # the agenda's add line takes the cursor back after a note went in
 var agenda_typing := false
 var _agenda_from_shelf := false
@@ -79,9 +82,9 @@ var _add_root: VBoxContainer
 var _banner: VBoxContainer
 var _banner_sig := ""
 var _header: HBoxContainer
-var _back: Button
+var _back: Control
 var _title: Label
-var _add: Button
+var _add: Control
 var _cog: Control
 var _status: Label
 var _sheet: PanelContainer
@@ -109,7 +112,7 @@ func setup(the_home, claude: RefCounted, phone: Node) -> void:
 	_banner.alignment = BoxContainer.ALIGNMENT_CENTER
 	outer.add_child(_banner)
 	_build_header(outer)
-	_status = Paper.label("can't reach tlon", 13, Color("a89fb0"))
+	_status = Paper.label("can't reach tlon", Fonts.SMALL, Color("a89fb0"))
 	_status.visible = false
 	outer.add_child(_status)
 
@@ -150,29 +153,28 @@ func setup(the_home, claude: RefCounted, phone: Node) -> void:
 
 func _build_header(outer: VBoxContainer) -> void:
 	_header = HBoxContainer.new()
-	_header.add_theme_constant_override("separation", 6)
+	_header.add_theme_constant_override("separation", 4)
 	outer.add_child(_header)
-	_back = _head_button("< home", back)
-	_title = Paper.heading("the home", 22, ACCENT)
+	var slot := Control.new()
+	slot.custom_minimum_size = Vector2(SLOT, SLOT)
+	_header.add_child(slot)
+	_back = IconButton.new("left", "Back (Esc)", LIGHT, SLOT)
+	_back.pressed.connect(back)
+	slot.add_child(_back)
+	_title = Paper.heading("Home", Fonts.TITLE, ACCENT)
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_title.clip_text = true
 	_header.add_child(_title)
-	_add = _head_button("add  (I)", func() -> void: open_add(false))
+	_add = IconButton.new("plus", "Add (I)", LIGHT, SLOT)
+	_add.pressed.connect(func() -> void: open_add(false))
+	_header.add_child(_add)
 	_cog = SettingsView.Cog.new()
+	_cog.tooltip_text = "Settings"
+	_cog.custom_minimum_size = Vector2(SLOT, SLOT)
 	_cog.pressed.connect(toggle_settings)
 	_cog.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_header.add_child(_cog)
-
-
-func _head_button(text: String, cb: Callable) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.focus_mode = Control.FOCUS_NONE
-	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	b.add_theme_font_size_override("font_size", 13)
-	b.pressed.connect(cb)
-	_header.add_child(b)
-	return b
 
 
 func _build_persistent(stack: VBoxContainer, claude: RefCounted, phone: Node) -> void:
@@ -226,7 +228,7 @@ func takes_text() -> bool:
 func view_title() -> String:
 	match view:
 		"home":
-			return "the home"
+			return "Home"
 		"item":
 			var row: Dictionary = home.things.find(int(arg))
 			return str(row.get("text", "")) if not row.is_empty() else "a thing"
@@ -394,6 +396,7 @@ func open_decorate() -> void:
 func open_add(jot_first: bool) -> void:
 	_switch("add", null)
 	jot.visible = true
+	home.selected = selected_key()
 	form.open_new(
 		{"kinds": ["todo", "reminder", "note", "waiting", "project"]}, home.things.today()
 	)
@@ -458,8 +461,6 @@ func _apply() -> void:
 		return
 	_back.visible = view != "home"
 	_title.text = view_title()
-	_add.visible = view == "home"
-	_cog.visible = view != "settings"
 	if decorate != null:
 		decorate.visible = view == "decorate"
 	scroll.visible = view != "decorate"
@@ -510,11 +511,13 @@ func _signature() -> String:
 						home.weather,
 						home.weather_desc,
 						home.temp_c,
-						home.forecast,
 						home.focus.id,
 						home.focus.text,
 						open_expanded,
 						notes_expanded,
+						later_expanded,
+						home.meetings,
+						int(home._now_local() / 60.0),
 						home.today(),
 					]
 				)
@@ -566,7 +569,7 @@ func _layout() -> void:
 		chat_view.set_mode(eff)
 	chat_view.size_flags_vertical = Control.SIZE_EXPAND_FILL if full else Control.SIZE_SHRINK_END
 	chat_view.custom_minimum_size.y = 0.0
-	if eff == "dock":
+	if eff == "dock" and chat_view.has_log():
 		chat_view.custom_minimum_size.y = maxf(176.0, size.y * 0.3)
 
 
@@ -599,7 +602,7 @@ func _banner_update() -> void:
 		_banner.remove_child(c)
 		c.queue_free()
 	if queue.is_empty():
-		var clock := Paper.label(_stamp(), 13, Color("a89fb0"))
+		var clock := Paper.label(_stamp(), Fonts.SMALL, Color("a89fb0"))
 		clock.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_banner.add_child(clock)
 		return
@@ -632,18 +635,16 @@ func _banner_update() -> void:
 				acts.append({"label": "Look", "act": "look"})
 			acts.append({"label": "Put away", "act": "away"})
 			cb = func(a: String) -> void: _slip_act(a)
-	var l := Paper.label(text, 14, Paper.INK)
+	var l := Paper.label(text, Fonts.BODY, Paper.INK)
 	l.clip_text = true
 	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.custom_minimum_size.x = 30
 	strip.add_child(l)
 	if queue.size() > 1:
-		strip.add_child(Paper.label("+%d" % (queue.size() - 1), 12, Paper.QUIET))
+		strip.add_child(Paper.label("+%d" % (queue.size() - 1), Fonts.SMALL, Paper.QUIET))
 	for a in acts:
-		var b := Paper.chip(str(a["label"]), strip, func() -> void: cb.call(str(a["act"])), false)
-		b.add_theme_font_size_override("font_size", 12)
-		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		Paper.chip(str(a["label"]), strip, func() -> void: cb.call(str(a["act"])), false)
 
 
 func _slip_act(a: String) -> void:

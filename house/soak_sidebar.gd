@@ -37,6 +37,7 @@ func run() -> void:
 	await _decorate_tabs()
 	_meetings()
 	_wall_click()
+	await _home_sections()
 
 
 func _meeting(title: String, from: String, to: String, tentative: bool, day: String) -> Dictionary:
@@ -397,7 +398,7 @@ func _agendas() -> void:
 	sb.back()
 	await _frames()
 	var texts: Array = _texts(sb._dyn)
-	s._check("Next up" in texts and "Retro at 14:00 - 2 things" in texts, "Home has a quiet row for an agenda due today: %s" % str(texts))
+	s._check("Today" in texts and "Retro at 14:00 - 2 things" in texts, "Home has a quiet row for an agenda due today: %s" % str(texts))
 	await _press("Retro at 14:00 - 2 things")
 	s._check(sb.view == "agenda" and int(sb.arg) == 71, "the row opens the agenda")
 	texts = _texts(sb._dyn)
@@ -617,6 +618,8 @@ func _things() -> void:
 		seen += 1
 		sb.back()
 		await _frames()
+		if key == "phone":
+			sb.chat_mode = "line"
 		var was := [sb.view, h.card.kind, h.tv.on, sb._effective()]
 		h.click(c)
 		await _frames()
@@ -749,3 +752,85 @@ func _decorate_tabs() -> void:
 			s._check(hit["rect"].end.x <= d.size.x - 4.0, "the %s tab fits the pane" % hit["act"])
 	main._set_decorate(false)
 	await _frames()
+
+
+func _iso(at: float) -> String:
+	return Time.get_datetime_string_from_unix_time(int(at - h._bias())) + "Z"
+
+
+func _home_box() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	sb._views.home_view(box)
+	return box
+
+
+# Home's sections in order, an empty one with no header, the pick only once, Later closed until
+# opened; the header the same in every view; the dock the input line alone until there is a message
+func _home_sections() -> void:
+	var keep := [h.open, h.coming, h.meetings, h.things.pick, h.things.proposals, h.chat.messages]
+	var day := Time.get_unix_time_from_datetime_string(h.today() + "T23:30:00")
+	var pick := {"id": 1, "kind": "todo", "text": "pick me", "why": "it has sat the longest"}
+	h.things.pick = pick
+	h.open = [pick, {"id": 2, "kind": "todo", "text": "second to-do", "due_at": null}]
+	h.coming = [
+		{"id": 3, "kind": "reminder", "text": "water the plant", "due_at": _iso(day)},
+		{"id": 4, "kind": "reminder", "text": "dentist next week", "due_at": _iso(day + 7 * 86400.0)},
+	]
+	var soon: float = h._now_local() + 600.0
+	h.meetings = [_meeting("Standup", _iso(soon), _iso(soon + 900.0), false, "today")]
+	h.things.proposals = []
+	var box := _home_box()
+	var texts := _texts(box)
+	box.free()
+	var at := func(t: String) -> int: return texts.find(t)
+	var order := ["Now", "Today", "Open", "Later (1)"]
+	var found: Array = order.map(at)
+	var sorted := found.duplicate()
+	sorted.sort()
+	s._check(not (-1 in found) and found == sorted, "Home's sections in order: %s" % str(texts))
+	s._check(texts.count("pick me") == 1, "the pick is not repeated in Open")
+	s._check("second to-do" in texts and "water the plant" in texts, "Open has the to-dos, Today the reminder")
+	s._check(at.call("water the plant") > at.call("Today") and at.call("water the plant") < at.call("Open"), "a reminder due today sits under Today")
+	s._check("Standup  ·  %s" % h.meeting_time(h.meetings[0]) in texts, "Today has the meeting")
+	s._check(not ("dentist next week" in texts), "Later is one closed line")
+	sb.later_expanded = true
+	box = _home_box()
+	var opened := _texts(box)
+	box.free()
+	sb.later_expanded = false
+	s._check("dentist next week" in opened, "Later opens in place")
+	h.open = []
+	h.coming = []
+	h.meetings = []
+	h.things.pick = {}
+	box = _home_box()
+	texts = _texts(box)
+	box.free()
+	for header in ["Now", "Today", "Open", "Later (1)"]:
+		s._check(not (header in texts), "an empty section draws no %s header" % header)
+	h.open = keep[0]
+	h.coming = keep[1]
+	h.meetings = keep[2]
+	h.things.pick = keep[3]
+	h.things.proposals = keep[4]
+	s._check(not h.open.is_empty(), "there is a to-do to open")
+	var opens: Array[Callable] = [
+		sb.back,
+		func() -> void: sb.open_item(int(h.open[0]["id"])),
+		func() -> void: sb.open_add(false),
+		sb.open_settings,
+	]
+	for open in opens:
+		open.call()
+		await _frames()
+		s._check(sb._add.visible and sb._cog.visible, "the header keeps add and settings in %s" % sb.view)
+		s._check(sb._back.visible == (sb.view != "home"), "the back chevron is only off Home (%s)" % sb.view)
+	sb.back()
+	await _frames()
+	h.chat.messages = []
+	sb.chat_view.set_mode("dock")
+	s._check(not sb.chat_view.has_log(), "the dock with no messages is the input line alone")
+	h.chat.messages = [{"who": "me", "text": "hello", "t": Time.get_unix_time_from_system()}]
+	s._check(sb.chat_view.has_log(), "a message grows the dock")
+	h.chat.messages = keep[5]
+	sb.chat_view.set_mode(sb._effective())
