@@ -225,6 +225,27 @@ defmodule Server.Home.PetsTest do
       refute prompt =~ "Sharp, sassy"
     end
 
+    test "the house's default request, spelled out, is the default cast and gets the written prompt" do
+      dog = Pets.cast(%{}).argos.name
+
+      cast =
+        Pets.cast(%{
+          "nina_name" => "Nina",
+          "nina_species" => "cat",
+          "nina_personality" => "sassy",
+          "argos_name" => dog,
+          "argos_species" => "dog",
+          "argos_personality" => "sweet"
+        })
+
+      assert cast == Pets.cast(%{})
+
+      prompt = Pets.prompt("SCENE", cast)
+      assert prompt == Pets.prompt("SCENE")
+      refute prompt =~ "is called"
+      assert prompt =~ "she is quick, he is lost."
+    end
+
     test "one pet changed: the other is composed too, and neither fixed text is used" do
       prompt = Pets.prompt("SCENE", Pets.cast(%{"argos_name" => "Bruno", "argos_species" => "bear"}))
 
