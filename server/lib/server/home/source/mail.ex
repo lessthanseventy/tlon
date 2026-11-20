@@ -87,7 +87,7 @@ defmodule Server.Home.Source.Mail do
   def kept do
     case state() do
       %{"pending" => %{"validity" => validity, "uid" => uid}} = state ->
-        save(state |> Map.delete("pending") |> Map.merge(%{"validity" => validity, "uid" => uid}))
+        state |> Map.delete("pending") |> Map.merge(%{"validity" => validity, "uid" => uid}) |> save()
 
       _ ->
         :ok
@@ -118,7 +118,9 @@ defmodule Server.Home.Source.Mail do
   defp top(messages), do: messages |> Enum.map(& &1.uid) |> Enum.max()
 
   defp pending(state, _validity, []), do: Map.delete(state, "pending")
-  defp pending(state, validity, messages), do: Map.put(state, "pending", %{"validity" => validity, "uid" => top(messages)})
+
+  defp pending(state, validity, messages),
+    do: Map.put(state, "pending", %{"validity" => validity, "uid" => top(messages)})
 
   defp user do
     case Server.OperatorConfig.setting("home_mail_user") do
@@ -182,7 +184,6 @@ defmodule Server.Home.Source.Mail do
     end
   end
 
-
   @doc "The prompt for the `read` messages `{n, message, readable}` at `now`: the mail is JSON, data between the lines."
   @spec prompt([{pos_integer(), map(), Mime.readable()}], DateTime.t()) :: String.t()
   def prompt(read, now) do
@@ -237,7 +238,8 @@ defmodule Server.Home.Source.Mail do
     opens = for {at, _} <- :binary.matches(reply, "["), do: at
     closes = for {at, _} <- :binary.matches(reply, "]"), do: at
 
-    spans = for open <- opens, close <- Enum.sort(closes, :desc), close > open, do: binary_part(reply, open, close - open + 1)
+    spans =
+      for open <- opens, close <- Enum.sort(closes, :desc), close > open, do: binary_part(reply, open, close - open + 1)
 
     Enum.find_value([reply | spans], :unusable, fn text ->
       case JSON.decode(text) do

@@ -199,12 +199,17 @@ defmodule Server.Home.Source.MailTest do
   test "with a mark and more than 40 new messages the oldest 40 are read, then the rest, each once" do
     Keep.put("home_mail_mark", JSON.encode!(%{validity: 77, uid: 10}))
     uids = Enum.to_list(11..70)
-    batch = fn uids -> Enum.map_join(Enum.with_index(uids, 1), fn {uid, n} -> fetch_line(n, uid, "Message-ID: <m#{uid}@x>\r\n\r\n", "b") end) end
+
+    batch = fn uids ->
+      Enum.map_join(Enum.with_index(uids, 1), fn {uid, n} ->
+        fetch_line(n, uid, "Message-ID: <m#{uid}@x>\r\n\r\n", "b")
+      end)
+    end
 
     seen = self()
 
     judged = fn prompt ->
-      send(seen, {:judged, Regex.scan(~r/"n":(\d+)/, prompt) |> length()})
+      send(seen, {:judged, ~r/"n":(\d+)/ |> Regex.scan(prompt) |> length()})
       {:ok, "[]"}
     end
 
