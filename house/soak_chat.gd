@@ -337,6 +337,7 @@ func _address() -> void:
 
 func _conversation() -> void:
 	var chat = h.chat
+	h.pets.freeze = true
 	chat.messages = []
 	s._fail_jot = false
 	main._sidebar.jot.finish()
@@ -424,6 +425,7 @@ func _conversation() -> void:
 	h._show_slip("home")
 	s._check(str(chat.messages[-1]["text"]).begins_with("Still open"), "a slip is a message: %s" % chat.messages[-1]["text"])
 	var nina = h.pets.critter("nina")
+	h.pets.freeze = false
 	chat.messages = chat.messages.filter(func(m): return not m["who"] in ["cat", "dog"])
 	var pet_n: int = chat.messages.filter(func(m): return m["who"] == "cat").size()
 	h.pets.say(nina, "Nina: not now")
