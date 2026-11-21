@@ -95,11 +95,10 @@ defmodule Server.OperatorConfigTest do
     assert OperatorConfig.oneshot_model(path) == "ollama-cloud/deepseek-v4.1-flash"
   end
 
-  test "Lifeline can never be set to take a held smoke for stuck: its floor is past the smoke's hold", %{path: path} do
+  test "lifeline_rescue_minutes is refused below its floor", %{path: path} do
     File.write!(path, "{}")
-    hold_minutes = div(7200, 60)
-    assert OperatorConfig.setting("lifeline_rescue_minutes", path) > hold_minutes
-    assert {:error, _} = OperatorConfig.put_settings(%{"lifeline_rescue_minutes" => hold_minutes}, path)
+    assert {:error, _} = OperatorConfig.put_settings(%{"lifeline_rescue_minutes" => 149}, path)
+    assert :ok = OperatorConfig.put_settings(%{"lifeline_rescue_minutes" => 150}, path)
   end
 
   test "boot_oban applies the boot knobs to Oban's config, leaving the rest as compiled", %{path: path} do

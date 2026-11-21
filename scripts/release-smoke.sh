@@ -89,7 +89,7 @@ if [ -z "$url" ]; then
     # smokes once it is done (and records its own ran-on). The bound is finite: a TLON_SMOKE_HOLD
     # holder can hold up to its TTL. 0 refuses at once.
     if holder_is_live; then
-      [ "$lock_wait" -gt 0 ] 2>/dev/null || fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
+      [ "$lock_wait" -gt 0 ] 2>/dev/null || fail "${sha:0:7} is already being smoked ($holder): stop that one"
       echo "smoke: waiting for ${sha:0:7} to be smoked by ($holder), up to ${lock_wait}s"
       flock -w "$lock_wait" 8 || fail "${sha:0:7}: timed out waiting for ($holder) after ${lock_wait}s"
       # a reclaimer may have replaced the file while this waited on the old one
@@ -108,7 +108,7 @@ if [ -z "$url" ]; then
       # weighing the holder took a while: it may have let go, and a run that never takes the guard may
       # have the file by now
       if ! flock -n 8; then
-        holder_is_live && fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
+        holder_is_live && fail "${sha:0:7} is already being smoked ($holder): stop that one"
         echo "smoke: reclaiming the lock on ${sha:0:7} from a holder that is gone ($holder)"
         exec 8>&-
         rm -f "$lock"
@@ -200,7 +200,6 @@ for flag in $flags; do
   [ "$code" = 200 ] || fail "flag $flag: /api/flags answered ${code:-nothing} (a flag this build has?)"
   echo "smoke: flag $flag on"
 done
-
 
 title="release smoke $$"
 tid="$(curl -s -m 10 -X POST -H 'content-type: application/json' \
