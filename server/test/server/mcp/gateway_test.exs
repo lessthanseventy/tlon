@@ -1079,7 +1079,11 @@ defmodule Server.MCP.GatewayTest do
       previous = for name <- names, do: {name, System.get_env(name)}
       Enum.each(names, &System.delete_env/1)
       for {name, value} <- Enum.zip(names, ~w(cid sec tok)), name != "XDG_RUNTIME_DIR", do: System.put_env(name, value)
-      System.put_env("XDG_RUNTIME_DIR", System.tmp_dir!() <> "/no-secrets-#{System.pid()}-#{System.unique_integer([:positive])}")
+
+      System.put_env(
+        "XDG_RUNTIME_DIR",
+        System.tmp_dir!() <> "/no-secrets-#{System.pid()}-#{System.unique_integer([:positive])}"
+      )
 
       dir = Path.join(System.tmp_dir!(), "money-ask-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
