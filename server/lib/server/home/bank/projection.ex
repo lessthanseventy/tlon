@@ -218,8 +218,8 @@ defmodule Server.Home.Bank.Projection do
   Months with nothing show zeros; the five largest are by size, either way; the averages are per
   month of the range. `{:error, :bad_range}` when `from` is after `to`.
   """
-  @spec history(data(), Date.t(), query()) :: {:ok, history()} | {:error, :bad_range}
-  def history(data, _today, %{from: from, to: to} = query) do
+  @spec history(data(), query()) :: {:ok, history()} | {:error, :bad_range}
+  def history(data, %{from: from, to: to} = query) do
     if Date.compare(from, to) == :gt, do: {:error, :bad_range}, else: months_of(data, query)
   end
 

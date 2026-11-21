@@ -392,7 +392,7 @@ defmodule Server.Home.Bank.ProjectionTest do
   describe "history" do
     defp history!(match, from, to) do
       assert {:ok, result} =
-               Projection.history(data([everyday(5), special()]), @today, %{match: match, from: from, to: to})
+               Projection.history(data([everyday(5), special()]), %{match: match, from: from, to: to})
 
       result
     end
@@ -434,12 +434,12 @@ defmodule Server.Home.Bank.ProjectionTest do
 
     test "from after to is a bad range, never a crash" do
       assert {:error, :bad_range} =
-               Projection.history(data([everyday(5)]), @today, %{match: nil, from: ~D[2026-11-02], to: ~D[2026-11-01]})
+               Projection.history(data([everyday(5)]), %{match: nil, from: ~D[2026-11-02], to: ~D[2026-11-01]})
     end
 
     test "a range inside one empty month gives zeros" do
       assert {:ok, %{months: [%{month: "2025-03", out_cents: 0, in_cents: 0, count: 0}], count: 0, largest: []} = h} =
-               Projection.history(data([everyday(5)]), @today, %{match: nil, from: ~D[2025-03-05], to: ~D[2025-03-05]})
+               Projection.history(data([everyday(5)]), %{match: nil, from: ~D[2025-03-05], to: ~D[2025-03-05]})
 
       assert h.average_out_cents == 0 and h.average_in_cents == 0
     end

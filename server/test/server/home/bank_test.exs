@@ -70,7 +70,7 @@ defmodule Server.Home.BankTest do
     assert {:error, :no_data} = Bank.forecast(~D[2026-12-20], @today)
     assert {:error, :no_data} = Bank.afford(1_000, nil, today: @today)
     assert {:error, :no_data} = Bank.what_if([], ~D[2026-12-20], @today)
-    assert {:error, :no_data} = Bank.history(%{match: nil, from: ~D[2026-01-01], to: @today}, @today)
+    assert {:error, :no_data} = Bank.history(%{match: nil, from: ~D[2026-01-01], to: @today})
     assert {:error, :no_data} = Bank.subscriptions(@today)
 
     store()
@@ -98,7 +98,7 @@ defmodule Server.Home.BankTest do
     assert {:error, {:no_series, "Rant", ["Rent" | _]}} = Bank.what_if([{:drop, "Rant"}], ~D[2026-12-20], @today)
 
     assert {:ok, %{months: [%{month: "2026-10", out_cents: -120_000}]}} =
-             Bank.history(%{match: "RENT", from: ~D[2026-10-01], to: ~D[2026-10-31]}, @today)
+             Bank.history(%{match: "RENT", from: ~D[2026-10-01], to: ~D[2026-10-31]})
 
     assert {:ok, [%{name: "Rent", amount_cents: -120_000, next: ~D[2026-11-27]}]} = Bank.subscriptions(@today)
   end

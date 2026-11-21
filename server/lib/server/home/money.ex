@@ -112,7 +112,7 @@ defmodule Server.Home.Money do
   defp compute({:forecast, until}, c), do: Bank.forecast(until, c.today)
   defp compute({:afford, cents, on}, c), do: Bank.afford(cents, on, today: c.today)
   defp compute({:what_if, changes, until}, c), do: Bank.what_if(changes, until, c.today)
-  defp compute({:history, query}, c), do: Bank.history(query, c.today)
+  defp compute({:history, query}, _c), do: Bank.history(query)
 
   defp summary(money) do
     %{

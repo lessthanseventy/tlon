@@ -250,9 +250,9 @@ defmodule Server.Home.Bank do
           | {:error, :no_data | :beyond_horizon | :bad_amount | {:no_series, String.t(), [String.t()]}}
   def what_if(changes, until, today \\ local_today()), do: projected(&Projection.what_if(&1, today, changes, until))
 
-  @doc "What went out and came in by month for a query (`Server.Home.Bank.Projection.history/3`)."
-  @spec history(Projection.query(), Date.t()) :: {:ok, Projection.history()} | {:error, :no_data | :bad_range}
-  def history(query, today \\ local_today()), do: projected(&Projection.history(&1, today, query))
+  @doc "What went out and came in by month for a query (`Server.Home.Bank.Projection.history/2`)."
+  @spec history(Projection.query()) :: {:ok, Projection.history()} | {:error, :no_data | :bad_range}
+  def history(query), do: projected(&Projection.history(&1, query))
 
   @doc "The recurring charges for display (`Server.Home.Bank.Projection.subscriptions/2`)."
   @spec subscriptions(Date.t()) :: {:ok, [Projection.subscription()]} | {:error, :no_data}
