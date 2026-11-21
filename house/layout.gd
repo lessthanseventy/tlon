@@ -96,6 +96,8 @@ const BUSY := "someone is there"
 const SHUTS := "that would shut a path"
 const ONCE := "that one is already out"
 const SAVED := 2
+# default pieces added after layouts were first saved: a saved layout is offered each once
+const NEWER := ["laundry_basket"]
 # the pets' spots that move with their thing: their old cells stay free ground
 const MOVING_SPOTS := ["bed", "bowl"]
 
@@ -116,6 +118,8 @@ var guests: Array = []
 var version := 0
 # the pet things put out once, so one the owner took away is not put back
 var pets_seen: Array = []
+# the `NEWER` pieces this layout has been offered, so one taken out stays out
+var offered: Array = NEWER.duplicate()
 # a file saved before `SAVED`: the pets' things in it were put by the first rule
 var old_things := false
 
@@ -133,6 +137,7 @@ func setup(sprites: Dictionary, with_art: bool, file: String, save_it: bool) -> 
 	persist = save_it
 	pets_seen = []
 	old_things = false
+	offered = NEWER.duplicate()
 	catalogue = []
 	version += 1
 	_fixed = FIXED.map(func(r): return _piece(r, true))
@@ -586,6 +591,7 @@ func reset(busy: Array) -> void:
 	_dormant_floor = ""
 	pets_seen = []
 	old_things = false
+	offered = NEWER.duplicate()
 	pieces = _defaults(busy)
 	version += 1
 	save()
@@ -603,6 +609,7 @@ func save() -> void:
 			"floor": _dormant_floor if _dormant_floor != "" else floor_style,
 			"pieces": saved + _dormant,
 		}
+		doc["offered"] = offered
 		if not pets_seen.is_empty():
 			doc["pets_seen"] = pets_seen
 		f.store_string(JSON.stringify(doc))
@@ -672,8 +679,40 @@ func load_file() -> bool:
 	pets_seen = []
 	if d.get("pets_seen") is Array:
 		pets_seen = d["pets_seen"].filter(func(k): return k is String and k not in dropped)
+	offered = (
+		d["offered"].filter(func(k): return k is String) if d.get("offered") is Array else []
+	)
+	var offering := false
+	for key in NEWER:
+		if key not in offered:
+			offered.append(key)
+			offering = true
+			if not pieces.any(func(p): return p["p"] == key):
+				_offer(key)
+	if offering:
+		save()
 	version += 1
 	return true
+
+
+# a default piece new to a saved layout goes at its default cell, else the nearest cell it may
+# stand on
+func _offer(key: String) -> void:
+	var row: Array = DEFAULTS.filter(func(r): return r[0] == key)[0]
+	var cells: Array = []
+	for c in Pets.COLS:
+		for r in Pets.ROWS:
+			cells.append(Vector2i(c, r))
+	var home := Vector2i(row[2], row[3])
+	cells.sort_custom(
+		func(a: Vector2i, b: Vector2i) -> bool:
+			return [(a - home).length_squared(), a.x, a.y] < [(b - home).length_squared(), b.x, b.y]
+	)
+	for cell in cells:
+		var p := _piece([key, row[1], cell.x, cell.y])
+		if check(p, null, []) == "":
+			pieces.append(p)
+			return
 
 
 func _pet_row(row: Variant) -> bool:

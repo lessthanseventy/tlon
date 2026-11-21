@@ -1597,6 +1597,7 @@ func _decorate_files(rng: RandomNumberGenerator) -> void:
 				"v": 1,
 				"wall": "plaster",
 				"floor": "nope",
+				"offered": ["laundry_basket"],
 				"pieces":
 				[
 					{"p": "no_such_thing", "f": "", "c": 2, "r": 2},
@@ -1885,6 +1886,7 @@ func _packs_files() -> void:
 		},
 	]
 	for doc in fixtures:
+		doc["offered"] = Layout.NEWER.duplicate()
 		_write_layout(path, doc)
 		var l := _layout_of(Packs.extend(_interiors(), _art()), path, true)
 		_check(l.pieces.size() == doc["pieces"].size() and l.wall == doc["wall"], "an old layout file loads whole (%d)" % l.pieces.size())
@@ -1900,6 +1902,7 @@ func _packs_files() -> void:
 
 	var held := {
 		"v": 1,
+		"offered": ["laundry_basket"],
 		"wall": "castle.ashlar",
 		"floor": "mansion.parquet",
 		"pieces":
