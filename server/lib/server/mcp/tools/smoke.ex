@@ -20,7 +20,7 @@ defmodule Server.MCP.Tool.StartSmoke do
 
     field :fixtures, {:list, :string},
       description:
-        "Named seed sets to load into the smoke's own database before you drive it (e.g. [\"tool_denied_need\"]): " <>
+        "Named seed sets to load into the smoke's own database (e.g. [\"tool_denied_need\"]): " <>
           "the candidate build's catalog, Server.Smoke.Fixtures; a spec may carry params, no spaces " <>
           ~s{("landed_workline:flag=off", "name:key=value,key=value"); an unknown name fails the smoke}
   end
@@ -52,44 +52,6 @@ defmodule Server.MCP.Tool.StartSmoke do
     do: %{"replaced" => "job #{id} was building an older commit of this ref; cancelled"}
 
   defp replaced_note(_), do: %{}
-end
-
-defmodule Server.MCP.Tool.DriveSmoke do
-  @moduledoc """
-  Drive the held smoke from the service (`Server.Smoke.drive/2`): each key is one
-  `office:drive` step (the drive-office skill), the screen after each comes back. Your own Bash
-  can't reach the smoke's port, so the drive runs here.
-  """
-  use Server.MCP.Tool
-
-  alias Server.Smoke
-
-  schema do
-    field :keys, {:list, :string},
-      required: true,
-      description:
-        ~s(office:drive steps, e.g. ["wait:HOME", "/", "Enter"]; "ticks:N" lets N ticks pass and lists every balloon seen)
-
-    field :thread_id, :integer,
-      description: "The workline you QA (its #id), when your session is bound to another thread"
-
-    field :wide, :boolean,
-      description:
-        "Draw the wide room (the door, the bathroom, the pets, events and their balloons) and print every screen row as text"
-
-    field :sandbox, :boolean,
-      description: "Run the office's made-up world, where the toy's keys (E event, F drill, D doorbell, T treat) work"
-  end
-
-  @impl true
-  def execute(params, frame) do
-    with {:ok, thread} <- Server.MCP.Tool.QASmoke.thread(params, frame),
-         {:ok, screens} <- Smoke.drive(thread.id, params[:keys], wide: params[:wide], sandbox: params[:sandbox]) do
-      ok(frame, %{"screens" => screens})
-    else
-      {:error, why} -> fail(frame, why)
-    end
-  end
 end
 
 defmodule Server.MCP.Tool.StopSmoke do

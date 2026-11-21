@@ -36,22 +36,22 @@ defmodule Server.Jobs.RunTaskTest do
 
   test "a task off the list is refused, naming the list", %{tree: tree, thread: t} do
     assert {:error, why} = RunTask.enqueue(t.id, "emma", "release:cut", tree)
-    assert why =~ "release:cut" and why =~ "office:test"
+    assert why =~ "release:cut" and why =~ "server:test"
     refute_enqueued(worker: RunTask)
   end
 
   test "a listed task is queued on the checkout's committed head", %{tree: tree, sha: sha, thread: t} do
-    assert {:ok, job} = RunTask.enqueue(t.id, "emma", "office:test", tree)
-    assert %{agent: "emma", task: "office:test", ref: ^sha, tree: ^tree} = job.args
+    assert {:ok, job} = RunTask.enqueue(t.id, "emma", "server:test", tree)
+    assert %{agent: "emma", task: "server:test", ref: ^sha, tree: ^tree} = job.args
   end
 
   test "green: the caller is told on the thread, by name, so the post wakes them", %{tree: tree, sha: sha, thread: t} do
-    {:ok, job} = RunTask.enqueue(t.id, "emma", "office:test", tree)
+    {:ok, job} = RunTask.enqueue(t.id, "emma", "server:test", tree)
     assert {:ok, :posted} = perform_job(RunTask, job.args)
 
     [m] = t |> Server.Channel.thread_messages() |> Enum.filter(&(&1.body =~ "mise run"))
     assert m.body =~ "@emma"
-    assert m.body =~ "✓ `mise run office:test` passed on #{String.slice(sha, 0, 7)}"
+    assert m.body =~ "✓ `mise run server:test` passed on #{String.slice(sha, 0, 7)}"
   end
 
   test "red: the exit and the run's tail come back", %{tree: tree, thread: t} do

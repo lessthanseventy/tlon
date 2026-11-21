@@ -1,7 +1,7 @@
 defmodule Server.Soul do
   @moduledoc """
   A seat's first-draft SOUL.md (souls design §1, §5–6 step 2): written once to
-  `<souls dir>/<name>.md`, the file the office TUI polls (`office/kit/souls.ts`). The draft never
+  `<souls dir>/<name>.md`. The draft never
   replaces a file that exists — the operator edits these — and writes diary only through `append_diary/2`.
   A soul shapes talk and room, never a work decision.
   """
@@ -96,7 +96,7 @@ defmodule Server.Soul do
     """
   }
 
-  @doc "The souls dir: `config :server, :souls_dir`, else `TLON_SOULS` (as the TUI), else `~/.config/tlon/souls`."
+  @doc "The souls dir: `config :server, :souls_dir`, else `TLON_SOULS`, else `~/.config/tlon/souls`."
   @spec dir() :: String.t()
   def dir do
     Application.get_env(:server, :souls_dir) || System.get_env("TLON_SOULS") ||
@@ -104,8 +104,8 @@ defmodule Server.Soul do
   end
 
   @doc """
-  The seat's soul as `%{heading => text}`, or `nil` when it has no readable file. Forgiving like
-  `office/kit/souls.ts` `parseSoul`: unknown headings are kept, text before the first heading is
+  The seat's soul as `%{heading => text}`, or `nil` when it has no readable file. Forgiving:
+  unknown headings are kept, text before the first heading is
   dropped, and nothing here raises — a bad soul is no soul. Read fresh on every call.
   """
   @spec read(String.t()) :: %{String.t() => String.t()} | nil

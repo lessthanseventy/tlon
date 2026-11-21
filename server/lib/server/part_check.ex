@@ -2,8 +2,7 @@ defmodule Server.PartCheck do
   @moduledoc """
   The one gate a model-drawn sprite part passes before it is kept (`Server.GeneratedParts`): a slot the
   office can dress (head, neck, hand), all three views, each a map of row index (0..17) to a row of exactly
-  12 characters, and only the gear colours. The colour list must stay in step with `office/test/wcag.test.ts`
-  (LEGAL), which proves each reads at 3:1 on the room's backgrounds; the body colours (k f s p b h) are refused.
+  12 characters, and only the gear colours; the body colours (k f s p b h) are refused.
   """
 
   @slots ~w(head neck hand)

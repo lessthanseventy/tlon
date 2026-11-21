@@ -252,7 +252,7 @@ defmodule Server.ProfilesTest do
       for cut <- ~w(submit_review edit_clause rename_identifier), do: assert(cut in qa.mcp["tlon"]["excludeTools"])
       assert get_in(qa.permissions, ["permission", "write"]) == "deny"
 
-      for tool <- ~w(start_smoke drive_smoke stop_smoke) do
+      for tool <- ~w(start_smoke stop_smoke) do
         refute tool in qa.mcp["tlon"]["excludeTools"]
         assert tool in Profiles.archetype(:builder).mcp["tlon"]["excludeTools"]
         assert qa.system_prompt =~ tool
@@ -260,17 +260,15 @@ defmodule Server.ProfilesTest do
 
       refute qa.system_prompt =~ "unsandboxed"
       assert qa.system_prompt =~ "4040"
-      assert qa.system_prompt =~ "OFFICE_SANDBOX=1"
 
       for {k, t} <- Profiles.archetypes(), k != :qa, do: assert("submit_qa" in t.mcp["tlon"]["excludeTools"], "#{k}")
     end
 
-    test "the QA brief lists every fixture of the catalog, how a spec carries params, and that drive_smoke starts a fresh session per call" do
+    test "the QA brief lists every fixture of the catalog and how a spec carries params" do
       prompt = Profiles.archetype(:qa).system_prompt
 
       for name <- Server.Smoke.Fixtures.names(), do: assert(prompt =~ name, "the brief omits fixture #{name}")
       assert prompt =~ "name:key=value"
-      assert prompt =~ "fresh session"
     end
 
     test "the librarian curates the office's memory with its own tools, writes no code, and no other archetype has them" do

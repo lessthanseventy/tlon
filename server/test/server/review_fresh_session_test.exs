@@ -161,7 +161,7 @@ defmodule Server.ReviewFreshSessionTest do
       assert {:ok, _} =
                Workline.review_verdict(thread, "approve", "lonnrot",
                  branch_head: nil,
-                 paths: ["office/kit/room.ts"],
+                 paths: ["server/lib/server/office/room.ex"],
                  follow_ups: ["the tooltip wraps"]
                )
 

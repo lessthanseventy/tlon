@@ -1,5 +1,5 @@
 defmodule Server.ReleaseSmokeScriptTest do
-  # scripts/release-smoke.sh: a candidate's office API must answer, and in shape. TLON_SMOKE_URL
+  # scripts/release-smoke.sh: a candidate's snapshot API must answer, and in shape. TLON_SMOKE_URL
   # points it at a server already up (here a stub), so nothing is built or started.
   use ExUnit.Case, async: true
 
@@ -142,12 +142,6 @@ defmodule Server.ReleaseSmokeScriptTest do
 
     assert out =~ "smoke: fixture p_set:a=b,c=d seeded"
     assert out =~ "smoke: fixture plain seeded"
-  end
-
-  test "an office with no machine workspace says the drive won't wait for it" do
-    office = ~s({"roster": [], "threads": [], "workspaces": [{"id": 1, "name": "elsewhere"}]})
-    assert {out, 1} = smoke(stub({200, office}))
-    assert out =~ "smoke: no wait for the office (no machine workspace)"
   end
 
   describe "the fetch of origin" do
@@ -349,7 +343,7 @@ defmodule Server.ReleaseSmokeScriptTest do
       signal = Path.join(tmp, "signal")
 
       Enum.each(
-        [Path.join(root, "scripts/lib"), Path.join(root, "server"), Path.join(root, "office"), stubs, signal],
+        [Path.join(root, "scripts/lib"), Path.join(root, "server"), stubs, signal],
         &File.mkdir_p!/1
       )
 
@@ -359,7 +353,7 @@ defmodule Server.ReleaseSmokeScriptTest do
       end
 
       File.write!(Path.join([root, "server", "mix.exs"]), "")
-      File.write!(Path.join([root, "office", "package.json"]), "{}")
+
       git = fn args -> {_, 0} = System.cmd("git", ["-C", root | args], stderr_to_stdout: true) end
       git.(["init", "-q", "-b", "main"])
       git.(["add", "-A"])
@@ -375,7 +369,7 @@ defmodule Server.ReleaseSmokeScriptTest do
       if [ -d "$PWD" ]; then echo kept; else echo swept; fi >"$SMOKE_SIGNAL/result"
       """)
 
-      for tool <- ~w(mise bun psql), do: stub(stubs, tool, "exit 0")
+      for tool <- ~w(mise psql), do: stub(stubs, tool, "exit 0")
       on_exit(fn -> File.rm_rf!(tmp) end)
       %{tmp: tmp, root: root, stubs: stubs, signal: signal}
     end
@@ -434,23 +428,6 @@ defmodule Server.ReleaseSmokeScriptTest do
       chmod +x _build/prod/rel/server/bin/server
       """)
 
-      drive = Path.join([ctx.root, "scripts", "office-drive.sh"])
-
-      File.write!(drive, ~S"""
-      #!/bin/sh
-      t="${3#\'}"; t="${t%\'}"
-      printf '=== after: .\nHOME\n=== after: Enter\n#7  %s\n=== after: c\nCREW\n=== after: R\nHOME\n' "$t"
-      """)
-
-      File.chmod!(drive, 0o755)
-      # the smoke drives the office from its checkout of the commit
-      for args <- [
-            ["add", "-A"],
-            ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "drive"],
-            ["branch", "-f", "work/feature"]
-          ],
-          do: {_, 0} = System.cmd("git", ["-C", ctx.root | args], stderr_to_stdout: true)
-
       script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
       env = [{"TLON_SMOKE_HOLD", "1"}, {"TLON_SMOKE_HOLD_TTL", "2"} | race_env(ctx, port)]
 
@@ -469,70 +446,6 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert out =~ "the hold of http://127.0.0.1:#{port} expired after 2s"
       # the suite's TLON_URL (test_helper.exs) reaches the script's report, never the live service
       assert out =~ "not recorded: http://127.0.0.1:1/api/release/ran"
-    end
-
-    test "the office drive waits for the title before the find and for the thread after Enter", ctx do
-      args = driven_args(ctx)
-      slash = Enum.find_index(args, &(&1 == "/"))
-      enter = Enum.find_index(args, &(&1 == "Enter"))
-
-      assert Enum.any?(Enum.take(args, slash), &(&1 =~ ~r/^wait:release smoke \d+$/))
-      assert Enum.at(args, enter + 1) =~ ~r/^wait:#7  release smoke \d+$/
-    end
-
-    test "a thread opens with its reply box focused: two Escapes leave it before the card", ctx do
-      args = driven_args(ctx)
-      enter = Enum.find_index(args, &(&1 == "Enter"))
-
-      assert [_wait, "Escape", "Escape", "c" | _] = Enum.drop(args, enter + 1)
-    end
-
-    defp driven_args(ctx) do
-      port = free_port()
-      office = ~s({"roster": [], "threads": [], "workspaces": [{"id": 1, "name": "machine"}], "id": 7})
-
-      stub(ctx.stubs, "mix", ~S"""
-      [ "$1" = release ] || exit 0
-      touch "$SMOKE_SIGNAL/building"
-      until [ -e "$SMOKE_SIGNAL/go" ]; do sleep 0.1; done
-      mkdir -p _build/prod/rel/server/bin
-      printf '#!/bin/sh\n[ "$1" = start ] && exec sleep 300\nexit 0\n' >_build/prod/rel/server/bin/server
-      chmod +x _build/prod/rel/server/bin/server
-      """)
-
-      # supports wait:TEXT (the smoke only waits when the candidate's drive says so)
-      drive = Path.join([ctx.root, "scripts", "office-drive.sh"])
-
-      File.write!(drive, ~S"""
-      #!/bin/sh
-      printf '%s\n' "$@" >"$SMOKE_SIGNAL/drive.args"
-      for a in "$@"; do case "$a" in \'*) t="${a#\'}"; t="${t%\'}" ;; wait:*) ;; esac; done
-      printf '=== after: .\nHOME\n=== after: Enter\n#7  %s\n=== after: c\nCREW\n=== after: R\nHOME\n' "$t"
-      """)
-
-      File.chmod!(drive, 0o755)
-
-      for args <- [
-            ["add", "-A"],
-            ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "drive"],
-            ["branch", "-f", "work/feature"]
-          ],
-          do: {_, 0} = System.cmd("git", ["-C", ctx.root | args], stderr_to_stdout: true)
-
-      script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
-      env = [{"TLON_SMOKE_HOLD", "1"}, {"TLON_SMOKE_HOLD_TTL", "2"} | race_env(ctx, port)]
-
-      smoke =
-        Task.async(fn ->
-          System.cmd("timeout", ["20", "bash", script, "work/feature"], env: env, stderr_to_stdout: true)
-        end)
-
-      wait_for(Path.join(ctx.signal, "building"))
-      start_supervised!({Bandit, plug: {Stub, {200, office}}, ip: {127, 0, 0, 1}, port: port, startup_log: false})
-      File.write!(Path.join(ctx.signal, "go"), "")
-      Task.await(smoke, 30_000)
-
-      ctx.signal |> Path.join("drive.args") |> File.read!() |> String.split("\n", trim: true)
     end
 
     defp stale_lock_in(ctx) do

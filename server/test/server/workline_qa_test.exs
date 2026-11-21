@@ -77,7 +77,7 @@ defmodule Server.WorklineQATest do
       )
 
   test "a driven workline with a broken R gets a QA finding before it lands" do
-    {thread, opts} = at_review("broken-r", ["office/tui/main.ts"])
+    {thread, opts} = at_review("broken-r", ["server/lib/server/office/room.ex"])
 
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
     assert Channel.thread_lead(thread.id) == "nolan"
@@ -134,7 +134,7 @@ defmodule Server.WorklineQATest do
   end
 
   test "while QA is owed it is not at its gate: QA's question to the operator is a question, which a reply clears" do
-    {thread, opts} = at_review("asks", ["office/kit/room.ts"])
+    {thread, opts} = at_review("asks", ["server/lib/server/office/room.ex"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
 
     {:ok, asked} =
@@ -151,7 +151,7 @@ defmodule Server.WorklineQATest do
   end
 
   test "a reviewer who approves in review.md and advances (no submit_review) hands it to QA, not to a dead end" do
-    {thread, opts} = at_review("advanced", ["office/kit/home.ts"])
+    {thread, opts} = at_review("advanced", ["server/lib/server/office/room.ex"])
     {:ok, _} = Channel.assign_lead(thread.id, "lonnrot")
 
     assert {:ok, %Thread{stage: "review"}} =
@@ -162,7 +162,7 @@ defmodule Server.WorklineQATest do
   end
 
   test "last round's approving review.md does not hand a re-entered review to QA" do
-    {thread, opts} = at_review("stale", ["office/kit/home.ts"])
+    {thread, opts} = at_review("stale", ["server/lib/server/office/room.ex"])
     {:ok, _} = Channel.assign_lead(thread.id, "lonnrot")
     {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", "lonnrot", opts)
 
@@ -179,14 +179,14 @@ defmodule Server.WorklineQATest do
   end
 
   test "a review.md asking for changes still refuses the advance" do
-    {thread, opts} = at_review("changes", ["office/kit/home.ts"])
+    {thread, opts} = at_review("changes", ["server/lib/server/office/room.ex"])
 
     assert {:error, {:artifact_missing, _}} =
              Workline.advance(Repo.get!(Thread, thread.id), Keyword.put(opts, :review_line, "VERDICT: request_changes"))
   end
 
   test "an operator's approve can't land it past an owed QA" do
-    {thread, opts} = at_review("held", ["office/kit/room.ts"])
+    {thread, opts} = at_review("held", ["server/lib/server/office/room.ex"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
     {:ok, held} = thread |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()
 
@@ -197,7 +197,7 @@ defmodule Server.WorklineQATest do
   end
 
   test "the operator's approve skips an owed QA only when told to, with a reason, and says so" do
-    {thread, opts} = at_review("overridden", ["office/kit/room.ts"])
+    {thread, opts} = at_review("overridden", ["server/lib/server/office/room.ex"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
     opts = Keyword.put(opts, :land, :queue)
 
@@ -222,7 +222,7 @@ defmodule Server.WorklineQATest do
   end
 
   test "a parked gate's approve skips an owed QA the same way" do
-    {thread, opts} = at_review("parked-override", ["office/kit/room.ts"])
+    {thread, opts} = at_review("parked-override", ["server/lib/server/office/room.ex"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
     {:ok, held} = thread |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()
 
@@ -233,12 +233,12 @@ defmodule Server.WorklineQATest do
   end
 
   test "while QA is owed, the qa seat's brief and nudges are QA's, not the reviewer's" do
-    {thread, opts} = at_review("qa-led", ["office/tui/main.ts"])
+    {thread, opts} = at_review("qa-led", ["server/lib/server/office/room.ex"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
     led = Repo.get!(Thread, thread.id)
 
     assert {:error, why} = Workline.owed_status(led, opts)
-    assert why =~ "submit_qa" and why =~ "start_smoke" and why =~ "drive_smoke"
+    assert why =~ "submit_qa" and why =~ "start_smoke"
     refute why =~ "unsandboxed"
     refute why =~ "submit_review"
 
@@ -252,7 +252,7 @@ defmodule Server.WorklineQATest do
   end
 
   test "asking whether the artifact is there records no check: only a move does" do
-    {thread, opts} = at_review("owed-asks", ["office/kit/room.ts"])
+    {thread, opts} = at_review("owed-asks", ["server/lib/server/office/room.ex"])
     before = checks(thread)
     Workline.owed_status(thread, opts)
     :ok = Server.Workline.Continuation.run(thread.id, opts)
@@ -272,11 +272,11 @@ defmodule Server.WorklineQATest do
   end
 
   test "a bench with no qa seat skips QA" do
-    skips_qa("no-qa-seat", ["office/tui/main.ts"], false)
+    skips_qa("no-qa-seat", ["server/lib/server/office/room.ex"], false)
   end
 
   test "QA is owed afresh each time it comes back to review" do
-    {thread, opts} = at_review("again", ["office/tui/main.ts"])
+    {thread, opts} = at_review("again", ["server/lib/server/office/room.ex"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
     {:error, {:bounced, _}} = Workline.qa_verdict(Repo.get!(Thread, thread.id), "fail", "nolan", @broken_r, opts)
 
@@ -287,7 +287,7 @@ defmodule Server.WorklineQATest do
   end
 
   test "a verdict other than pass or fail, or off the review stage, is refused" do
-    {thread, opts} = at_review("refusals", ["office/tui/main.ts"])
+    {thread, opts} = at_review("refusals", ["server/lib/server/office/room.ex"])
     assert {:error, {:bad_verdict, "meh"}} = Workline.qa_verdict(thread, "meh", "nolan", "x", opts)
 
     built = Thread |> Repo.get!(thread.id) |> Map.put(:stage, "build")
@@ -295,7 +295,7 @@ defmodule Server.WorklineQATest do
   end
 
   test "a repeated approval of the same commit is the one approval: one verdict, one grade, one QA notice" do
-    {thread, opts} = at_review("twice", ["office/kit/plane.ts"])
+    {thread, opts} = at_review("twice", ["server/lib/server/office/room.ex"])
     # a real head: with none on either side the match would be nil == nil
     opts = Keyword.put(opts, :branch_head, "08be9df")
     {:ok, _} = Workline.review_verdict(thread, "approve", "teodelina", opts)
@@ -314,7 +314,7 @@ defmodule Server.WorklineQATest do
   end
 
   test "an approval of a new commit is a new approval" do
-    {thread, opts} = at_review("anew", ["office/kit/plane.ts"])
+    {thread, opts} = at_review("anew", ["server/lib/server/office/room.ex"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "teodelina", Keyword.put(opts, :branch_head, "aaa111"))
 
     {:ok, _} =

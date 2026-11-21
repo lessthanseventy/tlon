@@ -5,16 +5,11 @@ defmodule Server.Rollout do
   parts moved (`parts/1`):
 
     * the server — nothing runs it yet: the service runs the release pointer (`scripts/release.sh`),
-      so a merge waits for the next `release:cut`, and the thread says so;
-    * the office TUI — nothing here: the snapshot carries the office's revision (`revs/0`) and a
-      TUI started on an older one offers a reload;
-    * the room kit (`office/kit`, `office/rooms`) — the desktop shell bundles it, and that is the
-      machine's to pin: a note for the operator (`pending/0`), since tlon never reaches into the
-      machine's config.
+      so a merge waits for the next `release:cut`, and the thread says so.
 
   The thread gets one line saying what was rolled out.
 
-  Notes live in this process's state, so a restart drops them and the next check refiles them. That
+  Notes for the operator (`pending/0`) live in this process's state, so a restart drops them and the next check refiles them. That
   is fine for a note a check keeps true: `note/2` is keyed, so refiling after a restart makes one
   note, not a pile, and `clear/1` removes it when the check passes again.
   """
@@ -30,14 +25,11 @@ defmodule Server.Rollout do
   def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
   @doc "Which parts of tlon a set of changed paths touches."
-  @spec parts([String.t()]) :: MapSet.t(:server | :office_tui | :office_room | :adapters)
+  @spec parts([String.t()]) :: MapSet.t(:server | :adapters)
   def parts(paths) do
     paths
     |> MapSet.new(fn
       "server/" <> _ -> :server
-      "office/tui/" <> _ -> :office_tui
-      "office/kit/" <> _ -> :office_room
-      "office/rooms/" <> _ -> :office_room
       "adapters/" <> _ -> :adapters
       _ -> nil
     end)
@@ -76,27 +68,6 @@ defmodule Server.Rollout do
 
   @doc "Done with note `id` (the operator did it, or doesn't need to)."
   def dismiss(id), do: if(GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:dismiss, id}), else: :ok)
-
-  @doc "The revisions surfaces compare against their own: `%{office: <tree sha of office/ on main>}`."
-  def revs do
-    case :persistent_term.get({__MODULE__, :revs}, nil) do
-      {at, revs} when at > 0 -> if System.monotonic_time(:second) - at < 10, do: revs, else: fresh_revs()
-      _ -> fresh_revs()
-    end
-  end
-
-  defp fresh_revs do
-    revs =
-      case Server.Git.cmd(Server.Profiles.tlon_root(), ["rev-parse", "HEAD:office"]) do
-        {sha, 0} -> %{office: String.trim(sha)}
-        _ -> %{office: nil}
-      end
-
-    :persistent_term.put({__MODULE__, :revs}, {System.monotonic_time(:second), revs})
-    revs
-  rescue
-    _ -> %{office: nil}
-  end
 
   @doc """
   What a restart would cut off right now, one line each: a coworker mid-turn, a verify or a landing
@@ -253,15 +224,6 @@ defmodule Server.Rollout do
     end
   end
 
-  defp note_desktop(short) do
-    GenServer.cast(
-      __MODULE__,
-      {:note, "the desktop shell runs an older office: pin tlon (#{short}) in the machine config and switch"}
-    )
-
-    "the desktop shell needs a pin (in your needs list)"
-  end
-
   @impl true
   def init(_), do: {:ok, %{notes: [], next: 1}}
 
@@ -342,21 +304,15 @@ defmodule Server.Rollout do
     _, _ -> :ok
   end
 
-  defp roll_out(%{repo: repo, to: to, thread_id: tid}, parts) do
-    own? = Path.expand(repo) == Path.expand(Server.Profiles.tlon_root())
-
-    lines =
-      if(own? and :server in parts, do: ["the server ships with the next release:cut"], else: []) ++
-        if(own? and MapSet.intersection(parts, MapSet.new([:office_tui, :office_room])) != MapSet.new(),
-          do: ["office TUIs offer a reload"],
-          else: []
-        ) ++
-        if(own? and :office_room in parts, do: [note_desktop(String.slice(to, 0, 7))], else: [])
-
-    if lines != [],
-      do:
-        {:ok, _} =
-          Server.Channel.post(%{thread_id: tid, author: "tlon", body: "⟳ rolled out: " <> Enum.join(lines, " · ")})
+  defp roll_out(%{repo: repo, thread_id: tid}, parts) do
+    if Path.expand(repo) == Path.expand(Server.Profiles.tlon_root()) and :server in parts do
+      {:ok, _} =
+        Server.Channel.post(%{
+          thread_id: tid,
+          author: "tlon",
+          body: "⟳ rolled out: the server ships with the next release:cut"
+        })
+    end
 
     :ok
   end

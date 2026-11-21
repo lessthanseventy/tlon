@@ -1,11 +1,11 @@
 defmodule Server.Smoke do
   @moduledoc """
-  The held smoke a QA seat drives, run by the service. `scripts/release-smoke.sh` needs Postgres's
+  The held smoke a QA seat asks for, run by the service. `scripts/release-smoke.sh` needs Postgres's
   unix socket and a network namespace shared with the scratch node, which a seat's sandboxed Bash
   has neither of, so the seat asks and the service runs it (`Server.Jobs.Smoke`). The release
   script keeps its own one-smoke-per-commit lock; this module only finds the thread's job and
   stops it: `held/1` is the one up (its url in meta), `building/2` the one queued or still building
-  (no url yet) — drive says so and a start for the same commit returns it (the ref is resolved to its
+  (no url yet) — a start for the same commit returns it (the ref is resolved to its
   sha at start; a ref whose tip moved cancels the old build and queues the new one); stop TERMs its script once it has a
   pid, or cancels the job when it has no process yet.
   """
@@ -19,8 +19,6 @@ defmodule Server.Smoke do
   @name ~r/\A[a-z][a-z0-9_]*\z/
   # a fixture is a name, then optionally `:key=value,key=value` (no spaces: TLON_SMOKE_FIXTURES is split on them)
   @fixture ~r/\A[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*=[A-Za-z0-9_.-]+(?:,[a-z][a-z0-9_]*=[A-Za-z0-9_.-]+)*)?\z/
-
-  @old_hold_note "(old hold: driving the checkout's office-drive.sh)\n"
 
   @doc """
   Queue the held smoke of `ref` (default the thread's own branch) for `thread`. `fixtures` are
@@ -115,34 +113,6 @@ defmodule Server.Smoke do
     end
   end
 
-  @doc """
-  Drive the held smoke from the service: `scripts/office-drive.sh` with `keys`, the screen after
-  each step. A seat's own drive is blind to the smoke's port (each sandboxed call has a network
-  namespace of its own).
-  """
-  @spec drive(integer(), [String.t()], keyword()) :: {:ok, String.t()} | {:error, String.t()}
-
-  def drive(thread_id, keys, opts \\ []) do
-    case held(thread_id) do
-      nil ->
-        {:error, none(thread_id, "no smoke is up for this thread: start_smoke first")}
-
-      %{meta: %{"url" => url} = meta} ->
-        # the smoke's own build dir, so a TUI change drives the candidate's TUI (old holds: the checkout)
-        dir = meta["dir"] || Server.Profiles.tlon_root()
-        {exe, args} = Job.launch([Path.join(dir, "scripts/office-drive.sh") | keys])
-        env = [{"TLON_URL", url}, {"MISE_YES", "1"} | drive_env(opts)]
-
-        task =
-          Task.async(fn -> Server.Cmd.run(exe, args, cd: dir, env: env, stderr_to_stdout: true, timeout: :infinity) end)
-
-        case Task.yield(task, 180_000) || Task.shutdown(task, :brutal_kill) do
-          {:ok, {out, _code}} -> {:ok, if(meta["dir"], do: out, else: @old_hold_note <> out)}
-          _ -> {:error, "the drive did not finish in 3 minutes"}
-        end
-    end
-  end
-
   @doc "The script that builds and holds the smoke (`config :server, :smoke_script` in tests)."
   def script do
     Application.get_env(:server, :smoke_script) || script_in_main_root()
@@ -156,13 +126,6 @@ defmodule Server.Smoke do
   defp building_error(%Oban.Job{id: id} = job, fallback) do
     since = Calendar.strftime(job.attempted_at || job.inserted_at, "%H:%M:%SZ")
     "building since #{since} (job #{id}): #{fallback}"
-  end
-
-  defp none(thread_id, fallback) do
-    case building(thread_id) do
-      nil -> fallback
-      job -> building_error(job, "its url is posted on the thread when it is up")
-    end
   end
 
   defp queue(thread_id, ref, opts) do
@@ -211,13 +174,6 @@ defmodule Server.Smoke do
     else
       _ -> :error
     end
-  end
-
-  # wide: the wide room in half blocks (where events, the door and the pets are), read as text lines;
-  # sandbox: the made-up world, where the toy's keys (E, F, D, T) run
-  defp drive_env(opts) do
-    wide = if opts[:wide], do: [{"OFFICE_WIDE", "1"}, {"OFFICE_TEXT", "1"}], else: []
-    if opts[:sandbox], do: [{"OFFICE_SANDBOX", "1"} | wide], else: wide
   end
 
   defp stop_job(%{meta: %{"os_pid" => pid}}) when is_integer(pid) do

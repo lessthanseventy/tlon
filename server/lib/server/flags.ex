@@ -9,7 +9,7 @@ defmodule Server.Flags do
   them.
   """
 
-  # :build_mode — the office TUI's `B` (floor step 3), off until the life room ships
+  # :build_mode — the room's build mode (floor step 3), off until the life room ships
   # :judged_supersede — a model-judged supersede is applied (Server.Recall.Supersede.judged/5), not
   # only proposed
   @known [:build_mode, :judged_supersede]

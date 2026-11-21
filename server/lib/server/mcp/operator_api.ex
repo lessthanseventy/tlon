@@ -5,7 +5,7 @@ defmodule Server.MCP.OperatorAPI do
   `Server.*` context (decision 1: the API IS the contexts — a client that needs a new read or write
   gets a context function first, then a route here; `scripts/tlon-cli.sh` calls the same
   functions). Same trust stance as `/mint`: loopback, unauthenticated by design. Clients:
-  asterion's tlon.nvim, the desktop office, the office TUI.
+  asterion's tlon.nvim, the desktop office, the house.
 
       GET    /api/sidebar                 Board.sidebar
       GET    /api/roster                  Staff.roster
@@ -16,7 +16,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/pets/:ws         Office.Pets.voices (the pets' lines by occasion; asking may write a batch)
       GET    /api/office/corkboard/:ws    Office.Corkboard.notes (the coworkers' notes to each other; asking may pin the next, and may post to #random: Office.Random)
       GET    /api/office/focus            Office.Focus.latest (the newest "show thread N" request)
-      POST   /api/office/focus            Office.Focus.request {"thread_id"} — the desktop asks the office TUI to open a thread
+      POST   /api/office/focus            Office.Focus.request {"thread_id"} — the desktop asks a surface to open a thread
       GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide); ?by=surface is Office.Needs.grouped (phone, machine, clipboard, uqbar, settled, counts)
       POST   /api/office/needs/heard      Office.Needs.hear {"keys": [...]} (the machine opened: those items leave it)
       POST   /api/office/talk/:ws         Office.Banter.talk {"situation", "a", "b"} (two coworkers together in the room: what they say, written now; 429 when they talked a moment ago)

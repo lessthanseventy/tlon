@@ -43,9 +43,6 @@ defmodule Server.MixProject do
         applications: [server: :permanent],
         steps: [:assemble, &Burrito.wrap/1],
         burrito: [
-          # `tlon office`: the launcher execs the office TUI it carries before the VM starts
-          plugin: "rel/burrito/plugin.zig",
-          extra_steps: [build: [pre: [Server.Package.Office]]],
           targets: [
             linux_x64: [os: :linux, cpu: :x86_64],
             linux_arm64: [os: :linux, cpu: :aarch64],

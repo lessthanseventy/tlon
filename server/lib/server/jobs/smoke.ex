@@ -4,8 +4,7 @@ defmodule Server.Jobs.Smoke do
   seat's Bash can't: `Server.Smoke`). The job is the hold: it lives as long as the script does, until
   `stop_smoke` or the script's own hold TTL. The job records the script's pid and log in its meta
   as soon as it starts (so `stop_smoke` can TERM a build); when the script says it is holding it
-  adds the url and the smoke's build dir (`Server.Smoke.drive/2` runs the candidate's drive from it),
-  what `Server.Smoke` finds it by, and posts the url and the
+  adds the url and the smoke's build dir, what `Server.Smoke` finds it by, and posts the url and the
   log's path on the thread; a smoke that fails posts its last lines instead. One attempt: a retry
   would stack another build. A `candidate` job (`Server.Smoke.queue_candidate/1`, main's new tip
   after a landing) runs the same script unheld and about no thread: the script records its
@@ -33,7 +32,6 @@ defmodule Server.Jobs.Smoke do
 
   # the service runs under systemd, whose PATH has no mise shims: the script's bare `mix`/`bun` are
   # found through `mise exec`, from the checkout whose mise.toml pins them
-  # (also how `Server.Smoke.drive/2` runs office-drive.sh: its tmux shell puts the mise shims first)
   @doc false
   def launch([script | _] = argv) when is_binary(script) do
     case System.find_executable("mise") do
@@ -70,7 +68,7 @@ defmodule Server.Jobs.Smoke do
 
       post(
         job,
-        "the smoke is up at #{url} (log: #{log}). Drive it with drive_smoke(keys); stop_smoke when done. " <>
+        "the smoke is up at #{url} (log: #{log}). stop_smoke when done. " <>
           "It tears itself down after the hold's TTL."
       )
     end

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The smoke check on a release candidate (pm-and-release design §4, check 2): the candidate built as
-# a scratch release in a throwaway worktree, started on a scratch port and database, asked for the
-# office at /api/office, and the office TUI driven through a fixed short script against it — then
-# all of it torn down. The exit code is the verdict; the last line says why.
+# a scratch release in a throwaway worktree, started on a scratch port and database, asked for its
+# snapshot at /api/office and to open a thread — then all of it torn down. The exit code is the
+# verdict; the last line says why.
 #
 #   release-smoke.sh [<commit>]     default origin/main
 #
@@ -12,10 +12,10 @@
 # built, started or recorded. A run ends `ran-on: smoke <sha>` and reports it to the service (lib/record-ran.sh), so a hand run counts for release:status too.
 # A second smoke of a commit another run is smoking waits for it, up to TLON_SMOKE_LOCK_WAIT seconds
 # (default 1200, inside a schedule's 30-minute run limit; 0 refuses at once), then smokes itself.
-# TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped, or
+# TLON_SMOKE_HOLD=1 keeps a passing scratch node up to read by hand (QA) until this is stopped, or
 # until TLON_SMOKE_HOLD_TTL seconds pass (default 7200): a forgotten hold would hold its port and
 # database for good. TLON_SMOKE_FLAGS and TLON_SMOKE_FIXTURES (space-separated names) turn flags on
-# and seed `Server.Smoke.Fixtures` sets on the node before the drive; TLON_SMOKE_SERVER_BIN is the
+# and seed `Server.Smoke.Fixtures` sets on the node; TLON_SMOKE_SERVER_BIN is the
 # bin/server the fixtures are rpc'd through (default the scratch build's). A sandboxed Bash is
 # refused up front: it can't reach Postgres, and each of its calls has a network namespace of its
 # own, blind to the port a hold serves on. The scratch node reads its operator settings from a file
@@ -41,7 +41,7 @@ fail() { echo "smoke FAILED: $*$([ -s "$log" ] && echo " (the log: $log)")"; exi
 for v in $(compgen -e | grep -E '^(TLON_|RELEASE_)'); do unset "$v"; done
 unset INVOCATION_ID
 
-dir="" node="" sha="" ok="" office="$root" dblock="" waited=""
+dir="" node="" sha="" ok="" dblock="" waited=""
 cleanup() {
   if [ -n "$node" ]; then kill "$node" 2>/dev/null; wait "$node" 2>/dev/null; fi
   if [ -n "$dir" ]; then
@@ -145,17 +145,12 @@ if [ -z "$url" ]; then
   exec 9>"$dir.lock"
   flock -n 9 || fail "can't lock $dir"
   git -C "$root" worktree add -q --detach "$dir" "$sha" || fail "can't check out ${sha:0:7}"
-  office="$dir"
   mise trust -q "$dir" >/dev/null 2>&1
   # a Hex home of its own (scripts/lib/seed-hex.sh)
   . "$(dirname "$0")/lib/seed-hex.sh"
   seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$dir.hex"
   export HEX_HOME="$dir.hex"
-  # the drive runs the candidate's own office-drive.sh under a throwaway XDG_STATE_HOME, which hides the trust above
-  export MISE_TRUSTED_CONFIG_PATHS="$dir"
   [ -d "$root/server/deps" ] && cp -a --reflink=auto "$root/server/deps" "$dir/server/"
-  [ -d "$root/office/node_modules" ] && cp -a --reflink=auto "$root/office/node_modules" "$dir/office/"
-  (cd "$dir/office" && bun install --frozen-lockfile >/dev/null 2>&1) || fail "bun install failed"
 
   # the heavy step, one at a time machine-wide: concurrent builds starve Postgres of connections.
   # Only this step: a built smoke (or a hold, for hours) runs on beside others.
@@ -198,8 +193,6 @@ code="$(curl -s -m 10 -o "$body" -w '%{http_code}' "$url/api/office")"
 jq -e '(.roster | type) == "array" and (.threads | type) == "array" and (.workspaces | length) > 0' "$body" >/dev/null ||
   { rm -f "$body"; fail "/api/office answered 200 without the office's shape (roster, threads, workspaces)"; }
 ws="$(jq -r '.workspaces[0].id' "$body")"
-# the workspace the TUI opens on (one named machine, as the boot makes it), named in its header
-home="$(jq -r '[.workspaces[] | select(.name | ascii_downcase == "machine")][0].name // empty' "$body")"
 rm -f "$body"
 echo "smoke: /api/office ✓"
 # TLON_SMOKE_FLAGS: feature flags a path under QA needs (`start_smoke`'s flags), set on THIS node
@@ -220,47 +213,12 @@ for fx in $fixtures; do
     fail "fixture $fx: not seeded (a fixture this build has?)"
   echo "smoke: fixture $fx seeded"
 done
-[ -n "$home" ] || echo "smoke: no wait for the office (no machine workspace)"
 
 title="release smoke $$"
 tid="$(curl -s -m 10 -X POST -H 'content-type: application/json' \
   -d "{\"workspace_id\": $ws, \"body\": \"$title\"}" "$url/api/threads" | jq -r '.id // empty')"
 [ -n "$tid" ] || fail "POST /api/threads opened no thread"
-
-# open · a thread (found by its title) · a card (the crew) · R (no reload: TUI and server agree)
-# a thread opens with its reply box focused: the first Escape leaves the box, the second the card
-# the finder lists only what the TUI's snapshot holds: wait for it (the header names the workspace)
-# before `/`, where the candidate's drive can wait at all
-loaded=()
-[ -n "$home" ] && grep -q 'wait:\*' "$office/scripts/office-drive.sh" && loaded=("wait:‹ $home ›")
-# a cold TUI takes its first snapshot late: the title must be on screen before `/`, and the thread
-# after Enter, not a fixed OFFICE_WAIT after each key
-find_wait=() enter_wait=()
-grep -q 'wait:\*' "$office/scripts/office-drive.sh" && { find_wait=("wait:$title"); enter_wait=("wait:#$tid  $title"); }
-screens="$(TLON_URL="$url" OFFICE_TAIL=60 OFFICE_WAIT=2 "$office/scripts/office-drive.sh" \
-  "." "${loaded[@]}" "${find_wait[@]}" "/" "'$title'" "Enter" "${enter_wait[@]}" "Escape" "Escape" "c" "Escape" "R" 2>&1)"
-after() { printf '%s\n' "$screens" | awk -v s="=== after: $1" '$0 == s {on = 1; next} /^=== / {on = 0} on'; }
-printf '%s\n' "$screens" >>"$log"
-expect() { case "$(after "$1")" in *"$2"*) ;; *) fail "the office after '$1' doesn't show '$2'" ;; esac; }
-expect "." "HOME"
-expect "Enter" "#$tid  $title"
-expect "c" "CREW"
-expect "R" "HOME"
-case "$(after "R")" in *"R reloads"*) fail "the office offers a reload against its own server" ;; esac
-echo "smoke: the office drove ✓"
-
-# the wide room (the door, the bathroom, Argos) is reachable headless: its labels are on screen. A candidate whose
-# drive predates OFFICE_WIDE only has the rail room.
-if grep -q OFFICE_WIDE "$office/scripts/office-drive.sh"; then
-  # the stereo shows whatever the host's playerctl is playing; a playerctl that finds no player keeps it at "no signal"
-  noplayer="$(mktemp -d)"
-  printf '#!/bin/sh\nexit 1\n' >"$noplayer/playerctl" && chmod +x "$noplayer/playerctl"
-  wide_screen="$(PATH="$noplayer:$PATH" TLON_URL="$url" OFFICE_WIDE=1 OFFICE_TEXT=1 "$office/scripts/office-drive.sh" "wait:no signal" 2>&1)"
-  rm -rf "$noplayer"
-  printf '%s\n' "$wide_screen" >>"$log"
-  case "$(printf '%s\n' "$wide_screen" | grep -v '^===')" in *"no signal"*) ;; *) fail "the wide room didn't draw under OFFICE_WIDE: no stereo label (only the wide room draws it)" ;; esac
-  echo "smoke: the wide room drove ✓"
-fi
+echo "smoke: a thread opened ✓"
 
 ok=1
 echo "smoke passed${sha:+ on ${sha:0:7}}"
@@ -269,7 +227,7 @@ if [ -n "$sha" ]; then
   record_ran smoke "$sha" 0
 fi
 if [ -n "$hold" ] && [ -n "$node" ]; then
-  echo "smoke: holding $url up (dir $office) — TLON_URL=$url mise run office:drive -- <keys>; stop this to tear it down"
+  echo "smoke: holding $url up (dir $dir); stop this to tear it down"
   trap 'exit 0' TERM INT
   for ((left = ttl; left > 0; left--)); do
     kill -0 "$node" 2>/dev/null || exit 0

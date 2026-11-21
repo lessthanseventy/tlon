@@ -60,7 +60,7 @@ if config_env() != :test do
 end
 
 # The operator's handle — who the human IS on this machine's channel. Local
-# configuration, never identity in the design (§8); the office TUI reads the same variable.
+# configuration, never identity in the design (§8).
 # `Dossier.bank_stated_fact` trusts only this author for `stated` provenance.
 config :server, operator: System.get_env("TLON_OPERATOR") || "andrew"
 

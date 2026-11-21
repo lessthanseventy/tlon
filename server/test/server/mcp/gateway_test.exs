@@ -222,8 +222,8 @@ defmodule Server.MCP.GatewayTest do
   end
 
   test "POST /api/check/scope names the gates a diff can break; a bad body is 422" do
-    assert {200, %{"tasks" => tasks}} = request_json(:post, "/api/check/scope", %{"paths" => ["office/kit/sim.ts"]})
-    assert tasks == ["check:names", "check:ignored", "office:check"]
+    assert {200, %{"tasks" => tasks}} = request_json(:post, "/api/check/scope", %{"paths" => ["house/main.gd"]})
+    assert tasks == ["check:names", "check:ignored", "check:house"]
     assert {200, %{"tasks" => ["check"]}} = request_json(:post, "/api/check/scope", %{"paths" => []})
     assert {422, _} = request_json(:post, "/api/check/scope", %{"paths" => "office"})
   end

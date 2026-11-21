@@ -10,7 +10,7 @@ defmodule Server.Standalone do
 
   @usage """
   usage: tlon [serve]   migrate the store, then serve until signalled (the default)
-         tlon office    the office in this terminal (TLON_URL: the server, default 127.0.0.1:4040)
+
          tlon help      this
   Configured like the service, by TLON_* environment variables: TLON_DATABASE or
   TLON_DATABASE_URL, TLON_MCP_PORT (4040), TLON_WEB_PORT (4042), TLON_START_*=0 to turn a part off.

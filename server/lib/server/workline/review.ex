@@ -24,8 +24,8 @@ defmodule Server.Workline.Review do
 
   require Logger
 
-  # What Andrew sees: the office, and the operator API it reads (the office snapshot rides on it).
-  @user_visible ~w(office/ server/lib/server/mcp/operator_api.ex server/lib/server/office)
+  # What Andrew sees: the operator API and the snapshot that rides on it.
+  @user_visible ~w(server/lib/server/mcp/operator_api.ex server/lib/server/office)
 
   @doc """
   Write + commit the review verdict. `{:ok, rel_path}`, `{:error, {:not_in_review, stage}}`
@@ -528,12 +528,12 @@ defmodule Server.Workline.Review do
 
   defp qa_playbook(thread) do
     """
-    drive the changed path as Andrew would, against a scratch release of work/#{thread.slug}: \
+    smoke a scratch release of work/#{thread.slug}: \
     `start_smoke(thread_id: #{thread.id})` has the service build it on its own port and db, smoke it and keep it up \
-    (it posts the url here); drive it with `drive_smoke(keys, thread_id: #{thread.id})`, the steps of `office:drive`; \
-    `stop_smoke` when done. Your own Bash can run neither: it has no Postgres socket and a network of its own. \
+    (it posts the url here, or the failure's last lines); `stop_smoke` when done. Your own Bash can run \
+    neither: it has no Postgres socket and a network of its own. \
     Never :4040, the live service. Then submit_qa with thread_id: #{thread.id}: pass, or fail with the \
-    finding — what you pressed and the screen text you saw.\
+    finding — what the smoke said.\
     """
   end
 

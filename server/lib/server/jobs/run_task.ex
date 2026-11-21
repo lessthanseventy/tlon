@@ -10,7 +10,7 @@ defmodule Server.Jobs.RunTask do
   """
   use Oban.Worker, queue: :tasks, max_attempts: 1
 
-  @tasks ~w(check server:check server:test office:check office:test adapters:claude-code:check menard:check)
+  @tasks ~w(check server:check server:test adapters:claude-code:check menard:check)
 
   @doc "The mise tasks a coworker may run here."
   def tasks, do: @tasks

@@ -1,6 +1,6 @@
 defmodule Server.Office do
   @moduledoc """
-  The office's read models — what the desktop rail and the office TUI draw: one snapshot of every
+  The office's read models — what the desktop rail and the house draw: one snapshot of every
   workspace (`status/0`) and a close look at one thread (`thread_view/1`). Plain maps, JSON-ready;
   served at `GET /api/office` and `GET /api/office/threads/:id` (`Server.MCP.OperatorAPI`) and by
   `scripts/tlon-cli.sh shell-status` / `shell-thread`, so every surface reads the same function.
@@ -68,8 +68,6 @@ defmodule Server.Office do
       life: Map.new(home_ws_ids(wss), &{&1, &1 |> Server.Life.status() |> Map.take([:level, :xp, :due])}),
       health: Map.take(Room.health(), [:state, :problems, :checks, :merge_queue]),
       weather: Server.Office.Weather.now(),
-      # a TUI started on an older office revision offers a reload (Server.Rollout)
-      revs: Server.Rollout.revs(),
       flags: Server.Flags.office(),
       release: Server.Release.PM.live_release(),
       landings: Server.Workline.recent_landings(5),

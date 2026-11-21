@@ -38,7 +38,7 @@ defmodule Server.CheckScope do
   defp cross?(path), do: Path.basename(path) == "AGENTS.md"
 
   defp area("server/" <> _), do: :server
-  defp area("office/" <> _), do: :office
+
   defp area("house/" <> _), do: :house
   defp area("adapters/claude-code/" <> _), do: :claude_code
   defp area("adapters/lsp/" <> _), do: :lsp
@@ -50,7 +50,7 @@ defmodule Server.CheckScope do
   defp area(_), do: :other
 
   defp tasks(:server), do: @greps ++ ["server:check", "server:eval-det"]
-  defp tasks(:office), do: @greps ++ ["office:check"]
+
   defp tasks(:house), do: @greps ++ ["check:house"]
   defp tasks(:claude_code), do: @greps ++ ["adapters:claude-code:check", "adapters:claude-code:mod"]
   defp tasks(:lsp), do: @greps ++ ["adapters:lsp:check"]

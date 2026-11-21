@@ -71,10 +71,8 @@ and every layer the spine design's re-laid §9 asked for
   (`Server.Aleph`, on Fable) is the other: called in, never seated. An `@aleph` on a thread from the
   operator, the manager or the tech lead spawns it there (`Aleph.called?/2`) in a window named for it,
   untagged so it is never taken for the thread's leaf; it answers once, and the staffing pass dismisses
-  it when idle after posting. The office draws it as a sphere over the card (`office/kit/aleph.ts`);
-  `:` on a thread card calls it.
-  The operator hands it an ask (`Attention.hand_to_uqbar/2`, `POST /api/office/prompts/:id/uqbar`, `u` on
-  an ask in the office): one post as the operator on its study, the ask resolved `handed to uqbar`; Uqbar's own ask is refused (`:own_ask`) and not offered.
+  it when idle after posting.
+  The operator hands it an ask (`Attention.hand_to_uqbar/2`, `POST /api/office/prompts/:id/uqbar`): one post as the operator on its study, the ask resolved `handed to uqbar`; Uqbar's own ask is refused (`:own_ask`) and not offered.
 - **the dossier** (`Server.Dossier`) — `fact` (provenance stated | derived, CHECKed by the db;
   `check_cmd` as a separate reproducibility axis; `supersedes`; `forgotten_at` tombstones), append-only
   `event` with a closed `kind`, `issue`, `todo`, `question`, `habit`. Read capped-and-counted.
@@ -117,8 +115,8 @@ and every layer the spine design's re-laid §9 asked for
   refused, held again at a head already requeued, the requeued landing red or conflicting, an hour
   gone — is a `pr_blocked` Need, answered by rebase (back into the merge queue, `Workline.reland_queued/2`: rebased, gated, `tlon/check` posted and merged at that head — never GitHub's own update-branch, whose head no gate ran on), close and reland, or a look at the PR).
   `KeepUp` leaves out a project whose repo folder is gone, with one keyed note `keep_up:gone:<repo>` (naming `server:project:remove`) instead of a failed job. It also warms each main checkout's `_build` for test once per tip (`warm_test_builds/2`): a mix project with a locked dependency and no `deps/` is skipped (never fetched), as is a compile that says its dependencies are unavailable (kept with its tip, not recompiled until the tip moves); each skip or failure is one keyed rollout note `keep_up:warm:<dir>`, and the tried tip is kept in `Server.Home.Keep`, so a restart does not recompile it, and its note is posted again while the condition holds.
-  An approved review of a change Andrew sees (`office/`, the operator API) goes to the bench's `qa`
-  seat first: it drives the branch on a scratch release the service holds for it (`start_smoke`, `drive_smoke`, `stop_smoke`: `Server.Smoke`, `Server.Jobs.Smoke` — a seat's sandboxed Bash can't run `release:smoke` or reach its port; `start_smoke`'s `fixtures` seed named sets (a spec is `name` or `name:key=value,key=value`, no spaces; a value that cannot travel, such as a backtick, is a named shape: `tool_denied_need:shape=backtick`; a new case is a catalog entry, not a new door) from the candidate's `Server.Smoke.Fixtures` on the smoke's own `tlon_smoke_*` db, refused on any other) and files `submit_qa` (with the workline's
+  An approved review of a change Andrew sees (the operator API and its snapshot) goes to the bench's `qa`
+  seat first: it smokes the branch on a scratch release the service holds for it (`start_smoke`, `stop_smoke`: `Server.Smoke`, `Server.Jobs.Smoke` — a seat's sandboxed Bash can't run `release:smoke` or reach its port; `start_smoke`'s `fixtures` seed named sets (a spec is `name` or `name:key=value,key=value`, no spaces; a value that cannot travel, such as a backtick, is a named shape: `tool_denied_need:shape=backtick`; a new case is a catalog entry, not a new door) from the candidate's `Server.Smoke.Fixtures` on the smoke's own `tlon_smoke_*` db, refused on any other) and files `submit_qa` (with the workline's
   `thread_id`, which only a `qa` seat on its bench may name — its session may be bound elsewhere); a fail bounces it to
   build with the finding, and nothing lands past an owed QA (`Server.Workline.qa_verdict/5`) but the
   operator's `approve <id> --skip-qa <why>` (API `{"skip_qa"}`), recorded as its QA verdict.
@@ -412,7 +410,7 @@ the live node:
 
 - `mise run server:release` — build the release the service runs, in `.release/` at the release pointer.
 - `mise run release:cut` — ship: move the pointer to origin/main (or a commit on it), build, restart once quiet. A merge to main alone deploys nothing; a session's landing runs `mise run install`, which cuts.
-- `mise run release:smoke -- [<sha>]` — the candidate as a scratch release on a pid-picked port and its own db `tlon_smoke_<port>` (never 4040 or `tlon`; the port is printed): `/api/office`, then the office driven headless; torn down after (`TLON_SMOKE_HOLD=1` keeps a passing node up to drive, as QA does, until stopped or `TLON_SMOKE_HOLD_TTL` seconds pass, default 7200). A sandboxed Bash is refused up front: it can't reach Postgres, and its network namespace is blind to the port a hold serves on — run it unsandboxed. `TLON_NODE` names its node beside `funes@`.
+- `mise run release:smoke -- [<sha>]` — the candidate as a scratch release on a pid-picked port and its own db `tlon_smoke_<port>` (never 4040 or `tlon`; the port is printed): `/api/office`, then a thread opened; torn down after (`TLON_SMOKE_HOLD=1` keeps a passing node up, as QA does, until stopped or `TLON_SMOKE_HOLD_TTL` seconds pass, default 7200). A sandboxed Bash is refused up front: it can't reach Postgres, and its network namespace is blind to the port a hold serves on — run it unsandboxed. `TLON_NODE` names its node beside `funes@`.
 - `mise run server:restart` — rebuild + restart the service (redeploy a server change). It refuses
   while a restart would cut work off (a coworker mid-turn, a verify, landing, smoke or scheduled run running —
   `Server.Rollout.busy/0`); `-- --force` restarts anyway.
@@ -424,9 +422,7 @@ The **standalone binary** is the same release for a box with no unit file (a Mac
 (Linux and macOS, x64 and arm64; ERTS inside, exqlite rebuilt per target). Run with no arguments
 it migrates and serves until signalled (`Server.Standalone`), every `TLON_START_*` defaulting on as
 the service sets them; it still needs Postgres (`PGHOST`, else `/tmp` on macOS) and tmux.
-`tlon office` is the office TUI from the same file: the launcher's plugin (`rel/burrito/plugin.zig`)
-carries that target's TUI (staged by `Server.Package.Office`) and execs it before the VM starts,
-so it has the real terminal. Each build's version carries its commit, because Burrito reuses an
+Each build's version carries its commit, because Burrito reuses an
 unpack named by version. `burrito` is build tooling (`runtime: false`): nothing ships it.
 
 The **shell parity pack** — operate the live channel from the shell, our peer to the agents' MCP tools

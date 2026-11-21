@@ -11,7 +11,7 @@ defmodule Server.Jobs.SmokeTest do
   #!/usr/bin/env bash
   trap 'exit 0' TERM
   echo "smoke: abc1234 on :4999"
-  echo "smoke: holding http://127.0.0.1:4999 up (dir /tmp/tlon-smoke/Ab1) — TLON_URL=http://127.0.0.1:4999 mise run office:drive -- <keys>"
+  echo "smoke: holding http://127.0.0.1:4999 up (dir /tmp/tlon-smoke/Ab1); stop this to tear it down"
   while true; do sleep 0.1; done
   """
 
@@ -76,7 +76,7 @@ defmodule Server.Jobs.SmokeTest do
     task = Task.async(fn -> Oban.drain_queue(queue: :smoke) end)
 
     wait_for(fn -> Enum.any?(bodies(t.id), &(&1 =~ "http://127.0.0.1:4999")) end)
-    assert Enum.any?(bodies(t.id), &(&1 =~ "drive_smoke"))
+    assert Enum.any?(bodies(t.id), &(&1 =~ "stop_smoke"))
     assert {:error, "a smoke is already up" <> _} = Smoke.start(t, nil)
     assert Smoke.held(t.id).meta["dir"] == "/tmp/tlon-smoke/Ab1"
 
@@ -125,42 +125,6 @@ defmodule Server.Jobs.SmokeTest do
              Regex.run(re, "smoke: holding http://127.0.0.1:4999 up (dir /tmp/tlon-smoke/Ab1) — x")
 
     assert [_, "http://127.0.0.1:4999"] = Regex.run(re, "smoke: holding http://127.0.0.1:4999 up — x")
-  end
-
-  test "drive runs the candidate's script from the smoke's dir, through the smoke's launcher", %{thread: t} do
-    dir = Path.join(System.tmp_dir!(), "smoke-dir-#{System.pid()}-#{System.unique_integer([:positive])}")
-    File.mkdir_p!(Path.join(dir, "scripts"))
-    drive = Path.join(dir, "scripts/office-drive.sh")
-
-    File.write!(
-      drive,
-      ~s(#!/usr/bin/env bash\necho "cwd=$PWD argv=$* yes=$MISE_YES url=$TLON_URL"\necho "wide=$OFFICE_WIDE text=$OFFICE_TEXT sandbox=$OFFICE_SANDBOX"\n)
-    )
-
-    File.chmod!(drive, 0o755)
-    on_exit(fn -> File.rm_rf(dir) end)
-
-    {:ok, _} =
-      %{thread_id: t.id, ref: "x"}
-      |> Server.Jobs.Smoke.new(state: "executing", meta: %{"url" => "http://127.0.0.1:4999", "dir" => dir})
-      |> Oban.insert()
-
-    assert {:ok, out} = Smoke.drive(t.id, ["/", "Enter"])
-    assert out =~ "cwd=#{dir} argv=/ Enter yes=1 url=http://127.0.0.1:4999"
-    assert out =~ "wide= text= sandbox="
-
-    assert {:ok, out} = Smoke.drive(t.id, ["E"], wide: true, sandbox: true)
-    assert out =~ "wide=1 text=1 sandbox=1"
-  end
-
-  test "a hold that recorded no dir says it drove the checkout's office-drive.sh", %{thread: t} do
-    {:ok, _} =
-      %{thread_id: t.id, ref: "x"}
-      |> Server.Jobs.Smoke.new(state: "executing", meta: %{"url" => "http://127.0.0.1:4999"})
-      |> Oban.insert()
-
-    assert {:ok, out} = Smoke.drive(t.id, ["--help"])
-    assert out =~ "(old hold: driving the checkout's office-drive.sh)"
   end
 
   test "a start for a tip that moved cancels the queued build and queues the new sha", %{thread: t} do
@@ -221,11 +185,6 @@ defmodule Server.Jobs.SmokeTest do
       {:ok, job} = Smoke.start(t, nil, "qa1")
       job |> Ecto.Changeset.change(state: "executing") |> Server.Repo.update!()
       %{job: job}
-    end
-
-    test "drive says it is building, with the job, not that no smoke is up", %{thread: t, job: job} do
-      assert {:error, "building since " <> _ = why} = Smoke.drive(t.id, ["/"])
-      assert why =~ "(job #{job.id})"
     end
 
     test "stop on an executing job whose script has not started yet says it is building", %{thread: t} do
