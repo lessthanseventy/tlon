@@ -38,7 +38,6 @@ const PINK := Color("f0a5b8")
 const PINK_DARK := Color("d9809a")
 const SNOUT := Color("f8c6d2")
 const PLUM := Color("5a3040")
-
 const PAPER := Color("f6efe0")
 const AMBER := Color("e3a33c")
 
