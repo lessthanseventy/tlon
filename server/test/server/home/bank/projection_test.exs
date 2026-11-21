@@ -319,6 +319,29 @@ defmodule Server.Home.Bank.ProjectionTest do
       assert only_shops.everyday.expected_daily_cents == 2_967
     end
 
+    test "moves between checking and savings, either way and a day apart, never reach everyday spending or the series" do
+      labels = ["Transfer to Acme Savings Account", "Moved to Acme Savings account", "Acme transfer"]
+
+      moves =
+        for i <- 1..60, {cents, from, to} <- [{20_000 + 100 * i, "a1", "s1"}, {7_000 + 100 * i, "s1", "a1"}] do
+          day = Date.add(@today, -rem(i * 7, 85) - 2)
+          label = Enum.at(labels, rem(i, 3))
+          lag = if rem(i, 2) == 0, do: 1, else: 0
+
+          [
+            txn(day, cents, label, %{"account_id" => from}),
+            txn(Date.add(day, lag), -cents, "Acme transfer", %{"account_id" => to})
+          ]
+        end
+
+      only_shops = forecast!(data([everyday(100)]))
+      with_moves = forecast!(data([everyday(100), moves]))
+
+      assert with_moves.everyday == only_shops.everyday
+      assert with_moves.basis.series == only_shops.basis.series
+      assert with_moves.events == only_shops.events
+    end
+
     test "under 30 days of history the three everyday figures are equal and the caveat is named" do
       f = forecast!(data([everyday(10)]))
       assert f.everyday.history_days == 11
@@ -352,6 +375,49 @@ defmodule Server.Home.Bank.ProjectionTest do
         assert wo.expected_cents - w.expected_cents == expected
         assert wo.low_cents - w.low_cents == expected
       end
+    end
+
+    test "savings is named beside the forecast and says whether it covers a shortfall or a tight low" do
+      checking = %{
+        "id" => "a1",
+        "type" => "depository",
+        "subtype" => "checking",
+        "current" => 50_000,
+        "available" => 50_000
+      }
+
+      saving = fn available ->
+        %{
+          "id" => "s1",
+          "name" => "Acme Savings",
+          "type" => "depository",
+          "subtype" => "savings",
+          "current" => available,
+          "available" => available
+        }
+      end
+
+      rent = monthly("Rent", 120_000, ~D[2026-10-27], 4)
+
+      big = afford!(data([rent, everyday(100)], [checking, saving.(9_000_000)]), 5_000)
+
+      assert %{
+               verdict: :short,
+               other_available_cents: 9_000_000,
+               other_accounts: ["Acme Savings"],
+               covered_by_other: true
+             } = big
+
+      assert big.with.other_available_cents == 9_000_000
+      assert big.with.start_cents == 50_000
+
+      small = afford!(data([rent, everyday(100)], [checking, saving.(1_000)]), 5_000)
+      assert %{verdict: :short, covered_by_other: false} = small
+
+      assert %{verdict: :covers, covered_by_other: nil} = afford!(base(), 1_000)
+
+      assert %{other_available_cents: 9_000_000, other_accounts: []} =
+               base() |> afford!(1_000) |> Map.take([:other_available_cents, :other_accounts])
     end
 
     test "a baseline that is already short says so, with the shortfall and what the purchase adds" do

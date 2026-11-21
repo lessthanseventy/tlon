@@ -272,6 +272,21 @@ defmodule Server.Home.Bank do
   def spendable_available(accounts),
     do: accounts |> Enum.filter(&spendable?/1) |> total(&(&1["available"] || &1["current"]))
 
+  @doc """
+  The available balance (else the current) of the depository accounts that are not spendable, as
+  `%{cents, names}`: savings and the like, the working buffer beside checking. Zero cents and no
+  names when there are none.
+  """
+  @spec other_available([map()]) :: %{cents: integer(), names: [String.t()]}
+  def other_available(accounts) do
+    others = Enum.filter(accounts, &(&1["type"] == "depository" and not spendable?(&1)))
+
+    %{
+      cents: total(others, &(&1["available"] || &1["current"])) || 0,
+      names: for(account <- others, is_binary(account["name"]) and account["name"] != "", do: account["name"])
+    }
+  end
+
   defp total([], _), do: nil
 
   defp total(accounts, amount) do

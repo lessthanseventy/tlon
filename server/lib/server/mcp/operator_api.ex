@@ -188,13 +188,17 @@ defmodule Server.MCP.OperatorAPI do
                                          monthly|yearly|once), count, overdue (expected and not yet posted, held on tomorrow), expected_on
                                          (the date it was due, when overdue; else null)}], everyday: {expected_daily_cents, low_daily_cents,
                                          high_daily_cents, history_days}, lowest: {date, balance_cents}, before_next_deposit: {date,
-                                         balance_cents} | null, basis: {months_of_history, series, next_deposit: {name, date, overdue} | null,
+                                         balance_cents} | null, other_available_cents (what the other depository accounts, savings, hold;
+                                         never in the balance), other_accounts (their names), basis: {months_of_history, series, next_deposit: {name, date, overdue} | null,
                                          skipped (names of series whose expected charge did not post), caveats (pending_ignored|short_history|
                                          skipped_charge|no_deposit_seen|one_off_bills_unknown)}, subscriptions: [{name, amount_cents, rhythm,
                                          next, count, was_cents}]}; null when the bank source is off or nothing is stored; 400 on a bad date
       POST   /api/home/money/ask         {text, thread?} → Server.Home.Money.ask; {reply, figures, thread}: a question about his money
                                          answered from the projection engine (model plans and phrases, every amount checked against the
-                                         results, else a plain rendering); figures is the forecast, the purchase's with/without or the
+                                         results, else a plain rendering); figures is the forecast, the purchase's with/without (with
+                                         short_without, baseline_shortfall_cents, baseline_short_on, adds_cents when the forecast is already
+                                         short without it, and other_available_cents, other_accounts, covered_by_other for the other
+                                         accounts) or the
                                          change's baseline/changed behind the answer, null when none; thread carries a follow-up; with the
                                          bank off 200 and a reply saying so; 400 with no text. Read-only
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion; ?nina_|argos_ + name|species|personality (sassy sweet lazy mischievous shy bold) choose the cast

@@ -82,6 +82,8 @@ defmodule Server.Home.Bank.Projection do
           days: [day()],
           lowest: point(),
           before_next_deposit: point() | nil,
+          other_available_cents: integer(),
+          other_accounts: [String.t()],
           basis: basis()
         }
   @type verdict :: :covers | :tight | :short
@@ -96,6 +98,9 @@ defmodule Server.Home.Bank.Projection do
           baseline_shortfall_cents: pos_integer() | nil,
           baseline_short_on: Date.t() | nil,
           adds_cents: non_neg_integer() | nil,
+          other_available_cents: integer(),
+          other_accounts: [String.t()],
+          covered_by_other: boolean() | nil,
           cushion_cents: integer()
         }
   @type change ::
@@ -145,7 +150,10 @@ defmodule Server.Home.Bank.Projection do
   `shortfall_cents` at the lowest point and `short_on`, the first day below zero. When the forecast
   without the purchase is already below zero, `short_without` is true and `baseline_shortfall_cents`
   and `baseline_short_on` are that shortfall and its first day, and `adds_cents` what the purchase
-  adds to the shortfall at the lowest point (they are nil otherwise). `worst_case` is the
+  adds to the shortfall at the lowest point (they are nil otherwise). The forecast stays on checking
+  alone; `other_available_cents` and `other_accounts` say what the other depository accounts
+  (savings) hold, and when the verdict is `:short` or `:tight`, `covered_by_other` whether that
+  covers the shortfall or lifts the lowest point to the cushion (nil when `:covers`). `worst_case` is the
   same verdict on the low line. A date earlier than today counts as today; one past the 180-day cap
   is `{:error, :beyond_horizon}`, never a purchase left uncounted. An `amount_cents` that is not a
   positive integer is `{:error, :bad_amount}`.
@@ -183,6 +191,9 @@ defmodule Server.Home.Bank.Projection do
          baseline_shortfall_cents: baseline,
          baseline_short_on: baseline_on,
          adds_cents: baseline && shortfall - baseline,
+         other_available_cents: ctx.other.cents,
+         other_accounts: ctx.other.names,
+         covered_by_other: covered_by_other(with, shortfall, cushion, ctx.other.cents),
          cushion_cents: cushion
        }}
     end
@@ -282,6 +293,7 @@ defmodule Server.Home.Bank.Projection do
         {:ok,
          %{
            start: start,
+           other: Bank.other_available(accounts),
            out: out,
            deposits: mine |> Recurring.series(:in) |> Recurring.live(today),
            everyday: everyday(mine, out, today),
@@ -485,6 +497,8 @@ defmodule Server.Home.Bank.Projection do
 
     %{
       start_cents: ctx.start,
+      other_available_cents: ctx.other.cents,
+      other_accounts: ctx.other.names,
       until: until,
       clamped: clamped,
       events: events,
@@ -512,6 +526,16 @@ defmodule Server.Home.Bank.Projection do
   defp lowest(days) do
     day = Enum.min_by(days, & &1.expected_cents)
     %{date: day.date, balance_cents: day.expected_cents}
+  end
+
+  defp covered_by_other(with, shortfall, cushion, other) do
+    low = Enum.min_by(with.days, & &1.expected_cents).expected_cents
+
+    case verdict(low, cushion) do
+      :covers -> nil
+      :tight -> low + other >= cushion
+      :short -> other >= shortfall
+    end
   end
 
   defp verdict(low, cushion) when low >= cushion, do: :covers

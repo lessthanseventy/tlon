@@ -157,7 +157,8 @@ defmodule Server.Home.Money.Say do
         "#{purchase} is covered: your lowest expected balance would be #{low["balance_cents_text"]} on #{day(low["date"])}."
 
       "tight" ->
-        "#{purchase} is tight: your lowest expected balance would be #{low["balance_cents_text"]} on #{day(low["date"])}, under the #{r["cushion_cents_text"]} cushion."
+        "#{purchase} is tight: your lowest expected balance would be #{low["balance_cents_text"]} on #{day(low["date"])}, under the #{r["cushion_cents_text"]} cushion." <>
+          other(r, "lifts it to the cushion", "would not lift it to the cushion")
 
       "short" ->
         short(purchase, r)
@@ -340,10 +341,24 @@ defmodule Server.Home.Money.Say do
 
   defp short(purchase, %{"short_without" => true} = r),
     do:
-      "Without it your balance is already projected short by #{r["baseline_shortfall_cents_text"]} on #{day(r["baseline_short_on"])}. #{purchase} #{deepens(r)}"
+      "Without it your balance is already projected short by #{r["baseline_shortfall_cents_text"]} on #{day(r["baseline_short_on"])}. #{purchase} #{deepens(r)}" <>
+        other(r, "covers it", "does not cover it")
 
   defp short(purchase, r),
-    do: "#{purchase} would leave you short by #{r["shortfall_cents_text"]} on #{day(r["short_on"])}."
+    do:
+      "#{purchase} would leave you short by #{r["shortfall_cents_text"]} on #{day(r["short_on"])}." <>
+        other(r, "covers it", "does not cover it")
+
+  defp other(%{"other_available_cents" => cents} = r, yes, no) when cents > 0 do
+    holds =
+      if r["other_accounts"] == [],
+        do: "Your other accounts hold",
+        else: "#{Enum.join(r["other_accounts"], " and ")} holds"
+
+    " This is checking alone; #{holds} #{r["other_available_cents_text"]}, which #{if r["covered_by_other"], do: yes, else: no}."
+  end
+
+  defp other(_r, _yes, _no), do: ""
 
   defp deepens(%{"adds_cents" => 0}), do: "would not make it any deeper."
   defp deepens(r), do: "would deepen it by #{r["adds_cents_text"]}."

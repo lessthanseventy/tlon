@@ -254,6 +254,34 @@ defmodule Server.Home.MoneyTest do
       end
     end
 
+    test "the lead says whether the other accounts cover a shortfall, without folding them into the balance" do
+      result = fn covered ->
+        [
+          %{
+            "ask" => %{"ask" => "afford", "amount_cents_text" => "$400", "on" => nil},
+            "result" => %{
+              "verdict" => "short",
+              "shortfall_cents_text" => "$120.00",
+              "short_on" => "2026-11-27",
+              "other_available_cents" => 90_000,
+              "other_available_cents_text" => "$900",
+              "other_accounts" => ["Acme Savings"],
+              "covered_by_other" => covered,
+              "with" => %{"lowest" => %{}}
+            }
+          }
+        ]
+      end
+
+      assert [
+               "A purchase of $400 on today would leave you short by $120.00 on Fri 27 Nov. This is checking alone; Acme Savings holds $900, which covers it."
+             ] ==
+               Say.leads(result.(true))
+
+      assert [lead] = Say.leads(result.(false))
+      assert lead =~ "which does not cover it."
+    end
+
     test "the lead names a baseline that is already short and what the purchase adds" do
       presented = [
         %{

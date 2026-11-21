@@ -244,7 +244,8 @@ and every layer the spine design's re-laid §9 asked for
   day (low, expected, high) from the recurring series repeated at their rhythms plus an everyday estimate (the last 90 days of
   posted outflows on checking that are in no series and no transfer, spread evenly; the low and high lines are the 25th and 75th
   percentile of rolling 30-day totals), capped at 180 days. Every number is computed there and none comes from a model, and none
-  is an opinion on the spending. An expected charge or deposit that has not posted (today or earlier) stays on tomorrow as
+  is an opinion on the spending. The forecast stays on checking; `other_available_cents` and `other_accounts` (savings) ride beside it and
+  `covered_by_other` says whether they cover a short or tight purchase. An expected charge or deposit that has not posted (today or earlier) stays on tomorrow as
   `overdue` (with `expected_on`) for half its rhythm, then is named in `basis.skipped`; a series whose last charge is older than two
   rhythms plus the rhythm's tolerance (yearly: one rhythm plus 30 days; `Recurring.live/2`) has ended and is in none of it, nor in `subscriptions`. `GET /api/home/money/forecast?until=` is the forecast and the subscriptions as JSON (null when
   off). The **money chat** (`Server.Home.Money`, `POST /api/home/money/ask {text, thread?}` → `{reply, figures, thread}`, read-only) answers a question about his money from that engine: the home reader's model
