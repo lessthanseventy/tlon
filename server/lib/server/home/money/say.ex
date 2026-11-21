@@ -140,8 +140,9 @@ defmodule Server.Home.Money.Say do
 
   @doc """
   The sentences code writes from the results, which the model's phrasing only follows: the verdict
-  of a purchase (with its date and amount when it is tight or short) and a series that was not
-  found. The model never says either.
+  of a purchase (with its date and amount when it is tight or short; when the balance is already
+  short without it, that shortfall and what the purchase adds) and a series that was not found. The
+  model never says either.
   """
   @spec leads([map()]) :: [String.t()]
   def leads(presented), do: for(entry <- presented, lead = lead(entry), do: lead)
@@ -159,7 +160,7 @@ defmodule Server.Home.Money.Say do
         "#{purchase} is tight: your lowest expected balance would be #{low["balance_cents_text"]} on #{day(low["date"])}, under the #{r["cushion_cents_text"]} cushion."
 
       "short" ->
-        "#{purchase} would leave you short by #{r["shortfall_cents_text"]} on #{day(r["short_on"])}."
+        short(purchase, r)
     end
   end
 
@@ -336,4 +337,14 @@ defmodule Server.Home.Money.Say do
   defp abs_text(%{"amount_cents" => cents}), do: Bank.money(abs(cents))
 
   defp day(iso), do: iso |> Date.from_iso8601!() |> Calendar.strftime("%a %-d %b")
+
+  defp short(purchase, %{"short_without" => true} = r),
+    do:
+      "Without it your balance is already projected short by #{r["baseline_shortfall_cents_text"]} on #{day(r["baseline_short_on"])}. #{purchase} #{deepens(r)}"
+
+  defp short(purchase, r),
+    do: "#{purchase} would leave you short by #{r["shortfall_cents_text"]} on #{day(r["short_on"])}."
+
+  defp deepens(%{"adds_cents" => 0}), do: "would not make it any deeper."
+  defp deepens(r), do: "would deepen it by #{r["adds_cents_text"]}."
 end

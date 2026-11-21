@@ -354,6 +354,23 @@ defmodule Server.Home.Bank.ProjectionTest do
       end
     end
 
+    test "a baseline that is already short says so, with the shortfall and what the purchase adds" do
+      low = [
+        %{"id" => "a1", "type" => "depository", "subtype" => "checking", "current" => 50_000, "available" => 50_000}
+      ]
+
+      a = afford!(data([monthly("Rent", 120_000, ~D[2026-10-27], 4), everyday(100)], low), 5_000)
+
+      assert %{verdict: :short, short_without: true, baseline_short_on: on, baseline_shortfall_cents: base} = a
+      assert on == ~D[2026-11-27]
+      assert base == -a.without.lowest.balance_cents
+      assert a.adds_cents == 5_000
+      assert a.shortfall_cents == base + 5_000
+
+      covered = afford!(base(), 1_000)
+      assert %{short_without: false, baseline_shortfall_cents: nil, baseline_short_on: nil, adds_cents: nil} = covered
+    end
+
     test "an amount that is not a positive integer is a bad amount" do
       for bad <- [0, -500, 10.5, "20"],
           do: assert({:error, :bad_amount} = Projection.afford(base(), @today, bad))

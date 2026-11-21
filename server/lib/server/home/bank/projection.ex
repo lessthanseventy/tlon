@@ -92,6 +92,10 @@ defmodule Server.Home.Bank.Projection do
           without: forecast(),
           shortfall_cents: pos_integer() | nil,
           short_on: Date.t() | nil,
+          short_without: boolean(),
+          baseline_shortfall_cents: pos_integer() | nil,
+          baseline_short_on: Date.t() | nil,
+          adds_cents: non_neg_integer() | nil,
           cushion_cents: integer()
         }
   @type change ::
@@ -138,7 +142,10 @@ defmodule Server.Home.Bank.Projection do
   later of #{@afford_days} days and the second next deposit (within the cap). `:covers` when the
   lowest expected balance with it is at least the cushion (`opts[:cushion_cents]`, default seven days
   of expected everyday spending), `:tight` when it is zero or more, `:short` below zero, with the
-  `shortfall_cents` at the lowest point and `short_on`, the first day below zero. `worst_case` is the
+  `shortfall_cents` at the lowest point and `short_on`, the first day below zero. When the forecast
+  without the purchase is already below zero, `short_without` is true and `baseline_shortfall_cents`
+  and `baseline_short_on` are that shortfall and its first day, and `adds_cents` what the purchase
+  adds to the shortfall at the lowest point (they are nil otherwise). `worst_case` is the
   same verdict on the low line. A date earlier than today counts as today; one past the 180-day cap
   is `{:error, :beyond_horizon}`, never a purchase left uncounted. An `amount_cents` that is not a
   positive integer is `{:error, :bad_amount}`.
@@ -162,6 +169,7 @@ defmodule Server.Home.Bank.Projection do
       with = build(ctx, today, until, [purchase | base])
       cushion = Keyword.get(opts, :cushion_cents, @cushion_days * ctx.everyday.expected_daily_cents)
       {short_on, shortfall} = shortfall(with.days)
+      {baseline_on, baseline} = shortfall(without.days)
 
       {:ok,
        %{
@@ -171,6 +179,10 @@ defmodule Server.Home.Bank.Projection do
          without: without,
          shortfall_cents: shortfall,
          short_on: short_on,
+         short_without: baseline != nil,
+         baseline_shortfall_cents: baseline,
+         baseline_short_on: baseline_on,
+         adds_cents: baseline && shortfall - baseline,
          cushion_cents: cushion
        }}
     end

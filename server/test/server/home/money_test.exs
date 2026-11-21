@@ -254,6 +254,27 @@ defmodule Server.Home.MoneyTest do
       end
     end
 
+    test "the lead names a baseline that is already short and what the purchase adds" do
+      presented = [
+        %{
+          "ask" => %{"ask" => "afford", "amount_cents_text" => "$50.00", "on" => nil},
+          "result" => %{
+            "verdict" => "short",
+            "short_without" => true,
+            "baseline_shortfall_cents_text" => "$120.00",
+            "baseline_short_on" => "2026-11-27",
+            "adds_cents" => 5_000,
+            "adds_cents_text" => "$50.00",
+            "with" => %{"lowest" => %{}}
+          }
+        }
+      ]
+
+      assert [
+               "Without it your balance is already projected short by $120.00 on Fri 27 Nov. A purchase of $50.00 on today would deepen it by $50.00."
+             ] == Say.leads(presented)
+    end
+
     test "a phrasing that says the opposite of the verdict is replaced by the plain rendering" do
       store()
       {answer, _} = ask("can I afford it?", [plan([afford(50_000_000)]), {:ok, "Yes, you can afford it, no problem."}])
