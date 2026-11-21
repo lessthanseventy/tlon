@@ -244,6 +244,11 @@ defmodule Server.Home.Bank.ProjectionTest do
       end
     end
 
+    test "an amount that is not a positive integer is a bad amount" do
+      for bad <- [0, -500, 10.5, "20"],
+          do: assert({:error, :bad_amount} = Projection.afford(base(), @today, bad))
+    end
+
     test "a purchase past the 180-day cap is refused, on the cap it is counted" do
       assert {:error, :beyond_horizon} = Projection.afford(base(), @today, 1_000, Date.add(@today, 181))
 
@@ -297,6 +302,22 @@ defmodule Server.Home.Bank.ProjectionTest do
     defp what_if!(changes, until \\ ~D[2027-01-20]) do
       assert {:ok, result} = Projection.what_if(base(), @today, changes, until)
       result
+    end
+
+    test "a cost the change cannot take is a bad amount; a negative one-off is money in" do
+      for change <- [
+            {:one_off, 0, ~D[2026-12-02], "X"},
+            {:one_off, 1.5, ~D[2026-12-02], "X"},
+            {:recurring, 0, :weekly, ~D[2026-12-02], "X"},
+            {:recurring, -5, :weekly, ~D[2026-12-02], "X"},
+            {:change, "salary", 0},
+            {:change, "salary", -1},
+            {:change, "salary", "9"}
+          ],
+          do: assert({:error, :bad_amount} = Projection.what_if(base(), @today, [change], ~D[2026-12-31]))
+
+      assert {:ok, r} = Projection.what_if(base(), @today, [{:one_off, -7_000, ~D[2026-12-02], "Gift"}], ~D[2026-12-31])
+      assert r.difference.end_cents == 7_000
     end
 
     test "a one-off past the horizon is refused, a recurring past until but within the cap is not" do

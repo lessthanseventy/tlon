@@ -139,11 +139,17 @@ defmodule Server.Home.Bank.Projection do
   of expected everyday spending), `:tight` when it is zero or more, `:short` below zero, with the
   `shortfall_cents` at the lowest point and `short_on`, the first day below zero. `worst_case` is the
   same verdict on the low line. A date earlier than today counts as today; one past the 180-day cap
-  is `{:error, :beyond_horizon}`, never a purchase left uncounted.
+  is `{:error, :beyond_horizon}`, never a purchase left uncounted. An `amount_cents` that is not a
+  positive integer is `{:error, :bad_amount}`.
   """
-  @spec afford(data(), Date.t(), pos_integer(), Date.t() | nil, keyword()) ::
-          {:ok, afford()} | {:error, :no_data | :beyond_horizon}
-  def afford(data, today, amount_cents, on \\ nil, opts \\ []) when is_integer(amount_cents) and amount_cents > 0 do
+  @spec afford(data(), Date.t(), term(), Date.t() | nil, keyword()) ::
+          {:ok, afford()} | {:error, :no_data | :beyond_horizon | :bad_amount}
+  def afford(data, today, amount_cents, on \\ nil, opts \\ [])
+
+  def afford(_data, _today, amount_cents, _on, _opts) when not is_integer(amount_cents) or amount_cents <= 0,
+    do: {:error, :bad_amount}
+
+  def afford(data, today, amount_cents, on, opts) do
     on = on || today
 
     with :ok <- within(on, Date.add(today, @cap)),
@@ -175,11 +181,14 @@ defmodule Server.Home.Bank.Projection do
   `{:change, series_name, new_amount}`. A series is named by its merchant, in any case; an unknown
   one is `{:error, {:no_series, name, suggestions}}` with the nearest names. A one-off past the
   horizon (`until`, clamped to the cap) or a recurring change starting past the cap is
-  `{:error, :beyond_horizon}`. `difference` is the change in the balance at the end and in the lowest
-  point; `clamped` says the horizon was cut to the cap.
+  `{:error, :beyond_horizon}`. A cost that is not an integer, a zero one-off, or a recurring or
+  changed cost that is not positive is `{:error, :bad_amount}`; a negative one-off is money in.
+  `difference` is the change in the balance at the end and in the lowest point; `clamped` says the
+  horizon was cut to the cap.
   """
   @spec what_if(data(), Date.t(), [change()], Date.t()) ::
-          {:ok, what_if()} | {:error, :no_data | :beyond_horizon | {:no_series, String.t(), [String.t()]}}
+          {:ok, what_if()}
+          | {:error, :no_data | :beyond_horizon | :bad_amount | {:no_series, String.t(), [String.t()]}}
   def what_if(data, today, changes, until) do
     cap = Date.add(today, @cap)
     horizon = Enum.min([until, cap], Date)
@@ -509,6 +518,14 @@ defmodule Server.Home.Bank.Projection do
     end)
   end
 
+  defp checked({:one_off, cost, _date, _name}, _horizon, _cap) when not is_integer(cost) or cost == 0,
+    do: {:error, :bad_amount}
+
+  defp checked({:recurring, cost, _rhythm, _from, _name}, _horizon, _cap) when not is_integer(cost) or cost <= 0,
+    do: {:error, :bad_amount}
+
+  defp checked({:change, _name, cost}, _horizon, _cap) when not is_integer(cost) or cost <= 0, do: {:error, :bad_amount}
+
   defp checked({:one_off, _cost, date, _name}, horizon, _cap), do: error_of(within(date, horizon))
   defp checked({:recurring, _cost, _rhythm, from, _name}, _horizon, cap), do: error_of(within(from, cap))
   defp checked(_change, _horizon, _cap), do: nil
@@ -516,17 +533,17 @@ defmodule Server.Home.Bank.Projection do
   defp error_of(:ok), do: nil
   defp error_of(error), do: error
 
-  defp apply_change(items, {:one_off, cost, date, name}, today) when is_integer(cost),
+  defp apply_change(items, {:one_off, cost, date, name}, today),
     do: [user_item(name, -cost, :once, date, today) | items]
 
-  defp apply_change(items, {:recurring, cost, rhythm, from_date, name}, today) when cost > 0,
+  defp apply_change(items, {:recurring, cost, rhythm, from_date, name}, today),
     do: [user_item(name, -cost, rhythm, from_date, today) | items]
 
   defp apply_change(items, {:drop, name}, _today) do
     with {:ok, key} <- series_key(items, name), do: Enum.reject(items, &(&1.key == key))
   end
 
-  defp apply_change(items, {:change, name, cost}, _today) when cost > 0 do
+  defp apply_change(items, {:change, name, cost}, _today) do
     with {:ok, key} <- series_key(items, name) do
       Enum.map(items, fn
         %{key: ^key, amount: amount} = item -> %{item | amount: if(amount < 0, do: -cost, else: cost)}

@@ -550,6 +550,13 @@ defmodule Server.Home.MoneyTest do
     end
   end
 
+  test "an engine's bad_amount is a result like the other errors" do
+    entry = %{ask: %{"ask" => "afford", "amount_cents" => 0, "on" => nil}, result: {:error, :bad_amount}}
+
+    assert [%{"result" => %{"error" => "bad_amount"}}] = presented = Say.present([entry])
+    assert Say.render(presented) =~ "can't be worked out"
+  end
+
   test "an engine's bad_range is a result like the other errors (compute is private; plans never reach it)" do
     entry = %{
       ask: %{"ask" => "history", "match" => nil, "from" => "2026-11-20", "to" => "2026-10-01"},

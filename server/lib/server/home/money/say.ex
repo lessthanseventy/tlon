@@ -29,6 +29,7 @@ defmodule Server.Home.Money.Say do
   defp result(_ask, {:error, :no_data}), do: %{error: "no_data"}
   defp result(_ask, {:error, :bad_range}), do: %{error: "bad_range"}
   defp result(_ask, {:error, :beyond_horizon}), do: %{error: "beyond_horizon"}
+  defp result(_ask, {:error, :bad_amount}), do: %{error: "bad_amount"}
 
   defp result(_ask, {:error, {:no_series, name, suggestions}}),
     do: %{error: "no_series", name: name, suggestions: suggestions}
@@ -230,6 +231,7 @@ defmodule Server.Home.Money.Say do
 
   defp entry(%{"result" => %{"error" => "no_data"}}), do: "I have no bank data to work from yet."
   defp entry(%{"result" => %{"error" => "bad_range"}}), do: "That date range runs backwards, so I can't look it up."
+  defp entry(%{"result" => %{"error" => "bad_amount"}}), do: "That amount can't be worked out, so I can't look it up."
   defp entry(%{"result" => %{"error" => "no_series"}} = entry), do: lead(entry)
   defp entry(%{"result" => %{"error" => "beyond_horizon"}} = entry), do: lead(entry)
 
