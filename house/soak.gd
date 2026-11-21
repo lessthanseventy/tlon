@@ -228,8 +228,7 @@ func _leave(name: String, nodes: Array, files: Array) -> void:
 
 # the house over the stub server, as the routes need it; torn down after
 func _on_main(body: Callable) -> void:
-	for _i in 30:
-		await process_frame
+	await process_frame
 	_srv.listen(0, "127.0.0.1")
 	OS.set_environment("TLON_URL", "http://127.0.0.1:%d" % _srv.get_local_port())
 	var main: Control = load("res://main.gd").new()
@@ -239,17 +238,32 @@ func _on_main(body: Callable) -> void:
 	main.pets_nudge = 0.3
 	root.add_child(main)
 	main._room.home.fake_hour = 15.0
-	await _until(func(): return main._data["open"].size() == 2)
+	await _until(func(): return main._data["open"].size() == 2, "the house reads the stub's list")
 	await body.call(main)
 	main.queue_free()
 	await process_frame
 
 
-# until `done` holds, at most `secs`; a failure to hold is the caller's check
-func _until(done: Callable, secs: float = 8.0) -> void:
+# until `done` holds, at most `secs`; a bound passed without it fails the soak, naming `what` and
+# the line that asked
+func _until(done: Callable, what: String = "", secs: float = 8.0) -> bool:
+	var at := get_stack()
 	var end := Time.get_ticks_msec() + int(secs * 1000.0)
-	while not done.call() and Time.get_ticks_msec() < end:
+	while not done.call():
+		if Time.get_ticks_msec() >= end:
+			var from := ""
+			if at.size() > 1:
+				from = " (%s:%d)" % [str(at[1]["source"]).get_file(), at[1]["line"]]
+			var wanted := what if what != "" else "the condition"
+			_check(false, "waited %ss and it did not come: %s%s" % [secs, wanted, from])
+			return false
 		await create_timer(0.02).timeout
+	return true
+
+
+# a window in which nothing is awaited: the caller then checks that nothing happened
+func _quiet(secs: float) -> void:
+	await create_timer(secs).timeout
 
 
 func _soak() -> void:
@@ -596,7 +610,7 @@ func _reach_everyday(look) -> void:
 
 
 func _routes(main: Control) -> void:
-	await _until(func(): return _count("/api/home/pets") >= 3)
+	await _until(func(): return _count("/api/home/pets") >= 3, "three asks for the pets' lines")
 	_check(
 		main._data["open"].size() == 2,
 		"GET /api/home filled the room (%d open)" % main._data["open"].size()
@@ -605,14 +619,19 @@ func _routes(main: Control) -> void:
 	_check(asks >= 3, "an empty batch is asked again at the short interval (%d asks)" % asks)
 	_check(not main._room.home.has_voices(), "{} leaves the pets with nothing served")
 	_pets_batch = {"Nina": {"muse": ["served line"]}, "duo": []}
-	await create_timer(0.8).timeout
+	await _until(func(): return main._room.home.has_voices(), "the next ask picks the batch up")
 	_check(main._room.home.has_voices(), "the next ask picks the batch up")
 	asks = _count("/api/home/pets")
-	await create_timer(0.8).timeout
-	_check(_count("/api/home/pets") == asks, "a held batch is asked at the long interval")
+	_check(
+		main._pets_timer.time_left > 90.0 and _count("/api/home/pets") == asks,
+		"a held batch is asked at the long interval"
+	)
 	_pets_batch = {}
 	main._pets_ask()
-	await create_timer(0.3).timeout
+	await _until(
+		func(): return _count("/api/home/pets") > asks and not main._pets_busy,
+		"the empty answer to the ask"
+	)
 	_check(main._room.home.has_voices(), "an empty answer keeps what is held")
 	main._room.home.set_voices({})
 	main._pets_since = Time.get_ticks_msec() / 1000.0
@@ -624,7 +643,8 @@ func _routes(main: Control) -> void:
 	_pets_batch = {"Nina": {"muse": ["served line"]}}
 	asks = _count("/api/home/pets")
 	main._on_act(1, "done")
-	await create_timer(1.0).timeout
+	await _until(func(): return _count("/api/home/pets") > asks, "the ask after the list changed")
+	await _quiet(0.6)
 	_check(_count("/api/home/pets") == asks + 1, "the open list changing asks once more")
 	var first := _last_query("/api/home/pets")
 	_check(
@@ -640,7 +660,8 @@ func _routes(main: Control) -> void:
 	settings.put("cat", "Mimi Q")
 	settings.put("pet1", "fox_red")
 	settings.put("pet2_personality", "bold")
-	await create_timer(1.2).timeout
+	await _until(func(): return _count("/api/home/pets") > asks, "the ask after the settings changed")
+	await _quiet(0.6)
 	_check(_count("/api/home/pets") == asks + 1, "changes made together ask once more")
 	var again := _last_query("/api/home/pets")
 	_check(
@@ -653,7 +674,7 @@ func _routes(main: Control) -> void:
 	)
 	_check(Settings.pets("Nina and Argos") == "Mimi Q and Argos", "the chosen name is what is shown")
 	settings.put("pet2", "none")
-	await create_timer(1.0).timeout
+	await _until(func(): return _count("/api/home/pets") > asks + 1, "the ask with no second pet")
 	_check(
 		not "argos_" in _last_query("/api/home/pets"), "a pet that is none sends nothing"
 	)
@@ -661,12 +682,12 @@ func _routes(main: Control) -> void:
 	settings.put("cat", "")
 	settings.put("pet1", "cat_black")
 	settings.put("pet2_personality", "sweet")
-	await create_timer(1.0).timeout
+	await _until(func(): return _count("/api/home/pets") >= asks + 3, "each change was asked about")
 	_check(_count("/api/home/pets") >= asks + 3, "each change was asked about")
 	_check(_seen("POST", "/api/home/1/done"), "done posted")
 	_check(main._data["open"].size() == 1, "done removed the thing")
 	main._on_act(2, "hour")
-	await create_timer(1.0).timeout
+	await _until(func(): return main._data["coming"].size() == 1, "later moved the thing to coming")
 	_check(_seen("POST", "/api/home/2/later", "hour"), "later posted with until=hour")
 	_check(
 		main._data["open"].is_empty() and main._data["coming"].size() == 1,
@@ -674,10 +695,10 @@ func _routes(main: Control) -> void:
 	)
 	main._open_add()
 	main._sidebar.jot.open("buy stamps")
-	main._send_jot("buy stamps")
-	await create_timer(1.0).timeout
-	_check(_seen("POST", "/api/home", "buy stamps"), "jot posted")
 	var jot = main._sidebar.jot
+	main._send_jot("buy stamps")
+	await _until(func(): return jot._kept.visible, "the notepad shows what was kept")
+	_check(_seen("POST", "/api/home", "buy stamps"), "jot posted")
 	_check(
 		jot._kept.visible and jot._said.text == "to do: buy stamps" and not jot._change.visible,
 		"a reply with no row is read back as it is, with OK only: '%s'" % jot._said.text
@@ -687,13 +708,13 @@ func _routes(main: Control) -> void:
 	main._open_add()
 	jot.open("keep: hang the picture")
 	main._send_jot("keep: hang the picture")
-	await create_timer(1.5).timeout
+	await _until(func(): return jot._kept.visible, "the notepad shows what was kept")
 	_check(
 		jot._kept.visible and jot._summary.text == "To-do" and jot._said.text == "hang the picture" and jot._change.visible,
 		"the row that is new in the next status is what it was read as: '%s' '%s'" % [jot._summary.text, jot._said.text]
 	)
 	jot.change_wanted.emit()
-	await process_frame
+	await _until(func(): return main._sidebar.view == "edit", "Change opens the form")
 	_check(
 		main._sidebar.view == "edit" and main._sidebar.form._text.text == "hang the picture",
 		"Change opens that thing's form, prefilled"
@@ -703,7 +724,7 @@ func _routes(main: Control) -> void:
 	main._open_add()
 	main._sidebar.jot.open("keep me")
 	main._send_jot("keep me")
-	await create_timer(1.0).timeout
+	await _until(func(): return "not kept" in main._sidebar.jot._hint.text, "the failed jot says so")
 	_check(
 		main._sidebar.jot.visible and main._sidebar.jot._edit.text == "keep me",
 		"failed jot keeps its text in the field"
@@ -716,7 +737,7 @@ func _routes(main: Control) -> void:
 	)
 	_weather = {"weather": {"kind": "snow", "desc": "Light snow", "temp_c": -2}}
 	main._watch_weather()
-	await create_timer(1.0).timeout
+	await _until(func(): return home.weather == "snow", "the weather arrives from /api/office")
 	_check(
 		home.weather == "snow" and home.weather_desc == "Light snow",
 		"the weather comes from /api/office"
@@ -1080,12 +1101,15 @@ func _cards() -> void:
 	}
 	h.set_data(data)
 	h.set_weather({"kind": "rain", "desc": "Light rain", "temp_c": 9})
-	for _i in 4:
-		await process_frame
 	if not room.art_found:
 		print("cards: no art, hit areas not tested")
 		room.queue_free()
 		return
+	var keys := ["cal", "jar", "window", "clock", "plant", "board"]
+	await _until(
+		func(): return keys.all(func(k): return h._hits.any(func(x): return x["key"] == k)),
+		"the cards' hit areas are drawn"
+	)
 	var pts := _hit_points(h)
 	var empty: Vector2 = pts[""][pts[""].size() - 1]
 	var things := {
@@ -1186,8 +1210,7 @@ func _hacks_draw() -> void:
 				drawn.append(n)
 	)
 	root.add_child(canvas)
-	await process_frame
-	await process_frame
+	await _until(func(): return drawn.size() >= Hacks.NAMES.size(), "the canvas draws every hack")
 	_check(drawn.size() >= Hacks.NAMES.size(), "every hack draws (%d)" % drawn.size())
 	canvas.queue_free()
 
