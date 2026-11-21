@@ -209,6 +209,32 @@ defmodule Server.Home.Bank.RecurringTest do
     assert [%{amount: 1_995, count: 6}] = Recurring.series(rows, :out)
   end
 
+  test "a one-off far charge on a regular charge's own day, between two that agree, is dropped" do
+    for stray_first? <- [true, false] do
+      regular = monthly("Streamr", 1_995, ~D[2026-11-13], 6)
+      one_off = txn(~D[2026-09-13], 77, "Streamr")
+      rows = if stray_first?, do: [one_off | regular], else: regular ++ [one_off]
+
+      assert [%{amount: 1_995, count: 6, last: ~D[2026-11-13], next: ~D[2026-12-13], was: nil}] =
+               Recurring.series(rows, :out)
+    end
+  end
+
+  test "a one-off far charge in place of a regular one is dropped, and the gap it leaves ends the run" do
+    rows =
+      monthly("Streamr", 1_995, ~D[2026-11-13], 4) ++
+        [txn(~D[2026-07-13], 77, "Streamr")] ++ monthly("Streamr", 1_995, ~D[2026-06-13], 3)
+
+    assert [%{count: 4, amount: 1_995, was: nil}] = Recurring.series(rows, :out)
+  end
+
+  test "three charges at a new amount are a price change, with a one-off in the old run dropped" do
+    old = with_stray(monthly("Streamr", 1_000, ~D[2026-08-13], 6), ~D[2026-05-13], 77)
+    rows = monthly("Streamr", 1_800, ~D[2026-11-13], 3) ++ old
+
+    assert [%{amount: 1_800, was: 1_000, at_amount: 3, count: 9}] = Recurring.series(rows, :out)
+  end
+
   test "a far charge that is on the rhythm still ends the run" do
     rows =
       monthly("Streamr", 1_995, ~D[2026-11-13], 3) ++

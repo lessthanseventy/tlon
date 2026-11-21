@@ -11,7 +11,9 @@ defmodule Server.Home.Bank.Recurring do
   more than twice or less than half of that that falls on the rhythm, and `count` is the whole run.
   A lone charge that is that far off in amount and off the rhythm too (a tax or adjustment line
   between two regular charges, or after the newest) is passed over: the run goes on past it, and it
-  is not counted. `was` is the amount of an
+  is not counted. So is one that is that far off from both its neighbours when those two agree in
+  amount, on the rhythm or not; the newest charge is passed over only off the rhythm, for the next
+  charge may show a price change. `was` is the amount of an
   older run of at least three charges at another amount, and `at_amount` how many of the latest
   charges are at the current one (within 10% of it): a real change of price. A merchant whose
   charges fall into two or more amount groups, each a steady series, and those series hold at least
@@ -224,17 +226,18 @@ defmodule Server.Home.Bank.Recurring do
   defp window(:weekly), do: 2 * 7 + tolerance(:weekly)
 
   defp key_series(group, direction) do
-    charges = group |> Enum.sort_by(& &1.date, {:desc, Date}) |> Enum.uniq_by(& &1.date)
+    dated = Enum.sort_by(group, & &1.date, {:desc, Date})
+    charges = Enum.uniq_by(dated, & &1.date)
     parts = charges |> amount_clusters() |> Enum.flat_map(&List.wrap(detect(&1, direction)))
     covered = parts |> Enum.map(& &1.count) |> Enum.sum()
 
     found =
       case parts do
         [_, _ | _] when covered * 5 >= length(charges) * 4 ->
-          if concurrent?(parts), do: parts, else: List.wrap(detect(without_strays(charges), direction))
+          if concurrent?(parts), do: parts, else: List.wrap(detect(without_strays(dated), direction))
 
         _ ->
-          List.wrap(detect(without_strays(charges), direction))
+          List.wrap(detect(without_strays(dated), direction))
       end
 
     explained = found |> Enum.map(& &1.count) |> Enum.sum()
@@ -257,7 +260,7 @@ defmodule Server.Home.Bank.Recurring do
     with {period, _band} <- band(Date.diff(newer.date, older.date)), do: period
   end
 
-  defp without_strays(charges), do: strays(nil, charges)
+  defp without_strays(charges), do: nil |> strays(charges) |> Enum.uniq_by(& &1.date)
 
   defp strays(newer, [charge | [older | later] = rest]) do
     if stray?(newer, charge, older, later),
@@ -269,8 +272,11 @@ defmodule Server.Home.Bank.Recurring do
 
   defp stray?(newer, charge, older, later) do
     far?(charge, older) and far_from_newer?(newer, charge, later) and
-      not on_rhythm?(newer, charge, older, later)
+      (neighbours_agree?(newer, older) or not on_rhythm?(newer, charge, older, later))
   end
+
+  defp neighbours_agree?(nil, _older), do: false
+  defp neighbours_agree?(newer, older), do: not far?(newer, older)
 
   defp far_from_newer?(nil, charge, [beyond | _]), do: far?(charge, beyond)
   defp far_from_newer?(nil, _charge, []), do: true
