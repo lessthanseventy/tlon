@@ -12,7 +12,8 @@ defmodule Server.Home.Money do
   3. **Phrase.** A second call gets the question and the results (`Server.Home.Money.Say.present/1`,
      amounts given as dollar strings beside the cents) and writes a short answer.
   4. **Check.** A purchase's verdict and a series not found are written by code
-     (`Server.Home.Money.Say.leads/1`) and come first; the model's text follows. Every dollar amount
+     (`Server.Home.Money.Say.leads/1`) and come first; the model's text follows, minus any written
+     sentence it begins by restating (`Say.drop_leads/2`). Every dollar amount
      in that text must be one of the results' (`Server.Home.Money.Say.check/2`) and it must not say
      the opposite of a verdict by a word list (`Say.contradicts?/2`). When there is a code-written
      sentence, a third call, a judge, gets only the verdict facts and the text as JSON data and must
@@ -151,13 +152,15 @@ defmodule Server.Home.Money do
   end
 
   defp phrased(text, presented, c) do
+    leads = Say.leads(presented)
+
     with {:ok, out} <- c.model.(phrase_prompt(text, presented, c.today)),
-         reply = String.trim(out),
+         reply = Say.drop_leads(out, leads),
          true <- reply != "",
          :ok <- Say.check(reply, presented),
          false <- Say.contradicts?(reply, presented),
          :ok <- judge(reply, presented, c) do
-      Enum.join(Say.leads(presented) ++ [reply], " ")
+      Enum.join(leads ++ [reply], " ")
     else
       _ -> Say.render(presented)
     end

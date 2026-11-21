@@ -179,6 +179,22 @@ defmodule Server.Home.Money.Say do
 
   defp lead(_entry), do: nil
 
+  @doc """
+  `text` without any of `leads` that it begins with, compared by words in any case and spacing and
+  with or without the closing full stop: a model that restates a written sentence does not make the
+  reply say it twice.
+  """
+  @spec drop_leads(String.t(), [String.t()]) :: String.t()
+  def drop_leads(text, leads) do
+    patterns =
+      for lead <- leads do
+        words = lead |> String.trim_trailing(".") |> String.split() |> Enum.map_join(~S"\s+", &Regex.escape/1)
+        Regex.compile!("\\A\\s*" <> words <> "[.!]?\\s*", "iu")
+      end
+
+    drop_leading(String.trim(text), patterns)
+  end
+
   @affirm ~r/\b(?:can afford|afford it|you can|should be fine|go for it|plenty|comfortabl[ey]|no issue|is covered|are covered|it covers|you're fine|you are fine|no problem|go ahead)\b/i
   @deny ~r/\b(?:can't afford|cannot|can not|won't be able|won't cover|not covered|not enough|don't have enough|short by|fall short|you're short|you are short|is short|overdraw|negative|hold off)\b/i
   @negated ~r/\b(?:can't|cannot|can not|won't|don't|doesn't|isn't|aren't|not|never)\b(?:\s+\w+){0,3}/i
@@ -362,4 +378,11 @@ defmodule Server.Home.Money.Say do
 
   defp deepens(%{"adds_cents" => 0}), do: "would not make it any deeper."
   defp deepens(r), do: "would deepen it by #{r["adds_cents_text"]}."
+
+  defp drop_leading(text, patterns) do
+    case Enum.find(patterns, &Regex.match?(&1, text)) do
+      nil -> text
+      pattern -> drop_leading(Regex.replace(pattern, text, "", global: false), List.delete(patterns, pattern))
+    end
+  end
 end

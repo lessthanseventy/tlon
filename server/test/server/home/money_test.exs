@@ -303,6 +303,28 @@ defmodule Server.Home.MoneyTest do
              ] == Say.leads(presented)
     end
 
+    test "a phrasing that restates the written lead does not make the reply say it twice" do
+      store()
+      {first, _} = ask("can I afford it?", [plan([afford(40_000)]), {:ok, "It rests on your history."}, agrees()])
+      lead = String.replace_suffix(first.reply, " It rests on your history.", "")
+
+      for restated <- [lead, String.downcase(lead), String.replace(lead, " ", "  "), String.trim_trailing(lead, ".")] do
+        {answer, _} =
+          ask("can I afford it?", [plan([afford(40_000)]), {:ok, restated <> " It rests on your history."}, agrees()])
+
+        assert answer.reply == first.reply
+      end
+
+      {answer, _} = ask("can I afford it?", [plan([afford(40_000)]), {:ok, lead}])
+      assert length(Regex.scan(~r/A purchase of/, answer.reply)) == 1
+    end
+
+    test "the plain rendering says the lead once" do
+      store()
+      {answer, _} = ask("can I afford it?", [plan([afford(40_000)]), {:ok, "No, you can't afford it."}])
+      assert length(Regex.scan(~r/A purchase of/, answer.reply)) == 1
+    end
+
     test "a phrasing that says the opposite of the verdict is replaced by the plain rendering" do
       store()
       {answer, _} = ask("can I afford it?", [plan([afford(50_000_000)]), {:ok, "Yes, you can afford it, no problem."}])
