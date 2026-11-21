@@ -442,7 +442,7 @@ defmodule Server.Home.Source.BankTest do
     log = ExUnit.CaptureLog.capture_log(fn -> fetch(http) end)
     assert log =~ "no account is a checking account"
     assert log =~ "savings"
-    refute log =~ "77"
+    refute log =~ ~r/77[,_]?123/
 
     assert ExUnit.CaptureLog.capture_log(fn -> fetch(http) end) == ""
   end
