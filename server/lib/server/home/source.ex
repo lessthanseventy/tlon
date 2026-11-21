@@ -1,12 +1,12 @@
 defmodule Server.Home.Source do
   @moduledoc """
-  An outside source of proposals (`Server.Proposal`) for the operator's personal life; `Server.Home.Source.Mail` is the one there is.
+  An outside source of proposals (`Server.Proposal`) for the operator's personal life; `Server.Home.Source.Mail` and `Server.Home.Source.Bank` are the ones there are.
   A source answers its `name/0` (the `source` of what it offers and the word in the `home_sources`
   setting), `fetch/0` and `auto/0`; `Server.Home.Sources` polls the enabled ones and hands what
   `fetch/0` returns to `Server.Proposal.offer/5` and `Server.Proposal.resolve/3`.
   """
 
-  @doc "The source's name: `\"mail\"`."
+  @doc ~s(The source's name: `"mail"`, `"bank"`.)
   @callback name() :: String.t()
 
   @doc """
