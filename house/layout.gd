@@ -50,7 +50,7 @@ const FIXED := [
 const DEFAULTS := [
 	["plant_small", "", 0, 0],
 	["laundry_basket", "", 1, 1],
-	["photo_frame", "", 3, 7],
+	["photo_frame", "", 5, 3],
 	["piggy_bank", "", 6, 4],
 	["armchair", "se", 0, 1],
 	["rug_blue", "nwse", 1, 4],
