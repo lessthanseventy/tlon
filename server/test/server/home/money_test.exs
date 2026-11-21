@@ -476,6 +476,19 @@ defmodule Server.Home.MoneyTest do
       assert Enum.map(Thread.load("t", @now), & &1["q"]) == for(n <- 3..12, do: "q#{n}")
     end
 
+    test "expiring leaves a non-JSON row outside the prefix alone and deletes a malformed one under it" do
+      Keep.put("home_bank_raw", "not json")
+      Keep.put("home_money:junk", "not json")
+      Keep.put("home_money:empty", "[]")
+      Keep.put("home_money:noat", ~s([{"q": "x"}]))
+      Keep.put("home_money:fresh", ~s([{"at": 2000}]))
+
+      assert Keep.expire("home_money:", 1_000) == 3
+      assert Keep.get("home_bank_raw") == "not json"
+      assert Keep.get("home_money:fresh")
+      assert Keep.get("home_money:junk") == nil
+    end
+
     test "writing a thread deletes the threads that are two hours stale, and only those" do
       Thread.push("stale", %{q: "q", plan: [], reply: "r"}, @now)
       Thread.push("live", %{q: "q", plan: [], reply: "r"}, DateTime.add(@now, 5_000))

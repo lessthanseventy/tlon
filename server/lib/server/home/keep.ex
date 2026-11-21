@@ -33,18 +33,30 @@ defmodule Server.Home.Keep do
 
   @doc """
   Delete the rows named with `prefix` whose body is a JSON list of objects whose last `"at"` (Unix
-  seconds) is before `cutoff`, in one query. The number of rows deleted.
+  seconds) is before `cutoff`. A row under the prefix whose body is not that shape (not JSON, not a
+  non-empty list, or a last element without an integer `"at"`) is stale too. Rows outside the prefix
+  are never read. The number of rows deleted.
   """
   @spec expire(String.t(), integer()) :: non_neg_integer()
   def expire(prefix, cutoff) do
-    {count, _} =
-      Repo.delete_all(
-        from k in __MODULE__,
-          where:
-            fragment("starts_with(?, ?)", k.name, ^prefix) and
-              fragment("(?::jsonb -> -1 ->> 'at')::bigint", k.body) < ^cutoff
-      )
+    names =
+      for {name, body} <-
+            Repo.all(
+              from k in __MODULE__, where: fragment("starts_with(?, ?)", k.name, ^prefix), select: {k.name, k.body}
+            ),
+          stale?(body, cutoff),
+          do: name
 
+    {count, _} = Repo.delete_all(from k in __MODULE__, where: k.name in ^names)
     count
+  end
+
+  defp stale?(body, cutoff) do
+    with {:ok, [_ | _] = list} <- JSON.decode(body),
+         %{"at" => at} when is_integer(at) <- List.last(list) do
+      at < cutoff
+    else
+      _ -> true
+    end
   end
 end
