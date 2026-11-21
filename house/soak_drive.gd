@@ -4,6 +4,7 @@ extends RefCounted
 # the work a person does through it (add a to-do, a key, a right click, a drag in decorate, a shot,
 # a bad command, what is under a point).
 const Drive := preload("res://drive.gd")
+const Main := preload("res://main.gd")
 
 var s
 var _peer := StreamPeerTCP.new()
@@ -21,7 +22,7 @@ func run() -> void:
 	OS.set_environment("TLON_URL", "http://127.0.0.1:9")
 	var was: Vector2i = s.root.size
 	s.root.size = Vector2i(1100, 700)
-	var main: Control = load("res://main.gd").new()
+	var main: Control = Main.new()
 	s.root.add_child(main)
 	main.size = Vector2(s.root.size)
 	var h = main._room.home
@@ -48,8 +49,36 @@ func run() -> void:
 	await _at()
 	_peer.disconnect_from_host()
 	main.queue_free()
+	await _server_flag()
 	OS.unset_environment("TLON_URL")
 	s.root.size = was
+
+
+# `--drive` alone is the own list; `--drive --server` reads the server at TLON_URL (the stub)
+func _server_flag() -> void:
+	s._srv.listen(0, "127.0.0.1")
+	OS.set_environment("TLON_URL", "http://127.0.0.1:%d" % s._srv.get_local_port())
+	var main: Control = Main.new()
+	s.root.add_child(main)
+	var h = main._room.home
+	h.fake_hour = 15.0
+	h.drive_setup(["--drive"])
+	main._use_backend(["--drive"])
+	_eq(h.settings.is_local(), true, "--drive alone forces the local list")
+	_eq(main._backend.local, true, "--drive alone is backed by the local list")
+	_eq(main._fixture, "starters", "--drive alone starts on the starter list")
+	h.settings.forced.erase("where")
+	h.drive_setup(["--drive", "--server"])
+	main._use_backend(["--drive", "--server"])
+	_eq(h.settings.is_local(), false, "--drive --server leaves the list's home alone")
+	_eq(main._backend.local, false, "--drive --server is backed by the server")
+	_eq(main._fixture, "", "--drive --server has no starter list")
+	await s._until(
+		func(): return main._data["open"].size() == 2, "--drive --server reads the stub's list"
+	)
+	main.queue_free()
+	await s.process_frame
+	s._srv.stop()
 
 
 func _send(cmd: Variant) -> Dictionary:

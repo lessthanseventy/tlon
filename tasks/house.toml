@@ -30,7 +30,7 @@ description = "house: `-- windows|mac|linux|all` — export the house with the a
 run = "scripts/house-build.sh \"$@\""
 
 ["house:drive:start"]
-description = "house: start the real house LIVE under headless gamescope on a throwaway data folder (starter list, no server, no network) with a drive port, in the background, and print the port; `-- --demo` for the demo list; refuses a second one (scripts/house-drive.sh; house/AGENTS.md `Driving it`)"
+description = "house: start the real house LIVE under headless gamescope on a throwaway data folder (starter list, no server, no network) with a drive port, in the background, and print the port; `-- --demo` for the demo list; `-- --server` reads the tlon server at TLON_URL (else the settings default) instead, and a click then acts on the real list; refuses a second one (scripts/house-drive.sh; house/AGENTS.md `Driving it`)"
 run = "scripts/house-drive.sh start \"$@\""
 
 ["house:drive"]

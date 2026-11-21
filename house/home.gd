@@ -127,6 +127,8 @@ static var scripted := false
 var staged := false
 # set by `setup`: `--drive`, a live run that keeps its files in user://
 var drive := false
+# set by `drive_setup`: `--drive --server`, the driven house reads the tlon server, not its own list
+var drive_server := false
 var keeps := false
 
 var room: Control
@@ -233,6 +235,14 @@ var _rung: Array = []
 var _attention := false
 
 
+# a driven house keeps to its own list, unless `--demo` brings the demo one or `--server` the server
+func drive_setup(args: Array) -> void:
+	drive = "--drive" in args
+	drive_server = drive and "--server" in args
+	if drive and not drive_server and "--demo" not in args:
+		settings.forced["where"] = "local"
+
+
 func setup(canvas: Control, art_dir: String, args: Array) -> void:
 	room = canvas
 	var seed_value := -1
@@ -334,9 +344,7 @@ func setup(canvas: Control, art_dir: String, args: Array) -> void:
 					)
 	if "--shot" in args and seed_value < 0:
 		seed_value = 7
-	drive = "--drive" in args
-	if drive and "--demo" not in args:
-		settings.forced["where"] = "local"
+	drive_setup(args)
 	staged = scripted or "--demo" in args or "--shot" in args or "--local" in args or drive
 	keeps = not staged or drive
 	settings.setup(keeps)

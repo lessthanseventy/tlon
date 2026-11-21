@@ -277,7 +277,7 @@ func _use_backend(args: Array) -> void:
 	var at := args.find("--local") + 1
 	_fixture = args[at] if at > 0 and at < args.size() else ""
 	_probing = settings.fresh and not OS.has_environment("TLON_URL") and not _room.home.drive
-	if _fixture == "" and _room.home.drive:
+	if _fixture == "" and _room.home.drive and not _room.home.drive_server:
 		_fixture = "starters"
 	_make_backend()
 

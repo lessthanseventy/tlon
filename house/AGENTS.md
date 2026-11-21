@@ -694,7 +694,7 @@ picture.
 
 `mise run house:drive:start [-- house args]` starts the real house LIVE (pets moving, real time) under
 headless gamescope on a throwaway `XDG_DATA_HOME`, over the starter list (`-- --demo` for the demo
-one), no server and no network, and prints its port; `mise run house:drive -- '<json>' ...` sends
+one), no server and no network (`-- --server`: over the tlon server at `TLON_URL`, else the settings' default URL, instead of the starter list; **a click in that drive acts on the real list**), and prints its port; `mise run house:drive -- '<json>' ...` sends
 each command and prints one reply line each; `house:drive:errors` prints the Godot `ERROR` lines since
 the last call; `house:drive:stop` quits it and removes the data folder. One house at a time. Save,
 load and the settings file work, inside that folder. `drive.gd` (`--drive [PORT]`) takes one JSON object
