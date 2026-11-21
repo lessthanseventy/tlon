@@ -1044,7 +1044,7 @@ defmodule Server.MCP.GatewayTest do
             transaction_id: "rent-#{m}",
             account_id: "a1",
             amount_cents: 12_000,
-            date: today |> Date.shift(month: -m) |> Date.add(-1),
+            date: Date.shift(Date.new!(today.year, today.month, 5), month: -m),
             name: "Rent",
             merchant_name: nil,
             pending: false

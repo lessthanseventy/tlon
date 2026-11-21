@@ -99,6 +99,7 @@ defmodule Server.Home.Bank.Projection do
           | {:drop, String.t()}
           | {:change, String.t(), pos_integer()}
   @type what_if :: %{
+          clamped: boolean(),
           baseline: forecast(),
           changed: forecast(),
           difference: %{end_cents: integer(), lowest_cents: integer()}
@@ -137,13 +138,16 @@ defmodule Server.Home.Bank.Projection do
   lowest expected balance with it is at least the cushion (`opts[:cushion_cents]`, default seven days
   of expected everyday spending), `:tight` when it is zero or more, `:short` below zero, with the
   `shortfall_cents` at the lowest point and `short_on`, the first day below zero. `worst_case` is the
-  same verdict on the low line.
+  same verdict on the low line. A date earlier than today counts as today; one past the 180-day cap
+  is `{:error, :beyond_horizon}`, never a purchase left uncounted.
   """
-  @spec afford(data(), Date.t(), pos_integer(), Date.t(), keyword()) :: {:ok, afford()} | {:error, :no_data}
+  @spec afford(data(), Date.t(), pos_integer(), Date.t() | nil, keyword()) ::
+          {:ok, afford()} | {:error, :no_data | :beyond_horizon}
   def afford(data, today, amount_cents, on \\ nil, opts \\ []) when is_integer(amount_cents) and amount_cents > 0 do
     on = on || today
 
-    with {:ok, ctx} <- context(data, today) do
+    with :ok <- within(on, Date.add(today, @cap)),
+         {:ok, ctx} <- context(data, today) do
       base = items(ctx, today)
       until = Enum.max([Date.add(today, @afford_days), second_deposit(ctx, base, today), on], Date)
       purchase = user_item("Purchase", -amount_cents, :once, on, today)
@@ -169,20 +173,26 @@ defmodule Server.Home.Bank.Projection do
   The forecast to `until` as it is and with `changes` made: a `{:one_off, cost, date, name}`, a
   `{:recurring, cost, rhythm, from_date, name}`, a `{:drop, series_name}` or a
   `{:change, series_name, new_amount}`. A series is named by its merchant, in any case; an unknown
-  one is `{:error, {:no_series, name, suggestions}}` with the nearest names. `difference` is the change
-  in the balance at the end and in the lowest point.
+  one is `{:error, {:no_series, name, suggestions}}` with the nearest names. A one-off past the
+  horizon (`until`, clamped to the cap) or a recurring change starting past the cap is
+  `{:error, :beyond_horizon}`. `difference` is the change in the balance at the end and in the lowest
+  point; `clamped` says the horizon was cut to the cap.
   """
   @spec what_if(data(), Date.t(), [change()], Date.t()) ::
-          {:ok, what_if()} | {:error, :no_data | {:no_series, String.t(), [String.t()]}}
+          {:ok, what_if()} | {:error, :no_data | :beyond_horizon | {:no_series, String.t(), [String.t()]}}
   def what_if(data, today, changes, until) do
+    cap = Date.add(today, @cap)
+    horizon = Enum.min([until, cap], Date)
+
     with {:ok, ctx} <- context(data, today),
          base = items(ctx, today),
-         {:ok, changed} <- apply_changes(base, changes, today) do
+         {:ok, changed} <- apply_changes(base, changes, today, horizon, cap) do
       baseline = build(ctx, today, until, base)
       changed = build(ctx, today, until, changed)
 
       {:ok,
        %{
+         clamped: baseline.clamped,
          baseline: baseline,
          changed: changed,
          difference: %{
@@ -488,14 +498,23 @@ defmodule Server.Home.Bank.Projection do
     end
   end
 
-  defp apply_changes(items, changes, today) do
+  defp within(date, limit), do: if(Date.compare(date, limit) == :gt, do: {:error, :beyond_horizon}, else: :ok)
+
+  defp apply_changes(items, changes, today, horizon, cap) do
     Enum.reduce_while(changes, {:ok, items}, fn change, {:ok, items} ->
-      case apply_change(items, change, today) do
+      case checked(change, horizon, cap) || apply_change(items, change, today) do
         {:error, _} = error -> {:halt, error}
         items -> {:cont, {:ok, items}}
       end
     end)
   end
+
+  defp checked({:one_off, _cost, date, _name}, horizon, _cap), do: error_of(within(date, horizon))
+  defp checked({:recurring, _cost, _rhythm, from, _name}, _horizon, cap), do: error_of(within(from, cap))
+  defp checked(_change, _horizon, _cap), do: nil
+
+  defp error_of(:ok), do: nil
+  defp error_of(error), do: error
 
   defp apply_change(items, {:one_off, cost, date, name}, today) when is_integer(cost),
     do: [user_item(name, -cost, :once, date, today) | items]

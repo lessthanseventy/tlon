@@ -233,7 +233,8 @@ defmodule Server.Home.Bank do
   Whether a purchase of `amount_cents` on `on` (default today) is covered
   (`Server.Home.Bank.Projection.afford/5`). Options: `:today`, `:cushion_cents`.
   """
-  @spec afford(pos_integer(), Date.t() | nil, keyword()) :: {:ok, Projection.afford()} | {:error, :no_data}
+  @spec afford(pos_integer(), Date.t() | nil, keyword()) ::
+          {:ok, Projection.afford()} | {:error, :no_data | :beyond_horizon}
   def afford(amount_cents, on \\ nil, opts \\ []) do
     {today, opts} = Keyword.pop_lazy(opts, :today, &local_today/0)
     projected(&Projection.afford(&1, today, amount_cents, on, opts))
@@ -241,7 +242,7 @@ defmodule Server.Home.Bank do
 
   @doc "The forecast with and without `changes` (`Server.Home.Bank.Projection.what_if/4`)."
   @spec what_if([Projection.change()], Date.t(), Date.t()) ::
-          {:ok, Projection.what_if()} | {:error, :no_data | {:no_series, String.t(), [String.t()]}}
+          {:ok, Projection.what_if()} | {:error, :no_data | :beyond_horizon | {:no_series, String.t(), [String.t()]}}
   def what_if(changes, until, today \\ local_today()), do: projected(&Projection.what_if(&1, today, changes, until))
 
   @doc "What went out and came in by month for a query (`Server.Home.Bank.Projection.history/3`)."

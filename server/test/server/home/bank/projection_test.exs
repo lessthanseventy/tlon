@@ -244,6 +244,14 @@ defmodule Server.Home.Bank.ProjectionTest do
       end
     end
 
+    test "a purchase past the 180-day cap is refused, on the cap it is counted" do
+      assert {:error, :beyond_horizon} = Projection.afford(base(), @today, 1_000, Date.add(@today, 181))
+
+      a = afford!(base(), 1_000, Date.add(@today, 180))
+      assert a.without.until == Date.add(@today, 180)
+      assert List.last(a.without.days).expected_cents - List.last(a.with.days).expected_cents == 1_000
+    end
+
     test "a purchase today lowers today too" do
       a = afford!(base(), 1_000)
       assert hd(a.with.days).expected_cents == 479_000
@@ -289,6 +297,32 @@ defmodule Server.Home.Bank.ProjectionTest do
     defp what_if!(changes, until \\ ~D[2027-01-20]) do
       assert {:ok, result} = Projection.what_if(base(), @today, changes, until)
       result
+    end
+
+    test "a one-off past the horizon is refused, a recurring past until but within the cap is not" do
+      assert {:error, :beyond_horizon} =
+               Projection.what_if(base(), @today, [{:one_off, 100, ~D[2026-12-02], "X"}], ~D[2026-12-01])
+
+      assert {:error, :beyond_horizon} =
+               Projection.what_if(base(), @today, [{:one_off, 100, Date.add(@today, 181), "X"}], ~D[2030-01-01])
+
+      assert {:error, :beyond_horizon} =
+               Projection.what_if(
+                 base(),
+                 @today,
+                 [{:recurring, 100, :weekly, Date.add(@today, 181), "X"}],
+                 ~D[2030-01-01]
+               )
+
+      assert {:ok, r} =
+               Projection.what_if(base(), @today, [{:recurring, 100, :weekly, ~D[2026-12-10], "X"}], ~D[2026-12-01])
+
+      assert r.changed == r.baseline
+    end
+
+    test "the result says when the horizon was clamped" do
+      assert what_if!([], ~D[2030-01-01]).clamped
+      refute what_if!([]).clamped
     end
 
     test "an empty list of changes equals the baseline" do
