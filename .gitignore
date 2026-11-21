@@ -13,6 +13,7 @@ deps
 *.ez
 erl_crash.dump
 .elixir_ls/
+.expert/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
