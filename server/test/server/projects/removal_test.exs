@@ -271,6 +271,20 @@ defmodule Server.Projects.RemovalTest do
     assert length(forms) == 2
   end
 
+  test "the keep_up note of its repo is dismissed, another repo's stays" do
+    %{path: path} = gone_workspace("gone")
+    other = path <> "-other"
+    Rollout.note("keep_up:#{path}", "red")
+    Rollout.note("keep_up:#{other}", "someone else's")
+    sync()
+
+    assert {:ok, plan} = Projects.remove_with_empties("gone", :dry_run)
+    assert plan.notes == ["keep_up:#{path}"]
+
+    assert {:ok, _} = Projects.remove_with_empties("gone", :remove)
+    assert for(%{key: k} <- Rollout.pending(), do: k) == ["keep_up:#{other}"]
+  end
+
   test "the remote, off-main and drift notes of its repo are dismissed, another repo's stay" do
     %{path: path} = gone_workspace("gone")
     other = path <> "-other"

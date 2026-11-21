@@ -438,8 +438,8 @@ defmodule Server.Jobs.KeepUp do
   end
 
   @doc """
-  What `forget/2` would clear for `paths`: `{note_keys, keep_names}`, the `keep_up:gone:<repo>`,
-  `keep_up:remote:<repo>`, `{:off_main, repo}`, `{:drift, repo}` and `keep_up:warm:<dir>` notes now
+  What `forget/2` would clear for `paths`: `{note_keys, keep_names}`, the `keep_up:<repo>`,
+  `keep_up:gone:<repo>`, `keep_up:remote:<repo>`, `{:off_main, repo}`, `{:drift, repo}` and `keep_up:warm:<dir>` notes now
   filed and the `keep_up:warm:<dir>` rows kept, for each repo and the dirs under it.
   """
   @spec stale([String.t()]) :: {[String.t() | {:off_main | :drift, String.t()}], [String.t()]}
@@ -468,6 +468,8 @@ defmodule Server.Jobs.KeepUp do
 
   defp keyed_to?("keep_up:warm:" <> dir, paths),
     do: Enum.any?(paths, &(dir == &1 or String.starts_with?(dir, &1 <> "/")))
+
+  defp keyed_to?("keep_up:" <> repo, paths), do: repo in paths
 
   defp keyed_to?(_key, _paths), do: false
 
