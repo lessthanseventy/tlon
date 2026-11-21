@@ -51,7 +51,7 @@ const DEFAULTS := [
 	["plant_small", "", 0, 0],
 	["laundry_basket", "", 1, 1],
 	["photo_frame", "", 3, 7],
-	["piggy_bank", "", 8, 5],
+	["piggy_bank", "", 6, 4],
 	["armchair", "se", 0, 1],
 	["rug_blue", "nwse", 1, 4],
 	["painting", "ne", 0, 0],
@@ -126,6 +126,7 @@ var version := 0
 var pets_seen: Array = []
 # the `NEWER` pieces this layout has been offered, so one taken out stays out
 var offered: Array = NEWER.duplicate()
+var money_shown := false
 # a file saved before `SAVED`: the pets' things in it were put by the first rule
 var old_things := false
 
@@ -316,9 +317,33 @@ func all() -> Array:
 	return _solid() + guests
 
 
-# a pet thing that is not out (its animal or its switch is gone) takes no room
+# a pet thing that is not out (its animal or its switch is gone) takes no room, nor does the piggy
+# bank while there is no money to show
 func _solid() -> Array:
-	return _fixed + pieces.filter(func(p): return not p.get("hide", false))
+	return (
+		_fixed
+		+ pieces.filter(
+			func(p): return not p.get("hide", false) and (money_shown or not Money.is_piggy(p))
+		)
+	)
+
+
+# the piggy bank comes into the room, or goes out of it, with the money; coming in onto a cell
+# something else has taken since, it goes to the nearest cell it may stand on
+func show_money(on: bool) -> void:
+	if on == money_shown:
+		return
+	money_shown = on
+	version += 1
+	if not on:
+		return
+	for p in pieces:
+		if Money.is_piggy(p) and check(p, p, []) != "":
+			var cell: Variant = _nearest(p["p"], p["f"], Vector2i(p["c"], p["r"]), p)
+			if cell != null:
+				p["c"] = cell.x
+				p["r"] = cell.y
+				save()
 
 
 # the laundry basket where it stands, {} when it has been taken away
@@ -730,20 +755,27 @@ func load_file() -> bool:
 # stand on
 func _offer(key: String) -> void:
 	var row: Array = DEFAULTS.filter(func(r): return r[0] == key)[0]
+	var cell: Variant = _nearest(key, row[1], Vector2i(row[2], row[3]), null)
+	if cell != null:
+		pieces.append(_piece([key, row[1], cell.x, cell.y]))
+
+
+# the cell nearest `near` that `key` may stand on, null when there is none
+func _nearest(key: String, face: String, near: Vector2i, skip: Variant) -> Variant:
 	var cells: Array = []
 	for c in Pets.COLS:
 		for r in Pets.ROWS:
 			cells.append(Vector2i(c, r))
-	var home := Vector2i(row[2], row[3])
 	cells.sort_custom(
 		func(a: Vector2i, b: Vector2i) -> bool:
-			return [(a - home).length_squared(), a.x, a.y] < [(b - home).length_squared(), b.x, b.y]
+			return (
+				[(a - near).length_squared(), a.x, a.y] < [(b - near).length_squared(), b.x, b.y]
+			)
 	)
 	for cell in cells:
-		var p := _piece([key, row[1], cell.x, cell.y])
-		if check(p, null, []) == "":
-			pieces.append(p)
-			return
+		if check(_piece([key, face, cell.x, cell.y]), skip, []) == "":
+			return cell
+	return null
 
 
 func _pet_row(row: Variant) -> bool:

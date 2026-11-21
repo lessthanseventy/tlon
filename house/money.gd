@@ -10,8 +10,19 @@ const When := preload("res://when.gd")
 
 # the placed piece the piggy bank is, in the layout
 const PIECE := "piggy_bank"
-const HEIGHT := 20.0
-const SCALE := 0.8
+const SCALE := 0.55
+# the points round the pig and its envelope, in the pig's own pixels from the cell's centre
+const HIT := [
+	Vector2(-22, -14),
+	Vector2(-17, -22),
+	Vector2(0, -25),
+	Vector2(10, -24),
+	Vector2(18, -19),
+	Vector2(24, -10),
+	Vector2(24, 2),
+	Vector2(-20, 2),
+	Vector2(-23, -6),
+]
 const SOON := 5
 const STRIP_MIN := 7
 const STRIP_MAX := 14
@@ -44,6 +55,11 @@ static func fmt(cents: Variant) -> String:
 			out += ","
 		out += digits[i]
 	return "$" + out + ("" if n % 100 == 0 else ".%02d" % (n % 100))
+
+
+# an estimate worded to the whole dollar: `-$826`, `$1,240`
+static func fmt_whole(cents: Variant) -> String:
+	return fmt(roundi(float(cents) / 100.0) * 100)
 
 
 # a forecast's amount with its direction: "+$2,400" in, "-$1,200" out
@@ -90,7 +106,7 @@ static func envelope(money: Variant, today: String) -> String:
 	return "short" if roundi(float(have)) < total else "due"
 
 
-# Home's one row in Today, "" when nothing is due soon: "Rent $1,200 due Fri and 1 more"
+# Home's one row in Today, "" when nothing is due soon: "Rent $1,200 due Fri, and 1 more"
 static func today_row(money: Variant, today: String) -> String:
 	var due := soon(money, today)
 	if due.is_empty():
@@ -99,7 +115,7 @@ static func today_row(money: Variant, today: String) -> String:
 	var text := (
 		"%s %s due %s" % [first["name"], fmt(first["cents"]), When.day_word(first["on"], today)]
 	)
-	return text if due.size() == 1 else "%s and %d more" % [text, due.size() - 1]
+	return text if due.size() == 1 else "%s, and %d more" % [text, due.size() - 1]
 
 
 # the days from tomorrow the strip draws: through the next deposit, `STRIP_MIN` to `STRIP_MAX`
@@ -185,13 +201,14 @@ static func lowest_line(forecast: Dictionary, today: String) -> String:
 		lead = "Lowest point in the next %d days" % When.days_between(today, str(forecast["until"]))
 	var cents := roundi(float(low["balance_cents"]))
 	if cents >= 0:
-		return "%s: about %s." % [lead, fmt(cents)]
+		return "%s: about %s." % [lead, fmt_whole(cents)]
 	var text := (
-		"%s: about %s, %s. That is below zero." % [lead, fmt(cents), _on(str(low["date"]), today)]
+		"%s: about %s, %s. That is below zero."
+		% [lead, fmt_whole(cents), _on(str(low["date"]), today)]
 	)
 	var held := roundi(float(forecast.get("other_available_cents", 0)))
 	if held >= -cents:
-		text += " %s holds %s, which covers it." % [savings_name(forecast), fmt(held)]
+		text += " %s holds %s, which covers it." % [savings_name(forecast), fmt_whole(held)]
 	return text
 
 
@@ -352,6 +369,15 @@ static func _rect(
 
 static func _pts(s: PetThings.Pen, a: Vector2, pts: Array) -> Array:
 	return pts.map(func(v: Vector2) -> Vector2: return (a + v * s.k).round())
+
+
+# the pig's outline on screen, for its hit and its hover
+static func outline(pen: PetThings.Pen) -> PackedVector2Array:
+	var a := pen.p(0.5, 0.5, 0.0)
+	var pts := PackedVector2Array()
+	for v in HIT:
+		pts.append((a + v * pen.k * SCALE).round())
+	return Geometry2D.convex_hull(pts)
 
 
 # a pig in profile facing left, a coin standing in its slot; `envelope` ("none", "due" or "short")

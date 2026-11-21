@@ -217,16 +217,28 @@ runs on the local list.
 - **Money** (`money.gd` the rules and the pig, `logic_money.gd` the checks): `money` of `GET /api/home` is `{balance,
   available, as_of, due_this_week: [{name, amount, on}], next_deposit: {name, amount, on} | null, accounts}`, amounts
   cents, null when the bank is off; `things.money` holds it, null over the local list and from an older server. The piggy
-  bank is the plain floor piece `piggy_bank` (a pig in profile drawn in code at its cell's depth, default cell 9,5 on open
+  bank is the plain floor piece `piggy_bank` (a pig in profile drawn in code at its cell's depth, default cell 6,4 on open
   floor: clear of row 6, of (1,7) and (2,7), of every pet spot and of the frame; in decorate's home tab, movable like the
   basket, offered once to a saved layout through `Layout.NEWER`). It is drawn, hit and listed in decorate **only while
-  `things.money` is not null**; the piece itself always stands in the layout, so over the local list it is an unseen
-  one-cell block (the pets' things are put out around it either way). Quiet most days; with a recurring charge due
+  `things.money` is not null**: without money the piece takes no cell (`Layout.money_shown`, `show_money`; not solid, not
+  walked around, free for another piece), and when money comes it stands on its cell or, taken meanwhile, the nearest one
+  it may. Quiet most days; with a recurring charge due
   within `Money.SOON` (5) days an envelope leans against it (`Money.envelope`: "none", "due", and "short", amber, when
   `available` (else `balance`) is less than the sum of those charges). No number is ever drawn in the room. Hover says
   "the piggy bank" and outlines it in gold (`piggy` hit). `--demo` has money (`demo.json` `money`, `in_days` for dates)
   and its forecast (`money_forecast`, built by `Money.staged_forecast`); `--money quiet|short|none` stages the room's
-  three states.
+  three states. A click opens the **Money view** (`money_view.gd`; `viewed` "money", `sb.open_money()`, the sidebar's
+  `money_ui`): Now (`available`, else `balance`; savings beside it from the forecast's `other_available_cents` and
+  `other_accounts`, named and never added in), Until the next deposit (`Money.lowest_line`, to the whole dollar, from `before_next_deposit`
+  and `basis.next_deposit`, then a `DayStrip` of the days ahead with each of `events` on its date), Subscriptions
+  (`subscriptions`: `amount_cents`, `rhythm`, `next`, a rise mark and "was $X" from `was_cents`), Worth a look (the
+  proposals of `GET /api/home` with `source` "bank", add and no as on Home) and a line to ask: `POST
+  /api/home/money/ask {text, thread?}` answers `{reply, figures, thread}`, the thread kept until the view is left, a
+  `figures` that holds a forecast (or an afford answer's `with`) drawn as the same strip. The forecast is
+  `GET /api/home/money/forecast` (`main.gd` `_fetch_forecast`; null body: "No forecast yet."). Home's Today has one
+  row when a charge is due within `Money.SOON` days (`Money.today_row`, "Rent $1,200 due Fri, and 1 more"). Money is formatted only by `Money.fmt` (`fmt_whole` for an estimate);
+  there are no budgets, category charts, totals or scores. `soak_money.gd` (section `money`) is its stub server, the
+  states, the view, the ask and the room without money.
 - **The room** is 11x11 cells (`Pets.COLS`/`ROWS`, which the home, the room and the walkers all follow; the back walls are column 0 and row 0, so a bigger room grows toward the front and a saved layout loads unchanged) and, in the 1100x700 window beside the sidebar, drawn with the 2x art (`fit_scale`; the 3x art needs a 1072 px area, which a 1450x980 window has). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
   (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
   board, calendar, jar, none of them movable) and the plain ones (the rest of
@@ -639,12 +651,12 @@ runs on the local list.
   that needs neither the tree nor the clock goes in `logic.gd`, not in the soak; none runs in both.
 - `mise run house:soak -- <section>...` runs only those sections, in the suite's order; `-- --list`
   prints the names (`home sim decorate packs looks hacks eggs guests petlife antics petthings cards
-  routes forms sidebar chores people door chat local talk telegram weather drive packlooks art`); an unknown name prints
+  routes forms sidebar chores people door money chat local talk telegram weather drive packlooks art`); an unknown name prints
   them and fails. **Iterate on your own section by name** and run the whole soak once, alone, on the
   final tree. Each section stands alone: the runner (`soak.gd` `_sections`, `_reset`, `_leave`) reseeds
   with 7 and resets the stub server's state, its log and its flags before it, and fails the section
   that leaves a node under the root, a file in `user://` or the server listening. The sections that
-  need the house over the stub (`routes forms sidebar chores people door chat local talk telegram`) get a fresh `main`
+  need the house over the stub (`routes forms sidebar chores people door money chat local talk telegram`) get a fresh `main`
   from `_on_main`; a section that needs more builds it itself and never reads what another left.
   A wait is on the condition the next check needs, with a bound (`_until(done, what)`: it fails the soak
   naming `what` when the bound passes); that nothing happens is a named window (`_quiet`, or `_quiet_frames`

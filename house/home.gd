@@ -510,6 +510,7 @@ func set_data(d: Dictionary) -> void:
 	done = d["done"] if d.get("done") is Array else null
 	meetings = d["meetings"] if d.get("meetings") is Array else []
 	things.set_data(d)
+	layout.show_money(things.money != null)
 	var ids: Array = []
 	ring_ids = []
 	for item in open:
@@ -1952,8 +1953,11 @@ func _draw_piggy() -> void:
 		return
 	var c: int = piece["c"]
 	var r: int = piece["r"]
-	Money.piggy(PetThings.Pen.new(room, _p(c, r), _k), Money.envelope(things.money, today()))
-	_hover_outline("piggy", _chore_box("piggy", c + 0.1, r + 0.1, c + 0.9, r + 0.9, Money.HEIGHT))
+	var pen := PetThings.Pen.new(room, _p(c, r), _k)
+	Money.piggy(pen, Money.envelope(things.money, today()))
+	var hull := Money.outline(pen)
+	_register("piggy", hull, _p(c + 0.5, r + 0.8))
+	_hover_outline("piggy", hull)
 
 
 func _draw_frame() -> void:
@@ -2152,6 +2156,9 @@ func click(pos: Vector2) -> bool:
 			return true
 		"door":
 			viewed.emit("door", null)
+			return true
+		"piggy":
+			viewed.emit("money", null)
 			return true
 		"pad":
 			viewed.emit("add", true)

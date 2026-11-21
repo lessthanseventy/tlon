@@ -114,6 +114,8 @@ func _ready() -> void:
 	_sidebar.chat_sent.connect(_send_chat)
 	_sidebar.chat_acted.connect(_chat_act)
 	_sidebar.check_requested.connect(_check_server)
+	_sidebar.money_ui.forecast_wanted.connect(_fetch_forecast)
+	_sidebar.money_ui.ask_wanted.connect(_ask_money)
 	_sidebar.form_submitted.connect(
 		func(req: Dictionary) -> void: _write(req["path"], req["body"], _form_saved)
 	)
@@ -489,6 +491,43 @@ func _fetch_meetings(key: String, from: String, to: String) -> void:
 	)
 
 
+# the forecast the Money view opens with: from the server, in the demo staged from `money_forecast`
+func _fetch_forecast(gen: int) -> void:
+	var view = _sidebar.money_ui
+	if _demo:
+		var staged: Dictionary = Money.staged_forecast(_money_spec, _room.home.today())
+		view.got_forecast.call_deferred(gen, true, 200, staged)
+		return
+	_backend.fetch(
+		"/api/home/money/forecast",
+		func(reached: bool, code: int, body: Variant) -> void:
+			view.got_forecast(gen, reached, code, body)
+	)
+
+
+# a question about the money: the server's model reads it, so it may take a while; the demo answers
+# with the forecast it has
+func _ask_money(text: String, thread: String, gen: int) -> void:
+	var view = _sidebar.money_ui
+	if _demo:
+		var staged: Dictionary = Money.staged_forecast(_money_spec, _room.home.today())
+		var answer := {"reply": "Here are the days ahead.", "figures": staged, "thread": "demo"}
+		get_tree().create_timer(1.0).timeout.connect(
+			func() -> void: view.got_reply(gen, true, 200, answer)
+		)
+		return
+	var body := {"text": text}
+	if thread != "":
+		body["thread"] = thread
+	_post(
+		"/api/home/money/ask",
+		body,
+		func(reached: bool, code: int, parsed: Variant) -> void:
+			view.got_reply(gen, reached, code, parsed),
+		60.0
+	)
+
+
 # demo meetings are `{title, mins, tentative}` with `in_min` (minutes from now), `tomorrow`
 # (local "HH:MM") or `in_days` (and `from`, or `all_day`), so the demo never goes stale: the
 # server's rows, UTC, with their local `date` and, for today and tomorrow, their `day`
@@ -684,6 +723,8 @@ func _on_viewed(kind: String, arg: Variant) -> void:
 			_sidebar.open_people()
 		"door":
 			_sidebar.open_door()
+		"money":
+			_sidebar.open_money()
 
 
 func _on_empty() -> void:
@@ -926,6 +967,8 @@ func _trouble(line: String) -> void:
 		_room.home.things.flash = line
 	elif _sidebar.view in ["people", "door"]:
 		_sidebar.people_ui.said(line)
+	elif _sidebar.view == "money":
+		_sidebar.money_ui.say = line
 	else:
 		_room.home.show_reply(line)
 

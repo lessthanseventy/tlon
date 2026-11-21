@@ -1,0 +1,520 @@
+extends RefCounted
+
+# The soak's checks of the piggy bank and the Money view over a stub that answers the forecast and
+# the ask as the server does: the three states of the envelope, the click, the view, a short balance
+# said calmly, the bank's proposals, the ask line with its reply, its figures and its error, Home's
+# Today row, and the room without money (the server says null, the house's own list). The rules
+# without a scene are `logic_money.gd`.
+const Money := preload("res://money.gd")
+const MoneyView := preload("res://money_view.gd")
+const BackendLocal := preload("res://backend_local.gd")
+const Blocks := preload("res://blocks.gd")
+const Decorate := preload("res://decorate.gd")
+const LocalSoak := preload("res://soak_local.gd")
+
+const QUIET := {
+	"balance": 181500,
+	"available": 181500,
+	"as_of": "2026-11-20T12:00:00Z",
+	"due_this_week": [{"name": "Rent", "amount": 120000, "in_days": 6}],
+	"next_deposit": {"name": "Paycheck", "amount": 240000, "in_days": 6},
+	"accounts": [],
+}
+const DUE := {
+	"balance": 400000,
+	"available": 400000,
+	"as_of": "2026-11-20T12:00:00Z",
+	"due_this_week":
+	[
+		{"name": "Streaming", "amount": 1599, "in_days": 2},
+		{"name": "Rent", "amount": 120000, "in_days": 4}
+	],
+	"next_deposit": {"name": "Paycheck", "amount": 240000, "in_days": 6},
+	"accounts": [],
+}
+const FORECAST := {
+	"start_cents": 400000,
+	"everyday_cents": 4200,
+	"ahead": 20,
+	"other_available_cents": 410000,
+	"other_accounts": ["Rainy day"],
+	"events":
+	[
+		{"in_days": 2, "kind": "charge", "name": "Streaming", "amount_cents": -1599},
+		{"in_days": 4, "kind": "charge", "name": "Rent", "amount_cents": -120000},
+		{"in_days": 6, "kind": "deposit", "name": "Paycheck", "amount_cents": 240000},
+	],
+	"subscriptions":
+	[
+		{
+			"name": "Streaming",
+			"amount_cents": -1599,
+			"rhythm": "monthly",
+			"in_days": 2,
+			"was_cents": -1299
+		},
+		{"name": "Rent", "amount_cents": -120000, "rhythm": "monthly", "in_days": 4},
+		{"name": "Cloud storage", "amount_cents": -2999, "rhythm": "yearly", "in_days": 160},
+	],
+}
+
+var s
+var main
+var h
+var sb
+var mv
+var _fspec: Variant = FORECAST
+var _ask_error := ""
+var _thread := ""
+var _figures := true
+
+
+func _init(soak, the_main) -> void:
+	s = soak
+	main = the_main
+	h = main._room.home
+	sb = main._sidebar
+	mv = sb.money_ui
+
+
+func run() -> void:
+	_start()
+	await _states()
+	await _click()
+	await _view()
+	await _short()
+	await _no_forecast()
+	await _proposals()
+	await _ask()
+	await _ask_failed()
+	await _today()
+	await _cell()
+	await _without()
+	await _local()
+
+
+func _start() -> void:
+	for t in main.get_children().filter(
+		func(n: Node) -> bool: return n is Timer and n.wait_time == main.POLL_SECONDS
+	):
+		t.stop()
+	sb.back()
+	s.stub = Callable(self, "answer")
+
+
+func answer(method: String, path: String, _body: Variant) -> Variant:
+	if method == "GET" and path == "/api/home/money/forecast":
+		var out: Variant = null
+		if _fspec != null:
+			out = Money.staged_forecast(_fspec, h.today())
+		return {"code": 200, "body": out}
+	if method == "POST" and path == "/api/home/money/ask":
+		if _ask_error != "":
+			return {"code": 400, "body": {"error": _ask_error}}
+		var figures: Variant = Money.staged_forecast(FORECAST, h.today()) if _figures else null
+		return {
+			"code": 200,
+			"body": {"reply": "Here are the days ahead.", "figures": figures, "thread": _thread}
+		}
+	return null
+
+
+func _stage(summary: Variant) -> void:
+	if summary == null:
+		s._state.erase("money")
+	else:
+		s._state["money"] = Money.staged_summary(summary, h.today())
+	await _poll()
+
+
+func _poll() -> void:
+	var before: int = s._count("/api/home")
+	main._poll()
+	await s._until(func(): return s._count("/api/home") > before, "the house is read again")
+	await s._answered(main)
+	await _sync()
+
+
+func _sync() -> void:
+	await s.process_frame
+	await s.process_frame
+
+
+func _texts(node: Node, out: Array = []) -> Array:
+	for c in node.get_children():
+		if c is Label:
+			out.append(c.text)
+		_texts(c, out)
+	return out
+
+
+func _has(prefix: String) -> bool:
+	return _texts(sb._dyn).any(func(t: String) -> bool: return t.begins_with(prefix))
+
+
+func _strips() -> Array:
+	return sb._dyn.find_children("*", "Control", true, false).filter(
+		func(c: Control) -> bool: return c is MoneyView.DayStrip
+	)
+
+
+func _buttons(text: String) -> Array:
+	return sb._dyn.find_children("*", "Button", true, false).filter(
+		func(b: Button) -> bool: return b.text == text
+	)
+
+
+func _edit() -> Variant:
+	for e in sb._dyn.find_children("*", "LineEdit", true, false):
+		if e.placeholder_text == "ask about your money":
+			return e
+	return null
+
+
+func _posted(path: String) -> Array:
+	return s._log.filter(func(l: Array) -> bool: return l[0] == "POST" and l[1] == path)
+
+
+func _centre(key: String) -> Variant:
+	for hit in h._hits:
+		if hit["key"] != key:
+			continue
+		var sum := Vector2.ZERO
+		for p: Vector2 in hit["poly"]:
+			sum += p
+		var c: Vector2 = sum / maxf(1.0, hit["poly"].size())
+		if h._topmost(c) == key:
+			return c
+	return null
+
+
+func _hits(key: String) -> int:
+	return h._hits.filter(func(hit: Dictionary) -> bool: return hit["key"] == key).size()
+
+
+func _states() -> void:
+	await _stage(QUIET)
+	var piece: Dictionary = h.layout.piggy()
+	s._check(
+		not piece.is_empty() and h.layout.kind(piece) == "floor",
+		"the default layout has a piggy bank"
+	)
+	s._check(
+		h.layout.rows()["furniture"].all(func(f: Array) -> bool: return f[0] != Money.PIECE),
+		"the room draws it in code, not as a sprite row"
+	)
+	var summary: Dictionary
+	for want in [["none", QUIET], ["due", DUE], ["short", _short_of(DUE)]]:
+		summary = want[1]
+		await _stage(summary)
+		s._check(
+			Money.envelope(h.things.money, h.today()) == want[0],
+			"%s: the envelope is %s" % [want[0], Money.envelope(h.things.money, h.today())]
+		)
+		await s._until(func() -> bool: return _centre("piggy") != null, "the piggy bank has a hit")
+		var drawn: Array = h.items().filter(
+			func(it: Dictionary) -> bool: return it["fn"] == Callable(h, "_draw_piggy")
+		)
+		s._check(drawn.size() == 1, "%s: the piggy bank is drawn once" % want[0])
+
+
+func _short_of(summary: Dictionary) -> Dictionary:
+	var out := summary.duplicate(true)
+	out["available"] = 60000
+	out["balance"] = 60000
+	return out
+
+
+func _click() -> void:
+	await _stage(DUE)
+	var at: Variant = _centre("piggy")
+	if at == null:
+		s._check(false, "the piggy bank has a hit to click")
+		return
+	h.hover(at)
+	s._check(
+		h._hover == "piggy" and h._name_of("piggy") == "the piggy bank",
+		"the pointer is on the piggy bank"
+	)
+	h.click(at)
+	await s._until(
+		func() -> bool: return sb.view == "money", "a click on the piggy bank opens Money"
+	)
+	s._check(
+		h.selected == "piggy" and sb.selected_key() == "piggy",
+		"the piggy bank is outlined while the view is open"
+	)
+	sb.back()
+	h.selected = ""
+	s._check(sb.view == "home", "back leaves the view")
+
+
+func _open() -> void:
+	sb.open_money()
+	await s._until(func() -> bool: return mv.fstate != "loading", "the forecast comes")
+	await _sync()
+
+
+func _view() -> void:
+	await _stage(DUE)
+	await _open()
+	s._check(mv.fstate == "ok", "the forecast is read: %s" % mv.fstate)
+	var texts := _texts(sb._dyn)
+	s._check(Money.fmt(400000) in texts, "Available shows %s: %s" % [Money.fmt(400000), str(texts)])
+	s._check(
+		Money.fmt(410000) in texts and "Rainy day" in texts,
+		"savings sit beside it, named: %s" % str(texts)
+	)
+	s._check(
+		not texts.any(func(t: String) -> bool: return t.contains(Money.fmt(810000))),
+		"and are never added in"
+	)
+	s._check(_has("Lowest point before"), "the lowest-point sentence is there: %s" % str(texts))
+	var strips := _strips()
+	s._check(
+		strips.size() == 1 and strips[0].days.size() == 7,
+		"the days ahead are one strip of a week (%d)" % strips.size()
+	)
+	for want in ["Streaming", "Rent", "Paycheck", "Cloud storage", "was $12.99", Money.fmt(1599)]:
+		s._check(want in texts, "%s is in the view: %s" % [want, str(texts)])
+	s._check(not _has("Worth a look"), "no proposals, no Worth a look")
+	sb.back()
+
+
+func _short() -> void:
+	var low: Dictionary = FORECAST.duplicate(true)
+	low["start_cents"] = 60000
+	_fspec = low
+	await _stage(_short_of(DUE))
+	await _open()
+	var line := ""
+	for t in _texts(sb._dyn):
+		if t.begins_with("Lowest point before"):
+			line = t
+	s._check(
+		line.contains("below zero") and line.contains("Rainy day holds"),
+		"below zero is said plainly with what savings hold: %s" % line
+	)
+	s._check(not line.contains("!"), "and calmly")
+	sb.back()
+	_fspec = FORECAST
+
+
+func _no_forecast() -> void:
+	_fspec = null
+	await _stage(DUE)
+	await _open()
+	s._check(mv.fstate == "none", "a server with nothing stored: %s" % mv.fstate)
+	s._check("No forecast yet." in _texts(sb._dyn), "says so")
+	s._check(Money.fmt(400000) in _texts(sb._dyn), "and still shows what is available")
+	sb.back()
+	_fspec = FORECAST
+
+
+func _proposals() -> void:
+	await _stage(DUE)
+	s._state["proposals"] = [
+		{
+			"id": 71,
+			"source": "bank",
+			"text": "Cancel the gym",
+			"why": "unused for 3 months",
+			"url": null
+		},
+		{"id": 72, "source": "bank", "text": "Move $200 to savings", "why": null, "url": null},
+		{"id": 73, "source": "mail", "text": "Package arriving Tuesday", "why": null, "url": null},
+	]
+	await _poll()
+	await _open()
+	var texts := _texts(sb._dyn)
+	s._check(
+		"Worth a look" in texts, "the bank's proposals sit under Worth a look: %s" % str(texts)
+	)
+	s._check(
+		(
+			"Cancel the gym" in texts
+			and "Move $200 to savings" in texts
+			and "Package arriving Tuesday" not in texts
+		),
+		"only the bank's: %s" % str(texts)
+	)
+	var add: Array = _buttons("add")
+	s._check(add.size() == 2, "each has add (%d)" % add.size())
+	add[0].pressed.emit()
+	await s._until(
+		func() -> bool: return not _posted("/api/home/proposals/71/take").is_empty(), "add is taken"
+	)
+	await s._answered(main)
+	await _sync()
+	s._check("Cancel the gym" not in _texts(sb._dyn), "a taken proposal leaves the view")
+	var no: Array = _buttons("no")
+	s._check(no.size() == 1, "the other has no (%d)" % no.size())
+	no[0].pressed.emit()
+	await s._until(
+		func() -> bool: return not _posted("/api/home/proposals/72/dismiss").is_empty(),
+		"no is dismissed"
+	)
+	await s._answered(main)
+	await _sync()
+	s._check("Worth a look" not in _texts(sb._dyn), "with none left the heading goes")
+	sb.back()
+	s._state.erase("proposals")
+
+
+func _ask_line(text: String) -> void:
+	var edit: Variant = _edit()
+	s._check(edit != null, "the view has an ask line")
+	if edit == null:
+		return
+	edit.text = text
+	edit.text_submitted.emit(text)
+
+
+func _ask() -> void:
+	await _stage(DUE)
+	await _open()
+	_thread = "t-7"
+	_ask_line("can I afford a chair?")
+	s._check(mv.waiting, "a question waits for its answer")
+	await s._until(func() -> bool: return mv.asked.has("reply"), "the reply comes")
+	await _sync()
+	var texts := _texts(sb._dyn)
+	s._check(
+		"can I afford a chair?" in texts and "Here are the days ahead." in texts,
+		"the question and its reply show"
+	)
+	s._check(
+		_strips().size() == 2,
+		"the figures' forecast is drawn as a second strip (%d)" % _strips().size()
+	)
+	var body: Dictionary = JSON.parse_string(_posted("/api/home/money/ask")[0][2])
+	s._check(
+		body == {"text": "can I afford a chair?"},
+		"the first question carries no thread: %s" % str(body)
+	)
+	s._check(mv.thread == "t-7", "the thread is kept")
+	_figures = false
+	_ask_line("and a lamp?")
+	await s._until(
+		func() -> bool: return _posted("/api/home/money/ask").size() == 2,
+		"the second question goes"
+	)
+	await s._until(func() -> bool: return not mv.waiting, "its reply comes")
+	await _sync()
+	body = JSON.parse_string(_posted("/api/home/money/ask")[1][2])
+	s._check(body.get("thread") == "t-7", "the next question names the thread: %s" % str(body))
+	s._check(_strips().size() == 1, "an answer without figures draws no strip")
+	_figures = true
+	sb.back()
+	s._check(mv.asked.is_empty() and mv.thread == "", "leaving the view forgets the talk")
+
+
+func _ask_failed() -> void:
+	await _open()
+	_ask_error = "the model is busy"
+	_ask_line("anything?")
+	await s._until(func() -> bool: return not mv.waiting, "the error comes")
+	await _sync()
+	s._check(
+		"Couldn't ask: the model is busy." in _texts(sb._dyn),
+		"a plain error line: %s" % str(_texts(sb._dyn))
+	)
+	s._check(not mv.asked.has("reply"), "and no reply")
+	_ask_error = ""
+	sb.back()
+
+
+func _today() -> void:
+	await _stage(QUIET)
+	s._check(
+		not _has("Streaming") and not _has("Rent $"), "nothing due soon: Today has no money row"
+	)
+	await _stage(DUE)
+	var row := ""
+	for t in _texts(sb._dyn):
+		if t.begins_with("Streaming $15.99 due"):
+			row = t
+	s._check(
+		row.ends_with(", and 1 more"), "a charge due soon has one row in Today: %s" % str(_texts(sb._dyn))
+	)
+	var found: Variant = null
+	for c in sb._dyn.find_children("*", "Control", true, false):
+		if c is Blocks.Row and row in _texts(c):
+			found = c
+	s._check(found != null, "the row is there to press")
+	if found != null:
+		found.pressed.emit()
+		await s._until(func() -> bool: return sb.view == "money", "the row opens Money")
+		sb.back()
+
+
+func _without() -> void:
+	await _stage(DUE)
+	await _stage(null)
+	s._check(h.things.money == null, "money null from the server")
+	s._check(_hits("piggy") == 0, "no hit without money")
+	s._check(not _has("Streaming"), "no row in Today")
+	var deco: Control = Decorate.new()
+	deco.room = main._room
+	deco.home = h
+	deco.size = Vector2(300, 4000)
+	main.add_child(deco)
+	deco.enter()
+	await _sync()
+	s._check(
+		not deco._hits.any(func(x: Dictionary) -> bool: return x["act"] == "pick:piggy_bank"),
+		"decorate does not list it"
+	)
+	await _stage(DUE)
+	deco.queue_redraw()
+	await _sync()
+	s._check(
+		deco._hits.any(func(x: Dictionary) -> bool: return x["act"] == "pick:piggy_bank"),
+		"decorate lists it while the server sends money"
+	)
+	deco.leave()
+	deco.queue_free()
+	await _sync()
+
+
+func _local() -> void:
+	await _stage(DUE)
+	var clock := LocalSoak.new(s)
+	clock.t = clock.at(2026, 11, 18, 14)
+	var plain := BackendLocal.new()
+	plain.setup("", Callable(clock, "_clock"), h._bias(), false)
+	main._install(plain)
+	main._poll()
+	await s._until(
+		func() -> bool: return h.things.money == null, "the house's own list has no money"
+	)
+	await _sync()
+	s._check(_hits("piggy") == 0, "local mode: no piggy bank hit")
+	s._check(h.layout.piggy().is_empty() and _held() != {}, "and the piece takes no cell")
+
+
+func _held() -> Dictionary:
+	for p in h.layout.pieces:
+		if Money.is_piggy(p):
+			return p
+	return {}
+
+
+func _cell() -> void:
+	await _stage(DUE)
+	var at := Vector2i(_held()["c"], _held()["r"])
+	s._check(h.layout.blocked().has(at), "with money the piggy bank's cell is blocked")
+	await _stage(null)
+	s._check(h.layout.piggy().is_empty(), "without money the room has no piggy bank")
+	s._check(not h.layout.blocked().has(at), "and its cell is free to walk on")
+	var plant: Dictionary = h.layout._piece(["plant_small", "", at.x, at.y])
+	s._check(h.layout.place(plant, null, []) == "", "and another piece may stand there")
+	await _stage(DUE)
+	var pig: Dictionary = h.layout.piggy()
+	s._check(not pig.is_empty(), "money again brings the piggy bank back")
+	if not pig.is_empty():
+		s._check(
+			Vector2i(pig["c"], pig["r"]) != at and h.layout.check(pig, pig, []) == "",
+			"to a cell it may stand on, not the one taken"
+		)
+	h.layout.remove(plant)

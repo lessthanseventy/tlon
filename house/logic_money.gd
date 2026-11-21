@@ -50,6 +50,10 @@ func _format() -> void:
 	]
 	for c in cases:
 		_eq(Money.fmt(c[0]), c[1], "%s is worded %s" % [str(c[0]), c[1]])
+	for c in [
+		[-82599, "-$826"], [124049, "$1,240"], [124050, "$1,241"], [31200, "$312"], [0, "$0"]
+	]:
+		_eq(Money.fmt_whole(c[0]), c[1], "%s is estimated as %s" % [str(c[0]), c[1]])
 	_eq(Money.signed(240000), "+$2,400", "money in has its plus")
 	_eq(Money.signed(-120000), "-$1,200", "money out its minus")
 	_eq(Money.signed(0), "$0", "nothing has neither")
@@ -129,7 +133,7 @@ func _today_row() -> void:
 	)
 	_eq(
 		Money.today_row(_summary(181500, [["Gym", 3000, 4], ["Rent", 120000, 1]]), TODAY),
-		"Rent $1,200 due tomorrow and 1 more",
+		"Rent $1,200 due tomorrow, and 1 more",
 		"the soonest, and how many more"
 	)
 	_eq(
@@ -246,8 +250,8 @@ func _lowest() -> void:
 		Money.lowest_line(
 			_forecast([], fri, {"date": "2026-11-19", "balance_cents": 120050}), TODAY
 		),
-		"Lowest point before Friday's deposit: about $1,200.50.",
-		"cents are kept"
+		"Lowest point before Friday's deposit: about $1,201.",
+		"an estimate is to the whole dollar"
 	)
 	var below := {"date": When.add_days(TODAY, 1), "balance_cents": -4000}
 	_eq(

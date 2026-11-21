@@ -21,6 +21,7 @@ const Card := preload("res://card.gd")
 const Blocks := preload("res://blocks.gd")
 const Views := preload("res://views.gd")
 const PeopleView := preload("res://people_view.gd")
+const MoneyView := preload("res://money_view.gd")
 const Form := preload("res://form.gd")
 const Jot := preload("res://jot.gd")
 const ChatView := preload("res://chat_view.gd")
@@ -57,6 +58,7 @@ const VIEW_TITLES := {
 	"decorate": "Decorate",
 	"people": "People",
 	"door": "By the door",
+	"money": "Money",
 }
 
 var home
@@ -81,6 +83,7 @@ var chat_view: PanelContainer
 var decorate: Control
 var scroll: ScrollContainer
 var people_ui: RefCounted
+var money_ui: RefCounted
 
 var _views: RefCounted
 var _dyn: VBoxContainer
@@ -105,6 +108,7 @@ func setup(the_home, claude: RefCounted, phone: Node) -> void:
 	home = the_home
 	_views = Views.new(self, home)
 	people_ui = PeopleView.new(self, home)
+	money_ui = MoneyView.new(self, home)
 	var style := StyleBoxFlat.new()
 	style.bg_color = FRAME
 	style.set_content_margin_all(8)
@@ -233,7 +237,7 @@ func is_open() -> bool:
 
 func takes_text() -> bool:
 	return (
-		view in ["add", "edit", "settings", "people", "door"]
+		view in ["add", "edit", "settings", "people", "door", "money"]
 		or (view == "pet" and pet_view.editing)
 	)
 
@@ -271,6 +275,8 @@ func selected_key() -> String:
 			return "frame"
 		"door":
 			return "door"
+		"money":
+			return "piggy"
 		"open":
 			return "stack"
 		"add":
@@ -314,6 +320,7 @@ func _switch(name: String, the_arg: Variant) -> void:
 	_seen_card = home.card.kind + "|" + home.card.key
 	agenda_typing = false
 	people_ui.reset()
+	money_ui.reset()
 	chat_popped = false
 	_sig = ""
 	scroll.scroll_vertical = 0
@@ -396,6 +403,11 @@ func open_people() -> void:
 
 func open_door() -> void:
 	_switch("door", null)
+
+
+func open_money() -> void:
+	_switch("money", null)
+	money_ui.open()
 
 
 func open_settings() -> void:
@@ -513,7 +525,7 @@ func _apply() -> void:
 	if decorate != null:
 		decorate.visible = view == "decorate"
 	scroll.visible = view != "decorate"
-	_dyn.visible = view in ["home", "item", "open", "card", "agenda", "people", "door"]
+	_dyn.visible = view in ["home", "item", "open", "card", "agenda", "people", "door", "money"]
 	_add_root.visible = view in ["add", "edit"]
 	settings_view.visible = view == "settings"
 	pet_view.visible = view == "pet"
@@ -555,6 +567,7 @@ func _signature() -> String:
 						home.things.note_list(),
 						home.things.agendas,
 						home.things.people,
+						home.things.money,
 						home.things.proposals,
 						proposed_expanded,
 						home.things.pick,
@@ -584,6 +597,8 @@ func _signature() -> String:
 			return JSON.stringify(home.open)
 		"people", "door":
 			return people_ui.signature(view)
+		"money":
+			return money_ui.signature()
 	return ""
 
 
@@ -607,6 +622,8 @@ func _rebuild() -> void:
 			people_ui.people_view(_dyn)
 		"door":
 			people_ui.door_view(_dyn)
+		"money":
+			money_ui.build(_dyn)
 	_restore_scroll.call_deferred(keep)
 
 

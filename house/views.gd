@@ -10,6 +10,7 @@ const Card := preload("res://card.gd")
 const Sure := preload("res://sure.gd")
 const Settings := preload("res://settings.gd")
 const Shelf := preload("res://shelf.gd")
+const Money := preload("res://money.gd")
 const OPEN_SHOWN := 6
 const PROPOSED_SHOWN := 3
 const SHORT := ["jar", "plant", "clock", "found", "globe", "piano", "weather"]
@@ -104,6 +105,9 @@ func _today(box: VBoxContainer) -> void:
 	for p in home.things.people:
 		if str(p.get("next_birthday", "")) == today:
 			entries.append({"at": -1.0, "birthday": p})
+	var due := Money.today_row(home.things.money, today)
+	if due != "":
+		entries.append({"at": -1.0, "money": due})
 	if entries.is_empty():
 		return
 	entries.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return x["at"] < y["at"])
@@ -133,6 +137,11 @@ func _today(box: VBoxContainer) -> void:
 		elif e.has("birthday"):
 			var row := Blocks.Row.new("%s's birthday" % e["birthday"]["name"], "", false, false, true)
 			row.pressed.connect(func() -> void: sb.open_people())
+			_put_time(row, "")
+			box.add_child(row)
+		elif e.has("money"):
+			var row := Blocks.Row.new(str(e["money"]), "", false, false, true)
+			row.pressed.connect(func() -> void: sb.open_money())
 			_put_time(row, "")
 			box.add_child(row)
 		else:
