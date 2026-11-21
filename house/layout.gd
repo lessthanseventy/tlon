@@ -6,6 +6,7 @@ const Pets := preload("res://pets.gd")
 const Packs := preload("res://packs.gd")
 const PetThings := preload("res://pet_things.gd")
 const Chores := preload("res://chores.gd")
+const People := preload("res://people.gd")
 
 const SIDES := ["sw", "se", "ne", "nw", "nwse", "nesw"]
 const FRONT := {
@@ -48,6 +49,7 @@ const FIXED := [
 const DEFAULTS := [
 	["plant_small", "", 0, 0],
 	["laundry_basket", "", 1, 1],
+	["photo_frame", "", 0, 10],
 	["armchair", "se", 0, 1],
 	["rug_blue", "nwse", 1, 4],
 	["painting", "ne", 0, 0],
@@ -81,6 +83,7 @@ const BOXES := {
 	"sofa_se": [1, 2, 17, Color("9a4f58")],
 	"floor_lamp": [1, 1, 33, Color("d9b86a")],
 	"laundry_basket": [1, 1, 12, Color("c79a5c")],
+	"photo_frame": [1, 1, 14, Color("a8794d")],
 }
 # wall segments the board, window, calendar, jar and door use; nothing else goes there
 const WALL_FIXED := {"ne": [2, 3, 4, 5, 6], "nw": [1, 4, 5, 7]}
@@ -97,7 +100,7 @@ const SHUTS := "that would shut a path"
 const ONCE := "that one is already out"
 const SAVED := 2
 # default pieces added after layouts were first saved: a saved layout is offered each once
-const NEWER := ["laundry_basket"]
+const NEWER := ["laundry_basket", "photo_frame"]
 # the pets' spots that move with their thing: their old cells stay free ground
 const MOVING_SPOTS := ["bed", "bowl"]
 
@@ -146,6 +149,7 @@ func setup(sprites: Dictionary, with_art: bool, file: String, save_it: bool) -> 
 	else:
 		catalogue.append_array(PetThings.entries())
 		catalogue.append(Chores.entry())
+		catalogue.append(People.entry())
 	pieces = _defaults([])
 	if art and path != "":
 		load_file()
@@ -225,6 +229,7 @@ func _scan() -> void:
 			e["faces"].append(face)
 	catalogue.append_array(PetThings.entries())
 	catalogue.append(Chores.entry())
+	catalogue.append(People.entry())
 	for i in catalogue.size():
 		var e: Dictionary = catalogue[i]
 		e["faces"].sort_custom(func(a, b): return SIDES.find(a) < SIDES.find(b))
@@ -319,6 +324,14 @@ func basket() -> Dictionary:
 	return {}
 
 
+# the framed photo where it stands, {} when it has been taken away
+func frame() -> Dictionary:
+	for p in _solid():
+		if People.is_frame(p):
+			return p
+	return {}
+
+
 # the pet things standing in the room, hidden ones not counted
 func pet_pieces() -> Array:
 	return pieces.filter(func(p): return PetThings.is_pet(p) and not p.get("hide", false))
@@ -341,7 +354,7 @@ func draw_key(p: Dictionary) -> int:
 func rows() -> Dictionary:
 	var out := {"furniture": [], "decor": [], "rugs": []}
 	for p in all():
-		if PetThings.is_pet(p) or Chores.is_basket(p):
+		if PetThings.is_pet(p) or Chores.is_basket(p) or People.is_frame(p):
 			continue
 		var id := sprite_id(p)
 		var f := footprint(p)

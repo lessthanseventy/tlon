@@ -78,6 +78,8 @@ func _route(method: String, path: String, body: Dictionary) -> Dictionary:
 		return _tell(str(body.get("text", "")))
 	if p.size() == 3 and p[2] == "add":
 		return list.add(body)
+	if p.size() == 4 and p[2] == "door" and p[3] == "add":
+		return list.door_add(body)
 	if p.size() == 3 and p[2] == "agendas":
 		return list.agenda_add(body)
 	if p.size() == 5 and p[2] == "agendas" and p[3].is_valid_int():

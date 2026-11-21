@@ -4,8 +4,8 @@ extends PanelContainer
 # house), the context pane (what is clicked, else the home) with its header, and the chat at the
 # bottom. Views are `home`, `item` (an id), `open` (the desk), `card` (a thing's blocks,
 # from `home.card`), `add` and `edit` (the form, with the jot field on a plain add), `pet`,
-# `closet`, `settings` and `decorate`. One is up at a time; `back` goes to the home, or from a form
-# to the card or item it came from.
+# `closet`, `settings`, `decorate`, `people` and `door`. One is up at a time; `back` goes to the
+# home, or from a form to the card or item it came from.
 signal form_submitted(req: Dictionary)
 signal form_acted(id: int, what: String)
 signal jot_submitted(text: String)
@@ -20,6 +20,7 @@ const IconButton := preload("res://icon_button.gd")
 const Card := preload("res://card.gd")
 const Blocks := preload("res://blocks.gd")
 const Views := preload("res://views.gd")
+const PeopleView := preload("res://people_view.gd")
 const Form := preload("res://form.gd")
 const Jot := preload("res://jot.gd")
 const ChatView := preload("res://chat_view.gd")
@@ -54,6 +55,8 @@ const VIEW_TITLES := {
 	"closet": "The closet",
 	"settings": "Settings",
 	"decorate": "Decorate",
+	"people": "People",
+	"door": "By the door",
 }
 
 var home
@@ -77,6 +80,7 @@ var closet: Control
 var chat_view: PanelContainer
 var decorate: Control
 var scroll: ScrollContainer
+var people_ui: RefCounted
 
 var _views: RefCounted
 var _dyn: VBoxContainer
@@ -100,6 +104,7 @@ var _eff := ""
 func setup(the_home, claude: RefCounted, phone: Node) -> void:
 	home = the_home
 	_views = Views.new(self, home)
+	people_ui = PeopleView.new(self, home)
 	var style := StyleBoxFlat.new()
 	style.bg_color = FRAME
 	style.set_content_margin_all(8)
@@ -227,7 +232,10 @@ func is_open() -> bool:
 
 
 func takes_text() -> bool:
-	return view in ["add", "edit", "settings"] or (view == "pet" and pet_view.editing)
+	return (
+		view in ["add", "edit", "settings", "people", "door"]
+		or (view == "pet" and pet_view.editing)
+	)
 
 
 func view_title() -> String:
@@ -259,6 +267,10 @@ func selected_key() -> String:
 			return "pet:" + str(arg)
 		"closet":
 			return "wardrobe"
+		"people":
+			return "frame"
+		"door":
+			return "door"
 		"open":
 			return "stack"
 		"add":
@@ -301,6 +313,7 @@ func _switch(name: String, the_arg: Variant) -> void:
 		home.close_card()
 	_seen_card = home.card.kind + "|" + home.card.key
 	agenda_typing = false
+	people_ui.reset()
 	chat_popped = false
 	_sig = ""
 	scroll.scroll_vertical = 0
@@ -375,6 +388,14 @@ func open_pet(who: String) -> void:
 func open_closet() -> void:
 	_switch("closet", null)
 	closet.open(home.look)
+
+
+func open_people() -> void:
+	_switch("people", null)
+
+
+func open_door() -> void:
+	_switch("door", null)
 
 
 func open_settings() -> void:
@@ -492,7 +513,7 @@ func _apply() -> void:
 	if decorate != null:
 		decorate.visible = view == "decorate"
 	scroll.visible = view != "decorate"
-	_dyn.visible = view in ["home", "item", "open", "card", "agenda"]
+	_dyn.visible = view in ["home", "item", "open", "card", "agenda", "people", "door"]
 	_add_root.visible = view in ["add", "edit"]
 	settings_view.visible = view == "settings"
 	pet_view.visible = view == "pet"
@@ -533,6 +554,7 @@ func _signature() -> String:
 						home.coming,
 						home.things.note_list(),
 						home.things.agendas,
+						home.things.people,
 						home.things.proposals,
 						proposed_expanded,
 						home.things.pick,
@@ -560,6 +582,8 @@ func _signature() -> String:
 			return JSON.stringify([home.card.kind, home.card_blocks()])
 		"open":
 			return JSON.stringify(home.open)
+		"people", "door":
+			return people_ui.signature(view)
 	return ""
 
 
@@ -579,6 +603,10 @@ func _rebuild() -> void:
 			_views.card_view(_dyn)
 		"open":
 			_views.open_view(_dyn)
+		"people":
+			people_ui.people_view(_dyn)
+		"door":
+			people_ui.door_view(_dyn)
 	_restore_scroll.call_deferred(keep)
 
 

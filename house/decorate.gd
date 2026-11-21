@@ -6,6 +6,7 @@ signal done
 const Pets := preload("res://pets.gd")
 const PetThings := preload("res://pet_things.gd")
 const Chores := preload("res://chores.gd")
+const People := preload("res://people.gd")
 const BG := Color("f3ead6")
 const INK := Color("2a2530")
 const QUIET := Color("6f6577")
@@ -218,6 +219,9 @@ func _entry(e: Dictionary, r: Rect2) -> void:
 	elif e["key"] == Chores.PIECE:
 		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 14.0)
 		Chores.basket(PetThings.Pen.new(self, origin, 1.0), "fine")
+	elif e["key"] == People.PIECE:
+		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 18.0)
+		People.frame(PetThings.Pen.new(self, origin, 0.9), false)
 	var tex: Texture2D = room.icon(id)
 	if tex != null:
 		var t := tex.get_size()
@@ -429,7 +433,7 @@ func _piece_at(pos: Vector2) -> Variant:
 
 
 func _opaque(p: Dictionary, pos: Vector2) -> bool:
-	if PetThings.is_pet(p) or Chores.is_basket(p):
+	if PetThings.is_pet(p) or Chores.is_basket(p) or People.is_frame(p):
 		return _over_pet(p, pos)
 	var s: Dictionary = room._sprite(room._furn_id([home.layout.sprite_id(p)]))
 	if s.is_empty():
@@ -478,6 +482,10 @@ func draw_ghost() -> void:
 	if Chores.is_basket(p):
 		var pen := PetThings.Pen.new(room, room._p(room._origin, p["c"], p["r"]), room._k, false, tint)
 		Chores.basket(pen, "fine")
+		return
+	if People.is_frame(p):
+		var pen := PetThings.Pen.new(room, room._p(room._origin, p["c"], p["r"]), room._k, false, tint)
+		People.frame(pen, false)
 		return
 	var s: Dictionary = room._sprite(room._furn_id([layout.sprite_id(p)]))
 	if home.petlife.hay(p):

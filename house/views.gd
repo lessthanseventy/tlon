@@ -101,6 +101,9 @@ func _today(box: VBoxContainer) -> void:
 			entries.append({"at": at, "item": item})
 	for a in home.things.agendas_today():
 		entries.append({"at": home.things._agenda_at(a), "agenda": a})
+	for p in home.things.people:
+		if str(p.get("next_birthday", "")) == today:
+			entries.append({"at": -1.0, "birthday": p})
 	if entries.is_empty():
 		return
 	entries.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return x["at"] < y["at"])
@@ -126,6 +129,11 @@ func _today(box: VBoxContainer) -> void:
 			var row := Blocks.Row.new(str(item["text"]), every, false, false, true)
 			row.pressed.connect(func() -> void: home.open_item(id))
 			_put_time(row, _hm(at))
+			box.add_child(row)
+		elif e.has("birthday"):
+			var row := Blocks.Row.new("%s's birthday" % e["birthday"]["name"], "", false, false, true)
+			row.pressed.connect(func() -> void: sb.open_people())
+			_put_time(row, "")
 			box.add_child(row)
 		else:
 			var a: Dictionary = e["agenda"]

@@ -8,6 +8,7 @@ extends RefCounted
 signal told(row: Dictionary)
 signal told_agenda(text: String)
 
+const People := preload("res://people.gd")
 const STORE := "user://house_list.json"
 const KINDS := ["todo", "reminder", "note", "waiting", "project"]
 const DONE_KEPT := 200
@@ -22,6 +23,9 @@ const AGENDA_LINGER := 3600.0
 const E_AT := "at is ISO 8601: 2026-11-21T09:00 (local) or with a zone, 2026-11-21T09:00:00Z"
 const E_RANGE := "at is no more than a year back or 20 years ahead"
 const E_EVERY := "every is day, week or month, or a number then one of them: 6 week"
+const E_BIRTHDAY := "birthday must be MM-DD or YYYY-MM-DD"
+const E_PERSON_RHYTHM := "a person has no every or at"
+const E_DOOR := "the door pile cannot be edited or dropped; clear it or drop its notes"
 
 var path := ""
 var clock := Callable()
@@ -340,7 +344,9 @@ func status() -> Dictionary:
 		"note_rows": [],
 		"done": [],
 		"done_week": 0,
-		"agendas": doc["agendas"].map(_agenda_row),
+		"agendas": _piles("agenda").map(_agenda_row),
+		"people": _people(),
+		"door": _door_row(),
 		"proposals": [],
 	}
 	for t in things():
@@ -831,8 +837,16 @@ func _agenda(id: int) -> Dictionary:
 	return {}
 
 
-func _named(name: String) -> Dictionary:
-	for a in doc["agendas"]:
+func _kind(a: Dictionary) -> String:
+	return str(a.get("kind", "agenda"))
+
+
+func _piles(kind: String) -> Array:
+	return doc["agendas"].filter(func(a: Dictionary) -> bool: return _kind(a) == kind)
+
+
+func _named(name: String, kind: String = "agenda") -> Dictionary:
+	for a in _piles(kind):
 		if str(a["name"]).to_lower() == name.to_lower():
 			return a
 	return {}
@@ -890,27 +904,115 @@ func _timing(body: Dictionary, a: Dictionary) -> Dictionary:
 	return {"every": every, "every_day": anchor, "next_at": at}
 
 
+# what a person's body changes: a birthday (null clears it); a rhythm means nothing to a person
+func _person_fields(body: Dictionary) -> Dictionary:
+	if body.has("every") or body.has("at"):
+		return _line(E_PERSON_RHYTHM)
+	if not body.has("birthday"):
+		return {}
+	var birthday: Variant = body["birthday"]
+	if birthday == null:
+		return {"birthday": null}
+	if not (birthday is String and People.valid((birthday as String).strip_edges())):
+		return _line(E_BIRTHDAY)
+	return {"birthday": (birthday as String).strip_edges()}
+
+
+func _person_row(a: Dictionary) -> Dictionary:
+	var birthday: Variant = a.get("birthday")
+	var next := People.next_birthday(birthday, Time.get_date_string_from_unix_time(int(now())))
+	return {
+		"id": int(a["id"]),
+		"name": a["name"],
+		"birthday": birthday,
+		"next_birthday": next if next != "" else null,
+		"notes": _agenda_row(a)["notes"],
+		"todos": _todos(str(a["name"])),
+	}
+
+
+# the open to-dos, reminders and waiting-ons that name `name` as a whole word in the text or who
+func _todos(name: String) -> Array:
+	var out: Array = []
+	for t in things():
+		if _state(t) != "open" or str(t["kind"]) not in ["todo", "reminder", "waiting"]:
+			continue
+		if People.names(str(t["text"]), name) or People.names(str(t.get("who", "")), name):
+			out.append(_row(t))
+	return out
+
+
+# the people, the soonest birthday first and those with none last, by name
+func _people() -> Array:
+	var rows := _piles("person").map(_person_row)
+	rows.sort_custom(
+		func(x: Dictionary, y: Dictionary) -> bool:
+			return (
+				[x["next_birthday"] == null, str(x["next_birthday"]), str(x["name"])]
+				< [y["next_birthday"] == null, str(y["next_birthday"]), str(y["name"])]
+			)
+	)
+	return rows
+
+
+func _door_row() -> Dictionary:
+	var door := _piles("door")
+	if door.is_empty():
+		return {"id": null, "notes": []}
+	return {"id": int(door[0]["id"]), "notes": _agenda_row(door[0])["notes"]}
+
+
 func agenda_add(body: Dictionary) -> Dictionary:
+	var kind: Variant = body.get("kind", "agenda")
+	if kind not in ["agenda", "person"]:
+		return _bad("kind is agenda or person")
 	var name := _agenda_name(body.get("name"))
 	if name == "":
 		return _bad("name is required")
-	var timing := _timing(body, {})
+	var timing := _person_fields(body) if kind == "person" else _timing(body, {})
 	if _err(timing):
 		return _bad(timing["error"])
-	if not _named(name).is_empty():
-		return _bad("there is already an agenda called %s" % name)
+	if not _named(name, kind).is_empty():
+		return _bad(
+			"there is already %s called %s" % ["a person" if kind == "person" else "an agenda", name]
+		)
 	var a := {"id": int(doc["next_id"]), "name": name, "told_for": null}
+	if kind == "person":
+		a["kind"] = "person"
 	doc["next_id"] = int(doc["next_id"]) + 1
 	a.merge(timing, true)
 	doc["agendas"].append(a)
 	save()
-	return _ok(_agenda_row(a))
+	return _ok(_person_row(a) if kind == "person" else _agenda_row(a))
+
+
+# a person's name and birthday
+func _person_edit(a: Dictionary, body: Dictionary) -> Dictionary:
+	var fields := _person_fields(body)
+	if _err(fields):
+		return _bad(fields["error"])
+	var name := str(a["name"])
+	if body.has("name"):
+		name = _agenda_name(body["name"])
+		if name == "":
+			return _bad("name is required")
+		var other := _named(name, "person")
+		if not other.is_empty() and int(other["id"]) != int(a["id"]):
+			return _bad("there is already a person called %s" % name)
+	a["name"] = name
+	a.merge(fields, true)
+	save()
+	return _ok(_person_row(a))
 
 
 func agenda_edit(id: int, body: Dictionary) -> Dictionary:
 	var a := _agenda(id)
 	if a.is_empty():
 		return _gone()
+	if _kind(a) == "door":
+		return _bad(E_DOOR)
+	if _kind(a) == "person":
+		return _person_edit(a, body)
 	var timing := _timing(body, a)
 	if _err(timing):
 		return _bad(timing["error"])
@@ -939,6 +1041,19 @@ func agenda_note(id: int, body: Dictionary) -> Dictionary:
 	return _ok(_plain_row(t))
 
 
+# the note put by the door, which the first one makes the pile for
+func door_add(body: Dictionary) -> Dictionary:
+	var text: Variant = _text(body.get("text"))
+	if _err(text):
+		return _bad(text["error"])
+	var door := _piles("door")
+	if door.is_empty():
+		door = [{"id": int(doc["next_id"]), "name": "by the door", "kind": "door", "told_for": null}]
+		doc["next_id"] = int(doc["next_id"]) + 1
+		doc["agendas"].append(door[0])
+	return agenda_note(int(door[0]["id"]), body)
+
+
 # the notes are kept, done, and the agenda stands empty
 func agenda_clear(id: int) -> Dictionary:
 	var a := _agenda(id)
@@ -948,13 +1063,15 @@ func agenda_clear(id: int) -> Dictionary:
 		t["state"] = "done"
 		t["done_at"] = iso(now())
 	save()
-	return _ok(_agenda_row(a))
+	return _ok(_person_row(a) if _kind(a) == "person" else _agenda_row(a))
 
 
 func agenda_drop(id: int) -> Dictionary:
 	var a := _agenda(id)
 	if a.is_empty():
 		return _gone()
+	if _kind(a) == "door":
+		return _bad(E_DOOR)
 	doc["things"] = things().filter(
 		func(t): return not (t.get("agenda_id") != null and int(t["agenda_id"]) == id)
 	)

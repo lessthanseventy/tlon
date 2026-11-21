@@ -6,9 +6,12 @@ extends RefCounted
 # done or deleted (told to the home's `acted`).
 signal form_wanted(mode: String, spec: Dictionary)
 signal post(path: String, body: Dictionary)
+# a write whose `ok` runs once it was kept
+signal post_kept(path: String, body: Dictionary, ok: Callable)
 signal meetings_wanted(key: String, from: String, to: String)
 
 const Card := preload("res://card.gd")
+const People := preload("res://people.gd")
 const Sure := preload("res://sure.gd")
 const Settings := preload("res://settings.gd")
 const TABS := {"notes": "Notes", "projects": "Projects", "waiting": "Waiting", "someday": "Someday"}
@@ -19,6 +22,9 @@ var someday: Array = []
 var projects: Array = []
 var note_rows: Array = []
 var agendas: Array = []
+# `GET /api/home`'s `people` and `door` ({id, notes}); an older server has neither
+var people: Array = []
+var door := {"id": null, "notes": []}
 var proposals: Array = []
 var mo := 0
 var day := 0
@@ -47,6 +53,8 @@ func set_data(d: Dictionary) -> void:
 	projects = d.get("projects", [])
 	note_rows = d.get("note_rows", [])
 	agendas = d.get("agendas", [])
+	people = d.get("people", []) if d.get("people") is Array else []
+	door = d["door"] if d.get("door") is Dictionary else {"id": null, "notes": []}
 	proposals = d.get("proposals", [])
 
 
@@ -131,6 +139,9 @@ func _day_blocks(d: Dictionary) -> Array:
 				"past": _ended(m),
 			}
 		)
+	var births := People.on_day(people, int(d["y"]), int(d["m"]), int(d["d"]))
+	for p in births:
+		blocks.append({"t": "text", "text": "%s's birthday" % p["name"]})
 	var entries: Array = []
 	for item in h._timed():
 		for when in Card.occurrences(h._due(item), h._every(item), at, at + 86400.0):
@@ -138,7 +149,7 @@ func _day_blocks(d: Dictionary) -> Array:
 	entries.sort_custom(func(a, b): return a[0] < b[0])
 	for e in entries:
 		blocks.append(_line(e[0], e[1]))
-	if entries.is_empty() and meets.is_empty():
+	if entries.is_empty() and meets.is_empty() and births.is_empty():
 		blocks.append({"t": "dim", "text": "nothing"})
 	return blocks
 
@@ -302,6 +313,7 @@ func calendar_blocks() -> Array:
 				tomorrow["d"] if tomorrow["y"] == s["y"] and tomorrow["m"] == s["m"] else 0,
 				"marks": marks,
 				"meet_marks": meet_marks,
+				"birthday_marks": People.marks(people, int(s["y"]), int(s["m"])),
 				"pick": true,
 				"sel": day,
 			}

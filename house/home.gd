@@ -39,6 +39,7 @@ const Fonts := preload("res://fonts.gd")
 const When := preload("res://when.gd")
 const Chores := preload("res://chores.gd")
 const PetThings := preload("res://pet_things.gd")
+const People := preload("res://people.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -73,6 +74,8 @@ const NAMES := {
 	"furn:piano": "the piano",
 	"globe": "the snow globe",
 	"mousehole": "a mouse hole",
+	"frame": "the people",
+	"door": "the door",
 }
 const NAME_STAYS := 2.0
 const FURN_KEYS := ["piano", "fireplace", "bookshelf"]
@@ -964,6 +967,9 @@ func items() -> Array:
 		{"key": 7.0, "pri": 1.3, "fn": _draw_chore_bag},
 		{"key": 5.0, "pri": 1.56, "fn": _draw_chore_pills},
 		{"key": _basket_key(), "pri": 1.0, "fn": _draw_chore_basket},
+		{"key": _frame_key(), "pri": 1.0, "fn": _draw_frame},
+		{"key": 7.0, "pri": 0.3, "fn": _draw_door},
+		{"key": 7.0, "pri": 0.2, "fn": _draw_tote},
 		{"key": 6.0, "pri": 1.6, "fn": _draw_jar},
 		{"key": 3.0, "pri": 0.6, "fn": _draw_bunting},
 	]
@@ -1928,6 +1934,39 @@ func _draw_chore_basket() -> void:
 		Chores.sparks(room, _p(c + 0.5, r + 0.5, 12.0), _k, lift)
 
 
+func _draw_frame() -> void:
+	var piece := layout.frame()
+	if piece.is_empty():
+		return
+	var c: int = piece["c"]
+	var r: int = piece["r"]
+	var pen := PetThings.Pen.new(room, _p(c, r), _k)
+	People.frame(pen, not People.soon(things.people, today()).is_empty())
+	_chore_box("frame", c + 0.15, r + 0.15, c + 0.85, r + 0.85, 32.0)
+
+
+# the front door is a click target; the tote stands by it while something is waiting there
+func _draw_door() -> void:
+	var p := _p(0, 7)
+	var west := p + Vector2(-16, 8) * _k
+	var up := Vector2(0, 44.0 * _k)
+	var poly := PackedVector2Array([p, west, west - up, p - up])
+	_register("door", poly, (p + west) / 2.0)
+	if _hover == "door" and not decorating:
+		var closed := poly.duplicate()
+		closed.append(poly[0])
+		room.draw_polyline(closed, Color("e8c77a", 0.85), 2.0)
+
+
+func _draw_tote() -> void:
+	if People.door_state(things.door) == "none":
+		return
+	var c := People.TOTE_CELL.x
+	var r := People.TOTE_CELL.y
+	People.tote(PetThings.Pen.new(room, _p(c, r), _k))
+	_chore_box("door", c + 0.1, r + 0.08, c + 0.48, r + 0.46, 26.0)
+
+
 func _draw_chore_bin() -> void:
 	var state_name := chore_state("bins")
 	if state_name == "":
@@ -2071,6 +2110,12 @@ func click(pos: Vector2) -> bool:
 			return true
 		"wardrobe":
 			viewed.emit("closet", null)
+			return true
+		"frame":
+			viewed.emit("people", null)
+			return true
+		"door":
+			viewed.emit("door", null)
 			return true
 		"pad":
 			viewed.emit("add", true)
@@ -2424,6 +2469,11 @@ func _opaque(hit: Dictionary, pos: Vector2) -> bool:
 	if p.x < 0 or p.y < 0 or p.x >= img.get_width() or p.y >= img.get_height():
 		return false
 	return img.get_pixelv(p).a > 0.1
+
+
+func _frame_key() -> float:
+	var piece := layout.frame()
+	return float(layout.draw_key(piece)) if not piece.is_empty() else 2.0
 
 
 func _basket_key() -> float:

@@ -2,7 +2,8 @@ extends RefCounted
 
 # Turns the blocks a thing's view is told to show into Controls on the paper sheet:
 # {"t": "title"|"text"|"dim", "text"}, {"t": "gap"}, {"t": "month", "year", "month", "today", "tomorrow",
-# "marks": {day: true}, "meet_marks": {day: true}, "pick": bool, "sel": day} (arrows and the name act "mprev" "mnext" "mtoday",
+# "marks": {day: true}, "meet_marks": {day: true}, "birthday_marks": {day: true}, "pick": bool,
+# "sel": day} (arrows and the name act "mprev" "mnext" "mtoday",
 # a day "day:N"), {"t": "buttons", "items": [{"label", "act", "on", "s"}]}, {"t": "row", "text",
 # "act", "dim", "line" (one clipped line), "sub" (small and dim at its end), "marks": [{"label", "act"}]}, {"t": "foot", "text", "act"}, {"t": "day", "name",
 # "kind", "temps", "wet"} (a forecast row with its icon). Every click calls `act.call(String)`.
@@ -275,6 +276,20 @@ class MonthGrid:
 				draw_circle(mid + Vector2(-spread, 11), 2.6, Color("c8483f"))
 			if meet:
 				draw_circle(mid + Vector2(spread, 11), 2.6, Color("3f6fb0"))
+			if (b.get("birthday_marks", {}) as Dictionary).has(d):
+				var at := cell + Vector2(CELL.x - 8.0, 6.0)
+				var tip := 3.6
+				draw_colored_polygon(
+					PackedVector2Array(
+						[
+							at + Vector2(0, -tip),
+							at + Vector2(tip, 0),
+							at + Vector2(0, tip),
+							at + Vector2(-tip, 0)
+						]
+					),
+					Color("d9648a")
+				)
 
 
 class DayRow:

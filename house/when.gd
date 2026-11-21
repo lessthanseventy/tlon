@@ -27,3 +27,15 @@ static func text(at: float, now: float, past: String = "since ") -> String:
 
 static func date(d: Dictionary) -> String:
 	return "%d %s" % [d["day"], MONTHS[d["month"] - 1]]
+
+
+# a birthday `days` from today, on local `date_iso` ("YYYY-MM-DD"): "today",
+# "tomorrow · Fri 21 Nov", "in 3 days · Mon 23 Nov"
+static func birthday(days: int, date_iso: String) -> String:
+	if days == 0:
+		return "today"
+	var d := Time.get_datetime_dict_from_unix_time(
+		int(Time.get_unix_time_from_datetime_string(date_iso + "T00:00:00"))
+	)
+	var day := "%s %s" % [DAYS[d["weekday"]], date(d)]
+	return "tomorrow · " + day if days == 1 else "in %d days · %s" % [days, day]

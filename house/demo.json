@@ -282,6 +282,31 @@
     },
     {"id": 73, "name": "offsite", "every": null, "next_at": null, "notes": []}
   ],
+  "people": [
+    {
+      "id": 81,
+      "name": "Sam",
+      "birthday_in_days": 3,
+      "notes": [
+        {"id": 811, "text": "a green kettle", "since": "2026-11-12T10:00:00Z"},
+        {"id": 812, "text": "said she wants a good scarf", "since": "2026-11-15T18:20:00Z"}
+      ]
+    },
+    {
+      "id": 82,
+      "name": "Jude",
+      "birthday_in_days": 41,
+      "notes": [{"id": 821, "text": "the lake book", "since": "2026-11-10T09:00:00Z"}]
+    },
+    {"id": 83, "name": "Robyn", "birthday": null, "notes": []}
+  ],
+  "door": {
+    "id": 91,
+    "notes": [
+      {"id": 911, "text": "umbrella", "since": "2026-11-19T08:00:00Z"},
+      {"id": 912, "text": "return the library books", "since": "2026-11-19T20:00:00Z"}
+    ]
+  },
   "waiting": [
     {
       "id": 41,

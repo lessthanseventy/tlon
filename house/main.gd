@@ -25,6 +25,7 @@ const ReaderClaude := preload("res://reader_claude.gd")
 const Telegram := preload("res://telegram.gd")
 const Wttr := preload("res://wttr.gd")
 const Chores := preload("res://chores.gd")
+const People := preload("res://people.gd")
 
 # false in a staged or scripted run: nothing is sent to Claude or anywhere else
 var talk_live := false
@@ -138,6 +139,9 @@ func _ready() -> void:
 
 	_room.home.things.form_wanted.connect(_open_form)
 	_room.home.things.post.connect(func(path: String, body: Dictionary) -> void: _write(path, body))
+	_room.home.things.post_kept.connect(
+		func(path: String, body: Dictionary, ok: Callable) -> void: _write(path, body, ok)
+	)
 	_room.home.things.meetings_wanted.connect(_fetch_meetings)
 	_room.home.settings.changed.connect(_on_setting)
 
@@ -150,6 +154,7 @@ func _ready() -> void:
 			_room.home.set_voices(demo.get("pets", {}))
 		demo["forecast"] = _dated(demo.get("forecast", []))
 		demo["agendas"] = _demo_agendas(demo.get("agendas", []))
+		demo["people"] = _demo_people(demo.get("people", []))
 		demo["open"] = _demo_due(demo.get("open", []))
 		demo["coming"] = _demo_due(demo.get("coming", []))
 		_demo_rows = _demo_meetings(demo.get("meetings", []))
@@ -444,6 +449,8 @@ static func _home_data(d: Dictionary) -> Dictionary:
 		"projects": d.get("projects", []),
 		"note_rows": d.get("note_rows", []),
 		"agendas": d.get("agendas", []),
+		"people": d.get("people", []),
+		"door": d.get("door", {"id": null, "notes": []}),
 		"proposals": d.get("proposals", []),
 		"forecast": d.get("forecast", []),
 		"meetings": d.get("meetings", []),
@@ -517,6 +524,8 @@ func _dated(rows: Array) -> Array:
 
 func _apply(data: Dictionary) -> void:
 	_data = _home_data(data)
+	if _demo:
+		_demo_todos(_data)
 	_room.home.set_data(_data)
 	if _forecast_arg != null:
 		_room.home.set_forecast(_forecast_arg)
@@ -662,6 +671,10 @@ func _on_viewed(kind: String, arg: Variant) -> void:
 			_open_chat()
 		"pet":
 			_sidebar.open_pet(str(arg))
+		"people":
+			_sidebar.open_people()
+		"door":
+			_sidebar.open_door()
 
 
 func _on_empty() -> void:
@@ -902,6 +915,8 @@ func _trouble(line: String) -> void:
 		_sidebar.chat_view.flash(line)
 	elif _room.home.card.is_open():
 		_room.home.things.flash = line
+	elif _sidebar.view in ["people", "door"]:
+		_sidebar.people_ui.said(line)
 	else:
 		_room.home.show_reply(line)
 
@@ -921,6 +936,9 @@ func _gone(id: int) -> void:
 	for key in ["open", "coming", "waiting", "someday", "projects"]:
 		_data[key] = _data[key].filter(func(t): return int(t["id"]) != id)
 	_data["note_rows"] = _data["note_rows"].filter(func(t): return int(t["id"]) != id)
+	for p in _data["people"]:
+		p["notes"] = p["notes"].filter(func(t): return int(t["id"]) != id)
+	_data["door"]["notes"] = _data["door"]["notes"].filter(func(t): return int(t["id"]) != id)
 	_apply(_data)
 
 
@@ -941,6 +959,8 @@ func _demo_write(path: String, body: Dictionary) -> void:
 		elif body["kind"] == "todo":
 			_data["open"] = _data["open"] + [row]
 		_apply(_data)
+	elif path == "/api/home/door/add":
+		_demo_door(body)
 	elif parts.size() == 5 and parts[4] == "drop":
 		_gone(int(parts[3]))
 	elif parts.size() == 6 and parts[3] == "proposals":
@@ -992,13 +1012,18 @@ func _demo_due(rows: Array) -> Array:
 
 func _demo_agenda(parts: PackedStringArray, body: Dictionary) -> void:
 	var agendas: Array = _data["agendas"]
+	var people: Array = _data["people"]
 	if parts.size() == 4:
 		_demo_ids += 1
-		agendas.append(
-			{"id": _demo_ids, "name": str(body["name"]), "every": null, "next_at": null, "notes": []}
-		)
+		if body.get("kind") == "person":
+			var birthday: Variant = body.get("birthday")
+			people.append(_demo_person(_demo_ids, str(body["name"]), birthday))
+		else:
+			agendas.append(
+				{"id": _demo_ids, "name": str(body["name"]), "every": null, "next_at": null, "notes": []}
+			)
 	else:
-		for a in agendas:
+		for a in agendas + people:
 			if int(a["id"]) != int(parts[4]):
 				continue
 			match parts[5]:
@@ -1008,10 +1033,63 @@ func _demo_agenda(parts: PackedStringArray, body: Dictionary) -> void:
 					a["notes"].append({"id": _demo_ids, "text": str(body["text"]), "since": since})
 				"clear":
 					a["notes"] = []
+				"edit":
+					if body.has("name"):
+						a["name"] = str(body["name"])
+					if body.has("birthday") and a.has("birthday"):
+						a.merge(_demo_birthday(body["birthday"]), true)
 				"drop":
 					agendas.erase(a)
+					people.erase(a)
 			break
 	_apply(_data)
+
+
+# a person made in the demo: the birthday as the server keeps it and the date it next falls
+func _demo_person(id: int, name: String, birthday: Variant) -> Dictionary:
+	var person := {"id": id, "name": name, "notes": [], "todos": []}
+	return person.merged(_demo_birthday(birthday))
+
+
+func _demo_birthday(birthday: Variant) -> Dictionary:
+	var next := People.next_birthday(birthday, _room.home.today())
+	return {"birthday": birthday, "next_birthday": next if next != "" else null}
+
+
+func _demo_door(body: Dictionary) -> void:
+	var door: Dictionary = _data["door"]
+	if door["id"] == null:
+		_demo_ids += 1
+		door["id"] = _demo_ids
+	_demo_ids += 1
+	var since := Time.get_datetime_string_from_system(true) + "Z"
+	door["notes"].append({"id": _demo_ids, "text": str(body["text"]), "since": since})
+	_apply(_data)
+
+
+# a staged person's `birthday_in_days` stands where its birthday would, so a demo never goes stale
+func _demo_people(rows: Array) -> Array:
+	var today: String = _room.home.today()
+	return rows.map(
+		func(row: Dictionary) -> Dictionary:
+			if not row.has("birthday_in_days"):
+				return _demo_birthday(row.get("birthday")).merged(row, true).merged({"todos": []})
+			var at := Time.get_unix_time_from_datetime_string(today + "T00:00:00")
+			var date := Time.get_date_string_from_unix_time(
+				int(at) + int(row["birthday_in_days"]) * 86400
+			)
+			var out := row.duplicate()
+			out.erase("birthday_in_days")
+			return out.merged({"birthday": date.substr(5), "next_birthday": date, "todos": []})
+	)
+
+
+# the demo's own to-dos that name a person, as the server finds them
+func _demo_todos(data: Dictionary) -> void:
+	for p in data["people"]:
+		p["todos"] = (data["open"] + data["coming"]).filter(
+			func(t: Dictionary) -> bool: return People.names(str(t["text"]), str(p["name"]))
+		)
 
 
 func _post(path: String, payload: Dictionary, done: Callable, timeout: float = 6.0) -> void:
