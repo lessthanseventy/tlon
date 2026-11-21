@@ -23,7 +23,11 @@ defmodule Server.Home.MoneyTest do
     System.put_env("PLAID_CLIENT_ID", "cid")
     System.put_env("PLAID_SECRET", "sec")
     System.put_env("PLAID_ACCESS_TOKEN", "tok")
-    System.put_env("XDG_RUNTIME_DIR", System.tmp_dir!() <> "/no-secrets-#{System.pid()}-#{System.unique_integer([:positive])}")
+
+    System.put_env(
+      "XDG_RUNTIME_DIR",
+      System.tmp_dir!() <> "/no-secrets-#{System.pid()}-#{System.unique_integer([:positive])}"
+    )
 
     on_exit(fn ->
       for {name, value} <- previous do
@@ -300,6 +304,43 @@ defmodule Server.Home.MoneyTest do
 
       assert %{"text" => ^text, "facts" => [%{"verdict" => "short", "shortfall_text" => _, "short_on" => _}]} =
                JSON.decode!(json)
+    end
+
+    test "a date past the horizon is code's sentence first, with no judge call" do
+      store()
+      far = Date.add(@today, 300)
+      said = "I can only look 180 days ahead, so I can't say for #{Calendar.strftime(far, "%a %-d %b")}."
+
+      purchase = %{"ask" => "afford", "amount_cents" => 40_000, "on" => Date.to_iso8601(far)}
+      {answer, [_, phrase_prompt]} = ask("can I buy it then?", [plan([purchase]), {:ok, "Nothing more to add."}])
+      assert answer.reply == said <> " Nothing more to add."
+      assert phrase_prompt =~ ~s("error":"beyond_horizon")
+      assert answer.figures == nil
+
+      one_off = %{
+        "ask" => "what_if",
+        "until" => Date.to_iso8601(far),
+        "changes" => [%{"kind" => "one_off", "amount_cents" => 5_000, "on" => Date.to_iso8601(far), "name" => "Trip"}]
+      }
+
+      {answer, [_, _]} = ask("what if I take a trip then?", [plan([one_off]), {:error, :down}])
+      assert answer.reply == said
+    end
+
+    test "a clamped forecast or what_if says the horizon was cut to 180 days, in the results and the rendering" do
+      store()
+      far = Date.to_iso8601(Date.add(@today, 300))
+
+      forecast = %{"ask" => "forecast", "until" => far}
+      {answer, [_, phrase_prompt]} = ask("how will next year look?", [plan([forecast]), {:error, :down}])
+      assert phrase_prompt =~ ~s("clamped":true)
+      assert phrase_prompt =~ ~s("note":"The horizon was cut to 180 days)
+      assert answer.reply =~ "The horizon was cut to 180 days"
+
+      what_if = %{"ask" => "what_if", "until" => far, "changes" => [%{"kind" => "drop", "name" => "rent"}]}
+      {answer, [_, phrase_prompt]} = ask("what if I cancel rent?", [plan([what_if]), {:error, :down}])
+      assert phrase_prompt =~ ~s("note":"The horizon was cut to 180 days)
+      assert answer.reply =~ "The horizon was cut to 180 days"
     end
 
     test "the judge is called only for a purchase or a name not found" do

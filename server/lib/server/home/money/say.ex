@@ -28,20 +28,26 @@ defmodule Server.Home.Money.Say do
 
   defp result(_ask, {:error, :no_data}), do: %{error: "no_data"}
   defp result(_ask, {:error, :bad_range}), do: %{error: "bad_range"}
+  defp result(_ask, {:error, :beyond_horizon}), do: %{error: "beyond_horizon"}
 
   defp result(_ask, {:error, {:no_series, name, suggestions}}),
     do: %{error: "no_series", name: name, suggestions: suggestions}
 
-  defp result("forecast", {:ok, forecast}), do: trim(forecast)
+  defp result("forecast", {:ok, forecast}), do: forecast |> trim() |> horizon_note()
 
   defp result("afford", {:ok, afford}), do: %{afford | with: trim(afford.with), without: slim(afford.without)}
 
   defp result("what_if", {:ok, what_if}),
-    do: %{what_if | baseline: slim(what_if.baseline), changed: trim(what_if.changed)}
+    do: horizon_note(%{what_if | baseline: slim(what_if.baseline), changed: trim(what_if.changed)})
 
   defp result("history", {:ok, history}), do: %{history | months: Enum.take(history.months, -@months)}
   defp result("subscriptions", {:ok, subscriptions}), do: Enum.take(subscriptions, @rows)
   defp result(_ask, {:ok, other}), do: other
+
+  defp horizon_note(%{clamped: true} = result),
+    do: Map.put(result, :note, "The horizon was cut to 180 days: I can only look 180 days ahead.")
+
+  defp horizon_note(result), do: result
 
   defp slim(forecast), do: forecast |> Map.drop([:days, :events]) |> Map.put(:end, List.last(forecast.days))
 
@@ -163,6 +169,11 @@ defmodule Server.Home.Money.Say do
     end
   end
 
+  defp lead(%{"ask" => ask, "result" => %{"error" => "beyond_horizon"}}) do
+    date = ask["on"] || ask["changes"] |> Enum.map(&(&1["on"] || &1["from"])) |> Enum.reject(&is_nil/1) |> Enum.max()
+    "I can only look 180 days ahead, so I can't say for #{day(date)}."
+  end
+
   defp lead(_entry), do: nil
 
   @affirm ~r/\b(?:can afford|afford it|you can|should be fine|go for it|plenty|comfortabl[ey]|no issue|is covered|are covered|it covers|you're fine|you are fine|no problem|go ahead)\b/i
@@ -196,7 +207,7 @@ defmodule Server.Home.Money.Say do
   """
   @spec facts([map()]) :: [map()]
   def facts(presented) do
-    for entry <- presented, lead(entry) != nil do
+    for entry <- presented, lead(entry) != nil, not beyond_horizon?(entry) do
       case entry do
         %{"ask" => %{"ask" => "afford"} = ask, "result" => r} ->
           %{
@@ -217,6 +228,7 @@ defmodule Server.Home.Money.Say do
   defp entry(%{"result" => %{"error" => "no_data"}}), do: "I have no bank data to work from yet."
   defp entry(%{"result" => %{"error" => "bad_range"}}), do: "That date range runs backwards, so I can't look it up."
   defp entry(%{"result" => %{"error" => "no_series"}} = entry), do: lead(entry)
+  defp entry(%{"result" => %{"error" => "beyond_horizon"}} = entry), do: lead(entry)
 
   defp entry(%{"ask" => %{"ask" => "summary"}, "result" => r}) do
     [
@@ -253,7 +265,7 @@ defmodule Server.Home.Money.Say do
     Enum.join(
       [
         "As things are, your balance on #{day(base["date"])} is expected to be #{base["expected_cents_text"]} (lowest #{r["baseline"]["lowest"]["balance_cents_text"]}). With the change it is #{changed["expected_cents_text"]} (lowest #{r["changed"]["lowest"]["balance_cents_text"]}), a difference of #{r["difference"]["end_cents_text"]}."
-        | basis(r["changed"])
+        | List.wrap(r["note"]) ++ basis(r["changed"])
       ],
       " "
     )
@@ -269,9 +281,12 @@ defmodule Server.Home.Money.Say do
       if(largest == "", do: "", else: " Largest: #{largest}.")
   end
 
+  defp beyond_horizon?(%{"result" => %{"error" => "beyond_horizon"}}), do: true
+  defp beyond_horizon?(_entry), do: false
+
   defp outlook(r) do
     "Your checking balance is #{r["start_cents_text"]} today. By #{day(r["until"])} it is expected to be #{r["end"]["expected_cents_text"]}, and the lowest it is expected to get is #{r["lowest"]["balance_cents_text"]} on #{day(r["lowest"]["date"])}." <>
-      if(r["clamped"], do: " That is as far ahead as I can look.", else: "")
+      if(r["note"], do: " #{r["note"]}", else: "")
   end
 
   defp basis(r) do
