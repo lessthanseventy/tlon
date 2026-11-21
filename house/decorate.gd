@@ -7,6 +7,7 @@ const Pets := preload("res://pets.gd")
 const PetThings := preload("res://pet_things.gd")
 const Chores := preload("res://chores.gd")
 const People := preload("res://people.gd")
+const Money := preload("res://money.gd")
 const BG := Color("f3ead6")
 const INK := Color("2a2530")
 const QUIET := Color("6f6577")
@@ -145,6 +146,8 @@ func _sections(y: float) -> float:
 	for e in layout.catalogue:
 		if e["tab"] != tab or (tab == "pets" and not _listed(e)):
 			continue
+		if e["key"] == Money.PIECE and home.things.money == null:
+			continue
 		if e["group"] != group:
 			if col == 1:
 				y += CELL_H
@@ -222,6 +225,9 @@ func _entry(e: Dictionary, r: Rect2) -> void:
 	elif e["key"] == People.PIECE:
 		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 18.0)
 		People.frame(PetThings.Pen.new(self, origin, 0.9), false)
+	elif e["key"] == Money.PIECE:
+		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 14.0)
+		Money.piggy(PetThings.Pen.new(self, origin, 0.9), "none")
 	var tex: Texture2D = room.icon(id)
 	if tex != null:
 		var t := tex.get_size()
@@ -433,7 +439,7 @@ func _piece_at(pos: Vector2) -> Variant:
 
 
 func _opaque(p: Dictionary, pos: Vector2) -> bool:
-	if PetThings.is_pet(p) or Chores.is_basket(p) or People.is_frame(p):
+	if PetThings.is_pet(p) or Chores.is_basket(p) or People.is_frame(p) or Money.is_piggy(p):
 		return _over_pet(p, pos)
 	var s: Dictionary = room._sprite(room._furn_id([home.layout.sprite_id(p)]))
 	if s.is_empty():
@@ -486,6 +492,10 @@ func draw_ghost() -> void:
 	if People.is_frame(p):
 		var pen := PetThings.Pen.new(room, room._p(room._origin, p["c"], p["r"]), room._k, false, tint)
 		People.frame(pen, false)
+		return
+	if Money.is_piggy(p):
+		var pen := PetThings.Pen.new(room, room._p(room._origin, p["c"], p["r"]), room._k, false, tint)
+		Money.piggy(pen, "none")
 		return
 	var s: Dictionary = room._sprite(room._furn_id([layout.sprite_id(p)]))
 	if home.petlife.hay(p):

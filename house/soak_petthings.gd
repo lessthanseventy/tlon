@@ -705,7 +705,7 @@ func _old_room() -> void:
 	var room := _home(87, "cat_grey", Pets.NONE)
 	var path := _ten_file(Vector2i(6, 9))
 	var l = s._layout_of(room._index, path, false)
-	var got: Array = l.pieces.filter(func(p): return not PetThings.is_pet(p) and not p["p"] in ["laundry_basket", "photo_frame"])
+	var got: Array = l.pieces.filter(func(p): return not PetThings.is_pet(p) and not p["p"] in ["laundry_basket", "photo_frame", "piggy_bank"])
 	got = got.map(func(p): return [p["p"], p["f"], p["c"], p["r"]])
 	s._check(got == OLD_ROWS, "a 10x10 layout loads with every piece at its cell (%s)" % [got])
 	var things: Array = l.pet_pieces().map(func(p): return [p["p"], _cell(p)])

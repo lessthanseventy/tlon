@@ -26,6 +26,8 @@ const Telegram := preload("res://telegram.gd")
 const Wttr := preload("res://wttr.gd")
 const Chores := preload("res://chores.gd")
 const People := preload("res://people.gd")
+const Money := preload("res://money.gd")
+const SHORT_CENTS := 60000
 
 # false in a staged or scripted run: nothing is sent to Claude or anywhere else
 var talk_live := false
@@ -54,6 +56,7 @@ var _poll_gen := 0
 var _loaded_gen := -1
 var _demo_ids := 1000
 var _demo_rows: Array = []
+var _money_spec := {}
 var _decorate: Control
 var _widget := false
 var _drag := false
@@ -155,6 +158,11 @@ func _ready() -> void:
 		demo["forecast"] = _dated(demo.get("forecast", []))
 		demo["agendas"] = _demo_agendas(demo.get("agendas", []))
 		demo["people"] = _demo_people(demo.get("people", []))
+		_money_spec = demo.get("money_forecast", {})
+		if demo.get("money") is Dictionary:
+			_stage_money(demo, args[args.find("--money") + 1] if "--money" in args else "")
+			if demo.has("money"):
+				demo["money"] = Money.staged_summary(demo["money"], _room.home.today())
 		demo["open"] = _demo_due(demo.get("open", []))
 		demo["coming"] = _demo_due(demo.get("coming", []))
 		_demo_rows = _demo_meetings(demo.get("meetings", []))
@@ -451,6 +459,7 @@ static func _home_data(d: Dictionary) -> Dictionary:
 		"agendas": d.get("agendas", []),
 		"people": d.get("people", []),
 		"door": d.get("door", {"id": null, "notes": []}),
+		"money": d.get("money"),
 		"proposals": d.get("proposals", []),
 		"forecast": d.get("forecast", []),
 		"meetings": d.get("meetings", []),
@@ -1065,6 +1074,18 @@ func _demo_door(body: Dictionary) -> void:
 	var since := Time.get_datetime_string_from_system(true) + "Z"
 	door["notes"].append({"id": _demo_ids, "text": str(body["text"]), "since": since})
 	_apply(_data)
+
+
+# `--money quiet|short|none`: nothing due soon, a balance that will not cover it, no bank at all
+func _stage_money(demo: Dictionary, mode: String) -> void:
+	match mode:
+		"none":
+			demo.erase("money")
+		"quiet":
+			demo["money"]["due_this_week"] = []
+		"short":
+			demo["money"]["available"] = SHORT_CENTS
+			_money_spec["start_cents"] = SHORT_CENTS
 
 
 # a staged person's `birthday_in_days` stands where its birthday would, so a demo never goes stale

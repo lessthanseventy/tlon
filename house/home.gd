@@ -40,6 +40,7 @@ const When := preload("res://when.gd")
 const Chores := preload("res://chores.gd")
 const PetThings := preload("res://pet_things.gd")
 const People := preload("res://people.gd")
+const Money := preload("res://money.gd")
 
 const LAYOUT_STORE := "user://house_layout.json"
 const WALL_H := 48
@@ -75,6 +76,7 @@ const NAMES := {
 	"globe": "the snow globe",
 	"mousehole": "a mouse hole",
 	"frame": "the people",
+	"piggy": "the piggy bank",
 	"door": "the door",
 }
 const NAME_STAYS := 2.0
@@ -968,6 +970,7 @@ func items() -> Array:
 		{"key": 5.0, "pri": 1.56, "fn": _draw_chore_pills},
 		{"key": _basket_key(), "pri": 1.0, "fn": _draw_chore_basket},
 		{"key": _frame_key(), "pri": 1.0, "fn": _draw_frame},
+		{"key": _piggy_key(), "pri": 1.0, "fn": _draw_piggy},
 		{"key": 7.0, "pri": 0.3, "fn": _draw_door},
 		{"key": 7.0, "pri": 0.2, "fn": _draw_tote},
 		{"key": 6.0, "pri": 1.6, "fn": _draw_jar},
@@ -1943,6 +1946,16 @@ func frame_marked() -> bool:
 	return not People.soon(things.people, today()).is_empty()
 
 
+func _draw_piggy() -> void:
+	var piece := layout.piggy()
+	if piece.is_empty() or things.money == null:
+		return
+	var c: int = piece["c"]
+	var r: int = piece["r"]
+	Money.piggy(PetThings.Pen.new(room, _p(c, r), _k), Money.envelope(things.money, today()))
+	_hover_outline("piggy", _chore_box("piggy", c + 0.1, r + 0.1, c + 0.9, r + 0.9, Money.HEIGHT))
+
+
 func _draw_frame() -> void:
 	var piece := layout.frame()
 	if piece.is_empty():
@@ -2492,6 +2505,11 @@ func _opaque(hit: Dictionary, pos: Vector2) -> bool:
 	if p.x < 0 or p.y < 0 or p.x >= img.get_width() or p.y >= img.get_height():
 		return false
 	return img.get_pixelv(p).a > 0.1
+
+
+func _piggy_key() -> float:
+	var piece := layout.piggy()
+	return float(layout.draw_key(piece)) if not piece.is_empty() else 2.0
 
 
 func _frame_key() -> float:

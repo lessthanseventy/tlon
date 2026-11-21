@@ -25,6 +25,8 @@ var agendas: Array = []
 # `GET /api/home`'s `people` and `door` ({id, notes}); an older server has neither
 var people: Array = []
 var door := {"id": null, "notes": []}
+# `GET /api/home`'s `money`: null when the bank is off, over the local list and from an older server
+var money: Variant = null
 var proposals: Array = []
 var mo := 0
 var day := 0
@@ -55,6 +57,7 @@ func set_data(d: Dictionary) -> void:
 	agendas = d.get("agendas", [])
 	people = d.get("people", []) if d.get("people") is Array else []
 	door = d["door"] if d.get("door") is Dictionary else {"id": null, "notes": []}
+	money = d["money"] if d.get("money") is Dictionary else null
 	proposals = d.get("proposals", [])
 
 

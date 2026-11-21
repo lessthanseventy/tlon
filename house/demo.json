@@ -307,6 +307,44 @@
       {"id": 912, "text": "return the library books", "since": "2026-11-19T20:00:00Z"}
     ]
   },
+  "money": {
+    "balance": 187500,
+    "available": 181500,
+    "as_of": "2026-11-20T12:00:00Z",
+    "due_this_week": [
+      {"name": "Streaming", "amount": 1599, "in_days": 2},
+      {"name": "Rent", "amount": 120000, "in_days": 4}
+    ],
+    "next_deposit": {"name": "Paycheck", "amount": 240000, "in_days": 6},
+    "accounts": [
+      {"id": "a1", "name": "Everyday", "type": "depository", "subtype": "checking", "balance": 187500, "available": 181500, "spendable": true},
+      {"id": "a2", "name": "Rainy day", "type": "depository", "subtype": "savings", "balance": 410000, "available": 410000, "spendable": false}
+    ]
+  },
+  "money_forecast": {
+    "start_cents": 181500,
+    "everyday_cents": 4200,
+    "other_available_cents": 410000,
+    "other_accounts": ["Rainy day"],
+    "events": [
+      {"in_days": 2, "kind": "charge", "name": "Streaming", "amount_cents": -1599},
+      {"in_days": 4, "kind": "charge", "name": "Rent", "amount_cents": -120000},
+      {"in_days": 6, "kind": "deposit", "name": "Paycheck", "amount_cents": 240000, "rhythm": "fortnightly"},
+      {"in_days": 9, "kind": "charge", "name": "Phone", "amount_cents": -6500},
+      {"in_days": 12, "kind": "charge", "name": "Gym", "amount_cents": -3000},
+      {"in_days": 20, "kind": "deposit", "name": "Paycheck", "amount_cents": 240000, "rhythm": "fortnightly"},
+      {"in_days": 32, "kind": "charge", "name": "Streaming", "amount_cents": -1599},
+      {"in_days": 34, "kind": "charge", "name": "Rent", "amount_cents": -120000},
+      {"in_days": 34, "kind": "deposit", "name": "Paycheck", "amount_cents": 240000, "rhythm": "fortnightly"}
+    ],
+    "subscriptions": [
+      {"name": "Streaming", "amount_cents": -1599, "rhythm": "monthly", "in_days": 2, "was_cents": -1299},
+      {"name": "Rent", "amount_cents": -120000, "rhythm": "monthly", "in_days": 4},
+      {"name": "Phone", "amount_cents": -6500, "rhythm": "monthly", "in_days": 9},
+      {"name": "Gym", "amount_cents": -3000, "rhythm": "monthly", "in_days": 12},
+      {"name": "Cloud storage", "amount_cents": -2999, "rhythm": "yearly", "in_days": 160}
+    ]
+  },
   "waiting": [
     {
       "id": 41,

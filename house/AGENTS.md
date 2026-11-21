@@ -214,6 +214,19 @@ runs on the local list.
   (`POST /api/home/door/add {text}`) and each note with a tick that drops it (`POST /api/home/:id/drop`). The pile is
   never edited or dropped as a whole. Over the local list it is an agenda with `kind` "door", in neither the shelf nor
   the agendas of the status.
+- **Money** (`money.gd` the rules and the pig, `logic_money.gd` the checks): `money` of `GET /api/home` is `{balance,
+  available, as_of, due_this_week: [{name, amount, on}], next_deposit: {name, amount, on} | null, accounts}`, amounts
+  cents, null when the bank is off; `things.money` holds it, null over the local list and from an older server. The piggy
+  bank is the plain floor piece `piggy_bank` (a pig in profile drawn in code at its cell's depth, default cell 9,5 on open
+  floor: clear of row 6, of (1,7) and (2,7), of every pet spot and of the frame; in decorate's home tab, movable like the
+  basket, offered once to a saved layout through `Layout.NEWER`). It is drawn, hit and listed in decorate **only while
+  `things.money` is not null**; the piece itself always stands in the layout, so over the local list it is an unseen
+  one-cell block (the pets' things are put out around it either way). Quiet most days; with a recurring charge due
+  within `Money.SOON` (5) days an envelope leans against it (`Money.envelope`: "none", "due", and "short", amber, when
+  `available` (else `balance`) is less than the sum of those charges). No number is ever drawn in the room. Hover says
+  "the piggy bank" and outlines it in gold (`piggy` hit). `--demo` has money (`demo.json` `money`, `in_days` for dates)
+  and its forecast (`money_forecast`, built by `Money.staged_forecast`); `--money quiet|short|none` stages the room's
+  three states.
 - **The room** is 11x11 cells (`Pets.COLS`/`ROWS`, which the home, the room and the walkers all follow; the back walls are column 0 and row 0, so a bigger room grows toward the front and a saved layout loads unchanged) and, in the 1100x700 window beside the sidebar, drawn with the 2x art (`fit_scale`; the 3x art needs a 1072 px area, which a 1450x980 window has). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
   (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
   board, calendar, jar, none of them movable) and the plain ones (the rest of

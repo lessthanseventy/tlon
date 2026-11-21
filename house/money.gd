@@ -10,7 +10,8 @@ const When := preload("res://when.gd")
 
 # the placed piece the piggy bank is, in the layout
 const PIECE := "piggy_bank"
-const HEIGHT := 22.0
+const HEIGHT := 20.0
+const SCALE := 0.8
 const SOON := 5
 const STRIP_MIN := 7
 const STRIP_MAX := 14
@@ -356,9 +357,9 @@ static func _pts(s: PetThings.Pen, a: Vector2, pts: Array) -> Array:
 # a pig in profile facing left, a coin standing in its slot; `envelope` ("none", "due" or "short")
 # leans an envelope against its side, paper while the balance holds the charge and amber when it
 # will not
-static func piggy(s: PetThings.Pen, envelope: String) -> void:
-	var a := s.p(0.5, 0.5, 0.0)
-	s.diamond(0.1, 0.1, 0.9, 0.9, 0.0, Color(0, 0, 0, 0.14))
+static func piggy(pen: PetThings.Pen, envelope: String) -> void:
+	var a := pen.p(0.5, 0.5, 0.0)
+	var s := PetThings.Pen.new(pen.c, pen.o, pen.k * SCALE, pen.flip, pen.tint)
 	_ellipse(s, a, 1.0, 0.0, 16.0, 4.0, Color(0, 0, 0, 0.16))
 	for x in [-5.0, 3.0]:
 		_rect(s, a, x - 1.0, -8.0, 6.0, 9.0, PLUM)
