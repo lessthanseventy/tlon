@@ -4,7 +4,9 @@ defmodule Server.Home.Money.Say do
   plain JSON data: every `*_cents` key gets a `*_cents_text` beside it in dollars as `Server.Home.Bank.money/1`
   says them, so the model copies amounts and never converts. `render/1` is the deterministic
   wording of the same data, used when the model's phrasing fails the check or the model is down.
-  `check/2` finds the money amounts in a model's reply and says which are in no result.
+  `check/2` finds the money amounts in a model's reply and says which are in no result; it looks at
+  dollar amounts alone, so dates, counts, percentages and numbers in words are not checked.
+  `leads/1` are the sentences code writes itself (a purchase's verdict, a series not found).
   """
 
   alias Server.Home.Bank
@@ -128,14 +130,59 @@ defmodule Server.Home.Money.Say do
   @spec render([map()]) :: String.t()
   def render(presented), do: Enum.map_join(presented, "\n\n", &entry/1)
 
-  defp entry(%{"result" => %{"error" => "no_data"}}), do: "I have no bank data to work from yet."
+  @doc """
+  The sentences code writes from the results, which the model's phrasing only follows: the verdict
+  of a purchase (with its date and amount when it is tight or short) and a series that was not
+  found. The model never says either.
+  """
+  @spec leads([map()]) :: [String.t()]
+  def leads(presented), do: for(entry <- presented, lead = lead(entry), do: lead)
 
-  defp entry(%{"result" => %{"error" => "no_series", "name" => name, "suggestions" => suggestions}}) do
+  defp lead(%{"ask" => %{"ask" => "afford"} = ask, "result" => %{"verdict" => verdict} = r}) do
+    on = if ask["on"], do: day(ask["on"]), else: "today"
+    low = r["with"]["lowest"]
+    purchase = "A purchase of #{ask["amount_cents_text"]} on #{on}"
+
+    case verdict do
+      "covers" ->
+        "#{purchase} is covered: your lowest expected balance would be #{low["balance_cents_text"]} on #{day(low["date"])}."
+
+      "tight" ->
+        "#{purchase} is tight: your lowest expected balance would be #{low["balance_cents_text"]} on #{day(low["date"])}, under the #{r["cushion_cents_text"]} cushion."
+
+      "short" ->
+        "#{purchase} would leave you short by #{r["shortfall_cents_text"]} on #{day(r["short_on"])}."
+    end
+  end
+
+  defp lead(%{"result" => %{"error" => "no_series", "name" => name, "suggestions" => suggestions}}) do
     case suggestions do
       [] -> ~s(I don't see a recurring charge called "#{name}".)
       names -> ~s(I don't see a recurring charge called "#{name}". Did you mean #{Enum.join(names, " or ")}?)
     end
   end
+
+  defp lead(_entry), do: nil
+
+  @affirm ~r/can afford|can comfortably|is covered|are covered|it covers|you're fine|you are fine|no problem|go ahead/i
+  @deny ~r/can't afford|cannot afford|can not afford|won't cover|not covered|not enough|short by|you're short|you are short/i
+
+  @doc """
+  Whether `text` says the opposite of a purchase's verdict in `presented`, by a narrow word set:
+  affirmations against `short`, denials against `covers` and `tight`. A sentence the set does not
+  hold passes.
+  """
+  @spec contradicts?(String.t(), [map()]) :: boolean()
+  def contradicts?(text, presented) do
+    Enum.any?(presented, fn
+      %{"ask" => %{"ask" => "afford"}, "result" => %{"verdict" => "short"}} -> Regex.match?(@affirm, text)
+      %{"ask" => %{"ask" => "afford"}, "result" => %{"verdict" => _covers_or_tight}} -> Regex.match?(@deny, text)
+      _other -> false
+    end)
+  end
+
+  defp entry(%{"result" => %{"error" => "no_data"}}), do: "I have no bank data to work from yet."
+  defp entry(%{"result" => %{"error" => "no_series"}} = entry), do: lead(entry)
 
   defp entry(%{"ask" => %{"ask" => "summary"}, "result" => r}) do
     [
@@ -157,28 +204,12 @@ defmodule Server.Home.Money.Say do
 
   defp entry(%{"ask" => %{"ask" => "forecast"}, "result" => r}), do: Enum.join([outlook(r) | basis(r)], " ")
 
-  defp entry(%{"ask" => %{"ask" => "afford"} = ask, "result" => r}) do
-    on = if ask["on"], do: day(ask["on"]), else: "today"
-    low = r["with"]["lowest"]
-    purchase = "A purchase of #{ask["amount_cents_text"]} on #{on}"
-
-    verdict =
-      case r["verdict"] do
-        "covers" ->
-          "#{purchase} is covered: your lowest expected balance would be #{low["balance_cents_text"]} on #{day(low["date"])}."
-
-        "tight" ->
-          "#{purchase} is tight: your lowest expected balance would be #{low["balance_cents_text"]} on #{day(low["date"])}, under the #{r["cushion_cents_text"]} cushion."
-
-        "short" ->
-          "#{purchase} would leave you short by #{r["shortfall_cents_text"]} on #{day(r["short_on"])}."
-      end
-
+  defp entry(%{"ask" => %{"ask" => "afford"}, "result" => r} = entry) do
     worst =
       if r["worst_case"] != r["verdict"],
         do: "If everyday spending runs high it would be #{r["worst_case"]}."
 
-    [verdict, worst | basis(r["with"])] |> Enum.reject(&is_nil/1) |> Enum.join(" ")
+    [lead(entry), worst | basis(r["with"])] |> Enum.reject(&is_nil/1) |> Enum.join(" ")
   end
 
   defp entry(%{"ask" => %{"ask" => "what_if"}, "result" => r}) do

@@ -7,6 +7,7 @@ defmodule Server.Home.Money.Thread do
 
   alias Server.Home.Keep
 
+  @prefix "home_money:"
   @turns 10
   @ttl 7_200
   @id ~r/\A[A-Za-z0-9_-]{1,40}\z/
@@ -34,15 +35,19 @@ defmodule Server.Home.Money.Thread do
     end
   end
 
-  @doc "Keep `turn` (stamped with `now`) after the turns already there, the newest #{10}."
+  @doc """
+  Keep `turn` (stamped with `now`) after the turns already there, the newest #{10}; the threads
+  whose newest turn is older than two hours are deleted.
+  """
   @spec push(String.t(), %{q: String.t(), plan: term(), reply: String.t()}, DateTime.t()) :: :ok
   def push(thread, %{q: q, plan: plan, reply: reply}, now) do
     turn = %{"q" => q, "plan" => plan, "reply" => reply, "at" => DateTime.to_unix(now)}
     turns = Enum.take(load(thread, now) ++ [turn], -@turns)
+    Keep.expire(@prefix, DateTime.to_unix(now) - @ttl)
     Keep.put(key(thread), JSON.encode!(turns))
   end
 
-  defp key(thread), do: "home_money:" <> thread
+  defp key(thread), do: @prefix <> thread
 
   defp fresh?(%{"at" => at}, now) when is_integer(at), do: DateTime.to_unix(now) - at <= @ttl
   defp fresh?(_other, _now), do: false

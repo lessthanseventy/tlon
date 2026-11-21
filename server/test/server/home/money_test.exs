@@ -79,6 +79,8 @@ defmodule Server.Home.MoneyTest do
   defp plan(asks), do: {:ok, JSON.encode!(%{"asks" => asks})}
   defp afford(cents), do: %{"ask" => "afford", "amount_cents" => cents, "on" => nil}
 
+  defp lowest_day(engine), do: Calendar.strftime(engine.with.lowest.date, "%a %-d %b")
+
   defp ask(text, replies, opts \\ []) do
     {model, seen} = stub(replies)
     {:ok, answer} = Money.ask(text, [now: @now, model: model] ++ opts)
@@ -192,7 +194,9 @@ defmodule Server.Home.MoneyTest do
       {answer, [plan_prompt, phrase_prompt]} =
         ask("can I afford a $400 TV?", [plan([afford(40_000)]), {:ok, phrase}])
 
-      assert answer.reply == phrase
+      assert answer.reply ==
+               "A purchase of $400 on today is covered: your lowest expected balance would be #{low} on #{lowest_day(engine)}. #{phrase}"
+
       assert answer.figures == engine
       assert is_binary(answer.thread)
       assert plan_prompt =~ "QUESTION: can I afford a $400 TV?"
@@ -220,6 +224,46 @@ defmodule Server.Home.MoneyTest do
       assert answer.reply =~ "A purchase of $400 on today"
       assert answer.reply =~ Bank.money(engine.with.lowest.balance_cents)
       assert answer.figures == engine
+    end
+
+    test "a purchase's verdict is written by code, whatever the model writes" do
+      store()
+      {:ok, base} = Bank.afford(1, nil, today: @today)
+      tight = base.without.lowest.balance_cents - div(base.cushion_cents, 2)
+
+      for {cents, verdict, lead} <- [
+            {40_000, :covers, "is covered: your lowest expected balance would be"},
+            {tight, :tight, "is tight: your lowest expected balance would be"},
+            {50_000_000, :short, "would leave you short by"}
+          ] do
+        {:ok, engine} = Bank.afford(cents, nil, today: @today)
+        assert engine.verdict == verdict
+
+        {answer, [_, phrase_prompt]} =
+          ask("can I afford it?", [plan([afford(cents)]), {:ok, "It rests on your history."}])
+
+        assert answer.reply =~ ~r/\AA purchase of \$[\d,.]+ on today #{Regex.escape(lead)}/
+        assert String.ends_with?(answer.reply, " It rests on your history.")
+        assert phrase_prompt =~ "WRITTEN: [\"A purchase of"
+      end
+    end
+
+    test "a phrasing that says the opposite of the verdict is replaced by the plain rendering" do
+      store()
+      {answer, _} = ask("can I afford it?", [plan([afford(50_000_000)]), {:ok, "Yes, you can afford it, no problem."}])
+      refute answer.reply =~ "can afford"
+      assert answer.reply =~ "would leave you short by"
+
+      {answer, _} = ask("can I afford it?", [plan([afford(40_000)]), {:ok, "No, you can't afford it."}])
+      refute answer.reply =~ "can't afford"
+      assert answer.reply =~ "is covered"
+    end
+
+    test "a series not found is code's sentence first" do
+      store()
+      drop = %{"ask" => "what_if", "until" => "2026-12-20", "changes" => [%{"kind" => "drop", "name" => "Rant"}]}
+      {answer, _} = ask("what if I cancel Rant?", [plan([drop]), {:ok, "Nothing changes."}])
+      assert answer.reply == ~s(I don't see a recurring charge called "Rant". Did you mean Rent? Nothing changes.)
     end
 
     test "model down at the plan is a plain reply, at the phrase the deterministic rendering" do
@@ -329,6 +373,20 @@ defmodule Server.Home.MoneyTest do
       assert Enum.map(Thread.load("t", @now), & &1["q"]) == for(n <- 3..12, do: "q#{n}")
     end
 
+    test "writing a thread deletes the threads that are two hours stale, and only those" do
+      Thread.push("stale", %{q: "q", plan: [], reply: "r"}, @now)
+      Thread.push("live", %{q: "q", plan: [], reply: "r"}, DateTime.add(@now, 5_000))
+      Keep.put("home_bank_other", "[]")
+      assert Keep.get("home_money:stale")
+
+      Thread.push("new", %{q: "q", plan: [], reply: "r"}, DateTime.add(@now, 7_201))
+
+      assert Keep.get("home_money:stale") == nil
+      assert Keep.get("home_money:live")
+      assert Keep.get("home_money:new")
+      assert Keep.get("home_bank_other") == "[]"
+    end
+
     test "forgets a turn after two hours" do
       Thread.push("t", %{q: "old", plan: [], reply: "r"}, @now)
       Thread.push("t", %{q: "new", plan: [], reply: "r"}, DateTime.add(@now, 7_000))
@@ -374,5 +432,8 @@ defmodule Server.Home.MoneyTest do
     end
 
     for file <- files, Path.basename(file) != "thread.ex", do: refute(File.read!(file) =~ "Keep.")
+
+    kept = ~r/\bKeep\.([a-z_]+)/ |> Regex.scan(File.read!(Path.join(root, "money/thread.ex"))) |> Enum.map(&List.last/1)
+    assert Enum.uniq(kept) -- ~w(get put expire) == []
   end
 end
