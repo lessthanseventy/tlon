@@ -116,4 +116,3 @@ func _words() -> void:
 		"bins · Friday",
 		"a thing's hover words"
 	)
-
