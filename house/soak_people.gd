@@ -34,6 +34,7 @@ func people() -> void:
 	await _calendar()
 	await _today()
 	await _offered()
+	_old_cell()
 	await _moved()
 	await _local()
 
@@ -621,6 +622,70 @@ func _offered() -> void:
 	var apart: int = absi(spot.get("c", 99) - home[2]) + absi(spot.get("r", 99) - home[3])
 	s._check(
 		not spot.is_empty() and apart == 1, "the frame goes to the nearest free cell: %s" % spot
+	)
+	DirAccess.remove_absolute(path)
+
+
+# a layout saved before the frame's default moved: a frame on the old cell goes to the new default
+# once when that is free, one anywhere else stays, and a save is not moved again
+func _old_cell() -> void:
+	var path := "user://soak_people_old_cell.json"
+	var home: Array = s.Layout.DEFAULTS.filter(func(r: Array) -> bool: return r[0] == People.PIECE)[0]
+	var rows: Array = (
+		s
+		. Layout
+		. DEFAULTS
+		. filter(func(r: Array) -> bool: return r[0] != People.PIECE)
+		. map(func(r: Array) -> Dictionary: return {"p": r[0], "f": r[1], "c": r[2], "r": r[3]})
+	)
+	var old := Vector2i(3, 7)
+	s._check(
+		s.Layout.OLD_FRAME == old and Vector2i(home[2], home[3]) != old,
+		"the default is no longer the old cell"
+	)
+	var cases := {
+		"on the old cell": [old, [], Vector2i(home[2], home[3])],
+		"elsewhere": [Vector2i(6, 9), [], Vector2i(6, 9)],
+		"on the old cell with the new one taken":
+		[old, [{"p": "plant_small", "f": "", "c": home[2], "r": home[3]}], old],
+	}
+	for label in cases:
+		var want: Array = cases[label]
+		var doc := rows.duplicate()
+		doc.append_array(want[1])
+		doc.append({"p": People.PIECE, "f": "", "c": want[0].x, "r": want[0].y})
+		s._write_layout(path, {"v": 2, "wall": "wallpaper", "floor": "oak", "pieces": doc})
+		var l: RefCounted = s._layout()
+		l.path = path
+		l.persist = true
+		s._check(l.load_file(), "a version 2 layout with the frame %s loads" % label)
+		var at := Vector2i(l.frame().get("c", -1), l.frame().get("r", -1))
+		s._check(at == want[2], "the frame %s is at %s, not %s" % [label, want[2], at])
+	var again: RefCounted = s._layout()
+	again.path = path
+	again.persist = true
+	again.load_file()
+	again.save()
+	s._check(
+		s._read_layout(path)["v"] == s.Layout.SAVED, "the layout is saved as the current version"
+	)
+	var other: RefCounted = s._layout()
+	other.path = path
+	other.persist = true
+	other.load_file()
+	var piece: Dictionary = other.frame()
+	s._check(
+		other.place({"p": People.PIECE, "f": "", "c": old.x, "r": old.y}, piece, []) == "",
+		"the owner puts the frame on the old cell"
+	)
+	other.save()
+	var last: RefCounted = s._layout()
+	last.path = path
+	last.persist = true
+	last.load_file()
+	s._check(
+		Vector2i(last.frame()["c"], last.frame()["r"]) == old,
+		"and a saved layout does not move it again"
 	)
 	DirAccess.remove_absolute(path)
 

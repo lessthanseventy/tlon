@@ -101,7 +101,11 @@ const NO_ROOM := "no room there"
 const BUSY := "someone is there"
 const SHUTS := "that would shut a path"
 const ONCE := "that one is already out"
-const SAVED := 2
+const SAVED := 3
+# the version from which the pets' things were put by the current rule
+const THINGS_SAVED := 2
+# where the frame stood by default before `SAVED` 3
+const OLD_FRAME := Vector2i(3, 7)
 # default pieces added after layouts were first saved: a saved layout is offered each once
 const NEWER := ["laundry_basket", "photo_frame", "piggy_bank"]
 # the pets' spots that move with their thing: their old cells stay free ground
@@ -731,7 +735,9 @@ func load_file() -> bool:
 	for p in out:
 		p.erase("_i")
 	pieces = out
-	old_things = not (d.get("v") is float and d["v"] >= SAVED)
+	old_things = not (d.get("v") is float and d["v"] >= THINGS_SAVED)
+	if not (d.get("v") is float and d["v"] >= SAVED):
+		_move_old_frame()
 	pets_seen = []
 	if d.get("pets_seen") is Array:
 		pets_seen = d["pets_seen"].filter(func(k): return k is String and k not in dropped)
@@ -749,6 +755,18 @@ func load_file() -> bool:
 		save()
 	version += 1
 	return true
+
+
+# a frame still on its old default cell goes to the current default, once, when that cell is free
+func _move_old_frame() -> void:
+	var piece := frame()
+	if piece.is_empty() or Vector2i(piece["c"], piece["r"]) != OLD_FRAME:
+		return
+	var row: Array = DEFAULTS.filter(func(r): return r[0] == People.PIECE)[0]
+	var moved := _piece([People.PIECE, piece["f"], row[2], row[3]])
+	if check(moved, piece, []) == "":
+		piece["c"] = moved["c"]
+		piece["r"] = moved["r"]
 
 
 # a default piece new to a saved layout goes at its default cell, else the nearest cell it may

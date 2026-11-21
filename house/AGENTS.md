@@ -192,7 +192,7 @@ runs on the local list.
   `[{id, name, birthday ("MM-DD" or "YYYY-MM-DD" or null), next_birthday (local date, today counting, or null), notes:
   [{id, text, since}], todos: [the open rows that name them]}]`, soonest first, none last. The framed photo is the
   plain floor piece `photo_frame` (a framed group photo on a small table, default cell 5,3 on open floor clear of the rugs, the table and the other pieces (row 6 stays free: the sun patch lies there), in decorate's home tab; drawn in
-  code at its cell's depth, `_frame_key`; offered once to a saved layout through `Layout.NEWER` and movable like the
+  code at its cell's depth, `_frame_key`; offered once to a saved layout through `Layout.NEWER`; a frame on the old default cell 3,7 in a file saved before `Layout.SAVED` 3 moves to the current default once when that is free (`_move_old_frame`); movable like the
   basket). It wears a small red bow while a birthday is a week away or less (`home.frame_marked`, `People.SOON`). Hover
   says "the people" and outlines it in gold like the door (`_hover_outline`); a click opens the People view and keeps the outline (`frame` hit). A card is the name, the next birthday
   in `When.birthday` words ("in 3 days · Mon 23 Nov", "today"), the notes (an add line; a quiet "drop" is
@@ -584,7 +584,7 @@ runs on the local list.
   is on the wall and exempt), on no other thing, and as far from the others as the room allows (2 cells from any thing or furniture piece, 3 from the other things with
   height; the tallest are put first), the open floor along the two front edges first, from the corner out, then the cells
   against a wall. It is put out when an animal that uses it lives here and its `def` is set; `layout.pets_seen` (saved as `pets_seen`)
-  remembers it, so one he took away is not put back. The file's `"v"` is `Layout.SAVED`; a file saved before it (`old_things`) has its
+  remembers it, so one he took away is not put back. The file's `"v"` is `Layout.SAVED`; a file saved before `THINGS_SAVED` (`old_things`) has its
   things looked at once: one still at the cell the first rule would have chosen in the 10x10 room (`OLD_PLACES`, `_old_pick`; the
   layout does not record that a thing was moved, so a thing he moved onto exactly that cell is placed again too) is put again by the
   current rule, one anywhere else stays.
