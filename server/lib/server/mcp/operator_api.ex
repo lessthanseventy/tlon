@@ -181,6 +181,12 @@ defmodule Server.MCP.OperatorAPI do
                                          meetings on each local date from..to (YYYY-MM-DD, inclusive, at most 62 days), past dates too,
                                          cleaned as the day's are (a multi-day all-day event once per date); [] with no calendars; reads
                                          only what the calendar holds; 400 on a bad or too wide range
+      GET    /api/home/money/forecast?until=  Server.Home.Bank.forecast and subscriptions: the checking balance day by day to until
+                                         (YYYY-MM-DD, default 45 days on, capped at 180): {start_cents, until, clamped, days: [{date,
+                                         low_cents, expected_cents, high_cents}], events: [{date, amount_cents (negative is money out),
+                                         name, kind, rhythm, count}], everyday, lowest: {date, balance_cents}, before_next_deposit,
+                                         basis: {months_of_history, series, next_deposit, caveats}, subscriptions: [{name, amount_cents,
+                                         rhythm, next, count, was_cents}]}; null when the bank source is off or nothing is stored; 400 on a bad date
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion; ?nina_|argos_ + name|species|personality (sassy sweet lazy mischievous shy bold) choose the cast
                                          (asking may write the next batch); {} before the first
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
@@ -648,6 +654,23 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
+  defp route(conn, "GET", "home", ["money", "forecast"]) do
+    today = Server.Home.Bank.today(DateTime.utc_now())
+
+    case forecast_until(fetch_query_params(conn).query_params["until"], today) do
+      {:ok, until} ->
+        with {:ok, forecast} <- Server.Home.Bank.forecast(until, today),
+             {:ok, subscriptions} <- Server.Home.Bank.subscriptions(today) do
+          json(conn, 200, Map.put(forecast, :subscriptions, subscriptions))
+        else
+          {:error, :no_data} -> json(conn, 200, nil)
+        end
+
+      :error ->
+        json(conn, 400, %{error: "until is a date as YYYY-MM-DD"})
+    end
+  end
+
   defp route(conn, "GET", "home", ["pets"]) do
     cast = Server.Home.Pets.cast(fetch_query_params(conn).query_params)
     json(conn, 200, Server.Home.Pets.voices(DateTime.utc_now(), cast))
@@ -791,7 +814,17 @@ defmodule Server.MCP.OperatorAPI do
 
   defp home_form(conn, {:ok, row}), do: json(conn, 200, row)
   defp home_form(conn, {:error, reason}), do: json(conn, 400, %{error: reason})
+
   defp home_form(conn, :not_found), do: no_route(conn)
+
+  defp forecast_until(nil, today), do: {:ok, Date.add(today, 45)}
+
+  defp forecast_until(text, _today) do
+    case Date.from_iso8601(text) do
+      {:ok, date} -> {:ok, date}
+      {:error, _} -> :error
+    end
+  end
 
   defp on_thread(conn, "GET", [], t), do: json(conn, 200, t |> Board.brief() |> Brief.scope())
   defp on_thread(conn, "GET", ["messages"], t), do: messages(conn, t)

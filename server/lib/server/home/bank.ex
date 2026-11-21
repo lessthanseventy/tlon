@@ -27,6 +27,7 @@ defmodule Server.Home.Bank do
   import Ecto.Query, only: [from: 2]
 
   alias Server.Home.Bank.Plaid
+  alias Server.Home.Bank.Projection
   alias Server.Home.Bank.Recurring
   alias Server.Home.Bank.Transaction
   alias Server.Home.Clock
@@ -219,6 +220,37 @@ defmodule Server.Home.Bank do
     |> Enum.reject(&is_nil/1)
     |> Recurring.without_transfers()
   end
+
+  @doc """
+  The balance day by day to `until` (`Server.Home.Bank.Projection.forecast/3`), from the transactions
+  and accounts kept; `{:error, :no_data}` when the source is off or nothing is stored. `today` is the
+  local day.
+  """
+  @spec forecast(Date.t(), Date.t()) :: {:ok, Projection.forecast()} | {:error, :no_data}
+  def forecast(until, today \\ local_today()), do: projected(&Projection.forecast(&1, today, until))
+
+  @doc """
+  Whether a purchase of `amount_cents` on `on` (default today) is covered
+  (`Server.Home.Bank.Projection.afford/5`). Options: `:today`, `:cushion_cents`.
+  """
+  @spec afford(pos_integer(), Date.t() | nil, keyword()) :: {:ok, Projection.afford()} | {:error, :no_data}
+  def afford(amount_cents, on \\ nil, opts \\ []) do
+    {today, opts} = Keyword.pop_lazy(opts, :today, &local_today/0)
+    projected(&Projection.afford(&1, today, amount_cents, on, opts))
+  end
+
+  @doc "The forecast with and without `changes` (`Server.Home.Bank.Projection.what_if/4`)."
+  @spec what_if([Projection.change()], Date.t(), Date.t()) ::
+          {:ok, Projection.what_if()} | {:error, :no_data | {:no_series, String.t(), [String.t()]}}
+  def what_if(changes, until, today \\ local_today()), do: projected(&Projection.what_if(&1, today, changes, until))
+
+  @doc "What went out and came in by month for a query (`Server.Home.Bank.Projection.history/3`)."
+  @spec history(Projection.query(), Date.t()) :: {:ok, Projection.history()} | {:error, :no_data}
+  def history(query, today \\ local_today()), do: projected(&Projection.history(&1, today, query))
+
+  @doc "The recurring charges for display (`Server.Home.Bank.Projection.subscriptions/2`)."
+  @spec subscriptions(Date.t()) :: {:ok, [Projection.subscription()]} | {:error, :no_data}
+  def subscriptions(today \\ local_today()), do: projected(&{:ok, Projection.subscriptions(&1, today)})
 
   @doc "The local calendar date of the instant `now`."
   @spec today(DateTime.t()) :: Date.t()
@@ -426,4 +458,15 @@ defmodule Server.Home.Bank do
 
   defp read_item(%{"name" => name, "amount" => amount, "on" => on}),
     do: %{name: name, amount: amount, on: Date.from_iso8601!(on)}
+
+  defp local_today, do: today(DateTime.utc_now())
+
+  defp projected(fun) do
+    with true <- enabled?(),
+         %{"accounts" => [_ | _] = accounts} <- state() do
+      fun.(%{transactions: transactions(), accounts: accounts})
+    else
+      _ -> {:error, :no_data}
+    end
+  end
 end

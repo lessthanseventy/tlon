@@ -1003,6 +1003,63 @@ defmodule Server.MCP.GatewayTest do
       assert {400, _} = get_json("/api/home/meetings?from=2026-11-01&to=2027-01-02")
     end
 
+    test "money forecast: null with the bank off, 400 on a bad date, else the days and the subscriptions in cents" do
+      Server.TestDB.clean!()
+      assert {200, nil} = get_json("/api/home/money/forecast")
+      assert {400, %{"error" => _}} = get_json("/api/home/money/forecast?until=soon")
+
+      names = ~w(PLAID_CLIENT_ID PLAID_SECRET PLAID_ACCESS_TOKEN XDG_RUNTIME_DIR)
+      previous = for name <- names, do: {name, System.get_env(name)}
+      Enum.each(names, &System.delete_env/1)
+      for {name, value} <- Enum.zip(names, ~w(cid sec tok)), name != "XDG_RUNTIME_DIR", do: System.put_env(name, value)
+      System.put_env("XDG_RUNTIME_DIR", System.tmp_dir!() <> "/no-secrets-#{System.unique_integer([:positive])}")
+
+      on_exit(fn ->
+        for {name, value} <- previous, do: if(value, do: System.put_env(name, value), else: System.delete_env(name))
+      end)
+
+      :ok = Server.OperatorConfig.put("home_sources", "bank", Server.TestDB.continuation_gap_off!())
+      today = Server.Home.Bank.today(DateTime.utc_now())
+
+      accounts = [
+        %{
+          "id" => "a1",
+          "name" => "Current",
+          "type" => "depository",
+          "subtype" => "checking",
+          "current" => 90_000,
+          "available" => 90_000
+        }
+      ]
+
+      Server.Home.Keep.put("home_bank", JSON.encode!(%{"accounts" => accounts, "as_of" => "2026-11-20T12:00:00Z"}))
+
+      rows =
+        for m <- 1..3 do
+          %{
+            transaction_id: "rent-#{m}",
+            account_id: "a1",
+            amount_cents: 12_000,
+            date: today |> Date.shift(month: -m) |> Date.add(-1),
+            name: "Rent",
+            merchant_name: nil,
+            pending: false
+          }
+        end
+
+      Server.Repo.insert_all(Server.Home.Bank.Transaction, rows)
+
+      assert {200, money} = get_json("/api/home/money/forecast?until=#{Date.add(today, 10)}")
+      assert money["start_cents"] == 90_000
+      assert length(money["days"]) == 11
+      assert %{"date" => _, "low_cents" => _, "expected_cents" => _, "high_cents" => _} = hd(money["days"])
+
+      assert [%{"name" => "Rent", "amount_cents" => -12_000, "rhythm" => "monthly", "next" => _}] =
+               money["subscriptions"]
+
+      assert money["clamped"] == false
+    end
+
     test "the forecast is [] with the weather off, else the days the report held" do
       Server.TestDB.clean!()
       assert {200, %{"forecast" => [], "meetings" => [], "money" => nil}} = get_json("/api/home")
