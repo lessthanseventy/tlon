@@ -7,7 +7,7 @@ signal changed(key: String)
 
 const STORE := "user://house_settings.json"
 const CAT := "Nina"
-const DOG := "Argos"
+const DOG := "Rocky"
 const DEFAULTS := {
 	"name": "",
 	"birthday": "",
@@ -60,14 +60,12 @@ static func default_url() -> String:
 	return "http://127.0.0.1:4040"
 
 
-# the server's own pet lines name Nina and Argos; show the names he gave them
+# the server's own pet lines name the roles, Nina and Argos; show the names the pets have
 static func pets(text: String) -> String:
-	if cat == CAT and dog == DOG:
-		return text
 	var out := ""
 	var at := 0
 	for m in RegEx.create_from_string("\\b(Nina|Argos)\\b").search_all(text):
-		out += text.substr(at, m.get_start() - at) + (cat if m.get_string() == CAT else dog)
+		out += text.substr(at, m.get_start() - at) + (cat if m.get_string() == "Nina" else dog)
 		at = m.get_end()
 	return out + text.substr(at)
 

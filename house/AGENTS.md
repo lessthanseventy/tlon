@@ -332,9 +332,9 @@ runs on the local list.
   not a day, and "none" or empty clears it.
   One flat object in `user://house_settings.json`, written on a change only, other keys kept as found, never in a
   scripted or staged run: `name` (used in the birthday line and a server line's `{name}`; a line with `{name}` and
-  no name is skipped), `birthday` (`"MM-DD"`, `""`), `cat` and `dog` (default Nina and Argos: shown everywhere the
-  house prints them, the server's pet lines too, by `Settings.pets`; the server and `voices.gd` still key on Nina and
-  Argos), `pet1` and `pet2` (the animal of the first, aloof pet and the second, eager one: a key of `Pets.KINDS`
+  no name is skipped), `birthday` (`"MM-DD"`, `""`), `cat` and `dog` (default Nina and Rocky: shown everywhere the
+  house prints them, the server's pet lines too, by `Settings.pets`; the server and `voices.gd` still key on the roles
+  Nina and Argos, and `Settings.pets` turns the word Argos into the dog's name, Rocky unless he chose one), `pet1` and `pet2` (the animal of the first, aloof pet and the second, eager one: a key of `Pets.KINDS`
   or `"none"`; absent is `cat_black` and `dog_golden`; applies at once; a pet that is `none` is not in the room and
   every scene, line, sound and card that needs it is skipped; `--pets cat=KIND,dog=KIND` stages them),
   `pet1_personality`/`pet2_personality` (`sassy`, `sweet`, `lazy`, `mischievous`, `shy`, `bold`; absent is sassy for
@@ -547,7 +547,7 @@ runs on the local list.
   Add a thing: a row in `THINGS`, its `_name(s, ...)` drawer in `pet_things.gd` (a `Pen` draws in the cell's own 0..1 coordinates,
   `box`, `ell`, `diamond`, `line`; `part` "back" and "front" for a `walk` thing), a `_register_one` arm for its spot and a `_habits`
   row (or an entry in `_plain`); `soak_petthings.gd` covers every thing by itself.
-- Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Argos a golden dog
+- Nina is a black cat with a jewelled collar (smart, sassy, wins every argument), Rocky (the role Argos) a golden dog
   (sweet, not bright). A left click pets and selects it, opening its view (a right click does too), its view (`pet_view.gd`): the pet drawn large with its name and "kind · way", "right now" (one phrase from its state, `pet_now.gd`: mode, spot, running antic; never invented), buttons that each send it somewhere with the room's own behaviours (pat; call over to the person; treat at its bowl or food thing; play at its toy thing, or the yarn for a cat, dog, fox or wolf; off to bed at its night home; a button whose thing is not out or not reachable is not shown, and a scene of the room's that holds the pet leaves only pat), "Its things" (the pet things of its kind in the room, six and "N more...", a row sends it there), "Lately" (its last lines) and "change who this is": the animal as a grid of idling sprites and `none`, the name and the way, behind a "< back" (Esc goes back to the pet first, then home; it writes the same `pet1`/`pet2`, `cat`/`dog` the settings screen writes; antics wait while it is up, as for any form); nothing counts or nags; `--pet-card nina|argos` stages it. Their lines are `voices.gd`: `GET /api/home/pets` (with `nina_name`, `nina_species`, `nina_personality` and the same three for `argos`, URL-encoded: the first and second pet as set; a pet that is `none` sends none; an older server ignores them; any of the six changing asks once more), a batch a
   model wrote for the home as it is now, `{Nina: {occasion: [lines]}, Argos: {...}, duo: [[
   "Nina: ...", "Argos: ..."]]}` (`{}` until the first exists). Asked at start, every 20 s while empty

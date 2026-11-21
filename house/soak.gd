@@ -694,7 +694,7 @@ func _routes(main: Control) -> void:
 		first
 		== (
 			"nina_name=Nina&nina_species=cat&nina_personality=sassy"
-			+ "&argos_name=Argos&argos_species=dog&argos_personality=sweet"
+			+ "&argos_name=Rocky&argos_species=dog&argos_personality=sweet"
 		),
 		"the pets ask names, animals and ways (%s)" % first
 	)
@@ -711,11 +711,11 @@ func _routes(main: Control) -> void:
 		again
 		== (
 			"nina_name=Mimi%20Q&nina_species=fox&nina_personality=sassy"
-			+ "&argos_name=Argos&argos_species=dog&argos_personality=bold"
+			+ "&argos_name=Rocky&argos_species=dog&argos_personality=bold"
 		),
 		"the chosen values are sent, encoded (%s)" % again
 	)
-	_check(Settings.pets("Nina and Argos") == "Mimi Q and Argos", "the chosen name is what is shown")
+	_check(Settings.pets("Nina and Argos") == "Mimi Q and Rocky", "the chosen name is what is shown")
 	settings.put("pet2", "none")
 	await _until(func(): return _count("/api/home/pets") > asks + 1, "the ask with no second pet")
 	_check(

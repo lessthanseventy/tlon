@@ -73,7 +73,7 @@ func _settings_file() -> void:
 	var a := Settings.new()
 	a.store = TMP
 	a.setup(true)
-	s._check(a.value("cat") == "Nina" and a.value("dog") == "Argos", "the pets' default names")
+	s._check(a.value("cat") == "Nina" and a.value("dog") == "Rocky", "the pets' default names")
 	s._check(a.value("name") == "" and a.value("widget") == false, "no name, the full window")
 	s._check(not FileAccess.file_exists(TMP), "nothing is written until something changes")
 	a.put("cat", "Nina")
@@ -161,7 +161,7 @@ func _names() -> void:
 	s._check(not h.finds.is_birthday(), "and only on its day")
 	h.settings.put("birthday", "")
 	h.settings.put("cat", "Nina")
-	h.settings.put("dog", "Argos")
+	h.settings.put("dog", "Rocky")
 	h.fake_day = ""
 	h.pets.set_voices({})
 

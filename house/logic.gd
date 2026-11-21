@@ -387,7 +387,9 @@ func _pet_settings() -> void:
 	var d := Settings.new()
 	d.put("cat", "Mimi")
 	d.put("pet1", "fox_red")
-	_check(Settings.pets("Nina sits") == "Mimi sits" and d.value("dog") == "Argos", "names stay whatever the animal")
+	_check(Settings.pets("Nina sits") == "Mimi sits", "names stay whatever the animal")
+	_check(d.value("dog") == "Rocky", "the dog is Rocky unless named")
+	_check(Settings.pets("Argos sits") == "Rocky sits", "the role word shows his name")
 	d.put("cat", "")
 
 

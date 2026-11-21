@@ -192,12 +192,12 @@ defmodule Server.Home.PetsTest do
   end
 
   describe "the cast" do
-    test "no params is Nina the sassy cat and Argos the sweet dog, and the prompt is as it was" do
+    test "no params is Nina the sassy cat and Rocky the sweet dog, and the prompt is as it was" do
       cast = Pets.cast(%{})
 
       assert cast == %{
                nina: %{name: "Nina", species: "cat", personality: "sassy"},
-               argos: %{name: "Argos", species: "dog", personality: "sweet"}
+               argos: %{name: "Rocky", species: "dog", personality: "sweet"}
              }
 
       prompt = Pets.prompt("SCENE", cast)
@@ -271,7 +271,7 @@ defmodule Server.Home.PetsTest do
                }).nina == %{name: "Nina", species: "cat", personality: "sassy"}
       end
 
-      assert Pets.cast(%{"argos_name" => ["x"], "argos_species" => %{}}).argos.name == "Argos"
+      assert Pets.cast(%{"argos_name" => ["x"], "argos_species" => %{}}).argos.name == "Rocky"
       assert Pets.cast(%{"argos_name" => "D'Artagnan-2 de la Cruz"}).argos.name == "D'Artagnan-2 de la Cruz"
     end
 
