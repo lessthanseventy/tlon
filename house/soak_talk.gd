@@ -501,6 +501,8 @@ func _claude() -> void:
 func _claude_in_the_house(main) -> void:
 	var h = main._room.home
 	var settings = h.settings
+	# a pet's passing remark would land in the chat between the line and its reply
+	h.pets.freeze = true
 	main.talk_live = true
 	var b := _backend()
 	b.claude = null
