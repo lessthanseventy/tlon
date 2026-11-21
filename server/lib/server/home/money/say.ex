@@ -27,6 +27,7 @@ defmodule Server.Home.Money.Say do
   end
 
   defp result(_ask, {:error, :no_data}), do: %{error: "no_data"}
+  defp result(_ask, {:error, :bad_range}), do: %{error: "bad_range"}
 
   defp result(_ask, {:error, {:no_series, name, suggestions}}),
     do: %{error: "no_series", name: name, suggestions: suggestions}
@@ -164,24 +165,57 @@ defmodule Server.Home.Money.Say do
 
   defp lead(_entry), do: nil
 
-  @affirm ~r/can afford|can comfortably|is covered|are covered|it covers|you're fine|you are fine|no problem|go ahead/i
-  @deny ~r/can't afford|cannot afford|can not afford|won't cover|not covered|not enough|short by|you're short|you are short/i
+  @affirm ~r/\b(?:can afford|afford it|you can|should be fine|go for it|plenty|comfortabl[ey]|no issue|is covered|are covered|it covers|you're fine|you are fine|no problem|go ahead)\b/i
+  @deny ~r/\b(?:can't afford|cannot|can not|won't be able|won't cover|not covered|not enough|don't have enough|short by|fall short|you're short|you are short|is short|overdraw|negative|hold off)\b/i
+  @negated ~r/\b(?:can't|cannot|can not|won't|don't|doesn't|isn't|aren't|not|never)\b(?:\s+\w+){0,3}/i
+  @not_short ~r/\b(?:not|isn't|aren't|never|won't be)\s+(?:be\s+)?(?:short|negative)\b/i
 
   @doc """
-  Whether `text` says the opposite of a purchase's verdict in `presented`, by a narrow word set:
-  affirmations against `short`, denials against `covers` and `tight`. A sentence the set does not
-  hold passes.
+  Whether `text` says the opposite of a purchase's verdict in `presented`, by a word list (the cheap
+  first pass; `Server.Home.Money` then asks a judge): affirmations against `short`, denials against
+  `covers` and `tight`. A negated affirmation ("you can't afford it") is not an affirmation and
+  "not short" is not a denial. A sentence the lists do not hold passes.
   """
   @spec contradicts?(String.t(), [map()]) :: boolean()
   def contradicts?(text, presented) do
     Enum.any?(presented, fn
-      %{"ask" => %{"ask" => "afford"}, "result" => %{"verdict" => "short"}} -> Regex.match?(@affirm, text)
-      %{"ask" => %{"ask" => "afford"}, "result" => %{"verdict" => _covers_or_tight}} -> Regex.match?(@deny, text)
-      _other -> false
+      %{"ask" => %{"ask" => "afford"}, "result" => %{"verdict" => "short"}} ->
+        Regex.match?(@affirm, Regex.replace(@negated, text, " "))
+
+      %{"ask" => %{"ask" => "afford"}, "result" => %{"verdict" => _covers_or_tight}} ->
+        Regex.match?(@deny, Regex.replace(@not_short, text, " "))
+
+      _other ->
+        false
     end)
   end
 
+  @doc """
+  The facts behind the code-written sentences of `leads/1`, as JSON-ready maps, for a judge that
+  checks a model's text against them.
+  """
+  @spec facts([map()]) :: [map()]
+  def facts(presented) do
+    for entry <- presented, lead(entry) != nil do
+      case entry do
+        %{"ask" => %{"ask" => "afford"} = ask, "result" => r} ->
+          %{
+            "about" => "can he afford a purchase",
+            "verdict" => r["verdict"],
+            "purchase_text" => ask["amount_cents_text"],
+            "on" => ask["on"],
+            "shortfall_text" => r["shortfall_cents_text"],
+            "short_on" => r["short_on"]
+          }
+
+        %{"result" => %{"error" => "no_series", "name" => name, "suggestions" => suggestions}} ->
+          %{"about" => "a series that was not found", "name" => name, "suggestions" => suggestions}
+      end
+    end
+  end
+
   defp entry(%{"result" => %{"error" => "no_data"}}), do: "I have no bank data to work from yet."
+  defp entry(%{"result" => %{"error" => "bad_range"}}), do: "That date range runs backwards, so I can't look it up."
   defp entry(%{"result" => %{"error" => "no_series"}} = entry), do: lead(entry)
 
   defp entry(%{"ask" => %{"ask" => "summary"}, "result" => r}) do
