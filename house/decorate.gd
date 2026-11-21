@@ -226,7 +226,7 @@ func _entry(e: Dictionary, r: Rect2) -> void:
 		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 22.0)
 		People.frame(PetThings.Pen.new(self, origin, 0.9), false)
 	elif e["key"] == Money.PIECE:
-		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 14.0)
+		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 - 2.0)
 		Money.piggy(PetThings.Pen.new(self, origin, 0.9), "none")
 	var tex: Texture2D = room.icon(id)
 	if tex != null:
