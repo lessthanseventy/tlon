@@ -216,7 +216,6 @@ export class WideRoom extends Sim<Layout> {
     const d = this.plan.layout(a).desks.find((x) => x.kind === "boss")
     return d ? { x: d.x + d.w / 2 - 6, y: d.y - 12 } : null
   }
-  /** Uqbar's volume one tick toward where it wants to be — its errand while its session idles, else its rest; true while it is in the air */
   /** the Aleph comes when its session appears (called in) and leaves when it ends (dismissed): a change every tick it is here */
   private stepAleph(a: Agents): boolean {
     const tid = a.aleph?.thread_id ?? null, v = this.visit
@@ -356,7 +355,8 @@ export class WideRoom extends Sim<Layout> {
     if (caught) {
       const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }, d = this.dog
       via.push({ ...mid, hold: 24 })
-      d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, { x: mid.x, y: d.aisle, aisle: d.aisle, pose: "stand", face: "left", kind: "roam" })]
+      d.host = null; d.cheer = false
+      d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, { x: Math.round(mid.x), y: d.aisle, aisle: d.aisle, pose: "stand", face: "left", kind: "roam" })]
       d.mode = "walk"
     }
     this.planes.push(launch(from, via, to))
@@ -366,7 +366,6 @@ export class WideRoom extends Sim<Layout> {
     this.planes = this.planes.map(stepPlane).filter((p): p is Plane => p !== null)
     return this.planes.length > 0
   }
-  /** Argos says something (after `delay`, when he is answering) */
   /** pets.json, resolved: the cat slot (`Sim.setPets`), then the dog's name and shade */
   override setPets(p: Pets) { super.setPets(p); this.dogAbsent = !!p.dog.absent; this.dog.name = p.dog.name; this.dog.shade = p.dog.shade ?? 0 }
   /** the dog slot as configured */
@@ -378,6 +377,7 @@ export class WideRoom extends Sim<Layout> {
     if (g && this.petsOn) {
       // he waits under the spot where one plane will hang
       const d = this.dog, c = planeCatch(g)
+      d.host = null; d.cheer = false
       d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, { x: c.x, y: g.hallY, aisle: g.hallY, pose: "stand", face: "left", kind: "roam" })]
       d.aisle = g.hallY; d.mode = "walk"
     }
@@ -464,6 +464,7 @@ export class WideRoom extends Sim<Layout> {
     if (this.panicking) {
       if (!d.path.length) {
         const to = pick([...this.plan.lounge, ...this.plan.muster!])
+        d.host = null; d.cheer = false
         d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, to)]
         d.aisle = to.aisle; d.mode = "walk"; d.fuss = null; this.dogPanicRun = true
       }
@@ -478,6 +479,7 @@ export class WideRoom extends Sim<Layout> {
       if (d.y === HALL) { d.path = []; d.aisle = HALL } else if (hall >= 0) { d.path = d.path.slice(0, hall + 1); d.aisle = HALL }
     }
     if (!d.path.length && (d.x !== m.x || d.y !== m.y)) {
+      d.host = null; d.cheer = false
       d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, m)]
       d.aisle = m.aisle; d.mode = "walk"; d.fuss = null
     } else if (!d.path.length) d.until = this.tick + 200 // stays put: stepDog would roam him off when this runs out
@@ -542,7 +544,6 @@ export class WideRoom extends Sim<Layout> {
   get cutting() { return this.tvSet.cutting }
   /** the lounge TV flashes the new level over whatever it was showing */
   protected override levelUp(level: number) { super.levelUp(level); this.tvSet.showLevel(level) }
-  /** the remote: the next channel */
   /** the trophies won so far, each a cup on top of the bookshelf (at most `CUPS_MAX`) */
   trophies = 0
   setTrophies(n: number) { this.trophies = n }
@@ -574,7 +575,7 @@ export class WideRoom extends Sim<Layout> {
 
     // ── floors ──
     const tileA = tint(ROLE.prose, ROLE.ground, 0.27), tileB = tint(ROLE.prose, ROLE.ground, 0.21)
-    for (let ty = BAND; ty < H; ty += 8) for (let tx = 0; tx < W; tx += 8) px(tx, ty, 8, 8, ((tx + ty) / 8) % 2 ? tileA : tileB)
+    for (let ty = BAND; ty < H; ty += 8) for (let tx = 0; tx < W; tx += 8) px(tx, ty, 8, 8, ((tx + ty - BAND) / 8) % 2 ? tileA : tileB)
     // your office: a carpet, flecked
     px(0, BAND, OFF_W, H - BAND, tint(ROLE.meta, ROLE.ground, 0.3))
     for (let y = BAND + 3; y < H; y += 3) for (let x = (y * 5) % 7; x < OFF_W; x += 7) px(x, y, 1, 1, tint(ROLE.meta, ROLE.ground, 0.4))
@@ -670,15 +671,15 @@ export class WideRoom extends Sim<Layout> {
     return sc.finish()
   }
 
+  protected eventGeo() {
+    const g = super.eventGeo()
+    return g && { ...g, windowX: this.z.M0 + 4, ceilY: BAND + 6, leftX: this.z.L0, cork: { x: this.z.F1 - 32, y: 40 }, kitchen: { x: this.width - 8, y: 157 }, board: { x: Math.round((62 + this.z.F1 - 64) / 2), y: 30 } }
+  }
   /**
    * The floor's light follows the real clock: the whole floor dims toward the ground as it darkens,
    * and the lamps — one per tile, in the order of `lamps` — come on one by one, each a pool of warm
    * light on top of the dim.
    */
-  protected eventGeo() {
-    const g = super.eventGeo()
-    return g && { ...g, windowX: this.z.M0 + 4, ceilY: BAND + 6, leftX: this.z.L0, cork: { x: this.z.F1 - 32, y: 40 }, kitchen: { x: this.width - 8, y: 157 }, board: { x: Math.round((62 + this.z.F1 - 64) / 2), y: 30 } }
-  }
   private nightfall(sc: Scene, now: Date) {
     const h = now.getHours() + now.getMinutes() / 60, d = darkness(h), flick = this.lampFlicker()
     if (d === 0 && flick === null && !this.blackout() && !this.dimmed()) return
@@ -733,7 +734,7 @@ export class WideRoom extends Sim<Layout> {
       } else if (a.kind === "chase") {
         if (!c.path.length) { c.path = [a.lap[0]!]; a.lap.push(a.lap.shift()!) ; c.mode = "walk" }
         a.trail.push({ x: c.x, y: c.y })
-        if (a.trail.length > 10) { const p = a.trail.shift()!; d.path = [p]; d.mode = "walk" }
+        if (a.trail.length > 10) { const p = a.trail.shift()!; d.path = [p]; d.host = null; d.cheer = false; d.mode = "walk" }
         if (now >= a.until) {
           if (!this.talkOut("chase")) shout("dog", "woof!")
           c.path = []; c.mode = "sit"; c.until = now + 200
@@ -763,6 +764,7 @@ export class WideRoom extends Sim<Layout> {
       this.antic = { kind: "bap", until: now + 400, trail: [], lap }
     } else if (c.mode !== "walk" && d.mode !== "sleep" && (!near || r < 0.4)) {
       const side = d.x < c.x ? -8 : 8
+      d.host = null; d.cheer = false
       d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, { x: c.x + side, y: c.y, aisle: c.y, pose: "stand", face: "left", kind: "roam" })]
       d.aisle = c.y; d.mode = "walk"; d.creep = true; c.until = now + 1000
       this.antic = { kind: "sneak", until: now + 1000, trail: [], lap }
@@ -971,7 +973,6 @@ export class WideRoom extends Sim<Layout> {
     sc.hits.push({ x: x0 - 1, y: 10, w: 12, h: 19, tip: `the suggestion box: ${this.ideas.length ? `${this.ideas.length} banter idea(s)` : "empty"} - click to read`, act: { kind: "ideas" } })
   }
 
-  /** windows on the sky as it is outside: night with its stars, dawn and dusk, day */
   /**
    * What the date brings: in October jack-o'-lanterns flickering in the lounge, a cobweb in its
    * corner and, after dark, bats past the windows; in December a little tree with blinking lights.

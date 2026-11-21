@@ -18,6 +18,9 @@ describe("parseNowPlaying", () => {
   test("bpm field present but not a number", () => {
     expect(parseNowPlaying("Song|Artist|unknown")).toEqual({ text: "Song - Artist", bpm: null })
   })
+  test("a bar in the title stays in the title", () => {
+    expect(parseNowPlaying("Song | Official Video|Artist|120")).toEqual({ text: "Song | Official Video - Artist", bpm: 120 })
+  })
   test("no title and no artist: no player playing", () => {
     expect(parseNowPlaying("||")).toBeNull()
     expect(parseNowPlaying("")).toBeNull()

@@ -353,6 +353,21 @@ describe("Argos and the trail", () => {
     stepDog(one, ctx([trail[0]!]) as never)
     expect(one.creep).toBe(false)
   }))
+
+  test("a point between two pixels is reached, and whoever he came to see is seen once", () => chance(0, () => {
+    const host = { x: 600, y: 100, seat: { agent: "W" } }
+    let fussed = 0
+    const dog = { name: "Argos", shade: 0, x: 200, y: 176, aisle: 176, path: [{ x: 201.5, y: 176 }], mode: "walk" as const, until: 0, face: -1, woof: 0, host: "w" as string | null, cheer: false, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
+    const ctx = {
+      tick: 100, antic: null, quiet: () => true, actors: new Map([["w", host]]), at: () => [], bed: () => ({ x: 400, y: 112 }),
+      say: () => {}, argos: () => "", fussDog: () => { fussed++ }, prints: () => [],
+    }
+    for (let i = 0; i < 4 && dog.path.length; i++) stepDog(dog as never, ctx as never)
+    expect(dog.path).toEqual([])
+    expect(Number.isInteger(dog.x)).toBe(true)
+    expect(fussed).toBe(1)
+    expect(dog.host).toBeNull()
+  }))
 })
 
 describe("the pets react to events", () => {

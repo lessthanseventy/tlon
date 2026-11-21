@@ -11,7 +11,9 @@ export const NOW_PLAYING_FORMAT = "{{ title }}|{{ artist }}|{{ xesam:audioBPM }}
 /** `stdout` of `playerctl metadata --format NOW_PLAYING_FORMAT`; null when
  *  there's nothing playing (blank title and artist) */
 export function parseNowPlaying(stdout: string): NowPlaying | null {
-  const [title = "", artist = "", bpmRaw = ""] = stdout.trim().split("|")
+  // the last two fields from the right: a title is free text and may hold the separator
+  const parts = stdout.trim().split("|")
+  const bpmRaw = parts.length > 2 ? (parts.pop() ?? "") : "", artist = parts.length > 1 ? (parts.pop() ?? "") : "", title = parts.join("|")
   if (!title && !artist) return null
   const bpm = Number(bpmRaw)
   return { text: artist ? `${title} - ${artist}` : title, bpm: Number.isFinite(bpm) && bpm > 0 ? bpm : null }
