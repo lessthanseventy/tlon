@@ -845,8 +845,6 @@ func _hidden() -> void:
 	l.catalogue = l.catalogue.filter(func(e: Dictionary) -> bool: return e["key"] != "soak_hug")
 
 
-
-
 # the house's own list keeps people the same way: a person, a note, a to-do that names them
 func _local() -> void:
 	s.stub = Callable()
