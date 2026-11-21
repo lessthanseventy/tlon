@@ -110,7 +110,7 @@ and every layer the spine design's re-laid §9 asked for
   (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s;
   entering verify queues the verifier on the service (`Server.Jobs.Verify`), which bounces a diff
   that adds a file at the repo root or touches another workline's `work/<slug>/` before any gate; approving review queues
-  the landing (`Server.Jobs.Land`, one at a time, rebased onto origin's main and gated there — red bounces to build; green posts the commit status `tlon/check`, main's required check, on the sha it gated (`Workline.Publish.publish/5`) and the PR merged at once at that head (`--match-head-commit`), and only then,
+  the landing (`Server.Jobs.Land`, one at a time, rebased onto origin's main and gated there — red bounces to build; green posts the commit status `tlon/check`, the record of the check, on the sha it gated (`Workline.Publish.publish/5`) and the PR merged at once at that head (`--match-head-commit`), and only then,
   read by `Server.Jobs.KeepUp`, does its thread close and its ticket count as done: `Workline.merged/2`;
   one GitHub holds `BEHIND` or `BLOCKED` with no check running goes back into the merge queue on its
   own, once per PR head (`Workline.requeue_blocked/3`); one GitHub still isn't merging — the merge

@@ -29,9 +29,11 @@ control loop, not two, and no second way to run anything:
   unqueued on a box with no usable `XDG_RUNTIME_DIR`. **A coworker seat never runs it:** its sandbox has no
   checks queue, Postgres or GitHub. Run `menard run check --in server` (or a module's own check) on your
   change and advance; verify runs the gates its diff can break on the server (`Server.CheckScope`; the full gate when the diff spans modules), and landing rebases onto main and runs the full gate again.
-  Its verdict is GitHub's required check on main: on a clean tree (nothing uncommitted or untracked) it posts
-  the commit status `tlon/check` (success or failure) on HEAD's sha (`scripts/check.sh`); on a dirty tree it
-  posts nothing and says so, and gh missing or refusing is said, never red. `TLON_CHECK_STATUS=0` posts nothing.
+  Its verdict is a record, not a requirement of main: on a clean tree (nothing uncommitted or untracked) it posts
+  the commit status `tlon/check` (success or failure) on HEAD's sha (`scripts/check.sh`); on a dirty tree, or a
+  commit GitHub does not have yet, it posts nothing and says so, and gh missing or refusing is said, never red.
+  `TLON_CHECK_STATUS=0` posts nothing. What keeps main green is the check that runs before a landing: babylon's
+  for a session, the server's merge queue for a workline or an existing PR.
 - `mise run land -- <pr>` — for a PR that already exists (a session lands through babylon, above): land a reviewed PR through the server's merge queue (`scripts/land.sh` →
   `Server.PRLanding`, the same line and gate as worklines): queued only when its branch's newest review on
   tlon (`review_branch`) approves its head, or that head rebased onto main with the same patches. An approving
@@ -158,8 +160,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   to compile/tests), so it's on you.
 - **Commit each piece of work when it is done**: one commit per bug, feature or ticket, before
   you start the next, so `git log` says what changed and why.
-- **History is linear.** GitHub's `main` requires linear history and the `tlon/check` status — the local
-  gate's commit status, not a CI run (CI runs on release tags only). Rebase onto main, never merge it in,
+- **History is linear.** GitHub's `main` requires linear history only (CI runs on release tags only). Rebase onto main, never merge it in,
   never make a merge commit. A session ships through babylon (the dev loop, above): its ticket branch is
   rebased and fast-forwarded onto main, with no PR. A PR that already exists is reviewed on tlon
   (`review_branch`; never the PR's author or a builder of the branch; each review on its own thread, in a
