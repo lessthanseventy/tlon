@@ -91,6 +91,11 @@ description = "server: the workline value ledger — stages, gates, advances, ta
 dir = "server"
 run = "mix server.ledger"
 
+["home:bank:link"]
+description = "home: link the bank through Plaid, once and read-only — serves a page on the loopback, prints the access token once and the agenix steps (needs PLAID_CLIENT_ID and PLAID_SECRET or their machine secrets; refused when an access token is present, `-- --allow-another-link` overrides: the account allows ten links for ever)"
+dir = "server"
+run = "mix server.bank_link"
+
 ["workline:verify"]
 description = "workline: the deterministic verifier — run check on work/<slug> rebased onto main, from the thread's own checkout (asked of the server), record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug>"
 run = "scripts/workline-verify.sh"
