@@ -162,6 +162,9 @@ defmodule Server.MCP.OperatorAPI do
                                          a waiting-on its who; someday are the put-off things; note_rows is notes as {id, text};
                                          forecast is Server.Office.Weather.forecast: up to three days, today first, each
                                          {date, high_c, low_c, kind, wet} ([] when there is none);
+                                         money is Server.Home.Bank.summary: {balance, available (cents of the checking
+                                         accounts), as_of, due_this_week: [{name, amount, on}], next_deposit: {name, amount, on} | null,
+                                         accounts: [{id, name, type, subtype, balance, available, spendable}]}, null when the bank source is off;
                                          meetings is Server.Home.Day.meetings: today's remaining and tomorrow's,
                                          cleaned, each {title, starts_at, ends_at, tentative, all_day, day:
                                          "today"|"tomorrow"} ([] with no calendars); proposals is what sources suggest
@@ -629,6 +632,7 @@ defmodule Server.MCP.OperatorAPI do
       |> Server.Home.status()
       |> Map.put(:forecast, Server.Office.Weather.forecast())
       |> Map.put(:meetings, Server.Home.Day.meetings(now))
+      |> Map.put(:money, Server.Home.Bank.summary(now: now))
     )
   end
 

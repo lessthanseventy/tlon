@@ -304,6 +304,14 @@ defmodule Server.Home.Source.BankTest do
       assert Bank.line(nil, @today) == nil
     end
 
+    test "the morning message carries the line, and the home answers it as JSON" do
+      assert {text, []} = Server.Home.Morning.compose("telegram", @now)
+      assert text =~ "Money: $1,240 available. Due this week: Rent $1,200 Sun, Phone Co $45 Tue."
+
+      assert %{"due_this_week" => [%{"name" => "Rent", "on" => "2026-11-22"} | _], "balance" => 125_000} =
+               @now |> then(&Bank.summary(now: &1)) |> JSON.encode!() |> JSON.decode!()
+    end
+
     test "it is nil when the source is off" do
       :ok = Server.OperatorConfig.put("home_sources", "mail")
       assert Bank.summary(now: @now) == nil
