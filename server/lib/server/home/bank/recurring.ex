@@ -5,8 +5,8 @@ defmodule Server.Home.Bank.Recurring do
   A transaction (`txn/1`) has `cents` as Plaid gives it: positive is money out, negative money in.
   A **series** is one merchant (its normalised `merchant_name`, else `name`) with at least three
   posted charges at a steady rhythm, the latest run of them: the gaps all within one of weekly
-  (5 to 9 days), fortnightly (11 to 17), monthly (26 to 34) or yearly (355 to 375), and every amount
-  within 10% of the latest. Pending transactions never count; several on one day count once. Its
+  (5 to 9 days), fortnightly (11 to 17), monthly (26 to 34) or yearly (355 to 375; two charges do, a
+  year being all Plaid gives), and every amount within 10% of the latest. Pending transactions never count; several on one day count once. Its
   `next` date and `amount` come from the latest charge. `series/2` finds them for outflows
   (`:out`) or deposits (`:in`); amounts are integers of cents, magnitudes in a series.
   """
@@ -28,6 +28,7 @@ defmodule Server.Home.Bank.Recurring do
           last: Date.t(),
           next: Date.t(),
           count: pos_integer(),
+          was: pos_integer() | nil,
           account_id: String.t() | nil
         }
 
@@ -90,7 +91,8 @@ defmodule Server.Home.Bank.Recurring do
 
     with [previous | _] <- older,
          {period, band} <- band(Date.diff(last.date, previous.date)),
-         [_, _, _ | _] = steady <- steady([last], older, band, abs(last.cents)) do
+         {steady, rest} = steady([last], older, band, abs(last.cents)),
+         true <- length(steady) >= minimum(period) do
       [
         %{
           key: last.key,
@@ -100,6 +102,7 @@ defmodule Server.Home.Bank.Recurring do
           last: last.date,
           next: next(last.date, period),
           count: length(steady),
+          was: was(steady, rest, band, period),
           account_id: last.account_id
         }
       ]
@@ -112,13 +115,13 @@ defmodule Server.Home.Bank.Recurring do
     Enum.find(@bands, fn {_period, range} -> gap in range end)
   end
 
-  defp steady([head | _] = taken, [older | rest], band, amount) do
+  defp steady([head | _] = taken, [older | rest] = all, band, amount) do
     if Date.diff(head.date, older.date) in band and close?(abs(older.cents), amount),
       do: steady([older | taken], rest, band, amount),
-      else: taken
+      else: {taken, all}
   end
 
-  defp steady(taken, [], _band, _amount), do: taken
+  defp steady(taken, [], _band, _amount), do: {taken, []}
 
   defp close?(a, b), do: abs(a - b) * 10 <= b
 
@@ -155,7 +158,59 @@ defmodule Server.Home.Bank.Recurring do
     |> Enum.map(fn [_a, b] -> %{key: b.key, label: b.label, cents: b.cents, account_id: b.account_id, on: b.date} end)
   end
 
-  @doc "The series that are new: made by exactly three charges, the latest within the last ten days."
+  @doc """
+  The series that are new: made by just enough charges (three, a yearly one two), the latest within
+  the last ten days, with no older steady run at that rhythm behind them.
+  """
   @spec new_series([series()], Date.t()) :: [series()]
-  def new_series(series, today), do: Enum.filter(series, &(&1.count == 3 and Date.diff(today, &1.last) in 0..10))
+  def new_series(series, today), do: Enum.filter(series, &(fresh?(&1, today) and &1.was == nil))
+
+  @doc """
+  The series that are a price change: just made by enough charges as `new_series/2` has it, but with
+  an older steady run at that rhythm and another amount (`was`) behind them.
+  """
+  @spec price_changes([series()], Date.t()) :: [series()]
+  def price_changes(series, today), do: Enum.filter(series, &(fresh?(&1, today) and &1.was != nil))
+
+  @doc """
+  `txns` without the transfers between the item's own accounts: a charge and a deposit of equal and
+  opposite amounts on two different accounts within a day of each other. Neither is a charge or a
+  deposit.
+  """
+  @spec without_transfers([txn()]) :: [txn()]
+  def without_transfers(txns) do
+    {charges, deposits} = Enum.split_with(txns, &(&1.cents > 0))
+
+    {unpaired_charges, unpaired_deposits} =
+      Enum.reduce(charges, {[], deposits}, fn charge, {kept, deposits} ->
+        case Enum.split_while(deposits, &(not mirror?(charge, &1))) do
+          {before, [_pair | after_]} -> {kept, before ++ after_}
+          {_all, []} -> {[charge | kept], deposits}
+        end
+      end)
+
+    unpaired_charges ++ unpaired_deposits
+  end
+
+  defp mirror?(charge, deposit),
+    do:
+      deposit.cents == -charge.cents and deposit.account_id != charge.account_id and
+        abs(Date.diff(charge.date, deposit.date)) <= 1
+
+  defp minimum(:yearly), do: 2
+  defp minimum(_period), do: 3
+
+  defp was([first | _], [candidate | tail], band, period) do
+    with true <- Date.diff(first.date, candidate.date) in band,
+         {older, _} = steady([candidate], tail, band, abs(candidate.cents)),
+         true <- length(older) >= minimum(period) do
+      abs(candidate.cents)
+    else
+      _ -> nil
+    end
+  end
+
+  defp was(_steady, [], _band, _period), do: nil
+
+  defp fresh?(series, today), do: series.count == minimum(series.period) and Date.diff(today, series.last) in 0..10
 end

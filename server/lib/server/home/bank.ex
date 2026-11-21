@@ -2,7 +2,7 @@ defmodule Server.Home.Bank do
   @moduledoc """
   What the home knows of the operator's bank, read-only through Plaid (`Server.Home.Bank.Plaid`),
   kept in `home_keep` as one JSON value, `home_bank`: the sync cursor, the transactions of the last
-  400 days (upserted by `transaction_id`, `removed` ones dropped, a few hundred rows in all), the
+  800 days (upserted by `transaction_id`, `removed` ones dropped, a few hundred rows in all), the
   accounts with their cached balances and when it was read. `refresh/1` syncs and keeps the cursor
   with its data in one write, so a sync that fails anywhere keeps nothing and the next one starts
   from the cursor this update began with.
@@ -22,8 +22,10 @@ defmodule Server.Home.Bank do
   alias Server.Home.Keep
   alias Server.Home.Sources
 
+  require Logger
+
   @key "home_bank"
-  @keep_days 400
+  @keep_days 800
   @page 500
   @pages 40
   @retries 2
@@ -66,10 +68,13 @@ defmodule Server.Home.Bank do
 
     with {:ok, changes} <- sync(state["cursor"], opts, @retries),
          {:ok, accounts} <- Plaid.accounts(opts) do
+      accounts = accounts |> Enum.map(&account/1) |> Enum.reject(&is_nil/1)
+      warn_unspendable(accounts, Map.get(state, "accounts", []))
+
       kept = %{
         "cursor" => changes.cursor,
         "transactions" => merge(Map.get(state, "transactions", []), changes, today(now)),
-        "accounts" => accounts |> Enum.map(&account/1) |> Enum.reject(&is_nil/1),
+        "accounts" => accounts,
         "as_of" => DateTime.to_iso8601(now)
       }
 
@@ -173,7 +178,7 @@ defmodule Server.Home.Bank do
         available: total(spendable, &(&1["available"] || &1["current"])),
         as_of: as_of,
         due_this_week: txns |> Recurring.series(:out) |> Recurring.due_within(today, 6) |> Enum.map(&item/1),
-        next_deposit: txns |> Recurring.series(:in) |> Enum.find(&(Date.compare(&1.next, today) != :lt)) |> deposit(),
+        next_deposit: txns |> Recurring.series(:in) |> next_deposit(spendable, today),
         accounts: Enum.map(accounts, &Map.put(listed(&1), :spendable, spendable?(&1)))
       }
     else
@@ -184,7 +189,12 @@ defmodule Server.Home.Bank do
   @doc "The transactions kept in `state`, as `Server.Home.Bank.Recurring.txn/1` reads them."
   @spec transactions(map()) :: [Recurring.txn()]
   def transactions(state),
-    do: state |> Map.get("transactions", []) |> Enum.map(&Recurring.txn/1) |> Enum.reject(&is_nil/1)
+    do:
+      state
+      |> Map.get("transactions", [])
+      |> Enum.map(&Recurring.txn/1)
+      |> Enum.reject(&is_nil/1)
+      |> Recurring.without_transfers()
 
   @doc "The local calendar date of the instant `now`."
   @spec today(DateTime.t()) :: Date.t()
@@ -206,9 +216,6 @@ defmodule Server.Home.Bank do
   end
 
   defp item(series), do: %{name: series.label, amount: series.amount, on: series.next}
-
-  defp deposit(nil), do: nil
-  defp deposit(series), do: item(series)
 
   defp listed(account) do
     %{
@@ -267,4 +274,27 @@ defmodule Server.Home.Bank do
     do: "Next deposit about #{if Date.diff(on, today) <= 6, do: day(on), else: Calendar.strftime(on, "%a %-d %b")}."
 
   defp day(date), do: Calendar.strftime(date, "%a")
+
+  defp warn_unspendable([], _before), do: :ok
+
+  defp warn_unspendable(accounts, before) do
+    if not Enum.any?(accounts, &spendable?/1) and kinds(accounts) != kinds(before) do
+      Logger.warning(
+        "home bank: no account is a checking account, so there is no money line: #{inspect(kinds(accounts))}"
+      )
+    end
+
+    :ok
+  end
+
+  defp kinds(accounts), do: accounts |> Enum.map(&{&1["type"], &1["subtype"]}) |> Enum.sort()
+
+  defp next_deposit(series, spendable, today) do
+    ids = Enum.map(spendable, & &1["id"])
+
+    case Enum.find(series, &(&1.account_id in ids and Date.compare(&1.next, today) != :lt)) do
+      nil -> nil
+      found -> item(found)
+    end
+  end
 end

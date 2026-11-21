@@ -11,7 +11,9 @@ defmodule Server.Home.Source.Bank do
   - two charges of one amount at one merchant within two days that are not a habit, keyed by merchant,
     amount and the later day;
   - a merchant whose third steady charge has just made it recurring ("looks like a new
-    subscription"), keyed by the merchant, so once ever.
+    subscription"), keyed by the merchant, so once ever;
+  - a recurring charge that changed price after an older steady run ("went up from $a to $b"),
+    keyed by the merchant and the new amount.
 
   A key is filed once and a dismissed one never returns, as `Server.Proposal.offer/5` has it;
   nothing is filed without a yes (`auto/0` is empty). Merchant names are outside text: shortened to a
@@ -60,7 +62,8 @@ defmodule Server.Home.Source.Bank do
 
     for(series <- Recurring.due_within(out, today, @due_days), do: due(series, accounts)) ++
       for(double <- Recurring.doubles(txns, today), do: double(double)) ++
-      for series <- Recurring.new_series(out, today), do: new(series)
+      for(series <- Recurring.new_series(out, today), do: new(series)) ++
+      for series <- Recurring.price_changes(out, today), do: price(series)
   end
 
   defp accounts(state), do: Map.new(Map.get(state, "accounts", []), &{&1["id"], &1})
@@ -101,6 +104,17 @@ defmodule Server.Home.Source.Bank do
       kind: "todo",
       text: "#{series.label} looks like a new subscription: #{Bank.money(series.amount)} #{series.period}",
       why: "three steady charges, the last on #{Calendar.strftime(series.last, "%-d %b")}"
+    }
+  end
+
+  defp price(series) do
+    word = if series.amount > series.was, do: "up", else: "down"
+
+    %{
+      key: "bank:price:#{hash(series.key)}:#{series.amount}",
+      kind: "todo",
+      text: "#{series.label} went #{word} from #{Bank.money(series.was)} to #{Bank.money(series.amount)}",
+      why: "#{series.period}, the last on #{Calendar.strftime(series.last, "%-d %b")}"
     }
   end
 

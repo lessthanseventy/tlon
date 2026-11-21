@@ -57,6 +57,40 @@ defmodule Server.Home.Bank.RecurringTest do
     assert [%{period: :yearly, next: ~D[2027-03-01]}] = Recurring.series(yearly, :out)
   end
 
+  test "a yearly charge needs two, a year apart at one amount; a monthly one still needs three" do
+    two = [txn(~D[2025-03-01], 3_000, "Domain"), txn(~D[2026-03-02], 3_000, "Domain")]
+    assert [%{period: :yearly, count: 2, next: ~D[2027-03-02]}] = Recurring.series(two, :out)
+    assert Recurring.series([txn(~D[2025-03-01], 3_000, "Domain"), txn(~D[2026-03-02], 9_000, "Domain")], :out) == []
+    assert Recurring.series(monthly("Rent", 120_000, ~D[2026-10-27], 2), :out) == []
+  end
+
+  test "a new price after an older steady run is a price change, not a new subscription" do
+    old = monthly("Streamr", 999, ~D[2026-08-17], 3)
+    up = monthly("Streamr", 1_299, ~D[2026-11-17], 3)
+    series = Recurring.series(old ++ up, :out)
+
+    assert [%{amount: 1_299, was: 999, count: 3}] = series
+    assert Recurring.new_series(series, @today) == []
+    assert [%{label: "Streamr"}] = Recurring.price_changes(series, @today)
+
+    fresh = Recurring.series(monthly("Streamr", 999, ~D[2026-11-17], 3), :out)
+    assert [%{was: nil}] = fresh
+    assert Recurring.price_changes(fresh, @today) == []
+  end
+
+  test "a transfer between two accounts, equal and opposite within a day, is neither charge nor deposit" do
+    out = txn(~D[2026-11-01], 20_000, "To Savings", %{"account_id" => "chk"})
+    into = txn(~D[2026-11-02], -20_000, "From Checking", %{"account_id" => "sav"})
+    spend = txn(~D[2026-11-02], 20_000, "Shop", %{"account_id" => "chk"})
+    pay = txn(~D[2026-11-02], -20_000, "Pay", %{"account_id" => "chk"})
+
+    assert Enum.sort_by(Recurring.without_transfers([out, into, spend, pay]), & &1.id) ==
+             Enum.sort_by([spend, pay], & &1.id)
+
+    far = txn(~D[2026-11-09], -20_000, "From Checking", %{"account_id" => "sav"})
+    assert length(Recurring.without_transfers([out, far])) == 2
+  end
+
   test "an irregular rhythm is not a series" do
     irregular = for d <- [~D[2026-08-01], ~D[2026-09-20], ~D[2026-10-03]], do: txn(d, 500, "Cafe")
     assert Recurring.series(irregular, :out) == []

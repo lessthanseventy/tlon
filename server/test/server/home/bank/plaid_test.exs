@@ -21,7 +21,12 @@ defmodule Server.Home.Bank.PlaidTest do
       for name <- ~w(PLAID_CLIENT_ID PLAID_SECRET PLAID_ACCESS_TOKEN XDG_RUNTIME_DIR), do: {name, System.get_env(name)}
 
     for {name, _} <- previous, do: System.delete_env(name)
-    on_exit(fn -> for {name, value} <- previous, value, do: System.put_env(name, value) end)
+
+    on_exit(fn ->
+      for {name, value} <- previous do
+        if value, do: System.put_env(name, value), else: System.delete_env(name)
+      end
+    end)
   end
 
   test "the client can call four paths and no others" do
@@ -48,7 +53,7 @@ defmodule Server.Home.Bank.PlaidTest do
     assert Enum.map(urls, &String.replace_prefix(&1, "https://production.plaid.com", "")) == Plaid.paths()
   end
 
-  test "a link token asks for the transactions product alone, 180 days, no redirect" do
+  test "a link token asks for the transactions product alone, 730 days, no redirect" do
     {:ok, _} = Plaid.link_token_create([http: stub(ok(%{"link_token" => "lt"}))] ++ @creds)
     assert_received {:request, _, body}
 
@@ -59,7 +64,7 @@ defmodule Server.Home.Bank.PlaidTest do
              "language" => "en",
              "country_codes" => ["US"],
              "products" => ["transactions"],
-             "transactions" => %{"days_requested" => 180}
+             "transactions" => %{"days_requested" => 730}
            } = body
 
     assert %{"client_user_id" => _} = body["user"]

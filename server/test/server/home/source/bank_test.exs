@@ -196,8 +196,8 @@ defmodule Server.Home.Source.BankTest do
     assert Proposal.open() == []
   end
 
-  test "modified rows replace, removed rows go, and what is older than 400 days is dropped" do
-    old = t("old", "2025-09-01", 5.0, "Ancient")
+  test "modified rows replace, removed rows go, and what is older than 800 days is dropped" do
+    old = t("old", "2024-09-01", 5.0, "Ancient")
     {http, _} = plaid([page(rent() ++ [old], cursor: "c1")], accounts(1500.0))
     {:ok, _, []} = fetch(http)
     assert [%{"id" => "rent0"} | _] = kept()["transactions"]
@@ -258,6 +258,52 @@ defmodule Server.Home.Source.BankTest do
     assert Bank.summary(now: @now) == nil
   end
 
+  test "a yearly charge two years back survives the keep and is found, then proposed when due" do
+    domain = [t("y1", "2024-11-25", 49.0, "Domain"), t("y2", "2025-11-25", 49.0, "Domain")]
+    {http, _} = plaid([page(domain)], accounts(1500.0))
+
+    assert {:ok, [%{text: "Domain $49 is due Wed 25 Nov; the balance covers it"}], []} = fetch(http)
+    assert length(kept()["transactions"]) == 2
+
+    assert [%{period: :yearly, next: ~D[2026-11-25]}] =
+             kept() |> Bank.transactions() |> Server.Home.Bank.Recurring.series(:out)
+  end
+
+  test "a price change is one proposal of its own and not a new subscription" do
+    dates = ~w(2026-06-17 2026-07-17 2026-08-17 2026-09-17 2026-10-17 2026-11-17)
+
+    rows =
+      for {d, i} <- Enum.with_index(dates), do: t("s#{i}", d, if(i < 3, do: 9.99, else: 12.99), "Streamr")
+
+    {http, _} = plaid([page(rows)], accounts(1500.0))
+    assert {:ok, [%{text: "Streamr went up from $9.99 to $12.99", key: key}], []} = fetch(http)
+    assert key =~ ~r/^bank:price:[0-9a-f]{16}:1299$/
+  end
+
+  test "accounts with none spendable are logged once, by type and subtype, without balances" do
+    savings =
+      ok(%{
+        "accounts" => [
+          %{
+            "account_id" => "sav",
+            "name" => "S",
+            "type" => "depository",
+            "subtype" => "savings",
+            "balances" => %{"current" => 77_123.0}
+          }
+        ]
+      })
+
+    {http, _} = plaid([page([]), page([], cursor: "c2")], savings)
+
+    log = ExUnit.CaptureLog.capture_log(fn -> fetch(http) end)
+    assert log =~ "no account is a checking account"
+    assert log =~ "savings"
+    refute log =~ "77"
+
+    assert ExUnit.CaptureLog.capture_log(fn -> fetch(http) end) == ""
+  end
+
   describe "summary" do
     setup do
       pay =
@@ -310,6 +356,27 @@ defmodule Server.Home.Source.BankTest do
 
       assert %{"due_this_week" => [%{"name" => "Rent", "on" => "2026-11-22"} | _], "balance" => 125_000} =
                @now |> then(&Bank.summary(now: &1)) |> JSON.encode!() |> JSON.decode!()
+    end
+
+    test "a regular transfer to savings is no deposit, and a deposit into savings is not the next deposit" do
+      transfers =
+        for {d, i} <- Enum.with_index(["2026-09-24", "2026-10-24", "2026-11-17"]) do
+          [
+            t("to#{i}", d, 300.0, "To Savings"),
+            t("from#{i}", d, -300.0, "From Checking", %{"account_id" => "sav"})
+          ]
+        end
+
+      interest =
+        for {d, i} <- Enum.with_index(["2026-09-26", "2026-10-26", "2026-11-26"]),
+            do: t("int#{i}", d, -2.0, "Interest", %{"account_id" => "sav"})
+
+      {http, _} = plaid([page(List.flatten(transfers) ++ interest, cursor: "c2")], accounts(1240.0))
+      {:ok, _, []} = fetch(http)
+
+      summary = Bank.summary(now: @now)
+      assert summary.next_deposit == %{name: "Acme Payroll", amount: 150_000, on: ~D[2026-11-27]}
+      refute Enum.any?(summary.due_this_week, &(&1.name == "To Savings"))
     end
 
     test "it is nil when the source is off" do

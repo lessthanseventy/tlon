@@ -15,7 +15,7 @@ defmodule Server.Home.Bank.Plaid do
 
   @host "https://production.plaid.com"
   @paths ~w(/link/token/create /item/public_token/exchange /transactions/sync /accounts/get)
-  @days_requested 180
+  @days_requested 730
   @client_name "the house"
   @client_user_id "the-house-operator"
 
@@ -23,7 +23,7 @@ defmodule Server.Home.Bank.Plaid do
   @spec paths() :: [String.t()]
   def paths, do: @paths
 
-  @doc "A link token for the Link page: the `transactions` product alone, 180 days of history, no redirect URI."
+  @doc "A link token for the Link page: the `transactions` product alone, 730 days of history (Plaid's most, and fixed once linked), no redirect URI."
   @spec link_token_create(keyword()) :: {:ok, String.t()} | {:error, term()}
   def link_token_create(opts \\ []) do
     body = %{

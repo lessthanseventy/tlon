@@ -229,11 +229,12 @@ and every layer the spine design's re-laid §9 asked for
   `/accounts/get`, listed in `Plaid.paths/0` and pinned by a test; never the paid balance call, a refresh, auth or a transfer), on
   when `home_sources` names it and an access token is present (env `PLAID_ACCESS_TOKEN` or the agenix secret `plaid-access-token`,
   with `PLAID_CLIENT_ID`/`PLAID_SECRET` or `plaid-client-id`/`plaid-secret`; never kept or logged). It syncs into the one `home_keep`
-  value `home_bank` (cursor and transactions stored in one write, last 400 days, upserted by `transaction_id`; no table), and
+  value `home_bank` (cursor and transactions stored in one write, last 800 days (Plaid is asked for 730 at the link, its most, so a yearly charge shows), upserted by `transaction_id`; no table), and
   `Server.Home.Bank.Recurring` (pure, in cents) finds the steady charges and deposits (three posted charges, a weekly,
-  fortnightly, monthly or yearly rhythm, amounts within 10%). It proposes only to-dos: a charge due within five days with whether
-  the available balance covers it, two equal charges within two days that are not a habit, a merchant that just became recurring
-  (keys `bank:due|double|new|relink:…`, never filed by itself); `ITEM_LOGIN_REQUIRED` is one proposal that the bank needs linking
+  fortnightly, monthly or yearly rhythm, a yearly one needing two charges, amounts within 10%; transfers between its own
+  accounts, equal and opposite within a day, are neither). It proposes only to-dos: a charge due within five days with whether
+  the available balance covers it, two equal charges within two days that are not a habit, a merchant that just became recurring,
+  a recurring one whose price changed (keys `bank:due|double|new|price|relink:…`, never filed by itself); `ITEM_LOGIN_REQUIRED` is one proposal that the bank needs linking
   again. `Server.Home.Bank.summary/1` (nil when off) gives the morning message its one `Money:` line and `GET /api/home` its `money`;
   spendable is the checking accounts alone. `mise run home:bank:link` links once (`Server.Home.Bank.Link`, a loopback page,
   the token printed once and kept nowhere; refused with a token present, `-- --allow-another-link` overrides: the account allows ten
