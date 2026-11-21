@@ -42,8 +42,9 @@ func _polls(bot) -> int:
 	return bot.calls.filter(func(c): return c["method"] == "getUpdates").size()
 
 
-# until no bot has a request in flight and, while one polls, the stub has seen two more polls and
-# handed out every update: what the bot answered has then reached the stub
+# until no bot has a request in flight or a line waiting for its reply and, while one polls,
+# the stub has seen two more polls and handed out every update: what the bot answered has then
+# reached the stub
 func _settle() -> void:
 	var bot = null if s.bot.is_null() else s.bot.get_object()
 	var from: int = 0 if bot == null else _polls(bot)
@@ -52,7 +53,7 @@ func _settle() -> void:
 			var polling := false
 			for tg in _bots():
 				polling = polling or tg._running
-				if _in_flight(tg) > 0:
+				if _in_flight(tg) > 0 or tg._busy:
 					return false
 			return bot == null or not polling or (_polls(bot) - from >= 2 and bot.updates.is_empty()),
 		"the bot's requests answered and the stub's updates taken"
