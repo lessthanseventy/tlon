@@ -411,7 +411,7 @@ on a schema it can't repair), and a named node + cookie (`rel/env.sh.eex`) so th
 the live node:
 
 - `mise run server:release` — build the release the service runs, in `.release/` at the release pointer.
-- `mise run release:cut` — ship: move the pointer to origin/main (or a commit on it), build, restart once quiet. A merge to main alone deploys nothing.
+- `mise run release:cut` — ship: move the pointer to origin/main (or a commit on it), build, restart once quiet. A merge to main alone deploys nothing; a session's landing runs `mise run install`, which cuts.
 - `mise run release:smoke -- [<sha>]` — the candidate as a scratch release on a pid-picked port and its own db `tlon_smoke_<port>` (never 4040 or `tlon`; the port is printed): `/api/office`, then the office driven headless; torn down after (`TLON_SMOKE_HOLD=1` keeps a passing node up to drive, as QA does, until stopped or `TLON_SMOKE_HOLD_TTL` seconds pass, default 7200). A sandboxed Bash is refused up front: it can't reach Postgres, and its network namespace is blind to the port a hold serves on — run it unsandboxed. `TLON_NODE` names its node beside `funes@`.
 - `mise run server:restart` — rebuild + restart the service (redeploy a server change). It refuses
   while a restart would cut work off (a coworker mid-turn, a verify, landing, smoke or scheduled run running —

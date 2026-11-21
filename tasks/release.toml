@@ -9,3 +9,7 @@ run = "scripts/release.sh status"
 ["release:smoke"]
 description = "release: smoke a candidate (default origin/main) — a scratch release on a scratch port and db, /api/office, the office driven headless; exit code is the verdict"
 run = "scripts/run-from-root.sh release-smoke.sh"
+
+[install]
+description = "after a landing: cut the release at origin/main, so what landed is what runs (babylon runs this once a change is on main)"
+run = "scripts/release.sh cut"
