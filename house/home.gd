@@ -1959,13 +1959,12 @@ func _draw_piggy() -> void:
 	var piece := layout.piggy()
 	if piece.is_empty() or things.money == null:
 		return
-	var c: int = piece["c"]
-	var r: int = piece["r"]
+	var at := layout.seat(piece)
 	var up := float(layout.lift(piece))
-	var pen := PetThings.Pen.new(room, _p(c, r, up), _k)
+	var pen := PetThings.Pen.new(room, _p(at.x, at.y, up), _k)
 	Money.piggy(pen, Money.envelope(things.money, today()))
 	var hull := Money.outline(pen)
-	_register("piggy", hull, _p(c + 0.5, r + 0.8, up))
+	_register("piggy", hull, _p(at.x + 0.5, at.y + 0.8, up))
 	_hover_outline("piggy", hull)
 
 

@@ -106,8 +106,9 @@ const SAVED := 4
 const THINGS_SAVED := 2
 # where the basket and the piggy bank stood by default before `SAVED` 4
 const OLD_DEFAULTS := {"laundry_basket": Vector2i(1, 1), "piggy_bank": Vector2i(6, 4)}
-# the tables a piggy bank may stand on
-const TABLE_TOPS := ["dining_table", "round_table", "tavern_table"]
+# the tables a piggy bank may stand on, and how high the middle of each one's top is drawn (the
+# sprite's `height` is its rim, a few pixels above)
+const TABLE_TOPS := {"dining_table": 17, "round_table": 15, "tavern_table": 15}
 # default pieces added after layouts were first saved: a saved layout is offered each once
 const NEWER := ["laundry_basket", "photo_frame", "piggy_bank"]
 # the pets' spots that move with their thing: their old cells stay free ground
@@ -513,7 +514,17 @@ func table_under(p: Dictionary) -> Dictionary:
 # how high up a piece stands: the table top under a piggy bank, else the floor
 func lift(p: Dictionary) -> int:
 	var table := table_under(p)
-	return 0 if table.is_empty() else height(table)
+	return 0 if table.is_empty() else TABLE_TOPS[table["p"]]
+
+
+# the corner, in cell units, the piggy bank is drawn from: its cell's, or on a table the one that
+# puts it in the middle of the top, so no part of it hangs over an edge
+func seat(p: Dictionary) -> Vector2:
+	var table := table_under(p)
+	if table.is_empty():
+		return Vector2(p["c"], p["r"])
+	var r := rect(table)
+	return Vector2(r.position) + Vector2(r.size) / 2.0 - Vector2(0.5, 0.5)
 
 
 # a pet thing: once, never on another piece, and a pet can get to it

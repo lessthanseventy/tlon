@@ -442,7 +442,9 @@ func _opaque(p: Dictionary, pos: Vector2) -> bool:
 	if People.is_frame(p):
 		var pen := PetThings.Pen.new(room, room._p(room._origin, p["c"], p["r"]), room._k)
 		return Geometry2D.is_point_in_polygon(pos, People.outline(pen))
-	if PetThings.is_pet(p) or Chores.is_basket(p) or Money.is_piggy(p):
+	if Money.is_piggy(p):
+		return Geometry2D.is_point_in_polygon(pos, Money.outline(_piggy_pen(p, Color.WHITE)))
+	if PetThings.is_pet(p) or Chores.is_basket(p):
 		return _over_pet(p, pos)
 	var s: Dictionary = room._sprite(room._furn_id([home.layout.sprite_id(p)]))
 	if s.is_empty():
@@ -453,6 +455,13 @@ func _opaque(p: Dictionary, pos: Vector2) -> bool:
 	if local.x < 0 or local.y < 0 or local.x >= tex.get_width() or local.y >= tex.get_height():
 		return false
 	return tex.get_image().get_pixelv(Vector2i(local)).a > 0.1
+
+
+# the pen the piggy bank is drawn with where it stands, on a table top or the floor
+func _piggy_pen(p: Dictionary, tint: Color) -> PetThings.Pen:
+	var at: Vector2 = home.layout.seat(p)
+	var origin: Vector2 = room._p(room._origin, at.x, at.y) - Vector2(0, home.layout.lift(p) * room._k)
+	return PetThings.Pen.new(room, origin, room._k, false, tint)
 
 
 # the thing's footprint and its height, as one outline
@@ -497,9 +506,7 @@ func draw_ghost() -> void:
 		People.frame(pen, false)
 		return
 	if Money.is_piggy(p):
-		var at: Vector2 = room._p(room._origin, p["c"], p["r"]) - Vector2(0, layout.lift(p) * room._k)
-		var pen := PetThings.Pen.new(room, at, room._k, false, tint)
-		Money.piggy(pen, "none")
+		Money.piggy(_piggy_pen(p, tint), "none")
 		return
 	var s: Dictionary = room._sprite(room._furn_id([layout.sprite_id(p)]))
 	if home.petlife.hay(p):
@@ -526,5 +533,7 @@ func _outline(p: Dictionary, color: Color) -> void:
 	if k == "wall":
 		return
 	var pts := _quad(home.layout.rect(p))
+	if Money.is_piggy(p):
+		pts = Money.outline(_piggy_pen(p, Color.WHITE))
 	pts.append(pts[0])
 	room.draw_polyline(pts, color, 2.0)

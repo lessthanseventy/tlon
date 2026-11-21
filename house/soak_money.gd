@@ -6,6 +6,8 @@ extends RefCounted
 # Today row, and the room without money (the server says null, the house's own list). The rules
 # without a scene are `logic_money.gd`.
 const Money := preload("res://money.gd")
+# the pig's feet, left and right of its middle, in its own art pixels
+const FEET := [-11.0, 11.5]
 const MoneyView := preload("res://money_view.gd")
 const BackendLocal := preload("res://backend_local.gd")
 const Blocks := preload("res://blocks.gd")
@@ -91,6 +93,7 @@ func run() -> void:
 	await _today()
 	await _row_fits()
 	await _cell()
+	await _tops()
 	await _without()
 	await _local()
 
@@ -211,7 +214,7 @@ func _states() -> void:
 		"by default it stands on the dining table"
 	)
 	s._check(
-		h.layout.lift(piece) == h.layout.height(table) and h.layout.lift(piece) > 0,
+		h.layout.lift(piece) == h.layout.TABLE_TOPS["dining_table"] and h.layout.lift(piece) > 0,
 		"at the table top's height"
 	)
 	var drawn_at: Array = h.items().filter(
@@ -508,6 +511,44 @@ func _local() -> void:
 	await _sync()
 	s._check(_hits("piggy") == 0, "local mode: no piggy bank hit")
 	s._check(h.layout.piggy().is_empty() and _held() != {}, "and the piece takes no cell")
+
+
+# on every table it may stand on, each way round, the line its feet stand along lies inside the
+# table top's outline
+func _tops() -> void:
+	await _stage(DUE)
+	var saved: Array = h.layout.pieces.duplicate(true)
+	for spec in [
+		["dining_table", "nwse"],
+		["dining_table", "nesw"],
+		["round_table", ""],
+		["tavern_table", "sw"],
+		["tavern_table", "se"],
+	]:
+		h.layout.pieces = saved.duplicate(true)
+		for p in h.layout.pieces:
+			if p["p"] == "dining_table":
+				p["p"] = spec[0]
+				p["f"] = spec[1]
+		var table: Dictionary = h.layout.pieces.filter(func(p): return p["p"] == spec[0])[0]
+		var pig := _held()
+		pig["c"] = table["c"]
+		pig["r"] = table["r"]
+		var name := "%s %s" % spec
+		s._check(h.layout.table_under(pig) == table, "%s: the piggy bank stands on it" % name)
+		var seat: Vector2 = h.layout.seat(pig)
+		var mid: Vector2 = h._p(seat.x + 0.5, seat.y + 0.5, float(h.layout.lift(pig)))
+		var sprite: Dictionary = h.room._sprite(h.room._furn_id([h.layout.sprite_id(table)]))
+		var corner: Vector2 = h.room._p(h.room._origin, table["c"], table["r"]) - sprite["anchor"]
+		var tex: Texture2D = sprite["tex"]
+		for x in FEET:
+			var foot := mid + Vector2(x * Money.SCALE * h._k, 0.0)
+			var local := (foot - corner.round()).floor()
+			s._check(
+				tex.get_image().get_pixelv(Vector2i(local)).a > 0.1,
+				"%s: its foot at %s is on the table's top" % [name, x]
+			)
+	h.layout.pieces = saved
 
 
 func _held() -> Dictionary:
