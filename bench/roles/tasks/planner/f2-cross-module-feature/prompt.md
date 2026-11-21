@@ -10,9 +10,11 @@ What you know about the code:
 - `server/lib/server/alerts.ex` holds `Alerts.raise/1` (`%{kind, title, body, actions}`) and
   `Alerts.list/0`; the operator API serves the list at `GET /api/alerts`
   (`server/lib/server/mcp/operator_api.ex`).
-- The house is a Godot project (GDScript) under `house/`; `house/main.gd` polls `/api/alerts` and
-  `house/sidebar.gd` draws a banner for `{title, body, ttl_ms}`. Its tests are the logic checks in
-  `house/logic.gd` (`mise run house:check`).
+- The house is a Godot project (GDScript) under `house/`. `house/main.gd` polls `GET /api/home` every
+  5 s (`_poll`, answered in `_on_polled`) and reads nothing from `/api/alerts`. `house/sidebar.gd`
+  draws the banner strip (`_banner_update`): one row at a time, a ringing reminder, then a reply line
+  (`reply_text` in `house/home.gd`, shown while `reply_left` seconds remain), then the day's slip.
+  Its tests are the logic checks in `house/logic.gd` (`mise run house:check`).
 - Elixir tests live in `server/test/server/`; `mise run server:test` runs them.
 
 Write the plan: numbered tasks, each with the files it touches, the failing test it starts with, the
