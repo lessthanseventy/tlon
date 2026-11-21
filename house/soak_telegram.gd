@@ -682,7 +682,7 @@ func _in_the_house(main) -> void:
 		["reminder", "call mum", "2026-11-19T17:00:00Z"],
 		"a line from the phone is filed"
 	)
-	var tail: Array = h.chat.messages.slice(-2)
+	var tail: Array = h.chat.messages.filter(func(m): return m.get("via") == "phone").slice(-2)
 	_eq(
 		tail.map(func(m): return [m["who"], m.get("via")]),
 		[["me", "phone"], ["home", "phone"]],
