@@ -8,7 +8,7 @@ checked, and they come to your door when something is yours to decide.
 
 **The crew.** Each coworker is a named agent with a role and a model routed to it: a **manager**
 (tertius) who triages tickets and staffs them, **builders** (the first is the tech lead, who owns the
-work's coherence), **planners**, **reviewers**, **QA**, a **sheriff** who owns anything red, a **PM**
+work's coherence), **planners**, **reviewers**, a **sheriff** who owns anything red, a **PM**
 who decides what ships, a **librarian** who keeps the office's memory honest, a **researcher** and an
 **assistant**. They run in Claude Code, on Claude or on ollama models,
 each in its own terminal, and join the office as citizens over MCP: a coworker wakes already knowing
@@ -22,7 +22,7 @@ its thread, its brief and what the office knows.
   commit it read; code committed afterwards goes back to build rather than landing on an old approval.
 - A model that didn't write it **grades the risk**. Under your standing approval, low-risk changes land
   on their own; everything else waits for you.
-- **QA** smokes anything you'd see, on a scratch release, before it lands.
+
 - The **merge queue** rebases onto main, gates it again, and opens the PR.
 - Work can be **sent back** to an earlier stage on the same branch, the build kept to improve, and a
   reviewer's non-blocking findings become **follow-up tickets** instead of nits that block or vanish.

@@ -141,10 +141,10 @@ defmodule Server.RolloutTest do
     end
 
     test "a running smoke or scheduled run (the nightly gate) holds it too" do
-      running!("Server.Jobs.Smoke", :smoke, %{thread_id: 150, ref: "work/x"})
+      running!("Server.Jobs.Smoke", :smoke, %{candidate: true, ref: String.duplicate("a", 40)})
       running!("Server.Jobs.RunSchedule", :schedules, %{run_id: 305})
       busy = Rollout.busy(%{})
-      assert Enum.any?(busy, &(&1 =~ "smoke of #150"))
+      assert Enum.any?(busy, &(&1 =~ "smoke of aaaaaaaaaaaa is running"))
       assert Enum.any?(busy, &(&1 =~ "scheduled run 305"))
     end
 

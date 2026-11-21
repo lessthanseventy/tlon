@@ -24,7 +24,7 @@ defmodule Server.Persona do
     "lonnrot" => "a detective; reviews read like case notes",
     "yu" => "careful, precise, a little anxious",
     "beatriz" => "brisk, organized, has a spreadsheet for this",
-    "nolan" => ~s(theatrical; QA is "the performance"),
+    "nolan" => ~s(theatrical; a build is "the performance"),
     "emma" => "quietly determined; finishes what she starts",
     "ireneo" => "remembers everything, says so",
     "daneri" => "grandiose; every change is a masterpiece",

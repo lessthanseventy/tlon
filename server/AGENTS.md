@@ -115,11 +115,6 @@ and every layer the spine design's re-laid §9 asked for
   refused, held again at a head already requeued, the requeued landing red or conflicting, an hour
   gone — is a `pr_blocked` Need, answered by rebase (back into the merge queue, `Workline.reland_queued/2`: rebased, gated, `tlon/check` posted and merged at that head — never GitHub's own update-branch, whose head no gate ran on), close and reland, or a look at the PR).
   `KeepUp` leaves out a project whose repo folder is gone, with one keyed note `keep_up:gone:<repo>` (naming `server:project:remove`) instead of a failed job. It also warms each main checkout's `_build` for test once per tip (`warm_test_builds/2`): a mix project with a locked dependency and no `deps/` is skipped (never fetched), as is a compile that says its dependencies are unavailable (kept with its tip, not recompiled until the tip moves); each skip or failure is one keyed rollout note `keep_up:warm:<dir>`, and the tried tip is kept in `Server.Home.Keep`, so a restart does not recompile it, and its note is posted again while the condition holds.
-  An approved review of a change Andrew sees (the operator API and its snapshot) goes to the bench's `qa`
-  seat first: it smokes the branch on a scratch release the service holds for it (`start_smoke`, `stop_smoke`: `Server.Smoke`, `Server.Jobs.Smoke` — a seat's sandboxed Bash can't run `release:smoke` or reach its port; `start_smoke`'s `fixtures` seed named sets (a spec is `name` or `name:key=value,key=value`, no spaces; a value that cannot travel, such as a backtick, is a named shape: `tool_denied_need:shape=backtick`; a new case is a catalog entry, not a new door) from the candidate's `Server.Smoke.Fixtures` on the smoke's own `tlon_smoke_*` db, refused on any other) and files `submit_qa` (with the workline's
-  `thread_id`, which only a `qa` seat on its bench may name — its session may be bound elsewhere); a fail bounces it to
-  build with the finding, and nothing lands past an owed QA (`Server.Workline.qa_verdict/5`) but the
-  operator's `approve <id> --skip-qa <why>` (API `{"skip_qa"}`), recorded as its QA verdict.
   The operator reviews a branch from the office (`Server.Workline.OperatorReview`): its diff as
   files, hunks and numbered lines, and notes on lines or files submitted with a verdict — comment,
   request changes (`send_back/5` to build, the notes its why) or approve — reaching the lead as one
@@ -130,9 +125,9 @@ and every layer the spine design's re-laid §9 asked for
   only, never while its verify is queued or running or its landing is running; a landing still
   waiting in the merge queue is pulled with the move by `unqueue` (the tool's and the API's field,
   the cli's `--unqueue`), cancelled in the same transaction so nothing finds the thread at review to
-  requeue it. A reviewer's or QA's non-blocking
-  findings are `follow_ups` on `submit_review`/`submit_qa`: one post on the workline, made after the
-  verdict for the lead it hands to (the builder on a bounce, the qa seat when QA is owed, the operator
+  requeue it. A reviewer's non-blocking
+  findings are `follow_ups` on `submit_review`: one post on the workline, made after the
+  verdict for the lead it hands to (the builder on a bounce, the operator
   at their gate — the author's own session ended with the verdict), who fixes what sits in the
   change's lines, drops the rest or defers one with `file_ticket`; a `held` follow-up ticket goes to
   intake when its thread closes (one closed unmerged says so in the ticket).
@@ -145,7 +140,7 @@ and every layer the spine design's re-laid §9 asked for
   An approving review is risk-graded by a model that didn't write it (`Server.Workline.Grade`, run by
   `Server.Jobs.Grade`): script limits first, then five axes; under the operator's `auto_land_risk` it
   lands without them.
-  Red anywhere after build — verify, the merge gate, review, QA — goes back to build on the same
+  Red anywhere after build — verify, the merge gate, review — goes back to build on the same
   branch with the finding (`Workline.red_verify/2` for verify): the build kept, never redone. Red
   also goes to the workspace's sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat
   thread as a copy, never instead of the operator's list (`Server.Office.Needs`, where a workline
@@ -410,7 +405,7 @@ the live node:
 
 - `mise run server:release` — build the release the service runs, in `.release/` at the release pointer.
 - `mise run release:cut` — ship: move the pointer to origin/main (or a commit on it), build, restart once quiet. A merge to main alone deploys nothing; a session's landing runs `mise run install`, which cuts.
-- `mise run release:smoke -- [<sha>]` — the candidate as a scratch release on a pid-picked port and its own db `tlon_smoke_<port>` (never 4040 or `tlon`; the port is printed): `/api/office`, then a thread opened; torn down after (`TLON_SMOKE_HOLD=1` keeps a passing node up, as QA does, until stopped or `TLON_SMOKE_HOLD_TTL` seconds pass, default 7200). A sandboxed Bash is refused up front: it can't reach Postgres, and its network namespace is blind to the port a hold serves on — run it unsandboxed. `TLON_NODE` names its node beside `funes@`.
+- `mise run release:smoke -- [<sha>]` — the candidate as a scratch release on a pid-picked port and its own db `tlon_smoke_<port>` (never 4040 or `tlon`; the port is printed): `/api/office`, then a thread opened; torn down after (`TLON_SMOKE_HOLD=1` keeps a passing node up until stopped or `TLON_SMOKE_HOLD_TTL` seconds pass, default 7200). A sandboxed Bash is refused up front: it can't reach Postgres, and its network namespace is blind to the port a hold serves on — run it unsandboxed. `TLON_NODE` names its node beside `funes@`.
 - `mise run server:restart` — rebuild + restart the service (redeploy a server change). It refuses
   while a restart would cut work off (a coworker mid-turn, a verify, landing, smoke or scheduled run running —
   `Server.Rollout.busy/0`); `-- --force` restarts anyway.

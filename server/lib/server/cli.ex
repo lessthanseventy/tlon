@@ -332,7 +332,7 @@ defmodule Server.CLI do
     end
   end
 
-  @doc "Completes a workline's parked gate; `opts` takes `skip_qa:` and `as:`."
+  @doc "Completes a workline's parked gate; `opts` takes `as:`."
   @spec approve(integer(), keyword()) :: result()
   def approve(id, opts) do
     case Repo.get(Server.Thread, id) do

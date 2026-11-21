@@ -164,12 +164,10 @@ defmodule Server.WorklineReviewHeadTest do
     alias Server.MCP.Tool.SubmitReview
 
     thread = at_review(root, "where")
-    lead = Channel.thread_lead(thread.id)
-    assert SubmitReview.next({:ok, %{thread | awaiting: "andrew"}}, lead) =~ "awaiting andrew"
-    assert SubmitReview.next({:ok, %{thread | awaiting: nil}}, lead) =~ "merge queue"
-    assert SubmitReview.next({:ok, %{thread | awaiting: nil}}, "someone-before") =~ "QA"
-    assert SubmitReview.next({:error, {:not_parked, "owed artifact missing: review.md"}}, "lonnrot") =~ "not parked"
-    assert SubmitReview.next({:error, {:not_parked, "owed artifact missing: review.md"}}, "lonnrot") =~ "review.md"
+    assert SubmitReview.next({:ok, %{thread | awaiting: "andrew"}}) =~ "awaiting andrew"
+    assert SubmitReview.next({:ok, %{thread | awaiting: nil}}) =~ "merge queue"
+    assert SubmitReview.next({:error, {:not_parked, "owed artifact missing: review.md"}}) =~ "not parked"
+    assert SubmitReview.next({:error, {:not_parked, "owed artifact missing: review.md"}}) =~ "review.md"
   end
 
   # park/3's approval-still-stands branch, reached from the verdict itself: an approval
@@ -317,10 +315,10 @@ defmodule Server.WorklineReviewHeadTest do
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
     {:ok, queued} = thread |> parked() |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
 
-    # QA fails the workline while the landing's gate is running; the gate still comes back green
+    # the review asks for changes while the landing's gate is running; the gate still comes back green
     gate = fn _repo, _branch ->
       {:error, {:bounced, _}} =
-        Workline.qa_verdict(Repo.get!(Thread, thread.id), "fail", "nolan", "R doesn't reload", artifacts: AllPresent)
+        Workline.review_verdict(Repo.get!(Thread, thread.id), "request_changes", "lonnrot", artifacts: AllPresent)
 
       {:ok, :green}
     end
@@ -330,7 +328,8 @@ defmodule Server.WorklineReviewHeadTest do
     assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "nothing landed"))
   end
 
-  test "the moved-workline brief wakes the lead the bounce staffed, not the reviewer who held it",
+  # a review's bounce ends the thread's sessions, so the builder's window is spawned, not poked
+  test "the moved-workline brief reaches the lead the bounce staffed, not the reviewer who held it",
        %{root: root} do
     Application.put_env(:server, :arbiter, Server.Arbiter.Test)
     Application.put_env(:server, :test_pid, self())
@@ -351,7 +350,7 @@ defmodule Server.WorklineReviewHeadTest do
 
     gate = fn _repo, _branch ->
       {:error, {:bounced, _}} =
-        Workline.qa_verdict(Repo.get!(Thread, thread.id), "fail", "nolan", "R doesn't reload", artifacts: AllPresent)
+        Workline.review_verdict(Repo.get!(Thread, thread.id), "request_changes", "lonnrot", artifacts: AllPresent)
 
       {:ok, :green}
     end
@@ -363,8 +362,10 @@ defmodule Server.WorklineReviewHeadTest do
     moved = Enum.find(Channel.thread_messages(thread), &(&1.body =~ "nothing landed"))
     Server.Switchboard.deliver(moved)
 
-    assert_received {:woke, "wEmma", _}
+    assert_received {:spawned, exports}
+    assert exports =~ ~s(TLON_AUTHOR="emma")
     refute_received {:woke, "wLonnrot", _}
+    refute_received {:spawned, _}
   end
 
   defp flush_woken do

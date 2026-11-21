@@ -13,8 +13,8 @@ defmodule Server.Workline.Continuation do
   Each continuation names the `stage_advanced` event it follows in its payload, so the count is a
   query, never a column. Silent on a plain thread, a merged one, one parked at a gate, one whose
   artifact is there, one with a prompt open on the operator, one blocked on an open ticket
-  (`Server.Blocked`), one the operator paused (`Server.Pause.pause_thread/1`), one whose smoke is still building
-  (`Server.Smoke.building/2`), one whose lead is clocked out (`Server.Presence.clocked_out?/1`),
+  (`Server.Blocked`), one the operator paused (`Server.Pause.pause_thread/1`),
+  one whose lead is clocked out (`Server.Presence.clocked_out?/1`),
   one inside `continuation_gap_minutes` of its last nudge (or its opening, when it has had none)
   or of the lead's last post on it (the check is queued again for the gap's end, so the nudge is
   late, not lost), and while the office is paused (`Server.Pause`).
@@ -52,7 +52,6 @@ defmodule Server.Workline.Continuation do
          false <- Server.Blocked.blocked?(thread_id),
          false <- Server.Pause.thread_paused?(thread_id),
          false <- verifying?(thread),
-         nil <- smoke_building(thread),
          false <- lead_clocked_out?(thread),
          :go <- gap_wait(thread, opts),
          after_id = last_advance_id(thread_id),
@@ -84,8 +83,7 @@ defmodule Server.Workline.Continuation do
   defp nudge(thread, opts) do
     case Workline.owed_status(thread, opts) do
       {:error, why} ->
-        {:nudge, why,
-         "its owed artifact is not there: #{why}. #{land(thread, opts)}, or post on the thread why you cannot."}
+        {:nudge, why, "its owed artifact is not there: #{why}. #{land(thread)}, or post on the thread why you cannot."}
 
       {:ok, have} ->
         if opts[:quiet],
@@ -155,10 +153,6 @@ defmodule Server.Workline.Continuation do
   defp verifying?(%Thread{stage: "review"} = thread), do: Server.Office.Needs.landing?(thread)
 
   defp verifying?(_thread), do: false
-
-  # QA runs smokes at review; at any other stage a lingering smoke job must not silence the lead.
-  defp smoke_building(%Thread{stage: "review", id: id}), do: Server.Smoke.building(id)
-  defp smoke_building(_thread), do: nil
 
   defp lead_clocked_out?(%Thread{agent_id: nil}), do: false
   defp lead_clocked_out?(%Thread{agent_id: id}), do: Server.Presence.clocked_out?(Repo.get!(Server.Agent, id))
@@ -230,13 +224,9 @@ defmodule Server.Workline.Continuation do
     )
   end
 
-  # a reviewer cannot write files: its artifact lands through submit_review, which commits it; an
-  # owed QA's lands through submit_qa, whose pass hands it on to the merge gate
-  defp land(%Thread{stage: "review"} = thread, opts) do
-    if Workline.qa_leads?(thread, opts),
-      do: "File what you saw with submit_qa — a pass hands it to the merge gate itself",
-      else: "Land it with submit_review — the server commits review.md and, on approve, parks it at the gate itself"
-  end
+  # a reviewer cannot write files: its artifact lands through submit_review, which commits it
+  defp land(%Thread{stage: "review"}),
+    do: "Land it with submit_review — the server commits review.md and, on approve, parks it at the gate itself"
 
-  defp land(_thread, _opts), do: "Commit it (then call advance_stage)"
+  defp land(_thread), do: "Commit it (then call advance_stage)"
 end

@@ -334,7 +334,7 @@ defmodule Server.Profiles do
           "staff_child",
           "assign_lead"
         ] ++
-          ~w(release_status check_candidate propose_release set_urgency submit_qa start_smoke stop_smoke) ++
+          ~w(release_status check_candidate propose_release set_urgency) ++
           ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
     }
   }
@@ -375,14 +375,6 @@ defmodule Server.Profiles do
                    ["tlon", "excludeTools"],
                    &((&1 -- @librarian_tools) ++ ["rename_identifier", "edit_clause"])
                  )
-
-  # QA uses the product and files what it saw; it neither edits code nor reviews the diff.
-  @qa_mcp update_in(
-            @reviewer_mcp,
-            ["tlon", "excludeTools"],
-            &((&1 -- ~w(submit_qa start_smoke stop_smoke)) ++
-                ["submit_review", "review_branch", "consult_peer"])
-          )
 
   # Shared chat etiquette — the office shows a live "…is typing" indicator while a coworker works,
   # so filler progress pings are pure noise. Appended to the worker roles.
@@ -674,43 +666,6 @@ defmodule Server.Profiles do
   fewer.#{@chat_etiquette}
   """
 
-  # The QA persona → `system_prompt.md` (roster design §5).
-  @qa_role """
-  You are {{handle}}, QA — you use the product the way Andrew does, and you don't read the diff (the
-  reviewer did). A workline that changes something he sees (the operator API and its snapshot)
-  comes to you once its review approves it; the brief names its branch.
-
-  SMOKE IT. `start_smoke(thread_id)` has the service build the branch as a scratch release, smoke it
-  (boot, the snapshot's shape, a thread opened) and keep it up on its own port and db; it posts the
-  url on the thread in a few minutes, or the failure's last lines.
-  `stop_smoke(thread_id)` when you're done; a forgotten one tears itself down after two hours.
-  A path that needs state a fresh db lacks (a Need, a refused tool) is seeded at start:
-  `start_smoke(thread_id, fixtures: ["tool_denied_need"])`, names from the build's catalog
-  (`Server.Smoke.Fixtures`); one it lacks fails the smoke. Ask for a fixture here before you file a
-  ticket for one. A spec is a name, then optionally its params with no spaces: `name:key=value,key=value`.
-  The catalog today: `tool_denied_need` (a seat refused a tool twice); `quota_refused_need` (`provider=`,
-  default ollama-cloud: a non-anthropic 429, the quota card); `failed_job` (a discarded job: the health
-  row, `tlon-cli job retry/dismiss`); `health_need` (`what=disk|mem|tmux`: the box row);
-  `settled_need` and `passed_up_need` (Uqbar's verdicts, with `uqbar_routing` on in the smoke's own
-  config: the settled digest rows, `u` overrule, the passed-up recommendation, the clipboard tip);
-  `ticket_tree` (initiative, epic, children, one in flight); `lead_change` (a handoff_opened: the office
-  shows hand-offs of the last three minutes, so drive soon after the url is posted);
-  `landed_workline` (`flag=on|off`: landed with its PR waiting on GitHub, the landing label, or without);
-  `life_routine_overdue` (a life workspace, 'in bed by 23:00' stamped last night and overdue now: the
-  bedroom sleep scene); `interrupted_schedule_run` (a script run cut off, exit 143: the RUNS ⊘ glyph,
-  'last ⊘'). Fixtures are seeded once at start.
-  Your Bash cannot do either: it is sandboxed, with no Postgres socket and a network of its own, blind
-  to the smoke's port. NEVER the live service on :4040 or its db `tlon`: a QA run there writes into
-  his real office.
-
-  FILE WHAT YOU SAW. `submit_qa(verdict, report, thread_id)`: pass, or fail with the finding, on the
-  workline you smoked (`thread_id`, its #id — your session may be bound elsewhere). The report is what
-  the smoke said (pasted), and what you expected; a fail names the one thing that is wrong. A smoke that won't build or boot is a fail, with its last lines. Say what the
-  product did, not where you guess the code is wrong. A fail goes back to the builder the way a
-  review requesting changes does; a pass moves it to the merge gate. Something wrong that shouldn't
-  block goes in `follow_ups`: each becomes a ticket, held until the workline merges.#{@chat_etiquette}
-  """
-
   # The librarian persona → `system_prompt.md`. Inward: the office's own memory (the researcher looks out).
   @librarian_role """
   You are {{handle}}, the LIBRARIAN — you own the office's memory: the facts every brief recalls.
@@ -797,7 +752,7 @@ defmodule Server.Profiles do
   #   * planner   — writing-plans discipline (bite-sized TDD tasks, exact paths, DoD); can write.
   #   * sheriff   — owns red: triages every red signal on its beat, routes or fixes, escalates the real.
   #   * pm        — owns what ships: releasability, the release pointer, the changelog, backlog urgency; no writes.
-  #   * qa        — drives a reviewed user-visible change on a scratch release and files what it saw; no writes.
+
   #   * librarian — owns the memory: decides the judge's proposals, supersedes/forgets with a reason; no writes.
   #   * researcher — deep multi-source fan-out + adversarial verification; sandbox scoped per workspace (tunable).
   #   * assistant — general life-assistant over a non-code workspace's git-tracked paths (sandbox tunable).
@@ -843,13 +798,6 @@ defmodule Server.Profiles do
       sandbox: @tlon_sandbox,
       permissions: @reviewer_permissions,
       system_prompt: @pm_role
-    },
-    qa: %{
-      model: @sonnet,
-      mcp: @qa_mcp,
-      sandbox: @tlon_sandbox,
-      permissions: @reviewer_permissions,
-      system_prompt: @qa_role
     },
     librarian: %{
       model: @sonnet,

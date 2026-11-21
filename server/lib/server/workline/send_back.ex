@@ -15,7 +15,7 @@ defmodule Server.Workline.SendBack do
   @doc """
   Send `thread` back to an earlier working stage (`spec`, `plan` or `build`) on the same thread and
   branch: what was built and reviewed stays, and the stage's lead is told to improve it, not redo
-  it. Back to build is the call of the workline's lead (its reviewer, QA or builder), or Uqbar's at a
+  it. Back to build is the call of the workline's lead (its reviewer or builder), or Uqbar's at a
   gate parked on the operator whose grade hit no limit (`limit_hit?/1`); back to plan or
   spec reshapes the build, a coherence call, so it is the tech lead's (`Server.Coworker.lead/1`) or
   the operator's. An open workline only, and not while its verify or landing is queued or running:

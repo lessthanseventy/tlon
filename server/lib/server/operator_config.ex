@@ -215,8 +215,7 @@ defmodule Server.OperatorConfig do
     },
     %{
       # Lifeline takes a job `executing` this long as stuck, live or not: on its last attempt it is
-      # discarded with no error. A held smoke runs up to its two-hour hold (release-smoke.sh's
-      # TLON_SMOKE_HOLD_TTL), so the floor sits above it.
+      # discarded with no error.
       key: "lifeline_rescue_minutes",
       type: "int",
       min: 150,

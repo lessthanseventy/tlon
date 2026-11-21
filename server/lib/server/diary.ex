@@ -3,8 +3,8 @@ defmodule Server.Diary do
   What each seat did, read from real rows (souls design §4, step 5). A builder (credited only when
   its archetype is `builder`): a workline it posted on that landed (`shipped`), and a send-back of a
   thread it posted on (`bounced`, with `by`, the seat that sent it back, when one did — never
-  credited with it). Any seat on the bench, for what it explicitly did: a QA verdict (`qa`,
-  `verdict` pass|fail), a review (`reviewed`, `verdict` approve|request_changes) and a librarian's
+  credited with it). Any seat on the bench, for what it explicitly did:
+  a review (`reviewed`, `verdict` approve|request_changes) and a librarian's
   supersede or forget (`curated`, `action`, the reason in `title`). Read only; the weekly job turns
   it into diary lines.
   """
@@ -13,7 +13,7 @@ defmodule Server.Diary do
   alias Server.{Event, Message, Repo, Soul, Thread}
 
   @type entry :: %{
-          required(:kind) => :shipped | :bounced | :qa | :reviewed | :curated,
+          required(:kind) => :shipped | :bounced | :reviewed | :curated,
           required(:thread_id) => integer(),
           required(:title) => String.t(),
           required(:at) => DateTime.t(),
@@ -122,14 +122,14 @@ defmodule Server.Diary do
   defp describe(%{kind: :shipped, title: t}), do: ~s(- shipped "#{t}")
   defp describe(%{kind: :bounced, title: t, by: by}) when is_binary(by), do: ~s(- sent back by #{by} on "#{t}")
   defp describe(%{kind: :bounced, title: t}), do: ~s(- sent back on "#{t}")
-  defp describe(%{kind: :qa, title: t, verdict: v}), do: ~s(- gave QA a #{v} on "#{t}")
+
   defp describe(%{kind: :reviewed, title: t, verdict: v}), do: ~s(- reviewed "#{t}": #{v})
   defp describe(%{kind: :curated, action: a, title: why}), do: ~s(- #{a} a fact: #{why})
 
   defp fallback(%{kind: :shipped, title: t}), do: ~s(shipped "#{t}".)
   defp fallback(%{kind: :bounced, title: t, by: by}) when is_binary(by), do: ~s(sent back by #{by} on "#{t}".)
   defp fallback(%{kind: :bounced, title: t}), do: ~s(sent back on "#{t}".)
-  defp fallback(%{kind: :qa, title: t, verdict: v}), do: ~s(gave QA a #{v} on "#{t}".)
+
   defp fallback(%{kind: :reviewed, title: t, verdict: v}), do: ~s(reviewed "#{t}": #{v}.)
   defp fallback(%{kind: :curated, action: a, title: why}), do: ~s(#{a} a fact: #{why}.)
 
@@ -179,29 +179,19 @@ defmodule Server.Diary do
       on: t.id == e.thread_id,
       where:
         t.workspace_id == ^workspace_id and e.kind in ["check_passed", "check_failed"] and e.created_at >= ^since and
-          (like(e.correlation, "workline:%:qa") or like(e.correlation, "workline:%:review")),
+          like(e.correlation, "workline:%:review"),
       order_by: e.id,
-      select: %{thread_id: t.id, title: t.title, at: e.created_at, correlation: e.correlation, detail: e.detail}
+      select: %{thread_id: t.id, title: t.title, at: e.created_at, detail: e.detail}
     )
     |> Repo.all()
     |> Enum.flat_map(&verdict/1)
   end
 
-  # `Server.Workline.qa_verdict/5` and `review_verdict/4` record the actor in the check's `cmd`
-  defp verdict(%{correlation: correlation, detail: detail} = row) do
-    entry = Map.take(row, [:thread_id, :title, :at])
+  # `Server.Workline.review_verdict/4` records the actor in the check's `cmd`
+  defp verdict(%{detail: %{"cmd" => "review verdict by " <> seat} = detail} = row),
+    do: [{seat, row |> Map.take([:thread_id, :title, :at]) |> Map.merge(%{kind: :reviewed, verdict: detail["tail"]})}]
 
-    case {String.ends_with?(correlation, ":qa"), detail["cmd"]} do
-      {true, "qa by " <> seat} ->
-        [{seat, Map.merge(entry, %{kind: :qa, verdict: if(detail["exit"] == 0, do: "pass", else: "fail")})}]
-
-      {false, "review verdict by " <> seat} ->
-        [{seat, Map.merge(entry, %{kind: :reviewed, verdict: detail["tail"]})}]
-
-      _ ->
-        []
-    end
-  end
+  defp verdict(_row), do: []
 
   # a librarian's `superseded`/`forgotten` events (`Server.Librarian`), `by` in the detail; the
   # reason stands in for the title, as most are not on a thread

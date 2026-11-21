@@ -1,33 +1,20 @@
 defmodule Server.Jobs.Smoke do
   @moduledoc """
-  Runs `scripts/release-smoke.sh` with `TLON_SMOKE_HOLD=1` for a QA seat, from the service (a
-  seat's Bash can't: `Server.Smoke`). The job is the hold: it lives as long as the script does, until
-  `stop_smoke` or the script's own hold TTL. The job records the script's pid and log in its meta
-  as soon as it starts (so `stop_smoke` can TERM a build); when the script says it is holding it
-  adds the url and the smoke's build dir, what `Server.Smoke` finds it by, and posts the url and the
-  log's path on the thread; a smoke that fails posts its last lines instead. One attempt: a retry
-  would stack another build. A `candidate` job (`Server.Smoke.queue_candidate/1`, main's new tip
-  after a landing) runs the same script unheld and about no thread: the script records its
-  `ran-on: smoke` for `Server.Release.Candidate`, and a red one is the alarm's line.
+  Runs `scripts/release-smoke.sh` on main's new tip after a landing
+  (`Server.Smoke.queue_candidate/1`), from the service. The script records its `ran-on: smoke` for
+  `Server.Release.Candidate`; a red one is the alarm's line. The job's meta carries the run's log.
+  One attempt: a retry would stack another build.
   """
   use Oban.Worker, queue: :smoke, max_attempts: 1
-
-  alias Server.Channel
 
   @log_ttl 7 * 86_400
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"candidate" => true, "ref" => ref}} = job) do
-    case run(job, ref, []) do
+    case run(job, ref) do
       {_log, 0} -> :ok
       {log, code} -> {:error, "smoke of #{String.slice(ref, 0, 12)} failed (exit #{code}); the log: #{log}"}
     end
-  end
-
-  def perform(%Oban.Job{args: %{"thread_id" => _, "ref" => ref}} = job) do
-    {log, code} = run(job, ref, [{~c"TLON_SMOKE_HOLD", ~c"1"}])
-    if code != 0, do: post(job, "smoke of #{ref} ended (exit #{code}); the log: #{log}")
-    {:ok, :posted}
   end
 
   # the service runs under systemd, whose PATH has no mise shims: the script's bare `mix`/`bun` are
@@ -42,55 +29,16 @@ defmodule Server.Jobs.Smoke do
 
   defp script_root(script), do: script |> Path.dirname() |> Path.dirname()
 
-  @doc false
-  def hold_line, do: ~r/^smoke: holding (http\S+) up(?: \(dir (\S+)\))?/
-
-  defp pump(port, job, os_pid, log, tail) do
+  defp pump(port, log) do
     receive do
       {^port, {:data, {_eol, line}}} ->
         File.write!(log, [line, "\n"], [:append])
-        hold(job, os_pid, log, line)
-        pump(port, job, os_pid, log, Enum.take([line | tail], 12))
-
-      {^port, {:exit_status, 0}} ->
-        post(job, "the held smoke is down")
-        0
+        pump(port, log)
 
       {^port, {:exit_status, code}} ->
-        post(job, "smoke failed:\n" <> (tail |> Enum.reverse() |> Enum.join("\n")))
         code
     end
   end
-
-  defp hold(job, os_pid, log, line) do
-    with [_, url | dir] <- Regex.run(hold_line(), line) do
-      stamp(job, %{"url" => url, "os_pid" => os_pid, "log" => log, "dir" => List.first(dir)})
-
-      post(
-        job,
-        "the smoke is up at #{url} (log: #{log}). stop_smoke when done. " <>
-          "It tears itself down after the hold's TTL."
-      )
-    end
-  end
-
-  defp stamp(job, meta) do
-    {:ok, job} =
-      job
-      |> Ecto.Changeset.change(meta: Map.merge(job.meta, meta))
-      |> Server.Repo.update()
-
-    job
-  end
-
-  # to whoever started it (`by`, the start_smoke caller): unaddressed, the post would wake the
-  # thread's lead, often a builder with no smoke tools
-  defp post(%Oban.Job{args: %{"thread_id" => tid} = args}, body) do
-    to = if args["by"], do: "@#{args["by"]} ", else: ""
-    {:ok, _} = Channel.post(%{thread_id: tid, author: "tlon", body: to <> body})
-  end
-
-  defp post(%Oban.Job{}, _body), do: :ok
 
   defp state_home, do: System.get_env("XDG_STATE_HOME") || Path.join(System.user_home!(), ".local/state")
 
@@ -106,8 +54,8 @@ defmodule Server.Jobs.Smoke do
     end
   end
 
-  # the script to its exit, `{log, code}`; the job's meta carries its pid and log from the start
-  defp run(job, ref, hold) do
+  # the script to its exit, `{log, code}`
+  defp run(job, ref) do
     dir = Path.join([state_home(), "tlon", "smoke"])
     File.mkdir_p!(dir)
     prune(dir)
@@ -122,19 +70,10 @@ defmodule Server.Jobs.Smoke do
         {:line, 4096},
         {:args, args},
         {:cd, script_root(Server.Smoke.script())},
-        {:env,
-         hold ++
-           [
-             {~c"MISE_YES", ~c"1"},
-             {~c"TLON_SMOKE_FLAGS", String.to_charlist(Enum.join(job.args["flags"] || [], " "))},
-             {~c"TLON_SMOKE_FIXTURES", String.to_charlist(Enum.join(job.args["fixtures"] || [], " "))}
-           ]}
+        {:env, [{~c"MISE_YES", ~c"1"}]}
       ])
 
-    # nil when the script already exited: its messages are still in the mailbox
-    os_pid = with info when is_list(info) <- Port.info(port), do: info[:os_pid]
-    # stamped before the build: `Server.Smoke.stop/1` TERMs a smoke that is not up yet by it
-    job = stamp(job, %{"os_pid" => os_pid, "log" => log})
-    {log, pump(port, job, os_pid, log, [])}
+    {:ok, _} = job |> Ecto.Changeset.change(meta: Map.put(job.meta, "log", log)) |> Server.Repo.update()
+    {log, pump(port, log)}
   end
 end

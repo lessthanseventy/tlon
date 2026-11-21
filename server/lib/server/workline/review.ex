@@ -6,8 +6,8 @@ defmodule Server.Workline.Review do
   `work/<slug>/review.md` in the workline root and commits it. The fence stays airtight;
   a hook, not an advisory.
 
-  Also the verdicts on a review: the reviewer's and the qa seat's, who may not review their own
-  build, the risk grade's reach on a gate, and the follow-ups a verdict hands on.
+  Also the reviewer's verdict on a review, who may not review their own build, the risk grade's
+  reach on a gate, and the follow-ups a verdict hands on.
   """
 
   import Ecto.Query
@@ -23,9 +23,6 @@ defmodule Server.Workline.Review do
   alias Server.Workline.Stage
 
   require Logger
-
-  # What Andrew sees: the operator API and the snapshot that rides on it.
-  @user_visible ~w(server/lib/server/mcp/operator_api.ex server/lib/server/office)
 
   @doc """
   Write + commit the review verdict. `{:ok, rel_path}`, `{:error, {:not_in_review, stage}}`
@@ -56,17 +53,17 @@ defmodule Server.Workline.Review do
   evidence (`workline:<slug>:review`). Changes requested send it straight back to build, its builder
   told to read review.md: a review asking for changes never reaches the operator's gate. An approval
   is what a standing approval (`auto_land_risk` in the settings file) needs to land without them,
-  and asks for the risk grade it is decided on (`Server.Jobs.Grade`); a change that owes QA is
-  handed to the qa seat. An approval of a commit already approved this round is that same
-  approval, nothing recorded: a client retries a call whose connection dropped. A thread parked or
-  handed to QA is `{:ok, thread}`; one the first approval left at review unparked (its park refused)
+  and asks for the risk grade it is decided on (`Server.Jobs.Grade`). An approval of a commit
+  already approved this round is that same approval, nothing recorded: a client retries a call
+  whose connection dropped. A thread parked
+  is `{:ok, thread}`; one the first approval left at review unparked (its park refused)
   is parked now, the same `advance/2` and the same refusal if it still fails (`park_approved/2`),
   never `{:ok, thread}` for a thread nothing queued. The verdict ends the reviewer's session (a
   review is a throwaway session, briefed fresh each round) last, from `Server.Jobs.EndReview`, once
   the thread has moved and its `follow_ups:` (non-blocking findings) are posted for the lead it hands
-  to (`follow_ups/4`): the window closing cancels the request on the server. A verdict by the
+  to (`follow_ups/3`): the window closing cancels the request on the server. A verdict by the
   agent that built the branch is refused, `{:error, {:self_review, why}}` (`self_review/2`).
-  `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
+  `opts` as `advance/2`'s.
   """
   def review_verdict(thread, verdict, author, opts \\ [])
 
@@ -103,51 +100,6 @@ defmodule Server.Workline.Review do
   end
 
   @doc """
-  The qa seat's verdict on a reviewed change it drove (`submit_qa`): `"pass"` or `"fail"`, its report
-  (what it pressed and the screen text it saw) recorded as evidence (`workline:<slug>:qa`). A fail
-  sends it back to build with the finding, as a review requesting changes does; a pass advances it
-  to the merge gate. Its `follow_ups:` are posted once it has moved, for the lead it hands to
-  (`follow_ups/4`). `opts` as `advance/2`'s, plus `session_id:`, the QA seat's connection, stamped
-  on the `qa by` check; the `cmd` string itself is what `Diary.verdict/1` parses.
-  """
-  def qa_verdict(thread, verdict, author, report, opts \\ [])
-
-  def qa_verdict(%Thread{stage: "review"} = thread, verdict, author, report, opts) when verdict in ~w(pass fail) do
-    {:ok, _} =
-      Dossier.record_check(
-        %{
-          thread_id: thread.id,
-          cmd: "qa by #{author}",
-          exit: if(verdict == "pass", do: 0, else: 1),
-          tail: report,
-          correlation: "workline:#{thread.slug}:qa"
-        },
-        session_id: opts[:session_id]
-      )
-
-    by = Server.Authorship.label(author, opts[:session_id])
-
-    outcome =
-      if verdict == "fail" do
-        Shared.bounce(
-          thread,
-          "QA found a problem",
-          "QA (#{by}) drove it and found:\n\n#{report}\n\nFix it test-first",
-          author
-        )
-      else
-        Shared.post_brief(thread, "✓ QA passed (#{by}):\n\n#{report}")
-        Stage.advance(Repo.get!(Thread, thread.id), opts)
-      end
-
-    {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []), :qa)
-    outcome
-  end
-
-  def qa_verdict(%Thread{stage: "review"}, verdict, _author, _report, _opts), do: {:error, {:bad_verdict, verdict}}
-  def qa_verdict(%Thread{stage: stage}, _verdict, _author, _report, _opts), do: {:error, {:not_in_review, stage}}
-
-  @doc """
   A risk grade just recorded for `thread` (`Server.Jobs.Grade`): a gate parked on the operator
   that the grade now lets land under the standing approval joins the merge queue; anything else
   is left as it is. `{:ok, thread}`. `opts` as `advance/2`'s.
@@ -180,9 +132,9 @@ defmodule Server.Workline.Review do
   def limit_hit?(%Thread{} = thread), do: grade_limits(thread) != []
 
   @doc """
-  A reviewer's or QA's non-blocking findings, posted on the workline for the lead its verdict hands
-  to, so they are posted after the verdict moves it (`review_verdict/4`, `qa_verdict/5`): the builder
-  on a bounce, the qa seat when QA is owed, and the operator when the thread is handed to their gate
+  A reviewer's non-blocking findings, posted on the workline for the lead its verdict hands
+  to, so they are posted after the verdict moves it (`review_verdict/4`): the builder
+  on a bounce, and the operator when the thread is handed to their gate
   and its lead is still the author, whose session the verdict ended. One message, each text numbered
   (its first line the title, the rest the detail), blanks and repeated titles dropped
   (`follow_up_items/1`). None becomes a ticket here: the lead fixes what sits in the change's own
@@ -190,7 +142,7 @@ defmodule Server.Workline.Review do
   open tickets. Filing every finding grew the backlog faster than the office closed it. `{:ok,
   items}`, the items posted.
   """
-  def follow_ups(%Thread{} = thread, author, items, door \\ :review) do
+  def follow_ups(%Thread{} = thread, author, items) do
     items = follow_up_items(items)
 
     if items != [] do
@@ -200,7 +152,7 @@ defmodule Server.Workline.Review do
 
       Shared.post_brief(
         thread,
-        "#{to}follow-ups from #{author}'s #{door}:\n#{list}\n\n" <>
+        "#{to}follow-ups from #{author}'s review:\n#{list}\n\n" <>
           "Fix any that sits in lines this change already touches before it lands. Drop the rest, or " <>
           "defer one someone would act on within a week with file_ticket (it is checked against open tickets)."
       )
@@ -209,7 +161,7 @@ defmodule Server.Workline.Review do
     {:ok, items}
   end
 
-  @doc "The follow-ups `follow_ups/4` would post from `items`: trimmed, blanks and repeated titles dropped."
+  @doc "The follow-ups `follow_ups/3` would post from `items`: trimmed, blanks and repeated titles dropped."
   def follow_up_items(items),
     do: items |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) |> Enum.uniq_by(&follow_up_title/1)
 
@@ -289,14 +241,10 @@ defmodule Server.Workline.Review do
         bounced
       else
         Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
-
-        case qa_owed(thread, opts) do
-          nil -> park_approved(thread, opts)
-          {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
-        end
+        park_approved(thread, opts)
       end
 
-    {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []), :review)
+    {:ok, _} = follow_ups(thread, author, Keyword.get(opts, :follow_ups, []))
     end_review(thread)
     outcome
   end
@@ -336,15 +284,12 @@ defmodule Server.Workline.Review do
     end
   end
 
-  # The retry of an approval whose park was refused: the thread sits at review, awaiting nobody and
-  # owing QA nothing, so the park is tried again. Parked or handed to QA, it is left as it is.
+  # The retry of an approval whose park was refused: the thread sits at review, awaiting nobody,
+  # so the park is tried again. Parked, it is left as it is.
   defp finish_approval(thread, opts) do
     case Repo.get!(Thread, thread.id) do
-      %Thread{stage: "review", awaiting: nil} = fresh ->
-        if qa_owed(fresh, opts) == nil, do: park_approved(fresh, opts), else: {:ok, fresh}
-
-      fresh ->
-        {:ok, fresh}
+      %Thread{stage: "review", awaiting: nil} = fresh -> park_approved(fresh, opts)
+      fresh -> {:ok, fresh}
     end
   end
 
@@ -363,8 +308,7 @@ defmodule Server.Workline.Review do
     max = Keyword.get_lazy(opts, :auto_land_risk, fn -> if checker == Git, do: auto_land_risk() end)
 
     is_integer(max) and review_approved?(thread) and
-      Grade.allows?(grade(thread), elem(Server.Trust.allowance(thread, max), 0)) and
-      qa_cleared(thread, opts) == :ok
+      Grade.allows?(grade(thread), elem(Server.Trust.allowance(thread, max), 0))
   end
 
   @doc false
@@ -407,50 +351,6 @@ defmodule Server.Workline.Review do
         order_by: [desc: e.id],
         limit: 1
     )
-  end
-
-  # at review, a change Andrew would see waits on a QA pass since it last entered review — where the
-  # bench seats a qa; a bench without one lands it as before
-  @doc false
-  def qa_cleared(thread, opts) do
-    case qa_owed(thread, opts) do
-      nil ->
-        :ok
-
-      {seat, _paths} ->
-        if Server.Channel.thread_lead(thread.id) == seat.name,
-          do: {:error, {:artifact_missing, "QA is yours: " <> qa_playbook(thread)}},
-          else:
-            {:error,
-             {:artifact_missing,
-              "QA hasn't passed this user-visible change: #{seat.name} drives it against a scratch release and files what it saw with submit_qa"}}
-    end
-  end
-
-  @doc false
-  def qa_owed(%Thread{stage: "review", workspace_id: ws} = thread, opts) when not is_nil(ws) do
-    with %Server.Coworker{} = seat <- qa_seat(thread),
-         [_ | _] = paths <- Enum.filter(changed_paths(thread, opts), &String.starts_with?(&1, @user_visible)),
-         false <- match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:qa")) do
-      {seat, paths}
-    else
-      _ -> nil
-    end
-  end
-
-  def qa_owed(_thread, _opts), do: nil
-
-  @doc false
-  def to_qa(thread, seat, paths) do
-    handed = Staffing.hand_to(thread, "qa", seat.name)
-
-    Shared.post_brief(
-      handed,
-      "🎭 QA: the review approved a change Andrew will see (#{Enum.join(Enum.take(paths, 5), ", ")}). " <>
-        String.capitalize(qa_playbook(thread))
-    )
-
-    handed
   end
 
   # the review approved the code it read (its verdict's `sha`): code committed after it goes back
@@ -525,32 +425,6 @@ defmodule Server.Workline.Review do
 
   defp review_approved?(thread),
     do: match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:review"))
-
-  defp qa_playbook(thread) do
-    """
-    smoke a scratch release of work/#{thread.slug}: \
-    `start_smoke(thread_id: #{thread.id})` has the service build it on its own port and db, smoke it and keep it up \
-    (it posts the url here, or the failure's last lines); `stop_smoke` when done. Your own Bash can run \
-    neither: it has no Postgres socket and a network of its own. \
-    Never :4040, the live service. Then submit_qa with thread_id: #{thread.id}: pass, or fail with the \
-    finding — what the smoke said.\
-    """
-  end
-
-  defp changed_paths(thread, opts) do
-    Keyword.get_lazy(opts, :paths, fn ->
-      if Keyword.get(opts, :artifacts, Git) == Git, do: Git.changed_paths(thread), else: []
-    end)
-  end
-
-  # the thread's lead when it is the qa already, else a free one, else any
-  defp qa_seat(thread) do
-    seats = thread.workspace_id |> Server.Workspaces.bench() |> Enum.filter(&(&1.archetype == "qa"))
-    current = Server.Channel.thread_lead(thread.id)
-
-    Enum.find(seats, &(&1.name == current)) || Enum.find(seats, &(not Staffing.leading_another?(&1, thread))) ||
-      List.first(seats)
-  end
 
   # no commits of its own on either side (its code is on main already): the trees decide
   defp same_tree?(root, sha, head, slug),

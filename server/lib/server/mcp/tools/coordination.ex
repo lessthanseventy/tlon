@@ -40,7 +40,7 @@ defmodule Server.MCP.Tool.StaffChild do
   CALLER's thread (so its close reports up) and inheriting the caller's project, assign the registered
   agent `lead`, and post `brief` (authored by the caller's bound identity) as its opening message.
   Staffing a child seats its lead on it: `Server.MCP.Spawn` builds the pane's exports, so the lead comes
-  up bound to the CHILD — able to push_branch / advance_stage / record_check / submit_review / submit_qa
+  up bound to the CHILD — able to push_branch / advance_stage / record_check / submit_review
   on the thread they lead. The seat cannot wait on delivery: the switchboard spawns whoever a message
   ADDRESSES, and a brief that @mentions another coworker addresses only them, leaving the lead running
   on whatever they already had (the lobby) with no way to act on the thread they lead.

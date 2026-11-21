@@ -170,11 +170,7 @@ defmodule Server.MCP.ServerTest do
                "check_candidate",
                "propose_release",
                "set_urgency",
-               # QA's (roster design §5)
-               "submit_qa",
-               "start_smoke",
                "run_task",
-               "stop_smoke",
                # the librarian's
                "supersede_fact",
                "forget_fact",
@@ -1510,8 +1506,7 @@ defmodule Server.MCP.ServerTest do
       roster = [
         %{"archetype" => "builder", "name" => "hronir"},
         %{"archetype" => "planner", "name" => "yu"},
-        %{"archetype" => "reviewer", "name" => "lonnrot"},
-        %{"archetype" => "qa", "name" => "nolan"}
+        %{"archetype" => "reviewer", "name" => "lonnrot"}
       ]
 
       {:ok, ws} = Server.Workspaces.register(%{name: "Backwards", roster: roster})
@@ -1559,29 +1554,6 @@ defmodule Server.MCP.ServerTest do
       refute call(token, session, 5, "send_back", Map.put(ask, "unqueue", true))["isError"]
       assert Repo.get!(Thread, wl.id).stage == "build"
       assert Repo.get!(Oban.Job, job.id).state == "cancelled"
-    end
-
-    test "submit_qa posts its follow-ups on the workline, filing no ticket", %{wl: wl} do
-      {token, session} = as("nolan", wl)
-
-      r =
-        call(token, session, 4, "submit_qa", %{
-          "verdict" => "fail",
-          "report" => "R doesn't reload",
-          "follow_ups" => ["the help line wraps at 80 cols"]
-        })
-
-      refute r["isError"]
-      assert decode_tool_json(r)["follow_ups"] == 1
-      assert Repo.all(from t in Server.Ticket, where: t.title == "the help line wraps at 80 cols") == []
-      assert Enum.any?(Channel.thread_messages(wl), &(&1.body =~ "1. the help line wraps at 80 cols"))
-    end
-
-    test "a refused submit_qa files no follow-ups", %{wl: wl} do
-      {token, session} = as("nolan", wl)
-      ask = %{"verdict" => "maybe", "report" => "r", "follow_ups" => ["never filed"]}
-      assert call(token, session, 4, "submit_qa", ask)["isError"]
-      assert Repo.all(from t in Server.Ticket, where: t.title == "never filed") == []
     end
   end
 
@@ -2511,50 +2483,6 @@ defmodule Server.MCP.ServerTest do
     end
   end
 
-  test "submit_qa: a fail sends the workline back to build with the finding; off review it is refused" do
-    {:ok, thread} = Server.Workline.open(%{title: "office: R", slug: "qa-tool", stage: "review"})
-    {:ok, agent} = Staff.register_agent(%{name: "nolan", mandate: "qa", engine: "fresh"})
-    token = MCP.Tokens.mint(thread, agent)
-    session = handshake(token)
-
-    r =
-      call(token, session, 2, "submit_qa", %{"verdict" => "fail", "report" => "after R: 'R reloads' on its own server"})
-
-    refute r["isError"]
-    assert %Thread{stage: "build"} = Repo.get!(Thread, thread.id)
-    assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "back to build" and &1.body =~ "R reloads"))
-
-    again = call(token, session, 3, "submit_qa", %{"verdict" => "pass", "report" => "fine"})
-    assert again["isError"]
-  end
-
-  test "submit_qa with thread_id: the bench's qa seat bound elsewhere files on that workline; a non-qa is refused" do
-    roster = [%{"archetype" => "builder", "name" => "emma"}, %{"archetype" => "qa", "name" => "nolan"}]
-    {:ok, ws} = Server.Workspaces.register(%{name: "QA off-thread", roster: roster})
-
-    {:ok, workline} =
-      Server.Workline.open(%{title: "office: R", slug: "qa-off-thread", stage: "review", workspace_id: ws.id})
-
-    {:ok, lobby} = Channel.open_thread(%{title: "lobby"})
-    args = %{"verdict" => "fail", "report" => "after R: 'R reloads'", "thread_id" => workline.id}
-
-    emma = Staff.agent_by_name("emma")
-    emma_token = MCP.Tokens.mint(lobby, emma)
-    refused = call(emma_token, handshake(emma_token), 2, "submit_qa", args)
-    assert refused["isError"]
-    assert hd(refused["content"])["text"] =~ "seat does not have submit_qa"
-    assert %Thread{stage: "review"} = Repo.get!(Thread, workline.id)
-
-    nolan = Staff.agent_by_name("nolan")
-    nolan_token = MCP.Tokens.mint(lobby, nolan)
-    r = call(nolan_token, handshake(nolan_token), 2, "submit_qa", args)
-
-    refute r["isError"]
-    assert %Thread{stage: "build"} = Repo.get!(Thread, workline.id)
-    assert Enum.any?(Channel.thread_messages(workline), &(&1.body =~ "R reloads"))
-    assert %Thread{stage: nil} = Repo.get!(Thread, lobby.id)
-  end
-
   test "a refusal reads as the explained sentence, not an inspected term" do
     {:ok, thread} = Channel.open_thread(%{title: "plain thread"})
     {:ok, agent} = Staff.register_agent(%{name: "Refused", mandate: "build", engine: "fresh"})
@@ -2568,7 +2496,7 @@ defmodule Server.MCP.ServerTest do
   end
 
   test "a lead woken on the lobby acts on the workline it leads by thread_id; a non-lead is refused" do
-    roster = [%{"archetype" => "builder", "name" => "emma"}, %{"archetype" => "qa", "name" => "nolan"}]
+    roster = [%{"archetype" => "builder", "name" => "emma"}, %{"archetype" => "builder", "name" => "nolan"}]
     {:ok, ws} = Server.Workspaces.register(%{name: "Lobby-bound", roster: roster})
     {:ok, workline} = Server.Workline.open(%{title: "fix", slug: "lobby-bound", stage: "build", workspace_id: ws.id})
     {:ok, _} = Channel.assign_lead(workline.id, "emma")

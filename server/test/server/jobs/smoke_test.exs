@@ -1,19 +1,12 @@
 defmodule Server.Jobs.SmokeTest do
-  # QA's held smoke is run by the service: the tool queues the job, the job runs the release script
-  # (stubbed: it prints the line the real one prints when it holds) and posts the url on the thread.
+  # The smoke of main's tip is run by the service: the job runs the release script (stubbed) to its
+  # exit and keeps its log.
   use ExUnit.Case, async: false
   use Oban.Testing, repo: Server.Repo
 
-  alias Server.Channel
   alias Server.Smoke
 
-  @stub """
-  #!/usr/bin/env bash
-  trap 'exit 0' TERM
-  echo "smoke: abc1234 on :4999"
-  echo "smoke: holding http://127.0.0.1:4999 up (dir /tmp/tlon-smoke/Ab1); stop this to tear it down"
-  while true; do sleep 0.1; done
-  """
+  @sha String.duplicate("e", 40)
 
   setup do
     Server.TestDB.clean!()
@@ -31,258 +24,49 @@ defmodule Server.Jobs.SmokeTest do
     end)
 
     script = Path.join(System.tmp_dir!(), "smoke-stub-#{System.pid()}-#{System.unique_integer([:positive])}.sh")
-    File.write!(script, @stub)
+    File.write!(script, ~s(#!/usr/bin/env bash\necho "ran-on: smoke $1"\n))
     Application.put_env(:server, :smoke_script, script)
-    Application.put_env(:server, :smoke_resolve, fn ref -> {:ok, "sha-of-" <> ref} end)
 
     on_exit(fn ->
       Application.delete_env(:server, :smoke_script)
-      Application.delete_env(:server, :smoke_resolve)
       File.rm(script)
     end)
 
-    {:ok, thread} = Server.Workline.open(%{title: "office: a thing", slug: "a-thing", stage: "review"})
-    %{thread: thread}
+    %{script: script, logs: Path.join([state, "tlon", "smoke"])}
   end
 
-  defp bodies(tid), do: tid |> Channel.thread() |> Channel.thread_messages() |> Enum.map(& &1.body)
-
-  defp wait_for(fun, n \\ 100) do
-    cond do
-      fun.() -> :ok
-      n == 0 -> flunk("timed out")
-      true -> Process.sleep(50) && wait_for(fun, n - 1)
-    end
-  end
-
-  test "start queues the job for the workline's branch; a bad ref is refused", %{thread: t} do
-    assert {:ok, _} = Smoke.start(t, nil)
-    assert_enqueued(worker: Server.Jobs.Smoke, args: %{thread_id: t.id, ref: "work/a-thing"})
-    assert {:error, "not a ref: " <> _} = Smoke.start(t, "--upload-pack=x")
-  end
-
-  test "a thread with no slug and no ref is refused; it never queues the bare work/ ref", %{thread: t} do
-    assert {:error, "no ref" <> _} = Smoke.start(%{t | slug: nil}, nil)
-    refute_enqueued(worker: Server.Jobs.Smoke, args: %{ref: "work/"})
-  end
-
-  test "a ref ending in / is refused", %{thread: t} do
-    assert {:error, "not a ref: " <> _} = Smoke.start(t, "work/")
-    refute_enqueued(worker: Server.Jobs.Smoke, args: %{ref: "work/"})
-  end
-
-  test "the job posts the held url on the thread, and stop tears it down", %{thread: t} do
-    {:ok, _} = Smoke.start(t, nil)
-    task = Task.async(fn -> Oban.drain_queue(queue: :smoke) end)
-
-    wait_for(fn -> Enum.any?(bodies(t.id), &(&1 =~ "http://127.0.0.1:4999")) end)
-    assert Enum.any?(bodies(t.id), &(&1 =~ "stop_smoke"))
-    assert {:error, "a smoke is already up" <> _} = Smoke.start(t, nil)
-    assert Smoke.held(t.id).meta["dir"] == "/tmp/tlon-smoke/Ab1"
-
-    assert :ok = Smoke.stop(t.id)
-    assert %{success: 1} = Task.await(task, 10_000)
-    assert Smoke.held(t.id) == nil
-    assert {:error, "no smoke is up for this thread"} = Smoke.stop(t.id)
-  end
-
-  test "the smoke's notices go to whoever started it, not the thread's lead", %{thread: t} do
-    {:ok, _} = Smoke.start(t, nil, "nolan")
-    task = Task.async(fn -> Oban.drain_queue(queue: :smoke) end)
-
-    wait_for(fn -> Enum.any?(bodies(t.id), &(&1 =~ "http://127.0.0.1:4999")) end)
-    assert Enum.any?(bodies(t.id), &String.starts_with?(&1, "@nolan the smoke is up"))
-
-    assert :ok = Smoke.stop(t.id)
-    assert %{success: 1} = Task.await(task, 10_000)
-  end
-
-  test "a candidate smoke runs unheld, about no thread: green is silent, red is the error the alarm says" do
-    script = Application.fetch_env!(:server, :smoke_script)
-
-    File.write!(
-      script,
-      ~s(#!/usr/bin/env bash\n[ -z "${TLON_SMOKE_HOLD:-}" ] || exit 9\necho "ran-on: smoke $1"\nexit ${SMOKE_EXIT:-0}\n)
-    )
-
-    sha = String.duplicate("e", 40)
-    {:ok, job} = Smoke.queue_candidate(sha)
+  test "a candidate smoke is about no thread: green is silent, red is the error the alarm says", %{script: script} do
+    {:ok, job} = Smoke.queue_candidate(@sha)
     job = Server.Repo.reload!(job)
-    assert %{"candidate" => true, "ref" => ^sha} = job.args
+    assert %{"candidate" => true, "ref" => @sha} = job.args
     refute Map.has_key?(job.args, "thread_id")
     assert :ok = Server.Jobs.Smoke.perform(job)
 
     File.write!(script, "#!/usr/bin/env bash\necho \"smoke: the office never answered\"\nexit 3\n")
     assert {:error, why} = Server.Jobs.Smoke.perform(job)
-    assert why =~ "smoke of #{String.slice(sha, 0, 12)} failed (exit 3); the log: "
+    assert why =~ "smoke of #{String.slice(@sha, 0, 12)} failed (exit 3); the log: "
     assert File.read!(Server.Repo.reload!(job).meta["log"]) =~ "never answered"
   end
 
-  test "the hold line names the smoke's build dir beside its url" do
-    re = Server.Jobs.Smoke.hold_line()
-
-    assert [_, "http://127.0.0.1:4999", "/tmp/tlon-smoke/Ab1"] =
-             Regex.run(re, "smoke: holding http://127.0.0.1:4999 up (dir /tmp/tlon-smoke/Ab1) — x")
-
-    assert [_, "http://127.0.0.1:4999"] = Regex.run(re, "smoke: holding http://127.0.0.1:4999 up — x")
-  end
-
-  test "a start for a tip that moved cancels the queued build and queues the new sha", %{thread: t} do
-    {:ok, old} = Smoke.start(t, nil, "qa1")
-    Application.put_env(:server, :smoke_resolve, fn ref -> {:ok, "moved-" <> ref} end)
-    assert {:ok, new} = Smoke.start(t, nil, "qa1")
-    refute new.id == old.id
-    assert Server.Repo.reload!(new).args["sha"] == "moved-work/a-thing"
-    assert new.meta["replaced"] == old.id
-    assert Server.Repo.reload!(old).state == "cancelled"
-    assert Smoke.building(t.id).id == new.id
-  end
-
-  test "a moved tip cancels the job it found, not another ref's build on the thread", %{thread: t} do
-    {:ok, other} = Smoke.start(t, "main", "qa1")
-    {:ok, old} = Smoke.start(t, nil, "qa1")
-    Application.put_env(:server, :smoke_resolve, fn ref -> {:ok, "moved-" <> ref} end)
-    assert {:ok, new} = Smoke.start(t, nil, "qa1")
-    assert new.meta["replaced"] == old.id
-    assert Server.Repo.reload!(old).state == "cancelled"
-    assert Server.Repo.reload!(other).state == "available"
-  end
-
-  test "a ref that resolves to no commit is refused, nothing queued", %{thread: t} do
-    Application.put_env(:server, :smoke_resolve, fn _ -> :error end)
-    assert {:error, "no commit work/a-thing"} = Smoke.start(t, nil)
-    assert [] = all_enqueued(worker: Server.Jobs.Smoke)
-  end
-
-  test "start carries fixtures into the job's args, and leaves them out when there are none", %{thread: t} do
-    {:ok, _} = Smoke.start(t, nil, "qa1", [], ["tool_denied_need"])
-    assert_enqueued(worker: Server.Jobs.Smoke, args: %{thread_id: t.id, fixtures: ["tool_denied_need"]})
-    {:ok, job} = Smoke.start(t, "main", "qa1", [], [])
-    refute Map.has_key?(Server.Repo.reload(job).args, "fixtures")
-  end
-
-  test "a fixture spec with params passes as one word; a malformed one is refused", %{thread: t} do
-    assert {:ok, _} = Smoke.start(t, nil, "qa1", [], ["quota_refused_need:provider=ollama-cloud,n=2"])
-
-    for bad <- ["Bad Name; rm", "x:a=b c", "x:a=$(id)", "x:a=\"b\"", "x:=b", "x:a=b;c=d"] do
-      assert {:error, "not a fixture name: " <> _} = Smoke.start(t, nil, "qa1", [], [bad])
-    end
-
-    assert [_only_the_good_one] = all_enqueued(worker: Server.Jobs.Smoke)
-  end
-
-  test "the job hands its fixtures to the script, space-joined", %{thread: t} do
-    File.write!(Smoke.script(), "#!/usr/bin/env bash\necho \"fixtures=$TLON_SMOKE_FIXTURES.\"\nexit 1\n")
-    {:ok, _} = Smoke.start(t, nil, nil, [], ["a_set", "b_set"])
-    {:ok, _} = Smoke.start(t, "main", nil, [], [])
-    assert %{success: 2} = Oban.drain_queue(queue: :smoke)
-    assert Enum.any?(bodies(t.id), &(&1 =~ "fixtures=a_set b_set."))
-    assert Enum.any?(bodies(t.id), &(&1 =~ "fixtures=."))
-  end
-
-  describe "a smoke still building" do
-    setup %{thread: t} do
-      {:ok, job} = Smoke.start(t, nil, "qa1")
-      job |> Ecto.Changeset.change(state: "executing") |> Server.Repo.update!()
-      %{job: job}
-    end
-
-    test "stop on an executing job whose script has not started yet says it is building", %{thread: t} do
-      assert {:error, "building since " <> _} = Smoke.stop(t.id)
-    end
-
-    test "stop on a job whose script already exited (a null pid) says to stop again, TERMing nothing", %{
-      thread: t,
-      job: job
-    } do
-      job |> Ecto.Changeset.change(meta: %{"os_pid" => nil}) |> Server.Repo.update!()
-      assert {:error, "building since " <> _} = Smoke.stop(t.id)
-    end
-
-    test "a start for the same ref returns the building job instead of a second build", %{thread: t, job: job} do
-      assert {:ok, %{id: id}} = Smoke.start(t, nil, "qa1")
-      assert id == job.id
-      assert Smoke.building(t.id).id == job.id
-    end
-
-    test "the job carries the sha its ref resolved to", %{job: job} do
-      assert Server.Repo.reload!(job).args["sha"] == "sha-of-work/a-thing"
-    end
-
-    test "a start over a moved tip whose build can't be cancelled yet says so in start's words", %{thread: t, job: job} do
-      Application.put_env(:server, :smoke_resolve, fn ref -> {:ok, "moved-" <> ref} end)
-      assert {:error, why} = Smoke.start(t, nil, "qa1")
-      assert why =~ "moved"
-      assert why =~ "job #{job.id}"
-      assert why =~ "start again"
-      refute why =~ "stop again"
-    end
-
-    test "a start for another ref still queues", %{thread: t, job: job} do
-      assert {:ok, %{id: id}} = Smoke.start(t, "main", "qa1")
-      refute id == job.id
-    end
-  end
-
-  test "stop cancels a smoke still building: the script gets TERM and the job ends", %{thread: t} do
-    File.write!(Smoke.script(), """
-    #!/usr/bin/env bash
-    trap 'exit 143' TERM
-    echo "smoke: abc1234 on :4999"
-    while true; do sleep 0.1; done
-    """)
-
-    {:ok, job} = Smoke.start(t, nil, "qa1")
-    task = Task.async(fn -> Oban.drain_queue(queue: :smoke) end)
-    wait_for(fn -> Server.Repo.reload!(job).meta["os_pid"] end)
-
-    assert Smoke.held(t.id) == nil
-    assert %{state: "executing"} = Smoke.building(t.id)
-    assert :ok = Smoke.stop(t.id)
-    assert %{success: 1} = Task.await(task, 10_000)
-    assert Enum.any?(bodies(t.id), &(&1 =~ "ended (exit 143)"))
-  end
-
-  test "stop cancels a queued smoke that has no process yet", %{thread: t} do
-    {:ok, job} = Smoke.start(t, nil, "qa1")
-    assert :ok = Smoke.stop(t.id)
-    assert Server.Repo.reload!(job).state == "cancelled"
-    assert {:error, "no smoke is up for this thread"} = Smoke.stop(t.id)
-  end
-
-  test "a smoke that fails posts its last lines", %{thread: t} do
-    File.write!(Smoke.script(), "#!/usr/bin/env bash\necho 'smoke FAILED: no build'\nexit 1\n")
-    {:ok, _} = Smoke.start(t, nil)
+  test "the log lands in the smoke's state dir, not the OS tmp dir", %{logs: logs} do
+    {:ok, job} = Smoke.queue_candidate(@sha)
     assert %{success: 1} = Oban.drain_queue(queue: :smoke)
-    assert Enum.any?(bodies(t.id), &(&1 =~ "smoke FAILED: no build"))
-  end
-
-  test "the log lands in the smoke's state dir, not the OS tmp dir", %{thread: t} do
-    {:ok, job} = Smoke.start(t, nil)
-    task = Task.async(fn -> Oban.drain_queue(queue: :smoke) end)
-
-    wait_for(fn -> Enum.any?(bodies(t.id), &(&1 =~ "http://127.0.0.1:4999")) end)
 
     log = Server.Repo.reload(job).meta["log"]
-    assert Path.dirname(log) == Path.join([System.get_env("XDG_STATE_HOME"), "tlon", "smoke"])
+    assert Path.dirname(log) == logs
     refute Path.dirname(log) == System.tmp_dir!()
-    assert File.exists?(log)
-
-    assert :ok = Smoke.stop(t.id)
-    assert %{success: 1} = Task.await(task, 10_000)
+    assert File.read!(log) =~ "ran-on: smoke #{@sha}"
   end
 
-  test "each run prunes smoke logs older than 7 days and keeps fresh ones", %{thread: t} do
-    dir = Path.join([System.get_env("XDG_STATE_HOME"), "tlon", "smoke"])
-    File.mkdir_p!(dir)
-    stale = Path.join(dir, "old.log")
-    fresh = Path.join(dir, "new.log")
+  test "each run prunes smoke logs older than 7 days and keeps fresh ones", %{logs: logs} do
+    File.mkdir_p!(logs)
+    stale = Path.join(logs, "old.log")
+    fresh = Path.join(logs, "new.log")
     File.write!(stale, "old\n")
     File.write!(fresh, "new\n")
     File.touch!(stale, System.os_time(:second) - 8 * 86_400)
 
-    File.write!(Smoke.script(), "#!/usr/bin/env bash\necho 'smoke FAILED: no build'\nexit 1\n")
-    {:ok, _} = Smoke.start(t, nil)
+    {:ok, _} = Smoke.queue_candidate(@sha)
     assert %{success: 1} = Oban.drain_queue(queue: :smoke)
 
     refute File.exists?(stale)

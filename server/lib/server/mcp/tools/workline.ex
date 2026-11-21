@@ -48,7 +48,7 @@ defmodule Server.MCP.Tool.SubmitReview do
   is nothing more to call), and the reply's `next` says where it went — or that the park was refused
   and the workline still sits at review, said on its thread too. A finding that
   shouldn't block goes in `follow_ups`: posted on the workline, after the verdict, for the lead it
-  hands to (the builder, QA or the operator), not filed as tickets.
+  hands to (the builder or the operator), not filed as tickets.
   """
   use Server.MCP.Tool
 
@@ -76,14 +76,13 @@ defmodule Server.MCP.Tool.SubmitReview do
          nil <- Server.Workline.self_review(thread, identity.agent),
          {:ok, rel} <- Review.submit(thread, params.body, identity.agent) do
       follow_ups = Server.Workline.follow_up_items(params[:follow_ups] || [])
-      lead = Channel.thread_lead(thread.id)
 
       case Server.Workline.review_verdict(thread, params.verdict, identity.agent, follow_ups: follow_ups) do
         {:ok, _} = outcome ->
-          approved(frame, rel, follow_ups, outcome, lead)
+          approved(frame, rel, follow_ups, outcome)
 
         {:error, {:not_parked, _}} = outcome ->
-          approved(frame, rel, follow_ups, outcome, lead)
+          approved(frame, rel, follow_ups, outcome)
 
         {:error, {:bounced, _}} ->
           ok(frame, %{
@@ -110,107 +109,26 @@ defmodule Server.MCP.Tool.SubmitReview do
 
   @doc """
   The reply's `next` line, read off what the verdict returned: the thread as parked on whoever it
-  awaits, handed to QA (its lead is no longer `lead_before`) or queued under a standing approval —
-  or the refusal, when the park did not happen and the workline still sits at review.
+  awaits or queued under a standing approval — or the refusal, when the park did not happen and
+  the workline still sits at review.
   """
-  def next({:ok, %{awaiting: awaiting}}, _lead_before) when is_binary(awaiting),
+  @spec next({:ok, map()} | {:error, {:not_parked, String.t()}}) :: String.t()
+  def next({:ok, %{awaiting: awaiting}}) when is_binary(awaiting),
     do: "parked at the merge gate, awaiting #{awaiting} — your session ends here"
 
-  def next({:ok, thread}, lead_before) do
-    case Channel.thread_lead(thread.id) do
-      ^lead_before -> "in the merge queue under a standing approval — your session ends here"
-      lead -> "handed to #{lead} for QA — your session ends here"
-    end
-  end
+  def next({:ok, _thread}), do: "in the merge queue under a standing approval — your session ends here"
 
-  def next({:error, {:not_parked, why}}, _lead_before),
+  def next({:error, {:not_parked, why}}),
     do: "verdict recorded but not parked: #{why} — the workline still sits at review; said on its thread for its lead"
 
-  defp approved(frame, rel, follow_ups, outcome, lead) do
+  defp approved(frame, rel, follow_ups, outcome) do
     ok(frame, %{
       "committed" => rel,
       "verdict" => "approve",
       "parked" => match?({:ok, _}, outcome),
       "follow_ups" => length(follow_ups),
-      "next" => next(outcome, lead)
+      "next" => next(outcome)
     })
-  end
-end
-
-defmodule Server.MCP.Tool.SubmitQA do
-  @moduledoc """
-  QA's door (roster design §5): after driving a reviewed user-visible change on a scratch release,
-  file what you saw — `pass`, or `fail` with the finding (`Server.Workline.qa_verdict/5`). A fail
-  sends the workline back to build with your report; a pass moves it to the merge gate.
-  Lands on THIS thread, or on `thread_id` — the workline QA'd — when the caller is a `qa` seat on
-  that workline's bench: a QA session can be bound to another thread (the lobby) than the one it
-  was called to. Refused outside the review stage. A finding that shouldn't block goes in
-  `follow_ups`: posted on the workline, after the verdict, for the lead it hands to, not filed as tickets.
-  """
-  use Server.MCP.Tool
-
-  alias Server.Channel
-  alias Server.Workline
-
-  schema do
-    field :verdict, :string, required: true, description: "pass | fail"
-
-    field :report, :string,
-      required: true,
-      description: "What you pressed and the screen text you saw; for a fail, the one thing that is wrong"
-
-    field :thread_id, :integer,
-      description: "The workline you QA'd (its #id), when your session is bound to another thread"
-
-    field :follow_ups, {:list, :string},
-      description:
-        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Posted on the workline after your verdict, for the lead it hands to, who fixes what is in the change's own lines and drops or files the rest"
-  end
-
-  @impl true
-  def execute(params, frame) do
-    identity = Identity.from_frame(frame)
-    thread_id = params[:thread_id] || identity.thread_id
-
-    case Channel.thread(thread_id) do
-      nil ->
-        fail(frame, "no such thread: #{thread_id}")
-
-      thread ->
-        if thread_id == identity.thread_id or qa_seat?(thread, identity.agent),
-          do: verdict(thread, params, identity, frame),
-          else: fail(frame, "#{identity.agent} is not a qa seat on thread #{thread_id}'s bench")
-    end
-  end
-
-  defp qa_seat?(%{workspace_id: nil}, _agent), do: false
-
-  defp qa_seat?(thread, agent),
-    do: thread.workspace_id |> Server.Workspaces.bench() |> Enum.any?(&(&1.archetype == "qa" and &1.name == agent))
-
-  defp verdict(thread, params, identity, frame) do
-    follow_ups = Workline.follow_up_items(params[:follow_ups] || [])
-    n = length(follow_ups)
-
-    case Workline.qa_verdict(thread, params.verdict, identity.agent, params.report,
-           follow_ups: follow_ups,
-           session_id: identity.session_id
-         ) do
-      {:error, {:bounced, _}} ->
-        ok(frame, %{"verdict" => "fail", "follow_ups" => n, "next" => "sent back to build"})
-
-      {:error, {:bad_verdict, v}} ->
-        fail(frame, "verdict must be pass or fail, not #{inspect(v)}")
-
-      {:error, {:not_in_review, stage}} ->
-        fail(frame, "not in review — this workline is at #{stage}")
-
-      {:error, reason} ->
-        fail(frame, "QA passed, but it could not move on: #{explain(reason)}")
-
-      {_, moved} ->
-        ok(frame, %{"verdict" => "pass", "follow_ups" => n, "stage" => moved.stage, "awaiting" => moved.awaiting})
-    end
   end
 end
 

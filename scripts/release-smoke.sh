@@ -12,11 +12,9 @@
 # built, started or recorded. A run ends `ran-on: smoke <sha>` and reports it to the service (lib/record-ran.sh), so a hand run counts for release:status too.
 # A second smoke of a commit another run is smoking waits for it, up to TLON_SMOKE_LOCK_WAIT seconds
 # (default 1200, inside a schedule's 30-minute run limit; 0 refuses at once), then smokes itself.
-# TLON_SMOKE_HOLD=1 keeps a passing scratch node up to read by hand (QA) until this is stopped, or
+# TLON_SMOKE_HOLD=1 keeps a passing scratch node up to read by hand until this is stopped, or
 # until TLON_SMOKE_HOLD_TTL seconds pass (default 7200): a forgotten hold would hold its port and
-# database for good. TLON_SMOKE_FLAGS and TLON_SMOKE_FIXTURES (space-separated names) turn flags on
-# and seed `Server.Smoke.Fixtures` sets on the node; TLON_SMOKE_SERVER_BIN is the
-# bin/server the fixtures are rpc'd through (default the scratch build's). A sandboxed Bash is
+# database for good. TLON_SMOKE_FLAGS (space-separated names) turns flags on on the node. A sandboxed Bash is
 # refused up front: it can't reach Postgres, and each of its calls has a network namespace of its
 # own, blind to the port a hold serves on. The scratch node reads its operator settings from a file
 # in its build dir (TLON_CONFIG), never the operator's ~/.config/tlon/config.json.
@@ -31,7 +29,6 @@ port="${TLON_SMOKE_PORT:-$(smoke_pick_port $((4100 + $$ % 800)))}"
 db="${TLON_SMOKE_DATABASE:-tlon_smoke_$port}" url="${TLON_SMOKE_URL:-}"
 lock_wait="${TLON_SMOKE_LOCK_WAIT:-1200}"
 hold="${TLON_SMOKE_HOLD:-}" ttl="${TLON_SMOKE_HOLD_TTL:-7200}" flags="${TLON_SMOKE_FLAGS:-}"
-fixtures="${TLON_SMOKE_FIXTURES:-}" server_bin="${TLON_SMOKE_SERVER_BIN:-}"
 log="$(mktemp -t tlon-smoke-log-XXXXXX)"
 fail() { echo "smoke FAILED: $*$([ -s "$log" ] && echo " (the log: $log)")"; exit 1; }
 
@@ -195,24 +192,15 @@ jq -e '(.roster | type) == "array" and (.threads | type) == "array" and (.worksp
 ws="$(jq -r '.workspaces[0].id' "$body")"
 rm -f "$body"
 echo "smoke: /api/office ✓"
-# TLON_SMOKE_FLAGS: feature flags a path under QA needs (`start_smoke`'s flags), set on THIS node
-# through its own operator API; a flag the build doesn't know fails the smoke rather than QA a lie
+# TLON_SMOKE_FLAGS: feature flags set on THIS node through its own operator API; a flag the build
+# doesn't know fails the smoke
 for flag in $flags; do
   code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' -X PATCH -H 'content-type: application/json' \
     -d '{"enabled": true}' "$url/api/flags/$flag")"
   [ "$code" = 200 ] || fail "flag $flag: /api/flags answered ${code:-nothing} (a flag this build has?)"
   echo "smoke: flag $flag on"
 done
-# TLON_SMOKE_FIXTURES: named seed sets (`start_smoke`'s fixtures) run INSIDE this node, since only the
-# candidate build knows its own catalog; Server.Smoke.Fixtures refuses any db but a tlon_smoke_* one
-for fx in $fixtures; do
-  bin="${server_bin:-${dir:+$dir/server/_build/prod/rel/server/bin/server}}"
-  [ -n "$bin" ] || fail "fixtures need a scratch node (not TLON_SMOKE_URL)"
-  TLON_NODE="tlon-smoke-$port@127.0.0.1" TLON_DATABASE="$db" \
-    "$bin" rpc "Server.Smoke.Fixtures.apply(\"$fx\")" >>"$log" 2>&1 ||
-    fail "fixture $fx: not seeded (a fixture this build has?)"
-  echo "smoke: fixture $fx seeded"
-done
+
 
 title="release smoke $$"
 tid="$(curl -s -m 10 -X POST -H 'content-type: application/json' \

@@ -72,8 +72,7 @@ defmodule Server.MCP.OperatorAPI do
                                           (a plain thread with unmerged work is tracked at build instead, left open)
       POST   /api/threads/:id/hand-off    {"agent"} → Sweep.hand_off (staffed now where Oban runs)
       POST   /api/threads/:id/advance     Workline.advance (409 when it can't: not a workline, gated, …)
-      POST   /api/threads/:id/approve     {"skip_qa"?} → Workline.approve: complete its parked gate; skip_qa
-                                          (a reason) lands a review past an owed QA pass, recorded
+      POST   /api/threads/:id/approve     Workline.approve: complete its parked gate
       POST   /api/threads/:id/send_back   {"stage", "why", "unqueue"?} → Workline.send_back as the operator: back to
                                           spec/plan/build on its own branch (400 without a why, 409 refused);
                                           unqueue pulls a landing still waiting in the merge queue with it
@@ -922,11 +921,7 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "POST", ["hand-off"], t), do: hand_off(conn, t)
   defp on_thread(conn, "POST", ["advance"], t), do: reply(conn, Workline.advance(t), &thread_row/1)
 
-  defp on_thread(conn, "POST", ["approve"], t) do
-    {b, conn} = body(conn)
-    opts = if is_binary(b["skip_qa"]), do: [skip_qa: b["skip_qa"]], else: []
-    reply(conn, Workline.approve(t, opts), &thread_row/1)
-  end
+  defp on_thread(conn, "POST", ["approve"], t), do: reply(conn, Workline.approve(t), &thread_row/1)
 
   defp on_thread(conn, "POST", ["track"], t), do: reply(conn, Workline.promote(t), &thread_row/1)
 

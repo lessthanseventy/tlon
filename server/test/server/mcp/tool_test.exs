@@ -15,13 +15,13 @@ defmodule Server.MCP.ToolTest do
     t0 = System.monotonic_time(:millisecond)
 
     builder_cut = Tool.cut_tools(ws.id, "hladik", t0)
-    assert "submit_qa" in builder_cut
+    assert "release_status" in builder_cut
 
     {:ok, _} = Workspaces.unseat(seat.id)
-    {:ok, _} = Workspaces.seat(ws.id, %{name: "hladik", archetype: "qa"})
+    {:ok, _} = Workspaces.seat(ws.id, %{name: "hladik", archetype: "pm"})
 
     assert Tool.cut_tools(ws.id, "hladik", t0 + 1) == builder_cut
-    refute "submit_qa" in Tool.cut_tools(ws.id, "hladik", t0 + 60_000)
+    refute "release_status" in Tool.cut_tools(ws.id, "hladik", t0 + 60_000)
   end
 
   describe "explain/1" do

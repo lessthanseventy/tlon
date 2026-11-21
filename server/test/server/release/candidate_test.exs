@@ -51,14 +51,12 @@ defmodule Server.Release.CandidateTest do
       assert all_enqueued(worker: Server.Jobs.Smoke) == []
     end
 
-    test "a newer tip's smoke replaces one still queued; a held QA smoke is not touched" do
-      {:ok, held} = Oban.insert(Server.Jobs.Smoke.new(%{thread_id: 1, ref: "work/x", sha: @a}))
+    test "a newer tip's smoke replaces one still queued" do
       {:ok, first} = Server.Smoke.queue_candidate(@a)
       {:ok, second} = Server.Smoke.queue_candidate(@b)
 
       assert Repo.reload!(first).state == "cancelled"
       assert Repo.reload!(second).state == "available"
-      assert Repo.reload!(held).state == "available"
     end
   end
 

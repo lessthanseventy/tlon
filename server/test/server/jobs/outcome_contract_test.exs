@@ -23,7 +23,6 @@ defmodule Server.Jobs.OutcomeContractTest do
     Server.Jobs.Land => {"thread_id", :posted},
     Server.Jobs.Retro => {"thread_id", {:quiet, "lessons are banked on a thread already closed"}},
     Server.Jobs.RunTask => {"thread_id", :posted},
-    Server.Jobs.Smoke => {"thread_id", :posted},
     Server.Jobs.TurnPass => {"thread_id", {:quiet, "a memory pass after every turn"}},
     Server.Jobs.Verify => {"thread_id", :posted}
   }
@@ -33,6 +32,7 @@ defmodule Server.Jobs.OutcomeContractTest do
     Server.Jobs.AutoResume => "the office's pause, not a thread's",
     Server.Jobs.Diary => "the week's diary for a workspace",
     Server.Jobs.Dispatch => "the schedules' minute",
+    Server.Jobs.Smoke => "main's tip after a landing",
     Server.Jobs.Drain => "the switchboard's redelivery",
     Server.Jobs.HeldReview => "the held tickets as a whole",
     Server.Jobs.Intake => "the backlog as a whole",

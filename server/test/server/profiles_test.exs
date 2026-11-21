@@ -84,7 +84,7 @@ defmodule Server.ProfilesTest do
       kept = Projects.read_dirs(t)
       read_count = kept |> Enum.map(&length(Path.wildcard(Path.join(&1, "**/.git"), match_dot: true))) |> Enum.sum()
 
-      for seat <- ["hronir", "zunz"], archetype <- [:builder, :qa] do
+      for seat <- ["hronir", "zunz"], archetype <- [:builder, :reviewer] do
         seed_repos(home, ".cache/tlon-scratch/#{seat}", SandboxBudget.write_root_reserve() - length(caches))
         roots = Profiles.instantiate(%{archetype: archetype, name: seat}).sandbox["filesystem"]["allowWrite"]
 
@@ -244,31 +244,6 @@ defmodule Server.ProfilesTest do
           k != :pm,
           tool <- tools,
           do: assert(tool in t.mcp["tlon"]["excludeTools"], "#{k} reaches #{tool}")
-    end
-
-    test "QA files its verdict with submit_qa, writes no code, and no other archetype has it" do
-      qa = Profiles.archetype(:qa)
-      for cut <- ~w(submit_qa), do: refute(cut in qa.mcp["tlon"]["excludeTools"])
-      for cut <- ~w(submit_review edit_clause rename_identifier), do: assert(cut in qa.mcp["tlon"]["excludeTools"])
-      assert get_in(qa.permissions, ["permission", "write"]) == "deny"
-
-      for tool <- ~w(start_smoke stop_smoke) do
-        refute tool in qa.mcp["tlon"]["excludeTools"]
-        assert tool in Profiles.archetype(:builder).mcp["tlon"]["excludeTools"]
-        assert qa.system_prompt =~ tool
-      end
-
-      refute qa.system_prompt =~ "unsandboxed"
-      assert qa.system_prompt =~ "4040"
-
-      for {k, t} <- Profiles.archetypes(), k != :qa, do: assert("submit_qa" in t.mcp["tlon"]["excludeTools"], "#{k}")
-    end
-
-    test "the QA brief lists every fixture of the catalog and how a spec carries params" do
-      prompt = Profiles.archetype(:qa).system_prompt
-
-      for name <- Server.Smoke.Fixtures.names(), do: assert(prompt =~ name, "the brief omits fixture #{name}")
-      assert prompt =~ "name:key=value"
     end
 
     test "the librarian curates the office's memory with its own tools, writes no code, and no other archetype has them" do
@@ -442,7 +417,7 @@ defmodule Server.ProfilesTest do
   describe "the archetype registry — role templates keyed by archetype atom" do
     test "the seed archetype set is present with sane defaults" do
       keys = Profiles.archetypes() |> Map.keys() |> Enum.sort()
-      assert keys == ~w(assistant builder librarian planner pm qa researcher reviewer sheriff surveyor)a
+      assert keys == ~w(assistant builder librarian planner pm researcher reviewer sheriff surveyor)a
     end
 
     test "reviewer archetype cannot write (deny floor), builder can" do

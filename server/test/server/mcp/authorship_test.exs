@@ -17,7 +17,7 @@ defmodule Server.MCP.AuthorshipTest do
 
   setup do
     Server.TestDB.clean!()
-    {:ok, ws} = Workspaces.register(%{name: "Work", roster: [%{"archetype" => "qa", "name" => "nolan"}]})
+    {:ok, ws} = Workspaces.register(%{name: "Work", roster: [%{"archetype" => "builder", "name" => "nolan"}]})
     {:ok, a} = Channel.open_thread(%{title: "thread A", workspace_id: ws.id})
     {:ok, b} = Channel.open_thread(%{title: "thread B", workspace_id: ws.id})
     nolan = Staff.agent_by_name("nolan")

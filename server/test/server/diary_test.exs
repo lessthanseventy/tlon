@@ -175,25 +175,6 @@ defmodule Server.DiaryTest do
       refute File.exists?(Path.join(dir, "nobody.md"))
     end
 
-    test "a QA verdict is credited to the seat that gave it, pass or fail", %{ws: ws} do
-      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "nolan", archetype: "qa"})
-      thread = workline(ws, "kettle", "the kettle")
-
-      for {cmd, exit} <- [{"qa by nolan", 0}, {"qa by nolan", 1}] do
-        {:ok, _} =
-          Dossier.record_check(%{
-            thread_id: thread.id,
-            cmd: cmd,
-            exit: exit,
-            tail: "saw it",
-            correlation: "workline:kettle:qa"
-          })
-      end
-
-      assert %{"nolan" => [%{kind: :qa, verdict: "pass", title: "the kettle"}, %{kind: :qa, verdict: "fail"}]} =
-               Diary.history(ws.id, @since)
-    end
-
     test "a review is credited to the reviewer who filed it, approval or changes", %{ws: ws} do
       thread = workline(ws, "teapot", "the teapot")
 

@@ -12,15 +12,13 @@ defmodule Server.Workline do
   spec→plan, review→merged, and a machine-born intent→spec — park in `awaiting: <operator>`
   instead of flipping; `approve/1` is the operator's completion verb, and its approval stands
   across commits that only touch `work/<slug>/` (an advance after one re-queues, never re-parks;
-  `approval/1`). A reviewed change Andrew
-  would see (`@user_visible` paths) also owes a QA pass before its gate (`qa_verdict/5`), when the
-  bench seats a qa. Every completed flip
+  `approval/1`). Every completed flip
   records a `stage_advanced` event: the slice-6 ledger reads metrics out of rows that
   already exist.
 
   This module opens, promotes and flags a workline and is the one door callers use: the rest lives
   in `Server.Workline.Stage` (the machine, its gates and approval), `Review` (verdicts, self-review,
-  QA, the grade's reach), `Landing` (the merge queue's turn, requeue, reland, publish), `SendBack`,
+  the grade's reach), `Landing` (the merge queue's turn, requeue, reland, publish), `SendBack`,
   `Staffing` (who leads a stage) and `Shared`.
   """
 
@@ -245,8 +243,6 @@ defmodule Server.Workline do
 
   defdelegate self_review(thread, author), to: Review
 
-  defdelegate qa_verdict(thread, verdict, author, report, opts \\ []), to: Review
-
   defdelegate graded(thread, opts \\ []), to: Review
 
   defdelegate grade_limits(thread), to: Review
@@ -257,7 +253,7 @@ defmodule Server.Workline do
 
   defdelegate send_back(thread, to, why, by, opts \\ []), to: SendBack
 
-  defdelegate follow_ups(thread, author, items, door \\ :review), to: Review
+  defdelegate follow_ups(thread, author, items), to: Review
 
   defdelegate follow_up_items(items), to: Review
 
@@ -283,8 +279,6 @@ defmodule Server.Workline do
   defdelegate proof(thread, opts \\ []), to: Stage
 
   defdelegate owed_status(thread, opts \\ []), to: Stage
-
-  defdelegate qa_leads?(thread, opts \\ []), to: Stage
 
   defdelegate republish(thread, run \\ &Server.Cmd.run/3), to: Landing
 

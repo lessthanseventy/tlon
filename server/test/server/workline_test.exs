@@ -526,7 +526,7 @@ defmodule Server.WorklineTest do
                Workline.review_verdict(thread, "approve", "lonnrot", artifacts: NonePresent)
 
       assert why =~ "review.md"
-      assert Server.MCP.Tool.SubmitReview.next({:error, {:not_parked, why}}, "lonnrot") =~ "not parked"
+      assert Server.MCP.Tool.SubmitReview.next({:error, {:not_parked, why}}) =~ "not parked"
       assert %Thread{stage: "review", awaiting: nil} = Repo.get!(Thread, thread.id)
 
       assert {:ok, %Thread{stage: "review", awaiting: "andrew"}} =
@@ -1120,15 +1120,6 @@ defmodule Server.WorklineTest do
       assert {:error, :limit_hit} = Workline.approve(parked, artifacts: AllPresent, land: :queue, as: "uqbar")
       assert %{awaiting: "andrew"} = Repo.get!(Server.Thread, parked.id)
       assert Workline.approval(parked) == nil
-    end
-
-    test "--skip-qa goes through the same door: refused for Uqbar on a limit-hit gate, no QA skip recorded" do
-      parked = parked_lamp!(%{"limits" => ["a database migration"]})
-
-      assert {:error, :limit_hit} =
-               Workline.approve(parked, artifacts: AllPresent, land: :queue, as: "uqbar", skip_qa: "in a hurry")
-
-      refute Enum.any?(Channel.thread_messages(parked), &(&1.body =~ "QA skipped"))
     end
 
     test "the operator's own approval of a limit-hit gate is accepted, recorded by the operator" do

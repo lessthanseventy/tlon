@@ -1,9 +1,0 @@
-{
-  "tier": "full",
-  "grader": {
-    "kind": "json",
-    "expect": {
-      "verdict": {"equals": "pass"}
-    }
-  }
-}

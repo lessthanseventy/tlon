@@ -87,63 +87,6 @@ defmodule Server.ReleaseSmokeScriptTest do
     assert out =~ "flag nope: /api/flags answered 404"
   end
 
-  test "TLON_SMOKE_FIXTURES seeds each fixture by rpc on the smoke node; one it can't seed fails the smoke" do
-    url = stub([], FlagStub)
-    bin = Path.join(System.tmp_dir!(), "smoke-rpc-stub-#{System.pid()}-#{System.unique_integer([:positive])}")
-
-    File.write!(bin, """
-    #!/usr/bin/env bash
-    [[ "$1" == rpc && "$2" == 'Server.Smoke.Fixtures.apply("ok_set")' ]] || exit 1
-    [[ "$TLON_DATABASE" == tlon_smoke_* && "$TLON_NODE" == tlon-smoke-* ]] || exit 1
-    """)
-
-    File.chmod!(bin, 0o755)
-    on_exit(fn -> File.rm(bin) end)
-
-    seeded = fn fixtures, extra ->
-      System.cmd("bash", [@script],
-        env: [{"TLON_SMOKE_URL", url}, {"TLON_SMOKE_FIXTURES", fixtures}, {"TLON_STALE_SCRIPTS_OK", "1"}] ++ extra,
-        stderr_to_stdout: true
-      )
-    end
-
-    {out, _} = seeded.("ok_set", [{"TLON_SMOKE_SERVER_BIN", bin}])
-    assert out =~ "smoke: fixture ok_set seeded"
-
-    assert {out, 1} = seeded.("nope", [{"TLON_SMOKE_SERVER_BIN", bin}])
-    assert out =~ "fixture nope: not seeded"
-
-    assert {out, 1} = seeded.("ok_set", [])
-    assert out =~ "fixtures need a scratch node"
-  end
-
-  test "a fixture spec with params reaches the rpc whole, beside another fixture" do
-    url = stub([], FlagStub)
-    bin = Path.join(System.tmp_dir!(), "smoke-rpc-stub-#{System.pid()}-#{System.unique_integer([:positive])}")
-
-    File.write!(bin, """
-    #!/usr/bin/env bash
-    [[ "$2" == 'Server.Smoke.Fixtures.apply("p_set:a=b,c=d")' || "$2" == 'Server.Smoke.Fixtures.apply("plain")' ]]
-    """)
-
-    File.chmod!(bin, 0o755)
-    on_exit(fn -> File.rm(bin) end)
-
-    {out, _} =
-      System.cmd("bash", [@script],
-        env: [
-          {"TLON_SMOKE_URL", url},
-          {"TLON_SMOKE_FIXTURES", "p_set:a=b,c=d plain"},
-          {"TLON_STALE_SCRIPTS_OK", "1"},
-          {"TLON_SMOKE_SERVER_BIN", bin}
-        ],
-        stderr_to_stdout: true
-      )
-
-    assert out =~ "smoke: fixture p_set:a=b,c=d seeded"
-    assert out =~ "smoke: fixture plain seeded"
-  end
-
   describe "the fetch of origin" do
     # a repo whose origin can't be fetched (a local path that isn't there): a smoke of a local ref
     # needs no fetch, so it must get past the fetch; a smoke of origin/main still needs it

@@ -27,7 +27,6 @@ defmodule Server.Bench.Roles do
     "builder-senior" => %{archetype: :builder, grade: "senior", set: "senior"},
     "reviewer" => %{archetype: :reviewer, grade: nil, set: "reviewer"},
     "planner" => %{archetype: :planner, grade: nil, set: "planner"},
-    "qa" => %{archetype: :qa, grade: nil, set: "qa"},
     "manager" => %{archetype: :surveyor, grade: nil, set: "manager"},
     "librarian" => %{archetype: :librarian, grade: "senior", set: "librarian"}
   }

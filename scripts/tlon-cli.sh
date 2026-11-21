@@ -82,13 +82,13 @@
 #                                  builder of it, approves its head
 #     land-pr … [author] --operator  …approved by the operator's word in place of a review
 #   approve <id>                   complete a workline's parked gate (awaiting the operator)
-#     approve <id> --skip-qa <why…>  …and land a review past an owed QA pass, recorded with why
+
 #     (TLON_AUTHOR set → approved as that seat; Uqbar's cannot approve a limit-hit gate)
 set -euo pipefail
 
 # the release the service runs (.release, the release pointer's build), from the main checkout
 # wherever this copy is; a machine that never cut a release has only the main checkout's.
-# TLON_CLI_SERVER names another bin/server (a scratch release, a QA node's) and wins; point
+# TLON_CLI_SERVER names another bin/server (a scratch release's) and wins; point
 # RELEASE_NODE at its node too.
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 SERVER="${TLON_CLI_SERVER:-$root/.release/server/_build/prod/rel/server/bin/server}"
@@ -651,18 +651,12 @@ case "$cmd" in
 
   approve)
     tid="${1:-}"; shift || true
-    int "$tid" || { echo 'usage: tlon-cli.sh approve <thread-id> [--skip-qa <reason…>]' >&2; exit 2; }
+    int "$tid" || { echo 'usage: tlon-cli.sh approve <thread-id>' >&2; exit 2; }
     opts="[]"
-    if [ "${1:-}" = "--skip-qa" ]; then
-      shift
-      [ "$#" -gt 0 ] || { echo 'approve --skip-qa needs a reason' >&2; exit 2; }
-      opts="[skip_qa: \"$(esc "$*")\"]"
-    fi
     # an agent's shell has TLON_AUTHOR (Uqbar's = uqbar); the operator's has none. The service
     # refuses a limit-hit gate to uqbar and records the approval by this handle (workline.ex approve/2).
     if [ -n "${TLON_AUTHOR:-}" ]; then
-      opts="${opts%]}"; [ "$opts" = "[" ] || opts="$opts, "
-      opts="${opts}as: \"$(esc "$TLON_AUTHOR")\"]"
+      opts="[as: \"$(esc "$TLON_AUTHOR")\"]"
     fi
     # Complete a workline's parked gate (awaiting the operator) — the operator's approval verb.
     # approve RE-VERIFIES the owed artifact via git in the SERVICE node — like `advance`,

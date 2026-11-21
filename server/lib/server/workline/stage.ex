@@ -58,17 +58,13 @@ defmodule Server.Workline.Stage do
 
     with :ok <- still_open(thread),
          :ok <- advanceable(thread, checker),
-         :ok <- verified_artifact(thread, checker),
-         :ok <- Review.qa_cleared(thread, opts) do
+         :ok <- verified_artifact(thread, checker) do
       if gated?(thread), do: park(thread, checker, opts), else: flip(thread)
     else
       {:error, {:artifact_missing, why}} when thread.stage == "verify" ->
         if Keyword.get(opts, :reverify, checker == Git),
           do: reverify(thread, why),
           else: {:error, {:artifact_missing, why}}
-
-      {:error, {:artifact_missing, _}} = refused when thread.stage == "review" ->
-        hand_to_qa(thread, opts) || refused
 
       other ->
         other
@@ -82,28 +78,16 @@ defmodule Server.Workline.Stage do
   `{:error, {:artifact_missing, why}}` (still parked), `{:error, :nothing_awaiting}`, or
   `{:error, :approving}` while another approval of it is landing.
 
-  `skip_qa: reason` lands a review past an owed QA pass (parked or not): the skip is recorded as its
-  QA verdict ("skipped by the operator: <reason>") and posted on the thread. Without it, or with a
-  blank reason, an owed QA refuses as before.
-
   `as: handle` is the caller's seat (tlon-cli passes `TLON_AUTHOR`); nil is the operator. `as: "uqbar"`
   on a gate whose grade hit a limit (`limit_hit?/1`) is refused `{:error, :limit_hit}` before anything
-  else, a `skip_qa` included. An approval is recorded `by` the caller, not the gate's holder.
+  else. An approval is recorded `by` the caller, not the gate's holder.
   """
   def approve(thread, opts \\ [])
 
   def approve(%Thread{} = thread, opts) do
-    reason = opts |> Keyword.get(:skip_qa) |> to_string() |> String.trim()
-
     cond do
       Keyword.get(opts, :as) == "uqbar" and Review.limit_hit?(thread) ->
         {:error, :limit_hit}
-
-      reason != "" and Review.qa_owed(thread, opts) ->
-        Landing.landing(thread.id, fn ->
-          skip_qa(thread, reason)
-          do_approve(thread, opts)
-        end)
 
       thread.awaiting ->
         Landing.landing(thread.id, fn -> do_approve(thread, opts) end)
@@ -187,18 +171,17 @@ defmodule Server.Workline.Stage do
   end
 
   @doc """
-  Whether a workline stands at its gate — a gated stage whose owed artifact is there (and at review,
-  no QA owed), which is when `advance` parks it — so an `awaiting` on it is that gate, which only an
-  approval clears. Anywhere else (an ungated stage, a gated one whose artifact isn't written yet, or
-  a review still owing QA) it is a worker's question, which a reply clears. A machine-born intent parks before its artifact by design: always a gate.
+  Whether a workline stands at its gate — a gated stage whose owed artifact is there, which is when
+  `advance` parks it — so an `awaiting` on it is that gate, which only an
+  approval clears. Anywhere else (an ungated stage, or a gated one whose artifact isn't written yet)
+  it is a worker's question, which a reply clears. A machine-born intent parks before its artifact by design: always a gate.
   `opts[:artifacts]` swaps the checker (tests).
   """
   def at_gate?(thread, opts \\ [])
   def at_gate?(%Thread{stage: "intent", born: "machine"}, _opts), do: true
 
   def at_gate?(%Thread{stage: stage} = thread, opts) do
-    stage in @gated and match?({:ok, _}, Keyword.get(opts, :artifacts, Git).check(thread, Map.fetch!(@owed, stage))) and
-      Review.qa_cleared(thread, opts) == :ok
+    stage in @gated and match?({:ok, _}, Keyword.get(opts, :artifacts, Git).check(thread, Map.fetch!(@owed, stage)))
   rescue
     # an artifact that can't even be checked (no slug, no repo): the cautious reading, a gate
     _ -> true
@@ -243,21 +226,7 @@ defmodule Server.Workline.Stage do
 
     # A question, not a move: only advance and approve record the artifact check, or every brief
     # and turn-end nudge writes one (two at the same instant when both ask).
-    with {:ok, _} <- owed_artifact(thread, checker),
-         :ok <- Review.qa_cleared(thread, opts) do
-      {:ok, "#{thread.stage} artifact committed"}
-    else
-      {:error, {:artifact_missing, why}} -> {:error, why}
-      {:error, why} when is_binary(why) -> {:error, why}
-    end
-  end
-
-  @doc "Whether `thread` owes a QA pass at review and its qa seat is the one leading it. `opts` as `advance/2`'s."
-  def qa_leads?(thread, opts \\ []) do
-    case Review.qa_owed(thread, opts) do
-      {seat, _paths} -> Server.Channel.thread_lead(thread.id) == seat.name
-      nil -> false
-    end
+    with {:ok, _} <- owed_artifact(thread, checker), do: {:ok, "#{thread.stage} artifact committed"}
   end
 
   # The review gate's approval is the merge: work/<slug> onto main (`Merge`), or — when it can't —
@@ -293,19 +262,6 @@ defmodule Server.Workline.Stage do
     )
 
     {:error, {:merge, why}}
-  end
-
-  defp skip_qa(thread, reason) do
-    {:ok, _} =
-      Dossier.record_check(%{
-        thread_id: thread.id,
-        cmd: "qa skipped by the operator",
-        exit: 0,
-        tail: "skipped by the operator: #{reason}",
-        correlation: "workline:#{thread.slug}:qa"
-      })
-
-    Shared.post_brief(thread, "⚠ QA skipped by the operator: #{reason}")
   end
 
   # the stage a workline was opened at, read from its earliest stage_advanced: the one from nowhere
@@ -345,23 +301,6 @@ defmodule Server.Workline.Stage do
   defp owed_artifact(thread, checker),
     do: thread |> checker.check(Map.fetch!(@owed, thread.stage)) |> this_round(thread)
 
-  # a reviewer that approved in review.md and advanced (rather than `submit_review`) still owes
-  # QA: hand it to the qa seat as the verdict would, instead of refusing into a dead end
-  defp hand_to_qa(thread, opts) do
-    line = Keyword.get_lazy(opts, :review_line, fn -> Git.doc_line(thread, "review.md") end) || ""
-
-    # review.md stays on the branch across rounds: with no verdict yet this round, an approval in it
-    # is the last round's and owes nothing
-    with true <- line =~ ~r/approve/i and not (line =~ ~r/request.?changes/i),
-         false <- is_nil(Review.since_review(thread, "workline:#{thread.slug}:review")) and reviewed_before?(thread),
-         {seat, paths} <- Review.qa_owed(thread, opts),
-         false <- Server.Channel.thread_lead(thread.id) == seat.name do
-      {:ok, Review.to_qa(thread, seat, paths)}
-    else
-      _ -> nil
-    end
-  end
-
   # verify's evidence is the server's own run: a lead asking to advance past it (after fixing the
   # branch) is asking for a verify, which only the server can start — so it does
   defp reverify(thread, why) do
@@ -382,8 +321,7 @@ defmodule Server.Workline.Stage do
     end
 
     with :ok <- verified_artifact(thread, checker),
-         :ok <- Review.reviewed_current(thread),
-         :ok <- Review.qa_cleared(thread, opts) do
+         :ok <- Review.reviewed_current(thread) do
       if queue?(thread, checker, opts),
         do: queue(thread, "approved", Keyword.get(opts, :as) || thread.awaiting || Shared.operator()),
         else: approve_now(thread, checker, opts)

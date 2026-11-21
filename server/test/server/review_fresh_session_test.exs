@@ -113,12 +113,11 @@ defmodule Server.ReviewFreshSessionTest do
     assert %DateTime{} = Repo.get!(Session, session.id).ended_at
   end
 
-  # A workline at review on a bench with a builder, a reviewer and a qa seat, lonnrot leading.
+  # A workline at review on a bench with a builder and a reviewer, lonnrot leading.
   defp benched_review(slug) do
     roster = [
       %{"archetype" => "builder", "name" => "hronir"},
-      %{"archetype" => "reviewer", "name" => "lonnrot"},
-      %{"archetype" => "qa", "name" => "nolan"}
+      %{"archetype" => "reviewer", "name" => "lonnrot"}
     ]
 
     {:ok, ws} = Server.Workspaces.register(%{name: "Fates #{slug}", roster: roster})
@@ -153,20 +152,6 @@ defmodule Server.ReviewFreshSessionTest do
       post = follow_up_post(thread)
       assert post =~ "@hronir" and post =~ "1. a typo in the help"
       refute post =~ "@lonnrot"
-    end
-
-    test "approve with QA owed: the qa seat" do
-      thread = benched_review("knob")
-
-      assert {:ok, _} =
-               Workline.review_verdict(thread, "approve", "lonnrot",
-                 branch_head: nil,
-                 paths: ["server/lib/server/office/room.ex"],
-                 follow_ups: ["the tooltip wraps"]
-               )
-
-      assert Channel.thread_lead(thread.id) == "nolan"
-      assert follow_up_post(thread) =~ "@nolan"
     end
 
     test "approve handed to the operator's gate: the operator" do

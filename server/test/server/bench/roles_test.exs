@@ -183,13 +183,13 @@ defmodule Server.Bench.RolesTest do
   describe "fingerprint/1" do
     test "one hash per role over its system prompt; equal prompts equal, an edit differs" do
       same = fn _role -> %{system_prompt: "be terse"} end
-      edited = fn role -> %{system_prompt: if(role == "qa", do: "be verbose", else: "be terse")} end
+      edited = fn role -> %{system_prompt: if(role == "planner", do: "be verbose", else: "be terse")} end
 
       a = Roles.fingerprint(same)
       assert a |> Map.keys() |> Enum.sort() == Roles.roles() |> Map.keys() |> Enum.sort()
       assert Roles.fingerprint(same) == a
       b = Roles.fingerprint(edited)
-      assert for({r, h} <- b, h != a[r], do: r) == ["qa"]
+      assert for({r, h} <- b, h != a[r], do: r) == ["planner"]
     end
 
     test "a profile with no persona hashes as the empty prompt" do
