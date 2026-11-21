@@ -568,7 +568,14 @@ defmodule Server.Home.Source.BankTest do
       assert keys() == []
     end
 
-    test "an open proposal with the key does not hide it, and another source's does not either" do
+    test "an open bank proposal with the key does not hide it" do
+      [new, _] = keys()
+      Proposal.offer("telegram", "bank", [todo(new)], @now, [])
+      assert [%{key: ^new}] = Proposal.open()
+      assert new in keys()
+    end
+
+    test "a dismissed proposal from another source does not hide it" do
       [new, _] = keys()
       Proposal.offer("telegram", "mail", [todo(new)], @now, [])
       [row] = Proposal.open()
