@@ -193,6 +193,9 @@ defmodule Server.Home.Money.Say do
       %{"ask" => %{"ask" => "afford"}, "result" => %{"verdict" => "short"}} ->
         Regex.match?(@affirm, Regex.replace(@negated, text, " "))
 
+      %{"result" => %{"error" => "beyond_horizon"}} ->
+        Regex.match?(@affirm, Regex.replace(@negated, text, " "))
+
       %{"ask" => %{"ask" => "afford"}, "result" => %{"verdict" => _covers_or_tight}} ->
         Regex.match?(@deny, Regex.replace(@not_short, text, " "))
 
@@ -280,6 +283,10 @@ defmodule Server.Home.Money.Say do
     "From #{day(ask["from"])} to #{day(ask["to"])}#{what}: #{r["count"]} transactions, on average #{r["average_out_cents_text"]} out and #{r["average_in_cents_text"]} in a month." <>
       if(largest == "", do: "", else: " Largest: #{largest}.")
   end
+
+  @doc "Whether every result is a date past the horizon: nothing is left for a model to explain."
+  @spec only_beyond_horizon?([map()]) :: boolean()
+  def only_beyond_horizon?(presented), do: presented != [] and Enum.all?(presented, &beyond_horizon?/1)
 
   defp beyond_horizon?(%{"result" => %{"error" => "beyond_horizon"}}), do: true
   defp beyond_horizon?(_entry), do: false

@@ -19,7 +19,8 @@ defmodule Server.Home.Money do
      answer exactly `{"agrees": true}`. Anything else (false, unparsable, extra keys, model down),
      like any failed check or a failed phrase call, makes the answer
      `Server.Home.Money.Say.render/1`, the deterministic wording of the results: a failure can only
-     make the reply plainer. So a purchase costs three model calls, any other question two. The
+     make the reply plainer. So a purchase costs three model calls, any other question two, and a
+     question whose every ask is beyond the engine's horizon one (the plan alone). The
      judge is a model too and cannot guarantee the text agrees; the code-written verdict leads the
      reply regardless. The check sees dollar amounts only: dates, counts, percentages and numbers in
      words are not checked.
@@ -146,6 +147,10 @@ defmodule Server.Home.Money do
   end
 
   defp phrase(text, presented, c) do
+    if Say.only_beyond_horizon?(presented), do: Say.render(presented), else: phrased(text, presented, c)
+  end
+
+  defp phrased(text, presented, c) do
     with {:ok, out} <- c.model.(phrase_prompt(text, presented, c.today)),
          reply = String.trim(out),
          true <- reply != "",

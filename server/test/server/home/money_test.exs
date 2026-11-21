@@ -306,15 +306,14 @@ defmodule Server.Home.MoneyTest do
                JSON.decode!(json)
     end
 
-    test "a date past the horizon is code's sentence first, with no judge call" do
+    test "a date past the horizon alone is code's sentence, and the plan is the one model call" do
       store()
       far = Date.add(@today, 300)
       said = "I can only look 180 days ahead, so I can't say for #{Calendar.strftime(far, "%a %-d %b")}."
 
       purchase = %{"ask" => "afford", "amount_cents" => 40_000, "on" => Date.to_iso8601(far)}
-      {answer, [_, phrase_prompt]} = ask("can I buy it then?", [plan([purchase]), {:ok, "Nothing more to add."}])
-      assert answer.reply == said <> " Nothing more to add."
-      assert phrase_prompt =~ ~s("error":"beyond_horizon")
+      {answer, [_]} = ask("can I buy it then?", [plan([purchase])])
+      assert answer.reply == said
       assert answer.figures == nil
 
       one_off = %{
@@ -323,8 +322,25 @@ defmodule Server.Home.MoneyTest do
         "changes" => [%{"kind" => "one_off", "amount_cents" => 5_000, "on" => Date.to_iso8601(far), "name" => "Trip"}]
       }
 
-      {answer, [_, _]} = ask("what if I take a trip then?", [plan([one_off]), {:error, :down}])
+      {answer, [_]} = ask("what if I take a trip then?", [plan([one_off])])
       assert answer.reply == said
+    end
+
+    test "beyond the horizon beside real results leads, and an affirming phrasing is replaced by the rendering" do
+      store()
+      far = Date.to_iso8601(Date.add(@today, 300))
+      purchase = %{"ask" => "afford", "amount_cents" => 40_000, "on" => far}
+      forecast = %{"ask" => "forecast", "until" => "2026-12-20"}
+
+      {answer, [_, _]} =
+        ask("then and in december?", [plan([purchase, forecast]), {:ok, "Yes, you can afford it."}])
+
+      refute answer.reply =~ "can afford"
+      assert answer.reply =~ ~r/\AI can only look 180 days ahead/
+      assert answer.reply =~ "Your checking balance is"
+
+      {answer, [_, _]} = ask("then and in december?", [plan([purchase, forecast]), {:ok, "Rent is due on the 27th."}])
+      assert answer.reply =~ ~r/\AI can only look 180 days ahead, so I can't say for [^.]+\. Rent is due/
     end
 
     test "a clamped forecast or what_if says the horizon was cut to 180 days, in the results and the rendering" do
