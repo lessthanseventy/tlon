@@ -223,7 +223,7 @@ func _entry(e: Dictionary, r: Rect2) -> void:
 		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 14.0)
 		Chores.basket(PetThings.Pen.new(self, origin, 1.0), "fine")
 	elif e["key"] == People.PIECE:
-		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 18.0)
+		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 22.0)
 		People.frame(PetThings.Pen.new(self, origin, 0.9), false)
 	elif e["key"] == Money.PIECE:
 		var origin := Vector2(r.position.x + 5 + ICON / 2.0, r.position.y + 5 + ICON / 2.0 + 14.0)
@@ -439,7 +439,10 @@ func _piece_at(pos: Vector2) -> Variant:
 
 
 func _opaque(p: Dictionary, pos: Vector2) -> bool:
-	if PetThings.is_pet(p) or Chores.is_basket(p) or People.is_frame(p) or Money.is_piggy(p):
+	if People.is_frame(p):
+		var pen := PetThings.Pen.new(room, room._p(room._origin, p["c"], p["r"]), room._k)
+		return Geometry2D.is_point_in_polygon(pos, People.outline(pen))
+	if PetThings.is_pet(p) or Chores.is_basket(p) or Money.is_piggy(p):
 		return _over_pet(p, pos)
 	var s: Dictionary = room._sprite(room._furn_id([home.layout.sprite_id(p)]))
 	if s.is_empty():
@@ -494,7 +497,8 @@ func draw_ghost() -> void:
 		People.frame(pen, false)
 		return
 	if Money.is_piggy(p):
-		var pen := PetThings.Pen.new(room, room._p(room._origin, p["c"], p["r"]), room._k, false, tint)
+		var at: Vector2 = room._p(room._origin, p["c"], p["r"]) - Vector2(0, layout.lift(p) * room._k)
+		var pen := PetThings.Pen.new(room, at, room._k, false, tint)
 		Money.piggy(pen, "none")
 		return
 	var s: Dictionary = room._sprite(room._furn_id([layout.sprite_id(p)]))

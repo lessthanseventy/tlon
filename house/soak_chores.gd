@@ -272,6 +272,13 @@ func _layout() -> void:
 		"the room draws it in code, not as a sprite row"
 	)
 	s._check(not h.layout.entry(Chores.PIECE).is_empty(), "decorating lists it")
+	s._check(
+		Vector2i(piece["c"], piece["r"]) == Vector2i(0, 10), "by default it is in the piano's corner"
+	)
+	s._check(
+		not h.layout.in_front().has(Vector2i(piece["c"], piece["r"])),
+		"on no piece's approach cell"
+	)
 	var wall: Dictionary = {"p": Chores.PIECE, "f": "", "c": 6, "r": 0}
 	s._check(h.layout.check(wall, piece, []) != "", "it does not go on the bin")
 	var again := {"p": Chores.PIECE, "f": "", "c": 8, "r": 9}
@@ -343,7 +350,7 @@ func _offered() -> void:
 	s._check(l.load_file(), "the old layout loads")
 	var basket: Dictionary = l.basket()
 	s._check(
-		not basket.is_empty() and basket["c"] == 1 and basket["r"] == 1,
+		not basket.is_empty() and basket["c"] == 0 and basket["r"] == 10,
 		"it gains the basket at its cell"
 	)
 	s._check(
@@ -358,14 +365,14 @@ func _offered() -> void:
 	s._check(back.load_file() and back.basket().is_empty(), "taken out, it stays out")
 	s._check(Chores.PIECE in s._read_layout(path)["offered"], "and is still on record")
 	var blocked: Array = rows.duplicate()
-	blocked.append({"p": "plant_small", "f": "", "c": 1, "r": 1})
+	blocked.append({"p": "plant_small", "f": "", "c": 0, "r": 10})
 	s._write_layout(path, {"v": 2, "wall": "wallpaper", "floor": "oak", "pieces": blocked})
 	var near: RefCounted = s._layout()
 	near.path = path
 	near.persist = true
 	s._check(near.load_file(), "a layout with the cell taken loads")
 	var spot: Dictionary = near.basket()
-	var apart: int = absi(spot.get("c", 99) - 1) + absi(spot.get("r", 99) - 1)
+	var apart: int = absi(spot.get("c", 99) - 0) + absi(spot.get("r", 99) - 10)
 	s._check(
 		not spot.is_empty() and apart == 1, "the basket goes to the nearest free cell: %s" % spot
 	)

@@ -180,7 +180,7 @@ runs on the local list.
   list moves the row to its next time (the demo does it in `_demo_repeat`). A chore whose thing is in the room is left
   out of Home's Today, Open and Later (`home.chore_thing_of`); it stays on the calendar card and in its item view, and
   the Now pick may pick it. With its thing not in the room (the basket taken away, the pet things off) it is a list
-  row as any other; a repeating row whose rhythm does not read (`Chores.interval` 0) is no chore. The basket is the plain piece `laundry_basket` (default cell 1,1, in decorate's home tab), drawn in
+  row as any other; a repeating row whose rhythm does not read (`Chores.interval` 0) is no chore. The basket is the plain piece `laundry_basket` (default cell 0,10, the corner by the piano, in decorate's home tab), drawn in
   code and never as a sprite row, at the depth of the cell it stands in (`_basket_key`); a saved layout from before it is
   offered it once on load (`Layout.NEWER`, `offered` in the file: its cell, else the nearest free one) and a basket taken
   out stays out. The bin, desk and plant are fixed so their chores are always in the room. Add a
@@ -191,9 +191,8 @@ runs on the local list.
 - **People** (`people.gd` the rules and the two drawings, `people_view.gd` the views): `GET /api/home` sends `people`,
   `[{id, name, birthday ("MM-DD" or "YYYY-MM-DD" or null), next_birthday (local date, today counting, or null), notes:
   [{id, text, since}], todos: [the open rows that name them]}]`, soonest first, none last. The framed photo is the
-  plain floor piece `photo_frame` (a framed group photo on a small table, default cell 5,3 on open floor clear of the rugs, the table and the other pieces (row 6 stays free: the sun patch lies there), in decorate's home tab; drawn in
-  code at its cell's depth, `_frame_key`; offered once to a saved layout through `Layout.NEWER`; a frame on the old default cell 3,7 in a file saved before `Layout.SAVED` 3 moves to the current default once when that is free (`_move_old_frame`); movable like the
-  basket). It wears a small red bow while a birthday is a week away or less (`home.frame_marked`, `People.SOON`). Hover
+  plain wall piece `photo_frame` (a framed group photo hung on the north-east wall, default cell 10,0 beside the bookshelf, face `ne`, in decorate's home tab; drawn in
+  code at its cell's depth, `_frame_key`; offered once to a saved layout through `Layout.NEWER`; a frame a file saved before `Layout.SAVED` 4 holds on the floor cannot stand on a wall, so it goes to the default cell, else the nearest wall cell, on load; movable along the wall like a painting). It wears a small red bow while a birthday is a week away or less (`home.frame_marked`, `People.SOON`). Hover
   says "the people" and outlines it in gold like the door (`_hover_outline`); a click opens the People view and keeps the outline (`frame` hit). A card is the name, the next birthday
   in `When.birthday` words ("in 3 days · Mon 23 Nov", "today"), the notes (an add line; a quiet "drop" is
   `POST /api/home/:id/drop`, which is how a note comes off, `done` is 404 for one), then the to-dos naming them,
@@ -217,9 +216,9 @@ runs on the local list.
 - **Money** (`money.gd` the rules and the pig, `logic_money.gd` the checks): `money` of `GET /api/home` is `{balance,
   available, as_of, due_this_week: [{name, amount, on}], next_deposit: {name, amount, on} | null, accounts}`, amounts
   cents, null when the bank is off; `things.money` holds it, null over the local list and from an older server. The piggy
-  bank is the plain floor piece `piggy_bank` (a pig in profile drawn in code at its cell's depth, default cell 6,4 on open
-  floor: clear of row 6, of (1,7) and (2,7), of every pet spot and of the frame; in decorate's home tab, movable like the
-  basket, offered once to a saved layout through `Layout.NEWER`). It is drawn, hit and listed in decorate **only while
+  bank is the plain floor piece `piggy_bank` (a pig in profile drawn in code at its cell's depth, default cell 5,8, the right half of the dining table's top, drawn at the table's height and depth; a bank may stand on any cell of `Layout.TABLE_TOPS`
+  (`Layout.table_under`, `lift`) or on open floor; in decorate's home tab, movable like the
+  basket, offered once to a saved layout through `Layout.NEWER`; a file's rows are placed bank-last so the table is there first). A basket or bank a file saved before `Layout.SAVED` 4 holds on its old default cell (`Layout.OLD_DEFAULTS`) moves to the new default once, when that is free (`_move_old_defaults`). It is drawn, hit and listed in decorate **only while
   `things.money` is not null**: without money the piece takes no cell (`Layout.money_shown`, `show_money`; not solid, not
   walked around, free for another piece), and when money comes it stands on its cell or, taken meanwhile, the nearest one
   it may. Quiet most days; with a recurring charge due

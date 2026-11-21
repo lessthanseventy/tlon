@@ -2,7 +2,7 @@ extends RefCounted
 
 # The people the home keeps and the pile by the door: the rules that need no scene (when a birthday
 # is near, which day of a month it marks, whether the door has anything to take) and the two things
-# drawn for them in the room, a framed photo on a small table and a tote by the door. A person is
+# drawn for them in the room, a framed photo hung on the wall and a tote by the door. A person is
 # `{id, name, birthday, next_birthday, notes, todos}` as `GET /api/home` sends it; dates are local
 # "YYYY-MM-DD" and a birthday "MM-DD" or "YYYY-MM-DD".
 const PetThings := preload("res://pet_things.gd")
@@ -10,7 +10,7 @@ const PetThings := preload("res://pet_things.gd")
 # the placed piece the framed photo is, in the layout
 const PIECE := "photo_frame"
 const SOON := 7
-const WOOD := Color("a8794d")
+
 const FRAME_WOOD := Color("c9964f")
 const MAT := Color("efe6cf")
 const HAIRS := [Color("3b2a2a"), Color("e3b95a"), Color("b5642f")]
@@ -19,6 +19,9 @@ const CROOK := Color("9a6a3a")
 const WARM_SKY := Color("f7dca8")
 const SHIRTS := [Color("e0674f"), Color("3f9aa0"), Color("e9b949")]
 const HEIGHT := 35.0
+# how far up the wall the frame hangs, and how far it stands from it
+const HUNG := 11.0
+const WALL_GAP := 0.08
 const HILL := Color("6f9c62")
 const SUN := Color("f3d27a")
 const SKIN := Color("e6b48e")
@@ -148,9 +151,9 @@ static func entry() -> Dictionary:
 	return {
 		"key": PIECE,
 		"name": "photo frame",
-		"kind": "floor",
+		"kind": "wall",
 		"anim": false,
-		"faces": [],
+		"faces": ["ne"],
 		"tab": "home",
 		"group": "living",
 		"order": 1 * 1000 + 60,
@@ -161,49 +164,49 @@ static func is_frame(p: Dictionary) -> bool:
 	return p["p"] == PIECE
 
 
-# the framed photo on its small table; `ribbon` ties a bow on the frame's corner
+# the framed photo hung on its cell's north-east wall; `ribbon` ties a bow on its corner
 static func frame(s: PetThings.Pen, ribbon: bool) -> void:
-	var a := 0.2
-	var b := 0.8
-	s.diamond(a - 0.04, a - 0.04, b + 0.04, b + 0.04, 0.0, Color(0, 0, 0, 0.16))
-	for leg in [
-		Vector2(a + 0.02, a + 0.02),
-		Vector2(b - 0.12, a + 0.02),
-		Vector2(a + 0.02, b - 0.12),
-		Vector2(b - 0.12, b - 0.12)
-	]:
-		s.box(leg.x, leg.y, leg.x + 0.1, leg.y + 0.1, 0.0, 7.0, WOOD.darkened(0.3), "lr")
-	s.box(a, a, b, b, 7.0, 9.0, WOOD)
-	var y := 0.5
-	s.box(0.1, y - 0.04, 0.9, y, 9.0, HEIGHT, FRAME_WOOD, "lr")
+	var y := WALL_GAP
+	var up := HUNG
+	s.box(0.1, y - 0.04, 0.9, y, 9.0 + up, HEIGHT + up, FRAME_WOOD, "lr")
 	var face := y + 0.004
-	_quad(s, face, 0.14, 0.86, 10.5, 33.5, MAT)
-	_quad(s, face, 0.18, 0.82, 12.0, 32.0, WARM_SKY)
+	_quad(s, face, 0.14, 0.86, 10.5 + up, 33.5 + up, MAT)
+	_quad(s, face, 0.18, 0.82, 12.0 + up, 32.0 + up, WARM_SKY)
 	s.poly(
 		[
-			s.p(0.18, face, 12.0),
-			s.p(0.82, face, 12.0),
-			s.p(0.82, face, 16.0),
-			s.p(0.5, face, 17.5),
-			s.p(0.18, face, 15.0)
+			s.p(0.18, face, 12.0 + up),
+			s.p(0.82, face, 12.0 + up),
+			s.p(0.82, face, 16.0 + up),
+			s.p(0.5, face, 17.5 + up),
+			s.p(0.18, face, 15.0 + up)
 		],
 		HILL
 	)
-	s.dot(0.74, face, 29.0, 2.2, SUN)
-	_person(s, face, 0.35, 12.0, 25.0, SHIRTS[0], HAIRS[0], 2.7)
-	_person(s, face, 0.65, 12.0, 25.0, SHIRTS[1], HAIRS[1], 2.7)
-	_person(s, face, 0.5, 12.0, 19.5, SHIRTS[2], HAIRS[2], 2.3)
+	s.dot(0.74, face, 29.0 + up, 2.2, SUN)
+	_person(s, face, 0.35, 12.0 + up, 25.0 + up, SHIRTS[0], HAIRS[0], 2.7)
+	_person(s, face, 0.65, 12.0 + up, 25.0 + up, SHIRTS[1], HAIRS[1], 2.7)
+	_person(s, face, 0.5, 12.0 + up, 19.5 + up, SHIRTS[2], HAIRS[2], 2.3)
 	s.outline(
 		[
-			s.p(0.18, face, 12.0),
-			s.p(0.82, face, 12.0),
-			s.p(0.82, face, 32.0),
-			s.p(0.18, face, 32.0)
+			s.p(0.18, face, 12.0 + up),
+			s.p(0.82, face, 12.0 + up),
+			s.p(0.82, face, 32.0 + up),
+			s.p(0.18, face, 32.0 + up)
 		],
 		FRAME_WOOD.darkened(0.55)
 	)
 	if ribbon:
-		_bow(s, s.p(0.86, face, HEIGHT))
+		_bow(s, s.p(0.86, face, HEIGHT + up))
+
+
+# the hung frame's outline on screen, for its hit and its hover
+static func outline(s: PetThings.Pen) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for x in [0.1, 0.9]:
+		pts.append(s.p(x, WALL_GAP, 9.0 + HUNG))
+		pts.append(s.p(x, WALL_GAP, HEIGHT + HUNG))
+	pts.append(s.p(1.04, WALL_GAP, HEIGHT + HUNG + 3.0))
+	return Geometry2D.convex_hull(pts)
 
 
 # a head over shoulders on the photo's plane `y`: `head` is the height of the head's centre

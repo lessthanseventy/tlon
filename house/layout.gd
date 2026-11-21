@@ -49,9 +49,8 @@ const FIXED := [
 ]
 const DEFAULTS := [
 	["plant_small", "", 0, 0],
-	["laundry_basket", "", 1, 1],
-	["photo_frame", "", 5, 3],
-	["piggy_bank", "", 6, 4],
+	["laundry_basket", "", 0, 10],
+	["photo_frame", "ne", 10, 0],
 	["armchair", "se", 0, 1],
 	["rug_blue", "nwse", 1, 4],
 	["painting", "ne", 0, 0],
@@ -67,6 +66,7 @@ const DEFAULTS := [
 	["mirror", "nw", 0, 9],
 	["rug_round", "", 4, 8],
 	["dining_table", "nwse", 4, 8],
+	["piggy_bank", "", 5, 8],
 	["dining_chair", "ne", 4, 9],
 	["dining_chair", "ne", 5, 9],
 	["plant_small", "", 10, 10],
@@ -101,11 +101,13 @@ const NO_ROOM := "no room there"
 const BUSY := "someone is there"
 const SHUTS := "that would shut a path"
 const ONCE := "that one is already out"
-const SAVED := 3
+const SAVED := 4
 # the version from which the pets' things were put by the current rule
 const THINGS_SAVED := 2
-# where the frame stood by default before `SAVED` 3
-const OLD_FRAME := Vector2i(3, 7)
+# where the basket and the piggy bank stood by default before `SAVED` 4
+const OLD_DEFAULTS := {"laundry_basket": Vector2i(1, 1), "piggy_bank": Vector2i(6, 4)}
+# the tables a piggy bank may stand on
+const TABLE_TOPS := ["dining_table", "round_table", "tavern_table"]
 # default pieces added after layouts were first saved: a saved layout is offered each once
 const NEWER := ["laundry_basket", "photo_frame", "piggy_bank"]
 # the pets' spots that move with their thing: their old cells stay free ground
@@ -474,6 +476,7 @@ func check(p: Dictionary, skip: Variant, busy: Array) -> String:
 		return ""
 	if PetThings.is_pet(p):
 		return _check_pet(p, skip, busy, r)
+	var top := table_under(p)
 	for o in _solid():
 		if is_same(o, skip) or kind(o) == "rug":
 			continue
@@ -481,7 +484,7 @@ func check(p: Dictionary, skip: Variant, busy: Array) -> String:
 		if ok == "wall":
 			if height(p) >= TALL and r.has_point(Vector2i(o["c"], o["r"])):
 				return NO_ROOM
-		elif r.intersects(rect(o)):
+		elif r.intersects(rect(o)) and not is_same(o, top):
 			return STAYS if o.has("fixed") else NO_ROOM
 	if r.intersects(PETS_CORNER) or r.has_point(DOOR_CELL):
 		return STAYS
@@ -494,6 +497,23 @@ func check(p: Dictionary, skip: Variant, busy: Array) -> String:
 		if r.has_point(cell):
 			return BUSY
 	return "" if reaches(blocked(p, skip), busy) else SHUTS
+
+
+# the table a piggy bank stands on, {} for any other piece or a bank on the floor
+func table_under(p: Dictionary) -> Dictionary:
+	if not Money.is_piggy(p):
+		return {}
+	var r := rect(p)
+	for o in _solid():
+		if o["p"] in TABLE_TOPS and rect(o).encloses(r):
+			return o
+	return {}
+
+
+# how high up a piece stands: the table top under a piggy bank, else the floor
+func lift(p: Dictionary) -> int:
+	var table := table_under(p)
+	return 0 if table.is_empty() else height(table)
 
 
 # a pet thing: once, never on another piece, and a pet can get to it
@@ -708,11 +728,11 @@ func load_file() -> bool:
 	var rows: Array = []
 	for i in d["pieces"].size():
 		rows.append([i, d["pieces"][i]])
-	rows.sort_custom(
-		func(a, b): return [_pet_row(a[1]), a[0]] < [_pet_row(b[1]), b[0]]
-	)
+	rows.sort_custom(func(a, b): return _load_order(a) < _load_order(b))
 	var out: Array = []
 	var dropped: Array = []
+	var old_file: bool = not (d.get("v") is float and d["v"] >= SAVED)
+	var lost_frame := false
 	for pair in rows:
 		var row: Variant = pair[1]
 		if not row is Dictionary or not (row.get("p") is String and row.get("f") is String):
@@ -731,13 +751,17 @@ func load_file() -> bool:
 			out.append(p)
 		elif PetThings.is_pet(p):
 			dropped.append(PetThings.key_of(p))
+		elif People.is_frame(p) and old_file:
+			lost_frame = true
 	out.sort_custom(func(a, b): return a["_i"] < b["_i"])
 	for p in out:
 		p.erase("_i")
 	pieces = out
 	old_things = not (d.get("v") is float and d["v"] >= THINGS_SAVED)
-	if not (d.get("v") is float and d["v"] >= SAVED):
-		_move_old_frame()
+	if old_file:
+		if lost_frame and frame().is_empty():
+			_offer(People.PIECE)
+		_move_old_defaults()
 	pets_seen = []
 	if d.get("pets_seen") is Array:
 		pets_seen = d["pets_seen"].filter(func(k): return k is String and k not in dropped)
@@ -757,16 +781,17 @@ func load_file() -> bool:
 	return true
 
 
-# a frame still on its old default cell goes to the current default, once, when that cell is free
-func _move_old_frame() -> void:
-	var piece := frame()
-	if piece.is_empty() or Vector2i(piece["c"], piece["r"]) != OLD_FRAME:
-		return
-	var row: Array = DEFAULTS.filter(func(r): return r[0] == People.PIECE)[0]
-	var moved := _piece([People.PIECE, piece["f"], row[2], row[3]])
-	if check(moved, piece, []) == "":
-		piece["c"] = moved["c"]
-		piece["r"] = moved["r"]
+# a piece still on its old default cell goes to the current default, once, when that cell is free
+func _move_old_defaults() -> void:
+	for key in OLD_DEFAULTS:
+		for piece in pieces:
+			if piece["p"] != key or Vector2i(piece["c"], piece["r"]) != OLD_DEFAULTS[key]:
+				continue
+			var row: Array = DEFAULTS.filter(func(r): return r[0] == key)[0]
+			var moved := _piece([key, row[1], row[2], row[3]])
+			if check(moved, piece, []) == "":
+				piece["c"] = moved["c"]
+				piece["r"] = moved["r"]
 
 
 # a default piece new to a saved layout goes at its default cell, else the nearest cell it may
@@ -798,6 +823,13 @@ func _nearest(key: String, face: String, near: Vector2i, skip: Variant) -> Varia
 
 func _pet_row(row: Variant) -> bool:
 	return row is Dictionary and str(row.get("p", "")).begins_with(PetThings.PREFIX)
+
+
+# a file's rows are placed in order, the piggy bank after the tables it may stand on and the pet
+# things after all
+func _load_order(pair: Array) -> Array:
+	var bank: bool = pair[1] is Dictionary and str(pair[1].get("p", "")) == Money.PIECE
+	return [_pet_row(pair[1]), bank, pair[0]]
 
 
 # named for one of our packs, and that pack is not in the catalogue

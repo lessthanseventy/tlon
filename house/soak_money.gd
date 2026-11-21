@@ -205,6 +205,22 @@ func _states() -> void:
 		h.layout.rows()["furniture"].all(func(f: Array) -> bool: return f[0] != Money.PIECE),
 		"the room draws it in code, not as a sprite row"
 	)
+	var table: Dictionary = h.layout.table_under(piece)
+	s._check(
+		not table.is_empty() and table["p"] == "dining_table",
+		"by default it stands on the dining table"
+	)
+	s._check(
+		h.layout.lift(piece) == h.layout.height(table) and h.layout.lift(piece) > 0,
+		"at the table top's height"
+	)
+	var drawn_at: Array = h.items().filter(
+		func(it: Dictionary) -> bool: return it["fn"] == Callable(h, "_draw_piggy")
+	)
+	s._check(
+		drawn_at.size() == 1 and drawn_at[0]["key"] == float(h.layout.draw_key(table)) + 0.5,
+		"and is drawn just after the table, so it is not behind it"
+	)
 	var summary: Dictionary
 	for want in [["none", QUIET], ["due", DUE], ["short", _short_of(DUE)]]:
 		summary = want[1]
@@ -503,6 +519,11 @@ func _held() -> Dictionary:
 
 func _cell() -> void:
 	await _stage(DUE)
+	var floor_cell := {"p": Money.PIECE, "f": "", "c": 6, "r": 4}
+	s._check(
+		h.layout.place(floor_cell, _held(), []) == "" and h.layout.table_under(_held()).is_empty(),
+		"the piggy bank can stand on open floor"
+	)
 	var at := Vector2i(_held()["c"], _held()["r"])
 	s._check(h.layout.blocked().has(at), "with money the piggy bank's cell is blocked")
 	await _stage(null)
@@ -519,6 +540,7 @@ func _cell() -> void:
 			"to a cell it may stand on, not the one taken"
 		)
 	h.layout.remove(plant)
+	h.layout.place({"p": Money.PIECE, "f": "", "c": 5, "r": 8}, h.layout.piggy(), [])
 
 
 # the row's lines whole: every line of a label shown, none cut to an ellipsis, none past the pane

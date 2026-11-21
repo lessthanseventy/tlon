@@ -1961,10 +1961,11 @@ func _draw_piggy() -> void:
 		return
 	var c: int = piece["c"]
 	var r: int = piece["r"]
-	var pen := PetThings.Pen.new(room, _p(c, r), _k)
+	var up := float(layout.lift(piece))
+	var pen := PetThings.Pen.new(room, _p(c, r, up), _k)
 	Money.piggy(pen, Money.envelope(things.money, today()))
 	var hull := Money.outline(pen)
-	_register("piggy", hull, _p(c + 0.5, r + 0.8))
+	_register("piggy", hull, _p(c + 0.5, r + 0.8, up))
 	_hover_outline("piggy", hull)
 
 
@@ -1976,15 +1977,8 @@ func _draw_frame() -> void:
 	var r: int = piece["r"]
 	var pen := PetThings.Pen.new(room, _p(c, r), _k)
 	People.frame(pen, frame_marked())
-	var pts := PackedVector2Array()
-	for at in [Vector2(0.2, 0.2), Vector2(0.8, 0.2), Vector2(0.8, 0.8), Vector2(0.2, 0.8)]:
-		pts.append(_p(c + at.x, r + at.y))
-	for x in [0.1, 0.9]:
-		pts.append(_p(c + x, r + 0.5, 9.0))
-		pts.append(_p(c + x, r + 0.5, People.HEIGHT))
-	pts.append(_p(c + 1.04, r + 0.5, People.HEIGHT + 3.0))
-	var hull := Geometry2D.convex_hull(pts)
-	_register("frame", hull, _p(c + 0.5, r + 0.8))
+	var hull := People.outline(pen)
+	_register("frame", hull, _p(c + 0.5, r + People.WALL_GAP, 9.0 + People.HUNG))
 	_hover_outline("frame", hull)
 
 
@@ -2524,7 +2518,12 @@ func _opaque(hit: Dictionary, pos: Vector2) -> bool:
 
 func _piggy_key() -> float:
 	var piece := layout.piggy()
-	return float(layout.draw_key(piece)) if not piece.is_empty() else 2.0
+	if piece.is_empty():
+		return 2.0
+	var table := layout.table_under(piece)
+	if not table.is_empty():
+		return float(layout.draw_key(table)) + 0.5
+	return float(layout.draw_key(piece))
 
 
 func _frame_key() -> float:

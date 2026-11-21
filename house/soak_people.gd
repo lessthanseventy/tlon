@@ -4,6 +4,8 @@ extends RefCounted
 # marks and place, the layout's offer of the frame), the People and Door views over a stub that
 # answers the routes as the server does, the calendar and Home's Today, and the house's own list
 # behind the same views. The rules without a scene are `logic_people.gd`.
+const Chores := preload("res://chores.gd")
+const Money := preload("res://money.gd")
 const People := preload("res://people.gd")
 const PetThings := preload("res://pet_things.gd")
 const BackendLocal := preload("res://backend_local.gd")
@@ -270,7 +272,11 @@ func _frame() -> void:
 	await _poll()
 	var piece: Dictionary = h.layout.frame()
 	s._check(
-		not piece.is_empty() and h.layout.kind(piece) == "floor", "the default layout has a frame"
+		not piece.is_empty() and h.layout.kind(piece) == "wall", "the default layout has a frame"
+	)
+	s._check(
+		piece["f"] == "ne" and Vector2i(piece["c"], piece["r"]) == Vector2i(10, 0),
+		"hung on the north-east wall beside the bookshelf"
 	)
 	s._check(
 		h.layout.footprint(piece) == Vector2i(1, 1) and h.layout.height(piece) < h.layout.TALL,
@@ -612,95 +618,131 @@ func _offered() -> void:
 	s._check(back.load_file() and back.frame().is_empty(), "taken out, it stays out")
 	s._check(People.PIECE in s._read_layout(path)["offered"], "and is still on record")
 	var blocked: Array = rows.duplicate()
-	blocked.append({"p": "plant_small", "f": "", "c": home[2], "r": home[3]})
+	blocked.append({"p": "painting", "f": "ne", "c": home[2], "r": home[3]})
 	s._write_layout(path, {"v": 2, "wall": "wallpaper", "floor": "oak", "pieces": blocked})
 	var near: RefCounted = s._layout()
 	near.path = path
 	near.persist = true
 	s._check(near.load_file(), "a layout with the cell taken loads")
-	var spot: Dictionary = near.frame()
-	var apart: int = absi(spot.get("c", 99) - home[2]) + absi(spot.get("r", 99) - home[3])
-	s._check(
-		not spot.is_empty() and apart == 1, "the frame goes to the nearest free cell: %s" % spot
-	)
+	s._check(near.frame().is_empty(), "no other wall cell is free, so there is no frame")
 	DirAccess.remove_absolute(path)
 
 
-# a layout saved before the frame's default moved: a frame on the old cell goes to the new default
-# once when that is free, one anywhere else stays, and a save is not moved again
+# a layout saved before the frame, the basket and the piggy bank moved to their current default
+# places: one on an old default cell goes to the current one once when that is free, one the owner
+# put anywhere else stays, and a layout saved now is not moved again
 func _old_cell() -> void:
 	var path := "user://soak_people_old_cell.json"
-	var home: Array = s.Layout.DEFAULTS.filter(func(r: Array) -> bool: return r[0] == People.PIECE)[0]
-	var rows: Array = (
-		s
-		. Layout
-		. DEFAULTS
-		. filter(func(r: Array) -> bool: return r[0] != People.PIECE)
-		. map(func(r: Array) -> Dictionary: return {"p": r[0], "f": r[1], "c": r[2], "r": r[3]})
-	)
-	var old := Vector2i(3, 7)
-	s._check(
-		s.Layout.OLD_FRAME == old and Vector2i(home[2], home[3]) != old,
-		"the default is no longer the old cell"
-	)
+	var keys: Array = s.Layout.NEWER
+	var base: Array = []
+	for row in s.Layout.DEFAULTS:
+		if row[0] not in keys:
+			base.append({"p": row[0], "f": row[1], "c": row[2], "r": row[3]})
+	var plant := {"p": "plant_small", "f": "", "c": 0, "r": 10}
 	var cases := {
-		"on the old cell": [old, [], Vector2i(home[2], home[3])],
-		"elsewhere": [Vector2i(6, 9), [], Vector2i(6, 9)],
-		"on the old cell with the new one taken":
-		[old, [{"p": "plant_small", "f": "", "c": home[2], "r": home[3]}], old],
+		People.PIECE:
+		{
+			"old": [Vector2i(3, 7), Vector2i(5, 3)],
+			"hand": [Vector2i(0, 0), "ne"],
+			"taken": {"p": "painting", "f": "ne", "c": 10, "r": 0},
+		},
+		Chores.PIECE:
+		{
+			"old": [Vector2i(1, 1)],
+			"hand": [Vector2i(6, 9), ""],
+			"taken": plant,
+		},
+		Money.PIECE:
+		{
+			"old": [Vector2i(6, 4)],
+			"hand": [Vector2i(6, 9), ""],
+			"taken": {"p": "plant_small", "f": "", "c": 5, "r": 8},
+		},
 	}
-	for label in cases:
-		var want: Array = cases[label]
-		var doc := rows.duplicate()
-		doc.append_array(want[1])
-		doc.append({"p": People.PIECE, "f": "", "c": want[0].x, "r": want[0].y})
-		s._write_layout(path, {"v": 2, "wall": "wallpaper", "floor": "oak", "pieces": doc})
-		var l: RefCounted = s._layout()
-		l.path = path
-		l.persist = true
-		s._check(l.load_file(), "a version 2 layout with the frame %s loads" % label)
-		var at := Vector2i(l.frame().get("c", -1), l.frame().get("r", -1))
-		s._check(at == want[2], "the frame %s is at %s, not %s" % [label, want[2], at])
-	var free: Array = rows.duplicate()
-	free.append({"p": People.PIECE, "f": "", "c": old.x, "r": old.y})
-	s._write_layout(path, {"v": 2, "wall": "wallpaper", "floor": "oak", "pieces": free})
-	var again: RefCounted = s._layout()
-	again.path = path
-	again.persist = true
-	again.load_file()
-	again.save()
+	for key in cases:
+		var want: Dictionary = cases[key]
+		var row: Array = s.Layout.DEFAULTS.filter(func(r: Array) -> bool: return r[0] == key)[0]
+		var home := Vector2i(row[2], row[3])
+		for old: Vector2i in want["old"]:
+			s._check(old != home, "%s: the default is no longer %s" % [key, old])
+			var l := _old_layout(path, 3, base, {"p": key, "f": "", "c": old.x, "r": old.y})
+			s._check(_cell_of(l, key) == home, "%s on %s goes to %s" % [key, old, home])
+		var by_hand: Array = want["hand"]
+		var clear: Array = base.filter(
+			func(r: Dictionary) -> bool: return r["p"] != "painting" or key != People.PIECE
+		)
+		var l := _old_layout(
+			path, 3, clear, {"p": key, "f": by_hand[1], "c": by_hand[0].x, "r": by_hand[0].y}
+		)
+		s._check(_cell_of(l, key) == by_hand[0], "%s put at %s by hand stays" % [key, by_hand[0]])
+		var old: Vector2i = want["old"][0]
+		var at := {"p": key, "f": "", "c": old.x, "r": old.y}
+		l = _old_layout(path, 3, [want["taken"]] + base, at)
+		var landed := _cell_of(l, key)
+		if key == People.PIECE:
+			s._check(
+				l.frame().is_empty(),
+				"%s with its new cell taken and no wall cell free is out" % key
+			)
+		else:
+			s._check(
+				landed == old, "%s on %s with the new cell taken stays: %s" % [key, old, landed]
+			)
+		l = _old_layout(path, s.Layout.SAVED, base, at)
+		if key == People.PIECE:
+			s._check(l.frame().is_empty(), "%s: a current layout is not given one again" % key)
+		else:
+			s._check(_cell_of(l, key) == old, "%s: a current layout is not moved again" % key)
+	var saved := _old_layout(path, 3, base, {"p": Chores.PIECE, "f": "", "c": 1, "r": 1})
+	saved.save()
 	s._check(
 		s._read_layout(path)["v"] == s.Layout.SAVED, "the layout is saved as the current version"
 	)
-	var other: RefCounted = s._layout()
-	other.path = path
-	other.persist = true
-	other.load_file()
-	var piece: Dictionary = other.frame()
-	s._check(
-		other.place({"p": People.PIECE, "f": "", "c": old.x, "r": old.y}, piece, []) == "",
-		"the owner puts the frame on the old cell"
-	)
-	other.save()
-	var last: RefCounted = s._layout()
-	last.path = path
-	last.persist = true
-	last.load_file()
-	s._check(
-		Vector2i(last.frame()["c"], last.frame()["r"]) == old,
-		"and a saved layout does not move it again"
-	)
 	DirAccess.remove_absolute(path)
+
+
+func _old_layout(path: String, v: int, rows: Array, piece: Dictionary) -> RefCounted:
+	(
+		s
+		. _write_layout(
+			path,
+			{
+				"v": v,
+				"wall": "wallpaper",
+				"floor": "oak",
+				"offered": s.Layout.NEWER,
+				"pieces": rows + [piece],
+			}
+		)
+	)
+	var l: RefCounted = s._layout()
+	l.path = path
+	l.persist = true
+	s._check(l.load_file(), "a version %d layout with %s loads" % [v, piece["p"]])
+	return l
+
+
+func _cell_of(l: RefCounted, key: String) -> Vector2i:
+	for p in l.pieces:
+		if p["p"] == key:
+			return Vector2i(p["c"], p["r"])
+	return Vector2i(-1, -1)
 
 
 # the frame is movable: it draws and clicks by where it stands, not where it began
 func _moved() -> void:
 	var piece: Dictionary = h.layout.frame()
 	var home := [piece["c"], piece["r"]]
-	var last: Variant = null
-	for cell in [Vector2i(6, 9), Vector2i(3, 9)]:
+	var last: Variant = _centre("frame")
+	var painting: Dictionary = {}
+	for p in h.layout.pieces:
+		if p["p"] == "painting" and p["f"] == "ne" and p["c"] == 0:
+			painting = p
+	var hung := painting.duplicate()
+	h.layout.remove(painting)
+	for cell in [Vector2i(0, 0)]:
 		var why: String = h.layout.place(
-			{"p": People.PIECE, "f": "", "c": cell.x, "r": cell.y}, piece, []
+			{"p": People.PIECE, "f": "ne", "c": cell.x, "r": cell.y}, piece, []
 		)
 		s._check(why == "", "the frame can stand at %s: %s" % [cell, why])
 		var entry: Dictionary = {}
@@ -725,7 +767,8 @@ func _moved() -> void:
 			func() -> bool: return sb.view == "people", "a click at %s opens People" % cell
 		)
 		sb.back()
-	h.layout.place({"p": People.PIECE, "f": "", "c": home[0], "r": home[1]}, piece, [])
+	h.layout.place({"p": People.PIECE, "f": "ne", "c": home[0], "r": home[1]}, piece, [])
+	h.layout.place(hung, null, [])
 
 
 # the house's own list keeps people the same way: a person, a note, a to-do that names them
