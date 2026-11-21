@@ -218,7 +218,7 @@ runs on the local list.
   cents, null when the bank is off; `things.money` holds it, null over the local list and from an older server. The piggy
   bank is the plain floor piece `piggy_bank` (a pig in profile drawn in code at its cell's depth, default cell 5,8, a cell of the dining table's top; a bank may stand on any cell of `Layout.TABLE_TOPS`
   (`Layout.table_under`) or on open floor. On a table it is drawn in the middle of the table's top, whichever of its cells it is on
-  (`Layout.seat`), at that table's drawn top (`TABLE_TOPS` holds each one's height, below the sprite's `height`, which is its rim), after the table; its hover, hit,
+  (`Layout.seat`, a little toward the front, `SEAT_FRONT`, so the feet's level line clears the sloping back edge), at that table's drawn top (`TABLE_TOPS` holds each one's height, below the sprite's `height`, which is its rim), after the table; its hover, hit,
   decorate's ghost and outline follow it there; in decorate's home tab, movable like the
   basket, offered once to a saved layout through `Layout.NEWER`; a file's rows are placed bank-last so the table is there first). A basket or bank a file saved before `Layout.SAVED` 4 holds on its old default cell (`Layout.OLD_DEFAULTS`) moves to the new default once, when that is free (`_move_old_defaults`). It is drawn, hit and listed in decorate **only while
   `things.money` is not null**: without money the piece takes no cell (`Layout.money_shown`, `show_money`; not solid, not

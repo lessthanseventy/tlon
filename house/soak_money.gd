@@ -548,6 +548,15 @@ func _tops() -> void:
 				tex.get_image().get_pixelv(Vector2i(local)).a > 0.1,
 				"%s: its foot at %s is on the table's top" % [name, x]
 			)
+			var behind := 0
+			var image := tex.get_image()
+			while local.y - behind - 1 >= 0 and image.get_pixelv(Vector2i(local.x, local.y - behind - 1)).a > 0.1:
+				behind += 1
+			var want: int = 4 if spec[0] == "tavern_table" else 6
+			s._check(
+				behind >= want,
+				"%s: its foot at %s stands %s px in from the top's back edge, at least %s" % [name, x, behind, want]
+			)
 	h.layout.pieces = saved
 
 
