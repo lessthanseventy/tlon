@@ -1,6 +1,6 @@
 # CI runs the same mise tasks as the dev loop (`mise run check` is a superset of these jobs) — one
-# control loop, never a second way to run anything. Main's required check is the local gate's commit
-# status `tlon/check` (scripts/check.sh), so this runs once per release tag, or by hand: the
+# control loop, never a second way to run anything. The local gate's commit status `tlon/check`
+# (scripts/check.sh) is the record of a check, so this runs once per release tag, or by hand: the
 # clean-machine backstop: proof the gate leans on nothing only this box has.
 name: ci
 
