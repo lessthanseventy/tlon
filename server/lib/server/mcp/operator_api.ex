@@ -192,7 +192,11 @@ defmodule Server.MCP.OperatorAPI do
                                          never in the balance), other_accounts (their names), basis: {months_of_history, series, next_deposit: {name, date, overdue} | null,
                                          skipped (names of series whose expected charge did not post), caveats (pending_ignored|short_history|
                                          skipped_charge|no_deposit_seen|one_off_bills_unknown)}, subscriptions: [{name, amount_cents, rhythm,
-                                         next, count, was_cents}]}; null when the bank source is off or nothing is stored; 400 on a bad date
+                                         next, count, was_cents}], notices: [{key, kind (new|price), text, why}] (Server.Home.Source.Bank.
+                                         notices: what is only to be known, a new subscription or a price change, never a to-do, minus the
+                                         seen ones)}; null when the bank source is off or nothing is stored; 400 on a bad date
+      POST   /api/home/money/notices/seen  {key} → Server.Home.Source.Bank.see; {ok: true}: one notice cleared, for good (twice is fine);
+                                         422 when key is not a bank:new:/bank:price: key
       POST   /api/home/money/ask         {text, thread?} → Server.Home.Money.ask; {reply, figures, thread}: a question about his money
                                          answered from the projection engine (model plans and phrases, every amount checked against the
                                          results, else a plain rendering); figures is the forecast, the purchase's with/without (with
@@ -675,7 +679,8 @@ defmodule Server.MCP.OperatorAPI do
       {:ok, until} ->
         with {:ok, forecast} <- Server.Home.Bank.forecast(until, today),
              {:ok, subscriptions} <- Server.Home.Bank.subscriptions(today) do
-          json(conn, 200, Map.put(forecast, :subscriptions, subscriptions))
+          notices = Server.Home.Source.Bank.notices(today)
+          json(conn, 200, forecast |> Map.put(:subscriptions, subscriptions) |> Map.put(:notices, notices))
         else
           {:error, :no_data} -> json(conn, 200, nil)
         end
@@ -713,6 +718,19 @@ defmodule Server.MCP.OperatorAPI do
     else
       {:choice, _} -> json(conn, 400, %{error: "choice is required"})
       _ -> no_route(conn)
+    end
+  end
+
+  defp route(conn, "POST", "home", ["money", "notices", "seen"]) do
+    case body(conn) do
+      {%{"key" => key}, conn} when is_binary(key) ->
+        case Server.Home.Source.Bank.see(key) do
+          :ok -> json(conn, 200, %{ok: true})
+          :error -> json(conn, 422, %{error: "key is a bank:new: or bank:price: notice key"})
+        end
+
+      {_, conn} ->
+        json(conn, 422, %{error: "key is a bank:new: or bank:price: notice key"})
     end
   end
 

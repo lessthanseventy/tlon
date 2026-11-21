@@ -275,17 +275,29 @@ defmodule Server.Home.Source.BankTest do
     assert Enum.all?(paths(calls.()), &(&1 in Server.Home.Bank.Plaid.paths()))
   end
 
-  test "a charge due within five days is proposed with whether the balance covers it" do
+  test "a charge due within five days is proposed as money to move when the balance is short" do
     {http, _} = plaid([page(rent())], accounts(1160.0))
 
     assert {:ok, [proposal], []} = fetch(http)
     assert proposal.kind == "todo"
-    assert proposal.text == "Rent $1,200 is due Sun 22 Nov; the balance is $40 short"
+    assert proposal.text == "Move money: the balance is $40 short for Rent $1,200, due Sun 22 Nov"
     assert proposal.key =~ ~r/^bank:due:[0-9a-f]{16}:2026-11-22$/
+  end
+
+  test "a charge the balance covers is no proposal, and its open row is withdrawn" do
+    {http, _} = plaid([page(rent())], accounts(1160.0))
+    {:ok, [proposal], []} = fetch(http)
+    [] = Proposal.offer("telegram", "bank", [proposal], @now, [])
+    assert [%{key: key}] = Proposal.open()
 
     {http, _} = plaid([page([], cursor: "c2")], accounts(1500.0))
-    assert {:ok, [%{text: "Rent $1,200 is due Sun 22 Nov; the balance covers it", key: key}], []} = fetch(http)
-    assert key == proposal.key
+    assert {:ok, [], [^key]} = fetch(http)
+  end
+
+  test "a charge whose account has no known balance is not proposed" do
+    unknown = ok(%{"accounts" => [%{"account_id" => "other", "name" => "X", "balances" => %{}}]})
+    {http, _} = plaid([page(rent())], unknown)
+    assert {:ok, [], []} = fetch(http)
   end
 
   test "a charge far off, or one already paid, is not proposed" do
@@ -293,22 +305,19 @@ defmodule Server.Home.Source.BankTest do
     assert {:ok, [], []} = fetch(http)
   end
 
-  test "a double charge and a new subscription are proposed" do
+  test "a double charge is proposed as a check, a new subscription is only a notice" do
     streamr =
       for {d, i} <- Enum.with_index(["2026-09-17", "2026-10-17", "2026-11-17"]), do: t("s#{i}", d, 9.99, "Streamr")
 
     double = [t("d1", "2026-11-18", 14.99, "Cloudy"), t("d2", "2026-11-19", 14.99, "Cloudy")]
     {http, _} = plaid([page(streamr ++ double)], accounts(1500.0))
 
-    assert {:ok, proposals, []} = fetch(http)
-    texts = Enum.sort(Enum.map(proposals, & &1.text))
+    assert {:ok, [proposal], []} = fetch(http)
+    assert proposal.text == "Check for a double charge from Cloudy: two of $14.99 on Thu"
+    assert proposal.kind == "todo"
+    assert proposal.key =~ ~r/^bank:double:/
 
-    assert texts == [
-             "Streamr looks like a new subscription: $9.99 monthly",
-             "Two charges of $14.99 from Cloudy on Thu: check for a double"
-           ]
-
-    assert Enum.all?(proposals, &(&1.kind == "todo" and String.starts_with?(&1.key, "bank:")))
+    assert [%{kind: "new", text: "Streamr looks like a new subscription: $9.99 monthly"}] = Source.notices(@today)
   end
 
   test "the proposals are filed once, and a dismissed one does not come back" do
@@ -396,20 +405,21 @@ defmodule Server.Home.Source.BankTest do
     domain = [t("y1", "2024-11-25", 49.0, "Domain"), t("y2", "2025-11-25", 49.0, "Domain")]
     {http, _} = plaid([page(domain)], accounts(1500.0))
 
-    assert {:ok, [%{text: "Domain $49 is due Wed 25 Nov; the balance covers it"}], []} = fetch(http)
+    assert {:ok, [], []} = fetch(http)
     assert length(rows()) == 2
 
     assert [%{period: :yearly, next: ~D[2026-11-25]}] = Server.Home.Bank.Recurring.series(Bank.transactions(), :out)
   end
 
-  test "a price change is one proposal of its own and not a new subscription" do
+  test "a price change is a notice of its own and not a new subscription, never a proposal" do
     dates = ~w(2026-06-17 2026-07-17 2026-08-17 2026-09-17 2026-10-17 2026-11-17)
 
     rows =
       for {d, i} <- Enum.with_index(dates), do: t("s#{i}", d, if(i < 3, do: 9.99, else: 12.99), "Streamr")
 
     {http, _} = plaid([page(rows)], accounts(1500.0))
-    assert {:ok, [%{text: "Streamr went up from $9.99 to $12.99", key: key}], []} = fetch(http)
+    assert {:ok, [], []} = fetch(http)
+    assert [%{kind: "price", text: "Streamr went up from $9.99 to $12.99", key: key}] = Source.notices(@today)
     assert key =~ ~r/^bank:price:[0-9a-f]{16}:1299$/
   end
 
@@ -449,44 +459,39 @@ defmodule Server.Home.Source.BankTest do
     defp file(keys), do: Proposal.offer("telegram", "bank", Enum.map(keys, &todo/1), @now, [])
     defp open_keys, do: Enum.sort(Enum.map(Proposal.open(), & &1.key))
 
-    defp poll(rows) do
-      {http, _} = plaid([page(rows)], accounts(1500.0))
+    defp poll(rows, available \\ 1500.0) do
+      {http, _} = plaid([page(rows)], accounts(available))
       {:ok, _, resolved} = fetch(http)
       Proposal.resolve("bank", resolved, @now)
       resolved
     end
 
-    defp streamr(amounts, dates \\ ~w(2026-06-17 2026-07-17 2026-08-17 2026-09-17 2026-10-17 2026-11-17)),
-      do: for({{d, a}, i} <- Enum.with_index(Enum.zip(dates, amounts)), do: t("s#{i}", d, a, "Streamr"))
+    test "every open new-subscription and price row is withdrawn, whatever the engine says" do
+      new = "bank:new:#{hash("Streamr")}"
+      price = "bank:price:#{hash("Streamr")}:1299"
+      file([new, price])
 
-    test "a new-subscription row for a merchant that has an older run at another price is withdrawn" do
-      key = "bank:new:#{hash("Streamr")}"
-      file([key])
-      assert poll(streamr([9.99, 9.99, 9.99, 12.99, 12.99, 12.99])) == [key]
+      streamr =
+        for {d, i} <- Enum.with_index(~w(2026-09-17 2026-10-17 2026-11-17)), do: t("s#{i}", d, 9.99, "Streamr")
+
+      assert Enum.sort(poll(streamr)) == Enum.sort([new, price])
       assert open_keys() == []
     end
 
-    test "a new-subscription row not looked at yet stays when its recency window has passed" do
-      key = "bank:new:#{hash("Streamr")}"
-      file([key])
-      assert poll(streamr([9.99, 9.99, 9.99], ~w(2026-08-17 2026-09-17 2026-10-17))) == []
-      assert open_keys() == [key]
-    end
-
-    test "a new-subscription row for a merchant with no series any more is withdrawn" do
-      key = "bank:new:#{hash("Gone")}"
-      file([key])
-      assert poll(rent()) == [key]
-      refute key in open_keys()
-    end
-
-    test "a due row dated before today is withdrawn, one dated today or later stays" do
+    test "a due row dated before today is withdrawn, a short one dated today or later is not" do
       past = "bank:due:#{hash("Rent")}:2026-11-19"
-      today = "bank:due:#{hash("Rent")}:2026-11-20"
       later = "bank:due:#{hash("Rent")}:2026-11-22"
-      file([past, today, later])
-      assert poll(rent()) == [past]
-      assert open_keys() == Enum.sort([today, later])
+      file([past, later])
+      assert poll(rent(), 1160.0) == [past]
+      assert open_keys() == [later]
+    end
+
+    test "a due row the balance now covers is withdrawn, one not due any more as well" do
+      covered = "bank:due:#{hash("Rent")}:2026-11-22"
+      gone = "bank:due:#{hash("Gone")}:2026-11-23"
+      file([covered, gone])
+      assert Enum.sort(poll(rent(), 1500.0)) == Enum.sort([covered, gone])
+      assert open_keys() == []
     end
 
     test "a taken and a dismissed row are left alone" do
@@ -502,11 +507,73 @@ defmodule Server.Home.Source.BankTest do
       assert [%{state: :dismissed}] = Repo.all(from(p in Proposal, where: p.key == ^dismissed))
     end
 
-    test "double, price and relink rows are never withdrawn" do
-      keys = ["bank:double:#{hash("Gone")}:1499:2026-11-01", "bank:price:#{hash("Gone")}:1299", "bank:relink:2026-10"]
+    test "double and relink rows are never withdrawn" do
+      keys = ["bank:double:#{hash("Gone")}:1499:2026-11-01", "bank:relink:2026-10"]
       file(keys)
       assert poll(rent()) == []
       assert Enum.all?(keys, &(&1 in open_keys()))
+    end
+  end
+
+  describe "notices" do
+    defp streamr_price_up do
+      dates = ~w(2026-06-17 2026-07-17 2026-08-17 2026-09-17 2026-10-17 2026-11-17)
+
+      for {d, i} <- Enum.with_index(dates), do: t("s#{i}", d, if(i < 3, do: 9.99, else: 12.99), "Cloudy")
+    end
+
+    defp streamr_new,
+      do: for({d, i} <- Enum.with_index(~w(2026-09-17 2026-10-17 2026-11-17)), do: t("n#{i}", d, 7.5, "Streamr"))
+
+    defp keys, do: @today |> Source.notices() |> Enum.map(& &1.key) |> Enum.sort()
+
+    setup do
+      {http, _} = plaid([page(streamr_price_up() ++ streamr_new())], accounts(1500.0))
+      {:ok, [], []} = fetch(http)
+      :ok
+    end
+
+    test "a new subscription and a price change are listed, with the wording and a why" do
+      assert [
+               %{kind: "new", key: "bank:new:" <> _, text: new_text, why: "three steady charges, the last on 17 Nov"},
+               %{kind: "price", key: "bank:price:" <> _, text: "Cloudy went up from $9.99 to $12.99", why: why}
+             ] = Enum.sort_by(Source.notices(@today), & &1.kind)
+
+      assert new_text == "Streamr looks like a new subscription: $7.50 monthly"
+      assert why == "monthly, the last on 17 Nov"
+    end
+
+    test "a seen key is gone, marking twice is fine, and the other stays" do
+      [new, price] = keys()
+      assert Source.see(new) == :ok
+      assert Source.see(new) == :ok
+      assert keys() == [price]
+      assert JSON.decode!(Keep.get("home_bank_seen")) == [new]
+    end
+
+    test "only a new or a price key can be marked" do
+      assert Source.see("bank:due:abc:2026-11-22") == :error
+      assert Source.see("bank:relink:2026-11") == :error
+      assert Source.see(nil) == :error
+      assert Keep.get("home_bank_seen") == nil
+    end
+
+    test "a key whose proposal was taken or dismissed is no notice" do
+      [new, price] = keys()
+      Proposal.offer("telegram", "bank", [todo(new), todo(price)], @now, [])
+
+      for p <- Proposal.open(),
+          do: if(p.key == new, do: Proposal.take("telegram", p.id, @now), else: Proposal.dismiss(p.id))
+
+      assert keys() == []
+    end
+
+    test "an open proposal with the key does not hide it, and another source's does not either" do
+      [new, _] = keys()
+      Proposal.offer("telegram", "mail", [todo(new)], @now, [])
+      [row] = Proposal.open()
+      Proposal.dismiss(row.id)
+      assert new in keys()
     end
   end
 

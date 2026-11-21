@@ -236,9 +236,12 @@ and every layer the spine design's re-laid §9 asked for
   three charges, six for a deposit; a lone charge far in amount and off the rhythm is passed over without ending the run and is not
   counted; two stable amounts at one merchant on two stable days are two series; a merchant with many more
   charges in no steady rhythm than its series holds is everyday spending, not a series; transfers between its own
-  accounts, equal and opposite within a day, are neither). It proposes only to-dos: a charge due within five days with whether
-  the available balance covers it, two equal charges within two days that are not a habit, a merchant that just became recurring,
-  a recurring one whose price changed (keys `bank:due|double|new|price|relink:…`, never filed by itself); it withdraws its own open `bank:new` whose merchant has an older steady run at another price or no series now (not one merely past its recency window) and its open `bank:due` dated before today, as the third element of `fetch/1`, leaving taken and dismissed ones and the other keys alone; `ITEM_LOGIN_REQUIRED` is one proposal that the bank needs linking
+  accounts, equal and opposite within a day, are neither). It proposes only to-dos worded as the action, never filed by itself: a charge due within five days
+  whose account's balance is known and short ("Move money: the balance is $n short for …", `bank:due:…`; a covered one is none, the
+  day's list shows it), two equal charges within two days that are not a habit ("Check for a double charge from …", `bank:double:…`), and `bank:relink:…`.
+  A new subscription (`bank:new:…`) and a price change (`bank:price:…`) are notices, not proposals: `Server.Home.Source.Bank.notices/1`, in the
+  forecast's `notices` and cleared by `see/1` (`POST /api/home/money/notices/seen {key}`; the seen keys are the `home_keep` value `home_bank_seen`, a list that is never trimmed, and a key
+  with a taken or dismissed proposal of the source is seen too). It withdraws its own open `bank:new` and `bank:price` and its open `bank:due` dated before today or no longer among the dues proposed (covered, or no longer due), as the third element of `fetch/1`, leaving taken and dismissed ones, `bank:double` and `bank:relink` alone; `ITEM_LOGIN_REQUIRED` is one proposal that the bank needs linking
   again. `Server.Home.Bank.summary/1` (nil when off) gives the morning message its one `Money:` line and `GET /api/home` its `money`;
   spendable is the checking accounts alone. `Server.Home.Bank.Projection` (pure, in cents, no clock: `today` is passed in) is the
   money engine behind `Bank.forecast/2`, `afford/3`, `what_if/3`, `history/1` and `subscriptions/1`: the checking balance day by

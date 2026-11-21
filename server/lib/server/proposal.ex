@@ -61,6 +61,12 @@ defmodule Server.Proposal do
     )
   end
 
+  @doc "The keys of `source`'s proposals that were taken or dismissed."
+  @spec answered_keys(String.t()) :: [String.t()]
+  def answered_keys(source) do
+    Repo.all(from(p in __MODULE__, where: p.source == ^source and p.state in [:taken, :dismissed], select: p.key))
+  end
+
   @doc "The keys of `live/1`."
   @spec live_keys(String.t()) :: [String.t()]
   def live_keys(source), do: source |> live() |> Enum.map(& &1.key)

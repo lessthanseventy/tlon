@@ -1062,6 +1062,34 @@ defmodule Server.MCP.GatewayTest do
                money["subscriptions"]
 
       assert money["clamped"] == false
+      assert money["notices"] == []
+
+      streamr =
+        for m <- 1..3 do
+          %{
+            transaction_id: "str-#{m}",
+            account_id: "a1",
+            amount_cents: 750,
+            date: Date.shift(Date.add(today, -2), month: 1 - m),
+            name: "Streamr",
+            merchant_name: nil,
+            pending: false
+          }
+        end
+
+      Server.Repo.insert_all(Server.Home.Bank.Transaction, streamr)
+
+      assert {200, %{"notices" => [%{"key" => "bank:new:" <> _ = key, "kind" => "new", "text" => text, "why" => _}]}} =
+               get_json("/api/home/money/forecast")
+
+      assert text == "Streamr looks like a new subscription: $7.50 monthly"
+
+      assert {200, %{"ok" => true}} = post_json("/api/home/money/notices/seen", %{key: key})
+      assert {200, %{"ok" => true}} = post_json("/api/home/money/notices/seen", %{key: key})
+      assert {200, %{"notices" => []}} = get_json("/api/home/money/forecast")
+
+      assert {422, %{"error" => _}} = post_json("/api/home/money/notices/seen", %{key: "bank:due:abc:2026-11-22"})
+      assert {422, %{"error" => _}} = post_json("/api/home/money/notices/seen", %{})
     end
 
     test "money ask: 400 with no text, a plain reply with the bank off, else the engine's figures and a thread" do
