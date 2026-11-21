@@ -12,7 +12,6 @@ cd "$root" || exit 1
 fail=0
 miss() { echo "check-glossary: $*"; fail=1; }
 
-
 glossary=docs/glossary.md
 [ -f "$glossary" ] || { echo "check-glossary: no $glossary"; exit 1; }
 

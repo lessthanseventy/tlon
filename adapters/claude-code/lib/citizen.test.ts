@@ -135,7 +135,6 @@ test("a turn's word is stable for the turn", () => {
   expect(typeof turnWord("t-2")).toBe("string");
 });
 
-
 describe("usageReport", () => {
   test("the plan's two windows, as the server takes them", () => {
     const limits = [

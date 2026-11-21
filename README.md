@@ -37,7 +37,6 @@ librarian to decide, and facts that name code are rechecked on a schedule.
 **Measured.** `mise run bench:roles` checks whether each role can do its job on the model it's routed
 to, and at what cost, so routing is a measurement rather than a guess.
 
-
 ## Install
 
 One self-contained executable per platform, from the

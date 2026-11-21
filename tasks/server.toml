@@ -230,7 +230,6 @@ run = "scripts/checks-queue.test.sh"
 description = "script test: house-gate.sh runs only when house/ changed, skips or fails a missing godot by TLON_HOUSE_GATE, and reports a failing or hung section (offline, temp repo, fake godot)"
 run = "scripts/house-gate.test.sh"
 
-
 ["check:scripts:record-ran"]
 description = "script test: record-ran.sh reports a hand-run gate, and a down service never fails the run (offline, temp dirs)"
 run = "scripts/record-ran.test.sh"

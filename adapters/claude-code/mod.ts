@@ -50,7 +50,6 @@ const DOSSIER_GIVE_UP_MS = 30_000;
 const NO_BRIEF = "(no brief)";
 
 type Message = { author: string; body: string; at?: string };
-
 type Need = { key: string; kind: string; level: string; ref?: number; title: string; text?: string; options?: { key: string; label: string }[] };
 
 let thread = "";
@@ -63,7 +62,6 @@ let dossierAt = 0;
 let glanceAt = 0;
 let dossierError = "";
 let glance: Glance | null = null;
-
 let briefed = "";
 // percent of the context window past which a turn starts by compacting (TLON_COMPACT_AT, the profile's
 // `compact_at`); 0 leaves compaction to Claude Code
@@ -215,7 +213,6 @@ async function refreshGlance($) {
     $.ui.invalidate("ui.render");
   }
 }
-
 
 let sessionId: number | null = null;
 let superseded = false;
@@ -537,7 +534,6 @@ export function register(on) {
     $.clock.every(GLANCE_MS, () => refreshGlance($));
     void refresh($);
     void refreshGlance($).then(() => {
-
       void landedToday($).then((rows) => {
         const titles = rows.length ? rows.map((a) => a.title) : (glance?.landed ?? []).map((l) => `#${l.thread_id} ${l.title}`);
         if (titles.length) $.ui.toast(`landed today: ${titles.slice(0, 3).join(" · ")}${titles.length > 3 ? ` +${titles.length - 3}` : ""}`, { timeoutMs: 10_000 });
