@@ -18,10 +18,10 @@ defmodule Server.Roster do
   def wanted_grade(_text, explicit) when is_binary(explicit), do: explicit
   def wanted_grade(text, nil), do: if(Regex.match?(@greybeard, text || ""), do: "greybeard", else: "senior")
 
-  @doc "The one area (`office`, `server`) an ask's paths name, else nil."
+  @doc "The one area (`house`, `server`) an ask's paths name, else nil."
   @spec specialty_of(String.t() | nil) :: String.t() | nil
   def specialty_of(text) do
-    case Enum.filter(["office", "server"], &String.contains?(text || "", &1 <> "/")) do
+    case Enum.filter(["house", "server"], &String.contains?(text || "", &1 <> "/")) do
       [one] -> one
       _ -> nil
     end
