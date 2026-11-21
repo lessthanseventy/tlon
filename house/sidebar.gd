@@ -70,12 +70,10 @@ var notes_expanded := false
 var later_expanded := false
 # the agenda's add line takes the cursor back after a note went in
 var agenda_typing := false
-var _agenda_from_shelf := false
 var chat_mode := "dock"
 var chat_popped := false
 var form: Control
 var jot: Control
-var _kept_row := {}
 var settings_view: Control
 var pet_view: Control
 var closet: Control
@@ -85,6 +83,8 @@ var scroll: ScrollContainer
 var people_ui: RefCounted
 var money_ui: RefCounted
 
+var _agenda_from_shelf := false
+var _kept_row := {}
 var _views: RefCounted
 var _dyn: VBoxContainer
 var _add_root: VBoxContainer
