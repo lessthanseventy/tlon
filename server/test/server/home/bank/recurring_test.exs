@@ -205,7 +205,7 @@ defmodule Server.Home.Bank.RecurringTest do
   end
 
   test "a stray third-newest does not end the run" do
-    rows = with_stray(monthly("Streamr", 1_995, ~D[2026-11-13], 6), ~D[2026-09-08], 77)
+    rows = with_stray(monthly("Streamr", 1_995, ~D[2026-11-13], 6), ~D[2026-10-08], 77)
     assert [%{amount: 1_995, count: 6}] = Recurring.series(rows, :out)
   end
 
