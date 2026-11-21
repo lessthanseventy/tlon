@@ -79,11 +79,17 @@ defmodule Server.TestDB do
   ]
 
   @doc """
-  Delete every domain row, children before parents — and, when the test exits, wait out the
-  background tasks it started (`await_background/0`).
+  Delete every domain row, children before parents, and the rollout notes (they live in the
+  `Server.Rollout` process, not the db, and surface as Needs) — and, when the test exits, wait out
+  the background tasks it started (`await_background/0`) and drop the notes it filed.
   """
   def clean! do
-    ExUnit.Callbacks.on_exit(&await_background/0)
+    ExUnit.Callbacks.on_exit(fn ->
+      await_background()
+      dismiss_rollout_notes()
+    end)
+
+    dismiss_rollout_notes()
     Enum.each(@ordered, &Repo.delete_all/1)
   end
 
@@ -105,4 +111,6 @@ defmodule Server.TestDB do
 
     :ok
   end
+
+  defp dismiss_rollout_notes, do: for(n <- Server.Rollout.pending(), do: Server.Rollout.dismiss(n.id))
 end
