@@ -1,4 +1,4 @@
-A ticket arrives on the root thread: `@tertius intake — ticket #233: office: the clock in the lobby
+A ticket arrives on the root thread: `@tertius intake — ticket #233: house: the clock on the wall
 blinks on resize — please fix. Quote from the corkboard post #5131: "clock still blinks when I
 resize?"`.
 
@@ -11,8 +11,8 @@ is live."
 
 The bench (seat · archetype · grade · specialty · right now):
 
-- pierre · builder · junior · office · free
-- zunz · builder · senior · office · free
+- pierre · builder · junior · house · free
+- zunz · builder · senior · house · free
 - yu · builder · greybeard · server · free (the tech lead)
 
 Route it. Reply with a fenced JSON block, exactly this shape:

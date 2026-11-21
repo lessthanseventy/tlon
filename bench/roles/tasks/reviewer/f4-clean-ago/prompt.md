@@ -1,23 +1,23 @@
-Review this diff. It is on a workline whose ticket reads: "office: a thread card shows how long ago
+Review this diff. It is on a workline whose ticket reads: "adapters: the status line shows how long ago
 its thread last moved — `now` under a minute, then whole minutes `Nm` under an hour, whole hours `Nh`
 under a day, else whole days `Nd`, always rounded down."
 
 ```diff
-diff --git a/office/kit/ago.ts b/office/kit/ago.ts
+diff --git a/adapters/claude-code/lib/ago.ts b/adapters/claude-code/lib/ago.ts
 new file mode 100644
 @@ -0,0 +1,12 @@
-+/** How long ago, for a card: `now` under a minute, then whole minutes, hours or days, rounded down. */
++/** How long ago, for the status line: `now` under a minute, then whole minutes, hours or days, rounded down. */
 +export function ago(seconds: number): string {
 +  if (seconds < 60) return "now";
 +  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
 +  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
 +  return `${Math.floor(seconds / 86400)}d`;
 +}
-diff --git a/office/test/ago.test.ts b/office/test/ago.test.ts
+diff --git a/adapters/claude-code/lib/ago.test.ts b/adapters/claude-code/lib/ago.test.ts
 new file mode 100644
 @@ -0,0 +1,22 @@
 +import { expect, test } from "bun:test";
-+import { ago } from "../kit/ago";
++import { ago } from "./ago";
 +
 +test("under a minute is now", () => {
 +  expect(ago(0)).toBe("now");

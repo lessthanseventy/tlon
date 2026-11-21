@@ -1,4 +1,4 @@
-A ticket arrives on the root thread: `@tertius intake — ticket #244: office: rewrite the room
+A ticket arrives on the root thread: `@tertius intake — ticket #244: house: rewrite the room
 renderer in a canvas library for speed`. It quotes no message, post or suggestion: no one asked for
 it in their own words, and its body is the title alone.
 
@@ -8,8 +8,8 @@ it."
 
 The bench (seat · archetype · grade · specialty · right now):
 
-- pierre · builder · junior · office · free
-- zunz · builder · senior · office · free
+- pierre · builder · junior · house · free
+- zunz · builder · senior · house · free
 - yu · builder · greybeard · server · free (the tech lead)
 - runeberg · planner · senior · — · free
 

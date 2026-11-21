@@ -7,11 +7,11 @@ Judge how the newer one relates to the older:
   retires behind it;
 - `new` — it says something the older one doesn't: both stay.
 
-OLDER (decision, derived, 2026-10-08): "The office test-timeout flake is fixed by office/bunfig.toml,
-which sets a 30s test timeout for the whole office suite (commit 1d3b768 on work/t1), instead of
+OLDER (decision, derived, 2026-10-08): "The adapter test-timeout flake is fixed by adapters/claude-code/bunfig.toml,
+which sets a 30s test timeout for the whole adapter suite (commit 1d3b768 on work/t1), instead of
 re-running tests. Issue #5 stays open until this lands on main via PR."
 
-NEWER (decision, derived, 2026-10-08): "The office test timeout is PR #100 (20 s in office/bunfig.toml,
+NEWER (decision, derived, 2026-10-08): "The adapter test timeout is PR #100 (20 s in adapters/claude-code/bunfig.toml,
 auto-merge on). Branches carrying their own timeout line, such as 1d3b768 with 30000, take main's side
 when they rebase."
 

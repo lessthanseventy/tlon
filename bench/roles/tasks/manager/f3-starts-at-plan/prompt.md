@@ -8,7 +8,7 @@ Senior work once planned."
 
 The bench (seat · archetype · grade · specialty · right now):
 
-- pierre · builder · junior · office · free
+- pierre · builder · junior · house · free
 - zunz · builder · senior · server · free
 - yu · builder · greybeard · server · free (the tech lead)
 - tzinacan · reviewer · senior · — · free

@@ -9,7 +9,7 @@ ticket is the spec; start it at build."
 
 The bench (seat · archetype · grade · specialty · right now):
 
-- pierre · builder · junior · office · free
+- pierre · builder · junior · house · free
 - emma · builder · junior · server · free
 - zunz · builder · senior · server · free
 - yu · builder · greybeard · server · free (the tech lead)
