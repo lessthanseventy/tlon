@@ -234,17 +234,22 @@ defmodule Server.Projects do
   end
 
   defp named(name) do
+    whole = Repo.all(from p in Project, where: p.name == ^name, preload: :workspace)
+
     case String.split(name, "/", parts: 2) do
       [workspace, bare] ->
-        Repo.all(
-          from p in Project,
-            join: w in assoc(p, :workspace),
-            where: w.name == ^workspace and p.name == ^bare,
-            preload: [workspace: w]
-        )
+        split =
+          Repo.all(
+            from p in Project,
+              join: w in assoc(p, :workspace),
+              where: w.name == ^workspace and p.name == ^bare,
+              preload: [workspace: w]
+          )
 
-      [bare] ->
-        Repo.all(from p in Project, where: p.name == ^bare, preload: :workspace)
+        Enum.uniq_by(split ++ whole, & &1.id)
+
+      [_] ->
+        whole
     end
   end
 end

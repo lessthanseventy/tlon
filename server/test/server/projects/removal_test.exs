@@ -246,6 +246,31 @@ defmodule Server.Projects.RemovalTest do
     assert {:ok, %{workspace: %{name: "twin"}}} = Projects.remove_with_empties("twin", :dry_run)
   end
 
+  test "a project whose own name contains a slash is found by its whole name" do
+    %{ws: ws} = gone_workspace("gone")
+    {:ok, _} = Projects.register(%{workspace_id: ws.id, name: "acme/tool", repos: []})
+    before = counts()
+
+    assert {:ok, %{project: %{name: "acme/tool"}}} = Projects.remove_with_empties("acme/tool", :dry_run)
+    assert counts() == before
+
+    assert {:ok, _} = Projects.remove_with_empties("acme/tool", :remove)
+    assert counts()["project"] == before["project"] - 1
+    assert {:error, :no_project} = Projects.remove_with_empties("acme/tool", :dry_run)
+
+    {:ok, _} = Projects.register(%{workspace_id: ws.id, name: "tool", repos: []})
+    assert {:ok, %{project: %{name: "tool"}}} = Projects.remove_with_empties("gone/tool", :dry_run)
+  end
+
+  test "a name read both as workspace/name and as a whole name is ambiguous" do
+    %{ws: ws} = gone_workspace("acme")
+    {:ok, _} = Projects.register(%{workspace_id: ws.id, name: "tool", repos: []})
+    {:ok, _} = Projects.register(%{workspace_id: ws.id, name: "acme/tool", repos: []})
+
+    assert {:error, {:ambiguous, forms}} = Projects.remove_with_empties("acme/tool", :dry_run)
+    assert length(forms) == 2
+  end
+
   test "the remote, off-main and drift notes of its repo are dismissed, another repo's stay" do
     %{path: path} = gone_workspace("gone")
     other = path <> "-other"
