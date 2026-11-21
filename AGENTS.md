@@ -21,7 +21,7 @@ control loop, not two, and no second way to run anything:
   into the session's pane and kept in its babylon inbox: done, or back to `doing` with why in the
   ticket's `stage_note`. No PR, no `review_branch`, no `mise run land`, no full check from the session.
   Worklines (the server's own coworker seats and threads) keep the server's line, below.
-- `mise run check` — names gate + script self-tests (`check:scripts`: each `scripts/*.test.sh` is a `check:scripts:<name>` task, run in parallel) + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server, adapters and office gates + the task manual; the green-before-commit gate. A session's change gets it once, from babylon at `submit_ticket`.
+- `mise run check` — names gate (which also holds the task manual to its source) + script self-tests (`check:scripts`: each `scripts/*.test.sh` is a `check:scripts:<name>` task, run in parallel) + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server, adapters and office gates + the task manual; the green-before-commit gate. A session's change gets it once, from babylon at `submit_ticket`.
   One at a time per machine: it waits its turn in the checks queue (`scripts/checks-queue.sh`, saying who
   holds it), first come, first served, and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
   suites on the one test database at once. Don't call `check:all` to skip the line. A shell that can't open
@@ -236,6 +236,7 @@ runs the targeted tests of what it changed. `mise run check:names` is the names-
 `Server.*` module, mix task and mise task that scripts, `mise.toml`, the adapters or a
 guide name must actually exist — a rename that strands a reference fails here instead of at 2am. The same task holds
 `docs/glossary.md` — one meaning per noun; its "lives in" names must exist and its retired words stay out of
-AGENTS.md and `office/tui`. A
+AGENTS.md and `office/tui`, and `docs/manual/tasks.md` must match the task descriptions: a change under `tasks/`
+or to `mise.toml` runs `check:names` before submitting, and `mise run manual:gen` fixes a drift. A
 claim that something works is backed by the command that proved it — and the agent and human run the
 *same* `mise` tasks, so "it works" means the shared task passed, not two private ones.

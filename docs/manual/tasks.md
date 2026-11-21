@@ -34,7 +34,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `check:all` | Everything green: the server's deps fetched and compiled first (server:deps), then check:suites, all in the one mise run (unqueued — `check` queues it) |
 | `check:ignored` | tracked-junk gate: fail on any tracked file that .gitignore ignores (scratch committed under an ignored path such as server/tmp) |
 | `check:main` | the whole gate on origin/main in a throwaway worktree (own test db) — main's health, whatever this checkout has out; the nightly schedule runs it |
-| `check:names` | names-exist gate: every Server.* module, mix task and mise task the glue names must exist, and docs/glossary.md holds (grep, offline, fast) |
+| `check:names` | names-exist gate: every Server.* module, mix task and mise task the glue names must exist, and docs/glossary.md holds, and the task manual matches its source (manual:check) (offline, fast) |
 | `check:scripts` | the scripts' self-tests (scripts/*.test.sh), one task each under check:scripts:*, in parallel |
 | `check:scripts:bwrap-argc` | script test: bwrap-argc.sh counts a bwrap argv and groups its mounts (offline, temp dirs) |
 | `check:scripts:check` | script test: check.sh gates a tree once, records only a green, posts tlon/check only on a clean tree (offline, temp repo, fake mise and gh) |
@@ -51,7 +51,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `check:scripts:tlon-cli` | script test: tlon-cli.sh hands the client node a writable stderr when the caller closed its own, mints a token through a stubbed curl, and prints usage with exit 2 on no arguments (offline) |
 | `check:scripts:tmux-sweep` | script test: tmux-sweep.sh removes only the dead sockets (offline, temp dirs) |
 | `check:scripts:workline-verify` | script test: workline-verify.sh scopes its gates, advances on green and sends red back, records nothing in a landing gate, runs the canary A/B only for a verify (offline, temp repo, fake mise, curl and tlon-cli) |
-| `check:suites` | the names gate + the script self-tests + the tracked-junk gate + the server (suite and deterministic evals) + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check, in parallel |
+| `check:suites` | the names gate (which holds the task manual to its source) + the script self-tests + the tracked-junk gate + the server (suite and deterministic evals) + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests), in parallel |
 
 ## claude
 
