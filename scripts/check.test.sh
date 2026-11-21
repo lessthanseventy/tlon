@@ -20,7 +20,7 @@ commit() { echo "$2" >"$repo/$1" && g add "$1" && g commit -qm "$3"; }
 commit app.txt one "app"; g add scripts; g commit -qm "the script"
 
 mkdir "$tmp/bin"
-printf '#!/bin/sh\necho "$@" >>"%s/mise"\nexit "$(cat "%s/gate" 2>/dev/null || echo 0)"\n' "$tmp" "$tmp" >"$tmp/bin/mise"
+printf '#!/bin/sh\necho "$@" >>"%s/mise"\n[ -f "%s/skip" ] && echo "house: SKIPPED — godot" >>"$TLON_GATE_NOTES"\nexit "$(cat "%s/gate" 2>/dev/null || echo 0)"\n' "$tmp" "$tmp" "$tmp" >"$tmp/bin/mise"
 printf '#!/bin/sh\necho "$@" >>"%s/gh"\n' "$tmp" >"$tmp/bin/gh"
 chmod +x "$tmp/bin/mise" "$tmp/bin/gh"
 export PATH="$tmp/bin:$PATH"
@@ -58,6 +58,19 @@ echo dirt >"$repo/untracked.txt"
 check >/dev/null
 expect "a dirty tree is gated, not served from the cache" "$(runs)" "6"
 rm "$repo/untracked.txt"
+
+commit app.txt skipped "app, gated with a part skipped"
+touch "$tmp/skip"
+out="$(check)"
+expect "a skipped part is named in the summary" "$(echo "$out" | grep -c '^  house: SKIPPED')" "1"
+n="$(runs)"
+check >/dev/null
+expect "  and the tree is not recorded green, so it is gated again" "$(runs)" "$((n + 1))"
+rm "$tmp/skip"
+check >/dev/null
+expect "  and a machine that can run the part gates it" "$(runs)" "$((n + 2))"
+check >/dev/null
+expect "  and records it" "$(runs)" "$((n + 2))"
 
 unset TLON_CHECK_STATUS
 commit app.txt three "app, changed again"

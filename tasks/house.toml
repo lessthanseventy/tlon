@@ -44,3 +44,12 @@ run = "scripts/house-drive.sh errors"
 ["house:drive:stop"]
 description = "house: quit the drive house, remove its throwaway data folder and pid file (also when it is already dead)"
 run = "scripts/house-drive.sh stop"
+
+["house:gate"]
+description = "house: the whole verification, fast: house:check, then every soak section as its own headless Godot in parallel (TLON_HOUSE_JOBS at once, default half the cores), a table of times, every FAIL named by its section; `-- --if-changed` runs only when house/ changed in the commits being gated (what `check` does); no godot is a named skip, red with TLON_HOUSE_GATE=required (needs Godot)"
+run = "scripts/house-gate.sh \"$@\""
+
+["check:house"]
+description = "the house's gate when house/ changed in the commits being gated (scripts/house-gate.sh --if-changed): unchanged is said and passes, no godot is a named skip, red with TLON_HOUSE_GATE=required"
+wait_for = ["server:check", "server:eval-det", "office:check", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check"]
+run = "scripts/house-gate.sh --if-changed"

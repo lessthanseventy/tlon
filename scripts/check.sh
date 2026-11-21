@@ -33,9 +33,17 @@ if [ "${TLON_CHECK_FORCE:-0}" != 1 ] && [ -n "$tree" ] && [ -z "$(git status --p
   echo "check: the gate's tree ${tree:0:12} already passed ($(cat "$green/$tree")) — not run again (TLON_CHECK_FORCE=1 runs it)"
   code=0
 else
-  mise run check:all
+  notes="$(mktemp)"
+  TLON_GATE_NOTES="$notes" mise run check:all
   code=$?
-  if [ "$code" -eq 0 ] && [ -n "$tree" ] && [ "$(state)" = "$before" ] && [ -z "$(git status --porcelain 2>/dev/null)" ]; then
+  if [ -s "$notes" ]; then
+    echo "check: summary"
+    sed 's/^/  /' "$notes"
+  fi
+  # a gate with a skipped part is not recorded: a machine that can run the part must still gate this tree
+  grep -qs SKIPPED "$notes" && skipped=1 || skipped=0
+  rm -f "$notes"
+  if [ "$code" -eq 0 ] && [ "$skipped" = 0 ] && [ -n "$tree" ] && [ "$(state)" = "$before" ] && [ -z "$(git status --porcelain 2>/dev/null)" ]; then
     { mkdir -p "$green" && printf '%s %s\n' "$(git rev-parse HEAD)" "$(date -Is)" >"$green/$tree"; } 2>/dev/null || true
   fi
 fi

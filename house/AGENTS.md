@@ -637,6 +637,16 @@ runs on the local list.
   for what per-frame code decides): a quiet window proves nothing more happens, it never waits for
   something to happen. Never a bare `create_timer`. It prints each section's wall time as it
   ends and a table at the end.
+- `mise run house:gate` — the whole verification, fast: `house:check`, then every soak section as its own
+  headless Godot, `TLON_HOUSE_JOBS` at once (default half the cores), each with its own throwaway
+  `XDG_DATA_HOME` (the stub server listens on port 0, so none collide). It prints a table of section times and
+  every `FAIL` line under its section, and fails on a failed section, one with no `SOAK OK`, or one still running
+  after 10 minutes (killed, reported as a timeout; no Godot of the gate outlives it). About two minutes, against
+  the serial soak's seven. **This is what the repo's gate runs** (`check:house`, inside `mise run check`) whenever
+  `house/` changed in the commits being gated, so a builder runs their own section and `house:check` while working
+  and leaves the full run to the gate; run `house:gate` by hand only to see it before submitting. A section must
+  pass alone and beside the others: no shared file, port or `user://` state. No `godot` on PATH is a named skip
+  unless `TLON_HOUSE_GATE=required` (the home machine sets it), which makes it red.
 - `mise run house:soak` (about 7 minutes quiet, up to twice that loaded; its own deadline is 15 minutes and the task wraps it in `timeout 1000`, so a caller's wrapper needs at least that) — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
   closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock and the day's rhythm in the room, the TV hacks drawn, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), the weather (`soak_weather.gd`: degrees, the card's days, the j1 reader, the address, the pace and the switch, against a stub of wttr.in), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`; the task fails when an `ERROR` or `SCRIPT ERROR` line comes before it (the engine's own `ERROR` leak lines at exit, printed after it, are not counted).

@@ -226,6 +226,10 @@ run = "scripts/check-glossary.test.sh"
 description = "script test: checks-queue.sh runs waiters first come first served, never two at once (offline, temp dirs)"
 run = "scripts/checks-queue.test.sh"
 
+["check:scripts:house-gate"]
+description = "script test: house-gate.sh runs only when house/ changed, skips or fails a missing godot by TLON_HOUSE_GATE, and reports a failing or hung section (offline, temp repo, fake godot)"
+run = "scripts/house-gate.test.sh"
+
 ["check:scripts:office-drive"]
 description = "script test: office-drive.sh sends each key step to tmux as typed (offline, temp dirs)"
 run = "scripts/office-drive.test.sh"
@@ -291,8 +295,8 @@ depends_post = ["check:suites"]
 # change has them behind; server:deps runs before this, never beside it, where a cold compile of every
 # dep would starve the office's tmux-driven tests.
 ["check:suites"]
-description = "the names gate (which holds the task manual to its source) + the script self-tests + the tracked-junk gate + the server (suite and deterministic evals) + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests), in parallel"
-depends = ["check:names", "check:scripts", "check:ignored", "server:check", "server:eval-det", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check"]
+description = "the names gate (which holds the task manual to its source) + the script self-tests + the tracked-junk gate + the server (suite and deterministic evals) + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the house gate (after the others, only when house/ changed), in parallel"
+depends = ["check:names", "check:scripts", "check:ignored", "server:check", "server:eval-det", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "check:house"]
 
 ["server:deps"]
 description = "server: fetch the locked deps when they are behind the lock (refusing a mix.exs the lock does not satisfy, rather than rewriting mix.lock), and compile them for the test env and the dev env server:eval-det boots (a no-op when current)"
