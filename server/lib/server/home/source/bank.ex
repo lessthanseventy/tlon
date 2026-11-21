@@ -20,12 +20,18 @@ defmodule Server.Home.Source.Bank do
   line, shown, never obeyed. Plaid's `ITEM_LOGIN_REQUIRED` is one proposal that the bank needs
   linking again, keyed by the month; any other failure is returned for the poller to log and the next
   fetch retries from the cursor kept with the data.
+
+  It also withdraws its own open proposals that no longer hold (`resolved/2`): a `bank:new` whose
+  merchant has an older steady run at another price, or no series at all now (a new subscription not
+  yet looked at stays open however old), and a `bank:due` whose date has passed. Double, price and
+  relink proposals are never withdrawn; a taken or dismissed one is left alone.
   """
   @behaviour Server.Home.Source
 
   alias Server.Home.Bank
   alias Server.Home.Bank.Plaid
   alias Server.Home.Bank.Recurring
+  alias Server.Proposal
 
   @due_days 5
 
@@ -36,18 +42,18 @@ defmodule Server.Home.Source.Bank do
   def auto, do: []
 
   @doc """
-  What the bank suggests at `opts[:now]` (default the clock): `{:ok, proposals, []}` or
+  What the bank suggests at `opts[:now]` (default the clock): `{:ok, proposals, resolved}` or
   `{:error, reason}`. Options for a test are `Server.Home.Bank.refresh/1`'s.
   """
   @impl true
-  @spec fetch(keyword()) :: {:ok, [map()], []} | {:error, term()}
+  @spec fetch(keyword()) :: {:ok, [map()], [String.t()]} | {:error, term()}
   def fetch(opts \\ []) do
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
     today = Bank.today(now)
 
     with token when is_binary(token) <- Plaid.access_token(opts) || {:error, "no Plaid access token"} do
       case Bank.refresh(Keyword.put(opts, :now, now)) do
-        {:ok, state} -> {:ok, proposals(accounts(state), today), []}
+        {:ok, state} -> {:ok, proposals(accounts(state), today), resolved(Proposal.live("bank"), today)}
         {:error, {:plaid, "ITEM_LOGIN_REQUIRED"}} -> {:ok, [relink(today)], []}
         {:error, _} = error -> error
       end
@@ -65,6 +71,32 @@ defmodule Server.Home.Source.Bank do
       for(series <- Recurring.new_series(out, today), do: new(series)) ++
       for series <- Recurring.price_changes(out, today), do: price(series)
   end
+
+  @doc """
+  The keys among `open` (`Server.Proposal.live/1` of this source) that no longer hold on `today`: a
+  `bank:new` whose merchant has no series now or one with an older run at another price, and a
+  `bank:due` dated before `today`.
+  """
+  @spec resolved([Proposal.t()], Date.t()) :: [String.t()]
+  def resolved(open, today) do
+    no_older_run =
+      Bank.transactions() |> Recurring.series(:out) |> Enum.filter(&(&1.was == nil)) |> MapSet.new(&hash(&1.key))
+
+    for %{key: key} <- open, stale?(key, no_older_run, today), do: key
+  end
+
+  defp stale?("bank:new:" <> hash, no_older_run, _today), do: hash not in no_older_run
+
+  defp stale?("bank:due:" <> rest, _no_older_run, today) do
+    with [_hash, date] <- String.split(rest, ":"),
+         {:ok, date} <- Date.from_iso8601(date) do
+      Date.before?(date, today)
+    else
+      _ -> false
+    end
+  end
+
+  defp stale?(_key, _no_older_run, _today), do: false
 
   defp accounts(state), do: Map.new(Map.get(state, "accounts", []), &{&1["id"], &1})
 

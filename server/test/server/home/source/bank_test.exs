@@ -437,6 +437,79 @@ defmodule Server.Home.Source.BankTest do
     assert ExUnit.CaptureLog.capture_log(fn -> fetch(http) end) == ""
   end
 
+  describe "proposals that no longer hold" do
+    defp hash(merchant),
+      do:
+        :sha256
+        |> :crypto.hash(Server.Home.Bank.Recurring.key(merchant))
+        |> Base.encode16(case: :lower)
+        |> binary_part(0, 16)
+
+    defp todo(key), do: %{key: key, kind: "todo", text: key}
+    defp file(keys), do: Proposal.offer("telegram", "bank", Enum.map(keys, &todo/1), @now, [])
+    defp open_keys, do: Enum.sort(Enum.map(Proposal.open(), & &1.key))
+
+    defp poll(rows) do
+      {http, _} = plaid([page(rows)], accounts(1500.0))
+      {:ok, _, resolved} = fetch(http)
+      Proposal.resolve("bank", resolved, @now)
+      resolved
+    end
+
+    defp streamr(amounts, dates \\ ~w(2026-06-17 2026-07-17 2026-08-17 2026-09-17 2026-10-17 2026-11-17)),
+      do: for({{d, a}, i} <- Enum.with_index(Enum.zip(dates, amounts)), do: t("s#{i}", d, a, "Streamr"))
+
+    test "a new-subscription row for a merchant that has an older run at another price is withdrawn" do
+      key = "bank:new:#{hash("Streamr")}"
+      file([key])
+      assert poll(streamr([9.99, 9.99, 9.99, 12.99, 12.99, 12.99])) == [key]
+      assert open_keys() == []
+    end
+
+    test "a new-subscription row not looked at yet stays when its recency window has passed" do
+      key = "bank:new:#{hash("Streamr")}"
+      file([key])
+      assert poll(streamr([9.99, 9.99, 9.99], ~w(2026-08-17 2026-09-17 2026-10-17))) == []
+      assert open_keys() == [key]
+    end
+
+    test "a new-subscription row for a merchant with no series any more is withdrawn" do
+      key = "bank:new:#{hash("Gone")}"
+      file([key])
+      assert poll(rent()) == [key]
+      refute key in open_keys()
+    end
+
+    test "a due row dated before today is withdrawn, one dated today or later stays" do
+      past = "bank:due:#{hash("Rent")}:2026-11-19"
+      today = "bank:due:#{hash("Rent")}:2026-11-20"
+      later = "bank:due:#{hash("Rent")}:2026-11-22"
+      file([past, today, later])
+      assert poll(rent()) == [past]
+      assert open_keys() == Enum.sort([today, later])
+    end
+
+    test "a taken and a dismissed row are left alone" do
+      taken = "bank:new:#{hash("Gone")}"
+      dismissed = "bank:new:#{hash("Gone Too")}"
+      file([taken, dismissed])
+
+      for p <- Proposal.open(),
+          do: if(p.key == taken, do: Proposal.take("telegram", p.id, @now), else: Proposal.dismiss(p.id))
+
+      assert poll(rent()) == []
+      assert [%{state: :taken}] = Repo.all(from(p in Proposal, where: p.key == ^taken))
+      assert [%{state: :dismissed}] = Repo.all(from(p in Proposal, where: p.key == ^dismissed))
+    end
+
+    test "double, price and relink rows are never withdrawn" do
+      keys = ["bank:double:#{hash("Gone")}:1499:2026-11-01", "bank:price:#{hash("Gone")}:1299", "bank:relink:2026-10"]
+      file(keys)
+      assert poll(rent()) == []
+      assert Enum.all?(keys, &(&1 in open_keys()))
+    end
+  end
+
   describe "summary" do
     setup do
       pay =
