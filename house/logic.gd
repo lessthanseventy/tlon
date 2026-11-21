@@ -17,6 +17,7 @@ const LocalLogic := preload("res://logic_local.gd")
 const WeatherLogic := preload("res://logic_weather.gd")
 const ChoreLogic := preload("res://logic_chores.gd")
 const PeopleLogic := preload("res://logic_people.gd")
+const MoneyLogic := preload("res://logic_money.gd")
 
 var _failures: Array = []
 
@@ -30,6 +31,7 @@ func _initialize() -> void:
 	WeatherLogic.new(self).run()
 	ChoreLogic.new(self).run()
 	PeopleLogic.new(self).run()
+	MoneyLogic.new(self).run()
 	print("LOGIC %s (%d failures)" % ["OK" if _failures.is_empty() else "FAILED", _failures.size()])
 	quit(0 if _failures.is_empty() else 1)
 

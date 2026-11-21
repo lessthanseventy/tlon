@@ -620,6 +620,7 @@ runs on the local list.
 - `mise run house:check` — every script, the soak's too, loads in headless Godot, then `logic.gd` runs:
   the checks that need no scene tree and no simulated room (the due-time rule `when.gd`, the reader and
   the list's rules `logic_local.gd`, the forecast, the j1 reader and the address `logic_weather.gd`, the chores' table, rhythm and states `logic_chores.gd`, the people's birthdays and the door's mark `logic_people.gd`,
+  the money's envelope states, day strip, lowest-point sentence and wording `logic_money.gd`,
   voices, the jar, the knock and rhythm rules, the TV, `Card`'s dates, the pet settings). A few seconds:
   **iterate here.** Godot is the machine's own, so this is not part of `mise run check`. A check
   that needs neither the tree nor the clock goes in `logic.gd`, not in the soak; none runs in both.
