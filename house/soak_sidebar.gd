@@ -659,6 +659,7 @@ func _fit() -> void:
 	await _sync()
 	await _laid_out()
 
+
 func _outside(win: Rect2) -> String:
 	var bad: Array = []
 	for c in sb.find_children("*", "Control", true, false):
