@@ -243,7 +243,8 @@ and every layer the spine design's re-laid §9 asked for
   posted outflows on checking that are in no series and no transfer, spread evenly; the low and high lines are the 25th and 75th
   percentile of rolling 30-day totals), capped at 180 days. Every number is computed there and none comes from a model, and none
   is an opinion on the spending. An expected charge or deposit that has not posted (today or earlier) stays on tomorrow as
-  `overdue` (with `expected_on`) for half its rhythm, then is named in `basis.skipped`. `GET /api/home/money/forecast?until=` is the forecast and the subscriptions as JSON (null when
+  `overdue` (with `expected_on`) for half its rhythm, then is named in `basis.skipped`; a series whose last charge is older than two
+  rhythms plus the rhythm's tolerance (yearly: one rhythm plus 30 days; `Recurring.live/2`) has ended and is in none of it, nor in `subscriptions`. `GET /api/home/money/forecast?until=` is the forecast and the subscriptions as JSON (null when
   off). The **money chat** (`Server.Home.Money`, `POST /api/home/money/ask {text, thread?}` → `{reply, figures, thread}`, read-only) answers a question about his money from that engine: the home reader's model
   (`:home_reader_cmd`/`:home_reader_model`, no tools; tests pass a `:model` function) plans up to four asks (`Server.Home.Money.Plan`, parsed strictly: a bad shape is a "rephrase" reply), the
   `Server.Home.Bank` wrappers compute them, the model phrases the results (amounts as `*_cents_text` strings) after the sentences code writes itself (a purchase's verdict with its date and amount, a series not found: `Say.leads/1`), and `Server.Home.Money.Say.check/2` requires every dollar amount in that phrasing to be one of

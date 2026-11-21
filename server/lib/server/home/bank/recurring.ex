@@ -9,6 +9,11 @@ defmodule Server.Home.Bank.Recurring do
   year being all Plaid gives), and every amount within 10% of the latest. Pending transactions never count; several on one day count once. Its
   `next` date and `amount` come from the latest charge. `series/2` finds them for outflows
   (`:out`) or deposits (`:in`); amounts are integers of cents, magnitudes in a series.
+
+  A series is **live** (`live/2`) while its latest charge is within two rhythms plus the rhythm's
+  tolerance of `today` (a yearly one: one rhythm plus 30 days), else it has **ended**: nothing is
+  expected of it any more. Weekly is 7 days, fortnightly 14, monthly 30 and yearly 365 days, with a
+  tolerance of 2, 3, 4 and 10 days, so the windows are 16, 31, 64 and 395 days.
   """
 
   @type txn :: %{
@@ -134,6 +139,18 @@ defmodule Server.Home.Bank.Recurring do
   defp next(date, :monthly), do: Date.shift(date, month: 1)
   defp next(date, :yearly), do: Date.shift(date, year: 1)
 
+  @doc "The days either side of a series' expected date within which a charge of the merchant counts as that one arriving."
+  @spec tolerance(series() | :weekly | :fortnightly | :monthly | :yearly) :: pos_integer()
+  def tolerance(%{period: period}), do: tolerance(period)
+  def tolerance(:weekly), do: 2
+  def tolerance(:fortnightly), do: 3
+  def tolerance(:monthly), do: 4
+  def tolerance(:yearly), do: 10
+
+  @doc "The series still live on `today`: the latest charge within the window the moduledoc names."
+  @spec live([series()], Date.t()) :: [series()]
+  def live(series, today), do: Enum.filter(series, &(Date.diff(today, &1.last) <= window(&1.period)))
+
   @doc "The series whose next date falls from `today` through `days` days after it."
   @spec due_within([series()], Date.t(), non_neg_integer()) :: [series()]
   def due_within(series, today, days),
@@ -217,4 +234,9 @@ defmodule Server.Home.Bank.Recurring do
   defp was(_steady, [], _band, _period), do: nil
 
   defp fresh?(series, today), do: series.count == minimum(series.period) and Date.diff(today, series.last) in 0..10
+
+  defp window(:yearly), do: 365 + 30
+  defp window(:monthly), do: 2 * 30 + tolerance(:monthly)
+  defp window(:fortnightly), do: 2 * 14 + tolerance(:fortnightly)
+  defp window(:weekly), do: 2 * 7 + tolerance(:weekly)
 end

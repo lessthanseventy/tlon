@@ -15,7 +15,8 @@ defmodule Server.Home.Bank.Projection do
 
   A series (`Recurring.series/2`) repeats at its rhythm from its latest charge; a monthly one keeps
   its day of the month, falling on the month's last day when it has none. Events start tomorrow.
-  The horizon is capped at 180 days.
+  The horizon is capped at 180 days. Only live series count (`Recurring.live/2`): one that has
+  ended is in no forecast, purchase check or change, and `subscriptions/2` leaves it out.
 
   **Overdue.** An expected event dated today or earlier with no charge of that merchant since (a
   posted or pending transaction on or after its date less half the width of the rhythm's band in
@@ -42,7 +43,6 @@ defmodule Server.Home.Bank.Projection do
   @month 30
   @afford_days 60
   @cushion_days 7
-  @tolerance %{weekly: 2, fortnightly: 3, monthly: 4, yearly: 10}
 
   @type rhythm :: :weekly | :fortnightly | :monthly | :yearly | :once
   @type data :: %{transactions: [Recurring.txn()], accounts: [map()]}
@@ -229,6 +229,7 @@ defmodule Server.Home.Bank.Projection do
     txns
     |> Recurring.without_transfers()
     |> Recurring.series(:out)
+    |> Recurring.live(today)
     |> Enum.map(fn s ->
       item = series_item(s, :charge, -1, today)
 
@@ -263,13 +264,13 @@ defmodule Server.Home.Bank.Projection do
       start when is_integer(start) ->
         ids = for account <- accounts, Bank.spendable?(account), do: account["id"]
         mine = txns |> Recurring.without_transfers() |> Enum.filter(&(&1.account_id in ids))
-        out = Recurring.series(mine, :out)
+        out = mine |> Recurring.series(:out) |> Recurring.live(today)
 
         {:ok,
          %{
            start: start,
            out: out,
-           deposits: Recurring.series(mine, :in),
+           deposits: mine |> Recurring.series(:in) |> Recurring.live(today),
            everyday: everyday(mine, out, today),
            pending?: Enum.any?(txns, & &1.pending),
            txns: mine,
@@ -342,7 +343,7 @@ defmodule Server.Home.Bank.Projection do
   end
 
   defp arrived?(txns, series, sign) do
-    since = Date.add(series.next, -@tolerance[series.period])
+    since = Date.add(series.next, -Recurring.tolerance(series))
     Enum.any?(txns, &(&1.key == series.key and &1.cents * sign < 0 and Date.compare(&1.date, since) != :lt))
   end
 

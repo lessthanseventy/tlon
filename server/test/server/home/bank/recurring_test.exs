@@ -39,6 +39,17 @@ defmodule Server.Home.Bank.RecurringTest do
            } = s
   end
 
+  test "a series is live through its window and ended after it, deposits the same" do
+    for sign <- [1, -1] do
+      series =
+        Recurring.series(monthly("Pay", sign * 120_000, Date.add(@today, -64), 3), :out) ++
+          Recurring.series(monthly("Pay", sign * 120_000, Date.add(@today, -64), 3), :in)
+
+      assert [_] = Recurring.live(series, @today)
+      assert [] = Recurring.live(series, Date.add(@today, 1))
+    end
+  end
+
   test "two charges are not enough, and a pending one does not count" do
     assert Recurring.series(monthly("Rent", 120_000, ~D[2026-10-27], 2), :out) == []
 

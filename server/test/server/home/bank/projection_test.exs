@@ -146,6 +146,74 @@ defmodule Server.Home.Bank.ProjectionTest do
       assert :skipped_charge in f.basis.caveats
     end
 
+    test "a series whose last charge is past its window has ended: no event, no skip, no series" do
+      ended = [monthly("Old gym", 4_000, ~D[2026-03-10], 6), weekly("Old coffee", 900, ~D[2026-02-01], 5)]
+      old_pay = monthly("Old employer", -300_000, ~D[2026-03-13], 5)
+      f = forecast!(data([ended, old_pay, base().transactions]), ~D[2027-01-20])
+
+      refute Enum.any?(f.events, &(&1.name in ["Old gym", "Old coffee", "Old employer"]))
+      assert f.basis.skipped == []
+      refute :skipped_charge in f.basis.caveats
+      assert f.basis.series == forecast!(base()).basis.series
+    end
+
+    test "one payer under three labels over time: only the live label is a deposit" do
+      fortnightly = fn name, last, n -> repeated(name, -300_000, last, n, &[day: -14 * &1]) end
+
+      pay = [
+        fortnightly.("Acme Payroll", Date.add(@today, -550), 11),
+        fortnightly.("ACME PAYROLL INC", Date.add(@today, -480), 5),
+        fortnightly.("Acme Co Salary", Date.add(@today, -7), 35)
+      ]
+
+      f = forecast!(data([pay, everyday(100)]), Date.add(@today, 28))
+      deposits = Enum.filter(f.events, &(&1.kind == :deposit))
+
+      assert Enum.map(deposits, & &1.name) == ["Acme Co Salary", "Acme Co Salary"]
+      assert Enum.map(deposits, & &1.date) == [Date.add(@today, 7), Date.add(@today, 21)]
+    end
+
+    test "ended series leave afford, what_if and subscriptions too" do
+      d = data([monthly("Old gym", 4_000, ~D[2026-03-10], 6), base().transactions])
+
+      assert {:ok, afford} = Projection.afford(d, @today, 10_000, nil)
+      refute Enum.any?(afford.without.events, &(&1.name == "Old gym"))
+
+      assert {:error, {:no_series, "Old gym", _}} = Projection.what_if(d, @today, [{:drop, "Old gym"}], ~D[2026-12-31])
+
+      assert {:error, {:no_series, "Old gym", _}} =
+               Projection.what_if(d, @today, [{:change, "Old gym", 100}], ~D[2026-12-31])
+
+      refute Enum.any?(Projection.subscriptions(d, @today), &(&1.name == "Old gym"))
+    end
+
+    test "the window edge: live on the last day of it, ended the day after, per rhythm" do
+      for {txns, edge} <- [
+            {&weekly("W", 500, &1, 4), 16},
+            {&repeated("F", 500, &1, 4, fn i -> [day: -14 * i] end), 31},
+            {&monthly("M", 500, &1, 4), 64},
+            {&[txn(&1, 500, "Y"), txn(Date.shift(&1, year: -1), 500, "Y")], 395}
+          ] do
+        live = data([txns.(Date.add(@today, -edge)), everyday(100)])
+        gone = data([txns.(Date.add(@today, -edge - 1)), everyday(100)])
+
+        assert Projection.subscriptions(live, @today) != []
+        assert Projection.subscriptions(gone, @today) == []
+      end
+    end
+
+    test "one cycle late is still overdue, past the grace skipped, beyond the window ended" do
+      overdue = forecast!(data([monthly("Rent", 120_000, ~D[2026-10-15], 4), everyday(100)]))
+      assert [%{overdue: true}, %{overdue: false}] = overdue.events |> Enum.filter(&(&1.name == "Rent")) |> Enum.take(2)
+
+      skipped = forecast!(data([monthly("Rent", 120_000, ~D[2026-09-25], 4), everyday(100)]))
+      assert skipped.basis.skipped == ["Rent"]
+
+      ended = forecast!(data([monthly("Rent", 120_000, ~D[2026-09-10], 4), everyday(100)]))
+      assert ended.basis.skipped == []
+      refute Enum.any?(ended.events, &(&1.name == "Rent"))
+    end
+
     test "an overdue deposit is placed tomorrow and bounds before_next_deposit there" do
       f = forecast!(data([monthly("Salary", -300_000, ~D[2026-10-17], 4), everyday(100)]), ~D[2026-12-31])
 
