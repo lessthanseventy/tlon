@@ -338,7 +338,6 @@ func _every_logic() -> void:
 	_check(Card.every_words("1 month") == "every month", "1 month is every month")
 
 
-
 func _when() -> void:
 	var now := Time.get_unix_time_from_datetime_string("2026-11-18T12:00:00")
 	var at := func(day_gap: int, hm: String) -> float:
@@ -388,8 +387,6 @@ func _pet_settings() -> void:
 	d.put("pet1", "fox_red")
 	_check(Settings.pets("Nina sits") == "Mimi sits" and d.value("dog") == "Argos", "names stay whatever the animal")
 	d.put("cat", "")
-
-
 
 
 func _pet_voices() -> void:

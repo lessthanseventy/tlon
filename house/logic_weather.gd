@@ -33,7 +33,6 @@ func _day(date: String, kind: String, wet: int = 0) -> Dictionary:
 	return {"date": date, "high_c": 12, "low_c": -1, "kind": kind, "wet": wet}
 
 
-
 func _forecast() -> void:
 	var wed := "2026-11-18"
 	var rows := [

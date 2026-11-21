@@ -48,9 +48,6 @@ func _forecast_card() -> void:
 	room.queue_free()
 
 
-
-
-
 # the server's /api/home carries the forecast to the card; an older one has no key
 func _served() -> void:
 	var main: Control = _main()
