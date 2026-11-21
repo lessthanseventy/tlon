@@ -214,6 +214,48 @@ defmodule Server.Home.Bank.ProjectionTest do
       refute Enum.any?(ended.events, &(&1.name == "Rent"))
     end
 
+    test "a charge under a longer label of the merchant, at any amount, means the series was not skipped" do
+      rent = monthly("Corner Shop", 4_000, ~D[2026-10-01], 3)
+      skipped = forecast!(data([rent, everyday(100)]), ~D[2026-12-31])
+      assert skipped.basis.skipped == ["Corner Shop"]
+
+      visit = txn(Date.add(@today, -7), 912, "Corner Shop 042")
+      arrived = forecast!(data([rent, visit, everyday(100)]), ~D[2026-12-31])
+      assert arrived.basis.skipped == []
+    end
+
+    test "series outflow and everyday outflow add up to all the non-transfer outflow over the window" do
+      often = for i <- 1..30, do: txn(Date.add(@today, -3 * i - rem(i * i, 4)), 600 + 100 * rem(i, 3), "Corner Market")
+      rent = monthly("Rent", 12_000, ~D[2026-10-27], 3)
+
+      transfer = [
+        txn(Date.add(@today, -5), 50_000, "To savings"),
+        txn(Date.add(@today, -5), -50_000, "From checking", %{"account_id" => "s1"})
+      ]
+
+      d = data([often, rent, transfer])
+      f = forecast!(d)
+
+      window = Date.add(@today, 1 - f.everyday.history_days)
+
+      outflow =
+        for t <- d.transactions,
+            t.cents > 0,
+            t.account_id == "a1",
+            Date.compare(t.date, window) != :lt,
+            t.label != "To savings",
+            do: t.cents
+
+      series_out = for t <- rent, Date.compare(t.date, window) != :lt, do: t.cents
+
+      assert Enum.sum(outflow) > 0
+
+      rounding =
+        abs(Enum.sum(outflow) - Enum.sum(series_out) - f.everyday.expected_daily_cents * f.everyday.history_days)
+
+      assert rounding <= div(f.everyday.history_days, 2)
+    end
+
     test "an overdue deposit is placed tomorrow and bounds before_next_deposit there" do
       f = forecast!(data([monthly("Salary", -300_000, ~D[2026-10-17], 4), everyday(100)]), ~D[2026-12-31])
 

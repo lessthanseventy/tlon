@@ -18,7 +18,8 @@ defmodule Server.Home.Bank.Projection do
   The horizon is capped at 180 days. Only live series count (`Recurring.live/2`): one that has
   ended is in no forecast, purchase check or change, and `subscriptions/2` leaves it out.
 
-  **Overdue.** An expected event dated today or earlier with no charge of that merchant since (a
+  **Overdue.** An expected event dated today or earlier with no charge of that merchant (the same
+  name, or that name with more words after it) since (a
   posted or pending transaction on or after its date less half the width of the rhythm's band in
   `Recurring`) is overdue: it stays in the forecast on tomorrow, with `overdue: true` and
   `expected_on`, for a grace of half its rhythm (at most 14 days; a yearly one 30). Past the grace
@@ -344,7 +345,11 @@ defmodule Server.Home.Bank.Projection do
 
   defp arrived?(txns, series, sign) do
     since = Date.add(series.next, -Recurring.tolerance(series))
-    Enum.any?(txns, &(&1.key == series.key and &1.cents * sign < 0 and Date.compare(&1.date, since) != :lt))
+
+    Enum.any?(
+      txns,
+      &(Recurring.same_merchant?(&1.key, series.key) and &1.cents * sign < 0 and Date.compare(&1.date, since) != :lt)
+    )
   end
 
   defp grace(:yearly), do: 30

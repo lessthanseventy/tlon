@@ -13,7 +13,9 @@ defmodule Server.Home.Bank.Recurring do
   charges are at the current one (within 10% of it): a real change of price. A merchant whose
   charges fall into two or more amount groups, each a steady series, and those series hold at least
   four fifths of its charges, and whose latest charges fall within one rhythm of each other, has those series (two subscriptions of one merchant) and no other; groups that follow each other are one series with a changed price.
-  Pending transactions never count; several on one day count once. Its `next` date comes from the
+  A merchant with ten or more charges outside its series, and more than twice as many as the series
+  holds, is everyday spending and has none (51 irregular charges and a monthly-looking tail are not a
+  bill). Pending transactions never count; several on one day count once. Its `next` date comes from the
   latest charge. `series/2` finds them for outflows
   (`:out`) or deposits (`:in`); amounts are integers of cents, magnitudes in a series.
 
@@ -113,6 +115,10 @@ defmodule Server.Home.Bank.Recurring do
   defp next(date, :fortnightly), do: Date.shift(date, day: 14)
   defp next(date, :monthly), do: Date.shift(date, month: 1)
   defp next(date, :yearly), do: Date.shift(date, year: 1)
+
+  @doc "Whether two merchant keys name one merchant: equal, or one the other with more words after it (`shell` and `shell oil 57444`)."
+  @spec same_merchant?(String.t(), String.t()) :: boolean()
+  def same_merchant?(a, b), do: a == b or String.starts_with?(a, b <> " ") or String.starts_with?(b, a <> " ")
 
   @doc "The days either side of a series' expected date within which a charge of the merchant counts as that one arriving."
   @spec tolerance(series() | :weekly | :fortnightly | :monthly | :yearly) :: pos_integer()
@@ -217,13 +223,18 @@ defmodule Server.Home.Bank.Recurring do
     parts = charges |> amount_clusters() |> Enum.flat_map(&List.wrap(detect(&1, direction)))
     covered = parts |> Enum.map(& &1.count) |> Enum.sum()
 
-    case parts do
-      [_, _ | _] when covered * 5 >= length(charges) * 4 ->
-        if concurrent?(parts), do: parts, else: List.wrap(detect(charges, direction))
+    found =
+      case parts do
+        [_, _ | _] when covered * 5 >= length(charges) * 4 ->
+          if concurrent?(parts), do: parts, else: List.wrap(detect(charges, direction))
 
-      _ ->
-        List.wrap(detect(charges, direction))
-    end
+        _ ->
+          List.wrap(detect(charges, direction))
+      end
+
+    explained = found |> Enum.map(& &1.count) |> Enum.sum()
+    unexplained = length(charges) - explained
+    if unexplained >= 10 and unexplained > 2 * explained, do: [], else: found
   end
 
   defp concurrent?(parts) do

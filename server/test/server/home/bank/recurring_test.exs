@@ -150,6 +150,40 @@ defmodule Server.Home.Bank.RecurringTest do
              Recurring.series(a ++ b, :out)
   end
 
+  defp irregular(name, n, last) do
+    gaps = [3, 10, 17, 4, 12, 23, 6, 15]
+
+    {rows, _} =
+      Enum.map_reduce(1..n, last, fn i, date ->
+        date = Date.add(date, -Enum.at(gaps, rem(i, 8)))
+        {txn(date, if(rem(i, 2) == 0, do: 700, else: 15_000), name), date}
+      end)
+
+    rows
+  end
+
+  test "a merchant charged often at irregular amounts, with a monthly-looking tail, is no series" do
+    tail = monthly("Corner Market", 4_000, ~D[2026-11-10], 3)
+    often = irregular("Corner Market", 48, ~D[2026-09-10])
+
+    assert length(Enum.uniq_by(tail ++ often, & &1.date)) == 51
+    assert Recurring.series(tail ++ often, :out) == []
+    assert [%{count: 3}] = Recurring.series(tail ++ Enum.take(often, 4), :out)
+  end
+
+  test "two subscriptions at one merchant under two labels stay two series" do
+    a = monthly("Apple iCloud", 999, ~D[2026-11-05], 8)
+    b = monthly("Apple Music", 1_499, ~D[2026-11-20], 8)
+    assert [%{label: "Apple iCloud"}, %{label: "Apple Music"}] = Recurring.series(a ++ b, :out)
+  end
+
+  test "same_merchant? is the same name or the name with more words after it" do
+    assert Recurring.same_merchant?("shell", "shell oil 57444")
+    assert Recurring.same_merchant?("shell oil 57444", "shell")
+    refute Recurring.same_merchant?("shell", "shellfish")
+    refute Recurring.same_merchant?("apple music", "apple icloud")
+  end
+
   test "a charge more than twice or less than half the recent amount ends the run" do
     old = monthly("Phone", 20_000, ~D[2026-07-27], 4)
     now = monthly("Phone", 4_500, ~D[2026-10-27], 3)
