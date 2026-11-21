@@ -1,0 +1,4 @@
+# A worktree under the checkout (.worktrees/<branch>) would otherwise also load the checkout's
+# mise.toml, and run its copy of a task this tree removed or renamed. Only this file is read
+# before config discovery: the same setting in mise.toml is too late.
+ceiling_paths = ["{{ config_root | dirname }}"]
