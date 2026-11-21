@@ -188,7 +188,7 @@ defmodule Server.Home.Bank do
 
       %{
         balance: total(spendable, & &1["current"]),
-        available: total(spendable, &(&1["available"] || &1["current"])),
+        available: spendable_available(accounts),
         as_of: as_of,
         due_this_week: dated.due_this_week,
         next_deposit: dated.next_deposit,
@@ -224,8 +224,15 @@ defmodule Server.Home.Bank do
   @spec today(DateTime.t()) :: Date.t()
   def today(now), do: now |> Clock.local() |> NaiveDateTime.to_date()
 
-  defp spendable?(%{"type" => "depository", "subtype" => "checking"}), do: true
-  defp spendable?(_), do: false
+  @doc "Whether a kept account counts toward the money: a depository account of subtype checking."
+  @spec spendable?(map()) :: boolean()
+  def spendable?(%{"type" => "depository", "subtype" => "checking"}), do: true
+  def spendable?(_), do: false
+
+  @doc "The available balance (else the current) summed over the spendable kept accounts, in cents; nil when there is none."
+  @spec spendable_available([map()]) :: integer() | nil
+  def spendable_available(accounts),
+    do: accounts |> Enum.filter(&spendable?/1) |> total(&(&1["available"] || &1["current"]))
 
   defp total([], _), do: nil
 

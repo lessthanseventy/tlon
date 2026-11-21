@@ -49,7 +49,7 @@ defmodule Server.Home.Bank.Recurring do
         account_id: row["account_id"],
         cents: cents,
         date: date,
-        key: label |> String.downcase() |> String.replace(~r/[^\p{L}\p{N}]+/u, " ") |> String.trim(),
+        key: key(label),
         label: label,
         pending: row["pending"] == true
       }
@@ -59,6 +59,10 @@ defmodule Server.Home.Bank.Recurring do
   end
 
   def txn(_), do: nil
+
+  @doc "The normalised form of a merchant name that series are matched on: lower case, letters and digits in single-space runs."
+  @spec key(String.t()) :: String.t()
+  def key(label), do: label |> String.downcase() |> String.replace(~r/[^\p{L}\p{N}]+/u, " ") |> String.trim()
 
   defp label(merchant, name) do
     [merchant, name]
