@@ -61,8 +61,9 @@ defmodule Server.Jobs.KeepUp do
   A project is skipped, not built, when its `mix.lock` locks dependencies and it has no `deps/`
   directory, or when its compile says its dependencies are not available: fetching would write into
   the human's checkout and use the network, and a checkout nobody has built is not one seats are
-  built from. A project with no dependencies compiles as always. The skip is checked again every
-  pass. While it holds, a keyed note says to run `mix deps.get` there: posted again after a restart
+  built from. A project with no dependencies compiles as always. The `deps/` skip is checked again
+  every pass; a skip found by the compile's output is kept with its tip (`"<sha> skip"`) and not
+  compiled again until the tip moves. While either holds, a keyed note says to run `mix deps.get` there: posted again after a restart
   (the row is durable, the note is not), never twice in a run; it clears when the project warms or
   its repo is no longer a project's.
 
@@ -366,9 +367,14 @@ defmodule Server.Jobs.KeepUp do
     state = Home.Keep.get("keep_up:warm:#{dir}")
 
     cond do
-      state == "#{sha} ok" -> :ok
-      is_binary(state) and String.starts_with?(state, "#{sha} failed") -> present(dir, state)
-      true -> settle(dir, state, outcome(dir, sha, run))
+      state == "#{sha} ok" ->
+        :ok
+
+      state == "#{sha} skip" or (is_binary(state) and String.starts_with?(state, "#{sha} failed")) ->
+        present(dir, state)
+
+      true ->
+        settle(dir, state, outcome(dir, sha, run))
     end
   end
 
@@ -378,7 +384,7 @@ defmodule Server.Jobs.KeepUp do
     else
       case build(dir, run) do
         :ok -> "#{sha} ok"
-        :skip -> "skip"
+        :skip -> "#{sha} skip"
         {:failed, lines} -> "#{sha} failed\n#{lines}"
       end
     end
@@ -405,14 +411,15 @@ defmodule Server.Jobs.KeepUp do
     end
   end
 
-  defp note_text(dir, "skip"),
-    do:
-      "the test build of #{dir} is not warmed: its dependencies are not fetched (run `mix deps.get` there), or it is not a checkout seats are built from"
-
   defp note_text(dir, body) do
-    [head, lines] = String.split(body, "\n", parts: 2)
-    [sha, "failed"] = String.split(head, " ")
-    "the test build of #{dir} failed at #{String.slice(sha, 0, 7)}:\n#{lines}"
+    case String.split(body, "\n", parts: 2) do
+      [head, lines] ->
+        [sha, "failed"] = String.split(head, " ")
+        "the test build of #{dir} failed at #{String.slice(sha, 0, 7)}:\n#{lines}"
+
+      [_skip] ->
+        "the test build of #{dir} is not warmed: its dependencies are not fetched (run `mix deps.get` there), or it is not a checkout seats are built from"
+    end
   end
 
   defp deps_missing?(dir) do

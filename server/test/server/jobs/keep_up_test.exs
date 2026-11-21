@@ -542,6 +542,14 @@ defmodule Server.Jobs.KeepUpTest do
       assert_received {:ran, "mise"}
       assert [%{text: text}] = notes(repo)
       assert text =~ "not warmed"
+
+      restart(repo)
+      KeepUp.warm_test_builds([repo], warm_run("fff", "", 0))
+      refute_received {:ran, _}
+      assert [%{text: ^text}] = notes(repo)
+
+      KeepUp.warm_test_builds([repo], warm_run("hhh", "", 0))
+      assert_received {:ran, "mise"}
     end
 
     test "a repo that is no longer a project's has its note cleared" do
