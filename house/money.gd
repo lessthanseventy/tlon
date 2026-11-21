@@ -38,7 +38,7 @@ const PINK := Color("f0a5b8")
 const PINK_DARK := Color("d9809a")
 const SNOUT := Color("f8c6d2")
 const PLUM := Color("5a3040")
-const GOLD := Color("e8c77a")
+
 const PAPER := Color("f6efe0")
 const AMBER := Color("e3a33c")
 
@@ -356,11 +356,13 @@ static func _ellipse(
 	s.poly(pts, color)
 
 
-# a shape with a one pixel outline: the outline colour first, a little larger
+# a shape with the outline width the other code-drawn pieces have (`Pen.outline`): the outline
+# colour first, a little larger
 static func _blob(
 	s: PetThings.Pen, a: Vector2, cx: float, cy: float, rx: float, ry: float, color: Color
 ) -> void:
-	_ellipse(s, a, cx, cy, rx + 1.0, ry + 1.0, PLUM)
+	var edge := maxf(1.0, round(0.7 * s.k / SCALE)) / s.k
+	_ellipse(s, a, cx, cy, rx + edge, ry + edge, PLUM)
 	_ellipse(s, a, cx, cy, rx, ry, color)
 
 
@@ -383,7 +385,7 @@ static func outline(pen: PetThings.Pen) -> PackedVector2Array:
 	return Geometry2D.convex_hull(pts)
 
 
-# a pig in profile facing left, a coin standing in its slot; `envelope` ("none", "due" or "short")
+# a pig in profile facing left, a slot along its back; `envelope` ("none", "due" or "short")
 # leans an envelope against its side, paper while the balance holds the charge and amber when it
 # will not
 static func piggy(pen: PetThings.Pen, envelope: String) -> void:
@@ -393,15 +395,13 @@ static func piggy(pen: PetThings.Pen, envelope: String) -> void:
 	for x in [-5.0, 3.0]:
 		_rect(s, a, x - 1.0, -8.0, 6.0, 9.0, PLUM)
 		_rect(s, a, x, -7.0, 4.0, 7.0, PINK_DARK.darkened(0.12))
-	_ellipse(s, a, 2.5, -21.4, 3.4, 3.4, PLUM)
-	_ellipse(s, a, 2.5, -21.4, 2.4, 2.4, GOLD)
 	_blob(s, a, 1.0, -11.0, 13.5, 9.5, PINK)
 	_ellipse(s, a, -1.0, -15.8, 5.0, 1.7, PINK.lightened(0.28))
 	for x in [-10.0, 7.0]:
 		_rect(s, a, x - 1.0, -8.0, 6.5, 9.0, PLUM)
 		_rect(s, a, x, -7.0, 4.5, 7.0, PINK)
 		_rect(s, a, x, -1.6, 4.5, 1.6, PINK_DARK)
-	_rect(s, a, -3.0, -20.3, 9.0, 1.8, PLUM)
+	_rect(s, a, -2.0, -18.6, 7.0, 1.2, PLUM)
 	var tail: Array = _pts(
 		s, a, [Vector2(14, -13), Vector2(16.5, -15), Vector2(15.5, -17.5), Vector2(17.8, -18.6)]
 	)
