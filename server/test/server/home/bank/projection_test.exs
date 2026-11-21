@@ -382,7 +382,9 @@ defmodule Server.Home.Bank.ProjectionTest do
         txn(~D[2026-10-01], 2_000, "CORNER CAFE #2"),
         txn(~D[2026-10-31], 3_000, "corner cafe"),
         txn(~D[2026-11-02], -500, "Corner Cafe refund"),
-        txn(~D[2026-11-03], 700, "Other", %{"pending" => true})
+        txn(~D[2026-11-03], 700, "Other", %{"pending" => true}),
+        txn(~D[2026-11-04], 99_900, "Move out"),
+        txn(~D[2026-11-04], -99_900, "Move in", %{"account_id" => "a2"})
       ]
     end
 
@@ -404,7 +406,9 @@ defmodule Server.Home.Bank.ProjectionTest do
     test "a nil match is everything posted, and pending and transfers stay out" do
       h = history!(nil, ~D[2026-11-01], ~D[2026-11-30])
       assert h.count == 5 + 1
-      refute Enum.any?(h.largest, &(&1.name == "Other"))
+      refute Enum.any?(h.largest, &(&1.name in ["Other", "Move out", "Move in"]))
+      assert Enum.sum(Enum.map(h.months, & &1.out_cents)) == -15_000
+      assert Enum.sum(Enum.map(h.months, & &1.in_cents)) == 500
     end
 
     test "from after to is a bad range, never a crash" do
