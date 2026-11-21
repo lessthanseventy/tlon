@@ -17,7 +17,9 @@ defmodule Server.Jobs.KeepUp do
   once its origin is on GitHub.
 
   Each main checkout's mix projects are compiled for test once per new tip, in a task the job starts
-  (`warm_test_builds/2`), so the `_build` a seat's worktree seeds from is current.
+  (`warm_test_builds/2`), so the `_build` a seat's worktree seeds from is current. A project whose
+  dependencies are not fetched is skipped, and a project that does not build is said, each as one
+  keyed rollout note (`keep_up:warm:<dir>`).
 
   A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
   from PATH, a git that won't run) leaves the other repos their pass, then fails the job with every
@@ -32,7 +34,11 @@ defmodule Server.Jobs.KeepUp do
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 120]
 
+  alias Server.Home
+
   require Logger
+
+  @missing_deps ~r/the dependency is not available|Can't continue due to errors on dependencies|Unchecked dependencies/
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
@@ -50,25 +56,35 @@ defmodule Server.Jobs.KeepUp do
   main checkout for test: a stale seed made a seat's first test run compile the whole app and
   outlast menard's tool wall. A repo's warm holds a lock while it compiles, so the next
   pass's warm skips it rather than compile one `_build` twice.
-  Each compile is bounded at 15 minutes. A tip is tried once: a failure is logged, and the next tip
-  tries again, so a red main costs one compile, not one every pass. A git that won't run warms
-  nothing (the repo pass reports it).
+  Each compile is bounded at 15 minutes.
+
+  A project is skipped, not built, when its `mix.lock` locks dependencies and it has no `deps/`
+  directory, or when its compile says its dependencies are not available: fetching would write into
+  the human's checkout and use the network, and a checkout nobody has built is not one seats are
+  built from. A project with no dependencies compiles as always. The skip is checked again every
+  pass. While it holds, a keyed note says to run `mix deps.get` there: posted again after a restart
+  (the row is durable, the note is not), never twice in a run; it clears when the project warms or
+  its repo is no longer a project's.
+
+  A tip is tried once, across restarts: `Server.Home.Keep` holds, per project, `"<sha> ok"` or
+  `"<sha> failed\n<last lines of the compiler's output>"`, so a red main costs one compile, not one
+  every pass or restart, and its note is posted again from the row. The next tip tries again. A git that won't
+  run warms nothing (the repo pass reports it).
   """
+  @spec warm_test_builds([String.t()], (String.t(), [String.t()], keyword() -> {String.t(), integer()})) :: :ok
   def warm_test_builds(repos, run \\ &Server.Cmd.run/3) do
     for repo <- repos,
         {sha, 0} <- [head(repo, run)],
-        key = {__MODULE__, :warm, repo},
-        :persistent_term.get(key, nil) != sha,
-        lock = {key, self()},
+        lock = {{__MODULE__, :warm, repo}, self()},
         :global.set_lock(lock, [node()], 0) do
       try do
-        compile_for_test(repo, run)
-        :persistent_term.put(key, sha)
+        for dir <- mix_dirs(repo), do: warm(dir, String.trim(sha), run)
       after
         :global.del_lock(lock, [node()])
       end
     end
 
+    forget_gone(repos)
     :ok
   end
 
@@ -327,17 +343,6 @@ defmodule Server.Jobs.KeepUp do
     _ -> :error
   end
 
-  # the projects whose compile failed, each logged
-  defp compile_for_test(repo, run) do
-    for mix <- Path.wildcard(Path.join(repo, "mix.exs")) ++ Path.wildcard(Path.join(repo, "*/mix.exs")),
-        dir = Path.dirname(mix),
-        {out, code} = compile(dir, run),
-        code != 0 do
-      Logger.warning("keep_up: the test build of #{dir} failed (exit #{code}): #{String.slice(out, -300, 300)}")
-      dir
-    end
-  end
-
   defp compile(dir, run) do
     # timeout wraps mix itself, so on expiry it signals the compiling VM, not only mise
     run.("mise", ["exec", "--", "timeout", "900", "mix", "compile"],
@@ -354,5 +359,99 @@ defmodule Server.Jobs.KeepUp do
   defp unfollowed(repo) do
     Server.Rollout.clear({:off_main, repo})
     Server.Rollout.clear({:drift, repo})
+  end
+
+  defp warm(dir, sha, run) do
+    # Home.Keep is the only durable key-value store the server has; its name says home, not what it holds
+    state = Home.Keep.get("keep_up:warm:#{dir}")
+
+    cond do
+      state == "#{sha} ok" -> :ok
+      is_binary(state) and String.starts_with?(state, "#{sha} failed") -> present(dir, state)
+      true -> settle(dir, state, outcome(dir, sha, run))
+    end
+  end
+
+  defp outcome(dir, sha, run) do
+    if deps_missing?(dir) do
+      "skip"
+    else
+      case build(dir, run) do
+        :ok -> "#{sha} ok"
+        :skip -> "skip"
+        {:failed, lines} -> "#{sha} failed\n#{lines}"
+      end
+    end
+  end
+
+  defp settle(dir, state, body) do
+    if body != state, do: Home.Keep.put("keep_up:warm:#{dir}", body)
+
+    if String.ends_with?(body, " ok") do
+      :persistent_term.erase({__MODULE__, :noted, dir})
+      Server.Rollout.clear("keep_up:warm:#{dir}")
+    else
+      present(dir, body)
+    end
+  end
+
+  # posted once per run (a note dismissed since stays dismissed), and again after a restart
+  defp present(dir, body) do
+    text = note_text(dir, body)
+
+    if :persistent_term.get({__MODULE__, :noted, dir}, nil) != text do
+      Server.Rollout.note("keep_up:warm:#{dir}", text)
+      :persistent_term.put({__MODULE__, :noted, dir}, text)
+    end
+  end
+
+  defp note_text(dir, "skip"),
+    do:
+      "the test build of #{dir} is not warmed: its dependencies are not fetched (run `mix deps.get` there), or it is not a checkout seats are built from"
+
+  defp note_text(dir, body) do
+    [head, lines] = String.split(body, "\n", parts: 2)
+    [sha, "failed"] = String.split(head, " ")
+    "the test build of #{dir} failed at #{String.slice(sha, 0, 7)}:\n#{lines}"
+  end
+
+  defp deps_missing?(dir) do
+    locked? =
+      case File.read(Path.join(dir, "mix.lock")) do
+        {:ok, lock} -> lock =~ ~s(%{")
+        {:error, _} -> false
+      end
+
+    locked? and not File.dir?(Path.join(dir, "deps"))
+  end
+
+  defp build(dir, run) do
+    case compile(dir, run) do
+      {_, 0} ->
+        :ok
+
+      {out, _code} ->
+        if out =~ @missing_deps do
+          :skip
+        else
+          {:failed, out |> String.split("\n", trim: true) |> Enum.take(-5) |> Enum.join("\n")}
+        end
+    end
+  end
+
+  defp mix_dirs(repo) do
+    for mix <- Path.wildcard(Path.join(repo, "mix.exs")) ++ Path.wildcard(Path.join(repo, "*/mix.exs")),
+        do: Path.dirname(mix)
+  end
+
+  defp forget(dir, key) do
+    :persistent_term.erase({__MODULE__, :noted, dir})
+    Server.Rollout.clear(key)
+  end
+
+  defp forget_gone(repos) do
+    for %{key: "keep_up:warm:" <> dir = key} <- Server.Rollout.pending(),
+        not Enum.any?(repos, &(dir == &1 or String.starts_with?(dir, &1 <> "/"))),
+        do: forget(dir, key)
   end
 end

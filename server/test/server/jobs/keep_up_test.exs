@@ -447,28 +447,110 @@ defmodule Server.Jobs.KeepUpTest do
       assert_received {:ran, "mise"}
     end
 
-    test "a failed compile is logged and not repeated on the same tip" do
+    defp warm_repo(lock) do
       repo = Path.join(System.tmp_dir!(), "warm-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(repo)
       File.write!(Path.join(repo, "mix.exs"), "")
+      if lock, do: File.write!(Path.join(repo, "mix.lock"), ~s(%{"jason": {:hex, :jason, "1.4.4"}}))
       on_exit(fn -> File.rm_rf!(repo) end)
+      repo
+    end
+
+    defp warm_run(sha, out, code) do
       test = self()
 
-      run = fn code ->
-        fn
-          "git", _, _ ->
-            {"ccc\n", 0}
+      fn
+        "git", _, _ ->
+          {sha <> "\n", 0}
 
-          exe, _, _ ->
-            send(test, {:ran, exe})
-            {"boom", code}
-        end
+        exe, _, _ ->
+          send(test, {:ran, exe})
+          {out, code}
       end
+    end
 
-      assert ExUnit.CaptureLog.capture_log(fn -> KeepUp.warm_test_builds([repo], run.(1)) end) =~ "boom"
+    defp dismiss_notes, do: for(n <- Rollout.pending(), do: Rollout.dismiss(n.id))
+
+    defp restart(repo) do
+      dismiss_notes()
+      :persistent_term.erase({KeepUp, :noted, repo})
+    end
+
+    test "a failed compile is one note of the compiler's last lines, tried once per tip across a restart" do
+      repo = warm_repo(false)
+      out = Enum.map_join(1..8, "\n", &"error line #{&1}")
+
+      KeepUp.warm_test_builds([repo], warm_run("ccc", out, 1))
       assert_received {:ran, "mise"}
-      KeepUp.warm_test_builds([repo], run.(0))
+      assert [%{text: text}] = notes(repo)
+      assert text =~ "error line 8"
+      assert text =~ "error line 4"
+      refute text =~ "error line 3"
+
+      dismiss_notes()
+      KeepUp.warm_test_builds([repo], warm_run("ccc", out, 0))
       refute_received {:ran, _}
+      assert notes(repo) == []
+
+      restart(repo)
+      KeepUp.warm_test_builds([repo], warm_run("ccc", out, 0))
+      refute_received {:ran, _}
+      assert [%{text: text}] = notes(repo)
+      assert text =~ "error line 8"
+
+      KeepUp.warm_test_builds([repo], warm_run("ddd", out, 1))
+      assert_received {:ran, "mise"}
+      assert [_one] = notes(repo)
+    end
+
+    test "deps not fetched: no compile, one note, nothing more across passes and a restart, cleared once it warms" do
+      repo = warm_repo(true)
+
+      KeepUp.warm_test_builds([repo], warm_run("eee", "", 0))
+      refute_received {:ran, _}
+      assert [%{text: text}] = notes(repo)
+      assert text =~ "mix deps.get"
+
+      KeepUp.warm_test_builds([repo], warm_run("eee", "", 0))
+      dismiss_notes()
+      KeepUp.warm_test_builds([repo], warm_run("eee", "", 0))
+      assert notes(repo) == []
+
+      restart(repo)
+      KeepUp.warm_test_builds([repo], warm_run("eee", "", 0))
+      refute_received {:ran, _}
+      assert [%{text: ^text}] = notes(repo)
+
+      File.mkdir_p!(Path.join(repo, "deps"))
+      KeepUp.warm_test_builds([repo], warm_run("eee", "", 0))
+      assert_received {:ran, "mise"}
+      assert notes(repo) == []
+    end
+
+    test "a compile that says its dependencies are not available is the skip, not a failed build" do
+      repo = warm_repo(false)
+
+      KeepUp.warm_test_builds(
+        [repo],
+        warm_run(
+          "fff",
+          "Unchecked dependencies for environment test:\n* jason (Hex package)\n  the dependency is not available",
+          1
+        )
+      )
+
+      assert_received {:ran, "mise"}
+      assert [%{text: text}] = notes(repo)
+      assert text =~ "not warmed"
+    end
+
+    test "a repo that is no longer a project's has its note cleared" do
+      repo = warm_repo(true)
+      KeepUp.warm_test_builds([repo], warm_run("ggg", "", 0))
+      assert [_one] = notes(repo)
+
+      KeepUp.warm_test_builds([], warm_run("ggg", "", 0))
+      assert notes(repo) == []
     end
   end
 end
