@@ -48,6 +48,14 @@ defmodule Server.Jobs.SmokeTest do
     assert File.read!(Server.Repo.reload!(job).meta["log"]) =~ "never answered"
   end
 
+  test "a queued smoke about a thread ends quietly without running the script", %{logs: logs} do
+    {:ok, job} = %{thread_id: 7, ref: @sha} |> Server.Jobs.Smoke.new() |> Oban.insert()
+
+    assert %{success: 1, failure: 0, discard: 0} = Oban.drain_queue(queue: :smoke)
+    assert Server.Repo.reload!(job).state == "completed"
+    refute File.exists?(logs)
+  end
+
   test "the log lands in the smoke's state dir, not the OS tmp dir", %{logs: logs} do
     {:ok, job} = Smoke.queue_candidate(@sha)
     assert %{success: 1} = Oban.drain_queue(queue: :smoke)

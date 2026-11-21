@@ -17,6 +17,9 @@ defmodule Server.Jobs.Smoke do
     end
   end
 
+  # a smoke about a thread is not run; quiet, so its ending posts no line on that thread
+  def perform(%Oban.Job{args: %{"thread_id" => _}}), do: {:ok, :quiet}
+
   # the service runs under systemd, whose PATH has no mise shims: the script's bare `mix`/`bun` are
   # found through `mise exec`, from the checkout whose mise.toml pins them
   @doc false
