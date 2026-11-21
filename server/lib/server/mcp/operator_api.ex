@@ -814,7 +814,6 @@ defmodule Server.MCP.OperatorAPI do
 
   defp home_form(conn, {:ok, row}), do: json(conn, 200, row)
   defp home_form(conn, {:error, reason}), do: json(conn, 400, %{error: reason})
-
   defp home_form(conn, :not_found), do: no_route(conn)
 
   defp forecast_until(nil, today), do: {:ok, Date.add(today, 45)}

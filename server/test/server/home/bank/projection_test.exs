@@ -153,6 +153,14 @@ defmodule Server.Home.Bank.ProjectionTest do
       assert f.before_next_deposit.date == @today
     end
 
+    test "a checking account with no transactions of its own forecasts with zero everyday spending" do
+      other = txn(Date.add(@today, -3), 900, "Elsewhere", %{"account_id" => "s1"})
+      f = forecast!(data([other]))
+
+      assert f.everyday == %{expected_daily_cents: 0, low_daily_cents: 0, high_daily_cents: 0, history_days: 0}
+      assert List.last(f.days).expected_cents == 480_000
+    end
+
     test "pending transactions are named as ignored" do
       pending = txn(@today, 900, "Cafe", %{"pending" => true})
       assert :pending_ignored in forecast!(data([pending, base().transactions])).basis.caveats
@@ -363,6 +371,18 @@ defmodule Server.Home.Bank.ProjectionTest do
       h = history!(nil, ~D[2026-11-01], ~D[2026-11-30])
       assert h.count == 5 + 1
       refute Enum.any?(h.largest, &(&1.name == "Other"))
+    end
+
+    test "from after to is a bad range, never a crash" do
+      assert {:error, :bad_range} =
+               Projection.history(data([everyday(5)]), @today, %{match: nil, from: ~D[2026-11-02], to: ~D[2026-11-01]})
+    end
+
+    test "a range inside one empty month gives zeros" do
+      assert {:ok, %{months: [%{month: "2025-03", out_cents: 0, in_cents: 0, count: 0}], count: 0, largest: []} = h} =
+               Projection.history(data([everyday(5)]), @today, %{match: nil, from: ~D[2025-03-05], to: ~D[2025-03-05]})
+
+      assert h.average_out_cents == 0 and h.average_in_cents == 0
     end
 
     test "the five largest" do

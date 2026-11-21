@@ -197,42 +197,11 @@ defmodule Server.Home.Bank.Projection do
   What went out and came in by calendar month from `from` through `to`, for the posted transactions
   (all accounts, transfers left out) whose merchant or name contains `match` in any case (nil is all).
   Months with nothing show zeros; the five largest are by size, either way; the averages are per
-  month of the range.
+  month of the range. `{:error, :bad_range}` when `from` is after `to`.
   """
-  @spec history(data(), Date.t(), query()) :: {:ok, history()}
-  def history(%{transactions: txns}, _today, %{match: match, from: from, to: to}) do
-    needle = match && Recurring.key(match)
-
-    rows =
-      txns
-      |> Recurring.without_transfers()
-      |> Enum.filter(
-        &(not &1.pending and Date.compare(&1.date, from) != :lt and Date.compare(&1.date, to) != :gt and
-            contains?(&1.key, needle))
-      )
-
-    by_month = Enum.group_by(rows, &Date.beginning_of_month(&1.date))
-
-    months =
-      from
-      |> Date.beginning_of_month()
-      |> Stream.iterate(&Date.shift(&1, month: 1))
-      |> Enum.take_while(&(Date.compare(&1, to) != :gt))
-
-    entries = Enum.map(months, &month(&1, Map.get(by_month, &1, [])))
-
-    {:ok,
-     %{
-       months: entries,
-       count: length(rows),
-       largest:
-         rows
-         |> Enum.sort_by(&abs(&1.cents), :desc)
-         |> Enum.take(5)
-         |> Enum.map(&%{date: &1.date, name: &1.label, amount_cents: -&1.cents}),
-       average_out_cents: -per(-Enum.sum(Enum.map(entries, & &1.out_cents)), length(entries)),
-       average_in_cents: per(Enum.sum(Enum.map(entries, & &1.in_cents)), length(entries))
-     }}
+  @spec history(data(), Date.t(), query()) :: {:ok, history()} | {:error, :bad_range}
+  def history(data, _today, %{from: from, to: to} = query) do
+    if Date.compare(from, to) == :gt, do: {:error, :bad_range}, else: months_of(data, query)
   end
 
   @doc "The recurring outflow series for display, by next date: amounts are signed, `was_cents` the price before a change."
@@ -563,5 +532,40 @@ defmodule Server.Home.Bank.Projection do
     |> Enum.sort(:desc)
     |> Enum.take(3)
     |> Enum.map(&elem(&1, 1))
+  end
+
+  defp months_of(%{transactions: txns}, %{match: match, from: from, to: to}) do
+    needle = match && Recurring.key(match)
+
+    rows =
+      txns
+      |> Recurring.without_transfers()
+      |> Enum.filter(
+        &(not &1.pending and Date.compare(&1.date, from) != :lt and Date.compare(&1.date, to) != :gt and
+            contains?(&1.key, needle))
+      )
+
+    by_month = Enum.group_by(rows, &Date.beginning_of_month(&1.date))
+
+    months =
+      from
+      |> Date.beginning_of_month()
+      |> Stream.iterate(&Date.shift(&1, month: 1))
+      |> Enum.take_while(&(Date.compare(&1, to) != :gt))
+
+    entries = Enum.map(months, &month(&1, Map.get(by_month, &1, [])))
+
+    {:ok,
+     %{
+       months: entries,
+       count: length(rows),
+       largest:
+         rows
+         |> Enum.sort_by(&abs(&1.cents), :desc)
+         |> Enum.take(5)
+         |> Enum.map(&%{date: &1.date, name: &1.label, amount_cents: -&1.cents}),
+       average_out_cents: -per(-Enum.sum(Enum.map(entries, & &1.out_cents)), length(entries)),
+       average_in_cents: per(Enum.sum(Enum.map(entries, & &1.in_cents)), length(entries))
+     }}
   end
 end

@@ -245,7 +245,7 @@ defmodule Server.Home.Bank do
   def what_if(changes, until, today \\ local_today()), do: projected(&Projection.what_if(&1, today, changes, until))
 
   @doc "What went out and came in by month for a query (`Server.Home.Bank.Projection.history/3`)."
-  @spec history(Projection.query(), Date.t()) :: {:ok, Projection.history()} | {:error, :no_data}
+  @spec history(Projection.query(), Date.t()) :: {:ok, Projection.history()} | {:error, :no_data | :bad_range}
   def history(query, today \\ local_today()), do: projected(&Projection.history(&1, today, query))
 
   @doc "The recurring charges for display (`Server.Home.Bank.Projection.subscriptions/2`)."
