@@ -174,7 +174,7 @@
       "id": 4,
       "kind": "reminder",
       "text": "take the bins out",
-      "in_days": 1,
+      "in_days": 0,
       "at": "18:00",
       "every": "week"
     },
@@ -190,9 +190,25 @@
       "id": 6,
       "kind": "reminder",
       "text": "water the plant",
-      "in_days": 3,
+      "in_days": 5,
       "at": "10:00",
       "every": "week"
+    },
+    {
+      "id": 7,
+      "kind": "reminder",
+      "text": "do the laundry",
+      "in_days": 2,
+      "at": "10:00",
+      "every": "week"
+    },
+    {
+      "id": 8,
+      "kind": "reminder",
+      "text": "feed the cat",
+      "in_days": 2,
+      "at": "08:00",
+      "every": "2 day"
     }
   ],
   "notes": [

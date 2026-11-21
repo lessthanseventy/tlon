@@ -640,7 +640,8 @@ static func _bowls(s: Pen, d: Dictionary) -> void:
 		var which := "food" if i == 0 else "water"
 		var at := Vector2(0.28, 0.72) if i == 0 else Vector2(0.72, 0.28)
 		s.ell(at.x, at.y, 6.0, 3.0, 0.0, Color("4a5a78"))
-		s.ell(at.x, at.y, 4.8, 2.3, 1.0, Color("8aa0c8"))
+		var inside := Color("2a3042") if d.get("chore", false) and lvl[which] <= 0.05 else Color("8aa0c8")
+		s.ell(at.x, at.y, 4.8, 2.3, 1.0, inside)
 		var lv: float = lvl[which]
 		if lv > 0.05:
 			var fill := Color("c9a86a") if i == 0 else Color("7fb8e0")

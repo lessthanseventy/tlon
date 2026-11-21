@@ -94,7 +94,7 @@ func _today(box: VBoxContainer) -> void:
 		var at: float = -1.0 if m.get("all_day", false) else home._local(str(m["starts_at"]))
 		entries.append({"at": at, "meeting": m})
 	for item in home.coming:
-		if item.get("due_at") == null:
+		if item.get("due_at") == null or home.chore_thing_of(int(item["id"])) != "":
 			continue
 		var at: float = home._due(item)
 		if Time.get_date_string_from_unix_time(int(at)) == today:
@@ -161,7 +161,10 @@ static func _put_time(row: Blocks.Row, text: String) -> void:
 
 func _open(box: VBoxContainer) -> void:
 	var skip := _in_now()
-	var rows: Array = home.open.filter(func(i: Dictionary) -> bool: return int(i["id"]) not in skip)
+	var rows: Array = home.open.filter(
+		func(i: Dictionary) -> bool:
+			return int(i["id"]) not in skip and home.chore_thing_of(int(i["id"])) == ""
+	)
 	if rows.is_empty():
 		return
 	heading(box, "Open")
@@ -181,8 +184,11 @@ func _later(box: VBoxContainer) -> void:
 	var rows: Array = home.coming.filter(
 		func(i: Dictionary) -> bool:
 			return (
-				i.get("due_at") == null
-				or Time.get_date_string_from_unix_time(int(home._due(i))) != today
+				home.chore_thing_of(int(i["id"])) == ""
+				and (
+					i.get("due_at") == null
+					or Time.get_date_string_from_unix_time(int(home._due(i))) != today
+				)
 			)
 	)
 	if rows.is_empty():

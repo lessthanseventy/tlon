@@ -24,6 +24,7 @@ const LocalList := preload("res://local_list.gd")
 const ReaderClaude := preload("res://reader_claude.gd")
 const Telegram := preload("res://telegram.gd")
 const Wttr := preload("res://wttr.gd")
+const Chores := preload("res://chores.gd")
 
 # false in a staged or scripted run: nothing is sent to Claude or anywhere else
 var talk_live := false
@@ -46,6 +47,10 @@ var _forecast_arg: Variant = null
 var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": null}
 var _skip: Array = []
 var _again := false
+# writes answered; the write a read began after; the latest read begun after a write that came
+var _writes := 0
+var _poll_gen := 0
+var _loaded_gen := -1
 var _demo_ids := 1000
 var _demo_rows: Array = []
 var _decorate: Control
@@ -864,6 +869,7 @@ func _write(path: String, body: Dictionary, ok: Callable = Callable()) -> void:
 		func(reached: bool, code: int, parsed: Variant) -> void:
 			_sidebar.set_reachable(reached)
 			if reached:
+				_writes += 1
 				_refresh()
 			if reached and code == 200:
 				if ok.is_valid():
@@ -1193,6 +1199,7 @@ func _poll() -> void:
 	if _busy or _probing:
 		return
 	_busy = true
+	_poll_gen = _writes
 	_backend.fetch("/api/home", _on_polled, 4.0)
 
 
@@ -1215,6 +1222,8 @@ func _on_polled(reached: bool, code: int, body: Variant) -> void:
 	_sidebar.set_reachable(ok)
 	if ok:
 		_apply(_data)
+		_loaded_gen = maxi(_loaded_gen, _poll_gen)
+		_room.home.chore_reload(_loaded_gen)
 
 
 
@@ -1307,15 +1316,40 @@ func _on_watch(reached: bool, code: int, body: Variant) -> void:
 
 
 func _remove(id: int) -> void:
-	_room.home.tick_off(id)
+	var chore: bool = _demo and _room.home.chore_thing_of(id) != ""
+	_room.home.tick_off(id, -1 if _demo else _writes)
 	var at := Time.get_datetime_string_from_system(true) + "Z"
 	for t in _data["open"]:
 		if int(t["id"]) == id and _data.get("done") is Array:
 			_data["done"] = [{"text": t["text"], "done_at": at}] + _data["done"]
+	if chore:
+		_demo_repeat(id)
 	var kept: Array = _data["open"].filter(func(t): return int(t["id"]) != id)
 	_data["open"] = kept
 	_data["done_week"] = int(_data.get("done_week", 0)) + 1
 	_apply(_data)
+	_room.home.chore_reload(_loaded_gen)
+
+
+# the demo has no server to move a repeating chore to its next time
+func _demo_repeat(id: int) -> void:
+	for key in ["open", "coming"]:
+		for row in _data[key]:
+			if int(row["id"]) != id:
+				continue
+			var gap: float = Chores.interval(str(row["every"]))
+			if gap <= 0.0:
+				return
+			var due := Time.get_unix_time_from_datetime_string(str(row["due_at"]).trim_suffix("Z"))
+			var now: float = _room.home._now_local() - _room.home._bias()
+			due += gap
+			while due <= now:
+				due += gap
+			row["due_at"] = Time.get_datetime_string_from_unix_time(int(due)) + "Z"
+			row["told_at"] = null
+			_data[key] = _data[key].filter(func(t): return int(t["id"]) != id)
+			_data["coming"] = _data["coming"] + [row]
+			return
 
 
 # `--settings "key=value;scroll;armed=reset"` (keys name cat dog birthday widget), for a picture
