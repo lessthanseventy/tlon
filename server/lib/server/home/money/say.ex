@@ -295,12 +295,18 @@ defmodule Server.Home.Money.Say do
   end
 
   defp entry(%{"ask" => %{"ask" => "history"} = ask, "result" => r}) do
-    what = if ask["match"], do: ~s( matching "#{ask["match"]}"), else: ""
+    what =
+      case ask["match"] do
+        nil -> ""
+        [_ | _] = names -> " matching " <> Enum.map_join(names, ", ", &~s("#{&1}"))
+        name -> ~s( matching "#{name}")
+      end
 
     largest =
       r["largest"] |> Enum.take(3) |> Enum.map_join("; ", &"#{&1["name"]} #{abs_text(&1)} on #{day(&1["date"])}")
 
     "From #{day(ask["from"])} to #{day(ask["to"])}#{what}: #{r["count"]} transactions, on average #{r["average_out_cents_text"]} out and #{r["average_in_cents_text"]} in a month." <>
+      counted(r["merchants"]) <>
       if(largest == "", do: "", else: " Largest: #{largest}.")
   end
 
@@ -384,5 +390,17 @@ defmodule Server.Home.Money.Say do
       nil -> text
       pattern -> drop_leading(Regex.replace(pattern, text, "", global: false), List.delete(patterns, pattern))
     end
+  end
+
+  defp counted([]), do: ""
+
+  defp counted(merchants) do
+    " Counted: " <> Enum.map_join(merchants, "; ", &"#{&1["name"]} #{totals(&1)}") <> "."
+  end
+
+  defp totals(m) do
+    [{m["out_cents"], "out"}, {m["in_cents"], "in"}]
+    |> Enum.reject(fn {cents, _way} -> cents == 0 end)
+    |> Enum.map_join(", ", fn {cents, way} -> "#{Bank.money(abs(cents))} #{way}" end)
   end
 end

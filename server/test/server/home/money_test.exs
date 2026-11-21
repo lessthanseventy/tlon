@@ -149,6 +149,26 @@ defmodule Server.Home.MoneyTest do
       assert history.call == {:history, %{match: "groceries", from: ~D[2026-08-01], to: ~D[2026-11-20]}}
     end
 
+    test "a history's match is a string, a list of one to twelve labels, or null" do
+      history = fn match ->
+        JSON.encode!(%{
+          "asks" => [%{"ask" => "history", "match" => match, "from" => "2026-08-01", "to" => "2026-11-20"}]
+        })
+      end
+
+      assert {:ok, [%{call: {:history, %{match: ["Whole Foods", "Trader Joe's"]}}, json: json}]} =
+               Plan.parse(history.([" Whole Foods ", "Trader Joe's"]), @today)
+
+      assert json["match"] == ["Whole Foods", "Trader Joe's"]
+      assert {:ok, [%{call: {:history, %{match: nil}}}]} = Plan.parse(history.(nil), @today)
+
+      for bad <- [[], List.duplicate("a", 13), [""], [" "], [String.duplicate("x", 41)], [1], ["a", nil], %{"a" => 1}] do
+        assert :error = Plan.parse(history.(bad), @today), inspect(bad)
+      end
+
+      assert {:ok, _} = Plan.parse(history.(List.duplicate("a", 12)), @today)
+    end
+
     test "a cannot is its sentence" do
       assert {:cannot, "That is not about your money."} =
                Plan.parse(~s(sure {"cannot": " That is not about your money. "}), @today)
@@ -430,6 +450,20 @@ defmodule Server.Home.MoneyTest do
       assert answer.reply =~ "The horizon was cut to 180 days"
     end
 
+    test "a history over named merchants is given the labels and answers with what it counted" do
+      store()
+      history = %{"ask" => "history", "match" => ["Rent", "shop 1"], "from" => "2026-08-01", "to" => "2026-11-20"}
+
+      {answer, [plan_prompt, phrase_prompt]} = ask("what did I spend on housing?", [plan([history]), {:error, :down}])
+
+      assert plan_prompt =~ ~s("merchants":[)
+      assert plan_prompt =~ ~s("Shop 1")
+      assert phrase_prompt =~ ~s("match":["Rent","shop 1"])
+      assert phrase_prompt =~ ~s("merchants":[{)
+      assert answer.reply =~ ~s(matching "Rent", "shop 1")
+      assert answer.reply =~ "Counted: Rent $3,600 out"
+    end
+
     test "the judge is called only for a purchase or a name not found" do
       store()
       forecast = %{"ask" => "forecast", "until" => "2026-12-20"}
@@ -674,7 +708,7 @@ defmodule Server.Home.MoneyTest do
     source = Enum.map_join(files, "\n", &File.read!/1)
 
     used = ~r/\bBank\.([a-z_]+)/ |> Regex.scan(source) |> Enum.map(&List.last/1) |> Enum.uniq() |> Enum.sort()
-    assert used -- ~w(forecast afford what_if history subscriptions summary today money) == []
+    assert used -- ~w(forecast afford what_if history subscriptions summary today money merchants) == []
 
     for forbidden <- ~w(Repo Bank.Plaid Proposals Source. Bank.Transaction Bank.refresh) do
       refute String.contains?(source, forbidden), "#{forbidden} is referenced by the money chat"

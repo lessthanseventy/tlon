@@ -41,6 +41,7 @@ defmodule Server.Home.Bank.Projection do
 
   @cap 180
   @window 90
+  @labels 60
   @month 30
   @afford_days 60
   @cushion_days 7
@@ -114,11 +115,13 @@ defmodule Server.Home.Bank.Projection do
           changed: forecast(),
           difference: %{end_cents: integer(), lowest_cents: integer()}
         }
-  @type query :: %{match: String.t() | nil, from: Date.t(), to: Date.t()}
+  @type query :: %{match: String.t() | [String.t()] | nil, from: Date.t(), to: Date.t()}
   @type month :: %{month: String.t(), out_cents: integer(), in_cents: integer(), count: non_neg_integer()}
+  @type counted :: %{name: String.t(), out_cents: integer(), in_cents: integer(), count: pos_integer()}
   @type history :: %{
           months: [month()],
           count: non_neg_integer(),
+          merchants: [counted()],
           largest: [%{date: Date.t(), name: String.t(), amount_cents: integer()}],
           average_out_cents: integer(),
           average_in_cents: integer()
@@ -238,13 +241,32 @@ defmodule Server.Home.Bank.Projection do
 
   @doc """
   What went out and came in by calendar month from `from` through `to`, for the posted transactions
-  (all accounts, transfers left out) whose merchant or name contains `match` in any case (nil is all).
-  Months with nothing show zeros; the five largest are by size, either way; the averages are per
-  month of the range. `{:error, :bad_range}` when `from` is after `to`.
+  (all accounts, transfers left out) whose merchant or name contains `match` in any case (nil is all;
+  a list is any of its strings). Months with nothing show zeros; the five largest are by size, either
+  way; the averages are per month of the range. `merchants` names the merchants a `match` counted with
+  their totals, the eight biggest (empty when `match` is nil). `{:error, :bad_range}` when `from` is
+  after `to`.
   """
   @spec history(data(), query()) :: {:ok, history()} | {:error, :bad_range}
   def history(data, %{from: from, to: to} = query) do
     if Date.compare(from, to) == :gt, do: {:error, :bad_range}, else: months_of(data, query)
+  end
+
+  @doc """
+  The distinct merchant labels of the posted transactions (transfers left out) of the last #{@window}
+  days up to `today`, the most frequent first, at most #{@labels}, each at most 40 characters.
+  """
+  @spec merchants(data(), Date.t()) :: [String.t()]
+  def merchants(%{transactions: txns}, today) do
+    from = Date.add(today, 1 - @window)
+
+    txns
+    |> Recurring.without_transfers()
+    |> Enum.filter(&(not &1.pending and Date.compare(&1.date, from) != :lt and Date.compare(&1.date, today) != :gt))
+    |> Enum.group_by(& &1.key)
+    |> Enum.sort_by(fn {key, rows} -> {-length(rows), key} end)
+    |> Enum.take(@labels)
+    |> Enum.map(fn {_key, [row | _]} -> Recurring.line(row.label, 40) end)
   end
 
   @doc "The recurring outflow series for display, by next date: amounts are signed, `was_cents` the price before a change."
@@ -270,7 +292,28 @@ defmodule Server.Home.Bank.Projection do
   end
 
   defp contains?(_key, nil), do: true
-  defp contains?(key, needle), do: String.contains?(key, needle)
+  defp contains?(key, needles), do: Enum.any?(needles, &String.contains?(key, &1))
+
+  defp needles(nil), do: nil
+  defp needles(match) when is_binary(match), do: [Recurring.key(match)]
+  defp needles(matches) when is_list(matches), do: matches |> Enum.map(&Recurring.key/1) |> Enum.reject(&(&1 == ""))
+
+  defp counted(rows) do
+    rows
+    |> Enum.group_by(& &1.key)
+    |> Enum.map(fn {_key, [row | _] = group} ->
+      {out, into} = Enum.split_with(group, &(&1.cents > 0))
+
+      %{
+        name: row.label,
+        out_cents: -Enum.sum(Enum.map(out, & &1.cents)),
+        in_cents: -Enum.sum(Enum.map(into, & &1.cents)),
+        count: length(group)
+      }
+    end)
+    |> Enum.sort_by(&{-(abs(&1.out_cents) + &1.in_cents), &1.name})
+    |> Enum.take(8)
+  end
 
   defp month(first, rows) do
     {out, into} = Enum.split_with(rows, &(&1.cents > 0))
@@ -613,7 +656,7 @@ defmodule Server.Home.Bank.Projection do
   end
 
   defp months_of(%{transactions: txns}, %{match: match, from: from, to: to}) do
-    needle = match && Recurring.key(match)
+    needle = needles(match)
 
     rows =
       txns
@@ -637,6 +680,7 @@ defmodule Server.Home.Bank.Projection do
      %{
        months: entries,
        count: length(rows),
+       merchants: if(needle, do: counted(rows), else: []),
        largest:
          rows
          |> Enum.sort_by(&abs(&1.cents), :desc)

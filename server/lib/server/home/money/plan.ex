@@ -5,7 +5,8 @@ defmodule Server.Home.Money.Plan do
   `{"ask": "summary"}`, `{"ask": "subscriptions"}`, `{"ask": "forecast", "until": date}`,
   `{"ask": "afford", "amount_cents": n, "on": date | null}`,
   `{"ask": "what_if", "until": date, "changes": [change, ...]}` or
-  `{"ask": "history", "match": text | null, "from": date, "to": date}`, with a change one of
+  `{"ask": "history", "match": text | [text, ...] | null, "from": date, "to": date}` (a list is one to
+  twelve merchant labels of one to forty characters, any of which matches), with a change one of
   `{"kind": "one_off", "amount_cents": n, "on": date, "name": s}` (a negative amount is money in),
   `{"kind": "recurring", "amount_cents": n, "rhythm": "weekly" | "fortnightly" | "monthly" |
   "yearly", "from": date, "name": s}`, `{"kind": "drop", "name": s}` or
@@ -21,6 +22,8 @@ defmodule Server.Home.Money.Plan do
   @max_changes 10
   @max_cents 100_000_000
   @max_name 80
+  @max_matches 12
+  @max_label 40
   @horizon 365
   @past 3_650
   @rhythms %{"weekly" => :weekly, "fortnightly" => :fortnightly, "monthly" => :monthly, "yearly" => :yearly}
@@ -171,7 +174,31 @@ defmodule Server.Home.Money.Plan do
   defp date(_other, _first, _last), do: :error
 
   defp match(nil), do: {:ok, nil}
+
+  defp match(texts) when is_list(texts) and length(texts) in 1..@max_matches//1 do
+    texts
+    |> Enum.map(&label/1)
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, text}, {:ok, acc} -> {:cont, {:ok, [text | acc]}}
+      :error, _acc -> {:halt, :error}
+    end)
+    |> case do
+      {:ok, parsed} -> {:ok, Enum.reverse(parsed)}
+      :error -> :error
+    end
+  end
+
+  defp match(texts) when is_list(texts), do: :error
   defp match(text), do: name(text)
+
+  defp label(text) when is_binary(text) do
+    case String.trim(text) do
+      label when byte_size(label) in 1..@max_label//1 -> {:ok, label}
+      _ -> :error
+    end
+  end
+
+  defp label(_other), do: :error
 
   defp name(text) when is_binary(text) do
     case String.trim(text) do

@@ -254,6 +254,10 @@ defmodule Server.Home.Bank do
   @spec history(Projection.query()) :: {:ok, Projection.history()} | {:error, :no_data | :bad_range}
   def history(query), do: projected(&Projection.history(&1, query))
 
+  @doc "The merchant labels of the last 90 days, most frequent first (`Server.Home.Bank.Projection.merchants/2`)."
+  @spec merchants(Date.t()) :: {:ok, [String.t()]} | {:error, :no_data}
+  def merchants(today \\ local_today()), do: projected(&{:ok, Projection.merchants(&1, today)})
+
   @doc "The recurring charges for display (`Server.Home.Bank.Projection.subscriptions/2`)."
   @spec subscriptions(Date.t()) :: {:ok, [Projection.subscription()]} | {:error, :no_data}
   def subscriptions(today \\ local_today()), do: projected(&{:ok, Projection.subscriptions(&1, today)})

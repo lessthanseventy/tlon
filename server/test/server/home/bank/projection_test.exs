@@ -602,6 +602,41 @@ defmodule Server.Home.Bank.ProjectionTest do
       ]
     end
 
+    test "a list of matches is any-of, and the merchants counted are named with their totals" do
+      h = history!(["cafe refund", "move out", "no such store"], ~D[2026-09-01], ~D[2026-11-30])
+      assert h.count == 1
+      assert h.merchants == [%{name: "Corner Cafe refund", out_cents: 0, in_cents: 500, count: 1}]
+
+      both = history!(["corner cafe", "shop 1"], ~D[2026-09-01], ~D[2026-11-30])
+      assert both.count == history!("corner cafe", ~D[2026-09-01], ~D[2026-11-30]).count + 1
+      assert [%{out_cents: -4_000, count: 2} = top | _] = both.merchants
+      assert String.downcase(top.name) == "corner cafe"
+      assert history!(nil, ~D[2026-09-01], ~D[2026-11-30]).merchants == []
+      assert history!([], ~D[2026-09-01], ~D[2026-11-30]).count == 0
+    end
+
+    test "merchants lists labels of the last 90 days by frequency, capped, transfers and old rows out" do
+      shops =
+        for i <- 1..70, do: txn(Date.add(@today, -1 - rem(i, 80)), 500, "Store #{String.pad_leading("#{i}", 2, "0")}")
+
+      often = for d <- 1..5, do: txn(Date.add(@today, -d), 300, "Daily Bread")
+      old = txn(Date.add(@today, -91), 500, "Long Ago")
+      pending = txn(@today, 500, "Pending Place", %{"pending" => true})
+      long = txn(@today, 500, String.duplicate("x", 60))
+
+      move = [
+        txn(@today, 90_000, "Move out"),
+        txn(@today, -90_000, "Move in", %{"account_id" => "a2"})
+      ]
+
+      labels = Projection.merchants(data([shops, often, old, pending, long, move]), @today)
+
+      assert hd(labels) == "Daily Bread"
+      assert length(labels) == 60
+      refute Enum.any?(labels, &(&1 in ["Long Ago", "Pending Place", "Move out", "Move in"]))
+      assert Enum.all?(labels, &(String.length(&1) <= 40))
+    end
+
     test "buckets by calendar month with the case-insensitive match, out and in apart" do
       h = history!("CAFE", ~D[2026-09-01], ~D[2026-11-30])
 
