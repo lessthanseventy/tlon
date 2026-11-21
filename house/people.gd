@@ -22,6 +22,8 @@ const HEIGHT := 35.0
 # how far up the wall the frame hangs, and how far it stands from it
 const HUNG := 11.0
 const WALL_GAP := 0.08
+# where the frame's lower edge hangs: a piece taller than this stands over its picture
+const BOTTOM := 9.0 + HUNG
 const HILL := Color("6f9c62")
 const SUN := Color("f3d27a")
 const SKIN := Color("e6b48e")
@@ -153,7 +155,7 @@ static func entry() -> Dictionary:
 		"name": "photo frame",
 		"kind": "wall",
 		"anim": false,
-		"faces": ["ne"],
+		"faces": ["ne", "nw"],
 		"tab": "home",
 		"group": "living",
 		"order": 1 * 1000 + 60,
@@ -164,7 +166,12 @@ static func is_frame(p: Dictionary) -> bool:
 	return p["p"] == PIECE
 
 
-# the framed photo hung on its cell's north-east wall; `ribbon` ties a bow on its corner
+# a frame on the north-west wall is drawn with a turned pen, the picture mirrored
+static func turned(p: Dictionary) -> bool:
+	return p["f"] == "nw"
+
+
+# the framed photo hung on a wall; `ribbon` ties a bow on its corner
 static func frame(s: PetThings.Pen, ribbon: bool) -> void:
 	var y := WALL_GAP
 	var up := HUNG

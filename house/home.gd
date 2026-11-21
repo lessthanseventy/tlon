@@ -1974,10 +1974,10 @@ func _draw_frame() -> void:
 		return
 	var c: int = piece["c"]
 	var r: int = piece["r"]
-	var pen := PetThings.Pen.new(room, _p(c, r), _k)
+	var pen := PetThings.Pen.new(room, _p(c, r), _k, People.turned(piece))
 	People.frame(pen, frame_marked())
 	var hull := People.outline(pen)
-	_register("frame", hull, _p(c + 0.5, r + People.WALL_GAP, 9.0 + People.HUNG))
+	_register("frame", hull, pen.p(0.5, People.WALL_GAP, 9.0 + People.HUNG))
 	_hover_outline("frame", hull)
 
 

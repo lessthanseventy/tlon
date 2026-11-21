@@ -38,6 +38,8 @@ func people() -> void:
 	await _offered()
 	_old_cell()
 	await _moved()
+	await _wall()
+	_hidden()
 	await _local()
 
 
@@ -769,6 +771,73 @@ func _moved() -> void:
 		sb.back()
 	h.layout.place({"p": People.PIECE, "f": "ne", "c": home[0], "r": home[1]}, piece, [])
 	h.layout.place(hung, null, [])
+
+
+# the frame hangs on the north-west wall too, mirrored; it is refused where a piece stands over its
+# picture, kept by a save and drawn and clicked where it hangs
+func _wall() -> void:
+	var piece: Dictionary = h.layout.frame()
+	var home := [piece["f"], piece["c"], piece["r"]]
+	s._check(h.layout.entry(People.PIECE)["faces"] == ["ne", "nw"], "decorating offers both walls")
+	var last: Variant = _centre("frame")
+	for row in [[0, 0], [0, 10]]:
+		var at := {"p": People.PIECE, "f": "nw", "c": row[0], "r": row[1]}
+		var why: String = h.layout.place(at, piece, [])
+		s._check(why == "", "the frame can hang at %s on the north-west wall: %s" % [row, why])
+		var from: Variant = last
+		await s._until(
+			func() -> bool:
+				var now: Variant = _centre("frame")
+				return now != null and now != from,
+			"at %s on the north-west wall its hit moves there" % [row]
+		)
+		last = _centre("frame")
+		sb.back()
+		h.click(last)
+		await s._until(
+			func() -> bool: return sb.view == "people", "a click at %s opens People" % [row]
+		)
+		sb.back()
+	for row in [[0, 2], [0, 4]]:
+		var at := {"p": People.PIECE, "f": "nw", "c": row[0], "r": row[1]}
+		s._check(
+			h.layout.check(at, piece, []) != "", "not at %s, behind the television or window" % [row]
+		)
+	var path := "user://soak_frame_wall.json"
+	var l: RefCounted = s._layout()
+	l.path = path
+	l.persist = true
+	l.pieces = h.layout.pieces.duplicate(true)
+	l.save()
+	var back: RefCounted = s._layout()
+	back.path = path
+	back.persist = true
+	s._check(back.load_file(), "the layout with the frame on the north-west wall loads")
+	var kept: Dictionary = back.frame()
+	s._check(
+		not kept.is_empty() and kept["f"] == "nw" and kept["c"] == 0 and kept["r"] == 10,
+		"and keeps it there: %s" % kept
+	)
+	DirAccess.remove_absolute(path)
+	h.layout.place({"p": People.PIECE, "f": home[0], "c": home[1], "r": home[2]}, piece, [])
+
+
+# a piece that hugs the wall, wider than one cell, stands over a frame hung on the cell its far
+# end covers
+func _hidden() -> void:
+	var piece: Dictionary = h.layout.frame()
+	var l: RefCounted = h.layout
+	l.catalogue.append({"key": "soak_hug", "kind": "hug", "faces": ["ne"], "tab": "home"})
+	l.index["soak_hug_ne"] = {"footprint": [2, 1], "height": 40, "file": "none"}
+	l.pieces.append({"p": "soak_hug", "f": "ne", "c": 9, "r": 0})
+	var at := {"p": People.PIECE, "f": "ne", "c": 10, "r": 0}
+	s._check(l.check(at, piece, []) != "", "a frame cannot hang behind a piece hugging that wall")
+	l.pieces = l.pieces.filter(func(o: Dictionary) -> bool: return o["p"] != "soak_hug")
+	s._check(l.check(at, piece, []) == "", "and can once it is gone")
+	l.index.erase("soak_hug_ne")
+	l.catalogue = l.catalogue.filter(func(e: Dictionary) -> bool: return e["key"] != "soak_hug")
+
+
 
 
 # the house's own list keeps people the same way: a person, a note, a to-do that names them

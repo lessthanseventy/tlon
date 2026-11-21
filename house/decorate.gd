@@ -440,7 +440,8 @@ func _piece_at(pos: Vector2) -> Variant:
 
 func _opaque(p: Dictionary, pos: Vector2) -> bool:
 	if People.is_frame(p):
-		var pen := PetThings.Pen.new(room, room._p(room._origin, p["c"], p["r"]), room._k)
+		var origin: Vector2 = room._p(room._origin, p["c"], p["r"])
+		var pen := PetThings.Pen.new(room, origin, room._k, People.turned(p))
 		return Geometry2D.is_point_in_polygon(pos, People.outline(pen))
 	if Money.is_piggy(p):
 		return Geometry2D.is_point_in_polygon(pos, Money.outline(_piggy_pen(p, Color.WHITE)))
@@ -502,8 +503,8 @@ func draw_ghost() -> void:
 		Chores.basket(pen, "fine")
 		return
 	if People.is_frame(p):
-		var pen := PetThings.Pen.new(room, room._p(room._origin, p["c"], p["r"]), room._k, false, tint)
-		People.frame(pen, false)
+		var origin: Vector2 = room._p(room._origin, p["c"], p["r"])
+		People.frame(PetThings.Pen.new(room, origin, room._k, People.turned(p), tint), false)
 		return
 	if Money.is_piggy(p):
 		Money.piggy(_piggy_pen(p, tint), "none")

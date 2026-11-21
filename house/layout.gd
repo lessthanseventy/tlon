@@ -483,7 +483,7 @@ func check(p: Dictionary, skip: Variant, busy: Array) -> String:
 			continue
 		var ok := kind(o)
 		if ok == "wall":
-			if height(p) >= TALL and r.has_point(Vector2i(o["c"], o["r"])):
+			if height(p) >= _clear(o) and r.has_point(Vector2i(o["c"], o["r"])):
 				return NO_ROOM
 		elif r.intersects(rect(o)) and not is_same(o, top):
 			return STAYS if o.has("fixed") else NO_ROOM
@@ -537,7 +537,8 @@ func _check_pet(p: Dictionary, skip: Variant, busy: Array, r: Rect2i) -> String:
 			continue
 		var why := ""
 		if kind(o) == "wall":
-			why = NO_ROOM if height(p) >= TALL and r.has_point(Vector2i(o["c"], o["r"])) else ""
+			if height(p) >= _clear(o) and r.has_point(Vector2i(o["c"], o["r"])):
+				why = NO_ROOM
 		elif PetThings.is_pet(o) and o["p"] == p["p"]:
 			why = ONCE
 		elif r.intersects(rect(o)):
@@ -594,10 +595,18 @@ func _check_wall(p: Dictionary, skip: Variant) -> String:
 		if ok == "wall" or ok == "hug":
 			if o["f"] == p["f"] and o["c"] == p["c"] and o["r"] == p["r"]:
 				return NO_ROOM
+			var over: bool = o["f"] == p["f"] and rect(o).has_point(cell)
+			if ok == "hug" and over and height(o) >= _clear(p):
+				return NO_ROOM
 		elif ok == "floor" and rect(o).has_point(cell):
-			if kind(p) == "hug" or height(o) >= TALL:
+			if kind(p) == "hug" or height(o) >= _clear(p):
 				return STAYS if o.has("fixed") else NO_ROOM
 	return ""
+
+
+# how tall a piece in a wall piece's cell may be before it stands over it
+func _clear(wall: Dictionary) -> float:
+	return People.BOTTOM if People.is_frame(wall) else float(TALL)
 
 
 # every spot and every cell in `busy` can be walked to from the door
