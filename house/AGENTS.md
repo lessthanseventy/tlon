@@ -610,7 +610,8 @@ runs on the local list.
   from `_on_main`; a section that needs more builds it itself and never reads what another left.
   A wait is on the condition the next check needs, with a bound (`_until(done, what)`: it fails the soak
   naming `what` when the bound passes); that nothing happens is a named window (`_quiet`, or `_quiet_frames`
-  for what per-frame code decides). Never a bare `create_timer`. It prints each section's wall time as it
+  for what per-frame code decides): a quiet window proves nothing more happens, it never waits for
+  something to happen. Never a bare `create_timer`. It prints each section's wall time as it
   ends and a table at the end.
 - `mise run house:soak` (about 7 minutes quiet, up to twice that loaded; its own deadline is 15 minutes and the task wraps it in `timeout 1000`, so a caller's wrapper needs at least that) — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
