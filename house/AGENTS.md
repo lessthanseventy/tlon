@@ -236,7 +236,7 @@ runs on the local list.
   /api/home/money/ask {text, thread?}` answers `{reply, figures, thread}`, the thread kept until the view is left, a
   `figures` that holds a forecast (or an afford answer's `with`) drawn as the same strip. The forecast is
   `GET /api/home/money/forecast` (`main.gd` `_fetch_forecast`; null body: "No forecast yet."). Home's Today has one
-  row when a charge is due within `Money.SOON` days (`Money.today_row`, "Rent $1,200 due Fri, and 1 more"). Money is formatted only by `Money.fmt` (`fmt_whole` for an estimate);
+  row when a charge is due within `Money.SOON` days (`Money.today_row` "Rent $1,200 due Fri", the others counted under it by `Money.today_more`, "and 1 more"). Money is formatted only by `Money.fmt` (`fmt_whole` for an estimate);
   there are no budgets, category charts, totals or scores. `soak_money.gd` (section `money`) is its stub server, the
   states, the view, the ask and the room without money.
 - **The room** is 11x11 cells (`Pets.COLS`/`ROWS`, which the home, the room and the walkers all follow; the back walls are column 0 and row 0, so a bigger room grows toward the front and a saved layout loads unchanged) and, in the 1100x700 window beside the sidebar, drawn with the 2x art (`fit_scale`; the 3x art needs a 1072 px area, which a 1450x980 window has). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to

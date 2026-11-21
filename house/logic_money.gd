@@ -133,9 +133,15 @@ func _today_row() -> void:
 	)
 	_eq(
 		Money.today_row(_summary(181500, [["Gym", 3000, 4], ["Rent", 120000, 1]]), TODAY),
-		"Rent $1,200 due tomorrow, and 1 more",
-		"the soonest, and how many more"
+		"Rent $1,200 due tomorrow",
+		"the soonest"
 	)
+	var three := _summary(181500, [["Gym", 3000, 4], ["Rent", 120000, 1], ["Phone", 6500, 2]])
+	_eq(Money.today_more(three, TODAY), "and 2 more", "the others, counted")
+	_eq(
+		Money.today_more(_summary(181500, [["Rent", 120000, 1]]), TODAY), "", "one charge, no count"
+	)
+	_eq(Money.today_more(null, TODAY), "", "no money, no count")
 	_eq(
 		Money.today_row(_summary(181500, [["Rent", 120000, 7]]), TODAY),
 		"",

@@ -107,7 +107,9 @@ func _today(box: VBoxContainer) -> void:
 			entries.append({"at": -1.0, "birthday": p})
 	var due := Money.today_row(home.things.money, today)
 	if due != "":
-		entries.append({"at": -1.0, "money": due})
+		entries.append(
+			{"at": -1.0, "money": due, "more": Money.today_more(home.things.money, today)}
+		)
 	if entries.is_empty():
 		return
 	entries.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return x["at"] < y["at"])
@@ -140,7 +142,7 @@ func _today(box: VBoxContainer) -> void:
 			_put_time(row, "")
 			box.add_child(row)
 		elif e.has("money"):
-			var row := Blocks.Row.new(str(e["money"]), "", false, false, true)
+			var row := Blocks.Row.new(str(e["money"]), str(e["more"]))
 			row.pressed.connect(func() -> void: sb.open_money())
 			_put_time(row, "")
 			box.add_child(row)

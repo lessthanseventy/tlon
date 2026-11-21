@@ -9,6 +9,7 @@ const Money := preload("res://money.gd")
 const MoneyView := preload("res://money_view.gd")
 const BackendLocal := preload("res://backend_local.gd")
 const Blocks := preload("res://blocks.gd")
+const When := preload("res://when.gd")
 const Decorate := preload("res://decorate.gd")
 const LocalSoak := preload("res://soak_local.gd")
 
@@ -88,6 +89,7 @@ func run() -> void:
 	await _ask()
 	await _ask_failed()
 	await _today()
+	await _row_fits()
 	await _cell()
 	await _without()
 	await _local()
@@ -434,9 +436,8 @@ func _today() -> void:
 	for t in _texts(sb._dyn):
 		if t.begins_with("Streaming $15.99 due"):
 			row = t
-	s._check(
-		row.ends_with(", and 1 more"), "a charge due soon has one row in Today: %s" % str(_texts(sb._dyn))
-	)
+	s._check(row != "", "a charge due soon has a row in Today: %s" % str(_texts(sb._dyn)))
+	s._check("and 1 more" in _texts(sb._dyn), "and the others are counted on a line under it")
 	var found: Variant = null
 	for c in sb._dyn.find_children("*", "Control", true, false):
 		if c is Blocks.Row and row in _texts(c):
@@ -518,3 +519,41 @@ func _cell() -> void:
 			"to a cell it may stand on, not the one taken"
 		)
 	h.layout.remove(plant)
+
+
+# the row's lines whole: every line of a label shown, none cut to an ellipsis, none past the pane
+func _whole(text: String) -> bool:
+	for l in sb._dyn.find_children("*", "Label", true, false):
+		if l.text == text:
+			var cut: bool = l.clip_text or l.get_visible_line_count() < l.get_line_count()
+			return not cut and l.get_global_rect().end.x <= sb.get_global_rect().end.x + 0.5
+	return false
+
+
+func _row_fits() -> void:
+	var rows := [
+		[[["Streaming", 1599, 2]], ["Streaming $15.99 due Mon"]],
+		[
+			[["Streaming", 1599, 2], ["Rent", 120000, 4]],
+			["Streaming $15.99 due Mon", "and 1 more"],
+		],
+		[
+			[["Streaming", 1599, 2], ["Rent", 120000, 4], ["Quarterly water and sewer assessment", 48250, 5]],
+			["Streaming $15.99 due Mon", "and 2 more"],
+		],
+		[[["Quarterly water and sewer assessment", 48250, 1]], ["Quarterly water and sewer assessment $482.50 due tomorrow"]],
+	]
+	for want in rows:
+		var due: Array = want[0].map(
+			func(d: Array) -> Dictionary: return {"name": d[0], "amount": d[1], "in_days": d[2]}
+		)
+		var spec := DUE.duplicate(true)
+		spec["due_this_week"] = due
+		await _stage(spec)
+		var texts := _texts(sb._dyn)
+		var lines: Array = want[1].map(
+			func(t: String) -> String: return t.replace("Mon", When.day_word(When.add_days(h.today(), int(due[0]["in_days"])), h.today()))
+		)
+		for line in lines:
+			s._check(line in texts, "%d due: %s is a line of Today: %s" % [due.size(), line, str(texts)])
+			s._check(_whole(line), "%d due: %s is shown whole" % [due.size(), line])

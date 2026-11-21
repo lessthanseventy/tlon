@@ -106,16 +106,19 @@ static func envelope(money: Variant, today: String) -> String:
 	return "short" if roundi(float(have)) < total else "due"
 
 
-# Home's one row in Today, "" when nothing is due soon: "Rent $1,200 due Fri, and 1 more"
+# Home's one row in Today, "" when nothing is due soon: "Rent $1,200 due Fri"
 static func today_row(money: Variant, today: String) -> String:
 	var due := soon(money, today)
 	if due.is_empty():
 		return ""
 	var first: Dictionary = due[0]
-	var text := (
-		"%s %s due %s" % [first["name"], fmt(first["cents"]), When.day_word(first["on"], today)]
-	)
-	return text if due.size() == 1 else "%s, and %d more" % [text, due.size() - 1]
+	return "%s %s due %s" % [first["name"], fmt(first["cents"]), When.day_word(first["on"], today)]
+
+
+# the quieter line under it when more than one charge is due: "and 1 more", else ""
+static func today_more(money: Variant, today: String) -> String:
+	var n := soon(money, today).size() - 1
+	return "and %d more" % n if n > 0 else ""
 
 
 # the days from tomorrow the strip draws: through the next deposit, `STRIP_MIN` to `STRIP_MAX`
