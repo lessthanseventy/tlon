@@ -687,8 +687,18 @@ func _routes(main: Control) -> void:
 	asks = _count("/api/home/pets")
 	main._on_act(1, "done")
 	await _until(func(): return _count("/api/home/pets") > asks, "the ask after the list changed")
+	await _until(
+		func():
+			return (
+				main._pets_nudged.is_stopped()
+				and not main._pets_busy
+				and _requests(main._backend) == 0
+			),
+		"the list's changes applied and the nudged asks answered"
+	)
+	asks = _count("/api/home/pets")
 	await _quiet(0.6)
-	_check(_count("/api/home/pets") == asks + 1, "the open list changing asks once more")
+	_check(_count("/api/home/pets") == asks, "the open list settling asks no more")
 	var first := _last_query("/api/home/pets")
 	_check(
 		first
