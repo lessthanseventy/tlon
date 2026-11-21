@@ -55,15 +55,12 @@ defmodule Server.Home.Bank.ProjectionTest do
       assert f.start_cents == 480_000
 
       assert f.events |> Enum.filter(&(&1.name == "Rent")) |> Enum.map(&{&1.date, &1.amount_cents}) ==
-               Enum.filter([{~D[2026-11-27], -120_000}, {~D[2026-12-27], -120_000}, {~D[2027-01-27], -120_000}], fn {d,
-                                                                                                                     _} ->
-                 Date.compare(d, f.until) != :gt
-               end)
+               [{~D[2026-11-27], -120_000}, {~D[2026-12-27], -120_000}]
 
       assert [%{date: ~D[2026-12-13], amount_cents: 300_000, kind: :deposit, rhythm: :monthly, count: 4}] =
                f.events |> Enum.filter(&(&1.name == "Salary")) |> Enum.take(1)
 
-      assert f.basis.next_deposit == %{name: "Salary", date: ~D[2026-12-13]}
+      assert f.basis.next_deposit == %{name: "Salary", date: ~D[2026-12-13], overdue: false}
       assert :one_off_bills_unknown in f.basis.caveats
       refute :short_history in f.basis.caveats
     end
@@ -109,6 +106,51 @@ defmodule Server.Home.Bank.ProjectionTest do
       assert {:error, :no_data} = Projection.forecast(data([everyday(10)], []), @today, @today)
       assert {:error, :no_data} = Projection.forecast(data([], @accounts), @today, @today)
       assert {:error, :no_data} = Projection.forecast(data([everyday(10)], tl(@accounts)), @today, @today)
+    end
+
+    test "an overdue charge inside the grace stays, tomorrow, and lowers the line" do
+      late = data([monthly("Rent", 120_000, ~D[2026-10-17], 4), everyday(100)])
+      f = forecast!(late, ~D[2026-12-31])
+
+      assert [%{date: ~D[2026-11-21], amount_cents: -120_000, overdue: true, expected_on: ~D[2026-11-17]}, next] =
+               f.events |> Enum.filter(&(&1.name == "Rent")) |> Enum.take(2)
+
+      assert %{date: ~D[2026-12-17], overdue: false, expected_on: nil} = next
+      assert Enum.at(f.days, 1).expected_cents == 480_000 - 120_000 - f.everyday.expected_daily_cents
+      assert f.basis.skipped == []
+
+      days = Date.diff(f.until, @today)
+      events = f.events |> Enum.map(& &1.amount_cents) |> Enum.sum()
+      assert List.last(f.days).expected_cents == 480_000 + events - f.everyday.expected_daily_cents * days
+    end
+
+    test "a charge that has arrived is not expected again, and a pending one is not counted twice" do
+      posted = data([monthly("Rent", 120_000, ~D[2026-11-18], 4), everyday(100)])
+      assert [%{date: ~D[2026-12-18], overdue: false}] = forecast!(posted, ~D[2026-12-31]).events
+
+      pending =
+        data([
+          monthly("Rent", 120_000, ~D[2026-10-17], 4),
+          txn(~D[2026-11-19], 120_000, "Rent", %{"pending" => true}),
+          everyday(100)
+        ])
+
+      assert [%{date: ~D[2026-12-17], overdue: false}] = forecast!(pending, ~D[2026-12-31]).events
+    end
+
+    test "past the grace a charge is skipped, rolled forward, and named" do
+      f = forecast!(data([monthly("Rent", 120_000, ~D[2026-10-01], 4), everyday(100)]), ~D[2026-12-31])
+
+      assert [%{date: ~D[2026-12-01], overdue: false}] = f.events
+      assert f.basis.skipped == ["Rent"]
+      assert :skipped_charge in f.basis.caveats
+    end
+
+    test "an overdue deposit is placed tomorrow and bounds before_next_deposit there" do
+      f = forecast!(data([monthly("Salary", -300_000, ~D[2026-10-17], 4), everyday(100)]), ~D[2026-12-31])
+
+      assert f.basis.next_deposit == %{name: "Salary", date: ~D[2026-11-21], overdue: true}
+      assert f.before_next_deposit.date == @today
     end
 
     test "pending transactions are named as ignored" do

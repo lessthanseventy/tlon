@@ -14,8 +14,17 @@ defmodule Server.Home.Bank.Projection do
   series. What comes back is the effect on the balance: money out is negative, money in positive.
 
   A series (`Recurring.series/2`) repeats at its rhythm from its latest charge; a monthly one keeps
-  its day of the month, falling on the month's last day when it has none. A charge dated today is
-  taken as already posted, so events start tomorrow. The horizon is capped at 180 days.
+  its day of the month, falling on the month's last day when it has none. Events start tomorrow.
+  The horizon is capped at 180 days.
+
+  **Overdue.** An expected event dated today or earlier with no charge of that merchant since (a
+  posted or pending transaction on or after its date less half the width of the rhythm's band in
+  `Recurring`) is overdue: it stays in the forecast on tomorrow, with `overdue: true` and
+  `expected_on`, for a grace of half its rhythm (at most 14 days; a yearly one 30). Past the grace
+  it is skipped: rolled to its next date and named in `basis.skipped` (caveat `:skipped_charge`).
+  An overdue deposit is placed tomorrow too, and `basis.next_deposit` carries `overdue: true`. A
+  pending charge of the series counts as the charge arriving: the available balance already holds
+  it, so it is not counted again.
 
   **Everyday spending**, what is in no series: the posted outflows of the spendable accounts in the
   last 90 days (or the history there is), without series charges and transfers, are spread evenly
@@ -33,6 +42,7 @@ defmodule Server.Home.Bank.Projection do
   @month 30
   @afford_days 60
   @cushion_days 7
+  @tolerance %{weekly: 2, fortnightly: 3, monthly: 4, yearly: 10}
 
   @type rhythm :: :weekly | :fortnightly | :monthly | :yearly | :once
   @type data :: %{transactions: [Recurring.txn()], accounts: [map()]}
@@ -42,7 +52,9 @@ defmodule Server.Home.Bank.Projection do
           name: String.t(),
           kind: :charge | :deposit,
           rhythm: rhythm(),
-          count: non_neg_integer()
+          count: non_neg_integer(),
+          overdue: boolean(),
+          expected_on: Date.t() | nil
         }
   @type day :: %{date: Date.t(), low_cents: integer(), expected_cents: integer(), high_cents: integer()}
   @type point :: %{date: Date.t(), balance_cents: integer()}
@@ -52,11 +64,12 @@ defmodule Server.Home.Bank.Projection do
           high_daily_cents: non_neg_integer(),
           history_days: non_neg_integer()
         }
-  @type caveat :: :pending_ignored | :short_history | :no_deposit_seen | :one_off_bills_unknown
+  @type caveat :: :pending_ignored | :short_history | :skipped_charge | :no_deposit_seen | :one_off_bills_unknown
   @type basis :: %{
           months_of_history: non_neg_integer(),
           series: non_neg_integer(),
-          next_deposit: %{name: String.t(), date: Date.t()} | nil,
+          next_deposit: %{name: String.t(), date: Date.t(), overdue: boolean()} | nil,
+          skipped: [String.t()],
           caveats: [caveat()]
         }
   @type forecast :: %{
@@ -271,6 +284,7 @@ defmodule Server.Home.Bank.Projection do
            deposits: Recurring.series(mine, :in),
            everyday: everyday(mine, out, today),
            pending?: Enum.any?(txns, & &1.pending),
+           txns: mine,
            months: months_of_history(mine, today)
          }}
 
@@ -320,9 +334,34 @@ defmodule Server.Home.Bank.Projection do
   defp per(total, days), do: div(2 * total + days, 2 * days)
 
   defp items(ctx, today) do
-    Enum.map(ctx.out, &series_item(&1, :charge, -1, Date.add(today, 1))) ++
-      Enum.map(ctx.deposits, &series_item(&1, :deposit, 1, Date.add(today, 1)))
+    Enum.flat_map(ctx.out, &series_items(ctx, &1, :charge, -1, today)) ++
+      Enum.flat_map(ctx.deposits, &series_items(ctx, &1, :deposit, 1, today))
   end
+
+  defp series_items(ctx, series, kind, sign, today) do
+    normal = series_item(series, kind, sign, Date.add(today, 1))
+
+    cond do
+      Date.compare(series.next, today) == :gt or arrived?(ctx.txns, series, sign) ->
+        [normal]
+
+      Date.diff(today, series.next) <= grace(series.period) ->
+        [%{normal | overdue: true, anchor: normal.from, expected_on: series.next}, normal]
+
+      true ->
+        [%{normal | skipped: true}]
+    end
+  end
+
+  defp arrived?(txns, series, sign) do
+    since = Date.add(series.next, -@tolerance[series.period])
+    Enum.any?(txns, &(&1.key == series.key and &1.cents * sign < 0 and Date.compare(&1.date, since) != :lt))
+  end
+
+  defp grace(:yearly), do: 30
+  defp grace(:monthly), do: 14
+  defp grace(:fortnightly), do: 7
+  defp grace(:weekly), do: 3
 
   defp series_item(series, kind, sign, from) do
     %{
@@ -333,7 +372,10 @@ defmodule Server.Home.Bank.Projection do
       rhythm: series.period,
       anchor: series.last,
       from: from,
-      count: series.count
+      count: series.count,
+      overdue: false,
+      expected_on: nil,
+      skipped: false
     }
   end
 
@@ -346,14 +388,19 @@ defmodule Server.Home.Bank.Projection do
       rhythm: rhythm,
       anchor: if(rhythm == :once, do: Enum.max([anchor, today], Date), else: anchor),
       from: today,
-      count: 0
+      count: 0,
+      overdue: false,
+      expected_on: nil,
+      skipped: false
     }
   end
 
-  defp dates(%{rhythm: :once, anchor: date, from: from}, until),
-    do: Enum.filter([date], &(Date.compare(&1, from) != :lt and Date.compare(&1, until) != :gt))
-
+  defp dates(%{rhythm: :once, anchor: date, from: from}, until), do: single(date, from, until)
+  defp dates(%{overdue: true, anchor: date, from: from}, until), do: single(date, from, until)
   defp dates(item, until), do: item |> occurrences() |> Enum.take_while(&(Date.compare(&1, until) != :gt))
+
+  defp single(date, from, until),
+    do: Enum.filter([date], &(Date.compare(&1, from) != :lt and Date.compare(&1, until) != :gt))
 
   defp occurrences(%{anchor: anchor, rhythm: rhythm, from: from}) do
     0
@@ -367,6 +414,7 @@ defmodule Server.Home.Bank.Projection do
   defp shift(date, :monthly, k), do: Date.shift(date, month: k)
   defp shift(date, :yearly, k), do: Date.shift(date, year: k)
 
+  defp first_date(%{overdue: true, anchor: date}), do: date
   defp first_date(item), do: item |> occurrences() |> Enum.at(0)
 
   defp events(items, until) do
@@ -378,7 +426,9 @@ defmodule Server.Home.Bank.Projection do
           name: item.name,
           kind: item.kind,
           rhythm: item.rhythm,
-          count: item.count
+          count: item.count,
+          overdue: item.overdue,
+          expected_on: item.expected_on
         }
       end,
       &{Date.to_erl(&1.date), &1.amount_cents, &1.name}
@@ -388,7 +438,7 @@ defmodule Server.Home.Bank.Projection do
   defp next_deposit(items) do
     items
     |> Enum.filter(&(&1.kind == :deposit and &1.rhythm != :once))
-    |> Enum.map(&%{name: &1.name, date: first_date(&1)})
+    |> Enum.map(&%{name: &1.name, date: first_date(&1), overdue: &1.overdue})
     |> Enum.min_by(&Date.to_erl(&1.date), fn -> nil end)
   end
 
@@ -425,6 +475,7 @@ defmodule Server.Home.Bank.Projection do
       end)
 
     deposit = next_deposit(items)
+    skipped = for %{skipped: true, name: name} <- items, do: name
 
     %{
       start_cents: ctx.start,
@@ -439,10 +490,12 @@ defmodule Server.Home.Bank.Projection do
         months_of_history: ctx.months,
         series: length(ctx.out) + length(ctx.deposits),
         next_deposit: deposit,
+        skipped: skipped,
         caveats:
           Enum.concat([
             if(ctx.pending?, do: [:pending_ignored], else: []),
             if(every.history_days < @month, do: [:short_history], else: []),
+            if(skipped == [], do: [], else: [:skipped_charge]),
             if(deposit == nil, do: [:no_deposit_seen], else: []),
             [:one_off_bills_unknown]
           ])

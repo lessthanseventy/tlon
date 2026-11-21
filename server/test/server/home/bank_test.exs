@@ -85,7 +85,7 @@ defmodule Server.Home.BankTest do
 
     assert f.start_cents == 290_000
     assert Enum.any?(f.events, &(&1.name == "Rent" and &1.date == ~D[2026-11-27]))
-    assert f.basis.next_deposit == %{name: "Salary", date: ~D[2026-12-13]}
+    assert f.basis.next_deposit == %{name: "Salary", date: ~D[2026-12-13], overdue: false}
   end
 
   test "afford, what_if, history and subscriptions use the same rows" do

@@ -241,7 +241,8 @@ and every layer the spine design's re-laid §9 asked for
   day (low, expected, high) from the recurring series repeated at their rhythms plus an everyday estimate (the last 90 days of
   posted outflows on checking that are in no series and no transfer, spread evenly; the low and high lines are the 25th and 75th
   percentile of rolling 30-day totals), capped at 180 days. Every number is computed there and none comes from a model, and none
-  is an opinion on the spending. `GET /api/home/money/forecast?until=` is the forecast and the subscriptions as JSON (null when
+  is an opinion on the spending. An expected charge or deposit that has not posted (today or earlier) stays on tomorrow as
+  `overdue` (with `expected_on`) for half its rhythm, then is named in `basis.skipped`. `GET /api/home/money/forecast?until=` is the forecast and the subscriptions as JSON (null when
   off). `mise run home:bank:link` links once (`Server.Home.Bank.Link`, a loopback page,
   the token printed once and kept nowhere; refused with a token present, `-- --allow-another-link` overrides: the account allows ten
   links for ever).

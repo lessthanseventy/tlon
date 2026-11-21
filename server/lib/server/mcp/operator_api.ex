@@ -184,7 +184,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/home/money/forecast?until=  Server.Home.Bank.forecast and subscriptions: the checking balance day by day to until
                                          (YYYY-MM-DD, default 45 days on, capped at 180): {start_cents, until, clamped, days: [{date,
                                          low_cents, expected_cents, high_cents}], events: [{date, amount_cents (negative is money out),
-                                         name, kind, rhythm, count}], everyday, lowest: {date, balance_cents}, before_next_deposit,
+                                         name, kind, rhythm, count, overdue, expected_on}], everyday, lowest: {date, balance_cents}, before_next_deposit,
                                          basis: {months_of_history, series, next_deposit, caveats}, subscriptions: [{name, amount_cents,
                                          rhythm, next, count, was_cents}]}; null when the bank source is off or nothing is stored; 400 on a bad date
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion; ?nina_|argos_ + name|species|personality (sassy sweet lazy mischievous shy bold) choose the cast
