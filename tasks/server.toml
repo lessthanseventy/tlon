@@ -242,6 +242,10 @@ run = "scripts/release-smoke.test.sh"
 description = "script test: scratch.sh prune keeps exactly the unlanded work (offline, temp dirs)"
 run = "scripts/scratch.test.sh"
 
+["check:scripts:miserc"]
+description = "script test: .miserc.toml keeps a worktree under the checkout to its own tasks (offline, temp dirs)"
+run = "scripts/miserc.test.sh"
+
 ["server:tmux-sweep"]
 description = "server: remove the dead tmux sockets of this uid under TMUX_TMPDIR (or /tmp) — a live server's socket stays; prints how many it removed"
 run = "scripts/tmux-sweep.sh"
