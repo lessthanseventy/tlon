@@ -9,7 +9,9 @@ out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 
 # ---- tasks.md: every mise verb, by group -------------------------------------------------------
-mise tasks ls --json > "$out/tasks.json"
+# Only this repo's tasks: mise also reads the config of every parent directory, and a worktree
+# under the main checkout would list that checkout's.
+mise tasks ls --json | jq --arg root "$PWD/" '[.[] | select(.source | startswith($root))]' > "$out/tasks.json"
 python3 - "$out/tasks.json" > "$out/tasks.md" <<'PY'
 import json, sys
 tasks = json.load(open(sys.argv[1]))
