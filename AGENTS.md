@@ -11,7 +11,17 @@ ficciones (`~/projects/ficciones`), which is where the Nix, the desktop and the 
 The human and any agent drive this repo through the **same mise tasks** (`mise tasks` lists them) — one
 control loop, not two, and no second way to run anything:
 
-- `mise run check` — names gate + script self-tests (`check:scripts`: each `scripts/*.test.sh` is a `check:scripts:<name>` task, run in parallel) + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server, adapters and office gates + the task manual; the green-before-commit gate.
+- **A session lands through babylon**, the ticket board every session on this machine shares:
+  `claim_ticket`, then the `start` command its answer gives (a `wt` worktree on the ticket's branch
+  `t<id>-<slug>`); work there, run only the tests of what you changed (`menard run test <files>` for
+  Elixir, a module's own targeted check otherwise), commit on that branch, `submit_ticket`. babylon, one
+  ticket at a time machine-wide, rebases the branch onto origin/main in its own warm worktree
+  (`~/.cache/babylon/work/tlon`), runs `mise run check` once, has the change reviewed headlessly (it
+  approves, fixes small things itself, or requests changes) and fast-forwards main. The outcome is typed
+  into the session's pane and kept in its babylon inbox: done, or back to `doing` with why in the
+  ticket's `stage_note`. No PR, no `review_branch`, no `mise run land`, no full check from the session.
+  Worklines (the server's own coworker seats and threads) keep the server's line, below.
+- `mise run check` — names gate + script self-tests (`check:scripts`: each `scripts/*.test.sh` is a `check:scripts:<name>` task, run in parallel) + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server, adapters and office gates + the task manual; the green-before-commit gate. A session's change gets it once, from babylon at `submit_ticket`.
   One at a time per machine: it waits its turn in the checks queue (`scripts/checks-queue.sh`, saying who
   holds it), first come, first served, and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
   suites on the one test database at once. Don't call `check:all` to skip the line. A shell that can't open
@@ -22,7 +32,7 @@ control loop, not two, and no second way to run anything:
   Its verdict is GitHub's required check on main: on a clean tree (nothing uncommitted or untracked) it posts
   the commit status `tlon/check` (success or failure) on HEAD's sha (`scripts/check.sh`); on a dirty tree it
   posts nothing and says so, and gh missing or refusing is said, never red. `TLON_CHECK_STATUS=0` posts nothing.
-- `mise run land -- <pr>` — land a reviewed PR through the server's merge queue (`scripts/land.sh` →
+- `mise run land -- <pr>` — for a PR that already exists (a session lands through babylon, above): land a reviewed PR through the server's merge queue (`scripts/land.sh` →
   `Server.PRLanding`, the same line and gate as worklines): queued only when its branch's newest review on
   tlon (`review_branch`) approves its head, or that head rebased onto main with the same patches. An approving
   `review_branch` queues it by itself (`Server.PRLanding.request_branch/3`: the branch's one open PR onto main,
@@ -33,7 +43,7 @@ control loop, not two, and no second way to run anything:
   MCP tool instead: the same preflight and queue, over MCP. `land -- <pr> --operator` is the operator's
   word in place of the review, for a change the operator directed and said to land: recorded as an
   approval of its head by "the operator", then the same queue and gate. Only on the operator's say.
-- `mise run review -- <branch>` — a review with no seat: one headless model run reads the pushed branch's
+- `mise run review -- <branch>` — a review with no seat, on demand (not a step of a session's landing): one headless model run reads the pushed branch's
   diff in a throwaway checkout of its head, read-only, and prints the review (`Server.BranchReview.Headless`).
   The reviewer is the first of `:branch_reviewers` that wrote none of the branch, by its commits'
   `Tlon-Model` and `Co-Authored-By` trailers; with none left it is refused. The verdict is recorded on that
@@ -82,7 +92,8 @@ more of its output.** The full output is already on disk — `grep`/`tail` the l
 burns tokens, re-streams noise into context, and risks a slightly-different invocation each time.
 
 **Elixir tests and the gate go through Menard, not `cap`:** `~/projects/menard/bin/menard run test --in
-server [FILE[:LINE]]` and `~/projects/menard/bin/menard run check --in server`. One run answers with one JSON line: `ok` and the counts when green; when red, every
+server [FILE[:LINE]]` on what you changed; `~/projects/menard/bin/menard run check --in server` is a
+coworker seat's, a session's full check is babylon's. One run answers with one JSON line: `ok` and the counts when green; when red, every
 failure with its kind, `file:line` and message, a failing test's name, source and the assertion's
 left and right. It is this section's rule with the failures already parsed out, so there is nothing
 to grep for. `cap` stays the door for everything else: builds, scripts, `mise run server:eval-det`'s
@@ -147,14 +158,13 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   to compile/tests), so it's on you.
 - **Commit each piece of work when it is done**: one commit per bug, feature or ticket, before
   you start the next, so `git log` says what changed and why.
-- **History is linear.** GitHub's `main` is protected: rebase-merge only, every change through a PR,
-  and its required check is `tlon/check` — the local gate's commit status, not a CI run (CI runs on
-  release tags only). Rebase onto main, never merge it in, never make a merge commit; ship work as a PR
-  branch, or a stack of small ones with `gh stack`. Review happens on tlon, before GitHub: branch → PR →
-  a reviewer's verdict on its head (`review_branch`; never the PR's author or a builder of the branch;
-  each review on its own thread, in a session its verdict ends — never from the lobby)
-  → `mise run land -- <pr>`; GitHub merges only what the merge queue gated, at that head. A workline's
-  approval lands its branch the same way — reviewed on its thread (never by its builder), rebased onto
+- **History is linear.** GitHub's `main` requires linear history and the `tlon/check` status — the local
+  gate's commit status, not a CI run (CI runs on release tags only). Rebase onto main, never merge it in,
+  never make a merge commit. A session ships through babylon (the dev loop, above): its ticket branch is
+  rebased and fast-forwarded onto main, with no PR. A PR that already exists is reviewed on tlon
+  (`review_branch`; never the PR's author or a builder of the branch; each review on its own thread, in a
+  session its verdict ends — never from the lobby) and queued with `mise run land -- <pr>`; GitHub merges
+  only what the merge queue gated, at that head. A workline's approval lands its branch the same way — reviewed on its thread (never by its builder), rebased onto
   origin's main and gated (`Server.Workline.Merge`), then published: the branch pushed, a PR opened,
   `tlon/check` posted on the sha the gate passed, and merged at once at that head
   (`Server.Workline.Publish`). The checkout's own main is never moved by a landing; it only follows origin. Rewriting pushed history is
@@ -219,7 +229,8 @@ exists so a reader of the repo knows where the law comes from and edits the one 
 
 ## Verify
 
-`mise run check` is the gate. `mise run check:names` is the names-exist gate: every
+`mise run check` is the gate; babylon runs it once per session's change, at `submit_ticket`, and a session
+runs the targeted tests of what it changed. `mise run check:names` is the names-exist gate: every
 `Server.*` module, mix task and mise task that scripts, `mise.toml`, the adapters or a
 guide name must actually exist — a rename that strands a reference fails here instead of at 2am. The same task holds
 `docs/glossary.md` — one meaning per noun; its "lives in" names must exist and its retired words stay out of

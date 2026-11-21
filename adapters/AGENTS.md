@@ -64,7 +64,7 @@ one. adapters holds what makes a Claude Code session a citizen of its thread:
 - `claude --plugin-dir adapters` hot-reloads the mod on save, so a session sees an edit at once.
 - A pane's transcript says only that a hook was skipped; what it met is in that seat's
   `citizen-<author>.log`.
-- `mise run check` — the whole-repo gate.
+- `mise run check` — the whole-repo gate; babylon runs it for a session's change.
 
 ## Verify
 

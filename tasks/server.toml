@@ -299,11 +299,11 @@ description = "manual: fail if the generated task manual drifts from its source 
 run = "scripts/manual-gen.sh --check"
 
 ["review"]
-description = "review a branch — `review -- <branch>`: one headless model run on a model that wrote none of the branch reads its diff in a checkout of its head and prints the review; the verdict is recorded on that commit, an approval queues the branch's open PR in the merge queue (as `land` does), requested changes exit 1. `review -- <branch> <repo>` reviews a branch of another repo's checkout and only prints the review: nothing is recorded or queued"
+description = "review a branch with no seat, on demand — `review -- <branch>`: one headless model run on a model that wrote none of the branch reads its diff in a checkout of its head and prints the review; the verdict is recorded on that commit, an approval queues the branch's open PR in the merge queue (as `land` does), requested changes exit 1. `review -- <branch> <repo>` reviews a branch of another repo's checkout and only prints the review: nothing is recorded or queued"
 run = "scripts/tlon-cli.sh review"
 
 ["land"]
-description = "land a reviewed PR — `land -- <pr>` (`-- <pr> --operator`: on the operator's word in place of the review): handed to the server's merge queue (the same line and gate as worklines), which takes it only when its branch's review on tlon approves its head, then rebases, gates, posts tlon/check and merges at exactly that head; the outcome is posted on the review's thread"
+description = "land a reviewed PR that already exists — `land -- <pr>` (`-- <pr> --operator`: on the operator's word in place of the review): handed to the server's merge queue (the same line and gate as worklines), which takes it only when its branch's review on tlon approves its head, then rebases, gates, posts tlon/check and merges at exactly that head; the outcome is posted on the review's thread"
 run = "scripts/land.sh"
 
 ["check:main"]

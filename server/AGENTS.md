@@ -416,4 +416,4 @@ to run these.
 
 Built test-first (RED before GREEN), and a claim that something works is backed by having run it — the
 spec exists because "it works" without running it happened repeatedly in version one. `mise run
-server:check` is the gate; `server doctor` against a real db, read back with `psql`, is the 2am proof.
+server:check` is the module's gate (babylon runs it for a session's change; a session runs `menard run test <files>`); `server doctor` against a real db, read back with `psql`, is the 2am proof.
