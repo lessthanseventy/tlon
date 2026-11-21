@@ -760,10 +760,14 @@ func _in_the_house(main) -> void:
 		func() -> bool:
 			return bot.to(777).filter(func(m): return m["params"]["text"] == "⏰ gym").size() == 2
 	)
-	await s._until(func() -> bool: return bot.named("editMessageReplyMarkup").size() > 0)
-	var cleared := bot.named("editMessageReplyMarkup").filter(
-		func(p): return int(p["message_id"]) == gym_first["mid"]
+	var cleared_of := func() -> Array:
+		return bot.named("editMessageReplyMarkup").filter(
+			func(p): return int(p["message_id"]) == gym_first["mid"]
+		)
+	await s._until(
+		func() -> bool: return not cleared_of.call().is_empty(), "the old message's buttons cleared"
 	)
+	var cleared: Array = cleared_of.call()
 	_eq(
 		[cleared.size() >= 1, cleared[0]["reply_markup"]["inline_keyboard"]],
 		[true, []],
