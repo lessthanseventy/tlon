@@ -2,8 +2,6 @@ extends RefCounted
 
 # The soak's checks of the choice of pets (kinds, none, one, two, species) and the visitors.
 const Pets := preload("res://pets.gd")
-const Settings := preload("res://settings.gd")
-const Voices := preload("res://voices.gd")
 const Quirks := preload("res://quirks.gd")
 const ANIMAL := "isometric-animals/Gridwright Isometric Animals/"
 const CRIES := ["purr", "bark", "meow"]
@@ -17,8 +15,6 @@ func _init(soak) -> void:
 
 func run() -> void:
 	_sheets()
-	_settings()
-	_voices()
 	_simulations()
 	_homes()
 	_visitors()
@@ -39,55 +35,6 @@ func _sheets() -> void:
 				)
 		for name in [Pets.KINDS[kind]["shadow"]]:
 			s._check(FileAccess.file_exists(art.path_join(ANIMAL) + "Effects/1x/%s.png" % name), "%s has its shadow" % kind)
-
-
-func _settings() -> void:
-	var path := "user://soak_pets_settings.json"
-	DirAccess.remove_absolute(path)
-	var a := Settings.new()
-	a.store = path
-	a.setup(true)
-	s._check(a.value("pet1") == "cat_black" and a.value("pet2") == "dog_golden", "no pet keys are the cat and the dog")
-	a.put("pet1", "rabbit_white")
-	a.put("pet2", Pets.NONE)
-	var b := Settings.new()
-	b.store = path
-	b.setup(true)
-	s._check(b.value("pet1") == "rabbit_white" and b.value("pet2") == "none", "the pet keys round-trip")
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	f.store_string('{"pet1": "zebra", "zzz": 1}')
-	f.close()
-	var c := Settings.new()
-	c.store = path
-	c.setup(true)
-	c.put("pet2", "pig_pink")
-	s._check(FileAccess.get_file_as_string(path).contains("zzz"), "other keys are kept")
-	s._check(Pets.kind_of(c.value("pet1"), "nina") == "cat_black", "an unknown kind is the default")
-	s._check(Pets.kind_of("none", "argos") == "none" and Pets.kind_of(5, "argos") == "dog_golden", "none is a kind")
-	DirAccess.remove_absolute(path)
-	var d := Settings.new()
-	d.put("cat", "Mimi")
-	d.put("pet1", "fox_red")
-	s._check(Settings.pets("Nina sits") == "Mimi sits" and d.value("dog") == "Argos", "names stay whatever the animal")
-	d.put("cat", "")
-
-
-func _voices() -> void:
-	var v := Voices.new()
-	v.species = {"Nina": "rabbit", "Argos": "rabbit"}
-	for i in 20:
-		s._check(v.line("Argos", "muse") != "Is Nina a small dog?", "a rabbit is no small dog")
-	v.species = {"Nina": "cat", "Argos": "dog"}
-	s._check(v.line("Argos", "muse") == "Is Nina a small dog?", "a dog wonders")
-	s._check(Voices.fits("the bed is a cat's.", ["dog"]) == false and Voices.fits("anything", []), "fits")
-	var pets := Pets.new()
-	pets.setup("", 3)
-	pets.set_kind(pets.critter("nina"), "rabbit_brown")
-	s._check(pets.cry(pets.critter("nina")) == "", "a rabbit has no cry")
-	pets.set_kind(pets.critter("nina"), "cat_grey")
-	s._check(pets.cry(pets.critter("nina")) == "purr", "a cat purrs")
-	pets.set_kind(pets.critter("argos"), "dog_brown")
-	s._check(pets.cry(pets.critter("argos")) == "bark", "a dog barks")
 
 
 # a pair on the grid for `seconds`: every animation used is in the table, nobody stands on a blocked cell,

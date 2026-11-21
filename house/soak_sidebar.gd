@@ -837,26 +837,10 @@ func _home_sections() -> void:
 	sb.chat_view.set_mode(sb._effective())
 
 
-# one rule words a due time: five cases against a pretended clock, and every row that prints one
+# every row that prints a due time words it by the one rule (`logic.gd` holds the rule)
 func _times() -> void:
-
-	var now := Time.get_unix_time_from_datetime_string("2026-11-18T12:00:00")
-	var at := func(day_gap: int, hm: String) -> float:
-		var p := hm.split(":")
-		return float(int(now / 86400.0) + day_gap) * 86400.0 + int(p[0]) * 3600.0 + int(p[1]) * 60.0
-	for case in [
-		[0, "14:00", "14:00", "today is the time alone"],
-		[1, "14:00", "tomorrow 14:00", "tomorrow"],
-		[3, "14:00", "Sat 14:00", "within six days, the weekday"],
-		[6, "09:30", "Tue 09:30", "the sixth day is still a weekday"],
-		[10, "14:00", "28 Nov", "later, the date"],
-		[0, "09:00", "since 09:00", "past due today"],
-		[-2, "09:00", "since Mon", "past due on an earlier day"],
-		[-9, "09:00", "since 9 Nov", "a week back is dated"],
-	]:
-		var got := When.text(at.call(case[0], case[1]), now)
-		s._check(got == case[2], "%s: '%s' (wanted '%s')" % [case[3], got, case[2]])
-	s._check(When.text(at.call(-2, "09:00"), now, "") == "Mon", "a time that is only a time has no since")
+	var was_pick: Dictionary = h.things.pick
+	h.things.pick = {}
 	var was_hour: float = h.fake_hour
 	var was_day: String = h.fake_day
 	h.fake_day = "11-18"
@@ -891,6 +875,7 @@ func _times() -> void:
 	h.coming = keep[1]
 	h.fake_day = was_day
 	h.fake_hour = was_hour
+	h.things.pick = was_pick
 
 
 # at 1100x700 with the demo list and the dock compact, Home's content fits its pane: no scrolling

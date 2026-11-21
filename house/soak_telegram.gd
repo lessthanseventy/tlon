@@ -10,6 +10,7 @@ const TOKEN := "123456:SOAK-not-a-real-token-ABCdef"
 const STORE := "user://soak_telegram.json"
 
 var s
+var _made: Array = []
 var t := 0.0
 
 
@@ -63,6 +64,9 @@ func run(main) -> void:
 	await _telegram()
 	await _in_the_house(main)
 	_wipe()
+	for n in _made:
+		if is_instance_valid(n):
+			n.queue_free()
 
 
 # What Telegram's API does, as far as the bot uses it. `handle` answers the soak server's /bot... paths.
@@ -156,6 +160,7 @@ func _tg(base: String, heard: Array, taps: Array) -> Telegram:
 			finish.call()
 	)
 	s.root.add_child(tg)
+	_made.append(tg)
 	return tg
 
 

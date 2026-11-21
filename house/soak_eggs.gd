@@ -142,6 +142,9 @@ func _sound_files() -> void:
 	loud.process(3.0)
 	loud.request("save")
 	s._check(loud.played.size() == n, "volume 0 plays nothing")
+	for snd in [bare, quiet, loud]:
+		for p in snd._players:
+			p.queue_free()
 
 	var kept := Sound.new()
 	kept.store = "user://soak_volume.json"

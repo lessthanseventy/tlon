@@ -69,7 +69,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 `closet.gd`, `jot.gd`, `focus.gd` (the now pin and its timer), `jar.gd`
 (the done jar), `knock.gd` (Nina's one nag),
 `rhythm.gd` (the day's two beats and their banners), `layout.gd` (the furniture and the rules of placing it),
-`decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet view) and `pet_now.gd` (its "right now" phrase). `drive.gd` (`--drive`: the live house driven over TCP). `soak.gd` is the scripted check.
+`decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet view) and `pet_now.gd` (its "right now" phrase). `drive.gd` (`--drive`: the live house driven over TCP). `soak.gd` is the scripted check, `logic.gd` the logic-only one.
 
 Where the list lives is one `Backend` (`backend.gd`): `backend_http.gd` is the tlon server, `backend_local.gd`
 the house's own file (`local_list.gd` the list, `reader_rules.gd` the loose-line reader; agendas are there too,
@@ -564,11 +564,26 @@ runs on the local list.
 - `mise run house:run` — over the live server. `mise run house:demo` — on `demo.json` (the home at
   the top level, with `weather`), no server.
 - `mise run house:widget` — over the live server as the small always-on-top widget.
-- `mise run house:check` — every script loads in headless Godot. Godot is the machine's own, so
-  this is not part of `mise run check`.
+- `mise run house:check` — every script, the soak's too, loads in headless Godot, then `logic.gd` runs:
+  the checks that need no scene tree and no simulated room (the due-time rule `when.gd`, the reader and
+  the list's rules `logic_local.gd`, the forecast, the j1 reader and the address `logic_weather.gd`,
+  voices, the jar, the knock and rhythm rules, the TV, `Card`'s dates, the pet settings). A few seconds:
+  **iterate here.** Godot is the machine's own, so this is not part of `mise run check`. A check
+  that needs neither the tree nor the clock goes in `logic.gd`, not in the soak; none runs in both.
+- `mise run house:soak -- <section>...` runs only those sections, in the suite's order; `-- --list`
+  prints the names (`home sim decorate packs looks hacks eggs guests petlife antics petthings cards
+  routes forms sidebar chat local talk telegram weather drive packlooks art`); an unknown name prints
+  them and fails. **Iterate on your own section by name** and run the whole soak once, alone, on the
+  final tree. Each section stands alone: the runner (`soak.gd` `_sections`, `_reset`, `_leave`) reseeds
+  with 7 and resets the stub server's state, its log and its flags before it, and fails the section
+  that leaves a node under the root, a file in `user://` or the server listening. The sections that
+  need the house over the stub (`routes forms sidebar chat local talk telegram`) get a fresh `main`
+  from `_on_main`; a section that needs more builds it itself and never reads what another left.
+  A wait is on a condition with a bound (`_until`), never a fixed time. It prints each section's
+  wall time as it ends and a table at the end.
 - `mise run house:soak` (about 7 minutes quiet, up to twice that loaded; its own deadline is 15 minutes and the task wraps it in `timeout 1000`, so a caller's wrapper needs at least that) — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the jar, the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock rules, the day's rhythm, the TV hacks, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), the weather (`soak_weather.gd`: degrees, the card's days, the j1 reader, the address, the pace and the switch, against a stub of wttr.in), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`; the task fails when an `ERROR` or `SCRIPT ERROR` line comes before it (the engine's own `ERROR` leak lines at exit, printed after it, are not counted).
+  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock and the day's rhythm in the room, the TV hacks drawn, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), the weather (`soak_weather.gd`: degrees, the card's days, the j1 reader, the address, the pace and the switch, against a stub of wttr.in), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`; the task fails when an `ERROR` or `SCRIPT ERROR` line comes before it (the engine's own `ERROR` leak lines at exit, printed after it, are not counted).
 - `mise run house:art-pack` / `mise run house:build -- windows|mac|linux|all` — the art the house can open, packed to
   `~/.cache/tlon/house-dist/house-art.zip` (`-- --list` prints the files only), and a build of the house per platform
   with it inside (Windows and Linux: one file; the Mac app ad-hoc signed by the export, nothing added to it after; the art raw in the pck), zipped as

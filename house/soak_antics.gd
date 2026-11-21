@@ -38,6 +38,7 @@ func run() -> void:
 	_rates()
 	_egg(h)
 	_random()
+	pair[0].queue_free()
 	s._check(_user() == before, "antics write nothing to user://")
 
 
@@ -263,7 +264,9 @@ func _count(setting: String) -> int:
 	h.antics.setup(h)
 	for i in 4000:
 		h.process(0.5)
-	return h.antics.started.size()
+	var n: int = h.antics.started.size()
+	pair[0].queue_free()
+	return n
 
 
 func _rates() -> void:
@@ -309,3 +312,4 @@ func _random() -> void:
 			not c.hold or c.away or not h.eggs.scene.is_empty(), "random run: %s released" % id
 		)
 		s._check(c.lift == 0.0 and not c.flip and c.carry == "", "random run: %s normal" % id)
+	pair[0].queue_free()
