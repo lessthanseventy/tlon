@@ -850,7 +850,7 @@ func _times() -> void:
 	var keep := [h.open, h.coming]
 	h.open = [{"id": 1, "kind": "reminder", "text": "gone", "due_at": _iso(local.call(-2, "09:00")), "every": null}]
 	h.coming = [
-		{"id": 2, "kind": "reminder", "text": "bins", "due_at": _iso(local.call(1, "18:00")), "every": "week"},
+		{"id": 2, "kind": "reminder", "text": "swim class", "due_at": _iso(local.call(1, "18:00")), "every": "week"},
 		{"id": 3, "kind": "reminder", "text": "rent", "due_at": _iso(local.call(10, "09:00")), "every": "month"},
 	]
 	var texts := _texts(_home_box())
@@ -904,6 +904,9 @@ func _home_fits() -> void:
 	s._check(
 		content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
 		"Home does not scroll at 1100x700 with the demo list: content %s in a pane of %s" % [content.get_combined_minimum_size().y, sb.scroll.size.y]
+	)
+	h.coming += main._demo_due(
+		[{"id": 90, "kind": "reminder", "text": "swim class", "in_days": 1, "at": "12:00", "every": null}]
 	)
 	h.things.reset()
 	h.card.open("calendar", "cal")

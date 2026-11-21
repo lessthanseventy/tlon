@@ -18,6 +18,7 @@ const PetThingsSoak := preload("res://soak_petthings.gd")
 const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
 const SidebarSoak := preload("res://soak_sidebar.gd")
+const ChoreSoak := preload("res://soak_chores.gd")
 const LocalSoak := preload("res://soak_local.gd")
 const ArtSoak := preload("res://soak_art.gd")
 const PackLooksSoak := preload("res://soak_looks.gd")
@@ -39,6 +40,9 @@ var _log: Array = []
 var _fail_jot := false
 # answers the stub's /bot... paths (Telegram's API) when set: (path, params) -> {code, body}
 var bot := Callable()
+# holds the answers to reads of the home until `release_reads`, each built when the read arrives
+var hold_reads := false
+var _held: Array = []
 var served := true
 var _local
 var _mode := ""
@@ -123,6 +127,7 @@ func _sections() -> Array:
 		["routes", _on_main.bind(_routes)],
 		["forms", _on_main.bind(func(main): await FormSoak.new(self, main).run())],
 		["sidebar", _on_main.bind(func(main): await SidebarSoak.new(self, main).run())],
+		["chores", _on_main.bind(func(main): await ChoreSoak.new(self, main).run())],
 		["chat", _on_main.bind(func(main): await ChatSoak.new(self, main).run())],
 		["local", _on_main.bind(func(main): await LocalSoak.new(self).over(main))],
 		["talk", _on_main.bind(func(main): await TalkSoak.new(self).run(main))],
@@ -200,6 +205,8 @@ func _reset() -> void:
 	wttr_code = 200
 	wttr_body = {}
 	bot = Callable()
+	hold_reads = false
+	_held = []
 	served = true
 	_local = null
 	_weather = {"weather": {"kind": "rain", "desc": "Light rain", "temp_c": 9}}
@@ -945,8 +952,18 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 		"HTTP/1.1 %d X\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n"
 		% [code, payload.size()]
 	)
+	if hold_reads and method == "GET" and path == "/api/home":
+		_held.append([p, head.to_utf8_buffer() + payload])
+		return
 	p.put_data(head.to_utf8_buffer() + payload)
 	p.disconnect_from_host()
+
+
+func release_reads() -> void:
+	for held in _held:
+		held[0].put_data(held[1])
+		held[0].disconnect_from_host()
+	_held = []
 
 
 func _iso(days_ago: float) -> String:
@@ -1156,6 +1173,14 @@ func _cards() -> void:
 		var key: String = things[kind]
 		_check(pts.has(key), "%s has a hit area" % kind)
 		if not pts.has(key):
+			continue
+		if kind == "plant":
+			var seen: Array = []
+			var watch := func(k: String, a: Variant) -> void: seen.append([k, a])
+			h.viewed.connect(watch)
+			h.click(pts[key][0])
+			h.viewed.disconnect(watch)
+			_check(seen == [["item", 1]], "with a watering chore the plant opens its item view: %s" % str(seen))
 			continue
 		h.click(pts[key][0])
 		_check(h.card.kind == kind and h.card.key == key, "a click on %s opens its view" % key)
@@ -1413,6 +1438,7 @@ func _decorate_files(rng: RandomNumberGenerator) -> void:
 				"v": 1,
 				"wall": "plaster",
 				"floor": "nope",
+				"offered": ["laundry_basket"],
 				"pieces":
 				[
 					{"p": "no_such_thing", "f": "", "c": 2, "r": 2},
@@ -1639,7 +1665,7 @@ func _packs_catalogue(l: RefCounted) -> void:
 	for e in l.catalogue:
 		count[e["tab"]] = int(count.get(e["tab"], 0)) + 1
 		_check(e["tab"] in l.tabs, "%s is on a tab that exists" % e["key"])
-		if e["tab"] == "pets":
+		if e["tab"] == "pets" or e["key"] == "laundry_basket":
 			continue
 		for f in (e["faces"] if not e["faces"].is_empty() else [""]):
 			var p := {"p": e["key"], "f": f, "c": 0, "r": 0}
@@ -1665,7 +1691,7 @@ func _packs_catalogue(l: RefCounted) -> void:
 	for tab in l.tabs:
 		shown.append("%s %d pieces %d walls %d floors" % [tab, count.get(tab, 0), l.walls_of(tab).size(), l.floors_of(tab).size()])
 	print("packs: ", "; ".join(shown))
-	_check(count.get("home", 0) == 45, "the interiors still give 45 pieces (%s)" % count.get("home", 0))
+	_check(count.get("home", 0) == 46, "the interiors still give 45 pieces and the laundry basket (%s)" % count.get("home", 0))
 
 
 func _write_layout(path: String, doc: Dictionary) -> void:
@@ -1701,6 +1727,7 @@ func _packs_files() -> void:
 		},
 	]
 	for doc in fixtures:
+		doc["offered"] = Layout.NEWER.duplicate()
 		_write_layout(path, doc)
 		var l := _layout_of(Packs.extend(_interiors(), _art()), path, true)
 		_check(l.pieces.size() == doc["pieces"].size() and l.wall == doc["wall"], "an old layout file loads whole (%d)" % l.pieces.size())
@@ -1716,6 +1743,7 @@ func _packs_files() -> void:
 
 	var held := {
 		"v": 1,
+		"offered": ["laundry_basket"],
 		"wall": "castle.ashlar",
 		"floor": "mansion.parquet",
 		"pieces":
