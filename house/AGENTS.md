@@ -95,7 +95,7 @@ runs on the local list.
   with moon and stars), a skyline, hills and a tree, and the weather kinds of `weather.ex` on top
   (sun, drifting clouds, fog, rain with a wet glass, storm flashes, snow that settles on the sill).
   Hover shows the description and the temperature in his `degrees`. Nina sometimes sits on the sill. The plant droops a
-  little as more things are open; no text says so.
+  little as more things are open (with a watering chore it follows the chore, below); no text says so.
 - **The person** (`person.gd`) walks the pets' grid and picks by state: at the desk in the chair
   (typing) when things are open, on the sofa when clear, watching the TV now and then when nothing
   is open (10:00-23:00), at the board or with a coffee now and then (mornings), asleep on the sofa
@@ -161,6 +161,35 @@ runs on the local list.
 - Small things: a "water the plant" thing done perks the plant up for 10 min with a can and drops;
   a note, open thing or reminder due today that says birthday or anniversary hangs bunting; the
   window gets lights in December, a pumpkin from 25 Oct, hearts 10-14 Feb.
+- **Chores** (`chores.gd`, wired in `home.gd` `chores`): a repeating reminder (`kind` reminder, `every` and `due_at`
+  set) whose text names a chore thing is that thing in the room, so the operator glances at the room instead of a
+  list. `Chores.TABLE` is the one table, first match wins, words matched whole and case-insensitive ("binder" is not
+  "bin"): laundry, washing: the laundry basket; trash, bins, bin, garbage, recycling, rubbish: the bin; feed with
+  cat, dog, pets or a pet's own name (`Settings.cat`/`dog`): the pets' bowls; meds, medication, pills, vitamins:
+  a pill bottle on the desk; water with plant or plants: the large plant. Of two rows for one thing the more urgent
+  stands for it (due, then soon, then fine; the earlier time breaks a tie) and the other stays a list row.
+  Each thing shows three states, from the row's `due_at` and `every` and the house clock (`Chores.state`): *fine*
+  (far off), *soon* (less than half an interval left) and *due* (due today or gone by). Laundry: an empty basket, a
+  mound filling it, a heap over the rim with a sleeve down the side. Bin: lid shut, lid lifted, mouth open with the lid
+  on the floor, a tied bag and a fly. Bowls: full, low, empty and dark (both bowls follow, the food one can sit
+  behind a pet thing). Bottle: on its side, upright capped, upright with the cap off. Plant: perky and in flower,
+  soft and leaning, drooped and drab (with no watering chore it droops with the open count as before). No text, badge
+  or red. Hover says `short name · when` ("laundry · due today", "bins · Thursday", `Chores.hover`); a click opens the
+  chore's item view and outlines the thing (`chore:<thing>` hits, "plant" for the plant; `sidebar.gd`
+  `selected_key`); Done, through `main.gd` `_remove`, keeps the thing as it was until the read of the room that began after the
+  write has come (`home.chore_reload`; a read already on its way does not end it, and `Chores.HOLD` ends it anyway), shows the old state for `Chores.PAUSE`, then fine with a
+  moment of its own (clothes lift, the bag goes, sparks, the bowls pour, the can waters), and the server or the local
+  list moves the row to its next time (the demo does it in `_demo_repeat`). A chore whose thing is in the room is left
+  out of Home's Today, Open and Later (`home.chore_thing_of`); it stays on the calendar card and in its item view, and
+  the Now pick may pick it. With its thing not in the room (the basket taken away, the pet things off) it is a list
+  row as any other; a repeating row whose rhythm does not read (`Chores.interval` 0) is no chore. The basket is the plain piece `laundry_basket` (default cell 1,1, in decorate's home tab), drawn in
+  code and never as a sprite row, at the depth of the cell it stands in (`_basket_key`); a saved layout from before it is
+  offered it once on load (`Layout.NEWER`, `offered` in the file: its cell, else the nearest free one) and a basket taken
+  out stays out. The bin, desk and plant are fixed so their chores are always in the room. Add a
+  chore: a row in `TABLE`, a name in `NAMES`, a drawer in `chores.gd` and a hit in `home.gd`; `logic_chores.gd` holds the
+  table, the rhythm, the states and the words; `soak_chores.gd` the hits, the lists, the basket's place and record, and
+  Done over the demo, the stub server (a delayed read, a read already in flight) and the local list. `--demo` has laundry (soon),
+  bins (due today) and feed the cat (fine).
 - **The room** is 11x11 cells (`Pets.COLS`/`ROWS`, which the home, the room and the walkers all follow; the back walls are column 0 and row 0, so a bigger room grows toward the front and a saved layout loads unchanged) and, in the 1100x700 window beside the sidebar, drawn with the 2x art (`fit_scale`; the 3x art needs a 1072 px area, which a 1450x980 window has). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
   (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
   board, calendar, jar, none of them movable) and the plain ones (the rest of
@@ -566,18 +595,18 @@ runs on the local list.
 - `mise run house:widget` — over the live server as the small always-on-top widget.
 - `mise run house:check` — every script, the soak's too, loads in headless Godot, then `logic.gd` runs:
   the checks that need no scene tree and no simulated room (the due-time rule `when.gd`, the reader and
-  the list's rules `logic_local.gd`, the forecast, the j1 reader and the address `logic_weather.gd`,
+  the list's rules `logic_local.gd`, the forecast, the j1 reader and the address `logic_weather.gd`, the chores' table, rhythm and states `logic_chores.gd`,
   voices, the jar, the knock and rhythm rules, the TV, `Card`'s dates, the pet settings). A few seconds:
   **iterate here.** Godot is the machine's own, so this is not part of `mise run check`. A check
   that needs neither the tree nor the clock goes in `logic.gd`, not in the soak; none runs in both.
 - `mise run house:soak -- <section>...` runs only those sections, in the suite's order; `-- --list`
   prints the names (`home sim decorate packs looks hacks eggs guests petlife antics petthings cards
-  routes forms sidebar chat local talk telegram weather drive packlooks art`); an unknown name prints
+  routes forms sidebar chores chat local talk telegram weather drive packlooks art`); an unknown name prints
   them and fails. **Iterate on your own section by name** and run the whole soak once, alone, on the
   final tree. Each section stands alone: the runner (`soak.gd` `_sections`, `_reset`, `_leave`) reseeds
   with 7 and resets the stub server's state, its log and its flags before it, and fails the section
   that leaves a node under the root, a file in `user://` or the server listening. The sections that
-  need the house over the stub (`routes forms sidebar chat local talk telegram`) get a fresh `main`
+  need the house over the stub (`routes forms sidebar chores chat local talk telegram`) get a fresh `main`
   from `_on_main`; a section that needs more builds it itself and never reads what another left.
   A wait is on the condition the next check needs, with a bound (`_until(done, what)`: it fails the soak
   naming `what` when the bound passes); that nothing happens is a named window (`_quiet`, or `_quiet_frames`
