@@ -1064,6 +1064,82 @@ defmodule Server.MCP.GatewayTest do
       assert money["clamped"] == false
     end
 
+    test "money ask: 400 with no text, a plain reply with the bank off, else the engine's figures and a thread" do
+      Server.TestDB.clean!()
+      assert {400, %{"error" => _}} = post_json("/api/home/money/ask", %{text: ""})
+      assert {400, %{"error" => _}} = post_json("/api/home/money/ask", %{})
+
+      assert {200, %{"reply" => reply, "figures" => nil, "thread" => thread}} =
+               post_json("/api/home/money/ask", %{text: "how much do I have?"})
+
+      assert reply =~ "isn't connected"
+      assert is_binary(thread)
+
+      names = ~w(PLAID_CLIENT_ID PLAID_SECRET PLAID_ACCESS_TOKEN XDG_RUNTIME_DIR)
+      previous = for name <- names, do: {name, System.get_env(name)}
+      Enum.each(names, &System.delete_env/1)
+      for {name, value} <- Enum.zip(names, ~w(cid sec tok)), name != "XDG_RUNTIME_DIR", do: System.put_env(name, value)
+      System.put_env("XDG_RUNTIME_DIR", System.tmp_dir!() <> "/no-secrets-#{System.unique_integer([:positive])}")
+
+      dir = Path.join(System.tmp_dir!(), "money-ask-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      cli = Path.join(dir, "cli")
+      today = Server.Home.Bank.today(DateTime.utc_now())
+      plan = JSON.encode!(%{asks: [%{ask: "forecast", until: Date.to_iso8601(Date.add(today, 10))}]})
+
+      File.write!(cli, """
+      #!/bin/sh
+      cat > #{dir}/asked
+      if grep -q '<results>' #{dir}/asked; then echo 'Here is the forecast.'; else echo '#{plan}'; fi
+      """)
+
+      File.chmod!(cli, 0o755)
+      Application.put_env(:server, :home_reader_cmd, cli)
+
+      on_exit(fn ->
+        Application.delete_env(:server, :home_reader_cmd)
+        File.rm_rf!(dir)
+        for {name, value} <- previous, do: if(value, do: System.put_env(name, value), else: System.delete_env(name))
+      end)
+
+      :ok = Server.OperatorConfig.put("home_sources", "bank", Server.TestDB.continuation_gap_off!())
+
+      accounts = [
+        %{
+          "id" => "a1",
+          "name" => "Current",
+          "type" => "depository",
+          "subtype" => "checking",
+          "current" => 90_000,
+          "available" => 90_000
+        }
+      ]
+
+      Server.Home.Keep.put("home_bank", JSON.encode!(%{"accounts" => accounts, "as_of" => "2026-11-20T12:00:00Z"}))
+
+      rows =
+        for m <- 1..3 do
+          %{
+            transaction_id: "rent-#{m}",
+            account_id: "a1",
+            amount_cents: 12_000,
+            date: today |> Date.shift(month: -m) |> Date.add(-1),
+            name: "Rent",
+            merchant_name: nil,
+            pending: false
+          }
+        end
+
+      Server.Repo.insert_all(Server.Home.Bank.Transaction, rows)
+
+      assert {200, %{"reply" => "Here is the forecast.", "figures" => figures, "thread" => thread}} =
+               post_json("/api/home/money/ask", %{text: "what will I have in ten days?", thread: "abc"})
+
+      assert thread == "abc"
+      assert figures["start_cents"] == 90_000
+      assert length(figures["days"]) == 11
+    end
+
     test "the forecast is [] with the weather off, else the days the report held" do
       Server.TestDB.clean!()
       assert {200, %{"forecast" => [], "meetings" => [], "money" => nil}} = get_json("/api/home")

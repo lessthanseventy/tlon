@@ -187,6 +187,11 @@ defmodule Server.MCP.OperatorAPI do
                                          name, kind, rhythm, count, overdue, expected_on}], everyday, lowest: {date, balance_cents}, before_next_deposit,
                                          basis: {months_of_history, series, next_deposit, caveats}, subscriptions: [{name, amount_cents,
                                          rhythm, next, count, was_cents}]}; null when the bank source is off or nothing is stored; 400 on a bad date
+      POST   /api/home/money/ask         {text, thread?} → Server.Home.Money.ask; {reply, figures, thread}: a question about his money
+                                         answered from the projection engine (model plans and phrases, every amount checked against the
+                                         results, else a plain rendering); figures is the forecast, the purchase's with/without or the
+                                         change's baseline/changed behind the answer, null when none; thread carries a follow-up; with the
+                                         bank off 200 and a reply saying so; 400 with no text. Read-only
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion; ?nina_|argos_ + name|species|personality (sassy sweet lazy mischievous shy bold) choose the cast
                                          (asking may write the next batch); {} before the first
       POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
@@ -699,6 +704,17 @@ defmodule Server.MCP.OperatorAPI do
     else
       {:choice, _} -> json(conn, 400, %{error: "choice is required"})
       _ -> no_route(conn)
+    end
+  end
+
+  defp route(conn, "POST", "home", ["money", "ask"]) do
+    case body(conn) do
+      {%{"text" => text} = b, conn} when is_binary(text) and text != "" ->
+        {:ok, answer} = Server.Home.Money.ask(text, thread: b["thread"])
+        json(conn, 200, answer)
+
+      {_, conn} ->
+        json(conn, 400, %{error: "text is required"})
     end
   end
 

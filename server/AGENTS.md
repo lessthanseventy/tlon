@@ -243,7 +243,11 @@ and every layer the spine design's re-laid §9 asked for
   percentile of rolling 30-day totals), capped at 180 days. Every number is computed there and none comes from a model, and none
   is an opinion on the spending. An expected charge or deposit that has not posted (today or earlier) stays on tomorrow as
   `overdue` (with `expected_on`) for half its rhythm, then is named in `basis.skipped`. `GET /api/home/money/forecast?until=` is the forecast and the subscriptions as JSON (null when
-  off). `mise run home:bank:link` links once (`Server.Home.Bank.Link`, a loopback page,
+  off). The **money chat** (`Server.Home.Money`, `POST /api/home/money/ask {text, thread?}` → `{reply, figures, thread}`, read-only) answers a question about his money from that engine: the home reader's model
+  (`:home_reader_cmd`/`:home_reader_model`, no tools; tests pass a `:model` function) plans up to four asks (`Server.Home.Money.Plan`, parsed strictly: a bad shape is a "rephrase" reply), the
+  `Server.Home.Bank` wrappers compute them, the model phrases the results (amounts as `*_cents_text` strings), and `Server.Home.Money.Say.check/2` requires every dollar amount in that phrasing to be one of
+  the results', else the reply is `Say.render/1`, the plain wording of the results (also when the model is down). Bank-sourced names reach the model only as JSON in a data block it is told is never instruction.
+  Nothing there writes the bank tables, calls Plaid or files a proposal; its only write is the thread's last ten turns for two hours (`Server.Home.Money.Thread`, in `home_keep`). `mise run home:bank:link` links once (`Server.Home.Bank.Link`, a loopback page,
   the token printed once and kept nowhere; refused with a token present, `-- --allow-another-link` overrides: the account allows ten
   links for ever).
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
