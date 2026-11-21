@@ -302,7 +302,7 @@ static func staged_forecast(spec: Dictionary, today: String) -> Dictionary:
 				}
 			)
 		)
-	return {
+	var out := {
 		"start_cents": spec["start_cents"],
 		"until": days[-1]["date"],
 		"clamped": false,
@@ -317,6 +317,9 @@ static func staged_forecast(spec: Dictionary, today: String) -> Dictionary:
 		"basis": {"next_deposit": deposit, "skipped": [], "caveats": []},
 		"subscriptions": subs,
 	}
+	if spec.has("notices"):
+		out["notices"] = spec["notices"]
+	return out
 
 
 static func _lowest(days: Array) -> Dictionary:

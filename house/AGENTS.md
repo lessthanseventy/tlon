@@ -232,7 +232,10 @@ runs on the local list.
   `money_ui`): Now (`available`, else `balance`; savings beside it from the forecast's `other_available_cents` and
   `other_accounts`, named and never added in), Until the next deposit (`Money.lowest_line`, to the whole dollar, from `before_next_deposit`
   and `basis.next_deposit`, then a `DayStrip` of the days ahead with each of `events` on its date), Subscriptions
-  (`subscriptions`: `amount_cents`, `rhythm`, `next`, a rise mark and "was $X" from `was_cents`), Worth a look (the
+  (`subscriptions`: `amount_cents`, `rhythm`, `next`, a rise mark and "was $X" from `was_cents`), Noticed (the forecast's
+  `notices` `[{key, kind, text, why}]`, absent from an older server: a row each under Now, the first three and "and N
+  more", a quiet "seen" that clears the row at once and posts `{key}` to `POST /api/home/money/notices/seen`; a
+  failed post brings it back with the next forecast; nothing drawn, no heading, when there are none), Worth a look (the
   proposals of `GET /api/home` with `source` "bank", add and no as on Home) and a line to ask: `POST
   /api/home/money/ask {text, thread?}` answers `{reply, figures, thread}`, the thread kept until the view is left, a
   `figures` that holds a forecast (or an afford answer's `with`) drawn as the same strip. The forecast is

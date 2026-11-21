@@ -88,6 +88,7 @@ func run() -> void:
 	await _short()
 	await _no_forecast()
 	await _proposals()
+	await _notices()
 	await _ask()
 	await _ask_failed()
 	await _today()
@@ -113,6 +114,8 @@ func answer(method: String, path: String, _body: Variant) -> Variant:
 		if _fspec != null:
 			out = Money.staged_forecast(_fspec, h.today())
 		return {"code": 200, "body": out}
+	if method == "POST" and path == "/api/home/money/notices/seen":
+		return {"code": 200, "body": {"ok": true}}
 	if method == "POST" and path == "/api/home/money/ask":
 		if _ask_error != "":
 			return {"code": 400, "body": {"error": _ask_error}}
@@ -380,6 +383,64 @@ func _proposals() -> void:
 	s._check("Worth a look" not in _texts(sb._dyn), "with none left the heading goes")
 	sb.back()
 	s._state.erase("proposals")
+
+
+func _notices() -> void:
+	var noted: Dictionary = FORECAST.duplicate(true)
+	noted["notices"] = [
+		{
+			"key": "bank:new:a1",
+			"kind": "new",
+			"text": "Streamly looks like a new subscription: $9.99 monthly",
+			"why": "seen on 3 months running",
+		},
+		{
+			"key": "bank:price:b2:1999",
+			"kind": "price",
+			"text": "Cloudbox went up from $14.99 to $19.99",
+			"why": "",
+		},
+	]
+	_fspec = noted
+	await _stage(DUE)
+	await _open()
+	var texts := _texts(sb._dyn)
+	s._check("Noticed" in texts, "the notices sit under Noticed: %s" % str(texts))
+	s._check(
+		"Streamly looks like a new subscription: $9.99 monthly" in texts,
+		"a notice is drawn with its text: %s" % str(texts)
+	)
+	s._check("Cloudbox went up from $14.99 to $19.99" in texts, "and the other")
+	s._check("seen on 3 months running" in texts, "its why under it")
+	var seen: Array = _buttons("seen")
+	s._check(seen.size() == 2, "each has seen (%d)" % seen.size())
+	seen[0].pressed.emit()
+	await s._until(
+		func() -> bool: return not _posted("/api/home/money/notices/seen").is_empty(),
+		"seen is posted"
+	)
+	await s._answered(main)
+	await _sync()
+	var body: Dictionary = JSON.parse_string(_posted("/api/home/money/notices/seen")[0][2])
+	s._check(body == {"key": "bank:new:a1"}, "seen posts the key: %s" % str(body))
+	texts = _texts(sb._dyn)
+	s._check(
+		not texts.any(func(t: String) -> bool: return t.begins_with("Streamly")),
+		"the cleared row goes at once"
+	)
+	s._check("Cloudbox went up from $14.99 to $19.99" in texts, "the other stays")
+	sb.back()
+	for none in [[], null]:
+		var bare: Dictionary = FORECAST.duplicate(true)
+		if none != null:
+			bare["notices"] = none
+		_fspec = bare
+		await _open()
+		texts = _texts(sb._dyn)
+		s._check("Noticed" not in texts, "no notices, no heading (%s)" % str(none))
+		s._check(_buttons("seen").is_empty(), "and no seen (%s)" % str(none))
+		sb.back()
+	_fspec = FORECAST
 
 
 func _ask_line(text: String) -> void:

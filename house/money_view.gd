@@ -8,6 +8,10 @@ extends RefCounted
 # are kept here, not in the controls, so the view can be built again.
 signal forecast_wanted(gen: int)
 signal ask_wanted(text: String, thread: String, gen: int)
+signal seen_wanted(key: String)
+
+# notices drawn before "and N more"
+const NOTICES_SHOWN := 3
 
 const Paper := preload("res://paper.gd")
 const Fonts := preload("res://fonts.gd")
@@ -73,6 +77,18 @@ func got_forecast(for_gen: int, reached: bool, code: int, body: Variant) -> void
 		fstate = "error"
 
 
+func _notices_of() -> Array:
+	return forecast.get("notices", []) if fstate == "ok" else []
+
+
+# a notice clears at once; one the server did not take comes back with the next forecast
+func seen(key: String) -> void:
+	forecast["notices"] = _notices_of().filter(
+		func(n: Dictionary) -> bool: return str(n["key"]) != key
+	)
+	seen_wanted.emit(key)
+
+
 func got_reply(for_gen: int, reached: bool, code: int, body: Variant) -> void:
 	if for_gen != gen:
 		return
@@ -110,6 +126,7 @@ func build(box: VBoxContainer) -> void:
 		box.add_child(Views.quiet("The bank is not connected.", Fonts.BODY))
 		return
 	_now(box, money)
+	_noticed(box)
 	_ahead(box)
 	_subscriptions(box)
 	_look(box)
@@ -150,6 +167,23 @@ func _now(box: VBoxContainer, money: Dictionary) -> void:
 	var names: Array = forecast.get("other_accounts", []) if fstate == "ok" else []
 	if fstate == "ok" and (held != 0 or not names.is_empty()):
 		_tile(row, "Savings", held, ", ".join(names))
+
+
+func _noticed(box: VBoxContainer) -> void:
+	var rows := _notices_of()
+	if rows.is_empty():
+		return
+	Views.heading(box, "Noticed")
+	for n in rows.slice(0, NOTICES_SHOWN):
+		var key := str(n["key"])
+		var why: Variant = n.get("why")
+		var row := Blocks.Row.new(str(n["text"]), "" if why == null else str(why))
+		row.marks(
+			[{"label": "seen", "act": "seen", "k": "quiet"}], func(_a: String) -> void: seen(key)
+		)
+		box.add_child(row)
+	if rows.size() > NOTICES_SHOWN:
+		_indented(box, Views.quiet("and %d more" % (rows.size() - NOTICES_SHOWN), Fonts.SMALL))
 
 
 func _ahead(box: VBoxContainer) -> void:

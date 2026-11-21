@@ -343,6 +343,10 @@
       {"name": "Phone", "amount_cents": -6500, "rhythm": "monthly", "in_days": 9},
       {"name": "Gym", "amount_cents": -3000, "rhythm": "monthly", "in_days": 12},
       {"name": "Cloud storage", "amount_cents": -2999, "rhythm": "yearly", "in_days": 160}
+    ],
+    "notices": [
+      {"key": "bank:new:demo1", "kind": "new", "text": "Streamly looks like a new subscription: $9.99 monthly", "why": "charged on the 3rd for 3 months running"},
+      {"key": "bank:price:demo2:1999", "kind": "price", "text": "Cloudbox went up from $14.99 to $19.99", "why": "last month's charge was $14.99"}
     ]
   },
   "waiting": [

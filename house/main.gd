@@ -116,6 +116,7 @@ func _ready() -> void:
 	_sidebar.check_requested.connect(_check_server)
 	_sidebar.money_ui.forecast_wanted.connect(_fetch_forecast)
 	_sidebar.money_ui.ask_wanted.connect(_ask_money)
+	_sidebar.money_ui.seen_wanted.connect(_notice_seen)
 	_sidebar.form_submitted.connect(
 		func(req: Dictionary) -> void: _write(req["path"], req["body"], _form_saved)
 	)
@@ -503,6 +504,12 @@ func _fetch_forecast(gen: int) -> void:
 		func(reached: bool, code: int, body: Variant) -> void:
 			view.got_forecast(gen, reached, code, body)
 	)
+
+
+# the operator cleared a notice: the server forgets it; the demo has no server to tell
+func _notice_seen(key: String) -> void:
+	if not _demo:
+		_post("/api/home/money/notices/seen", {"key": key}, func(_r, _c, _b) -> void: pass)
 
 
 # a question about the money: the server's model reads it, so it may take a while; the demo answers
