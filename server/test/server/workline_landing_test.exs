@@ -462,6 +462,16 @@ defmodule Server.WorklineLandingTest do
     end
   end
 
+  test "a landing whose folder is gone does not fail the job: it waits as it was" do
+    %{thread: t} = published!()
+    gone = fn _cmd, _args, _opts -> raise ErlangError, original: :enoent end
+
+    log = ExUnit.CaptureLog.capture_log(fn -> assert KeepUp.landings(gone) == [] end)
+
+    assert log =~ "is not a directory"
+    assert %Thread{stage: "landed", state: "open"} = Repo.get!(Thread, t.id)
+  end
+
   # the queued landing's turn came and went
   defp ran_out!, do: Repo.update_all(Oban.Job, set: [state: "completed"])
 

@@ -16,6 +16,10 @@ defmodule Server.Jobs.KeepUp do
   following its main, and it has one keyed rollout note (`keep_up:remote:<repo>`) saying so, cleared
   once its origin is on GitHub.
 
+  A project whose primary repo's folder does not exist is left out of the pass (no git, no warm) and is
+  one keyed note (`keep_up:gone:<repo>`: remove the project or restore the folder), posted again after
+  a restart and cleared once the folder is back or the project is gone.
+
   Each main checkout's mix projects are compiled for test once per new tip, in a task the job starts
   (`warm_test_builds/2`), so the `_build` a seat's worktree seeds from is current. A project whose
   dependencies are not fetched is skipped, and a project that does not build is said, each as one
@@ -42,7 +46,8 @@ defmodule Server.Jobs.KeepUp do
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
-    repos = repos()
+    {repos, gone} = Enum.split_with(repos(), &File.dir?/1)
+    report_gone(repos, gone)
     faults = Enum.flat_map(repos, &keep_up/1) ++ landings() ++ requeue_stranded()
     # minutes of compile, kept out of the pass's own time (`Server.Jobs.Passes` alarms past 30 s)
     Task.Supervisor.start_child(Server.TaskSupervisor, fn -> warm_test_builds(repos) end)
@@ -173,7 +178,7 @@ defmodule Server.Jobs.KeepUp do
   # a landing is done when GitHub says its PR is MERGED, never at the local gate
   def landings(run \\ &Server.Cmd.run/3) do
     for %{thread: t, url: url} <- Server.Workline.waiting_on_github() do
-      case Server.Workline.Publish.view(Server.Workline.Artifacts.Git.root(t), url, run) do
+      case view(Server.Workline.Artifacts.Git.root(t), url, run) do
         {:ok, %{"state" => "MERGED"}} ->
           Server.Workline.merged(t, url)
 
@@ -394,21 +399,36 @@ defmodule Server.Jobs.KeepUp do
     if body != state, do: Home.Keep.put("keep_up:warm:#{dir}", body)
 
     if String.ends_with?(body, " ok") do
-      :persistent_term.erase({__MODULE__, :noted, dir})
-      Server.Rollout.clear("keep_up:warm:#{dir}")
+      unsay("keep_up:warm:#{dir}")
     else
       present(dir, body)
     end
   end
 
   # posted once per run (a note dismissed since stays dismissed), and again after a restart
-  defp present(dir, body) do
-    text = note_text(dir, body)
+  defp present(dir, body), do: say("keep_up:warm:#{dir}", note_text(dir, body))
 
-    if :persistent_term.get({__MODULE__, :noted, dir}, nil) != text do
-      Server.Rollout.note("keep_up:warm:#{dir}", text)
-      :persistent_term.put({__MODULE__, :noted, dir}, text)
+  defp say(key, text) do
+    if :persistent_term.get({__MODULE__, :noted, key}, nil) != text do
+      Server.Rollout.note(key, text)
+      :persistent_term.put({__MODULE__, :noted, key}, text)
     end
+  end
+
+  defp unsay(key) do
+    :persistent_term.erase({__MODULE__, :noted, key})
+    Server.Rollout.clear(key)
+  end
+
+  defp report_gone(present, gone) do
+    for repo <- gone,
+        do: say("keep_up:gone:#{repo}", "#{repo}'s folder is gone: remove the project or restore the folder")
+
+    for repo <- present, do: unsay("keep_up:gone:#{repo}")
+
+    for %{key: "keep_up:gone:" <> repo = key} <- Server.Rollout.pending(),
+        repo not in gone,
+        do: unsay(key)
   end
 
   defp note_text(dir, body) do
@@ -451,14 +471,20 @@ defmodule Server.Jobs.KeepUp do
         do: Path.dirname(mix)
   end
 
-  defp forget(dir, key) do
-    :persistent_term.erase({__MODULE__, :noted, dir})
-    Server.Rollout.clear(key)
-  end
-
   defp forget_gone(repos) do
     for %{key: "keep_up:warm:" <> dir = key} <- Server.Rollout.pending(),
         not Enum.any?(repos, &(dir == &1 or String.starts_with?(dir, &1 <> "/"))),
-        do: forget(dir, key)
+        do: unsay(key)
+  end
+
+  # a folder that is gone makes the command raise on its `cd:`: unreadable, so the landing waits
+  defp view(root, url, run) do
+    Server.Workline.Publish.view(root, url, run)
+  rescue
+    e in ErlangError ->
+      case e.original do
+        :enoent -> {:error, "#{root} is not a directory"}
+        _ -> reraise e, __STACKTRACE__
+      end
   end
 end

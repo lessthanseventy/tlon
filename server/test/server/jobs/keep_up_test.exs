@@ -21,6 +21,13 @@ defmodule Server.Jobs.KeepUpTest do
 
   defp notes(repo), do: Enum.filter(Rollout.pending(), &String.contains?(&1.text, repo))
 
+  defp dismiss_notes, do: for(n <- Rollout.pending(), do: Rollout.dismiss(n.id))
+
+  defp restart(repo) do
+    dismiss_notes()
+    for prefix <- ["keep_up:warm:", "keep_up:gone:"], do: :persistent_term.erase({KeepUp, :noted, prefix <> repo})
+  end
+
   describe "a repo no project owns" do
     test "two checks with different counts leave one note, carrying the latest" do
       KeepUp.drifted("/r/orphan", {:diverged, 15})
@@ -130,8 +137,12 @@ defmodule Server.Jobs.KeepUpTest do
   test "a repo whose pass raises (gh not on PATH) fails the job: a failed job the operator sees, not only a log line" do
     {:ok, ws} = Workspaces.create(%{name: "Broken"})
 
+    nowhere = Path.join(System.tmp_dir!(), "broken-#{System.pid()}-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(nowhere)
+    on_exit(fn -> File.rm_rf!(nowhere) end)
+
     {:ok, _} =
-      Server.Projects.register(%{workspace_id: ws.id, name: "b", repos: [%{"name" => "b", "path" => "/r/nowhere"}]})
+      Server.Projects.register(%{workspace_id: ws.id, name: "b", repos: [%{"name" => "b", "path" => nowhere}]})
 
     path = System.get_env("PATH")
     System.put_env("PATH", "")
@@ -144,8 +155,43 @@ defmodule Server.Jobs.KeepUpTest do
       end
 
     assert {:error, why} = result
-    assert why =~ "/r/nowhere"
-    assert log =~ "keep_up /r/nowhere"
+    assert why =~ nowhere
+    assert log =~ "keep_up #{nowhere}"
+  end
+
+  describe "a project whose folder is gone" do
+    test "is left out of the pass, one note, the other repos kept up, cleared when the folder is back" do
+      {:ok, ws} = Workspaces.create(%{name: "Gone"})
+      stamp = "#{System.pid()}-#{System.unique_integer([:positive])}"
+      gone = Path.join(System.tmp_dir!(), "gone-#{stamp}")
+      live = Path.join(System.tmp_dir!(), "live-#{stamp}")
+      File.mkdir_p!(live)
+      {_, 0} = System.cmd("git", ["init", "-q", live])
+      on_exit(fn -> File.rm_rf!([gone, live]) end)
+
+      for {name, path} <- [{"g", gone}, {"l", live}],
+          do:
+            {:ok, _} =
+              Server.Projects.register(%{workspace_id: ws.id, name: name, repos: [%{"name" => name, "path" => path}]})
+
+      assert :ok = KeepUp.perform(%Oban.Job{})
+      assert [%{text: text}] = notes(gone)
+      assert text =~ "folder is gone"
+      assert [_origin_note] = notes(live)
+      assert Server.Home.Keep.get("keep_up:warm:#{gone}") == nil
+
+      assert :ok = KeepUp.perform(%Oban.Job{})
+      assert [_one] = notes(gone)
+
+      restart(gone)
+      assert :ok = KeepUp.perform(%Oban.Job{})
+      assert [%{text: ^text}] = notes(gone)
+
+      File.mkdir_p!(gone)
+      {_, 0} = System.cmd("git", ["init", "-q", gone])
+      assert :ok = KeepUp.perform(%Oban.Job{})
+      assert Enum.all?(notes(gone), &(not (&1.text =~ "folder is gone")))
+    end
   end
 
   describe "a landed workline whose PR's checks went red" do
@@ -467,13 +513,6 @@ defmodule Server.Jobs.KeepUpTest do
           send(test, {:ran, exe})
           {out, code}
       end
-    end
-
-    defp dismiss_notes, do: for(n <- Rollout.pending(), do: Rollout.dismiss(n.id))
-
-    defp restart(repo) do
-      dismiss_notes()
-      :persistent_term.erase({KeepUp, :noted, repo})
     end
 
     test "a failed compile is one note of the compiler's last lines, tried once per tip across a restart" do
