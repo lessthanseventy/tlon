@@ -120,12 +120,18 @@ wait "$upid" 2>/dev/null
 group="$(cat "$XDG_RUNTIME_DIR/tlon-checks.group" 2>/dev/null)"
 job V 0
 code=$?
-expect "a check beside a previous check's surviving group exits 2" "$code" "2"
+expect "a check beside a previous check's surviving group exits 75, not run" "$code" "75"
 expect "…naming the group" "$(grep -c "group $group" "$err")" "1"
 CHECKS_IGNORE_LEFTOVERS=1 job W 0
 expect "CHECKS_IGNORE_LEFTOVERS=1 runs it anyway" "$(grep -c "^start W" "$log")" "1"
 kill -KILL -- "-$group" 2>/dev/null
 job X 0
 expect "once the group is gone the next check runs" "$(starts | grep -c X)" "1"
+
+# a lock file that cannot be opened is a different refusal: exit 2
+fresh
+XDG_RUNTIME_DIR="$tmp/missing" job Y 0
+expect "an unopenable lock exits 2" "$?" "2"
+expect "…and the check did not run" "$(starts | grep -c Y)" "0"
 
 exit "$bad"

@@ -140,7 +140,7 @@ Numbers were read 2026-11-07 from the `tlon` db unless stated. Fourteen days = 2
   that group still has members.
 - Check: `checks-queue.test.sh` gains a case: a stopped holder leaves no child alive and the lock is
   taken by the next waiter only after; a check beside a surviving group exits 2 naming it.
-- Done: `checks-queue.sh` stops the group on TERM/INT/HUP and waits for it to be gone (KILL after `CHECKS_KILL_GRACE`, 30 s) before releasing the lock (polled in the script, so no timer holds the lock); a queue killed outright leaves its group, and the next check exits 2 naming it (`CHECKS_IGNORE_LEFTOVERS=1` runs anyway). Not a cwd scan: a watcher, LSP BEAM or menard run in the checkout is not a leftover. Tests: `checks-queue.test.sh`.
+- Done: `checks-queue.sh` stops the group on TERM/INT/HUP and waits for it to be gone (KILL after `CHECKS_KILL_GRACE`, 30 s) before releasing the lock (polled in the script, so no timer holds the lock); a queue killed outright leaves its group, and the next check exits 75 (did not run) naming it (`CHECKS_IGNORE_LEFTOVERS=1` runs anyway). Not a cwd scan: a watcher, LSP BEAM or menard run in the checkout is not a leftover. Tests: `checks-queue.test.sh`.
 
 ---
 

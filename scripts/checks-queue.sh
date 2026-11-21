@@ -14,6 +14,10 @@
 # its suite would run beside the merge queue's gates, and a sandboxed run can't post tlon/check
 # anyway. Run it unsandboxed. CHECKS_UNQUEUED=1 runs it without the queue, for a box with no
 # usable XDG_RUNTIME_DIR.
+#
+# Exit 75 (EX_TEMPFAIL) means the check did not run and may be retried later: a previous check's
+# process group still has running processes. Any other nonzero exit is the command's own verdict
+# (or the sandbox refusal above, 2).
 set -u
 . "$(dirname "$0")/lib/fresh-script.sh"
 refuse_stale_script "$0"
@@ -99,7 +103,7 @@ group_file="$dir/tlon-checks.group"
 prev="$(cat "$group_file" 2>/dev/null)"
 if [ "${CHECKS_IGNORE_LEFTOVERS:-0}" != 1 ] && [ -n "$prev" ] && kill -0 -- "-$prev" 2>/dev/null; then
   echo "checks queue: refused — group $prev, left by a previous check, still has running processes; stop it ('kill -- -$prev') or wait (CHECKS_IGNORE_LEFTOVERS=1 runs anyway)" >&2
-  exit 2
+  exit 75
 fi
 # a killed check must not leave its line behind as if it still ran
 trap ': >"$holder" 2>/dev/null' EXIT
