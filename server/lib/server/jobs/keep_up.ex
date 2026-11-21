@@ -17,7 +17,8 @@ defmodule Server.Jobs.KeepUp do
   once its origin is on GitHub.
 
   A project whose primary repo's folder does not exist is left out of the pass (no git, no warm) and is
-  one keyed note (`keep_up:gone:<repo>`: remove the project or restore the folder), posted again after
+  one keyed note (`keep_up:gone:<repo>`: remove the project with `mise run server:project:remove` or
+  restore the folder), posted again after
   a restart and cleared once the folder is back or the project is gone.
 
   Each main checkout's mix projects are compiled for test once per new tip, in a task the job starts
@@ -37,6 +38,8 @@ defmodule Server.Jobs.KeepUp do
   can't handle a drift (a live session committing to that main) is open.
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 120]
+
+  import Ecto.Query, only: [from: 2]
 
   alias Server.Home
 
@@ -420,9 +423,60 @@ defmodule Server.Jobs.KeepUp do
     Server.Rollout.clear(key)
   end
 
+  @doc """
+  The repo paths of `project` that no other project registers (`~`-expanded, scope globs left out):
+  the ones whose keyed notes and keep rows are the project's alone.
+  """
+  @spec exclusive_paths(Server.Project.t()) :: [String.t()]
+  def exclusive_paths(%Server.Project{id: id} = project) do
+    held =
+      for other <- Server.Repo.all(from p in Server.Project, where: p.id != ^id),
+          {:ok, path} <- [Server.Projects.primary_repo_path(other)],
+          do: path
+
+    for {:ok, path} <- [Server.Projects.primary_repo_path(project)], path not in held, do: path
+  end
+
+  @doc """
+  What `forget/2` would clear for `paths`: `{note_keys, keep_names}`, the `keep_up:gone:<repo>` and
+  `keep_up:warm:<dir>` notes now filed and the `keep_up:warm:<dir>` rows kept, for each repo and the
+  dirs under it.
+  """
+  @spec stale([String.t()]) :: {[String.t()], [String.t()]}
+  def stale(paths) do
+    notes =
+      for %{key: key} <- Server.Rollout.pending(), is_binary(key), keyed_to?(key, paths), do: key
+
+    keep =
+      Server.Repo.all(
+        from k in Home.Keep, where: fragment("starts_with(?, ?)", k.name, "keep_up:warm:"), select: k.name
+      )
+
+    {notes, Enum.filter(keep, &keyed_to?(&1, paths))}
+  end
+
+  @doc "Dismiss the notes and delete the keep rows `stale/1` named."
+  @spec forget([String.t()], [String.t()]) :: :ok
+  def forget(notes, keep) do
+    Enum.each(notes, &unsay/1)
+    Server.Repo.delete_all(from k in Home.Keep, where: k.name in ^keep)
+    :ok
+  end
+
+  defp keyed_to?("keep_up:gone:" <> repo, paths), do: repo in paths
+
+  defp keyed_to?("keep_up:warm:" <> dir, paths),
+    do: Enum.any?(paths, &(dir == &1 or String.starts_with?(dir, &1 <> "/")))
+
+  defp keyed_to?(_key, _paths), do: false
+
   defp report_gone(present, gone) do
     for repo <- gone,
-        do: say("keep_up:gone:#{repo}", "#{repo}'s folder is gone: remove the project or restore the folder")
+        do:
+          say(
+            "keep_up:gone:#{repo}",
+            "#{repo}'s folder is gone: remove the project (`mise run server:project:remove -- <name>`) or restore the folder"
+          )
 
     for repo <- present, do: unsay("keep_up:gone:#{repo}")
 

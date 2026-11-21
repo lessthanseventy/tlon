@@ -102,6 +102,29 @@ defmodule Server.CLI do
     end)
   end
 
+  @doc """
+  Removes the project named `name` with its empty scaffolding (`Server.Projects.remove_with_empties/2`).
+  Without `yes` it only reads: the answer lists what it would remove, or what holds it.
+  """
+  @spec project_remove(String.t(), boolean()) :: result()
+  def project_remove(name, yes) do
+    mode = if yes, do: :remove, else: :dry_run
+
+    case Server.Projects.remove_with_empties(name, mode) do
+      {:ok, plan} ->
+        {:ok, removal_text(plan, mode)}
+
+      {:error, :no_project} ->
+        {:error, "no project named \"#{name}\""}
+
+      {:error, {:ambiguous, workspaces}} ->
+        {:error, "refused: \"#{name}\" names projects in workspaces #{Enum.join(workspaces, ", ")}"}
+
+      {:error, {:blocked, reasons}} ->
+        {:error, blocked_text(name, reasons)}
+    end
+  end
+
   @doc "Tombstones a fact: out of every recall surface, row kept."
   @spec forget_fact(integer()) :: result()
   def forget_fact(id) do
@@ -413,4 +436,39 @@ defmodule Server.CLI do
   defp said({:ok, %{verdict: "approve"} = review}, branch), do: {:ok, reviewed("✓ approved", branch, review)}
   defp said({:ok, review}, branch), do: {:error, reviewed("✗ changes requested", branch, review)}
   defp said({:error, why}, _branch), do: {:error, "not reviewed: " <> why}
+
+  defp blocked_text(name, reasons) do
+    Enum.join(
+      ["refused: project \"#{name}\" is held by:" | Enum.map(reasons, &"  - #{&1}")] ++ ["nothing removed"],
+      "\n"
+    )
+  end
+
+  defp removal_text(plan, mode) do
+    head =
+      case mode do
+        :dry_run -> "dry run, nothing changed (add --yes to remove), project \"#{plan.project.name}\" would remove"
+        :remove -> "removed with project \"#{plan.project.name}\""
+      end
+
+    lines =
+      ["project #{plan.project.name} (workspace #{plan.workspace.name})"] ++
+        Enum.map(plan.threads, &"thread ##{&1.id} \"#{&1.title}\"") ++
+        repoint_lines(plan.repoint) ++
+        Enum.map(plan.repos, &"workspace repo #{&1.path}") ++
+        [
+          if(plan.drop_workspace,
+            do: "workspace #{plan.workspace.name} (its last project)",
+            else: "workspace #{plan.workspace.name} stays"
+          )
+        ] ++
+        Enum.map(plan.notes, &"rollout note #{&1}") ++ Enum.map(plan.keep, &"keep row #{&1}")
+
+    Enum.join([head <> ":" | Enum.map(lines, &"  #{&1}")], "\n")
+  end
+
+  defp repoint_lines(nil), do: []
+
+  defp repoint_lines({thread, project}),
+    do: ["thread ##{thread.id} \"#{thread.title}\" moves to project #{project.name}"]
 end

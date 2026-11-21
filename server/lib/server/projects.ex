@@ -74,6 +74,23 @@ defmodule Server.Projects do
     end
   end
 
+  @doc """
+  Remove the project named `name` with what only scaffolds it (`Server.Projects.Removal`): its empty
+  born-with threads, its repo rows, and its workspace when it was the last project. `:dry_run` reads
+  and changes nothing. `{:ok, plan}` is what was (or would be) removed; `{:error, {:blocked, reasons}}`
+  names what holds it, nothing removed.
+  """
+  @spec remove_with_empties(String.t(), :dry_run | :remove) ::
+          {:ok, Server.Projects.Removal.plan()}
+          | {:error, :no_project | {:ambiguous, [String.t(), ...]} | {:blocked, [String.t(), ...]}}
+  def remove_with_empties(name, mode) when mode in [:dry_run, :remove] do
+    case Repo.all(from p in Project, where: p.name == ^name, preload: :workspace) do
+      [] -> {:error, :no_project}
+      [project] -> removal(project, mode)
+      many -> {:error, {:ambiguous, Enum.map(many, & &1.workspace.name)}}
+    end
+  end
+
   @doc "Move a thread into another project of its own workspace."
   @spec move_thread(Server.Thread.t(), integer()) ::
           {:ok, Server.Thread.t()} | {:error, :no_project | :other_workspace | Ecto.Changeset.t()}
@@ -203,5 +220,14 @@ defmodule Server.Projects do
   def nested_repos(dir) do
     {out, _} = Server.Cmd.run("find", [dir, "-name", ".git", "-prune", "-print"], stderr_to_stdout: true)
     out |> String.split("\n", trim: true) |> Enum.count(&String.ends_with?(&1, "/.git"))
+  end
+
+  defp removal(project, :remove), do: Server.Projects.Removal.execute(project)
+
+  defp removal(project, :dry_run) do
+    case Server.Projects.Removal.plan(project) do
+      %{blocked: [_ | _] = reasons} -> {:error, {:blocked, reasons}}
+      plan -> {:ok, plan}
+    end
   end
 end

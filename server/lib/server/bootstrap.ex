@@ -23,6 +23,10 @@ defmodule Server.Bootstrap do
   # Each workspace's standing machine thread — where the operator talks to the bench.
   @standing_title "the front desk"
 
+  @doc "The title every workspace's standing thread is born with."
+  @spec standing_title() :: String.t()
+  def standing_title, do: @standing_title
+
   @doc """
   Seed-if-empty + repair. Returns `{:ok, default_workspace}` — the oldest workspace, which
   is the default home for adrift threads. Idempotent; an operator's workspaces and

@@ -22,6 +22,10 @@ defmodule Server.Import.Memory do
   require Logger
 
   @thread_title "Claude Code memory"
+
+  @doc "The title of the closed thread a project's memory facts hang off."
+  @spec thread_title() :: String.t()
+  def thread_title, do: @thread_title
   # a brief's budget is a few thousand tokens; one memory must not be able to eat it
   @text_cap 2_000
 

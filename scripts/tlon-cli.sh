@@ -37,6 +37,7 @@
 #   fire <seat-id>                              take a coworker off a bench (the agent survives)
 #   ticket-set <id> status|title|body|priority <value…>  change a ticket; ticket-delete <id> removes one
 #   workspace-delete <id>                       delete one; its threads move to the oldest left
+#   project-remove <name> [--yes]               a deleted repo's project, with its empty born-with threads, repo rows and last-project workspace; without --yes it only says what it would remove or what holds it
 #   hand-off <thread-id> <agent-name>           give a running thread to another coworker
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
@@ -435,6 +436,13 @@ case "$cmd" in
     ws="${1:-}"
     int "$ws" || { echo 'usage: tlon-cli.sh workspace-delete <workspace-id>' >&2; exit 2; }
     exec "$SERVER" rpc "case Server.Workspaces.get($ws) do nil -> IO.puts(\"no workspace #$ws\"); raise(\"refused\"); w -> case Server.Workspaces.remove(w) do {:ok, _} -> IO.puts(\"deleted workspace #{w.name}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end end"
+    ;;
+
+  project-remove)
+    name="${1:-}"; yes=false
+    [ -n "$name" ] || { echo 'usage: tlon-cli.sh project-remove <name> [--yes]' >&2; exit 2; }
+    case "${2:-}" in '') ;; --yes) yes=true ;; *) echo 'usage: tlon-cli.sh project-remove <name> [--yes]' >&2; exit 2 ;; esac
+    exec "$SERVER" rpc "Server.CLI.project_remove(\"$(esc "$name")\", $yes) |> Server.CLI.out()"
     ;;
 
   hand-off)
