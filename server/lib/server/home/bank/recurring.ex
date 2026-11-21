@@ -6,8 +6,15 @@ defmodule Server.Home.Bank.Recurring do
   A **series** is one merchant (its normalised `merchant_name`, else `name`) with at least three
   posted charges at a steady rhythm, the latest run of them: the gaps all within one of weekly
   (5 to 9 days), fortnightly (11 to 17), monthly (26 to 34) or yearly (355 to 375; two charges do, a
-  year being all Plaid gives), and every amount within 10% of the latest. Pending transactions never count; several on one day count once. Its
-  `next` date and `amount` come from the latest charge. `series/2` finds them for outflows
+  year being all Plaid gives). Amounts may vary: the series' `amount` is the median of the latest
+  three charges (of the latest six for a deposit, whose amounts vary more), the run stops at a charge
+  more than twice or less than half of that, and `count` is the whole run. `was` is the amount of an
+  older run of at least three charges at another amount, and `at_amount` how many of the latest
+  charges are at the current one (within 10% of it): a real change of price. A merchant whose
+  charges fall into two or more amount groups, each a steady series, and those series hold at least
+  four fifths of its charges, and whose latest charges fall within one rhythm of each other, has those series (two subscriptions of one merchant) and no other; groups that follow each other are one series with a changed price.
+  Pending transactions never count; several on one day count once. Its `next` date comes from the
+  latest charge. `series/2` finds them for outflows
   (`:out`) or deposits (`:in`); amounts are integers of cents, magnitudes in a series.
 
   A series is **live** (`live/2`) while its latest charge is within two rhythms plus the rhythm's
@@ -33,6 +40,7 @@ defmodule Server.Home.Bank.Recurring do
           last: Date.t(),
           next: Date.t(),
           count: pos_integer(),
+          at_amount: pos_integer(),
           was: pos_integer() | nil,
           account_id: String.t() | nil
         }
@@ -88,49 +96,16 @@ defmodule Server.Home.Bank.Recurring do
     txns
     |> Enum.filter(&(not &1.pending and direction?(&1, direction)))
     |> Enum.group_by(& &1.key)
-    |> Enum.flat_map(fn {_key, group} -> run(group) end)
+    |> Enum.flat_map(fn {_key, group} -> key_series(group, direction) end)
     |> Enum.sort_by(&{&1.next, &1.key})
   end
 
   defp direction?(%{cents: cents}, :out), do: cents > 0
   defp direction?(%{cents: cents}, :in), do: cents < 0
 
-  defp run(group) do
-    [last | older] = group |> Enum.sort_by(& &1.date, {:desc, Date}) |> Enum.uniq_by(& &1.date)
-
-    with [previous | _] <- older,
-         {period, band} <- band(Date.diff(last.date, previous.date)),
-         {steady, rest} = steady([last], older, band, abs(last.cents)),
-         true <- length(steady) >= minimum(period) do
-      [
-        %{
-          key: last.key,
-          label: last.label,
-          period: period,
-          amount: abs(last.cents),
-          last: last.date,
-          next: next(last.date, period),
-          count: length(steady),
-          was: was(steady, rest, band, period),
-          account_id: last.account_id
-        }
-      ]
-    else
-      _ -> []
-    end
-  end
-
   defp band(gap) do
     Enum.find(@bands, fn {_period, range} -> gap in range end)
   end
-
-  defp steady([head | _] = taken, [older | rest] = all, band, amount) do
-    if Date.diff(head.date, older.date) in band and close?(abs(older.cents), amount),
-      do: steady([older | taken], rest, band, amount),
-      else: {taken, all}
-  end
-
-  defp steady(taken, [], _band, _amount), do: {taken, []}
 
   defp close?(a, b), do: abs(a - b) * 10 <= b
 
@@ -184,14 +159,16 @@ defmodule Server.Home.Bank.Recurring do
   the last ten days, with no older steady run at that rhythm behind them.
   """
   @spec new_series([series()], Date.t()) :: [series()]
-  def new_series(series, today), do: Enum.filter(series, &(fresh?(&1, today) and &1.was == nil))
+  def new_series(series, today),
+    do: Enum.filter(series, &(fresh?(&1, today) and &1.count == minimum(&1.period) and &1.was == nil))
 
   @doc """
   The series that are a price change: just made by enough charges as `new_series/2` has it, but with
   an older steady run at that rhythm and another amount (`was`) behind them.
   """
   @spec price_changes([series()], Date.t()) :: [series()]
-  def price_changes(series, today), do: Enum.filter(series, &(fresh?(&1, today) and &1.was != nil))
+  def price_changes(series, today),
+    do: Enum.filter(series, &(fresh?(&1, today) and &1.at_amount == minimum(&1.period) and &1.was != nil))
 
   @doc """
   `txns` without the transfers between the item's own accounts: a charge and a deposit of equal and
@@ -221,22 +198,103 @@ defmodule Server.Home.Bank.Recurring do
   defp minimum(:yearly), do: 2
   defp minimum(_period), do: 3
 
-  defp was([first | _], [candidate | tail], band, period) do
-    with true <- Date.diff(first.date, candidate.date) in band,
-         {older, _} = steady([candidate], tail, band, abs(candidate.cents)),
-         true <- length(older) >= minimum(period) do
-      abs(candidate.cents)
-    else
-      _ -> nil
-    end
+  defp was(at_amount, [older | _] = rest, period) do
+    chunk = Enum.take_while(rest, &close?(abs(&1.cents), abs(older.cents)))
+    if length(at_amount) >= minimum(period) and length(chunk) >= minimum(period), do: abs(older.cents)
   end
 
-  defp was(_steady, [], _band, _period), do: nil
+  defp was(_at_amount, [], _period), do: nil
 
-  defp fresh?(series, today), do: series.count == minimum(series.period) and Date.diff(today, series.last) in 0..10
+  defp fresh?(series, today), do: Date.diff(today, series.last) in 0..10
 
   defp window(:yearly), do: 365 + 30
   defp window(:monthly), do: 2 * 30 + tolerance(:monthly)
   defp window(:fortnightly), do: 2 * 14 + tolerance(:fortnightly)
   defp window(:weekly), do: 2 * 7 + tolerance(:weekly)
+
+  defp key_series(group, direction) do
+    charges = group |> Enum.sort_by(& &1.date, {:desc, Date}) |> Enum.uniq_by(& &1.date)
+    parts = charges |> amount_clusters() |> Enum.flat_map(&List.wrap(detect(&1, direction)))
+    covered = parts |> Enum.map(& &1.count) |> Enum.sum()
+
+    case parts do
+      [_, _ | _] when covered * 5 >= length(charges) * 4 ->
+        if concurrent?(parts), do: parts, else: List.wrap(detect(charges, direction))
+
+      _ ->
+        List.wrap(detect(charges, direction))
+    end
+  end
+
+  defp concurrent?(parts) do
+    newest = parts |> Enum.map(& &1.last) |> Enum.max(Date)
+    Enum.all?(parts, &(Date.diff(newest, &1.last) <= days(&1.period)))
+  end
+
+  defp days(:weekly), do: 7
+  defp days(:fortnightly), do: 14
+  defp days(:monthly), do: 30
+  defp days(:yearly), do: 365
+
+  defp amount_clusters(charges) do
+    charges
+    |> Enum.sort_by(&abs(&1.cents))
+    |> Enum.reduce([], &cluster/2)
+    |> Enum.map(fn {_low, members} -> Enum.sort_by(members, & &1.date, {:desc, Date}) end)
+  end
+
+  defp cluster(charge, [{low, members} | rest] = clusters) do
+    if close?(abs(charge.cents), low),
+      do: [{low, [charge | members]} | rest],
+      else: [{abs(charge.cents), [charge]} | clusters]
+  end
+
+  defp cluster(charge, []), do: [{abs(charge.cents), [charge]}]
+
+  defp detect([last, previous | _] = charges, direction) do
+    with {period, band} <- band(Date.diff(last.date, previous.date)),
+         run = rhythm_run(charges, band),
+         level = level(run, direction),
+         run = Enum.take_while(run, &comparable?(abs(&1.cents), level)),
+         true <- length(run) >= minimum(period) do
+      {at_amount, older} = Enum.split_while(run, &close?(abs(&1.cents), level))
+
+      %{
+        key: last.key,
+        label: last.label,
+        period: period,
+        amount: level,
+        last: last.date,
+        next: next(last.date, period),
+        count: length(run),
+        at_amount: length(at_amount),
+        was: was(at_amount, older, period),
+        account_id: last.account_id
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  defp detect(_charges, _direction), do: nil
+
+  defp rhythm_run([first | rest], band), do: rhythm_run([first], rest, band)
+
+  defp rhythm_run([head | _] = taken, [older | rest], band) do
+    if Date.diff(head.date, older.date) in band,
+      do: rhythm_run([older | taken], rest, band),
+      else: Enum.reverse(taken)
+  end
+
+  defp rhythm_run(taken, [], _band), do: Enum.reverse(taken)
+
+  defp level(run, direction) do
+    recent = run |> Enum.take(recent(direction)) |> Enum.map(&abs(&1.cents)) |> Enum.sort()
+    Enum.at(recent, div(length(recent), 2))
+  end
+
+  defp recent(:out), do: 3
+  defp recent(:in), do: 6
+
+  defp comparable?(a, level), do: a * 2 >= level and a <= level * 2
 end

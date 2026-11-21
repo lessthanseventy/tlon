@@ -80,7 +80,7 @@ defmodule Server.Home.Bank.RecurringTest do
     up = monthly("Streamr", 1_299, ~D[2026-11-17], 3)
     series = Recurring.series(old ++ up, :out)
 
-    assert [%{amount: 1_299, was: 999, count: 3}] = series
+    assert [%{amount: 1_299, was: 999, count: 6, at_amount: 3}] = series
     assert Recurring.new_series(series, @today) == []
     assert [%{label: "Streamr"}] = Recurring.price_changes(series, @today)
 
@@ -116,12 +116,44 @@ defmodule Server.Home.Bank.RecurringTest do
 
     far = [
       txn(~D[2026-08-27], 4_500, "Phone"),
-      txn(~D[2026-09-26], 6_000, "Phone"),
+      txn(~D[2026-09-26], 12_000, "Phone"),
       txn(~D[2026-10-27], 4_650, "Phone")
     ]
 
     assert [%{amount: 4_650, count: 3}] = Recurring.series(near, :out)
     assert Recurring.series(far, :out) == []
+  end
+
+  defp fortnightly(name, cents_for, last, n),
+    do: for(i <- 0..(n - 1), do: txn(Date.add(last, -14 * i), cents_for.(i), name))
+
+  test "a deposit that varies is one series: the median of the latest six, the whole run counted" do
+    amounts = [3_900, 3_500, 3_800, 3_700, 3_300, 3_600, 2_900, 3_800, 3_600, 3_400]
+    pay = fortnightly("Acme Payroll", &(-Enum.at(Stream.cycle(amounts), &1)), ~D[2026-11-13], 35)
+
+    assert [%{period: :fortnightly, count: 35, amount: 3_700, was: nil}] = Recurring.series(pay, :in)
+  end
+
+  test "a bill's history is the whole run at its latest price, and the step is reported" do
+    storage = monthly("Storage", 2_500, ~D[2026-11-02], 9) ++ monthly("Storage", 1_800, ~D[2026-02-02], 10)
+    assert [%{count: 19, amount: 2_500, at_amount: 9, was: 1_800}] = Recurring.series(storage, :out)
+
+    steady = monthly("Streamr", 999, ~D[2026-11-17], 15)
+    assert [%{count: 15, amount: 999, was: nil}] = Recurring.series(steady, :out)
+  end
+
+  test "two stable amounts on two stable days at one merchant are two series" do
+    a = monthly("Apple", 999, ~D[2026-11-05], 6)
+    b = monthly("Apple", 1_499, ~D[2026-11-20], 6)
+
+    assert [%{amount: 999, next: ~D[2026-12-05], count: 6}, %{amount: 1_499, next: ~D[2026-12-20]}] =
+             Recurring.series(a ++ b, :out)
+  end
+
+  test "a charge more than twice or less than half the recent amount ends the run" do
+    old = monthly("Phone", 20_000, ~D[2026-07-27], 4)
+    now = monthly("Phone", 4_500, ~D[2026-10-27], 3)
+    assert [%{count: 3, amount: 4_500}] = Recurring.series(old ++ now, :out)
   end
 
   test "an old odd charge does not break the latest steady run, which is what counts" do

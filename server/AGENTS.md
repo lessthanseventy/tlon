@@ -232,7 +232,8 @@ and every layer the spine design's re-laid §9 asked for
   with `PLAID_CLIENT_ID`/`PLAID_SECRET` or `plaid-client-id`/`plaid-secret`; never kept or logged). It syncs the last 800 days of transactions (Plaid is asked for 730 at the link, its most, so a yearly charge shows) into
   the table `home_bank_transactions` (`Server.Home.Bank.Transaction`, upserted by `transaction_id`) and the cursor, accounts, `as_of` and the summary's dated part into the `home_keep` value `home_bank`, all in one database transaction per sync; a `home_bank` still holding a `transactions` list is moved into the table by the first read or refresh that sees it. The summary is worked out once per refresh and stored with the local day it is for, recomputed from the rows when read on another day. And
   `Server.Home.Bank.Recurring` (pure, in cents) finds the steady charges and deposits (three posted charges, a weekly,
-  fortnightly, monthly or yearly rhythm, a yearly one needing two charges, amounts within 10%; transfers between its own
+  fortnightly, monthly or yearly rhythm, a yearly one needing two charges; amounts may vary, the series' amount being the median of the latest
+  three charges, six for a deposit; two stable amounts at one merchant on two stable days are two series; transfers between its own
   accounts, equal and opposite within a day, are neither). It proposes only to-dos: a charge due within five days with whether
   the available balance covers it, two equal charges within two days that are not a habit, a merchant that just became recurring,
   a recurring one whose price changed (keys `bank:due|double|new|price|relink:…`, never filed by itself); `ITEM_LOGIN_REQUIRED` is one proposal that the bank needs linking
