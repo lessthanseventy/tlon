@@ -19,6 +19,7 @@ const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
 const SidebarSoak := preload("res://soak_sidebar.gd")
 const ChoreSoak := preload("res://soak_chores.gd")
+const PeopleSoak := preload("res://soak_people.gd")
 const LocalSoak := preload("res://soak_local.gd")
 const ArtSoak := preload("res://soak_art.gd")
 const PackLooksSoak := preload("res://soak_looks.gd")
@@ -40,6 +41,8 @@ var _log: Array = []
 var _fail_jot := false
 # answers the stub's /bot... paths (Telegram's API) when set: (path, params) -> {code, body}
 var bot := Callable()
+# answers the people and the door routes when set: (method, path, body) -> {code, body} or null
+var stub := Callable()
 # holds the answers to reads of the home until `release_reads`, each built when the read arrives
 var hold_reads := false
 var _held: Array = []
@@ -128,6 +131,8 @@ func _sections() -> Array:
 		["forms", _on_main.bind(func(main): await FormSoak.new(self, main).run())],
 		["sidebar", _on_main.bind(func(main): await SidebarSoak.new(self, main).run())],
 		["chores", _on_main.bind(func(main): await ChoreSoak.new(self, main).run())],
+		["people", _on_main.bind(func(main): await PeopleSoak.new(self, main).people())],
+		["door", _on_main.bind(func(main): await PeopleSoak.new(self, main).door())],
 		["chat", _on_main.bind(func(main): await ChatSoak.new(self, main).run())],
 		["local", _on_main.bind(func(main): await LocalSoak.new(self).over(main))],
 		["talk", _on_main.bind(func(main): await TalkSoak.new(self).run(main))],
@@ -205,6 +210,7 @@ func _reset() -> void:
 	wttr_code = 200
 	wttr_body = {}
 	bot = Callable()
+	stub = Callable()
 	hold_reads = false
 	_held = []
 	served = true
@@ -911,7 +917,11 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 	var code := 200
 	var out: Variant = {}
 	var parsed: Variant = JSON.parse_string(body) if body != "" else {}
-	if bot.is_valid() and path.begins_with("/bot"):
+	var mine: Variant = stub.call(method, path, parsed) if stub.is_valid() else null
+	if mine is Dictionary:
+		code = mine["code"]
+		out = mine["body"]
+	elif bot.is_valid() and path.begins_with("/bot"):
 		var answer: Dictionary = bot.call(path, parsed)
 		code = answer["code"]
 		out = answer["body"]
@@ -947,6 +957,11 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 		_state["open"] = _state["open"].filter(func(t): return int(t["id"]) != id)
 		if _state.has("note_rows"):
 			_state["note_rows"] = _state["note_rows"].filter(func(t): return int(t["id"]) != id)
+		var piles: Array = _state.get("people", []).duplicate()
+		if _state.has("door"):
+			piles.append(_state["door"])
+		for pile in piles:
+			pile["notes"] = pile["notes"].filter(func(n): return int(n["id"]) != id)
 		out = {"id": id, "text": "x"}
 	elif method == "POST" and (path == "/api/home/add" or path.get_slice("/", 4) in ["edit", "plan", "revive", "answer"]):
 		if _mode == "400":

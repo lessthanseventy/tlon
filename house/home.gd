@@ -1934,6 +1934,11 @@ func _draw_chore_basket() -> void:
 		Chores.sparks(room, _p(c + 0.5, r + 0.5, 12.0), _k, lift)
 
 
+# a ribbon on the frame while a birthday is a week off or less
+func frame_marked() -> bool:
+	return not People.soon(things.people, today()).is_empty()
+
+
 func _draw_frame() -> void:
 	var piece := layout.frame()
 	if piece.is_empty():
@@ -1941,7 +1946,7 @@ func _draw_frame() -> void:
 	var c: int = piece["c"]
 	var r: int = piece["r"]
 	var pen := PetThings.Pen.new(room, _p(c, r), _k)
-	People.frame(pen, not People.soon(things.people, today()).is_empty())
+	People.frame(pen, frame_marked())
 	_chore_box("frame", c + 0.15, r + 0.15, c + 0.85, r + 0.85, 32.0)
 
 
