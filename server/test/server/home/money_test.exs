@@ -23,7 +23,7 @@ defmodule Server.Home.MoneyTest do
     System.put_env("PLAID_CLIENT_ID", "cid")
     System.put_env("PLAID_SECRET", "sec")
     System.put_env("PLAID_ACCESS_TOKEN", "tok")
-    System.put_env("XDG_RUNTIME_DIR", System.tmp_dir!() <> "/no-secrets-#{System.unique_integer([:positive])}")
+    System.put_env("XDG_RUNTIME_DIR", System.tmp_dir!() <> "/no-secrets-#{System.pid()}-#{System.unique_integer([:positive])}")
 
     on_exit(fn ->
       for {name, value} <- previous do
