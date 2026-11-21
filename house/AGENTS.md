@@ -2,7 +2,7 @@
 
 A Godot 4.7 project: one isometric room and one sidebar. The home keeps in sight what the operator's
 jots left open, what is coming, and the newest notes. `main.gd` polls and posts the home's data,
-`room.gd` draws the room (floor, walls, furniture, a plain front door), `sidebar.gd` is everything
+`room.gd` draws the room (floor, walls, furniture, a front door), `sidebar.gd` is everything
 that is not the room (below).
 
 **The sidebar** is one 360 px column on the right of the full window (`Sidebar.WIDTH`), always there;
@@ -40,7 +40,7 @@ agenda's pile, `views.gd` `agenda_view`: its rhythm as text, its notes, each ope
 Enter puts a note on it, and Clear, which archives the pile; opened from a shelf row or from Home's row
 "14:00  Retro · 3 things" under "Today" when an agenda with notes is due today; back from it goes to the shelf
 it came from. The data is `agendas` of `GET /api/home`: `{id, name, every, next_at, notes}`; the notes are in no
-other list), `item`, `open`, `add` (`jot.gd` the jot line alone and what the house read it as; `form.gd` the
+other list), `people` and `door` (`people_view.gd`, below), `item`, `open`, `add` (`jot.gd` the jot line alone and what the house read it as; `form.gd` the
 typed form, behind its "Fill in the details instead" link), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
 (`settings_view.gd`), `decorate`. A click on a thing replaces the view; the back chevron, Esc and a click on
 empty floor go back. The chat dock (`chat_view.gd`, "Chat") is its input line alone until there is a real exchange: a line he typed or the house's word to him (a pet's passing remark is logged and shown once the dock is open, but never grows it). It grows
@@ -149,8 +149,6 @@ runs on the local list.
   (`knock.gd`); one at a time; it lies there until clicked, which opens its item view and puts it
   back on the desk. It is not kept across restarts, only the time of the last knock. She also sits on
   the notepad now and then while the jot field is closed.
-- **The door** is a plain front door: it opens a little when the person comes in or a visitor
-  calls, and a click on it does nothing.
 - **The day's rhythm** (`rhythm.gd`), each beat once a day, remembered in `user://house_rhythm.json`:
   at the server's `home_list_at` (`GET /api/settings`, `knobs[].key`; empty never; 17:30 until
   read) he comes home through the door with a bag, Argos greets him, and a banner of what is still open
@@ -190,6 +188,32 @@ runs on the local list.
   table, the rhythm, the states and the words; `soak_chores.gd` the hits, the lists, the basket's place and record, and
   Done over the demo, the stub server (a delayed read, a read already in flight) and the local list. `--demo` has laundry (soon),
   bins (due today) and feed the cat (fine).
+- **People** (`people.gd` the rules and the two drawings, `people_view.gd` the views): `GET /api/home` sends `people`,
+  `[{id, name, birthday ("MM-DD" or "YYYY-MM-DD" or null), next_birthday (local date, today counting, or null), notes:
+  [{id, text, since}], todos: [the open rows that name them]}]`, soonest first, none last. The framed photo is the
+  plain floor piece `photo_frame` (a small table, default cell 0,10 by the piano, in decorate's home tab; drawn in
+  code at its cell's depth, `_frame_key`; offered once to a saved layout through `Layout.NEWER` and movable like the
+  basket). It wears a small red bow while a birthday is a week away or less (`home.frame_marked`, `People.SOON`). Hover
+  says "the people"; a click opens the People view and outlines it (`frame` hit). A card is the name, the next birthday
+  in `When.birthday` words ("in 3 days · Mon 23 Nov", "today"), the notes (an add line; a quiet "drop" is
+  `POST /api/home/:id/drop`, which is how a note comes off, `done` is 404 for one), then the to-dos naming them,
+  tickable as on Home. "Add a person" and "edit" open one form: a name and a birthday that says what it read
+  (`SettingsView.parse_birthday`); a birthday sent only when its text changed, null when emptied; Remove asks twice
+  (`Sure`, `rm:<id>`). Writes: `POST /api/home/agendas {name, kind: "person", birthday?}`, `.../agendas/:id/edit
+  {name?, birthday?}`, `.../agendas/:id/add {text}`, `.../agendas/:id/drop`; a 400's `error` is shown over the view
+  (a name already taken, a birthday that is no day). The wall calendar marks a birthday's day with a small pink
+  diamond and lists "Sam's birthday" under it (from the stored `birthday`, 29 Feb on the 28th in a year without
+  one); Home's Today has one calm row on the day itself, which opens People. Over the local list people are agendas
+  with `kind` "person" and a `birthday`, and the to-dos naming them are found by text or `who`. `--demo` has Sam
+  (in three days), Jude and Robyn (no birthday). `logic_people.gd` the rules, the words and the list's keeping;
+  `soak_people.gd` (sections `people` and `door`) the stub server's routes, the views, the marks and the layout.
+- **The door** is the front door and a click target (`door` hit, a gold outline on hover, "the door"). It opens a little
+  when the person comes in or a visitor calls. `door: {id, notes: [{id, text, since}]}` of `GET /api/home` is the pile
+  of notes left by it: a canvas tote with an umbrella stands in the doorway cell while there is one
+  (`People.door_state`), and a click on the door or the tote opens "By the door": an add line
+  (`POST /api/home/door/add {text}`) and each note with a tick that drops it (`POST /api/home/:id/drop`). The pile is
+  never edited or dropped as a whole. Over the local list it is an agenda with `kind` "door", in neither the shelf nor
+  the agendas of the status.
 - **The room** is 11x11 cells (`Pets.COLS`/`ROWS`, which the home, the room and the walkers all follow; the back walls are column 0 and row 0, so a bigger room grows toward the front and a saved layout loads unchanged) and, in the 1100x700 window beside the sidebar, drawn with the 2x art (`fit_scale`; the 3x art needs a 1072 px area, which a 1450x980 window has). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
   (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
   board, calendar, jar, none of them movable) and the plain ones (the rest of
@@ -377,7 +401,7 @@ runs on the local list.
 - **The house's own list** (`where`: `"server"` by default, `"local"` for "this computer"; the cog's screen chooses,
   `--local FILE|starters` stages it, nothing saved; `--tell "line;line"` sends loose lines and opens the chat). The same room runs on `backend_local.gd`: every route of the
   server's list answered on the next frame by `local_list.gd`, a Dictionary kept in `user://house_list.json`
-  `{"v": 1, "next_id": N, "things": [...], "agendas": [...]}` (a thing: `id kind text state since due_at every every_day told_at nudges
+  `{"v": 1, "next_id": N, "things": [...], "agendas": [...]}` (an agenda may carry `kind` "person" with a `birthday`, or "door"; one without is an agenda; a thing: `id kind text state since due_at every every_day told_at nudges
   project_id who plan done_at hidden_until`; unknown keys, top level or on a thing, are kept; `due_at` is UTC `Z` as
   the server's rows). Saved after every change, written to a temp file and renamed over the old one, which stays as
   `house_list.bak.json`; a file that cannot be read is moved aside as `house_list.broken-N.json` and the house starts
@@ -595,18 +619,18 @@ runs on the local list.
 - `mise run house:widget` — over the live server as the small always-on-top widget.
 - `mise run house:check` — every script, the soak's too, loads in headless Godot, then `logic.gd` runs:
   the checks that need no scene tree and no simulated room (the due-time rule `when.gd`, the reader and
-  the list's rules `logic_local.gd`, the forecast, the j1 reader and the address `logic_weather.gd`, the chores' table, rhythm and states `logic_chores.gd`,
+  the list's rules `logic_local.gd`, the forecast, the j1 reader and the address `logic_weather.gd`, the chores' table, rhythm and states `logic_chores.gd`, the people's birthdays and the door's mark `logic_people.gd`,
   voices, the jar, the knock and rhythm rules, the TV, `Card`'s dates, the pet settings). A few seconds:
   **iterate here.** Godot is the machine's own, so this is not part of `mise run check`. A check
   that needs neither the tree nor the clock goes in `logic.gd`, not in the soak; none runs in both.
 - `mise run house:soak -- <section>...` runs only those sections, in the suite's order; `-- --list`
   prints the names (`home sim decorate packs looks hacks eggs guests petlife antics petthings cards
-  routes forms sidebar chores chat local talk telegram weather drive packlooks art`); an unknown name prints
+  routes forms sidebar chores people door chat local talk telegram weather drive packlooks art`); an unknown name prints
   them and fails. **Iterate on your own section by name** and run the whole soak once, alone, on the
   final tree. Each section stands alone: the runner (`soak.gd` `_sections`, `_reset`, `_leave`) reseeds
   with 7 and resets the stub server's state, its log and its flags before it, and fails the section
   that leaves a node under the root, a file in `user://` or the server listening. The sections that
-  need the house over the stub (`routes forms sidebar chores chat local talk telegram`) get a fresh `main`
+  need the house over the stub (`routes forms sidebar chores people door chat local talk telegram`) get a fresh `main`
   from `_on_main`; a section that needs more builds it itself and never reads what another left.
   A wait is on the condition the next check needs, with a bound (`_until(done, what)`: it fails the soak
   naming `what` when the bound passes); that nothing happens is a named window (`_quiet`, or `_quiet_frames`
