@@ -54,7 +54,7 @@ defmodule Server.Projects.Removal do
           drop_workspace: boolean(),
           blocked: [String.t()],
           paths: [String.t()],
-          notes: [String.t()],
+          notes: [String.t() | {:off_main | :drift, String.t()}],
           keep: [String.t()]
         }
 

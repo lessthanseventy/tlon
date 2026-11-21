@@ -438,14 +438,13 @@ defmodule Server.Jobs.KeepUp do
   end
 
   @doc """
-  What `forget/2` would clear for `paths`: `{note_keys, keep_names}`, the `keep_up:gone:<repo>` and
-  `keep_up:warm:<dir>` notes now filed and the `keep_up:warm:<dir>` rows kept, for each repo and the
-  dirs under it.
+  What `forget/2` would clear for `paths`: `{note_keys, keep_names}`, the `keep_up:gone:<repo>`,
+  `keep_up:remote:<repo>`, `{:off_main, repo}`, `{:drift, repo}` and `keep_up:warm:<dir>` notes now
+  filed and the `keep_up:warm:<dir>` rows kept, for each repo and the dirs under it.
   """
-  @spec stale([String.t()]) :: {[String.t()], [String.t()]}
+  @spec stale([String.t()]) :: {[String.t() | {:off_main | :drift, String.t()}], [String.t()]}
   def stale(paths) do
-    notes =
-      for %{key: key} <- Server.Rollout.pending(), is_binary(key), keyed_to?(key, paths), do: key
+    notes = for %{key: key} <- Server.Rollout.pending(), keyed_to?(key, paths), do: key
 
     keep =
       Server.Repo.all(
@@ -456,7 +455,7 @@ defmodule Server.Jobs.KeepUp do
   end
 
   @doc "Dismiss the notes and delete the keep rows `stale/1` named."
-  @spec forget([String.t()], [String.t()]) :: :ok
+  @spec forget([String.t() | {:off_main | :drift, String.t()}], [String.t()]) :: :ok
   def forget(notes, keep) do
     Enum.each(notes, &unsay/1)
     Server.Repo.delete_all(from k in Home.Keep, where: k.name in ^keep)
@@ -464,6 +463,8 @@ defmodule Server.Jobs.KeepUp do
   end
 
   defp keyed_to?("keep_up:gone:" <> repo, paths), do: repo in paths
+  defp keyed_to?("keep_up:remote:" <> repo, paths), do: repo in paths
+  defp keyed_to?({kind, repo}, paths) when kind in [:off_main, :drift], do: repo in paths
 
   defp keyed_to?("keep_up:warm:" <> dir, paths),
     do: Enum.any?(paths, &(dir == &1 or String.starts_with?(dir, &1 <> "/")))

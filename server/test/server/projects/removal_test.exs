@@ -217,9 +217,54 @@ defmodule Server.Projects.RemovalTest do
     {:ok, _} = Projects.register(%{workspace_id: other.ws.id, name: "twin", repos: []})
     before = counts()
 
-    assert {:error, {:ambiguous, names}} = Projects.remove_with_empties("twin", :remove)
-    assert Enum.sort(names) == ["other", "twin"]
+    assert {:error, {:ambiguous, forms}} = Projects.remove_with_empties("twin", :remove)
+    assert Enum.sort(forms) == ["other/twin", "twin/twin"]
     assert counts() == before
+
+    assert {:error, text} = Server.CLI.project_remove("twin", true)
+    assert text =~ "use one of: "
+    assert text =~ "other/twin"
+    assert text =~ "twin/twin"
+  end
+
+  test "workspace/name picks one of two same-named projects, for a dry run and a removal" do
+    gone_workspace("twin")
+    other = gone_workspace("other")
+    {:ok, _} = Projects.register(%{workspace_id: other.ws.id, name: "twin", repos: []})
+    before = counts()
+
+    assert {:ok, %{project: %{name: "twin"}, workspace: %{name: "other"}}} =
+             Projects.remove_with_empties("other/twin", :dry_run)
+
+    assert counts() == before
+    assert {:error, :no_project} = Projects.remove_with_empties("nowhere/twin", :dry_run)
+    assert {:ok, text} = Server.CLI.project_remove("other/twin", false)
+    assert text =~ "project twin (workspace other)"
+
+    assert {:ok, _} = Projects.remove_with_empties("other/twin", :remove)
+    assert counts()["project"] == before["project"] - 1
+    assert {:ok, %{workspace: %{name: "twin"}}} = Projects.remove_with_empties("twin", :dry_run)
+  end
+
+  test "the remote, off-main and drift notes of its repo are dismissed, another repo's stay" do
+    %{path: path} = gone_workspace("gone")
+    other = path <> "-other"
+
+    keys = fn p -> ["keep_up:remote:#{p}", {:off_main, p}, {:drift, p}] end
+    for key <- keys.(path) ++ keys.(other), do: Rollout.note(key, "note #{inspect(key)}")
+    sync()
+
+    assert {:ok, plan} = Projects.remove_with_empties("gone", :dry_run)
+    assert Enum.sort(plan.notes) == Enum.sort(keys.(path))
+
+    assert {:ok, text} = Server.CLI.project_remove("gone", false)
+    assert text =~ "rollout note keep_up:remote:#{path}"
+    assert text =~ "rollout note off_main:#{path}"
+    assert text =~ "rollout note drift:#{path}"
+    assert Enum.sort(for(%{key: k} <- Rollout.pending(), do: k)) == Enum.sort(keys.(path) ++ keys.(other))
+
+    assert {:ok, _} = Projects.remove_with_empties("gone", :remove)
+    assert Enum.sort(for(%{key: k} <- Rollout.pending(), do: k)) == Enum.sort(keys.(other))
   end
 
   describe "Server.CLI.project_remove/2" do

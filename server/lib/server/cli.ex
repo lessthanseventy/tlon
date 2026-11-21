@@ -117,8 +117,8 @@ defmodule Server.CLI do
       {:error, :no_project} ->
         {:error, "no project named \"#{name}\""}
 
-      {:error, {:ambiguous, workspaces}} ->
-        {:error, "refused: \"#{name}\" names projects in workspaces #{Enum.join(workspaces, ", ")}"}
+      {:error, {:ambiguous, forms}} ->
+        {:error, "refused: \"#{name}\" names projects in several workspaces, use one of: #{Enum.join(forms, ", ")}"}
 
       {:error, {:blocked, reasons}} ->
         {:error, blocked_text(name, reasons)}
@@ -462,10 +462,13 @@ defmodule Server.CLI do
             else: "workspace #{plan.workspace.name} stays"
           )
         ] ++
-        Enum.map(plan.notes, &"rollout note #{&1}") ++ Enum.map(plan.keep, &"keep row #{&1}")
+        Enum.map(plan.notes, &"rollout note #{note_label(&1)}") ++ Enum.map(plan.keep, &"keep row #{&1}")
 
     Enum.join([head <> ":" | Enum.map(lines, &"  #{&1}")], "\n")
   end
+
+  defp note_label({kind, repo}), do: "#{kind}:#{repo}"
+  defp note_label(key), do: key
 
   defp repoint_lines(nil), do: []
 

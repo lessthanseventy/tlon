@@ -78,16 +78,18 @@ defmodule Server.Projects do
   Remove the project named `name` with what only scaffolds it (`Server.Projects.Removal`): its empty
   born-with threads, its repo rows, and its workspace when it was the last project. `:dry_run` reads
   and changes nothing. `{:ok, plan}` is what was (or would be) removed; `{:error, {:blocked, reasons}}`
-  names what holds it, nothing removed.
+  names what holds it, nothing removed. `name` is a bare project name, or `workspace/name` to pick
+  one of several workspaces' projects of that name; a bare name that more than one workspace
+  shares is `{:error, {:ambiguous, forms}}`, the `workspace/name` forms to choose from.
   """
   @spec remove_with_empties(String.t(), :dry_run | :remove) ::
           {:ok, Server.Projects.Removal.plan()}
           | {:error, :no_project | {:ambiguous, [String.t(), ...]} | {:blocked, [String.t(), ...]}}
   def remove_with_empties(name, mode) when mode in [:dry_run, :remove] do
-    case Repo.all(from p in Project, where: p.name == ^name, preload: :workspace) do
+    case named(name) do
       [] -> {:error, :no_project}
       [project] -> removal(project, mode)
-      many -> {:error, {:ambiguous, Enum.map(many, & &1.workspace.name)}}
+      many -> {:error, {:ambiguous, Enum.map(many, &"#{&1.workspace.name}/#{&1.name}")}}
     end
   end
 
@@ -228,6 +230,21 @@ defmodule Server.Projects do
     case Server.Projects.Removal.plan(project) do
       %{blocked: [_ | _] = reasons} -> {:error, {:blocked, reasons}}
       plan -> {:ok, plan}
+    end
+  end
+
+  defp named(name) do
+    case String.split(name, "/", parts: 2) do
+      [workspace, bare] ->
+        Repo.all(
+          from p in Project,
+            join: w in assoc(p, :workspace),
+            where: w.name == ^workspace and p.name == ^bare,
+            preload: [workspace: w]
+        )
+
+      [bare] ->
+        Repo.all(from p in Project, where: p.name == ^bare, preload: :workspace)
     end
   end
 end
