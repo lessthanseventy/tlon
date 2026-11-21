@@ -115,7 +115,7 @@ func door_view(box: VBoxContainer) -> void:
 		var text := Blocks.wrapped(str(n["text"]), Fonts.BODY, Paper.INK)
 		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		line.add_child(text)
-	_add_line(box, "door", "umbrella, return the library books", "/api/home/door/add")
+	_add_line(box, "door", "something to take with you", "/api/home/door/add")
 
 
 func _say(box: VBoxContainer) -> void:

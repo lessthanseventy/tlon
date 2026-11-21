@@ -780,7 +780,7 @@ func _pile() -> void:
 	await _poll()
 	sb.open_door()
 	await _sync()
-	var edit: Variant = _edit("umbrella")
+	var edit: Variant = _edit("something to take")
 	s._check(edit != null, "the view has an add line")
 	edit.text_submitted.emit("umbrella")
 	await s._until(
@@ -791,10 +791,10 @@ func _pile() -> void:
 	)
 	await s._until(func() -> bool: return _says("umbrella"), "it is on the pile")
 	s._check(_hits("door") == 2, "and the tote stands by the door")
-	_edit("umbrella").text_submitted.emit("  ")
+	_edit("something to take").text_submitted.emit("  ")
 	await _sync()
 	s._check(_posted("/api/home/door/add").size() == 1, "a blank line posts nothing")
-	_edit("umbrella").text_submitted.emit("return the library books")
+	_edit("something to take").text_submitted.emit("return the library books")
 	await s._until(
 		func() -> bool: return _says("return the library books"), "a second note is there"
 	)
