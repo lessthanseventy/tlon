@@ -834,6 +834,13 @@ func _hidden() -> void:
 	s._check(l.check(at, piece, []) != "", "a frame cannot hang behind a piece hugging that wall")
 	l.pieces = l.pieces.filter(func(o: Dictionary) -> bool: return o["p"] != "soak_hug")
 	s._check(l.check(at, piece, []) == "", "and can once it is gone")
+	var kept: Array = l.pieces
+	l.pieces = [piece]
+	var wide := {"p": "soak_hug", "f": "ne", "c": 9, "r": 0}
+	s._check(l.check(wide, null, []) != "", "a hugging piece cannot be dropped in front of a frame")
+	l.index["soak_hug_ne"]["height"] = 10
+	s._check(l.check(wide, null, []) == "", "unless it is too low to reach the picture")
+	l.pieces = kept
 	l.index.erase("soak_hug_ne")
 	l.catalogue = l.catalogue.filter(func(e: Dictionary) -> bool: return e["key"] != "soak_hug")
 

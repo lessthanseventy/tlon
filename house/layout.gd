@@ -598,6 +598,14 @@ func _check_wall(p: Dictionary, skip: Variant) -> String:
 		if ok == "wall" or ok == "hug":
 			if o["f"] == p["f"] and o["c"] == p["c"] and o["r"] == p["r"]:
 				return NO_ROOM
+			if (
+				ok == "wall"
+				and kind(p) == "hug"
+				and o["f"] == p["f"]
+				and rect(p).has_point(Vector2i(o["c"], o["r"]))
+				and height(p) >= _clear(o)
+			):
+				return NO_ROOM
 			var over: bool = o["f"] == p["f"] and rect(o).has_point(cell)
 			if ok == "hug" and over and height(o) >= _clear(p):
 				return NO_ROOM
