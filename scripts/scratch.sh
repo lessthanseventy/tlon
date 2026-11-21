@@ -46,7 +46,7 @@ new() {
   install "$dir/server" "formatter plugins" mix deps.compile credo quokka doctest_formatter
   # a cold first `menard run test` compiles the test env past the MCP tool's wall and loses the verdict
   install "$dir/server" "test build" env MIX_ENV=test mix compile
-  install "$dir/office" "bun install" bun install --frozen-lockfile
+
   local pkg
   for pkg in "$dir"/adapters/*/package.json; do
     [ -f "$pkg" ] && install "$(dirname "$pkg")" "bun install" bun install --frozen-lockfile

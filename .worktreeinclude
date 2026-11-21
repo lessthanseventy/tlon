@@ -1,6 +1,5 @@
 server/_build
 server/deps
-office/node_modules
 adapters/claude-code/node_modules
 adapters/lsp/node_modules
 adapters/lspd/node_modules

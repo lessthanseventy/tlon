@@ -81,7 +81,7 @@ run = "journalctl --user -u tlon -n 80 -f"
 # Operate/script access to the LIVE channel from the shell — the human+Claude-Code peer
 # to the agents' MCP tools. Goes through `bin/server rpc` INTO the running service node:
 # a token minted anywhere else dies with its node, and roster/presence is in-memory
-# there. Thin and deliberate — operate access, NOT a second UI (the office is the rich surface).
+# there. Thin and deliberate — operate access, NOT a second UI.
 ["server:spawn"]
 description = "server: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pane"
 run = "scripts/tlon-cli.sh spawn"
@@ -184,7 +184,7 @@ dir = "server"
 run = "../scripts/watch.sh mise exec -- mix test"
 
 ["server:dev"]
-description = "server: a scratch server NODE (funes-dev@127.0.0.1, database tlon_dev, MCP :4041) in iex — hack on the server with the live service untouched; point the office at it with `TLON_URL=http://127.0.0.1:4041 mise run office:run`"
+description = "server: a scratch server NODE (funes-dev@127.0.0.1, database tlon_dev, MCP :4041) in iex — hack on the server with the live service untouched; point the house at it with `TLON_URL=http://127.0.0.1:4041 mise run house:run`"
 dir = "server"
 run = """
 # never the service's database: TLON_DATABASE names the scratch one (config/dev.exs: tlon_dev)
@@ -230,13 +230,6 @@ run = "scripts/checks-queue.test.sh"
 description = "script test: house-gate.sh runs only when house/ changed, skips or fails a missing godot by TLON_HOUSE_GATE, and reports a failing or hung section (offline, temp repo, fake godot)"
 run = "scripts/house-gate.test.sh"
 
-["check:scripts:office-drive"]
-description = "script test: office-drive.sh sends each key step to tmux as typed (offline, temp dirs)"
-run = "scripts/office-drive.test.sh"
-
-["check:scripts:office-monitor"]
-description = "script test: office-monitor.sh says DOWN and UP once per outage (offline, temp dirs)"
-run = "scripts/office-monitor.test.sh"
 
 ["check:scripts:record-ran"]
 description = "script test: record-ran.sh reports a hand-run gate, and a down service never fails the run (offline, temp dirs)"
@@ -249,6 +242,10 @@ run = "scripts/release-smoke.test.sh"
 ["check:scripts:scratch"]
 description = "script test: scratch.sh prune keeps exactly the unlanded work (offline, temp dirs)"
 run = "scripts/scratch.test.sh"
+
+["server:tmux-sweep"]
+description = "server: remove the dead tmux sockets of this uid under TMUX_TMPDIR (or /tmp) — a live server's socket stays; prints how many it removed"
+run = "scripts/tmux-sweep.sh"
 
 ["check:scripts:tmux-sweep"]
 description = "script test: tmux-sweep.sh removes only the dead sockets (offline, temp dirs)"
@@ -293,10 +290,10 @@ depends_post = ["check:suites"]
 
 # Every suite at once. A worktree's deps are its own (seeded copies), so a branch rebased onto a lock
 # change has them behind; server:deps runs before this, never beside it, where a cold compile of every
-# dep would starve the office's tmux-driven tests.
+# dep would starve the suites' timing-bound tests.
 ["check:suites"]
-description = "the names gate (which holds the task manual to its source) + the script self-tests + the tracked-junk gate + the server (suite and deterministic evals) + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the house gate (after the others, only when house/ changed), in parallel"
-depends = ["check:names", "check:scripts", "check:ignored", "server:check", "server:eval-det", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "check:house"]
+description = "the names gate (which holds the task manual to its source) + the script self-tests + the tracked-junk gate + the server (suite and deterministic evals) + adapters (claude-code + its mod + lsp + lspd) precommit gates (format + warnings + credo + types + tests) + the house gate (after the others, only when house/ changed), in parallel"
+depends = ["check:names", "check:scripts", "check:ignored", "server:check", "server:eval-det", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "check:house"]
 
 ["server:deps"]
 description = "server: fetch the locked deps when they are behind the lock (refusing a mix.exs the lock does not satisfy, rather than rewriting mix.lock), and compile them for the test env and the dev env server:eval-det boots (a no-op when current)"

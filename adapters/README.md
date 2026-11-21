@@ -1,6 +1,6 @@
 # adapters
 
-The hands of the stack. `server` remembers, `office` sees, **`adapters` acts** — it is how a
+The hands of the stack. `server` remembers, **`adapters` acts** — it is how a
 working agent reaches the server, wakes up already knowing its thread, and banks what it learns.
 
 Every coworker runs in Claude Code, on any model (an ollama one through Claude Code's gateway), and
@@ -23,7 +23,7 @@ adapters/
   lsp/                   the LSP tools as a stdio MCP server, forwarding over a unix socket to…
   lspd/                  …the LSP sidecar daemon that owns the warm language-server pool
   skills/                harness-neutral discipline (a citizen loads them as /tlon-citizen:<name>)
-    coordinate-via-tlon/  bank-what-you-learn/  keep-todos-current/  verify-with-evidence/  drive-office/
+    coordinate-via-tlon/  bank-what-you-learn/  keep-todos-current/  verify-with-evidence/
 ```
 
 ## Run it

@@ -66,7 +66,7 @@ pure parts are `lib/` (bun-tested).
 **What the session shows**
 - **The band** above the prompt: the thread and goal, the workline stage and its gate, the last
   check, todos, blockers, what is red (`office_glance`), and context / 5h / week use.
-- **`/thread`**: a pane with the coworker's own figure (`office/cli.ts figure`), its voice, the
+- **`/thread`**: a pane with the coworker's voice, the
   workline with **advance** / **finish** buttons that fill the prompt (never call), the branch's
   commits, cited threads, the crew and what each is doing (a seat's `status` as the server words it, `lib/status.ts`: ● working, ! waiting, ○ idle, ◌ cold, · off), and the thread's conversation.
 - **Toasts**: a new @mention of this seat, something newly red, the day's landings at start, a

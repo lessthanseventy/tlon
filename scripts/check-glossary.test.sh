@@ -6,7 +6,7 @@ tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 bad=0
 
 fixture() { # fixture <dir>: a clean tree
-  mkdir -p "$1/docs/plans" "$1/server/lib" "$1/office/tui" "$1/scripts"
+  mkdir -p "$1/docs/plans" "$1/server/lib" "$1/sub" "$1/scripts"
   echo 'defmodule Server.Real do end' >"$1/server/lib/real.ex"
   printf '%s\n' '| term | meaning | lives in (module/field/task) | never say |' '|---|---|---|---|' \
     '| x | y | `Server.Real` | "z" |' '| w | v | pending: `Server.Gone` | "z" |' >"$1/docs/glossary.md"
@@ -22,8 +22,7 @@ fixture "$tmp/mod"; sed -i 's/`Server.Real`/`Server.Nope`/' "$tmp/mod/docs/gloss
 fixture "$tmp/file"; sed -i 's#`Server.Real`#`scripts/nope.sh`#' "$tmp/file/docs/glossary.md"; expect 1 'missing script' "$tmp/file"
 fixture "$tmp/ck"; echo 'the cockpit' >>"$tmp/ck/AGENTS.md";            expect 1 'cockpit in AGENTS.md' "$tmp/ck"
 fixture "$tmp/fn"; echo 'funes the product' >>"$tmp/fn/AGENTS.md";      expect 1 'funes in AGENTS.md' "$tmp/fn"
-fixture "$tmp/co"; echo 'the console' >"$tmp/co/office/tui/a.ts";       expect 1 'console in office/tui' "$tmp/co"
+fixture "$tmp/co"; echo 'the console' >"$tmp/co/sub/AGENTS.md";         expect 1 'console in a nested AGENTS.md' "$tmp/co"
 fixture "$tmp/pl"; echo 'press ctrl+] lobby' >"$tmp/pl/docs/plans/2026-10-20-x.md"; expect 0 'a new plan is prose, not scanned' "$tmp/pl"
 fixture "$tmp/old"; echo 'the cockpit' >"$tmp/old/docs/plans/2026-10-18-x.md"; expect 0 'old plan is exempt' "$tmp/old"
-fixture "$tmp/b3"; echo 'press ctrl+] lobby' >"$tmp/b3/office/tui/a.ts"; expect 0 'tui lobby hint only warns (B3)' "$tmp/b3"
 exit "$bad"

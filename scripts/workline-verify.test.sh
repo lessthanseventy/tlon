@@ -64,10 +64,10 @@ expect "  asks the service with the diff's paths" "$(grep -c 'work/s1/notes.md.*
 expect "  records the real exit" "$(cli | grep -c '^record-verify 7 s1 0 mise run server:check')" "1"
 expect "  and advances the verify stage" "$(cli | grep -c '^advance 7 verify$')" "1"
 
-reset; echo '{"tasks":["server:check","office:check"]}' >"$tmp/scope"; echo office:check >"$tmp/red"
+reset; echo '{"tasks":["server:check","check:house"]}' >"$tmp/scope"; echo check:house >"$tmp/red"
 out="$(verify 7 s1 "$repo")"
-expect "a red task still runs the rest" "$(ran)" "run server:check,run office:check"
-expect "  records its exit 1" "$(cli | grep -c '^record-verify 7 s1 1 mise run office:check')" "1"
+expect "a red task still runs the rest" "$(ran)" "run server:check,run check:house"
+expect "  records its exit 1" "$(cli | grep -c '^record-verify 7 s1 1 mise run check:house')" "1"
 expect "  goes back to build, never advancing" "$(cli | grep -c '^red-verify 7 mise run check failed'):$(cli | grep -c '^advance')" "1:0"
 
 reset

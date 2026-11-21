@@ -24,7 +24,7 @@ import {
 } from "./lib/capture.ts";
 import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
 import { seatGlyph, seatStatus } from "./lib/status.ts";
-import { attribution, bandParts, figureCells, gateOf, landedAlerts, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.ts";
+import { attribution, bandParts, gateOf, landedAlerts, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.ts";
 import { CHIME_WAV } from "./lib/chime.ts";
 
 // Below this much new transcript a turn's capture waits for the next turn instead of paying for
@@ -50,7 +50,7 @@ const DOSSIER_GIVE_UP_MS = 30_000;
 const NO_BRIEF = "(no brief)";
 
 type Message = { author: string; body: string; at?: string };
-type Figure = { columns: number; rows: number; cells: string };
+
 type Need = { key: string; kind: string; level: string; ref?: number; title: string; text?: string; options?: { key: string; label: string }[] };
 
 let thread = "";
@@ -63,7 +63,7 @@ let dossierAt = 0;
 let glanceAt = 0;
 let dossierError = "";
 let glance: Glance | null = null;
-let figure: Figure | null = null;
+
 let briefed = "";
 // percent of the context window past which a turn starts by compacting (TLON_COMPACT_AT, the profile's
 // `compact_at`); 0 leaves compaction to Claude Code
@@ -136,7 +136,7 @@ async function note($, what: string) {
   }
 }
 
-// One dossier read in flight, at most one queued behind it (office/tui/flight.ts's shape): two
+// One dossier read in flight, at most one queued behind it: two
 // replies landing out of order would let the older overwrite the newer and advance seenMessage twice.
 let dossierFlight: Promise<void> | null = null;
 let dossierQueued: Promise<void> | null = null;
@@ -216,18 +216,6 @@ async function refreshGlance($) {
   }
 }
 
-// The coworker's own figure, from the office's art (`office/cli.ts figure`), for the pane.
-async function loadFigure($, archetype: string | null) {
-  const office = `${$.plugin.root}/../office/cli.ts`;
-  try {
-    const r = await $.process.run(["bun", office, "figure", author, ...(archetype ? [archetype] : [])]);
-    if (r.exitCode !== 0) return;
-    const { rows, paint } = JSON.parse(r.stdout);
-    figure = figureCells(rows, paint);
-  } catch {
-    return;
-  }
-}
 
 let sessionId: number | null = null;
 let superseded = false;
@@ -549,7 +537,7 @@ export function register(on) {
     $.clock.every(GLANCE_MS, () => refreshGlance($));
     void refresh($);
     void refreshGlance($).then(() => {
-      void loadFigure($, glance?.archetype ?? null);
+
       void landedToday($).then((rows) => {
         const titles = rows.length ? rows.map((a) => a.title) : (glance?.landed ?? []).map((l) => `#${l.thread_id} ${l.title}`);
         if (titles.length) $.ui.toast(`landed today: ${titles.slice(0, 3).join(" · ")}${titles.length > 3 ? ` +${titles.length - 3}` : ""}`, { timeoutMs: 10_000 });
@@ -842,7 +830,7 @@ export function register(on) {
 
   on("ui.render", { component: "Pane" }, async ($, e, next) => {
     if (e.requestId !== THREAD_PANE) return next(e);
-    const { Box, Text, Markdown, Button, Raster } = $.ui.resolve(e);
+    const { Box, Text, Markdown, Button } = $.ui.resolve(e);
     const d = dossier;
     const head: unknown[] = [];
     const who = [Text({ bold: true, children: [author] })];
@@ -852,10 +840,7 @@ export function register(on) {
         key: "who",
         flexDirection: "row",
         columnGap: 2,
-        children: [
-          ...(figure && e.surface === "terminal" ? [Raster({ key: "figure", columns: figure.columns, rows: figure.rows, cells: figure.cells })] : []),
-          Box({ flexDirection: "column", children: who }),
-        ],
+        children: [Box({ flexDirection: "column", children: who })],
       }),
     );
     if (d?.workline) {

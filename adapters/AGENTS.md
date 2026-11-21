@@ -1,6 +1,6 @@
 # adapters — the hands
 
-The third story in the stack. `server` is the memory, `office` is the sight, `adapters` is the
+`server` is the memory, `adapters` is the
 **hands**: how a working agent reaches the server, comes up already knowing its thread, and banks what
 it learns as it works. Read `../server/docs/spec.md` before reshaping anything here — this module is
 Track B's agent side, and the spec's boundaries govern it.

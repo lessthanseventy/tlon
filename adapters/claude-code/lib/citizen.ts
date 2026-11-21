@@ -1,5 +1,5 @@
 // The tlon-citizen mod's pure decisions: what the band says, which tool calls are held, how a commit
-// is signed, which messages and landings are news, and how a coworker's figure becomes cells. The
+// is signed, and which messages and landings are news. The
 // mod (../mod.ts) does the calling and drawing; everything here is data in, data out.
 
 import type { ChatterMessage, Dossier } from "./brief.ts";
@@ -193,30 +193,4 @@ export function turnWord(turnId: string): string {
   let h = 2166136261;
   for (let i = 0; i < turnId.length; i++) h = Math.imul(h ^ turnId.charCodeAt(i), 16777619);
   return VERBS[(h >>> 0) % VERBS.length]!;
-}
-
-const DEFAULT_COLOR = 0x01000000;
-const hex = (c: string | undefined) => (c ? Number.parseInt(c.replace("#", ""), 16) : DEFAULT_COLOR);
-
-/**
- * A figure (rows of palette letters, `.` clear) as a Raster's cells: two pixel rows to a cell, the
- * upper as `▀`'s colour over the lower as its background, a lone lower pixel as `▄`.
- */
-export function figureCells(rows: string[], paint: Record<string, string>): { columns: number; rows: number; cells: string } {
-  const columns = Math.max(0, ...rows.map((r) => r.length));
-  const height = Math.ceil(rows.length / 2);
-  const numbers: number[] = [];
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < columns; x++) {
-      const top = rows[2 * y]?.[x] ?? ".";
-      const bottom = rows[2 * y + 1]?.[x] ?? ".";
-      if (top === "." && bottom === ".") numbers.push(32, DEFAULT_COLOR, DEFAULT_COLOR);
-      else if (top === ".") numbers.push(0x2584, hex(paint[bottom]), DEFAULT_COLOR);
-      else numbers.push(0x2580, hex(paint[top]), bottom === "." ? DEFAULT_COLOR : hex(paint[bottom]));
-    }
-  }
-  const bytes = new Uint8Array(Uint32Array.from(numbers).buffer);
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return { columns, rows: height, cells: btoa(binary) };
 }

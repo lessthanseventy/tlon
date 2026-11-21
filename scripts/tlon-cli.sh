@@ -251,7 +251,7 @@ case "$cmd" in
     ;;
 
   shell-status)
-    # One JSON blob for the office (the desktop rail; the TUI reads the same at GET /api/office):
+    # One JSON blob for the office (the desktop rail; the house reads the same at GET /api/office):
     # Server.Office.status — every workspace's roster, benches, threads, tickets, notes, visits.
     exec "$SERVER" rpc 'Server.Office.status() |> JSON.encode!() |> IO.puts()'
     ;;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attribution, bandParts, figureCells, gateOf, landedAlerts, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport } from "./citizen.ts";
+import { attribution, bandParts, gateOf, landedAlerts, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport } from "./citizen.ts";
 import type { Dossier } from "./brief.ts";
 
 const NONE = { shown: [], more: 0 };
@@ -135,15 +135,6 @@ test("a turn's word is stable for the turn", () => {
   expect(typeof turnWord("t-2")).toBe("string");
 });
 
-test("a figure packs two pixel rows to a cell: ▀ over its background, a lone lower pixel as ▄, clear as a space", () => {
-  const { columns, rows, cells } = figureCells(["a.", ".b", "a."], { a: "#ff0000", b: "#00ff00" });
-  expect([columns, rows]).toEqual([2, 2]);
-  const n = new Uint32Array(Uint8Array.from(atob(cells), (c) => c.charCodeAt(0)).buffer);
-  expect(Array.from(n.slice(0, 3))).toEqual([0x2580, 0xff0000, 0x01000000]);
-  expect(Array.from(n.slice(3, 6))).toEqual([0x2584, 0x00ff00, 0x01000000]);
-  expect(Array.from(n.slice(6, 9))).toEqual([0x2580, 0xff0000, 0x01000000]);
-  expect(Array.from(n.slice(9, 12))).toEqual([32, 0x01000000, 0x01000000]);
-});
 
 describe("usageReport", () => {
   test("the plan's two windows, as the server takes them", () => {

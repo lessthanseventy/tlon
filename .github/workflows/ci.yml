@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # The runner's own Postgres, over the socket at /run/postgresql with peer auth — the setup
-      # config.exs assumes — and tmux, which the office read model asks what windows exist.
+      # config.exs assumes — and tmux, which the server's read model asks what windows exist.
       - name: postgres and tmux
         run: |
           sudo systemctl start postgresql.service
@@ -59,13 +59,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      # tmux: the office's terminal test drives a private tmux server
-      - run: sudo apt-get install -y --no-install-recommends tmux
       - uses: jdx/mise-action@v2
         with:
           cache: true
           install_args: bun
-      - run: mise run office:check
       - run: mise run adapters:claude-code:check
       - run: mise run adapters:lsp:check
       - run: mise run adapters:lspd:check

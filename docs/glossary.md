@@ -3,8 +3,8 @@
 Every row is one word with one meaning. A word that needs two meanings is two words, and the second
 one is a rename (marked `pending:` while it is open). `scripts/check-names.sh` (`mise run check:names`) holds this file: every
 `Server.*` module, `mise run` task and `scripts/*` file named in the **lives in** column must exist,
-and the retired words under **never say** must not appear in any `AGENTS.md` or in `office/tui/*.ts`
-user-facing strings (a plan is prose and is not scanned). A **lives in** cell that
+and the retired words under **never say** must not appear in any `AGENTS.md`
+(a plan is prose and is not scanned). A **lives in** cell that
 begins `pending:` records a rename not yet made; the gate skips it. The source of the decisions is
 `docs/plans/2026-10-13-cohesion-off-the-happy-path.md`, Cause 2.
 
@@ -25,11 +25,11 @@ begins `pending:` records a rename not yet made; the gate skips it. The source o
 | the check | `mise run check`: the green-before-commit gate. | `mise run check` | "the gate" |
 | the release gate | The PM's gate on cutting a release: a Need of kind `gate` with `scope: release`, answered by its prompt's id. | `Server.Release.PM`, `Server.Release.Candidate` | "gate" bare |
 | Need | One item in what waits on the operator: the header, the inbox and the home card all read the same list. | `Server.Office.Needs` | "task", "todo", "alert" (an alert is the desktop's, `Server.Alerts`) |
-| schedules | Oban cron or one-shot work the operator set: an agent prompt, a workline or a script. The TUI's `a`. | `Server.Schedules`, `Server.Schedule` | "calendar" |
+| schedules | Oban cron or one-shot work the operator set: an agent prompt, a workline or a script. | `Server.Schedules`, `Server.Schedule` | "calendar" |
 | calendar | The operator's `.ics` meetings, read for alerts. | `Server.Calendar` | "schedules" |
-| the room | The office screen: the pixel-art floor behind every card. `ctrl+] room` returns to it. | `office/tui/main.ts` | "lobby", "console", "cockpit" for the screen |
+
 | the front desk | A workspace's standing thread, where the operator talks to the bench. Its stored title is `the front desk`. | `Server.Bootstrap` (`ensure_standing/1`) | "lobby" |
 | at their desk | A coworker's home window: the tmux window that is theirs. | `Server.Arbiter` | "lounge" for a live window |
-| the office | The operator's surface: the standalone TUI over the server. | `office/tui`, `mise run office:check` | "console", "cockpit" |
+
 | funes | The Erlang node name of the server (`funes@`) and nothing else. The product is Tlön. | `server/rel/env.sh.eex` (`RELEASE_NODE`) | "funes" as a product name |
 | the door | The one pile per messenger, of kind `door`, of what to take along and errands for the next time the operator goes out. Not an agenda: it has no rhythm and is never told; it is found by its kind and is not renamed or dropped. | `Server.Agenda` (`door/1`) | "inbox", "bag" |

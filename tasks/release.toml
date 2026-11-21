@@ -7,7 +7,7 @@ description = "release: what the service runs against what main has waiting, and
 run = "scripts/release.sh status"
 
 ["release:smoke"]
-description = "release: smoke a candidate (default origin/main) — a scratch release on a scratch port and db, /api/office, the office driven headless; exit code is the verdict"
+description = "release: smoke a candidate (default origin/main) — a scratch release on a scratch port and db, /api/office, a thread opened; exit code is the verdict"
 run = "scripts/run-from-root.sh release-smoke.sh"
 
 [install]

@@ -39,8 +39,8 @@ judgment you keep in your own context dies with you.
   lead, were @mentioned on, or sit on (title, state, lead, recent messages); `get_message(id)`
   reads one message by its `(message #ID)` stamp. `roster` says who is on what and whether
   they are working, waiting, idle, cold or off.
-- **Never route yourself through operator-only UI to reach a coworker.** You cannot press
-  the office's keys; reaching another seat by typing into its window's terminal is a
+- **Never route yourself through operator-only UI to reach a coworker.**
+  Reaching another seat by typing into its window's terminal is a
   raw hack, not a capability. Delegate through the `consult` tool, post on your thread, or ask the
   human — not `tmux send-keys`.
 

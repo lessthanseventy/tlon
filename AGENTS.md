@@ -1,9 +1,8 @@
 # tlon — boundaries for a session at the repo root
 
 Tlön, the dev product: `server/` (the always-up brain — threads, facts, worklines, staffing; its node
-is `funes@`), `adapters/` (what makes a Claude Code session a citizen of the server), `office/`
-(the pixel-art room over it: a shared kit, its rooms, and the standalone TUI that is the operator's
-surface) and `house/` (a standalone Godot window over the home: what the operator's jots left open). It runs on any box with Postgres and mise; the home machine wires it in from
+is `funes@`), `adapters/` (what makes a Claude Code session a citizen of the server)
+and `house/` (a standalone Godot window over the home: what the operator's jots left open). It runs on any box with Postgres and mise; the home machine wires it in from
 ficciones (`~/projects/ficciones`), which is where the Nix, the desktop and the secrets live.
 
 ## The dev loop — one shared API
@@ -21,7 +20,7 @@ control loop, not two, and no second way to run anything:
   into the session's pane and kept in its babylon inbox: done, or back to `doing` with why in the
   ticket's `stage_note`. No PR, no `review_branch`, no `mise run land`, no full check from the session.
   Worklines (the server's own coworker seats and threads) keep the server's line, below.
-- `mise run check` — names gate (which also holds the task manual to its source) + script self-tests (`check:scripts`: each `scripts/*.test.sh` is a `check:scripts:<name>` task, run in parallel) + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server, adapters and office gates + the task manual + the house's gate (`check:house`, after the others: `house:gate`, below, but only when `house/` changed in the commits being gated, the range from the merge-base with `origin/main` to HEAD and any uncommitted `house/` file; on main itself there is no range, so a full run); the green-before-commit gate. A session's change gets it once, from babylon at `submit_ticket`.
+- `mise run check` — names gate (which also holds the task manual to its source) + script self-tests (`check:scripts`: each `scripts/*.test.sh` is a `check:scripts:<name>` task, run in parallel) + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server and adapters gates + the task manual + the house's gate (`check:house`, after the others: `house:gate`, below, but only when `house/` changed in the commits being gated, the range from the merge-base with `origin/main` to HEAD and any uncommitted `house/` file; on main itself there is no range, so a full run); the green-before-commit gate. A session's change gets it once, from babylon at `submit_ticket`.
   The house gate needs Godot, which is the machine's, not mise's: with `godot` on PATH it always runs when `house/` changed. Without it, a machine that sets `TLON_HOUSE_GATE=required` (the home machine does) fails the gate; any other prints `house: SKIPPED — godot not on PATH …` and `check`'s closing summary repeats the skip, so a pass that skipped the house never reads as one that ran it (and such a tree is not recorded green).
   One at a time per machine: it waits its turn in the checks queue (`scripts/checks-queue.sh`, saying who
   holds it), first come, first served, and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
@@ -151,7 +150,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   structure that does not exist yet. The tree should not lie about what is built.
 - **An `AGENTS.md` is born the same way a comment is — when a scope needs context its parent doesn't
   give.** Root holds repo-wide invariants; a module or subapp gets its own when it has distinct law, a
-  distinct dev loop, or gotchas that bite (`server`, `adapters` + its adapters, `office`). Don't add one per
+  distinct dev loop, or gotchas that bite (`server`, `adapters` + its adapters, `house`). Don't add one per
   folder by reflex — `lib/schemas/`, `test/`, etc. earn a file only once they accumulate a rule a
   weaker model keeps getting wrong; until then that guidance lives in the module's file. Keep every one
   terse and actionable to the same standard as comments: orientation, the exact commands, the law, the
@@ -238,7 +237,7 @@ runs the targeted tests of what it changed. `mise run check:names` is the names-
 `Server.*` module, mix task and mise task that scripts, `mise.toml`, the adapters or a
 guide name must actually exist — a rename that strands a reference fails here instead of at 2am. The same task holds
 `docs/glossary.md` — one meaning per noun; its "lives in" names must exist and its retired words stay out of
-AGENTS.md and `office/tui`, and `docs/manual/tasks.md` must match the task descriptions: a change under `tasks/`
+AGENTS.md, and `docs/manual/tasks.md` must match the task descriptions: a change under `tasks/`
 or to `mise.toml` runs `check:names` before submitting, and `mise run manual:gen` fixes a drift. A
 claim that something works is backed by the command that proved it — and the agent and human run the
 *same* `mise` tasks, so "it works" means the shared task passed, not two private ones.

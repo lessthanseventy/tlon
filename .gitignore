@@ -59,12 +59,8 @@ HANDOFF.md
 # .omc/ — local tool runtime state (sessions, last-tool-error.json); never repo content
 .omc/
 
-# the office TUI's compiled executables (mise run office:build)
-office/dist/
 # the standalone server executables (mise run server:package)
 server/burrito_out/
-# the office TUI staged per target into the tlon launcher (Server.Package.Office)
-server/rel/burrito/office.xz
 # Claude Code writes these beside the claude-code mod each time it loads it.
 adapters/.claude-plugin/types/
 adapters/tsconfig.json
