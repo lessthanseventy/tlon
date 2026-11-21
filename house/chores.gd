@@ -10,6 +10,7 @@ const Card := preload("res://card.gd")
 const PIECE := "laundry_basket"
 const STATES := ["fine", "soon", "due"]
 const MOMENT := 1.1
+const HOLD := 8.0
 const PAUSE := 0.35
 const PILLS_AT := Vector3(5.1, 0.42, 17.0)
 # the first row whose words match wins: `any` is a whole word of the text, and so is one of `with`

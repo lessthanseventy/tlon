@@ -806,8 +806,8 @@ func _stack_top(n: int) -> Vector2:
 	return _p(STACK.x, STACK.y, STACK.z + minf(n, 10) * 1.1 + 1.0)
 
 
-func tick_off(id: int) -> void:
-	_chore_done(id)
+func tick_off(id: int, gen: int = -1) -> void:
+	_chore_done(id, gen)
 	_geometry()
 	var found := {}
 	for item in open:
@@ -963,7 +963,7 @@ func items() -> Array:
 		{"key": 6.0, "pri": 1.52, "fn": _draw_chore_bin},
 		{"key": 7.0, "pri": 1.3, "fn": _draw_chore_bag},
 		{"key": 5.0, "pri": 1.56, "fn": _draw_chore_pills},
-		{"key": 2.0, "pri": 1.0, "fn": _draw_chore_basket},
+		{"key": _basket_key(), "pri": 1.0, "fn": _draw_chore_basket},
 		{"key": 6.0, "pri": 1.6, "fn": _draw_jar},
 		{"key": 3.0, "pri": 0.6, "fn": _draw_bunting},
 	]
@@ -1746,7 +1746,7 @@ func _plant_blocks() -> Array:
 
 # The chore things: thing -> {item, state, due}. A repeating reminder that names a thing stands for
 # it; of two for one thing the more urgent does, and the other stays in the lists.
-func chores() -> Dictionary:
+func _chore_rows() -> Dictionary:
 	var now := _now_local()
 	var sig := [open, coming, int(now), Settings.cat, Settings.dog]
 	var same := _chore_sig.size() == 5 and sig.slice(2) == _chore_sig.slice(2)
@@ -1757,6 +1757,8 @@ func chores() -> Dictionary:
 	for item in coming + open:
 		if item["kind"] != "reminder" or item.get("every") == null or item.get("due_at") == null:
 			continue
+		if Chores.interval(str(item["every"])) <= 0.0:
+			continue
 		var thing := Chores.thing_of(str(item["text"]), [Settings.cat, Settings.dog])
 		if thing == "":
 			continue
@@ -1765,6 +1767,19 @@ func chores() -> Dictionary:
 		if not _chores.has(thing) or _chore_before(row, _chores[thing]):
 			_chores[thing] = row
 	return _chores
+
+
+# a thing just done keeps its row until the reload after the write has come, then for the moment
+func chores() -> Dictionary:
+	var rows := _chore_rows()
+	if _moment.is_empty():
+		return rows
+	var out := rows.duplicate()
+	for thing in _moment:
+		var m: Dictionary = _moment[thing]
+		if m["held"] or not out.has(thing):
+			out[thing] = m["entry"]
+	return out
 
 
 func _chore_before(a: Dictionary, b: Dictionary) -> bool:
@@ -1808,32 +1823,63 @@ func chore_state(thing: String) -> String:
 		return ""
 	var m: Variant = _moment.get(thing)
 	if m != null:
-		return m["from"] if m["t"] < Chores.PAUSE else "fine"
+		return m["from"] if m["held"] or m["t"] < Chores.PAUSE else "fine"
 	return all[thing]["state"]
 
 
 # 0..1 over the part of the moment after the thing has changed, -1 when none is on
 func chore_moment(thing: String) -> float:
 	var m: Variant = _moment.get(thing)
-	if m == null or m["t"] < Chores.PAUSE:
+	if m == null or m["held"] or m["t"] < Chores.PAUSE:
 		return -1.0
 	return clampf((m["t"] - Chores.PAUSE) / (Chores.MOMENT - Chores.PAUSE), 0.0, 1.0)
 
 
 func _chore_moments(dt: float) -> void:
 	for thing in _moment.keys():
-		_moment[thing]["t"] += dt
-		if _moment[thing]["t"] > Chores.MOMENT:
+		var m: Dictionary = _moment[thing]
+		if m["held"]:
+			m["age"] += dt
+			if m["age"] > Chores.HOLD:
+				_chore_play(thing)
+			continue
+		m["t"] += dt
+		if m["t"] > Chores.MOMENT:
 			_moment.erase(thing)
 
 
-func _chore_done(id: int) -> void:
+# `gen` is the write the done was told by: the thing keeps its old state until a reload that began
+# after that write (`loaded` of `chore_reload`) has come; -1 plays the moment at once
+func _chore_done(id: int, gen: int) -> void:
 	var thing := chore_thing_of(id)
 	if thing == "":
 		return
-	_moment[thing] = {"t": 0.0, "from": chore_state(thing)}
+	_moment[thing] = {
+		"t": 0.0,
+		"age": 0.0,
+		"from": chore_state(thing),
+		"entry": chores()[thing].duplicate(),
+		"id": id,
+		"gen": gen,
+		"held": gen >= 0,
+	}
+	if gen < 0:
+		_chore_play(thing)
+
+
+func _chore_play(thing: String) -> void:
+	_moment[thing]["held"] = false
+	_moment[thing]["t"] = 0.0
 	if thing == "bowls":
 		petlife.fill("food")
+
+
+# the room has been read again, the read begun after write `loaded`
+func chore_reload(loaded: int) -> void:
+	for thing in _moment.keys():
+		var m: Dictionary = _moment[thing]
+		if m["held"] and m["gen"] <= loaded:
+			_chore_play(thing)
 
 
 func chore_hit(thing: String) -> String:
@@ -2378,3 +2424,8 @@ func _opaque(hit: Dictionary, pos: Vector2) -> bool:
 	if p.x < 0 or p.y < 0 or p.x >= img.get_width() or p.y >= img.get_height():
 		return false
 	return img.get_pixelv(p).a > 0.1
+
+
+func _basket_key() -> float:
+	var piece := layout.basket()
+	return float(layout.draw_key(piece)) if not piece.is_empty() else 2.0

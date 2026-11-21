@@ -176,13 +176,16 @@ runs on the local list.
   soft and leaning, drooped and drab (with no watering chore it droops with the open count as before). No text, badge
   or red. Hover says `short name · when` ("laundry · due today", "bins · Thursday", `Chores.hover`); a click opens the
   chore's item view and outlines the thing (`chore:<thing>` hits, "plant" for the plant; `sidebar.gd`
-  `selected_key`); Done, through `main.gd` `_remove`, shows the thing's old state for `Chores.PAUSE`, then fine with a
+  `selected_key`); Done, through `main.gd` `_remove`, keeps the thing as it was until the read of the room that began after the
+  write has come (`home.chore_reload`; a read already on its way does not end it, and `Chores.HOLD` ends it anyway), shows the old state for `Chores.PAUSE`, then fine with a
   moment of its own (clothes lift, the bag goes, sparks, the bowls pour, the can waters), and the server or the local
   list moves the row to its next time (the demo does it in `_demo_repeat`). A chore whose thing is in the room is left
   out of Home's Today, Open and Later (`home.chore_thing_of`); it stays on the calendar card and in its item view, and
   the Now pick may pick it. With its thing not in the room (the basket taken away, the pet things off) it is a list
-  row as any other. The basket is the plain piece `laundry_basket` (default cell 1,1, in decorate's home tab), drawn in
-  code and never as a sprite row; the bin, desk and plant are fixed so their chores are always in the room. Add a
+  row as any other; a repeating row whose rhythm does not read (`Chores.interval` 0) is no chore. The basket is the plain piece `laundry_basket` (default cell 1,1, in decorate's home tab), drawn in
+  code and never as a sprite row, at the depth of the cell it stands in (`_basket_key`); a saved layout from before it is
+  offered it once on load (`Layout.NEWER`, `offered` in the file: its cell, else the nearest free one) and a basket taken
+  out stays out. The bin, desk and plant are fixed so their chores are always in the room. Add a
   chore: a row in `TABLE`, a name in `NAMES`, a drawer in `chores.gd` and a hit in `home.gd`; `soak_chores.gd` covers
   the table, the states, the hits, Done, the lists and the same over the local list. `--demo` has laundry (soon),
   bins (due today) and feed the cat (fine).

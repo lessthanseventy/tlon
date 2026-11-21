@@ -52,7 +52,10 @@ func run() -> void:
 	await _room()
 	await _lists()
 	await _layout()
+	await _moved()
+	_offered()
 	await _done()
+	await _wire()
 	h.open = keep[0]
 	h.coming = keep[1]
 	h.fake_day = keep[2]
@@ -267,9 +270,12 @@ func _centre(key: String) -> Variant:
 		var sum := Vector2.ZERO
 		for p: Vector2 in hit["poly"]:
 			sum += p
-		var c: Vector2 = sum / maxf(1.0, hit["poly"].size())
-		if h._topmost(c) == key:
-			return c
+		for t in [0.0, 0.25, 0.5, 0.75]:
+			var at: Vector2 = sum / maxf(1.0, hit["poly"].size())
+			for p: Vector2 in hit["poly"]:
+				var q := at.lerp(p, t)
+				if h._topmost(q) == key:
+					return q
 	return null
 
 
@@ -414,6 +420,102 @@ func _layout() -> void:
 	s._check(h.layout.check(again, piece, []) == "", "it can be moved to free floor")
 
 
+# the basket is movable: it draws and clicks by where it stands, not where it began
+func _moved() -> void:
+	var piece: Dictionary = h.layout.basket()
+	var home := [piece["c"], piece["r"]]
+	h.open = []
+	h.coming = [_row(201, THINGS["laundry"], _clock() + 3 * 86400.0)]
+	var chair: Dictionary = {}
+	for p in h.layout.pieces:
+		if p["p"] == "dining_chair" and p["c"] == 5:
+			chair = p
+	for cell in [Vector2i(6, 9), Vector2i(3, 9)]:
+		var why: String = h.layout.place(
+			{"p": Chores.PIECE, "f": "", "c": cell.x, "r": cell.y}, piece, []
+		)
+		s._check(why == "", "the basket can stand at %s: %s" % [cell, why])
+		await _frames()
+		var entry: Dictionary = {}
+		for it in h.items():
+			if it["fn"] == Callable(h, "_draw_chore_basket"):
+				entry = it
+		s._check(
+			not entry.is_empty() and entry["key"] == float(h.layout.draw_key(piece)),
+			"at %s it is drawn at its own depth (%s)" % [cell, entry.get("key")]
+		)
+		s._check(
+			(entry["key"] > float(h.layout.draw_key(chair))) == (cell.x > chair["c"]),
+			"and in order with the chair beside it"
+		)
+		var at: Variant = _centre("chore:laundry")
+		var hit_keys: Array = (
+			h
+			. _hits
+			. filter(func(x): return x["key"] == "chore:laundry")
+			. map(func(x): return h._topmost((x["poly"] as PackedVector2Array)[0]))
+		)
+		s._check(at != null, "at %s it can be clicked (%s)" % [cell, hit_keys])
+		if at != null:
+			sb.back()
+			h.click(at)
+			await _frames()
+			s._check(
+				sb.view == "item" and int(sb.arg) == 201, "a click at %s opens its chore" % cell
+			)
+			sb.back()
+	h.layout.place({"p": Chores.PIECE, "f": "", "c": home[0], "r": home[1]}, piece, [])
+	h.open = []
+	h.coming = []
+
+
+# a saved layout from before the basket is offered it once: at its cell, else the nearest free one
+func _offered() -> void:
+	var path := "user://soak_chores_layout.json"
+	var rows: Array = (
+		s
+		. Layout
+		. DEFAULTS
+		. filter(func(r: Array) -> bool: return r[0] != Chores.PIECE)
+		. map(func(r: Array) -> Dictionary: return {"p": r[0], "f": r[1], "c": r[2], "r": r[3]})
+	)
+	var old := {"v": 2, "wall": "wallpaper", "floor": "oak", "pieces": rows}
+	s._write_layout(path, old)
+	var l: RefCounted = s._layout()
+	l.path = path
+	l.persist = true
+	s._check(l.load_file(), "the old layout loads")
+	var basket: Dictionary = l.basket()
+	s._check(
+		not basket.is_empty() and basket["c"] == 1 and basket["r"] == 1,
+		"it gains the basket at its cell"
+	)
+	s._check(
+		l.pieces.size() == rows.size() + 1 and Chores.PIECE in s._read_layout(path)["offered"],
+		"and the file says it was offered"
+	)
+	l.remove(basket)
+	l.save()
+	var back: RefCounted = s._layout()
+	back.path = path
+	back.persist = true
+	s._check(back.load_file() and back.basket().is_empty(), "taken out, it stays out")
+	s._check(Chores.PIECE in s._read_layout(path)["offered"], "and is still on record")
+	var blocked: Array = rows.duplicate()
+	blocked.append({"p": "plant_small", "f": "", "c": 1, "r": 1})
+	s._write_layout(path, {"v": 2, "wall": "wallpaper", "floor": "oak", "pieces": blocked})
+	var near: RefCounted = s._layout()
+	near.path = path
+	near.persist = true
+	s._check(near.load_file(), "a layout with the cell taken loads")
+	var spot: Dictionary = near.basket()
+	var apart: int = absi(spot.get("c", 99) - 1) + absi(spot.get("r", 99) - 1)
+	s._check(
+		not spot.is_empty() and apart == 1, "the basket goes to the nearest free cell: %s" % spot
+	)
+	DirAccess.remove_absolute(path)
+
+
 # Done through the same path a ticked item takes: the thing moves to fine with a moment of its own
 func _done() -> void:
 	var now := _clock()
@@ -472,6 +574,122 @@ func _done() -> void:
 	main._apply(keep)
 	h.open = []
 	h.coming = []
+
+
+# a server whose answers the soak sends by hand
+class Wire:
+	extends Node
+	signal changed
+	signal told(row: Dictionary)
+	signal told_agenda(text: String)
+	var local := false
+	var base := ""
+	var gets: Array = []
+	var posts: Array = []
+
+	func fetch(path: String, cb: Callable, _timeout: float = 8.0) -> void:
+		if path == "/api/home":
+			gets.append({"path": path, "cb": cb})
+
+	func send(path: String, _body: Dictionary, cb: Callable, _timeout: float = 6.0) -> void:
+		posts.append({"path": path, "cb": cb})
+
+	func check(_url: String, cb: Callable) -> void:
+		cb.call_deferred(true)
+
+
+# Done over a server: the thing keeps its look until the read after the write has come, whatever
+# a read already on its way says, then plays its moment
+func _wire() -> void:
+	var now := _clock()
+	var keep: Dictionary = main._data.duplicate(true)
+	var ticks: Array = main.get_children().filter(
+		func(n: Node) -> bool: return n is Timer and n.wait_time == main.POLL_SECONDS
+	)
+	for t in ticks:
+		t.stop()
+	var wire := Wire.new()
+	var was_backend: Node = main._backend
+	main.remove_child(was_backend)
+	main._backend = wire
+	main.add_child(wire)
+	main._demo = false
+	main._busy = false
+	var due := now - 86400.0
+	var before := _row(41, "take the bins out", due)
+	var after := _row(41, "take the bins out", now + 7 * 86400.0)
+	var pills := _row(42, "take your meds", now + 6 * 86400.0)
+	var pills_after := _row(42, "take your meds", now + 13 * 86400.0)
+	var stale := {"open": [before], "coming": [pills]}
+	var fresh := {"open": [], "coming": [after, pills_after]}
+	main._data = main._home_data(stale)
+	main._apply(main._data)
+	await _frames()
+	s._check(h.chore_state("bins") == "due", "over a server the bin starts due")
+
+	main._act(41, "done")
+	s._check(wire.posts.size() == 1, "Done posts once")
+	s._check(h.chore_state("bins") == "due", "and the thing waits for the answer")
+	wire.posts[0]["cb"].call(true, 200, {})
+	await _frames()
+	s._check(
+		wire.gets.size() == 1,
+		(
+			"the answer reads the room again (%d, busy %s, probing %s, demo %s)"
+			% [wire.gets.size(), main._busy, main._probing, main._demo]
+		)
+	)
+	await s.create_timer(Chores.PAUSE + Chores.MOMENT).timeout
+	s._check(
+		h.chore_state("bins") == "due" and h.chore_moment("bins") < 0.0,
+		"a slow read leaves the bin as it was: '%s'" % h.chore_state("bins")
+	)
+	s._check(h.chore_thing_of(41) == "bins", "and the row stays out of the lists")
+	wire.gets[0]["cb"].call(true, 200, fresh)
+	await _frames()
+	s._check(h.chore_state("bins") == "due", "the read that has come starts the moment")
+	await s.create_timer(Chores.PAUSE + 0.2).timeout
+	s._check(
+		h.chore_state("bins") == "fine" and h.chore_moment("bins") >= 0.0,
+		"and the bin turns fine: '%s'" % h.chore_state("bins")
+	)
+	await s.create_timer(Chores.MOMENT).timeout
+	s._check(h.chore_state("bins") == "fine", "and stays fine after it")
+
+	wire.gets.clear()
+	wire.posts.clear()
+	main._data = main._home_data(stale)
+	main._apply(main._data)
+	await _frames()
+	main._poll()
+	s._check(wire.gets.size() == 1 and main._busy, "a read is on its way")
+	main._act(41, "done")
+	wire.posts[0]["cb"].call(true, 200, {})
+	await _frames()
+	wire.gets[0]["cb"].call(true, 200, stale)
+	await _frames()
+	s._check(
+		h.chore_state("bins") == "due" and h.chore_moment("bins") < 0.0,
+		"a read from before the write does not end the wait: '%s'" % h.chore_state("bins")
+	)
+	s._check(h.chore_thing_of(41) == "bins", "nor puts the row back in the lists")
+	s._check(wire.gets.size() == 2, "the read after the write is asked for")
+	await s.create_timer(Chores.PAUSE + Chores.MOMENT).timeout
+	s._check(h.chore_state("bins") == "due", "and the bin keeps its look meanwhile")
+	wire.gets[1]["cb"].call(true, 200, fresh)
+	await s.create_timer(Chores.PAUSE + 0.2).timeout
+	s._check(h.chore_state("bins") == "fine", "then it turns fine for good")
+	await s.create_timer(Chores.MOMENT).timeout
+	s._check(h.chore_state("bins") == "fine", "and never as due again")
+	for t in ticks:
+		t.start()
+	main.remove_child(wire)
+	wire.queue_free()
+	main._backend = was_backend
+	main.add_child(was_backend)
+	main._busy = false
+	main._data = keep
+	main._apply(keep)
 
 
 # the same over the house's own list: Done moves a repeating reminder on and the thing is fine
