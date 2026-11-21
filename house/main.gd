@@ -60,7 +60,6 @@ var _drag_mouse := Vector2i.ZERO
 var _drag_win := Vector2i.ZERO
 var _prev_size := Vector2i(1100, 700)
 var _busy := false
-var _watch := {}
 var _slow_step := ""
 var _pets_busy := false
 var _pets_stale := false
@@ -532,8 +531,6 @@ func _apply(data: Dictionary) -> void:
 	_ids = ids
 	_ids_known = true
 	_room.show_home()
-	if not _watch.is_empty():
-		_check_watch()
 	if ids != _pick_ids:
 		_pick_ids = ids
 		_ask_now(true)
@@ -1079,7 +1076,6 @@ func _send_jot(text: String) -> void:
 func _tell(text: String, done: Callable, via: String = "", kept: Callable = Callable()) -> void:
 	var chat = _room.home.chat
 	var marks := {"via": via} if via != "" else {}
-	var before: Array = _room.home.things.all_ids() if kept.is_valid() else []
 	chat.add("me", text, marks)
 	var finished := func(ok: bool, code: int, body: Variant) -> void:
 		var reached: bool = ok and code == 200
@@ -1089,7 +1085,7 @@ func _tell(text: String, done: Callable, via: String = "", kept: Callable = Call
 		if reached:
 			chat.add("home", reply, marks)
 			if kept.is_valid():
-				_keep(body, reply, before, kept)
+				kept.call(_made(body), reply)
 			if _demo:
 				var id: int = 100 + _data["open"].size()
 				_data["open"] = _data["open"] + [
@@ -1109,39 +1105,12 @@ func _tell(text: String, done: Callable, via: String = "", kept: Callable = Call
 		_post("/api/home", {"text": text}, finished, 40.0)
 
 
-# the row a jot made, for `kept(row, reply)`: the local list hands it back; the server's reply is a
-# line only, so it is the one id that is new in the next status ({} when none or several are)
-func _keep(body: Variant, reply: String, before: Array, kept: Callable) -> void:
-	if body is Dictionary and body.get("row") is Dictionary:
-		kept.call(body["row"], reply)
-		return
-	var watch := {"before": before, "kept": kept, "reply": reply, "skip": 1 if _busy else 0}
-	_watch = watch
-	get_tree().create_timer(4.0).timeout.connect(
-		func() -> void:
-			if is_same(_watch, watch):
-				_settle_watch({})
-	)
-
-
-func _check_watch() -> void:
-	var things = _room.home.things
-	var fresh: Array = things.all_ids().filter(func(i: int) -> bool: return i not in _watch["before"])
-	var rows: Array = fresh.map(func(i: int) -> Dictionary: return things.find(i)).filter(
-		func(r: Dictionary) -> bool: return not r.is_empty() and r.get("project_id") == null
-	)
-	if rows.size() == 1:
-		_settle_watch(rows[0])
-	elif rows.size() > 1 or _watch["skip"] == 0:
-		_settle_watch({})
-	else:
-		_watch["skip"] -= 1
-
-
-func _settle_watch(row: Dictionary) -> void:
-	var watch := _watch
-	_watch = {}
-	(watch["kept"] as Callable).call(row, watch["reply"])
+# the row the answer to a jot carries, {} when it made none; a note's row has no kind
+static func _made(body: Variant) -> Dictionary:
+	if not (body is Dictionary and body.get("row") is Dictionary):
+		return {}
+	var row: Dictionary = body["row"]
+	return row if row.has("kind") else {"kind": "note"}.merged(row)
 
 
 func _send_chat(text: String) -> void:

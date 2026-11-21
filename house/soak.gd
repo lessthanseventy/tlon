@@ -754,7 +754,7 @@ func _routes(main: Control) -> void:
 	await _until(func(): return jot._kept.visible, "the notepad shows what was kept")
 	_check(
 		jot._kept.visible and jot._summary.text == "To-do" and jot._said.text == "hang the picture" and jot._change.visible,
-		"the row that is new in the next status is what it was read as: '%s' '%s'" % [jot._summary.text, jot._said.text]
+		"the row the answer carries is what it was read as: '%s' '%s'" % [jot._summary.text, jot._said.text]
 	)
 	jot.change_wanted.emit()
 	await _until(func(): return main._sidebar.view == "edit", "Change opens the form")
@@ -763,6 +763,25 @@ func _routes(main: Control) -> void:
 		"Change opens that thing's form, prefilled"
 	)
 	main._sidebar.back()
+	main._open_add()
+	jot.open("race: paint the door")
+	main._send_jot("race: paint the door")
+	await _until(func(): return jot._kept.visible, "the notepad shows what was kept")
+	_check(
+		jot._summary.text == "To-do" and jot._said.text == "paint the door" and jot._change.visible,
+		"another thing appearing at the same time does not change what is read back: '%s'" % jot._said.text
+	)
+	jot.accepted.emit()
+	main._open_add()
+	jot.open("note: wifi is on the fridge")
+	main._send_jot("note: wifi is on the fridge")
+	await _until(func(): return jot._kept.visible, "the notepad shows what was kept")
+	_check(
+		jot._summary.text == "Note" and jot._said.text == "wifi is on the fridge",
+		"a note's row, which has no kind, is read as a note: '%s' '%s'" % [jot._summary.text, jot._said.text]
+	)
+	jot.accepted.emit()
+	main._open_add()
 	_fail_jot = true
 	main._open_add()
 	main._sidebar.jot.open("keep me")
@@ -940,11 +959,19 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 			code = 404
 		else:
 			var said := str(parsed.get("text", ""))
-			if said.begins_with("keep: "):
-				_state["open"].append(
-					{"id": 960, "kind": "todo", "text": said.trim_prefix("keep: "), "due_at": null, "every": null}
-				)
-			out = {"reply": "to do: " + said}
+			out = {"reply": "to do: " + said, "row": null}
+			if said.begins_with("keep: ") or said.begins_with("race: "):
+				if said.begins_with("race: "):
+					_state["open"].append(
+						{"id": 959, "kind": "todo", "text": "from elsewhere", "due_at": null, "every": null}
+					)
+				var made := {"id": 960, "kind": "todo", "text": said.get_slice(": ", 1), "due_at": null, "every": null}
+				_state["open"].append(made)
+				out["row"] = made
+			elif said.begins_with("note: "):
+				var made := {"id": 961, "text": said.get_slice(": ", 1)}
+				_state["note_rows"] = _state.get("note_rows", []) + [made]
+				out["row"] = made
 	else:
 		code = 404
 	var payload := JSON.stringify(out).to_utf8_buffer()

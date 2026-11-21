@@ -471,8 +471,8 @@ runs on the local list.
   with one line of example under it; Enter sends the text to the server (a model reads it, so a pencil scribbles
   while it waits). The view then says what the house read it as ("Reminder · tomorrow 10:00 · every week" over the
   text) with a primary "OK" (back) and a secondary "Change", which opens that thing's edit form. The kept row is
-  `row` of the local list's answer; the server answers `{reply}` alone, so it is the one id new in the next status
-  (`main.gd` `_keep`; none or several, an ask or a correction, shows the reply with OK only). A server that does not
+  `row` of the answer, `{reply, row}` from the server and the local list alike (`main.gd` `_made`; a note's row has
+  no kind, so it is made one; a null `row`, an ask or a correction, shows the reply with OK only). A server that does not
   answer says "couldn't reach tlon — not kept" and keeps the text in the field.
 - **Acting on a thing**: click a sticky, a row of the Home view or a stack (which lists "On the desk") for its item
   view: Done (the crumple), Into the fire (while it burns), In an hour, Tomorrow (the paper flies to the wall calendar), Now, Edit, Delete (and Plan for a project).
