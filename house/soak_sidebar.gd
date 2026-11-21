@@ -651,10 +651,14 @@ func _fit() -> void:
 				"card":
 					h.card.open("calendar", "cal")
 			await _laid_out()
-			await s._until(
+			var laid: bool = await s._until(
 				func(): return _outside(win) == "" and sb.get_global_rect().end.x <= size.x + 0.5,
 				"the %s view laid out inside a %s window" % [name, size]
 			)
+			if not laid:
+				s._check(
+					false, "%s view, %s window, outside it: %s" % [name, size, _outside(win)]
+				)
 			var out := _outside(win)
 			s._check(out == "", "no %s control lies outside a %s window: %s" % [name, size, out])
 			s._check(sb.get_global_rect().end.x <= size.x + 0.5, "the sidebar fits a %s window" % size)
