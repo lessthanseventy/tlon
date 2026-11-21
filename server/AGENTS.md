@@ -222,9 +222,22 @@ and every layer the spine design's re-laid §9 asked for
   those positions), and by Add/No buttons (`p:<id>:take|no`). `GET /api/home` has
   `proposals`; `POST /api/home/proposals/:id/take|dismiss`. A **source** is a module behind `Server.Home.Source` (`name/0`,
   `fetch/0` → `{:ok, proposals, resolved_keys} | {:error, why}`, `auto/0` the kinds it may file itself); `Server.Home.Sources` polls
-  the ones in `home_sources` (comma list, default `""`: none), where `mail` is the one source: `Server.Home.Source.Mail`, the personal inbox over read-only IMAP (`EXAMINE`, `BODY.PEEK`; settings `home_mail_host`, `home_mail_user`, password from env `ZOHO_MAIL_PASSWORD` or the agenix secret `zoho-mail-password`), one home-reader model call over what arrived since the mark in `home_keep` `home_mail_mark` (the oldest 40 after a mark, so a backlog is worked off poll by poll; the mark moves in the optional source callback `kept/0`, after the proposals are filed; a reply with no list, and a batch whose filing failed so `kept/0` never ran, are counted per batch, a batch being what is read from one mark (so mail arriving meanwhile does not reset the count; a retry reads only up to the batch's top as first tried, later mail waits for the poll after), and the third skips it, the mark moving to that top, with one warning; message text is made valid UTF-8 first), proposing only a bill, appointment, package or renewal as a to-do keyed by `mid:` and the SHA-256 of its Message-ID (else `uid:<validity>:<uid>`; never the raw text), never filing one itself; every 15 minutes, started with the inbox
+  the ones in `home_sources` (comma list, default `""`: none), where `mail` is the first source: `Server.Home.Source.Mail`, the personal inbox over read-only IMAP (`EXAMINE`, `BODY.PEEK`; settings `home_mail_host`, `home_mail_user`, password from env `ZOHO_MAIL_PASSWORD` or the agenix secret `zoho-mail-password`), one home-reader model call over what arrived since the mark in `home_keep` `home_mail_mark` (the oldest 40 after a mark, so a backlog is worked off poll by poll; the mark moves in the optional source callback `kept/0`, after the proposals are filed; a reply with no list, and a batch whose filing failed so `kept/0` never ran, are counted per batch, a batch being what is read from one mark (so mail arriving meanwhile does not reset the count; a retry reads only up to the batch's top as first tried, later mail waits for the poll after), and the third skips it, the mark moving to that top, with one warning; message text is made valid UTF-8 first), proposing only a bill, appointment, package or renewal as a to-do keyed by `mid:` and the SHA-256 of its Message-ID (else `uid:<validity>:<uid>`; never the raw text), never filing one itself; every 15 minutes, started with the inbox
   (`TLON_START_HOME_INBOX=1`), logging a failure once per distinct reason and leaving the proposals alone; a name with no
-  module is logged once as no such source.
+  module is logged once as no such source. `bank` is the other: `Server.Home.Source.Bank`, the operator's bank through Plaid
+  (`Server.Home.Bank.Plaid`, **read-only**: only `/link/token/create`, `/item/public_token/exchange`, `/transactions/sync`,
+  `/accounts/get`, listed in `Plaid.paths/0` and pinned by a test; never the paid balance call, a refresh, auth or a transfer), on
+  when `home_sources` names it and an access token is present (env `PLAID_ACCESS_TOKEN` or the agenix secret `plaid-access-token`,
+  with `PLAID_CLIENT_ID`/`PLAID_SECRET` or `plaid-client-id`/`plaid-secret`; never kept or logged). It syncs into the one `home_keep`
+  value `home_bank` (cursor and transactions stored in one write, last 400 days, upserted by `transaction_id`; no table), and
+  `Server.Home.Bank.Recurring` (pure, in cents) finds the steady charges and deposits (three posted charges, a weekly,
+  fortnightly, monthly or yearly rhythm, amounts within 10%). It proposes only to-dos: a charge due within five days with whether
+  the available balance covers it, two equal charges within two days that are not a habit, a merchant that just became recurring
+  (keys `bank:due|double|new|relink:…`, never filed by itself); `ITEM_LOGIN_REQUIRED` is one proposal that the bank needs linking
+  again. `Server.Home.Bank.summary/1` (nil when off) gives the morning message its one `Money:` line and `GET /api/home` its `money`;
+  spendable is the checking accounts alone. `mise run home:bank:link` links once (`Server.Home.Bank.Link`, a loopback page,
+  the token printed once and kept nowhere; refused with a token present, `-- --allow-another-link` overrides: the account allows ten
+  links for ever).
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
   open next step or a question about it, a waiting-on is asked about after three days, a weekly review
   (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28
@@ -238,8 +251,8 @@ and every layer the spine design's re-laid §9 asked for
   follow as a message of their own (an Add and a No each; the chat's morning message has no buttons, and its proposals follow the
   same way). Once a day at `home_morning_at` (08:30; `""` never; same slot record and quiet hours as the list,
   `Server.Home.Inbox.morning/6`) the morning message is said (`Server.Home.Morning`): today's meetings (`Server.Home.Day.meetings/1`,
-  today's only: times local, "all day", a tentative one marked), what to start with, agendas due today with a pile, birthdays today and a week ahead, the
-  settled waiting-ons and the proposals (five shown, "and N more"); it is skipped when there is nothing to say, and the desktop
+  today's only: times local, "all day", a tentative one marked), what to start with, agendas due today with a pile, birthdays today and a week ahead, one
+  `Money:` line when the bank source is on, the settled waiting-ons and the proposals (five shown, "and N more"); it is skipped when there is nothing to say, and the desktop
   gets it as a `home_morning` info alert for ten minutes after its time (`Server.Home.morning/1`), and the daily list as a
   `home_list` one, each carrying the settled waiting-ons and recording them told the first time it is raised, so a desktop with no chat says them too. A message that corrects the jot before it
   changes that jot's reading, and a reminder is said in the chat when it comes due, with done / in an

@@ -173,7 +173,7 @@ defmodule Server.OperatorConfig do
       type: "string",
       default: "",
       doc:
-        "the outside sources that propose things for the home's list (`mail`), comma separated; polled every 15 minutes; empty for none"
+        "the outside sources that propose things for the home's list (`mail`, `bank`), comma separated; polled every 15 minutes; empty for none"
     },
     %{
       key: "home_mail_host",
