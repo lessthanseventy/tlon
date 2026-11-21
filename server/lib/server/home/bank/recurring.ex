@@ -8,14 +8,19 @@ defmodule Server.Home.Bank.Recurring do
   (5 to 9 days), fortnightly (11 to 17), monthly (26 to 34) or yearly (355 to 375; two charges do, a
   year being all Plaid gives). Amounts may vary: the series' `amount` is the median of the latest
   three charges (of the latest six for a deposit, whose amounts vary more), the run stops at a charge
-  more than twice or less than half of that, and `count` is the whole run. `was` is the amount of an
+  more than twice or less than half of that that falls on the rhythm, and `count` is the whole run.
+  A lone charge that is that far off in amount and off the rhythm too (a tax or adjustment line
+  between two regular charges, or after the newest) is passed over: the run goes on past it, and it
+  is not counted. `was` is the amount of an
   older run of at least three charges at another amount, and `at_amount` how many of the latest
   charges are at the current one (within 10% of it): a real change of price. A merchant whose
   charges fall into two or more amount groups, each a steady series, and those series hold at least
   four fifths of its charges, and whose latest charges fall within one rhythm of each other, has those series (two subscriptions of one merchant) and no other; groups that follow each other are one series with a changed price.
-  A merchant with ten or more charges outside its series, and more than twice as many as the series
-  holds, is everyday spending and has none (51 irregular charges and a monthly-looking tail are not a
-  bill). Pending transactions never count; several on one day count once. Its `next` date comes from the
+  A merchant with ten or more charges in no steady rhythm (not one of three in a row whose two gaps
+  are in one band), and more than twice as many as the series holds, is everyday spending and has
+  none (51 irregular charges and a monthly-looking tail are not a bill; thirty games-store charges
+  on irregular days are not either). A series' own older charges, an earlier price included, are
+  steady and never count against it. Pending transactions never count; several on one day count once. Its `next` date comes from the
   latest charge. `series/2` finds them for outflows
   (`:out`) or deposits (`:in`); amounts are integers of cents, magnitudes in a series.
 
@@ -226,16 +231,49 @@ defmodule Server.Home.Bank.Recurring do
     found =
       case parts do
         [_, _ | _] when covered * 5 >= length(charges) * 4 ->
-          if concurrent?(parts), do: parts, else: List.wrap(detect(charges, direction))
+          if concurrent?(parts), do: parts, else: List.wrap(detect_past_stray(charges, direction))
 
         _ ->
-          List.wrap(detect(charges, direction))
+          List.wrap(detect_past_stray(charges, direction))
       end
 
     explained = found |> Enum.map(& &1.count) |> Enum.sum()
-    unexplained = length(charges) - explained
+    unexplained = unsteady(charges)
     if unexplained >= 10 and unexplained > 2 * explained, do: [], else: found
   end
+
+  defp unsteady(charges) do
+    steady =
+      charges
+      |> Enum.chunk_every(3, 1, :discard)
+      |> Enum.filter(fn [a, b, c] -> same_band(a, b) == same_band(b, c) and same_band(a, b) != nil end)
+      |> List.flatten()
+      |> MapSet.new()
+
+    length(charges) - MapSet.size(steady)
+  end
+
+  defp same_band(newer, older) do
+    with {period, _band} <- band(Date.diff(newer.date, older.date)), do: period
+  end
+
+  defp detect_past_stray([stray | [kept | _] = rest] = charges, direction) do
+    case detect(charges, direction) do
+      nil ->
+        with %{amount: amount, period: period} = found <- detect(rest, direction),
+             false <- Date.diff(stray.date, kept.date) in @bands[period],
+             false <- comparable?(abs(stray.cents), amount) do
+          found
+        else
+          _ -> nil
+        end
+
+      found ->
+        found
+    end
+  end
+
+  defp detect_past_stray(charges, direction), do: detect(charges, direction)
 
   defp concurrent?(parts) do
     newest = parts |> Enum.map(& &1.last) |> Enum.max(Date)
@@ -292,12 +330,19 @@ defmodule Server.Home.Bank.Recurring do
   defp rhythm_run([first | rest], band), do: rhythm_run([first], rest, band)
 
   defp rhythm_run([head | _] = taken, [older | rest], band) do
-    if Date.diff(head.date, older.date) in band,
-      do: rhythm_run([older | taken], rest, band),
-      else: Enum.reverse(taken)
+    cond do
+      Date.diff(head.date, older.date) in band -> rhythm_run([older | taken], rest, band)
+      stray?(head, older, rest, band) -> rhythm_run(taken, rest, band)
+      true -> Enum.reverse(taken)
+    end
   end
 
   defp rhythm_run(taken, [], _band), do: Enum.reverse(taken)
+
+  defp stray?(head, older, [kept | _], band),
+    do: not comparable?(abs(older.cents), abs(head.cents)) and Date.diff(head.date, kept.date) in band
+
+  defp stray?(_head, _older, [], _band), do: false
 
   defp level(run, direction) do
     recent = run |> Enum.take(recent(direction)) |> Enum.map(&abs(&1.cents)) |> Enum.sort()

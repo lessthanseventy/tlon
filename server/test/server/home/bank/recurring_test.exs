@@ -171,6 +171,91 @@ defmodule Server.Home.Bank.RecurringTest do
     assert [%{count: 3}] = Recurring.series(tail ++ Enum.take(often, 4), :out)
   end
 
+  defp with_stray(rows, date, cents), do: [txn(date, cents, "Streamr") | rows]
+
+  test "a lone far, off-rhythm charge in a price-stepped run does not end it, and is not counted" do
+    old = monthly("Streamr", 1_995, ~D[2026-08-13], 12)
+    up = monthly("Streamr", 2_395, ~D[2026-11-13], 3)
+    rows = with_stray(old ++ up, ~D[2026-09-08], 77)
+
+    assert [%{amount: 2_395, was: 1_995, count: 15, at_amount: 3, last: ~D[2026-11-13], next: ~D[2026-12-13]}] =
+             Recurring.series(rows, :out)
+
+    assert [_] = Recurring.live(Recurring.series(rows, :out), @today)
+  end
+
+  test "a stray in the middle of a same-price run leaves the run whole" do
+    rows = with_stray(monthly("Streamr", 1_995, ~D[2026-11-13], 8), ~D[2026-08-08], 77)
+    assert [%{amount: 1_995, count: 8, was: nil}] = Recurring.series(rows, :out)
+  end
+
+  test "a stray as the newest charge leaves the series live at its own amount" do
+    rows = with_stray(monthly("Streamr", 1_995, ~D[2026-11-13], 6), ~D[2026-11-18], 77)
+    [s] = Recurring.series(rows, :out)
+    assert %{amount: 1_995, count: 6, last: ~D[2026-11-13]} = s
+    assert [_] = Recurring.live([s], @today)
+  end
+
+  test "a far charge that is on the rhythm still ends the run" do
+    rows =
+      monthly("Streamr", 1_995, ~D[2026-11-13], 3) ++
+        [txn(~D[2026-08-13], 77, "Streamr")] ++ monthly("Streamr", 1_995, ~D[2026-07-13], 3)
+
+    assert [%{count: 3, was: nil}] = Recurring.series(rows, :out)
+  end
+
+  test "older charges of the series' own earlier price are never everyday spending" do
+    old = monthly("Gym", 1_000, ~D[2026-08-13], 12)
+    up = monthly("Gym", 4_000, ~D[2026-11-13], 3)
+    assert [%{amount: 4_000, count: 3}] = Recurring.series(old ++ up, :out)
+  end
+
+  test "a games store: about thirty charges at a few amounts on irregular days is everyday" do
+    gaps = [
+      12,
+      45,
+      7,
+      33,
+      60,
+      18,
+      5,
+      41,
+      25,
+      9,
+      52,
+      15,
+      37,
+      22,
+      58,
+      6,
+      29,
+      48,
+      11,
+      55,
+      20,
+      8,
+      43,
+      31,
+      14,
+      50,
+      10,
+      36,
+      24
+    ]
+
+    amounts = [1_999, 5_999, 999, 5_999, 1_999, 4_999, 999, 1_999, 5_999, 4_999]
+
+    {rows, _} =
+      gaps
+      |> Enum.with_index()
+      |> Enum.map_reduce(Date.add(@today, -16), fn {gap, i}, date ->
+        {txn(date, Enum.at(amounts, rem(i, 10)), "Game Barn"), Date.add(date, -gap)}
+      end)
+
+    assert length(rows) == 29
+    assert Recurring.series(rows, :out) == []
+  end
+
   test "two subscriptions at one merchant under two labels stay two series" do
     a = monthly("Apple iCloud", 999, ~D[2026-11-05], 8)
     b = monthly("Apple Music", 1_499, ~D[2026-11-20], 8)
