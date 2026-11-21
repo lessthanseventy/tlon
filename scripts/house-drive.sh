@@ -24,6 +24,13 @@ start() {
 		echo "house-drive: already running on port $(cat "$run/port")" >&2
 		exit 1
 	fi
+	local arg
+	for arg in "$@"; do
+		if [ "$arg" = "--server" ]; then
+			echo "house-drive: --server reads the tlon server at ${TLON_URL:-http://127.0.0.1:4040}; a click in this drive acts on the real list" >&2
+			break
+		fi
+	done
 	rm -rf "$run"
 	mkdir -p "$run/shots"
 	local data
