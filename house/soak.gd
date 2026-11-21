@@ -1490,7 +1490,7 @@ func _decorate_files(rng: RandomNumberGenerator) -> void:
 				"v": 1,
 				"wall": "plaster",
 				"floor": "nope",
-				"offered": ["laundry_basket"],
+				"offered": ["laundry_basket", "photo_frame"],
 				"pieces":
 				[
 					{"p": "no_such_thing", "f": "", "c": 2, "r": 2},
@@ -1717,7 +1717,7 @@ func _packs_catalogue(l: RefCounted) -> void:
 	for e in l.catalogue:
 		count[e["tab"]] = int(count.get(e["tab"], 0)) + 1
 		_check(e["tab"] in l.tabs, "%s is on a tab that exists" % e["key"])
-		if e["tab"] == "pets" or e["key"] == "laundry_basket":
+		if e["tab"] == "pets" or e["key"] in ["laundry_basket", "photo_frame"]:
 			continue
 		for f in (e["faces"] if not e["faces"].is_empty() else [""]):
 			var p := {"p": e["key"], "f": f, "c": 0, "r": 0}
@@ -1743,7 +1743,7 @@ func _packs_catalogue(l: RefCounted) -> void:
 	for tab in l.tabs:
 		shown.append("%s %d pieces %d walls %d floors" % [tab, count.get(tab, 0), l.walls_of(tab).size(), l.floors_of(tab).size()])
 	print("packs: ", "; ".join(shown))
-	_check(count.get("home", 0) == 46, "the interiors still give 45 pieces and the laundry basket (%s)" % count.get("home", 0))
+	_check(count.get("home", 0) == 47, "the interiors still give 45 pieces, the laundry basket and the photo frame (%s)" % count.get("home", 0))
 
 
 func _write_layout(path: String, doc: Dictionary) -> void:
@@ -1795,7 +1795,7 @@ func _packs_files() -> void:
 
 	var held := {
 		"v": 1,
-		"offered": ["laundry_basket"],
+		"offered": ["laundry_basket", "photo_frame"],
 		"wall": "castle.ashlar",
 		"floor": "mansion.parquet",
 		"pieces":
