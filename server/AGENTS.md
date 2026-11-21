@@ -236,7 +236,13 @@ and every layer the spine design's re-laid §9 asked for
   the available balance covers it, two equal charges within two days that are not a habit, a merchant that just became recurring,
   a recurring one whose price changed (keys `bank:due|double|new|price|relink:…`, never filed by itself); `ITEM_LOGIN_REQUIRED` is one proposal that the bank needs linking
   again. `Server.Home.Bank.summary/1` (nil when off) gives the morning message its one `Money:` line and `GET /api/home` its `money`;
-  spendable is the checking accounts alone. `mise run home:bank:link` links once (`Server.Home.Bank.Link`, a loopback page,
+  spendable is the checking accounts alone. `Server.Home.Bank.Projection` (pure, in cents, no clock: `today` is passed in) is the
+  money engine behind `Bank.forecast/2`, `afford/3`, `what_if/3`, `history/2` and `subscriptions/1`: the checking balance day by
+  day (low, expected, high) from the recurring series repeated at their rhythms plus an everyday estimate (the last 90 days of
+  posted outflows on checking that are in no series and no transfer, spread evenly; the low and high lines are the 25th and 75th
+  percentile of rolling 30-day totals), capped at 180 days. Every number is computed there and none comes from a model, and none
+  is an opinion on the spending. `GET /api/home/money/forecast?until=` is the forecast and the subscriptions as JSON (null when
+  off). `mise run home:bank:link` links once (`Server.Home.Bank.Link`, a loopback page,
   the token printed once and kept nowhere; refused with a token present, `-- --allow-another-link` overrides: the account allows ten
   links for ever).
   The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
