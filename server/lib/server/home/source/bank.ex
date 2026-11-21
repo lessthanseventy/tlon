@@ -47,17 +47,17 @@ defmodule Server.Home.Source.Bank do
 
     with token when is_binary(token) <- Plaid.access_token(opts) || {:error, "no Plaid access token"} do
       case Bank.refresh(Keyword.put(opts, :now, now)) do
-        {:ok, state} -> {:ok, proposals(state, accounts(state), today), []}
+        {:ok, state} -> {:ok, proposals(accounts(state), today), []}
         {:error, {:plaid, "ITEM_LOGIN_REQUIRED"}} -> {:ok, [relink(today)], []}
         {:error, _} = error -> error
       end
     end
   end
 
-  @doc "The proposals the kept `state` gives on `today`."
-  @spec proposals(map(), %{String.t() => map()}, Date.t()) :: [map()]
-  def proposals(state, accounts, today) do
-    txns = Bank.transactions(state)
+  @doc "The proposals the kept transactions give on `today`, with `accounts` by id."
+  @spec proposals(%{String.t() => map()}, Date.t()) :: [map()]
+  def proposals(accounts, today) do
+    txns = Bank.transactions()
     out = Recurring.series(txns, :out)
 
     for(series <- Recurring.due_within(out, today, @due_days), do: due(series, accounts)) ++

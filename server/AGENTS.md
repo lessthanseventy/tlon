@@ -228,8 +228,8 @@ and every layer the spine design's re-laid §9 asked for
   (`Server.Home.Bank.Plaid`, **read-only**: only `/link/token/create`, `/item/public_token/exchange`, `/transactions/sync`,
   `/accounts/get`, listed in `Plaid.paths/0` and pinned by a test; never the paid balance call, a refresh, auth or a transfer), on
   when `home_sources` names it and an access token is present (env `PLAID_ACCESS_TOKEN` or the agenix secret `plaid-access-token`,
-  with `PLAID_CLIENT_ID`/`PLAID_SECRET` or `plaid-client-id`/`plaid-secret`; never kept or logged). It syncs into the one `home_keep`
-  value `home_bank` (cursor and transactions stored in one write, last 800 days (Plaid is asked for 730 at the link, its most, so a yearly charge shows), upserted by `transaction_id`; no table), and
+  with `PLAID_CLIENT_ID`/`PLAID_SECRET` or `plaid-client-id`/`plaid-secret`; never kept or logged). It syncs the last 800 days of transactions (Plaid is asked for 730 at the link, its most, so a yearly charge shows) into
+  the table `home_bank_transactions` (`Server.Home.Bank.Transaction`, upserted by `transaction_id`) and the cursor, accounts, `as_of` and the summary's dated part into the `home_keep` value `home_bank`, all in one database transaction per sync; a `home_bank` still holding a `transactions` list is moved into the table by the first read or refresh that sees it. The summary is worked out once per refresh and stored with the local day it is for, recomputed from the rows when read on another day. And
   `Server.Home.Bank.Recurring` (pure, in cents) finds the steady charges and deposits (three posted charges, a weekly,
   fortnightly, monthly or yearly rhythm, a yearly one needing two charges, amounts within 10%; transfers between its own
   accounts, equal and opposite within a day, are neither). It proposes only to-dos: a charge due within five days with whether

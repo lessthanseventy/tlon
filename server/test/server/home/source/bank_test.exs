@@ -1,10 +1,14 @@
 defmodule Server.Home.Source.BankTest do
   use ExUnit.Case, async: false
 
+  import Ecto.Query, only: [from: 2]
+
   alias Server.Home.Bank
+  alias Server.Home.Bank.Transaction
   alias Server.Home.Keep
   alias Server.Home.Source.Bank, as: Source
   alias Server.Proposal
+  alias Server.Repo
 
   @now ~U[2026-11-20 12:00:00Z]
   @today ~D[2026-11-20]
@@ -118,6 +122,135 @@ defmodule Server.Home.Source.BankTest do
   defp fetch(http), do: Source.fetch(http: http, now: @now)
   defp paths(calls), do: Enum.map(calls, &elem(&1, 0))
   defp kept, do: JSON.decode!(Keep.get("home_bank"))
+  defp rows, do: Repo.all(from(t in Transaction, order_by: [t.date, t.transaction_id]))
+
+  defp xmins,
+    do: Map.new(Repo.query!("select transaction_id, xmin::text from home_bank_transactions").rows, &List.to_tuple/1)
+
+  test "5,000 transactions are rows, not a body, and a later sync touches only what changed" do
+    many =
+      for i <- 1..5000,
+          do: t("t#{i}", String.replace("2026-11-#{rem(i, 20) + 1}", ~r/-(\d)$/, "-0\\1"), 1.0 + i, "Shop #{i}")
+
+    {http, _} = plaid([page(many, cursor: "c1")], accounts(1500.0))
+    {:ok, _, []} = fetch(http)
+
+    assert length(rows()) == 5000
+    assert byte_size(Keep.get("home_bank")) < 2_000
+    before = xmins()
+
+    added = for i <- 5001..5003, do: t("t#{i}", "2026-11-19", 2.0, "New #{i}")
+
+    {http, _} =
+      plaid(
+        [
+          page(added,
+            modified: [t("t7", "2026-11-19", 99.0, "Shop 7")],
+            removed: [%{"transaction_id" => "t9"}],
+            cursor: "c2"
+          )
+        ],
+        accounts(1500.0)
+      )
+
+    {:ok, _, []} = fetch(http)
+    after_sync = xmins()
+
+    assert map_size(after_sync) == 5002
+    changed = for {id, xmin} <- after_sync, before[id] != xmin, do: id
+    assert Enum.sort(changed) == ["t5001", "t5002", "t5003", "t7"]
+    assert Enum.find(rows(), &(&1.transaction_id == "t7")).amount_cents == 9900
+  end
+
+  describe "a keep in the earlier shape" do
+    defp old_row(id, date, cents, name),
+      do: %{
+        "id" => id,
+        "account_id" => "chk",
+        "cents" => cents,
+        "date" => date,
+        "name" => name,
+        "merchant" => nil,
+        "pending" => false
+      }
+
+    defp old_keep(transactions) do
+      Keep.put(
+        "home_bank",
+        JSON.encode!(%{
+          "cursor" => "c1",
+          "transactions" => transactions,
+          "accounts" => [
+            %{
+              "id" => "chk",
+              "name" => "Chk",
+              "type" => "depository",
+              "subtype" => "checking",
+              "current" => 125_000,
+              "available" => 124_000
+            }
+          ],
+          "as_of" => "2026-11-19T12:00:00Z"
+        })
+      )
+    end
+
+    defp old_rent,
+      do:
+        for(
+          {d, i} <- Enum.with_index(["2026-08-22", "2026-09-22", "2026-10-22"]),
+          do: old_row("rent#{i}", d, 120_000, "Rent")
+        )
+
+    test "the first refresh moves its rows into the table and the keep loses the list, cursor kept" do
+      old_keep(old_rent())
+      {http, calls} = plaid([page([], cursor: "c2")], accounts(1500.0))
+      assert {:ok, _, []} = fetch(http)
+
+      assert [{"/transactions/sync", %{"cursor" => "c1"}}, _] = calls.()
+      assert Enum.map(rows(), & &1.transaction_id) == ["rent0", "rent1", "rent2"]
+      assert %{"cursor" => "c2"} = kept = kept()
+      refute Map.has_key?(kept, "transactions")
+    end
+
+    test "a summary read before any refresh moves them too, and is idempotent" do
+      old_keep(old_rent())
+      assert %{due_this_week: [%{name: "Rent"}]} = Bank.summary(now: @now)
+      assert Bank.summary(now: @now).due_this_week == Bank.summary(now: @now).due_this_week
+      assert length(rows()) == 3
+      refute Map.has_key?(kept(), "transactions")
+    end
+
+    test "an empty or absent list is fine" do
+      old_keep([])
+      {http, _} = plaid([page([], cursor: "c2")], accounts(1500.0))
+      assert {:ok, _, []} = fetch(http)
+      assert rows() == []
+      refute Map.has_key?(kept(), "transactions")
+    end
+
+    test "rows that do not parse are skipped and the cursor is dropped, with a log line" do
+      old_keep([old_row("bad", "not-a-date", 1, "X") | old_rent()])
+      {http, calls} = plaid([page([], cursor: "c2")], accounts(1500.0))
+
+      log = ExUnit.CaptureLog.capture_log(fn -> assert {:ok, _, []} = fetch(http) end)
+      assert log =~ "1 kept transactions did not parse"
+      assert [{"/transactions/sync", body}, _] = calls.()
+      refute Map.has_key?(body, "cursor")
+      assert length(rows()) == 3
+    end
+  end
+
+  test "a stored summary is used the day it was made and worked out again on another day" do
+    {http, _} = plaid([page(rent())], accounts(1500.0))
+    {:ok, _, []} = fetch(http)
+    assert %{"for" => "2026-11-20", "due_this_week" => [%{"name" => "Rent"}]} = kept()["summary"]
+
+    Repo.delete_all(Transaction)
+    assert [%{name: "Rent"}] = Bank.summary(now: @now).due_this_week
+
+    assert [] = Bank.summary(now: ~U[2026-11-24 12:00:00Z]).due_this_week
+  end
 
   test "it is the bank source, filing nothing by itself" do
     assert Source.name() == "bank"
@@ -136,8 +269,9 @@ defmodule Server.Home.Source.BankTest do
     assert [{"/transactions/sync", first}, {"/transactions/sync", second}, {"/accounts/get", _}] = calls.()
     refute Map.has_key?(first, "cursor")
     assert second["cursor"] == "c1"
-    assert %{"cursor" => "c2", "transactions" => rows, "as_of" => "2026-11-20T12:00:00Z"} = kept()
-    assert length(rows) == 3
+    assert %{"cursor" => "c2", "as_of" => "2026-11-20T12:00:00Z"} = kept = kept()
+    refute Map.has_key?(kept, "transactions")
+    assert length(rows()) == 3
     assert Enum.all?(paths(calls.()), &(&1 in Server.Home.Bank.Plaid.paths()))
   end
 
@@ -200,8 +334,8 @@ defmodule Server.Home.Source.BankTest do
     old = t("old", "2024-09-01", 5.0, "Ancient")
     {http, _} = plaid([page(rent() ++ [old], cursor: "c1")], accounts(1500.0))
     {:ok, _, []} = fetch(http)
-    assert [%{"id" => "rent0"} | _] = kept()["transactions"]
-    refute Enum.any?(kept()["transactions"], &(&1["id"] == "old"))
+    assert [%{transaction_id: "rent0"} | _] = rows()
+    refute Enum.any?(rows(), &(&1.transaction_id == "old"))
 
     changed = t("rent2", "2026-10-22", 1250.0, "Rent")
 
@@ -211,9 +345,9 @@ defmodule Server.Home.Source.BankTest do
     {:ok, _, []} = fetch(http)
 
     assert [{"/transactions/sync", %{"cursor" => "c1"}}, _] = calls.()
-    rows = kept()["transactions"]
-    assert Enum.map(rows, & &1["id"]) == ["rent1", "rent2"]
-    assert Enum.find(rows, &(&1["id"] == "rent2"))["cents"] == 125_000
+    rows = rows()
+    assert Enum.map(rows, & &1.transaction_id) == ["rent1", "rent2"]
+    assert Enum.find(rows, &(&1.transaction_id == "rent2")).amount_cents == 125_000
   end
 
   test "a page that fails mid-pagination restarts from the cursor the update began with, and keeps nothing until it ends" do
@@ -263,10 +397,9 @@ defmodule Server.Home.Source.BankTest do
     {http, _} = plaid([page(domain)], accounts(1500.0))
 
     assert {:ok, [%{text: "Domain $49 is due Wed 25 Nov; the balance covers it"}], []} = fetch(http)
-    assert length(kept()["transactions"]) == 2
+    assert length(rows()) == 2
 
-    assert [%{period: :yearly, next: ~D[2026-11-25]}] =
-             kept() |> Bank.transactions() |> Server.Home.Bank.Recurring.series(:out)
+    assert [%{period: :yearly, next: ~D[2026-11-25]}] = Server.Home.Bank.Recurring.series(Bank.transactions(), :out)
   end
 
   test "a price change is one proposal of its own and not a new subscription" do

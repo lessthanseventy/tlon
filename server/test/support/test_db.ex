@@ -51,6 +51,7 @@ defmodule Server.TestDB do
     "jot",
     "home_slot",
     "home_keep",
+    "home_bank_transactions",
     "home_agenda",
     "home_proposal",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so

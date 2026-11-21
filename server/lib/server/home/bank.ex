@@ -1,32 +1,45 @@
 defmodule Server.Home.Bank do
   @moduledoc """
   What the home knows of the operator's bank, read-only through Plaid (`Server.Home.Bank.Plaid`),
-  kept in `home_keep` as one JSON value, `home_bank`: the sync cursor, the transactions of the last
-  800 days (upserted by `transaction_id`, `removed` ones dropped, a few hundred rows in all), the
-  accounts with their cached balances and when it was read. `refresh/1` syncs and keeps the cursor
-  with its data in one write, so a sync that fails anywhere keeps nothing and the next one starts
-  from the cursor this update began with.
+  kept in two places: the transactions of the last 800 days, one row each in `home_bank_transactions`
+  (`Server.Home.Bank.Transaction`, upserted by `transaction_id`, `removed` ones dropped), and in
+  `home_keep` as one small JSON value, `home_bank`: the sync cursor, the accounts with their cached
+  balances, when they were read and the summary's dated part. `refresh/1` syncs and writes rows and
+  keep in one database transaction, so a sync that fails anywhere keeps nothing and the next one
+  starts from the cursor this update began with.
 
-  `summary/0` is what the morning message and `GET /api/home` (`money`) say, worked out from what is
-  kept with no call to Plaid (`Server.Home.Bank.Recurring`), nil when the `bank` source is off
-  (`home_sources` without it, or no access token) or nothing was read yet. Its accounts are listed
+  A `home_bank` still carrying a `transactions` list (the earlier storage) is moved into the table by
+  the first read or refresh that sees it, in one database transaction with the keep rewritten
+  without the list. Rows that do not parse are skipped, and then the cursor is dropped too so the next
+  sync fetches them again.
+
+  `summary/0` is what the morning message and `GET /api/home` (`money`) say, worked out once per
+  refresh from the rows with no call to Plaid (`Server.Home.Bank.Recurring`) and read from the keep;
+  the parts that depend on today (due this week, the next deposit) are stored with the local day they
+  were worked out for and recomputed from the rows when read on another day. It is nil when the
+  `bank` source is off (`home_sources` without it, or no access token) or nothing was read yet. Its accounts are listed
   all; the spendable ones are the depository accounts of subtype checking, summed into `balance` and
   `available` (the available balance, else the current); savings and credit accounts are listed and
   never counted, so any number of accounts, whichever Plaid shows for the bank, works. All amounts
   are integers of cents.
   """
 
+  import Ecto.Query, only: [from: 2]
+
   alias Server.Home.Bank.Plaid
   alias Server.Home.Bank.Recurring
+  alias Server.Home.Bank.Transaction
   alias Server.Home.Clock
   alias Server.Home.Keep
   alias Server.Home.Sources
+  alias Server.Repo
 
   require Logger
 
   @key "home_bank"
   @keep_days 800
   @page 500
+  @batch 1000
   @pages 40
   @retries 2
   @mutation "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
@@ -45,7 +58,7 @@ defmodule Server.Home.Bank do
   def enabled?,
     do: "bank" in Sources.names(Server.OperatorConfig.setting("home_sources")) and Plaid.access_token() != nil
 
-  @doc "What is kept: `%{}` before the first refresh."
+  @doc "What is kept in the keep: `%{}` before the first refresh. The transactions are `transactions/0`."
   @spec state() :: map()
   def state do
     with body when is_binary(body) <- Keep.get(@key),
@@ -64,22 +77,27 @@ defmodule Server.Home.Bank do
   @spec refresh(keyword()) :: {:ok, map()} | {:error, term()}
   def refresh(opts \\ []) do
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
-    state = state()
+    state = state!()
+    today = today(now)
 
     with {:ok, changes} <- sync(state["cursor"], opts, @retries),
          {:ok, accounts} <- Plaid.accounts(opts) do
       accounts = accounts |> Enum.map(&account/1) |> Enum.reject(&is_nil/1)
       warn_unspendable(accounts, Map.get(state, "accounts", []))
 
-      kept = %{
-        "cursor" => changes.cursor,
-        "transactions" => merge(Map.get(state, "transactions", []), changes, today(now)),
-        "accounts" => accounts,
-        "as_of" => DateTime.to_iso8601(now)
-      }
+      Repo.transaction(fn ->
+        apply_changes(changes, today)
 
-      Keep.put(@key, JSON.encode!(kept))
-      {:ok, kept}
+        kept = %{
+          "cursor" => changes.cursor,
+          "accounts" => accounts,
+          "as_of" => DateTime.to_iso8601(now),
+          "summary" => accounts |> fresh(today) |> stored(today)
+        }
+
+        Keep.put(@key, JSON.encode!(kept))
+        kept
+      end)
     end
   end
 
@@ -116,31 +134,26 @@ defmodule Server.Home.Bank do
 
   defp row(%{"transaction_id" => id, "amount" => amount, "date" => date} = txn)
        when is_binary(id) and is_number(amount) and is_binary(date) do
-    [
-      %{
-        "id" => id,
-        "account_id" => txn["account_id"],
-        "cents" => round(amount * 100),
-        "date" => date,
-        "name" => txn["name"],
-        "merchant" => txn["merchant_name"],
-        "pending" => txn["pending"] == true
-      }
-    ]
+    case Date.from_iso8601(date) do
+      {:ok, date} ->
+        [
+          %{
+            transaction_id: id,
+            account_id: txn["account_id"],
+            amount_cents: round(amount * 100),
+            date: date,
+            name: txn["name"],
+            merchant_name: txn["merchant_name"],
+            pending: txn["pending"] == true
+          }
+        ]
+
+      {:error, _} ->
+        []
+    end
   end
 
   defp row(_), do: []
-
-  defp merge(kept, %{rows: rows, removed: removed}, today) do
-    oldest = today |> Date.add(-@keep_days) |> Date.to_iso8601()
-
-    (kept ++ rows)
-    |> Map.new(&{&1["id"], &1})
-    |> Map.drop(removed)
-    |> Map.values()
-    |> Enum.filter(&(is_binary(&1["date"]) and &1["date"] >= oldest))
-    |> Enum.sort_by(&{&1["date"], &1["id"]})
-  end
 
   defp account(%{"account_id" => id} = account) when is_binary(id) do
     balances = account["balances"] || %{}
@@ -168,17 +181,17 @@ defmodule Server.Home.Bank do
   @spec summary(keyword()) :: money() | nil
   def summary(opts \\ []) do
     with true <- enabled?(),
-         %{"accounts" => [_ | _] = accounts, "as_of" => as_of} = state <- state() do
+         %{"accounts" => [_ | _] = accounts, "as_of" => as_of} = state <- state!() do
       today = opts |> Keyword.get_lazy(:now, &DateTime.utc_now/0) |> today()
-      txns = transactions(state)
       spendable = Enum.filter(accounts, &spendable?/1)
+      dated = dated(state["summary"], accounts, today)
 
       %{
         balance: total(spendable, & &1["current"]),
         available: total(spendable, &(&1["available"] || &1["current"])),
         as_of: as_of,
-        due_this_week: txns |> Recurring.series(:out) |> Recurring.due_within(today, 6) |> Enum.map(&item/1),
-        next_deposit: txns |> Recurring.series(:in) |> next_deposit(spendable, today),
+        due_this_week: dated.due_this_week,
+        next_deposit: dated.next_deposit,
         accounts: Enum.map(accounts, &Map.put(listed(&1), :spendable, spendable?(&1)))
       }
     else
@@ -186,15 +199,26 @@ defmodule Server.Home.Bank do
     end
   end
 
-  @doc "The transactions kept in `state`, as `Server.Home.Bank.Recurring.txn/1` reads them."
-  @spec transactions(map()) :: [Recurring.txn()]
-  def transactions(state),
-    do:
-      state
-      |> Map.get("transactions", [])
-      |> Enum.map(&Recurring.txn/1)
-      |> Enum.reject(&is_nil/1)
-      |> Recurring.without_transfers()
+  @doc "The transactions kept, as `Server.Home.Bank.Recurring.txn/1` reads them."
+  @spec transactions() :: [Recurring.txn()]
+  def transactions do
+    from(t in Transaction,
+      order_by: [t.date, t.transaction_id],
+      select: %{
+        "id" => t.transaction_id,
+        "account_id" => t.account_id,
+        "cents" => t.amount_cents,
+        "date" => t.date,
+        "name" => t.name,
+        "merchant" => t.merchant_name,
+        "pending" => t.pending
+      }
+    )
+    |> Repo.all()
+    |> Enum.map(&(&1 |> Map.update!("date", fn date -> Date.to_iso8601(date) end) |> Recurring.txn()))
+    |> Enum.reject(&is_nil/1)
+    |> Recurring.without_transfers()
+  end
 
   @doc "The local calendar date of the instant `now`."
   @spec today(DateTime.t()) :: Date.t()
@@ -297,4 +321,102 @@ defmodule Server.Home.Bank do
       found -> item(found)
     end
   end
+
+  defp state! do
+    case state() do
+      %{"transactions" => carried} = state -> carry_over(state, carried)
+      state -> state
+    end
+  end
+
+  defp carry_over(state, carried) do
+    parsed = Enum.map(list(carried), &carried_row/1)
+    rows = for {:ok, row} <- parsed, do: row
+    skipped = length(parsed) - length(rows)
+    kept = Map.delete(state, "transactions")
+
+    kept =
+      if skipped == 0 do
+        kept
+      else
+        Logger.warning("home bank: #{skipped} kept transactions did not parse, so the next sync starts from no cursor")
+        Map.delete(kept, "cursor")
+      end
+
+    {:ok, kept} =
+      Repo.transaction(fn ->
+        upsert(rows)
+        Keep.put(@key, JSON.encode!(kept))
+        kept
+      end)
+
+    kept
+  end
+
+  defp carried_row(%{"id" => id, "cents" => cents, "date" => date} = row) when is_binary(id) and is_integer(cents) do
+    case Date.from_iso8601(to_string(date)) do
+      {:ok, date} ->
+        {:ok,
+         %{
+           transaction_id: id,
+           account_id: row["account_id"],
+           amount_cents: cents,
+           date: date,
+           name: row["name"],
+           merchant_name: row["merchant"],
+           pending: row["pending"] == true
+         }}
+
+      {:error, _} ->
+        :error
+    end
+  end
+
+  defp carried_row(_), do: :error
+
+  defp apply_changes(%{rows: rows, removed: removed}, today) do
+    upsert(rows)
+
+    for ids <- Enum.chunk_every(removed, @batch),
+        do: Repo.delete_all(from(t in Transaction, where: t.transaction_id in ^ids))
+
+    oldest = Date.add(today, -@keep_days)
+    Repo.delete_all(from(t in Transaction, where: t.date < ^oldest))
+    :ok
+  end
+
+  defp upsert(rows) do
+    for batch <- rows |> Map.new(&{&1.transaction_id, &1}) |> Map.values() |> Enum.chunk_every(@batch) do
+      Repo.insert_all(Transaction, batch,
+        on_conflict: {:replace_all_except, [:transaction_id]},
+        conflict_target: :transaction_id
+      )
+    end
+
+    :ok
+  end
+
+  defp dated(%{"for" => day, "due_this_week" => due, "next_deposit" => deposit}, accounts, today) do
+    if day == Date.to_iso8601(today),
+      do: %{due_this_week: Enum.map(due, &read_item/1), next_deposit: deposit && read_item(deposit)},
+      else: fresh(accounts, today)
+  end
+
+  defp dated(_, accounts, today), do: fresh(accounts, today)
+
+  defp fresh(accounts, today) do
+    txns = transactions()
+    spendable = Enum.filter(accounts, &spendable?/1)
+
+    %{
+      due_this_week: txns |> Recurring.series(:out) |> Recurring.due_within(today, 6) |> Enum.map(&item/1),
+      next_deposit: txns |> Recurring.series(:in) |> next_deposit(spendable, today)
+    }
+  end
+
+  defp stored(%{due_this_week: due, next_deposit: deposit}, today),
+    do: %{"for" => Date.to_iso8601(today), "due_this_week" => due, "next_deposit" => deposit}
+
+  defp read_item(%{"name" => name, "amount" => amount, "on" => on}),
+    do: %{name: name, amount: amount, on: Date.from_iso8601!(on)}
 end
