@@ -410,8 +410,7 @@ func _cage() -> void:
 	s._check(h.antics.begin("cage_watch", cat, false), "a cat starts to watch it")
 	s._check(h.antics.act.get("legs") == ["cage"], "and goes beside it")
 	room.queue_redraw()
-	for i in 3:
-		await s.process_frame
+	await s._until(func(): return h._hits.any(func(x): return x["key"] == "cage"), "the cage is drawn and hit")
 	var hit: Array = h._hits.filter(func(x): return x["key"] == "cage")
 	s._check(hit.size() == 1, "the cage is hit (%d of %d hits)" % [hit.size(), h._hits.size()])
 	s._check(h.petlife.click("cage") and h.sound.requested.has("squeak"), "a click makes it sing")
@@ -873,7 +872,6 @@ func _drawn() -> void:
 			s._check(not tiny.ell(0.5, 0.5, 0.4, 0.2, 0.0, Color.RED), "a tiny ellipse is not drawn")
 	)
 	s.root.add_child(canvas)
-	await s.process_frame
-	await s.process_frame
+	await s._until(func(): return count[0] >= PetThings.THINGS.size() * 4, "the canvas draws every thing")
 	s._check(count[0] >= PetThings.THINGS.size() * 4, "every thing draws (%d)" % count[0])
 	canvas.queue_free()

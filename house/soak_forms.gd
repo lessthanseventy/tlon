@@ -23,21 +23,12 @@ func _sent(path: String, from: int) -> Variant:
 	return null
 
 
-# a moment, then until no request is in flight (bounded): a slow machine is slower, not wrong
 func _wait() -> void:
-	await s.create_timer(0.1).timeout
-	var quiet := 0
-	var end := Time.get_ticks_msec() + 8000
-	while quiet < 3 and Time.get_ticks_msec() < end:
-		quiet = quiet + 1 if main._backend.get_child_count() == 0 else 0
-		await s.process_frame
+	await s._answered(main)
 
 
 func _read_again(before: int) -> void:
-	for i in 30:
-		if s._count("/api/home") > before:
-			return
-		await s.create_timer(0.1).timeout
+	await s._until(func(): return s._count("/api/home") > before, "the room reads the list again")
 
 
 func _iso_utc(y: int, m: int, d: int, hour: int, minute: int) -> String:
@@ -383,8 +374,7 @@ func _deletes() -> void:
 	)
 	h.open_item(9)
 	var sb = main._sidebar
-	await s.process_frame
-	await s.process_frame
+	await s._until(func(): return sb.view == "item" and sb.arg == 9, "the reminder's view opens")
 	s._check(sb.view == "item" and sb.arg == 9, "a click on a reminder opens its view")
 	var acts: Array = sb._views._actions(h.things.find(9), "reminder")
 	s._check(acts[-1]["act"] == "delete", "the item view ends with Delete")
@@ -497,15 +487,13 @@ func _blockers() -> void:
 	s._check(h.form_open or sb.takes_text(), "the form is up")
 	h.rhythm.kind = "home"
 	h.rhythm.left = 30.0
-	await s.process_frame
-	await s.process_frame
+	await s._quiet_frames(3)
 	s._check(f.visible, "a slip appearing does not close the form")
 	h.rhythm.dismiss()
 	main._open_form("new", {"kinds": ["todo"]})
 	s._check(f.visible and f.kind == "todo", "one form at a time: the second replaces the first")
 	f.cancel()
-	await s.process_frame
-	await s.process_frame
+	await s._until(func(): return not f.visible and sb.view == "home", "the form's end brings the home view back")
 	s._check(not f.visible and sb.view == "home", "the form's end brings the home view back")
 
 

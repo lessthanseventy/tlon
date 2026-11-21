@@ -143,7 +143,7 @@ func _frozen_pass(main) -> void:
 	}
 	push_state()
 	main._poll()
-	await s.create_timer(0.5).timeout
+	await s._until(func(): return main._data["open"].size() == 3, "the local list fills the room")
 	_eq(main._data["open"].size(), 3, "the local list fills the room: two to-dos and a project's step")
 	await FormSoak.new(s, main).run()
 	await ChatSoak.new(s, main).run()
@@ -154,8 +154,8 @@ func _frozen_pass(main) -> void:
 	s._state = server_state
 
 
-func _wait(secs: float = 0.4) -> void:
-	await s.create_timer(secs).timeout
+func _wait() -> void:
+	await s._answered(_main)
 
 
 func _texts(rows: Array) -> Array:
@@ -181,20 +181,17 @@ func _real_pass(main) -> void:
 		func(reached: bool, code: int, body: Variant) -> void: got.append([reached, code, body["text"]])
 	)
 	_eq(got, [], "an answer comes on a later frame, never inside the call")
-	await s.process_frame
-	await s.process_frame
+	await s._until(func(): return not got.is_empty(), "the add's answer arrives")
 	_eq(got, [[true, 200, "buy milk"]], "and is the route's answer, reached")
 	got = []
 	plain.fetch("/api/nowhere", func(reached: bool, code: int, _b: Variant) -> void: got.append([reached, code]))
 	plain.send("/api/home/abc/done", {}, func(reached: bool, code: int, _b: Variant) -> void: got.append([reached, code]))
 	plain.send("/api/home", {"text": " "}, func(_r: bool, code: int, b: Variant) -> void: got.append([code, b["error"]]))
-	await s.process_frame
-	await s.process_frame
+	await s._until(func(): return got.size() == 3, "the three answers arrive")
 	_eq(got, [[true, 404], [true, 404], [400, "text is required"]], "unknown routes are 404, a blank line 400")
 	var pets: Array = []
 	plain.fetch("/api/home/pets", func(_r: bool, code: int, b: Variant) -> void: pets.append([code, b]))
-	await s.process_frame
-	await s.process_frame
+	await s._until(func(): return not pets.is_empty(), "the pets' answer arrives")
 	_eq(pets, [[200, {}]], "the pets' lines: an empty batch, so the house's own are used")
 	main._poll()
 	await _wait()
@@ -336,7 +333,7 @@ func _first_start(main) -> void:
 	main._backend.base = "http://127.0.0.1:1"
 	main._probing = true
 	main._first_start()
-	await _wait(0.8)
+	await s._until(func(): return not main._probing, "the first-start probe ends")
 	_eq([main._backend.local, settings.value("where"), main._probing], [true, "local", false], "no server at the default address: the house keeps its own list")
 	main._poll()
 	await _wait()
@@ -347,7 +344,7 @@ func _first_start(main) -> void:
 	main._backend.base = "http://127.0.0.1:%d" % s._srv.get_local_port()
 	main._probing = true
 	main._first_start()
-	await _wait(0.8)
+	await s._until(func(): return not main._probing, "the first-start probe ends")
 	_eq([main._backend.local, settings.value("where")], [false, "server"], "a server at the default address: the house stays with it")
 	settings.put("where", "server")
 

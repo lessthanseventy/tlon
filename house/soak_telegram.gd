@@ -35,7 +35,7 @@ func _bots() -> Array:
 
 
 func _in_flight(tg: Node) -> int:
-	return tg.get_children().filter(func(c): return c is HTTPRequest and not c.is_queued_for_deletion()).size()
+	return s._requests(tg)
 
 
 func _polls(bot) -> int:

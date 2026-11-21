@@ -281,11 +281,25 @@ func _quiet_frames(n: int = 3) -> void:
 		await process_frame
 
 
-# until the house has no request in flight: what it asked has been answered and applied
+# the requests a node has in flight
+func _requests(node: Node) -> int:
+	return node.get_children().filter(
+		func(c): return c is HTTPRequest and not c.is_queued_for_deletion()
+	).size()
+
+
+# until the house has had no request in flight over two frames in a row: what it asked has been
+# answered and applied. The local list answers by call_deferred, which a frame flushes.
 func _answered(main: Control) -> bool:
-	return await _until(
-		func(): return main._backend.get_child_count() == 0, "the house's requests answered"
-	)
+	var end := Time.get_ticks_msec() + 8000
+	var idle := 0
+	while idle < 2:
+		await process_frame
+		idle = idle + 1 if _requests(main._backend) == 0 else 0
+		if Time.get_ticks_msec() >= end:
+			_check(false, "waited 8s and the house's requests were still in flight")
+			return false
+	return true
 
 
 func _soak() -> void:

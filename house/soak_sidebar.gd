@@ -22,9 +22,17 @@ func _init(soak, the_main) -> void:
 	sb = main._sidebar
 
 
-func _frames(n: int = 3) -> void:
-	for _i in n:
-		await s.process_frame
+# the sidebar's own frame, which draws its state; the deferred calls an action queued have run by
+# the time it ends
+func _sync() -> void:
+	await s.process_frame
+
+
+# the engine's own container pass lays a resize or a rebuild out at the end of a frame; a layout
+# is read after the sidebar has drawn and that pass has run
+func _laid_out() -> void:
+	await _sync()
+	await _sync()
 
 
 func run() -> void:
@@ -255,25 +263,25 @@ func _press(text: String) -> void:
 	s._check(r != null, "the shelf has a row: %s" % text)
 	if r != null:
 		r.pressed.emit()
-	await _frames()
+	await _sync()
 
 
 func _open_shelf() -> void:
 	sb.back()
 	h.decorating = false
-	await _frames()
+	await _sync()
 	var c: Variant = _centre("furn:bookshelf")
 	s._check(c != null, "the room has a bookshelf to click")
 	if c != null:
 		h.click(c)
-	await _frames()
+	await _sync()
 
 
 func _filter(text: String) -> void:
 	for c in sb._dyn.find_children("*", "LineEdit", true, false):
 		c.text = text
 		c.text_changed.emit(text)
-	await _frames()
+	await _sync()
 
 
 # one click on the bookshelf shows the notes, what is put off, the projects and every title
@@ -290,11 +298,8 @@ func _shelf() -> void:
 	var before: int = s._count("/api/home")
 	s.seed(keep["open"], keep["coming"], extra)
 	main._poll()
-	for i in 30:
-		if s._count("/api/home") > before:
-			break
-		await s.create_timer(0.1).timeout
-	await s.create_timer(0.45).timeout
+	await s._until(func(): return s._count("/api/home") > before, "the house is read again")
+	await s._answered(main)
 	await _open_shelf()
 	s._check(sb.view == "card" and h.card.kind == "book", "the bookshelf opens the shelf")
 	var texts: Array = _texts(sb._dyn)
@@ -321,15 +326,15 @@ func _shelf() -> void:
 	s._check(sb.view == "item" and int(sb.arg) == 203, "a note opens its item view")
 	s._check("note 3" in _texts(sb._dyn) and sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the note view shows its text")
 	sb.item_act(203, "delete")
-	await s.create_timer(1.0).timeout
+	await s._answered(main)
 	await _open_shelf()
 	texts = _texts(sb._dyn)
 	s._check(sb.view == "card" and "Notes (9)" in texts and "note 3" not in texts, "deleting a note takes it off the shelf")
 	s._check("2 more..." in texts or "1 more..." in texts, "the shelf opens collapsed again")
 	sb.back()
-	await _frames()
+	await _sync()
 	h.things.open_note({"id": 0, "text": "plain"})
-	await _frames()
+	await _sync()
 	s._check(h.card.kind == "board" and h.things.tab == "notes", "a note with no id opens the board's notes")
 	sb.back()
 	await _open_shelf()
@@ -338,7 +343,7 @@ func _shelf() -> void:
 	sb.back()
 	s._state = keep
 	main._poll()
-	await s.create_timer(0.45).timeout
+	await s._answered(main)
 
 
 func _edit(placeholder: String) -> Variant:
@@ -376,13 +381,10 @@ func _agendas() -> void:
 	var before: int = s._count("/api/home")
 	s.seed(keep["open"], keep["coming"], {"agendas": [retro, sam]})
 	main._poll()
-	for i in 30:
-		if s._count("/api/home") > before:
-			break
-		await s.create_timer(0.1).timeout
-	await s.create_timer(0.45).timeout
+	await s._until(func(): return s._count("/api/home") > before, "the house is read again")
+	await s._answered(main)
 	sb.back()
-	await _frames()
+	await _sync()
 	var texts: Array = _texts(sb._dyn)
 	s._check("Today" in texts and "14:00" in texts and "Retro · 2 things" in texts, "Home has a time-first row for an agenda due today: %s" % str(texts))
 	await _press("Retro · 2 things")
@@ -407,29 +409,29 @@ func _agendas() -> void:
 	s._check(edit != null, "the agenda has an add line")
 	if edit != null:
 		edit.text_submitted.emit("nobody owned the rollback")
-	await _frames()
+	await s._until(func(): return _posted("/api/home/agendas/71/add").size() >= 1, "the note is posted")
 	var posts := _posted("/api/home/agendas/71/add")
 	s._check(posts.size() == 1 and JSON.parse_string(posts[0][2]) == {"text": "nobody owned the rollback"}, "Enter adds the note to this agenda: %s" % str(posts))
 	var clear: Variant = _button("Clear")
 	s._check(clear != null, "a pile with notes has Clear")
 	if clear != null:
 		clear.pressed.emit()
-	await _frames()
+	await s._until(func(): return _posted("/api/home/agendas/71/clear").size() >= 1, "Clear is posted")
 	s._check(_posted("/api/home/agendas/71/clear").size() == 1, "Clear asks the home to archive the pile")
 	sb.back()
-	await _frames()
+	await s._until(func(): return sb.view == "card" and h.card.kind == "book", "back from the agenda reaches the shelf")
 	s._check(sb.view == "card" and h.card.kind == "book", "back from an agenda opened on the shelf is the shelf")
 	await _press("new agenda")
 	var name_edit: Variant = _edit("name the agenda")
 	s._check(name_edit != null, "new agenda opens a line for the name")
 	if name_edit != null:
 		name_edit.text_submitted.emit("offsite")
-	await _frames()
+	await s._until(func(): return _posted("/api/home/agendas").size() >= 1, "the new agenda is posted")
 	s._check(_posted("/api/home/agendas").size() == 1, "a name makes a new agenda")
 	sb.back()
 	s._state = keep
 	main._poll()
-	await s.create_timer(0.45).timeout
+	await s._answered(main)
 
 
 # proposals: a section under Open with the why line, add and no, three shown, no banner
@@ -443,7 +445,7 @@ func _proposals() -> void:
 	s.seed(keep["open"], keep["coming"], {"proposals": rows})
 	await _poll_home()
 	sb.back()
-	await _frames()
+	await _sync()
 	var texts: Array = _texts(sb._dyn)
 	s._check("Proposed (5)" in texts, "Home has a Proposed (5) section: %s" % str(texts))
 	s._check(texts.find("Proposed (5)") > texts.find("Open"), "Proposed comes under Open")
@@ -463,10 +465,9 @@ func _proposals() -> void:
 	s._check(add != null, "a row has an add button")
 	if add != null:
 		add.pressed.emit()
-	for i in 30:
-		if not _posted("/api/home/proposals/80/take").is_empty():
-			break
-		await s.create_timer(0.1).timeout
+	await s._until(
+		func(): return not _posted("/api/home/proposals/80/take").is_empty(), "add posts the take"
+	)
 	s._check(_posted("/api/home/proposals/80/take").size() == 1, "add takes the proposal")
 	await _settle_home()
 	texts = _texts(sb._dyn)
@@ -477,10 +478,9 @@ func _proposals() -> void:
 	s._check(no != null, "a row has a no button")
 	if no != null:
 		no.pressed.emit()
-	for i in 30:
-		if not _posted("/api/home/proposals/81/dismiss").is_empty():
-			break
-		await s.create_timer(0.1).timeout
+	await s._until(
+		func(): return not _posted("/api/home/proposals/81/dismiss").is_empty(), "no posts the dismissal"
+	)
 	s._check(_posted("/api/home/proposals/81/dismiss").size() == 1, "no dismisses the proposal")
 	await _settle_home()
 	texts = _texts(sb._dyn)
@@ -496,17 +496,14 @@ func _proposals() -> void:
 func _poll_home() -> void:
 	var before: int = s._count("/api/home")
 	main._poll()
-	for i in 30:
-		if s._count("/api/home") > before:
-			break
-		await s.create_timer(0.1).timeout
-	await s.create_timer(0.45).timeout
+	await s._until(func(): return s._count("/api/home") > before, "the house is read again")
+	await s._answered(main)
 
 
 func _settle_home() -> void:
 	await _poll_home()
 	sb.back()
-	await _frames()
+	await _sync()
 
 
 # the small button `label` on the row whose text is `text`
@@ -536,7 +533,7 @@ func local_agendas() -> void:
 	var name_edit: Variant = _edit("name the agenda")
 	if name_edit != null:
 		name_edit.text_submitted.emit("retro")
-	await s.create_timer(1.2).timeout
+	await s._answered(main)
 	texts = _texts(sb._dyn)
 	s._check("Agendas (1)" in texts and "retro" in texts, "the local list makes the agenda: %s" % str(texts.slice(0, 5)))
 	await _press("retro")
@@ -544,18 +541,18 @@ func local_agendas() -> void:
 	var edit: Variant = _edit("add a note")
 	if edit != null:
 		edit.text_submitted.emit("flaky gate")
-	await s.create_timer(1.2).timeout
+	await s._answered(main)
 	s._check("flaky gate" in _texts(sb._dyn), "the local list puts the note on the pile")
 	var clear: Variant = _button("Clear")
 	if clear != null:
 		clear.pressed.emit()
-	await s.create_timer(1.2).timeout
+	await s._answered(main)
 	s._check("Nothing on this pile yet." in _texts(sb._dyn), "Clear leaves the local agenda empty")
 	s._check("flaky gate" not in h.notes and h.things.note_list().all(func(n): return n["text"] != "flaky gate"), "a pile's notes are not in the plain notes")
 	sb.back()
-	await _frames()
+	await _sync()
 	sb.back()
-	await _frames()
+	await _sync()
 
 
 # the local list's own data builds the same view
@@ -569,10 +566,10 @@ func shelf_local() -> void:
 	s._check(not kept.is_empty(), "the local list gives notes with ids")
 	if not kept.is_empty():
 		h.things.open_note(kept[0])
-		await _frames()
+		await _sync()
 		s._check(sb.view == "item" and str(kept[0]["text"]) in _texts(sb._dyn), "a local note opens its item view")
 	sb.back()
-	await _frames()
+	await _sync()
 
 
 func _centre(key: String) -> Variant:
@@ -592,7 +589,7 @@ func _centre(key: String) -> Variant:
 func _things() -> void:
 	sb.back()
 	h.decorating = false
-	await _frames()
+	await _sync()
 	var seen := 0
 	for key in [
 		"cal", "jar", "window", "clock", "plant", "board", "mousehole", "furn:fireplace",
@@ -603,30 +600,30 @@ func _things() -> void:
 			continue
 		seen += 1
 		sb.back()
-		await _frames()
+		await _sync()
 		if key == "phone":
 			sb.chat_mode = "line"
 		var was := [sb.view, h.card.kind, h.tv.on, sb._effective()]
 		h.click(c)
-		await _frames()
+		await _sync()
 		var now := [sb.view, h.card.kind, h.tv.on, sb._effective()]
 		s._check(now != was, "a click on %s opens a view or toggles (%s)" % [key, str(now)])
 		if key != "tv" and key != "phone":
 			s._check(sb.selected_key() == h.selected, "%s stays highlighted" % key)
 		sb.back()
-		await _frames()
+		await _sync()
 	s._check(seen >= 8, "the room has things to click: %d" % seen)
 	sb.back()
 	var a: Variant = _centre("cal")
 	var b: Variant = _centre("jar")
 	if a != null and b != null:
 		h.click(a)
-		await _frames()
+		await _sync()
 		h.click(b)
-		await _frames()
+		await _sync()
 		s._check(sb.view == "card" and h.card.kind == "jar", "thing B replaces thing A's view")
 		sb.back()
-		await _frames()
+		await _sync()
 		s._check(sb.view == "home" and h.selected == "", "back brings the home view, nothing selected")
 
 
@@ -638,7 +635,7 @@ func _fit() -> void:
 		var win := Rect2(Vector2.ZERO, size)
 		for name in ["home", "add", "pet", "pet_edit", "closet", "settings", "card"]:
 			sb.back()
-			await _frames()
+			await _sync()
 			match name:
 				"add":
 					sb.open_add()
@@ -653,14 +650,14 @@ func _fit() -> void:
 					sb.open_settings()
 				"card":
 					h.card.open("calendar", "cal")
-			await _frames(4)
+			await _laid_out()
 			var out := _outside(win)
 			s._check(out == "", "no %s control lies outside a %s window: %s" % [name, size, out])
 			s._check(sb.get_global_rect().end.x <= size.x + 0.5, "the sidebar fits a %s window" % size)
 		sb.back()
 	main.size = was
-	await _frames()
-
+	await _sync()
+	await _laid_out()
 
 func _outside(win: Rect2) -> String:
 	var bad: Array = []
@@ -678,27 +675,27 @@ func _outside(win: Rect2) -> String:
 # a click on a pet opens its view, not the controls; Esc goes back one level at a time
 func _pet() -> void:
 	sb.back()
-	await _frames()
+	await _sync()
 	var cat = h.pets.critter("nina")
 	var c: Vector2 = h.pets.hit_rect(cat, h._o, h._k).get_center()
 	if h.pet_at(c) == "nina":
 		h.click(c)
 	else:
 		main._on_viewed("pet", "nina")
-	await _frames()
+	await _sync()
 	var v = sb.pet_view
 	s._check(sb.view == "pet" and v.visible, "a click on a pet opens its view")
 	s._check(v._page.visible and not v._tiles["cat_black"].is_visible_in_tree(), "not the kind grid")
 	s._check(not sb.takes_text(), "the pets go on with their day while it is open")
 	v._open_edit()
-	await _frames()
+	await _sync()
 	s._check(sb.takes_text() and v._tiles["cat_black"].is_visible_in_tree(), "change who this is")
 	s._check(is_equal_approx(sb.size.x, Sidebar.WIDTH), "the pane stays %d wide" % Sidebar.WIDTH)
 	sb.back()
-	await _frames()
+	await _sync()
 	s._check(sb.view == "pet" and v._page.visible and not v.editing, "Esc goes back to the pet")
 	sb.back()
-	await _frames()
+	await _sync()
 	s._check(sb.view == "home", "and again goes home")
 
 
@@ -706,18 +703,18 @@ func _pet() -> void:
 func _banner() -> void:
 	sb.back()
 	main._open_add()
-	await _frames()
+	await _sync()
 	var form_was: bool = sb.form.visible
 	h.rhythm.show_slip("home", "Still open", [])
-	await _frames()
+	await _sync()
 	s._check(sb.view == "add" and sb.form.visible == form_was, "a slip leaves the add view be")
 	h.rhythm.dismiss()
 	main._open_settings()
 	h.show_reply("noted")
-	await _frames()
+	await _sync()
 	s._check(sb.view == "settings", "a reply leaves the settings be")
 	sb.back()
-	await _frames()
+	await _sync()
 	s._check(sb.view == "home", "and back still goes home")
 
 
@@ -726,18 +723,18 @@ func _decorate_tabs() -> void:
 	if not h.layout.art:
 		return
 	main._set_decorate(true)
-	await _frames(3)
+	await _sync()
 	var d = main._decorate
 	for t in h.layout.tabs:
 		d.tab = t
 		d.queue_redraw()
-		await _frames(2)
+		await _sync()
 		s._check(sb.get_global_rect().size.x <= sb.WIDTH + 0.5, "the sidebar stays %d wide on %s" % [sb.WIDTH, t])
 	for hit in d._hits:
 		if str(hit["act"]).begins_with("tab:"):
 			s._check(hit["rect"].end.x <= d.size.x - 4.0, "the %s tab fits the pane" % hit["act"])
 	main._set_decorate(false)
-	await _frames()
+	await _sync()
 
 
 func _iso(at: float) -> String:
@@ -814,11 +811,11 @@ func _home_sections() -> void:
 	]
 	for open in opens:
 		open.call()
-		await _frames()
+		await _sync()
 		s._check(sb._add.visible and sb._cog.visible, "the header keeps add and settings in %s" % sb.view)
 		s._check(sb._back.visible == (sb.view != "home"), "the back chevron is only off Home (%s)" % sb.view)
 	sb.back()
-	await _frames()
+	await _sync()
 	h.chat.messages = []
 	sb.chat_view.set_mode("dock")
 	s._check(not sb.chat_view.has_log(), "the dock with no messages is the input line alone")
@@ -900,7 +897,7 @@ func _home_fits() -> void:
 	main.size = Vector2(1100, 700)
 	sb.back()
 	sb.chat_mode = "dock"
-	await _frames(4)
+	await _laid_out()
 	var content: Control = sb.scroll.get_child(0)
 	s._check(sb.view == "home" and not sb.chat_view.has_log(), "Home with the dock compact")
 	s._check(
@@ -909,7 +906,7 @@ func _home_fits() -> void:
 	)
 	h.things.reset()
 	h.card.open("calendar", "cal")
-	await _frames(4)
+	await _laid_out()
 	var blocks: Array = h.things.calendar_blocks()
 	var split: int = blocks.find_custom(func(b: Dictionary) -> bool: return b.get("text") == "Coming up")
 	var ids := func(part: Array) -> Array:
@@ -935,4 +932,4 @@ func _home_fits() -> void:
 	h.temp_c = keep[9]
 	h.chat.messages = keep[10]
 	main.size = size_was
-	await _frames()
+	await _sync()

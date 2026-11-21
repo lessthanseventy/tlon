@@ -37,21 +37,8 @@ func _stamp() -> Dictionary:
 	return out
 
 
-# a moment, then until no request is in flight (bounded): a slow machine is slower, not wrong
-func _wait(_secs: float = 0.0) -> void:
-	await s.create_timer(0.15).timeout
-	var quiet := 0
-	var end := Time.get_ticks_msec() + 8000
-	while quiet < 3 and Time.get_ticks_msec() < end:
-		quiet = quiet + 1 if main._backend.get_child_count() == 0 else 0
-		await s.process_frame
-
-
-# until `done` holds, at most `secs`; a failure to hold is the caller's check
-func _until(done: Callable, secs: float = 8.0) -> void:
-	var end := Time.get_ticks_msec() + int(secs * 1000.0)
-	while not done.call() and Time.get_ticks_msec() < end:
-		await s.create_timer(0.02).timeout
+func _wait() -> void:
+	await s._answered(main)
 
 
 func _key(code: int) -> InputEventKey:
@@ -234,7 +221,6 @@ func _settings_view() -> void:
 	var v = SettingsView.new()
 	v.setup(home.settings, home)
 	s.root.add_child(v)
-	await s.process_frame
 	v.open()
 	s._check(v.visible, "the settings open")
 	v._name.text = "Sam"
@@ -330,10 +316,10 @@ func _address() -> void:
 	var v = main._sidebar.settings_view
 	v.open()
 	main._check_server("http://127.0.0.1:%d" % s._srv.get_local_port())
-	await _until(func() -> bool: return v._url_say.text == "reachable")
+	await s._until(func() -> bool: return v._url_say.text == "reachable")
 	s._check(v._url_say.text == "reachable", "the check says reachable against the stub: %s" % v._url_say.text)
 	main._check_server("http://127.0.0.1:1")
-	await _until(func() -> bool: return v._url_say.text == "not reachable")
+	await s._until(func() -> bool: return v._url_say.text == "not reachable")
 	s._check(v._url_say.text == "not reachable", "and not reachable on a dead port: %s" % v._url_say.text)
 	v._url.text = "ftp://x"
 	v._check()
@@ -359,14 +345,14 @@ func _conversation() -> void:
 	var before: int = s._count("/api/home")
 	v._submit("hello house")
 	s._check(v.reading and chat.messages[-1]["who"] == "me", "sending shows his line and a reading state")
-	await _wait(1.0)
+	await _wait()
 	s._check(not v.reading and chat.messages[-1]["text"] == s.reply_for("hello house") and chat.messages[-1]["who"] == "home", "the reply replaces reading")
 	s._check(s._seen("POST", "/api/home", "hello house"), "the line is posted to /api/home")
 	s._check(s._count("/api/home") > before, "the status is read again at once")
 	s._fail_jot = true
 	var n: int = chat.messages.size()
 	v._submit("keep me")
-	await _wait(1.0)
+	await _wait()
 	s._check(chat.messages.size() == n and v._edit.text == "keep me" and "not sent" in v._note.text, "a failure takes the line back and keeps the text")
 	s._fail_jot = false
 	v._edit.text = ""
@@ -378,7 +364,7 @@ func _conversation() -> void:
 	main._open_add()
 	main._sidebar.jot.open("from the pad")
 	main._send_jot("from the pad")
-	await _wait(1.0)
+	await _wait()
 	var texts: Array = chat.messages.map(func(m): return m["text"])
 	s._check(texts.has("from the pad") and texts.has(s.reply_for("from the pad")), "a notepad line and its reply are in the history")
 	var pad = main._sidebar.jot
@@ -397,8 +383,7 @@ func _conversation() -> void:
 		s.add_open(row)
 	main._sidebar.chat_mode = "line"
 	main._sidebar._apply()
-	await s.process_frame
-	await s.process_frame
+	await s._until(func(): return main._sidebar.chat_view.mode == "line", "the chat folds to its line")
 	chat.unread = false
 	main._poll()
 	await _wait()
@@ -409,11 +394,9 @@ func _conversation() -> void:
 	await _wait()
 	s._check(chat.messages.filter(func(m): return m.has("id")).size() == 4, "a second read tells nothing again")
 	main._open_chat()
-	await s.process_frame
-	await s.process_frame
+	await s._until(func(): return not chat.unread, "opening the chat clears the unread mark")
 	s._check(not chat.unread, "opening clears the unread mark")
-	await s.process_frame
-	await s.process_frame
+	await s._until(func(): return v._hits.size() >= 4 and v._hits.size() % 4 == 0, "the chat draws four buttons under each reminder")
 	s._check(v._hits.size() >= 4 and v._hits.size() % 4 == 0, "four buttons under each shown: %d" % v._hits.size())
 	v.press(7, "done")
 	await _wait()
@@ -436,7 +419,7 @@ func _conversation() -> void:
 	v.press(10, "delete")
 	await _wait()
 	s._check(s._seen("POST", "/api/home/10/drop"), "the second click deletes")
-	await s.process_frame
+	await s._until(func(): return v._hits.is_empty() and v.acting == -1, "the pressed rows are gone")
 	s._check(v._hits.is_empty() and v.acting == -1, "nothing is left to press")
 	h._show_slip("home")
 	s._check(str(chat.messages[-1]["text"]).begins_with("Still open"), "a slip is a message: %s" % chat.messages[-1]["text"])
@@ -455,7 +438,7 @@ func _conversation() -> void:
 func _blockers() -> void:
 	var sb = main._sidebar
 	main._open_add()
-	await s.process_frame
+	await s._until(func(): return sb.view == "add" and sb.takes_text(), "the add view opens")
 	s._check(sb.view == "add" and sb.takes_text(), "the add view takes text")
 	main._input(_key(KEY_K))
 	main._input(_key(KEY_D))
@@ -469,8 +452,7 @@ func _blockers() -> void:
 	s._check(sb.view == "home", "Esc goes back to the home view")
 	s._check(main._open_settings() and sb.view == "settings", "the settings open as a view")
 	h.rhythm.show_slip("home", "Still open", [])
-	await s.process_frame
-	await s.process_frame
+	await s._quiet_frames(3)
 	s._check(sb.view == "settings", "a slip arriving does not close the view")
 	h.rhythm.dismiss()
 	main._input(_key(KEY_ESCAPE))
