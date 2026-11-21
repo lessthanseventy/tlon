@@ -11,6 +11,7 @@ const STORE := "user://soak_telegram.json"
 
 var s
 var _made: Array = []
+var phone: Node
 var t := 0.0
 
 
@@ -26,32 +27,36 @@ func _eq(got: Variant, want: Variant, what: String) -> void:
 	s._check(got == want, "%s: got %s, want %s" % [what, str(got), str(want)])
 
 
-func _until(done: Callable, secs: float = 4.0) -> void:
-	var end := Time.get_ticks_msec() + int(secs * 1000.0)
-	while not done.call() and Time.get_ticks_msec() < end:
-		await s.create_timer(0.02).timeout
+func _bots() -> Array:
+	var out: Array = _made.filter(func(n): return is_instance_valid(n))
+	if is_instance_valid(phone):
+		out.append(phone)
+	return out
+
+
+func _in_flight(tg: Node) -> int:
+	return tg.get_children().filter(func(c): return c is HTTPRequest and not c.is_queued_for_deletion()).size()
 
 
 func _polls(bot) -> int:
 	return bot.calls.filter(func(c): return c["method"] == "getUpdates").size()
 
 
-# a moment, then until the bot has acknowledged every update and polled twice more, so what it
-# answered has reached the stub (bounded). A bot that is not polling is not waited for.
-func _settle(secs: float = 0.3) -> void:
-	await s.create_timer(minf(secs, 0.1)).timeout
-	if s.bot.is_null():
-		return
-	var bot = s.bot.get_object()
-	var from := _polls(bot)
-	var start := Time.get_ticks_msec()
-	while Time.get_ticks_msec() - start < 5000:
-		var seen: int = _polls(bot) - from
-		if seen >= 2 and bot.updates.is_empty():
-			return
-		if seen == 0 and Time.get_ticks_msec() - start > 700:
-			return
-		await s.create_timer(0.02).timeout
+# until no bot has a request in flight and, while one polls, the stub has seen two more polls and
+# handed out every update: what the bot answered has then reached the stub
+func _settle() -> void:
+	var bot = null if s.bot.is_null() else s.bot.get_object()
+	var from: int = 0 if bot == null else _polls(bot)
+	await s._until(
+		func() -> bool:
+			var polling := false
+			for tg in _bots():
+				polling = polling or tg._running
+				if _in_flight(tg) > 0:
+					return false
+			return bot == null or not polling or (_polls(bot) - from >= 2 and bot.updates.is_empty()),
+		"the bot's requests answered and the stub's updates taken"
+	)
 
 
 func _wipe() -> void:
@@ -184,22 +189,22 @@ func _telegram() -> void:
 	var said: Array = []
 	tg.connect_bot("", func(l: String) -> void: said.append(l))
 	tg.connect_bot("999:wrong-WXYZ", func(l: String) -> void: said.append(l))
-	await _until(func() -> bool: return said.size() == 2)
+	await s._until(func() -> bool: return said.size() == 2)
 	_eq(
 		said,
 		["paste the token first", "Telegram says: Unauthorized"],
 		"a missing and a bad token are said in one line"
 	)
-	await _settle(0.2)
+	await _settle()
 	_eq([tg.token, bot.named("getUpdates").size()], ["", 0], "and nothing is kept or asked")
 	tg.connect_bot(TOKEN, func(l: String) -> void: said.append(l))
-	await _until(func() -> bool: return said.size() == 3)
+	await s._until(func() -> bool: return said.size() == 3)
 	_eq(
 		[said[2], tg.token == TOKEN, tg.masked()],
 		["@house_stub_bot", true, "…" + TOKEN.right(4)],
 		"a good token says the bot's name, and is shown masked"
 	)
-	await _until(func() -> bool: return bot.named("getUpdates").size() >= 2)
+	await s._until(func() -> bool: return bot.named("getUpdates").size() >= 2)
 	var asked: Dictionary = bot.named("getUpdates").back()
 	_eq(
 		[int(asked["timeout"]), asked["allowed_updates"]],
@@ -229,9 +234,9 @@ func _telegram() -> void:
 	await _settle()
 	_eq(tg.code != first_code, true, "five wrong tries and the code is changed")
 	bot.text(777, tg.code)
-	await _until(func() -> bool: return tg.chat == 777)
+	await s._until(func() -> bool: return tg.chat == 777)
 	_eq([tg.chat, tg.code], [777, ""], "the chat that sent the code is the chat")
-	await _until(func() -> bool: return bot.to(777).size() == 1)
+	await s._until(func() -> bool: return bot.to(777).size() == 1)
 	_eq(bot.to(777)[0]["params"]["text"].begins_with("Paired."), true, "and is told so")
 	n = bot.sent.size()
 	bot.text(555, "hello again")
@@ -241,22 +246,22 @@ func _telegram() -> void:
 
 	# a line from the paired chat is the house's to read; the answer goes back
 	var id := bot.text(777, "buy stamps")
-	await _until(func() -> bool: return heard.size() == 1)
-	await _until(func() -> bool: return bot.to(777).size() == 2)
+	await s._until(func() -> bool: return heard.size() == 1)
+	await s._until(func() -> bool: return bot.to(777).size() == 2)
 	_eq(
 		[heard, bot.to(777)[1]["params"]["text"]],
 		[["buy stamps"], "re: buy stamps"],
 		"a text from the chat is told, and the reply sent"
 	)
 	bot.text(777, "/start")
-	await _until(func() -> bool: return bot.to(777).size() == 3)
+	await s._until(func() -> bool: return bot.to(777).size() == 3)
 	_eq(
 		[heard.size(), bot.to(777)[2]["params"]["text"].begins_with("I'm here")],
 		[1, true],
 		"/start is greeted, not filed"
 	)
 	bot.voice(777)
-	await _until(func() -> bool: return bot.to(777).size() == 4)
+	await s._until(func() -> bool: return bot.to(777).size() == 4)
 	await _settle()
 	_eq(
 		[heard.size(), bot.to(777).size(), bot.to(777)[3]["params"]["text"]],
@@ -294,7 +299,7 @@ func _telegram() -> void:
 		}
 	)
 	tg2.start()
-	await _until(func() -> bool: return bot.named("getUpdates").back()["offset"] == tg.offset)
+	await s._until(func() -> bool: return bot.named("getUpdates").back()["offset"] == tg.offset)
 	await _settle()
 	_eq(
 		[again, bot.named("getUpdates").back()["offset"] == tg.offset],
@@ -311,14 +316,15 @@ func _telegram() -> void:
 	var tg3 := _tg(base, backlog, taps)
 	tg3.load_state()
 	tg3.start()
-	await _until(func() -> bool: return backlog.size() == 3)
+	await s._until(func() -> bool: return backlog.size() == 3)
 	_eq(backlog, ["one", "two", "three"], "the backlog is read oldest first at start")
+	await _settle()
 
 	# a reminder told: a message with buttons
 	var tea: Dictionary = {"id": 7, "text": "tea", "every": null}
 	n = bot.sent.size()
 	tg3.on_told(tea)
-	await _until(func() -> bool: return bot.sent.size() == n + 1)
+	await s._until(func() -> bool: return bot.sent.size() == n + 1)
 	var msg: Dictionary = bot.sent.back()
 	_eq(
 		[msg["params"]["text"], _keys(msg["params"]["reply_markup"])],
@@ -335,12 +341,12 @@ func _telegram() -> void:
 	]:
 		n = bot.sent.size()
 		tg3.on_told({"id": 20, "text": "x", "every": null})
-		await _until(func() -> bool: return bot.sent.size() == n + 1)
+		await s._until(func() -> bool: return bot.sent.size() == n + 1)
 		var m: Dictionary = bot.sent.back()
 		var answers := bot.named("answerCallbackQuery").size()
 		var tap_id := bot.tap(777, "%s:20" % pair[0], m["mid"], "⏰ x")
-		await _until(func() -> bool: return bot.named("answerCallbackQuery").size() == answers + 1)
-		await _until(
+		await s._until(func() -> bool: return bot.named("answerCallbackQuery").size() == answers + 1)
+		await s._until(
 			func() -> bool:
 				return (
 					bot.named("editMessageText").size() > 0
@@ -369,7 +375,7 @@ func _telegram() -> void:
 
 	# a repeating reminder's Delete asks again
 	tg3.on_told({"id": 8, "text": "water", "every": "week"})
-	await _until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ water")
+	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ water")
 	var water: Dictionary = bot.sent.back()
 	_eq(
 		_keys(water["params"]["reply_markup"]).back(),
@@ -379,7 +385,7 @@ func _telegram() -> void:
 	presses = taps.size()
 	var edits := bot.named("editMessageText").size()
 	bot.tap(777, "ask:8", water["mid"], "⏰ water")
-	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
 	var ask: Dictionary = bot.named("editMessageText").back()
 	_eq(
 		[ask["text"], _keys(ask["reply_markup"]), taps.size()],
@@ -387,7 +393,7 @@ func _telegram() -> void:
 		"the second keyboard says yes or no, and deletes nothing"
 	)
 	bot.tap(777, "no:8", water["mid"], ask["text"])
-	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 2)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 2)
 	var back: Dictionary = bot.named("editMessageText").back()
 	_eq(
 		[back["text"], _keys(back["reply_markup"]).size(), taps.size()],
@@ -395,8 +401,8 @@ func _telegram() -> void:
 		"no puts the buttons back"
 	)
 	bot.tap(777, "yes:8", water["mid"], ask["text"])
-	await _until(func() -> bool: return taps.size() == presses + 1)
-	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 3)
+	await s._until(func() -> bool: return taps.size() == presses + 1)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 3)
 	_eq(
 		[taps.back(), bot.named("editMessageText").back()["text"]],
 		[[8, "delete"], "⏰ water\ndeleted"],
@@ -405,12 +411,12 @@ func _telegram() -> void:
 
 	# a re-ring: the new message, the old one loses its buttons
 	tg3.on_told({"id": 9, "text": "gym", "every": null})
-	await _until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ gym")
+	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ gym")
 	var old: Dictionary = bot.sent.back()
 	n = bot.sent.size()
 	tg3.on_told({"id": 9, "text": "gym", "every": null})
-	await _until(func() -> bool: return bot.sent.size() == n + 1)
-	await _until(func() -> bool: return bot.named("editMessageReplyMarkup").size() > 0)
+	await s._until(func() -> bool: return bot.sent.size() == n + 1)
+	await s._until(func() -> bool: return bot.named("editMessageReplyMarkup").size() > 0)
 	var cleared: Dictionary = bot.named("editMessageReplyMarkup").back()
 	_eq(
 		[int(cleared["message_id"]), cleared["reply_markup"]["inline_keyboard"]],
@@ -422,7 +428,7 @@ func _telegram() -> void:
 	var fresh: Dictionary = bot.sent.back()
 	edits = bot.named("editMessageText").size()
 	tg3.handled(9, "done")
-	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
 	var followed: Dictionary = bot.named("editMessageText").back()
 	_eq(
 		[
@@ -434,13 +440,13 @@ func _telegram() -> void:
 		"done in the house takes the buttons off and says so"
 	)
 	tg3.handled(9, "done")
-	await _settle(0.15)
+	await _settle()
 	_eq(bot.named("editMessageText").size(), edits + 1, "and says it once")
 	tg3.on_told({"id": 10, "text": "mail", "every": null})
-	await _until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ mail")
+	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ mail")
 	edits = bot.named("editMessageText").size()
 	tg3.sync([9, 7])
-	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
 	_eq(
 		bot.named("editMessageText").back()["text"],
 		"⏰ mail\ndealt with in the house",
@@ -448,24 +454,24 @@ func _telegram() -> void:
 	)
 	# a press in flight is not said twice by the house's own report of it
 	tg3.on_told({"id": 11, "text": "post", "every": null})
-	await _until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ post")
+	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ post")
 	var held: Array = []
 	var tg4 := tg3
 	tg4.tapped.disconnect(tg4.tapped.get_connections()[0]["callable"])
 	tg4.tapped.connect(func(_i: int, _v: String, finish: Callable) -> void: held.append(finish))
 	bot.tap(777, "done:11", bot.sent.back()["mid"], "⏰ post")
-	await _until(func() -> bool: return held.size() == 1)
+	await s._until(func() -> bool: return held.size() == 1)
 	edits = bot.named("editMessageText").size()
 	tg4.handled(11, "done")
-	await _settle(0.15)
+	await _settle()
 	_eq(bot.named("editMessageText").size(), edits, "the house's report waits for the press's own")
 	held[0].call()
-	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
 	_eq(bot.named("editMessageText").back()["text"], "⏰ post\n✓ done", "which says it, once")
 	# acted on before Telegram has even answered the send: said once the message exists
 	tg3.on_told({"id": 13, "text": "quick", "every": null})
 	tg3.handled(13, "done")
-	await _until(
+	await s._until(
 		func() -> bool:
 			return (
 				bot.named("editMessageText").size() > 0
@@ -476,17 +482,17 @@ func _telegram() -> void:
 	# a list read before the tell does not close the new message
 	tg3.grace = 5.0
 	tg3.on_told({"id": 14, "text": "fresh", "every": null})
-	await _until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ fresh")
+	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ fresh")
 	var others: Array = tg3._msgs.keys().filter(func(k): return int(k) != 14)
 	edits = bot.named("editMessageText").size()
 	tg3.sync(others)
-	await _settle(0.15)
+	await _settle()
 	_eq(
 		bot.named("editMessageText").size(), edits, "a message younger than the grace is left alone"
 	)
 	tg3.grace = 0.0
 	tg3.sync(others)
-	await _until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
 	_eq(
 		bot.named("editMessageText").back()["text"],
 		"⏰ fresh\ndealt with in the house",
@@ -524,13 +530,13 @@ func _daily(base: String, bot: Bot) -> void:
 	var n := bot.sent.size()
 	t = LocalList.wall(2026, 11, 18, 17, 29)
 	tg.daily()
-	await _settle(0.15)
+	await _settle()
 	_eq(bot.sent.size(), n, "no day's list before its time")
 	t = LocalList.wall(2026, 11, 18, 17, 30)
 	tg.daily()
 	tg.daily()
-	await _until(func() -> bool: return bot.sent.size() == n + 1)
-	await _settle(0.15)
+	await s._until(func() -> bool: return bot.sent.size() == n + 1)
+	await _settle()
 	_eq(
 		[bot.sent.size() - n, bot.sent.back()["params"]["text"]],
 		[1, "Still open: buy milk, send photos; tomorrow: dentist"],
@@ -538,7 +544,7 @@ func _daily(base: String, bot: Bot) -> void:
 	)
 	t = LocalList.wall(2026, 11, 19, 17, 31)
 	tg.daily()
-	await _until(func() -> bool: return bot.sent.size() == n + 2)
+	await s._until(func() -> bool: return bot.sent.size() == n + 2)
 	_eq(bot.sent.size() - n, 2, "and again the next day")
 	var tg2 := _tg(base, [], [])
 	tg2.token = TOKEN
@@ -546,21 +552,21 @@ func _daily(base: String, bot: Bot) -> void:
 	tg2.status = tg.status
 	tg2.listed = tg.listed
 	tg2.daily()
-	await _settle(0.15)
+	await _settle()
 	_eq(bot.sent.size() - n, 2, "a restart the same day does not say it again")
 	t = LocalList.wall(2026, 11, 20, 23, 30)
 	tg2.list_at = "off"
 	tg2.daily()
-	await _settle(0.15)
+	await _settle()
 	_eq(bot.sent.size() - n, 2, "off says nothing")
 	tg2.list_at = "17:30"
 	tg2.daily()
-	await _until(func() -> bool: return bot.sent.size() == n + 3)
+	await s._until(func() -> bool: return bot.sent.size() == n + 3)
 	_eq(bot.sent.size() - n, 3, "a house opened after the time says it that day")
 	t = LocalList.wall(2026, 11, 21, 18)
 	tg2.status = func() -> Dictionary: return {"open": [], "coming": []}
 	tg2.daily()
-	await _settle(0.15)
+	await _settle()
 	_eq(
 		[bot.sent.size() - n, tg2.listed],
 		[3, "2026-11-21"],
@@ -589,7 +595,8 @@ func _failures(base: String, bot: Bot, said: Array) -> void:
 	var before := bot.attempts
 	tg.me = "@x"
 	tg.start()
-	await _settle(0.5)
+	await s._until(func() -> bool: return tg.backoff > 0.0, "the failing poll backs off")
+	await s._quiet(0.3)
 	_eq(
 		[tg.backoff, tg.problem, bot.attempts - before],
 		[5.0, "", 1],
@@ -602,7 +609,7 @@ func _failures(base: String, bot: Bot, said: Array) -> void:
 	dead.chat = 777
 	dead.me = "@x"
 	dead.start()
-	await _until(func() -> bool: return dead.backoff > 0.0)
+	await s._until(func() -> bool: return dead.backoff > 0.0)
 	_eq(
 		[dead.backoff, dead.problem],
 		[5.0, ""],
@@ -615,9 +622,9 @@ func _failures(base: String, bot: Bot, said: Array) -> void:
 	gone.chat = 777
 	bot.token = "revoked"
 	gone.start()
-	await _until(func() -> bool: return gone.problem != "")
+	await s._until(func() -> bool: return gone.problem != "")
 	before = bot.attempts
-	await _settle(0.3)
+	await s._quiet(0.2)
 	_eq(
 		[gone.problem, bot.attempts - before],
 		["Telegram says: Unauthorized", 0],
@@ -649,6 +656,7 @@ func _in_the_house(main) -> void:
 	s.bot = Callable(bot, "handle")
 	var base := "http://127.0.0.1:%d" % s._srv.get_local_port()
 	var ph = main._phone
+	phone = ph
 	ph.base = base
 	ph.poll_gap = 0.03
 	ph.grace = 0.0
@@ -666,7 +674,7 @@ func _in_the_house(main) -> void:
 
 	# his words from the phone are read and answered like the chat's own, and marked
 	bot.text(777, "remind me to call mum tomorrow at 5pm")
-	await _until(func() -> bool: return bot.to(777).size() == 1)
+	await s._until(func() -> bool: return bot.to(777).size() == 1)
 	var made: Dictionary = b.list.things().back()
 	_eq(
 		[made["kind"], made["text"], made["due_at"]],
@@ -700,7 +708,7 @@ func _in_the_house(main) -> void:
 	t = LocalList.wall(2026, 11, 18, 15)
 	b.list.tick()
 	main._poll()
-	await _until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ tea")
+	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ tea")
 	var tea_msg: Dictionary = bot.sent.back()
 	_eq(
 		h.chat.messages.filter(func(m): return m.get("id") == tea).size(),
@@ -708,8 +716,8 @@ func _in_the_house(main) -> void:
 		"the chat tells it too"
 	)
 	bot.tap(777, "hour:%d" % tea, tea_msg["mid"], "⏰ tea")
-	await _until(func() -> bool: return bot.named("answerCallbackQuery").size() > 0)
-	await _until(func() -> bool: return bot.named("editMessageText").size() > 0)
+	await s._until(func() -> bool: return bot.named("answerCallbackQuery").size() > 0)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() > 0)
 	var row: Dictionary = b.list.status()["coming"].filter(func(x): return x["id"] == tea)[0]
 	_eq(
 		[
@@ -720,7 +728,7 @@ func _in_the_house(main) -> void:
 		["2026-11-18T16:00:00Z", "in an hour", "⏰ tea\nin an hour"],
 		"In an hour on the phone moves it in the list and says so"
 	)
-	await _until(
+	await s._until(
 		func() -> bool:
 			return (
 				(
@@ -736,7 +744,7 @@ func _in_the_house(main) -> void:
 	t = LocalList.wall(2026, 11, 18, 16)
 	b.list.tick()
 	main._poll()
-	await _until(
+	await s._until(
 		func() -> bool:
 			return (
 				bot.to(777).filter(func(m): return m["params"]["text"] == "⏰ gym").size() == 1
@@ -747,11 +755,11 @@ func _in_the_house(main) -> void:
 	t = LocalList.wall(2026, 11, 18, 16, 30)
 	b.list.tick()
 	main._poll()
-	await _until(
+	await s._until(
 		func() -> bool:
 			return bot.to(777).filter(func(m): return m["params"]["text"] == "⏰ gym").size() == 2
 	)
-	await _until(func() -> bool: return bot.named("editMessageReplyMarkup").size() > 0)
+	await s._until(func() -> bool: return bot.named("editMessageReplyMarkup").size() > 0)
 	var cleared := bot.named("editMessageReplyMarkup").filter(
 		func(p): return int(p["message_id"]) == gym_first["mid"]
 	)
@@ -762,7 +770,7 @@ func _in_the_house(main) -> void:
 	)
 	var edits := bot.named("editMessageText").size()
 	main._on_act(gym, "done")
-	await _until(func() -> bool: return bot.named("editMessageText").size() > edits)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() > edits)
 	_eq(
 		bot.named("editMessageText").back()["text"],
 		"⏰ gym\n✓ done",
@@ -782,7 +790,7 @@ func _in_the_house(main) -> void:
 	)
 	bot.tap(777, "ask:%d" % water, water_msg["mid"], "⏰ water")
 	bot.tap(777, "yes:%d" % water, water_msg["mid"], "⏰ water\nDelete for good?")
-	await _until(
+	await s._until(
 		func() -> bool:
 			return (
 				b.list.status()["open"].filter(func(x): return x["id"] == water).size() == 0
@@ -790,7 +798,7 @@ func _in_the_house(main) -> void:
 			)
 	)
 	_eq(_things(b).has("water"), false, "yes deletes it from the list")
-	await _until(
+	await s._until(
 		func() -> bool: return bot.named("editMessageText").back()["text"] == "⏰ water\ndeleted"
 	)
 	_eq(bot.named("editMessageText").back()["text"], "⏰ water\ndeleted", "and says so")
@@ -800,11 +808,11 @@ func _in_the_house(main) -> void:
 	)
 	b.list.tick()
 	main._poll()
-	await _until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ bins")
+	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ bins")
 	edits = bot.named("editMessageText").size()
 	b.list.drop(bins)
 	main._poll()
-	await _until(func() -> bool: return bot.named("editMessageText").size() > edits)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() > edits)
 	_eq(
 		bot.named("editMessageText").back()["text"],
 		"⏰ bins\ndealt with in the house",
@@ -836,7 +844,7 @@ func _in_the_house(main) -> void:
 	opened.setup(away, Callable(self, "_clock"), 0.0, false)
 	var n := bot.sent.size()
 	main._install(opened)
-	await _until(func() -> bool: return bot.sent.size() == n + 1)
+	await s._until(func() -> bool: return bot.sent.size() == n + 1)
 	_eq(
 		[bot.sent.back()["params"]["text"], opened.started.size()],
 		["⏰ closed while away", 1],
@@ -862,7 +870,7 @@ func _in_the_house(main) -> void:
 	)
 	_eq(v._tg_state.text.contains(TOKEN) or v._tg_say.text.contains(TOKEN), false, "never whole")
 	ph.chat = 777
-	await _until(func() -> bool: return ph.reached_at > 0.0)
+	await s._until(func() -> bool: return ph.reached_at > 0.0)
 	v._refresh()
 	_eq(
 		[
@@ -902,11 +910,11 @@ func _in_the_house(main) -> void:
 	)
 	v._tg_token.text = "999:wrong-WXYZ"
 	v._tg_connect()
-	await _until(func() -> bool: return v._tg_say.text != "connecting...")
+	await s._until(func() -> bool: return v._tg_say.text != "connecting...")
 	_eq(v._tg_say.text, "Telegram says: Unauthorized", "connect says why in one line")
 	v._tg_token.text = TOKEN
 	v._tg_connect()
-	await _until(func() -> bool: return v._tg_say.text == "@house_stub_bot")
+	await s._until(func() -> bool: return v._tg_say.text == "@house_stub_bot")
 	_eq(
 		[v._tg_say.text, v._tg_token.text, ph.token == TOKEN],
 		["@house_stub_bot", "", true],
@@ -931,7 +939,7 @@ func _in_the_house(main) -> void:
 		"in server mode the bot is not offered"
 	)
 	var seen_after: int = bot.named("getUpdates").size()
-	await _settle()
+	await s._quiet(0.3)
 	_eq(bot.named("getUpdates").size(), seen_after, "and is not polled")
 	v.close()
 	ph.stop()

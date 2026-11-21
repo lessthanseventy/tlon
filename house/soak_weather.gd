@@ -56,12 +56,12 @@ func _served() -> void:
 	var h = main._room.home
 	h.fake_hour = 15.0
 	var today: String = h.today()
-	await _until(func(): return not main._busy)
+	await s._until(func(): return not main._busy, "the house is idle")
 	s._state["forecast"] = [
 		_day(_plus(today, -1), "snow"), _day(today, "storm", 80), _day(_plus(today, 2), "fog")
 	]
 	main._poll()
-	await _until(func(): return not _days_of(h).is_empty())
+	await s._until(func(): return not _days_of(h).is_empty(), "the card shows the days")
 	_eq(
 		_days_of(h).map(func(b): return b["kind"]),
 		["storm", "fog"],
@@ -73,9 +73,9 @@ func _served() -> void:
 		"named from today"
 	)
 	s._state.erase("forecast")
-	await _until(func(): return not main._busy)
+	await s._until(func(): return not main._busy, "the house is idle")
 	main._poll()
-	await _until(func(): return _days_of(h).is_empty())
+	await s._until(func(): return _days_of(h).is_empty(), "the card drops the days")
 	_eq(_days_of(h), [], "an older server's answer has no forecast, and none is shown")
 	main.queue_free()
 
@@ -108,14 +108,9 @@ func _last_path() -> String:
 	return "" if all.is_empty() else all[-1][1]
 
 
-func _until(done: Callable, secs: float = 4.0) -> void:
-	var end := Time.get_ticks_msec() + int(secs * 1000.0)
-	while not done.call() and Time.get_ticks_msec() < end:
-		await s.create_timer(0.02).timeout
-
-
-func _quiet_for(secs: float = 0.3) -> void:
-	await s.create_timer(secs).timeout
+func _settled(w: Node) -> void:
+	w.step()
+	await s._until(func(): return not w._busy, "the weather module's request answered")
 
 
 func _stub() -> String:
@@ -132,54 +127,54 @@ func _pace() -> void:
 	s.root.add_child(w)
 	s.wttr_body = _fixture()
 	var before := _hits()
-	await _until(func(): return w.report != null)
+	await s._until(func(): return w.report != null, "the first report")
 	_eq(_hits() - before, 1, "the first turn asks once")
 	_eq(_last_path(), "/?format=j1", "placed by the address")
 	_eq(w.report["kind"], "rain", "the report is kept")
 	_eq(w.days.size(), 2, "and its days")
 	_t += 1799.0
-	await _quiet_for()
+	await _settled(w)
 	_eq(_hits() - before, 1, "nothing before the interval is up")
 	_t += 1.0
-	await _until(func(): return _hits() - before == 2)
+	await s._until(func(): return _hits() - before == 2, "request 2 reaches the stub")
 	_eq(_hits() - before, 2, "the next turn asks again")
 	var kept: Variant = w.report
 	s.wttr_code = 500
 	_t += 1800.0
-	await _until(func(): return _hits() - before == 3)
-	await _quiet_for()
+	await s._until(func(): return _hits() - before == 3, "request 3 reaches the stub")
+	await _settled(w)
 	_eq(_hits() - before, 3, "a refused request is asked once, no storm of retries")
 	_eq(w.report, kept, "a failure keeps the last report")
 	_eq(w.days.size(), 2, "and its days")
 	_t += 1799.0
-	await _quiet_for()
+	await _settled(w)
 	_eq(_hits() - before, 3, "a failure waits for the next turn")
 	s.wttr_code = 200
 	s.wttr_body = {"nothing": "here"}
 	_t += 1.0
-	await _until(func(): return _hits() - before == 4)
-	await _quiet_for()
+	await s._until(func(): return _hits() - before == 4, "request 4 reaches the stub")
+	await _settled(w)
 	_eq(w.report, kept, "an answer that is no report keeps the last one")
 	s.wttr_body = _fixture()
 	w.town = Wttr.town_of("New York")
 	w.poke()
 	w.poke()
-	await _quiet_for()
+	await _settled(w)
 	_eq(_hits() - before, 4, "a change waits for things to be quiet")
 	_t += 2.0
-	await _until(func(): return _hits() - before == 5)
-	await _quiet_for()
+	await s._until(func(): return _hits() - before == 5, "request 5 reaches the stub")
+	await _settled(w)
 	_eq(_hits() - before, 5, "a change is one request however often it is poked")
 	_eq(_last_path(), "/New%20York?format=j1", "a town with a space goes into the path")
 	w.town = Wttr.town_of("a/b")
 	w.poke()
 	_t += 2.0
-	await _until(func(): return _hits() - before == 6)
+	await s._until(func(): return _hits() - before == 6, "request 6 reaches the stub")
 	_eq(_last_path(), "/?format=j1", "a bad town is no town")
 	w.on = false
 	w.clear()
 	_t += 100000.0
-	await _quiet_for()
+	await _settled(w)
 	_eq(_hits() - before, 6, "switched off, nothing is asked")
 	_eq(w.report, null, "and nothing is held")
 	w.queue_free()
@@ -190,7 +185,7 @@ func _pace() -> void:
 	s.root.add_child(idle)
 	idle.poke()
 	_t += 100000.0
-	await _quiet_for()
+	await _settled(idle)
 	_eq(_hits() - before, 6, "a staged module asks nothing")
 	idle.queue_free()
 
@@ -208,11 +203,11 @@ func _local() -> void:
 	_eq(main._wttr.live, false, "a staged room's module is not live")
 	_eq(main._wttr.on, true, "over the house's own list the weather is on")
 	var before := _hits()
-	await _quiet_for(2.5)
+	await _settled(main._wttr)
 	_eq(_hits() - before, 0, "a staged room asks nothing")
 	s.wttr_body = _fixture()
 	main._wttr.live = true
-	await _until(func(): return h.weather == "rain")
+	await s._until(func(): return h.weather == "rain", "the report reaches the window")
 	_eq(h.weather, "rain", "the report reaches the window")
 	_eq(h.weather_desc, "Light rain", "its words")
 	_eq(h.temp_c, 11, "its temperature")
@@ -226,7 +221,7 @@ func _local() -> void:
 		"and the window shows none"
 	)
 	var asked := _hits()
-	await _quiet_for(2.5)
+	await _settled(main._wttr)
 	_eq(_hits(), asked, "off asks nothing")
 	h.settings.forced["where"] = "server"
 	main._make_backend()

@@ -36,17 +36,6 @@ func _eq(got: Variant, want: Variant, what: String) -> void:
 	s._check(got == want, "%s: got %s, want %s" % [what, str(got), str(want)])
 
 
-# until `done` holds, at most `secs`; a failure to hold is the caller's check
-func _until(done: Callable, secs: float = 4.0) -> void:
-	var end := Time.get_ticks_msec() + int(secs * 1000.0)
-	while not done.call() and Time.get_ticks_msec() < end:
-		await s.create_timer(0.02).timeout
-
-
-func _settle(secs: float = 0.3) -> void:
-	await s.create_timer(secs).timeout
-
-
 func _wipe() -> void:
 	if DirAccess.dir_exists_absolute(_dir):
 		for f in DirAccess.get_files_at(_dir):
@@ -112,23 +101,23 @@ func _backend(limit: float = 5.0) -> BackendLocal:
 	return b
 
 
-# one loose line through the backend; the reply, how long the call took, and the frames that ran
+# one loose line through the backend; the reply, whether the call returned before it, and the frames that ran
 func _tell(b: BackendLocal, line: String) -> Dictionary:
 	_runs += 1
 	var got := {}
-	var start := Time.get_ticks_msec()
 	b.send(
 		"/api/home",
 		{"text": line},
 		func(_r: bool, code: int, body: Variant) -> void:
 			got.merge({"code": code, "reply": body["reply"]})
 	)
-	got["call_ms"] = Time.get_ticks_msec() - start
+	got["early"] = got.is_empty()
 	var frames := 0
 	var end := Time.get_ticks_msec() + 12000
 	while got.size() < 3 and Time.get_ticks_msec() < end:
 		await s.process_frame
 		frames += 1
+	s._check(got.size() >= 3, "the call answered within 12 s: %s" % str(got))
 	got["frames"] = frames
 	return got
 
@@ -413,9 +402,9 @@ func _claude() -> void:
 	b = _backend()
 	r = await _tell(b, "x")
 	_eq(
-		[r["reply"], r["call_ms"] < 250, r["frames"] > 10],
+		[r["reply"], r["early"], r["frames"] > 10],
 		["Noted.", true, true],
-		"a slow read blocks no frame (%d ms in the call, %d frames)" % [r["call_ms"], r["frames"]]
+		"a slow read blocks no frame (returned before the reply: %s, %d frames)" % [r["early"], r["frames"]]
 	)
 	_knob("sleep", "")
 	# the program is not there
@@ -500,11 +489,11 @@ func _claude() -> void:
 	reader.command = _dir.path_join("claude")
 	_envelope(JSON.stringify({"action": "answer", "say": "ok"}))
 	reader.test({"now": t, "bias": 0.0, "status": {}}, func(l: String) -> void: line.append(l))
-	await _until(func() -> bool: return line.size() == 1)
+	await s._until(func() -> bool: return line.size() == 1)
 	_eq(line, ["works"], "the test says works")
 	_out("nope")
 	reader.test({"now": t, "bias": 0.0, "status": {}}, func(l: String) -> void: line.append(l))
-	await _until(func() -> bool: return line.size() == 2)
+	await s._until(func() -> bool: return line.size() == 2)
 	_eq(line[1], "no reply", "and the reason when it does not")
 
 
@@ -537,7 +526,7 @@ func _claude_in_the_house(main) -> void:
 	)
 	main._open_add()
 	main._send_jot("stretch later")
-	await _until(func() -> bool: return main._sidebar.jot._kept.visible)
+	await s._until(func() -> bool: return main._sidebar.jot._kept.visible)
 	_eq([main._sidebar.jot._summary.text.begins_with("Reminder"), main._sidebar.jot._said.text, h.chat.messages.back()["text"]], [true, "stretch", "Stretch at three."], "the pad reads back the thing; the reading's own line is in the chat")
 	_eq(
 		h.chat.messages.slice(-2).map(func(m): return m["who"]),
@@ -545,7 +534,7 @@ func _claude_in_the_house(main) -> void:
 		"and the chat keeps both"
 	)
 	main._sidebar.chat_view.sent.emit("again")
-	await _until(
+	await s._until(
 		func() -> bool:
 			return (
 				h.chat.messages.back()["who"] == "home" and h.chat.messages[-2]["text"] == "again"
@@ -565,11 +554,11 @@ func _claude_in_the_house(main) -> void:
 	_eq(v._claude_last.text, "last Claude reading: ok", "and how the last reading went")
 	_out("junk")
 	v._claude_test()
-	await _until(func() -> bool: return v._claude_say.text != "testing...")
+	await s._until(func() -> bool: return v._claude_say.text != "testing...")
 	_eq(v._claude_say.text, "no reply", "the test button says why when it fails")
 	_envelope(JSON.stringify({"action": "answer", "say": "ok"}))
 	v._claude_test()
-	await _until(
+	await s._until(
 		func() -> bool:
 			return v._claude_say.text != "testing..." and v._claude_say.text != "no reply"
 	)

@@ -254,16 +254,38 @@ func _until(done: Callable, what: String = "", secs: float = 8.0) -> bool:
 			var from := ""
 			if at.size() > 1:
 				from = " (%s:%d)" % [str(at[1]["source"]).get_file(), at[1]["line"]]
-			var wanted := what if what != "" else "the condition"
+			var wanted := what if what != "" else _line_at(at)
 			_check(false, "waited %ss and it did not come: %s%s" % [secs, wanted, from])
 			return false
 		await create_timer(0.02).timeout
 	return true
 
 
+# the source line that asked, for a wait that was given no name
+func _line_at(stack: Array) -> String:
+	if stack.size() < 2:
+		return "a condition"
+	var lines := FileAccess.get_file_as_string(str(stack[1]["source"])).split("\n")
+	var n: int = int(stack[1]["line"]) - 1
+	return str(lines[n]).strip_edges() if n < lines.size() else "a condition"
+
+
 # a window in which nothing is awaited: the caller then checks that nothing happened
 func _quiet(secs: float) -> void:
 	await create_timer(secs).timeout
+
+
+# the same window counted in the product's own frames, for what per-frame code would do
+func _quiet_frames(n: int = 3) -> void:
+	for _i in n:
+		await process_frame
+
+
+# until the house has no request in flight: what it asked has been answered and applied
+func _answered(main: Control) -> bool:
+	return await _until(
+		func(): return main._backend.get_child_count() == 0, "the house's requests answered"
+	)
 
 
 func _soak() -> void:
