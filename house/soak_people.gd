@@ -661,6 +661,9 @@ func _old_cell() -> void:
 		s._check(l.load_file(), "a version 2 layout with the frame %s loads" % label)
 		var at := Vector2i(l.frame().get("c", -1), l.frame().get("r", -1))
 		s._check(at == want[2], "the frame %s is at %s, not %s" % [label, want[2], at])
+	var free: Array = rows.duplicate()
+	free.append({"p": People.PIECE, "f": "", "c": old.x, "r": old.y})
+	s._write_layout(path, {"v": 2, "wall": "wallpaper", "floor": "oak", "pieces": free})
 	var again: RefCounted = s._layout()
 	again.path = path
 	again.persist = true
