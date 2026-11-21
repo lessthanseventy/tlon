@@ -922,6 +922,9 @@ func _home_fits() -> void:
 		content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
 		"Home does not scroll at 1100x700 with the demo list: content %s in a pane of %s" % [content.get_combined_minimum_size().y, sb.scroll.size.y]
 	)
+	h.coming += main._demo_due(
+		[{"id": 90, "kind": "reminder", "text": "swim class", "in_days": 1, "at": "12:00", "every": null}]
+	)
 	h.things.reset()
 	h.card.open("calendar", "cal")
 	await _frames(4)
