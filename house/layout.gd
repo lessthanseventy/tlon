@@ -49,7 +49,7 @@ const FIXED := [
 const DEFAULTS := [
 	["plant_small", "", 0, 0],
 	["laundry_basket", "", 1, 1],
-	["photo_frame", "", 0, 10],
+	["photo_frame", "", 3, 7],
 	["armchair", "se", 0, 1],
 	["rug_blue", "nwse", 1, 4],
 	["painting", "ne", 0, 0],
@@ -83,7 +83,7 @@ const BOXES := {
 	"sofa_se": [1, 2, 17, Color("9a4f58")],
 	"floor_lamp": [1, 1, 33, Color("d9b86a")],
 	"laundry_basket": [1, 1, 12, Color("c79a5c")],
-	"photo_frame": [1, 1, 14, Color("a8794d")],
+	"photo_frame": [1, 1, 35, Color("a8794d")],
 }
 # wall segments the board, window, calendar, jar and door use; nothing else goes there
 const WALL_FIXED := {"ne": [2, 3, 4, 5, 6], "nw": [1, 4, 5, 7]}

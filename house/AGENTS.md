@@ -191,10 +191,10 @@ runs on the local list.
 - **People** (`people.gd` the rules and the two drawings, `people_view.gd` the views): `GET /api/home` sends `people`,
   `[{id, name, birthday ("MM-DD" or "YYYY-MM-DD" or null), next_birthday (local date, today counting, or null), notes:
   [{id, text, since}], todos: [the open rows that name them]}]`, soonest first, none last. The framed photo is the
-  plain floor piece `photo_frame` (a small table, default cell 0,10 by the piano, in decorate's home tab; drawn in
+  plain floor piece `photo_frame` (a framed group photo on a small table, default cell 3,7 on open floor below the blue rug (row 6 stays free: the sun patch lies there), in decorate's home tab; drawn in
   code at its cell's depth, `_frame_key`; offered once to a saved layout through `Layout.NEWER` and movable like the
   basket). It wears a small red bow while a birthday is a week away or less (`home.frame_marked`, `People.SOON`). Hover
-  says "the people"; a click opens the People view and outlines it (`frame` hit). A card is the name, the next birthday
+  says "the people" and outlines it in gold like the door (`_hover_outline`); a click opens the People view and keeps the outline (`frame` hit). A card is the name, the next birthday
   in `When.birthday` words ("in 3 days · Mon 23 Nov", "today"), the notes (an add line; a quiet "drop" is
   `POST /api/home/:id/drop`, which is how a note comes off, `done` is 404 for one), then the to-dos naming them,
   tickable as on Home. "Add a person" and "edit" open one form: a name and a birthday that says what it read

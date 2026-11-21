@@ -1910,12 +1910,16 @@ func _chore_name(thing: String) -> String:
 
 
 # a hit over a cell box from `z0` to `z1`
-func _chore_box(key: String, x0: float, y0: float, x1: float, y1: float, z1: float) -> void:
+func _chore_box(
+	key: String, x0: float, y0: float, x1: float, y1: float, z1: float
+) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	for at in [Vector2(x0, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x0, y1)]:
 		pts.append(_p(at.x, at.y))
 		pts.append(_p(at.x, at.y, z1))
-	_register(key, Geometry2D.convex_hull(pts), _p((x0 + x1) / 2.0, y1))
+	var hull := Geometry2D.convex_hull(pts)
+	_register(key, hull, _p((x0 + x1) / 2.0, y1))
+	return hull
 
 
 func _draw_chore_basket() -> void:
@@ -1947,7 +1951,24 @@ func _draw_frame() -> void:
 	var r: int = piece["r"]
 	var pen := PetThings.Pen.new(room, _p(c, r), _k)
 	People.frame(pen, frame_marked())
-	_chore_box("frame", c + 0.15, r + 0.15, c + 0.85, r + 0.85, 32.0)
+	var pts := PackedVector2Array()
+	for at in [Vector2(0.2, 0.2), Vector2(0.8, 0.2), Vector2(0.8, 0.8), Vector2(0.2, 0.8)]:
+		pts.append(_p(c + at.x, r + at.y))
+	for x in [0.1, 0.9]:
+		pts.append(_p(c + x, r + 0.5, 9.0))
+		pts.append(_p(c + x, r + 0.5, People.HEIGHT))
+	pts.append(_p(c + 1.04, r + 0.5, People.HEIGHT + 3.0))
+	var hull := Geometry2D.convex_hull(pts)
+	_register("frame", hull, _p(c + 0.5, r + 0.8))
+	_hover_outline("frame", hull)
+
+
+# the gold outline round a hit while the pointer is on it
+func _hover_outline(key: String, poly: PackedVector2Array) -> void:
+	if _hover == key and not decorating:
+		var closed := poly.duplicate()
+		closed.append(poly[0])
+		room.draw_polyline(closed, Color("e8c77a", 0.85), 2.0)
 
 
 # the front door is a click target; the tote stands by it while something is waiting there
@@ -1957,10 +1978,7 @@ func _draw_door() -> void:
 	var up := Vector2(0, 44.0 * _k)
 	var poly := PackedVector2Array([p, west, west - up, p - up])
 	_register("door", poly, (p + west) / 2.0)
-	if _hover == "door" and not decorating:
-		var closed := poly.duplicate()
-		closed.append(poly[0])
-		room.draw_polyline(closed, Color("e8c77a", 0.85), 2.0)
+	_hover_outline("door", poly)
 
 
 func _draw_tote() -> void:
@@ -1969,7 +1987,7 @@ func _draw_tote() -> void:
 	var c := People.TOTE_CELL.x
 	var r := People.TOTE_CELL.y
 	People.tote(PetThings.Pen.new(room, _p(c, r), _k))
-	_chore_box("door", c + 0.1, r + 0.08, c + 0.48, r + 0.46, 26.0)
+	_hover_outline("door", _chore_box("door", c + 0.34, r + 0.08, c + 0.86, r + 0.6, 34.0))
 
 
 func _draw_chore_bin() -> void:

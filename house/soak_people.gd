@@ -272,8 +272,8 @@ func _frame() -> void:
 		not piece.is_empty() and h.layout.kind(piece) == "floor", "the default layout has a frame"
 	)
 	s._check(
-		h.layout.footprint(piece) == Vector2i(1, 1) and h.layout.height(piece) <= h.layout.LOW,
-		"a small piece"
+		h.layout.footprint(piece) == Vector2i(1, 1) and h.layout.height(piece) < h.layout.TALL,
+		"a one-cell piece shorter than the tall ones"
 	)
 	s._check(
 		h.layout.rows()["furniture"].all(func(f: Array) -> bool: return f[0] != People.PIECE),
@@ -770,7 +770,7 @@ func _centre_of_tote() -> Variant:
 		for p: Vector2 in hit["poly"]:
 			sum += p
 		var c: Vector2 = sum / maxf(1.0, hit["poly"].size())
-		if hit["poly"].size() == 4 and h._topmost(c) == "door" and c.y > h._p(0, 7).y - 30.0 * h._k:
+		if hit["poly"].size() != 4 and h._topmost(c) == "door" and c.y > h._p(0, 7).y - 30.0 * h._k:
 			return c
 	return null
 

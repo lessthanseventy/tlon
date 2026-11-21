@@ -13,8 +13,12 @@ const SOON := 7
 const WOOD := Color("a8794d")
 const FRAME_WOOD := Color("c9964f")
 const MAT := Color("efe6cf")
-const HAIR := Color("4a3a3a")
-const SKY := Color("9cc3de")
+const HAIRS := [Color("3b2a2a"), Color("e3b95a"), Color("b5642f")]
+const EYE := Color("2a2025")
+const CROOK := Color("9a6a3a")
+const WARM_SKY := Color("f7dca8")
+const SHIRTS := [Color("e0674f"), Color("3f9aa0"), Color("e9b949")]
+const HEIGHT := 35.0
 const HILL := Color("6f9c62")
 const SUN := Color("f3d27a")
 const SKIN := Color("e6b48e")
@@ -168,29 +172,70 @@ static func frame(s: PetThings.Pen, ribbon: bool) -> void:
 		Vector2(a + 0.02, b - 0.12),
 		Vector2(b - 0.12, b - 0.12)
 	]:
-		s.box(leg.x, leg.y, leg.x + 0.1, leg.y + 0.1, 0.0, 9.0, WOOD.darkened(0.3), "lr")
-	s.box(a, a, b, b, 9.0, 11.5, WOOD)
-	var y := 0.56
-	s.box(0.22, y - 0.03, 0.78, y, 11.5, 31.0, FRAME_WOOD, "lr")
+		s.box(leg.x, leg.y, leg.x + 0.1, leg.y + 0.1, 0.0, 7.0, WOOD.darkened(0.3), "lr")
+	s.box(a, a, b, b, 7.0, 9.0, WOOD)
+	var y := 0.5
+	s.box(0.1, y - 0.04, 0.9, y, 9.0, HEIGHT, FRAME_WOOD, "lr")
 	var face := y + 0.004
-	_quad(s, face, 0.26, 0.74, 13.5, 29.0, MAT)
-	_quad(s, face, 0.3, 0.7, 15.5, 27.0, SKY)
+	_quad(s, face, 0.14, 0.86, 10.5, 33.5, MAT)
+	_quad(s, face, 0.18, 0.82, 12.0, 32.0, WARM_SKY)
 	s.poly(
 		[
-			s.p(0.3, face, 15.5),
-			s.p(0.7, face, 15.5),
-			s.p(0.7, face, 19.5),
-			s.p(0.5, face, 21.0),
-			s.p(0.3, face, 19.0)
+			s.p(0.18, face, 12.0),
+			s.p(0.82, face, 12.0),
+			s.p(0.82, face, 16.0),
+			s.p(0.5, face, 17.5),
+			s.p(0.18, face, 15.0)
 		],
 		HILL
 	)
-	s.dot(0.64, face, 24.5, 1.6, SUN)
-	for at in [Vector2(0.43, 22.0), Vector2(0.55, 22.5)]:
-		s.dot(at.x, face, at.y - 3.4, 2.0, HAIR)
-		s.dot(at.x, face, at.y, 1.5, SKIN)
+	s.dot(0.74, face, 29.0, 2.2, SUN)
+	_person(s, face, 0.35, 12.0, 25.0, SHIRTS[0], HAIRS[0], 2.7)
+	_person(s, face, 0.65, 12.0, 25.0, SHIRTS[1], HAIRS[1], 2.7)
+	_person(s, face, 0.5, 12.0, 19.5, SHIRTS[2], HAIRS[2], 2.3)
+	s.outline(
+		[
+			s.p(0.18, face, 12.0),
+			s.p(0.82, face, 12.0),
+			s.p(0.82, face, 32.0),
+			s.p(0.18, face, 32.0)
+		],
+		FRAME_WOOD.darkened(0.55)
+	)
 	if ribbon:
-		_bow(s, s.p(0.76, face, 31.0))
+		_bow(s, s.p(0.86, face, HEIGHT))
+
+
+# a head over shoulders on the photo's plane `y`: `head` is the height of the head's centre
+static func _person(
+	s: PetThings.Pen,
+	y: float,
+	x: float,
+	base: float,
+	head: float,
+	shirt: Color,
+	hair: Color,
+	r: float
+) -> void:
+	var w := 0.12
+	var neck := head - r
+	s.poly(
+		[
+			s.p(x - w, y, base),
+			s.p(x + w, y, base),
+			s.p(x + w, y, neck - 1.5),
+			s.p(x + w * 0.5, y, neck),
+			s.p(x - w * 0.5, y, neck),
+			s.p(x - w, y, neck - 1.5)
+		],
+		shirt
+	)
+	s.dot(x, y, head, r + 0.5, SKIN.darkened(0.45))
+	s.dot(x, y, head, r, SKIN)
+	s.dot(x, y, head + r * 0.45, r * 0.9, hair)
+	s.dot(x, y, head - r * 0.15, r * 0.75, SKIN)
+	for side in [-1.0, 1.0]:
+		s.dot(x + side * 0.035, y, head - r * 0.1, 0.45, EYE)
 
 
 static func _quad(
@@ -217,23 +262,37 @@ static func _bow(s: PetThings.Pen, knot: Vector2) -> void:
 	s.c.draw_rect(Rect2(knot - Vector2(0.8, 0.8) * k, Vector2(1.6, 1.6) * k), RIBBON.darkened(0.4))
 
 
-# a canvas tote with a rolled umbrella in it, leaning in its corner of the cell in front of the door
+# a canvas tote with two looped handles and an umbrella poking out, standing in the doorway
 static func tote(s: PetThings.Pen) -> void:
-	var x0 := 0.1
+	var x0 := 0.34
 	var y0 := 0.08
-	var x1 := 0.48
-	var y1 := 0.46
+	var x1 := 0.86
+	var y1 := 0.6
 	var mid := (y0 + y1) / 2.0
-	s.diamond(x0 - 0.04, y0 - 0.04, x1 + 0.06, y1 + 0.06, 0.0, Color(0, 0, 0, 0.18))
-	s.line(s.p(0.28, mid, 8.0), s.p(0.28, mid, 24.0), UMBRELLA, 1.4)
-	s.line(s.p(0.28, mid, 24.0), s.p(0.28, mid + 0.07, 25.6), UMBRELLA, 1.4)
-	s.box(x0, y0, x1, y1, 0.0, 13.0, CANVAS, "lr")
-	s.poly([s.p(x0, y1, 4.0), s.p(x1, y1, 4.0), s.p(x1, y1, 7.0), s.p(x0, y1, 7.0)], STRIPE)
+	var strap := CANVAS.darkened(0.5)
+	s.diamond(x0 - 0.05, y0 - 0.05, x1 + 0.07, y1 + 0.07, 0.0, Color(0, 0, 0, 0.2))
+	_handle(s, x0, y0, strap.darkened(0.2))
+	s.line(s.p(x0 + 0.34, mid, 10.0), s.p(x0 + 0.34, mid, 31.0), UMBRELLA, 1.6)
+	s.line(s.p(x0 + 0.34, mid, 31.0), s.p(x0 + 0.43, mid, 31.0), CROOK, 1.8)
+	s.line(s.p(x0 + 0.43, mid, 31.0), s.p(x0 + 0.43, mid, 27.0), CROOK, 1.8)
+	s.box(x0, y0, x1, y1, 0.0, 15.0, CANVAS, "lr")
+	s.poly([s.p(x0, y1, 5.0), s.p(x1, y1, 5.0), s.p(x1, y1, 9.0), s.p(x0, y1, 9.0)], STRIPE)
 	s.poly(
-		[s.p(x1, y0, 4.0), s.p(x1, y1, 4.0), s.p(x1, y1, 7.0), s.p(x1, y0, 7.0)],
+		[s.p(x1, y0, 5.0), s.p(x1, y1, 5.0), s.p(x1, y1, 9.0), s.p(x1, y0, 9.0)],
 		STRIPE.darkened(0.25)
 	)
-	var strap := CANVAS.darkened(0.4)
-	for hx in [0.2, 0.42]:
-		s.line(s.p(hx, y1, 13.0), s.p(hx, y1, 19.0), strap, 1.0)
-	s.line(s.p(0.2, y1, 19.0), s.p(0.42, y1, 19.0), strap, 1.0)
+	_handle(s, x0, y1, strap)
+
+
+# a handle looped over the bag's rim on the plane `y`, from the bag's left edge `x0`
+static func _handle(s: PetThings.Pen, x0: float, y: float, color: Color) -> void:
+	var loop := [
+		s.p(x0 + 0.08, y, 14.0),
+		s.p(x0 + 0.09, y, 22.0),
+		s.p(x0 + 0.14, y, 25.0),
+		s.p(x0 + 0.26, y, 25.0),
+		s.p(x0 + 0.32, y, 22.0),
+		s.p(x0 + 0.34, y, 14.0)
+	]
+	for i in loop.size() - 1:
+		s.line(loop[i], loop[i + 1], color, 1.4)
