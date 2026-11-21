@@ -1,6 +1,6 @@
-// The office's colours, by role. Every sprite and floor reads ROLE at draw time, so a surface with
-// its own theme (the desktop shell) hands its roles in with useRoles and the room follows it; the
-// TUI keeps these defaults.
+// The office's colours, by role. What the desktop shell draws (floor, draw, sprites) reads ROLE at
+// draw time, so it hands its theme's roles in with useRoles and the room follows it. The TUI keeps
+// these defaults, and its own tables (door, zoo, homeart, crew's TONE) take them once at import.
 export const ROLE = {
   alarm: "#FF6969",
   assistant: "#B98AFF",

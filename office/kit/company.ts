@@ -5,9 +5,16 @@ type SoulLike = { sections: Record<string, string> }
 const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 const VERBS: [keyof Affinities, RegExp][] = [["covers", /would cover for/g], ["admires", /\badmires\b/g], ["needles", /\bneedles\b/g]]
 
+const memo = new Map<string, Affinities>()
+
 /** the People section → who they admire / needle / would cover for, by verb; names off the bench are ignored */
 export function affinities(people: string, bench: string[]): Affinities {
+  // the sim asks for every pair at play on every tick, and a soul changes a few times a day
+  const key = `${bench.join("\n")}\n\n${people}`, known = memo.get(key)
+  if (known) return known
+  if (memo.size >= 64) memo.clear()
   const text = fold(people), out: Affinities = { admires: [], needles: [], covers: [] }
+  memo.set(key, out)
   const marks = VERBS.flatMap(([k, re]) => [...text.matchAll(re)].map((m) => ({ k, at: m.index!, end: m.index! + m[0].length })))
     .sort((a, b) => a.at - b.at)
   marks.forEach((m, i) => {
