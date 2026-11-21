@@ -934,7 +934,7 @@ defmodule Server.MCP.ServerTest do
       sh.("""
       git init -q && git config user.email t@t && git config user.name t &&
       git commit -q --allow-empty -m seed && git branch live &&
-      git commit -q --allow-empty -m 'office: the lamp talks' && git update-ref refs/remotes/origin/main HEAD
+      git commit -q --allow-empty -m 'house: the lamp talks' && git update-ref refs/remotes/origin/main HEAD
       """)
 
       Application.put_env(:server, :release_root, repo)
@@ -945,7 +945,7 @@ defmodule Server.MCP.ServerTest do
 
     test "release_status: what runs, what waits on main, and main's checks", %{token: token, session: session} do
       status = token |> call(session, 2, "release_status", %{}) |> decode_tool_json()
-      assert [%{"subject" => "office: the lamp talks"}] = status["waiting"]
+      assert [%{"subject" => "house: the lamp talks"}] = status["waiting"]
       assert status["live"] != status["main"]
       assert Enum.any?(status["checks"], &(&1 =~ "releasable: no"))
     end
@@ -985,7 +985,7 @@ defmodule Server.MCP.ServerTest do
   end
 
   test "submit_qa: a fail sends the workline back to build with the finding; off review it is refused" do
-    {:ok, thread} = Server.Workline.open(%{title: "office: R", slug: "qa-tool", stage: "review"})
+    {:ok, thread} = Server.Workline.open(%{title: "house: R", slug: "qa-tool", stage: "review"})
     {:ok, agent} = Staff.register_agent(%{name: "nolan", mandate: "qa", engine: "fresh"})
     token = MCP.Tokens.mint(thread, agent)
     session = handshake(token)
