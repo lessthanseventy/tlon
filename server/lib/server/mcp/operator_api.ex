@@ -182,11 +182,16 @@ defmodule Server.MCP.OperatorAPI do
                                          cleaned as the day's are (a multi-day all-day event once per date); [] with no calendars; reads
                                          only what the calendar holds; 400 on a bad or too wide range
       GET    /api/home/money/forecast?until=  Server.Home.Bank.forecast and subscriptions: the checking balance day by day to until
-                                         (YYYY-MM-DD, default 45 days on, capped at 180): {start_cents, until, clamped, days: [{date,
-                                         low_cents, expected_cents, high_cents}], events: [{date, amount_cents (negative is money out),
-                                         name, kind, rhythm, count, overdue, expected_on}], everyday, lowest: {date, balance_cents}, before_next_deposit,
-                                         basis: {months_of_history, series, next_deposit, caveats}, subscriptions: [{name, amount_cents,
-                                         rhythm, next, count, was_cents}]}; null when the bank source is off or nothing is stored; 400 on a bad date
+                                         (YYYY-MM-DD, default 45 days on, capped at 180): {start_cents, until (the capped date), clamped
+                                         (until was cut to the cap), days: [{date, low_cents, expected_cents, high_cents}], events: [{date,
+                                         amount_cents (negative is money out), name, kind (charge|deposit), rhythm (weekly|fortnightly|
+                                         monthly|yearly|once), count, overdue (expected and not yet posted, held on tomorrow), expected_on
+                                         (the date it was due, when overdue; else null)}], everyday: {expected_daily_cents, low_daily_cents,
+                                         high_daily_cents, history_days}, lowest: {date, balance_cents}, before_next_deposit: {date,
+                                         balance_cents} | null, basis: {months_of_history, series, next_deposit: {name, date, overdue} | null,
+                                         skipped (names of series whose expected charge did not post), caveats (pending_ignored|short_history|
+                                         skipped_charge|no_deposit_seen|one_off_bills_unknown)}, subscriptions: [{name, amount_cents, rhythm,
+                                         next, count, was_cents}]}; null when the bank source is off or nothing is stored; 400 on a bad date
       POST   /api/home/money/ask         {text, thread?} → Server.Home.Money.ask; {reply, figures, thread}: a question about his money
                                          answered from the projection engine (model plans and phrases, every amount checked against the
                                          results, else a plain rendering); figures is the forecast, the purchase's with/without or the
