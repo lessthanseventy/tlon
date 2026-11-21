@@ -651,6 +651,10 @@ func _fit() -> void:
 				"card":
 					h.card.open("calendar", "cal")
 			await _laid_out()
+			await s._until(
+				func(): return _outside(win) == "" and sb.get_global_rect().end.x <= size.x + 0.5,
+				"the %s view laid out inside a %s window" % [name, size]
+			)
 			var out := _outside(win)
 			s._check(out == "", "no %s control lies outside a %s window: %s" % [name, size, out])
 			s._check(sb.get_global_rect().end.x <= size.x + 0.5, "the sidebar fits a %s window" % size)
@@ -900,6 +904,10 @@ func _home_fits() -> void:
 	sb.chat_mode = "dock"
 	await _laid_out()
 	var content: Control = sb.scroll.get_child(0)
+	await s._until(
+		func(): return content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
+		"Home laid out to fit its pane"
+	)
 	s._check(sb.view == "home" and not sb.chat_view.has_log(), "Home with the dock compact")
 	s._check(
 		content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
@@ -911,6 +919,10 @@ func _home_fits() -> void:
 	h.things.reset()
 	h.card.open("calendar", "cal")
 	await _laid_out()
+	await s._until(
+		func(): return content.get_combined_minimum_size().y <= sb.scroll.size.y + 0.5,
+		"the calendar card laid out to fit its pane"
+	)
 	var blocks: Array = h.things.calendar_blocks()
 	var split: int = blocks.find_custom(func(b: Dictionary) -> bool: return b.get("text") == "Coming up")
 	var ids := func(part: Array) -> Array:
