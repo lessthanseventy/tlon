@@ -171,12 +171,12 @@ defmodule Server.Home.MorningTest do
     assert [[{"✓ milk", tick}], [{"✓ bread", _}]] = opts[:choices]
     assert_received {:said, "42", "Proposed (1):" <> _, _}
 
-    Inbox.hear([%{id: 3, chat: "42", tap: tick, ref: 9, text: nil}], "telegram", "42", say)
+    Inbox.hear([%{id: 3, chat: "42", tap: tick, ref: 9, text: nil}], "telegram", "42", say, friday(~T[17:40:00]))
     assert_received {:said, "42", "Still open:\n• bread\n\nSettled:\n• Reviewed: PR 1", reply}
     assert reply[:replace] == 9
     assert [[{"✓ bread", _}]] = reply[:choices]
 
-    Inbox.hear([%{id: 4, chat: "42", tap: tick, ref: 9, text: nil}], "telegram", "42", say)
+    Inbox.hear([%{id: 4, chat: "42", tap: tick, ref: 9, text: nil}], "telegram", "42", say, friday(~T[17:40:00]))
     assert_received {:said, "42", "Still open:\n• bread\n\nSettled:\n• Reviewed: PR 1", _}
   end
 

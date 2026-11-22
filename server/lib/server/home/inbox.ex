@@ -78,14 +78,16 @@ defmodule Server.Home.Inbox do
   @doc """
   Take `updates` (`%{id, chat, text}`, as the messenger gives them) from `via`: a text from `chat`
   is kept and answered through `say` (`chat, text, opts`, as the messenger's `say/3`), once however
-  often it is delivered; a tap on a reminder's choice is carried out. The offset the next poll starts
-  at, nil when there were none.
+  often it is delivered; a tap on a reminder's choice is carried out. They are taken at `now`. The
+  offset the next poll starts at, nil when there were none.
   """
-  @spec hear([map()], String.t(), String.t(), (String.t(), String.t(), keyword() -> term())) :: integer() | nil
-  def hear([], _via, _chat, _say), do: nil
+  @spec hear([map()], String.t(), String.t(), (String.t(), String.t(), keyword() -> term()), DateTime.t()) ::
+          integer() | nil
+  def hear(updates, via, chat, say, now \\ DateTime.utc_now())
+  def hear([], _via, _chat, _say, _now), do: nil
 
-  def hear(updates, via, chat, say) do
-    Enum.each(updates, &take(&1, via, chat, say))
+  def hear(updates, via, chat, say, now) do
+    Enum.each(updates, &take(&1, via, chat, say, now))
     List.last(updates).id + 1
   end
 
@@ -365,9 +367,9 @@ defmodule Server.Home.Inbox do
     Enum.each(later, fn {text, opts} -> say.(chat, text, opts) end)
   end
 
-  defp take(%{chat: nil}, _via, _chat, _say), do: :ok
+  defp take(%{chat: nil}, _via, _chat, _say, _now), do: :ok
 
-  defp take(%{chat: from}, _via, "", say) do
+  defp take(%{chat: from}, _via, "", say, _now) do
     say.(
       from,
       "This helper is not paired with a chat yet. This chat's id is #{from}: set `home_chat` to it in tlon's settings.",
@@ -375,25 +377,23 @@ defmodule Server.Home.Inbox do
     )
   end
 
-  defp take(%{chat: chat, tap: tap, ref: ref}, via, chat, say) do
-    now = DateTime.utc_now()
-
+  defp take(%{chat: chat, tap: tap, ref: ref}, via, chat, say, now) do
     {text, opts} = tap(tap, via, now)
     say.(chat, text, [replace: ref] ++ opts)
   end
 
-  defp take(%{chat: chat, text: "/" <> _command}, _via, chat, say),
+  defp take(%{chat: chat, text: "/" <> _command}, _via, chat, say, _now),
     do: say.(chat, "Text me anything and I'll keep it.", [])
 
-  defp take(%{chat: chat, text: text, id: id}, via, chat, say) when is_binary(text) do
-    with {_text, _opts} = reply <- keep(via, id, text, DateTime.utc_now()), do: speak(chat, say, reply)
+  defp take(%{chat: chat, text: text, id: id}, via, chat, say, now) when is_binary(text) do
+    with {_text, _opts} = reply <- keep(via, id, text, now), do: speak(chat, say, reply)
   end
 
-  defp take(%{chat: chat, voice: file, id: id}, via, chat, say) do
+  defp take(%{chat: chat, voice: file, id: id}, via, chat, say, now) do
     case Application.get_env(:server, :home_ear, &Server.Home.Ear.hear/1).(file) do
       {:ok, heard} ->
         with {:ok, jot} <- Jot.take(via, id, heard) do
-          speak(chat, say, filed(jot, via, DateTime.utc_now()), "heard: “#{heard}”\n")
+          speak(chat, say, filed(jot, via, now), "heard: “#{heard}”\n")
         end
 
       {:error, why} ->
@@ -402,10 +402,10 @@ defmodule Server.Home.Inbox do
     end
   end
 
-  defp take(%{chat: chat}, _via, chat, say),
+  defp take(%{chat: chat}, _via, chat, say, _now),
     do: say.(chat, "I can only keep text so far: type it and I'll keep it.", [])
 
-  defp take(_update, _via, _chat, _say), do: :ok
+  defp take(_update, _via, _chat, _say, _now), do: :ok
 
   defp tap("a:" <> answer, via, now) do
     with [id, choice] <- String.split(answer, ":"),
