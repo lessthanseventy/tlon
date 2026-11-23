@@ -495,7 +495,7 @@ func _callback(q: Dictionary) -> void:
 				func() -> void:
 					_tapping.erase(id)
 					_msgs.erase(id)
-					if what == "done":
+					if verb == "done":
 						_ticked(id)
 					_answer(qid, OUTCOME[said])
 					_edit(

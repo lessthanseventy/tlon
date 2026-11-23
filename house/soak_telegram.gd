@@ -391,8 +391,11 @@ func _telegram() -> void:
 	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ stretch")
 	var skipped: Dictionary = bot.sent.back()
 	var before_skip := bot.named("editMessageText").size()
+	tg3.card = {"items": [{"id": 12}], "ticked": []}
 	bot.tap(777, "skip:12", skipped["mid"], "⏰ stretch")
 	await s._until(func() -> bool: return bot.named("editMessageText").size() == before_skip + 1)
+	_eq(tg3.card["ticked"], [], "a skipped repeating reminder is not ticked on the day's card")
+	tg3.card = {}
 	_eq(
 		[taps.back(), bot.named("editMessageText").back()["text"]],
 		[[12, "done"], "⏰ stretch\nskipped to its next time"],
