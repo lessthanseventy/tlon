@@ -22,8 +22,8 @@ turns a card's blocks (title, text, dim, gap, month, buttons, row, foot, day) in
 `Paper.section`); text is sentence case. `paper.gd` holds the three button styles: primary (filled, at most one
 per group: Done, Save), secondary (a 1 px outline at low alpha, the default of `Paper.chip`) and quiet (text
 only, underlined on hover: Something else, Not today, Cancel, "no"); a go-line (`-> a reminder Wed 18:00`,
-`views.gd` `_move_item`) keeps the ASCII arrow: the body face has no `→`, and the house ships to machines whose
-fallback fonts differ. A block's button or a row's mark takes
+`views.gd` `_move_item`) keeps the ASCII arrow: the go-line is drawn in the default font, which differs across the
+machines the house ships to, so `→` is not guaranteed. A block's button or a row's mark takes
 `"k": "primary"|"quiet"`. A chip (a kind or a personality) is the secondary look unselected and a gold fill
 selected. Arrows, the plus and the chat's handle are `icons.gd` drawings (`icon_button.gd` is one as a
 button), never characters; a shortcut is in the tooltip.
