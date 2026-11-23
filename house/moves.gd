@@ -128,20 +128,25 @@ func open_items() -> Array:
 
 
 # `candidates` is everything the sources say is the person's move right now. What is open and no
-# longer there is taken back; what is new and not settled is shown, ranked, while the day's five and
-# the two open asks last (the rest wait for a later sweep). True when anything changed.
+# longer there is taken back; what is open and still there is worded as the source says it now; what
+# is new and not settled is shown, ranked, while the day's five and the two open asks last (the rest
+# wait for a later sweep). True when anything changed.
 func sweep(candidates: Array) -> bool:
 	var live := {}
 	var fresh: Array = []
+	var changed := false
 	for c in candidates:
 		if not _whole(c):
 			continue
 		live[c["key"]] = true
-		if _find(c["key"]).is_empty() and settled(c["key"]).is_empty():
+		var open := _find(c["key"])
+		if not open.is_empty():
+			changed = _reword(open, c) or changed
+		elif settled(c["key"]).is_empty():
 			fresh.append(c)
 	var before: int = doc["open"].size()
 	doc["open"] = doc["open"].filter(func(m): return live.has(m["key"]))
-	var changed: bool = doc["open"].size() != before
+	changed = doc["open"].size() != before or changed
 	var today := _iso(now()).substr(0, 10)
 	if doc["day"] != today:
 		doc["day"] = today
@@ -157,6 +162,17 @@ func sweep(candidates: Array) -> bool:
 		changed = true
 	if changed:
 		save()
+	return changed
+
+
+# Bring the open item up to the candidate's wording; its `at` and what the person already answered
+# stay. True when anything differed.
+func _reword(open: Dictionary, c: Dictionary) -> bool:
+	var changed := false
+	for k in ["text", "why", "action", "date", "options"]:
+		if c.has(k) and open.get(k) != c[k]:
+			open[k] = c[k].duplicate(true) if c[k] is Array or c[k] is Dictionary else c[k]
+			changed = true
 	return changed
 
 

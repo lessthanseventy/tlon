@@ -378,6 +378,16 @@ func _money_short() -> void:
 	var m := _moves(_list())
 	m.sweep(got)
 	_eq(_keys(m), ["money-short-2026-11-27"], "the sweep keeps it")
+	var at: String = m.open_items()[0]["at"]
+	short["short_cents"] = 30000
+	_eq(m.sweep(MovesList.money_short(short)), true, "a shortfall that grew is a change")
+	var now_open: Dictionary = m.open_items()[0]
+	_eq(
+		now_open["text"], "Cover the $300 shortfall before 2026-11-27", "the card names the new sum"
+	)
+	_eq(now_open["action"]["text"], now_open["text"], "and so does the to-do its go adds")
+	_eq(now_open["at"], at, "it is the same card, not a new one")
+	_eq(m.sweep(MovesList.money_short(short)), false, "the same shortfall changes nothing")
 
 
 func _sources_of(l: RefCounted) -> Array:
