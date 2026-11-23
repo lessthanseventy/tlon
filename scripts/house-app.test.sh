@@ -2,7 +2,8 @@
 # Self-test of house-app.sh: install builds through house-build.sh and leaves an executable at the
 # path (replacing atomically, no .new left), a missing godot is a named skip that leaves nothing, a
 # failed build keeps the old copy, run starts the installed file or says to install, and install
-# writes the launcher's desktop entry and icon, leaving both untouched on a second run and rewriting each when its content changes.
+# writes the launcher's desktop entry and icon, leaving both untouched on a second run and
+# rewriting each when its content changes.
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tmp="$(mktemp -d)"
