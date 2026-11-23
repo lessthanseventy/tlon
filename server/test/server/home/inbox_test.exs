@@ -78,11 +78,11 @@ defmodule Server.Home.InboxTest do
     assert text =~ ": bins"
     refute text =~ "wifi"
 
-    Inbox.hear([press("tick", milk)], "telegram", "42", say)
+    Inbox.hear([press("tick", milk)], "telegram", "42", say, DateTime.add(friday(), 1, :hour))
     assert_received {:said, "42", "Still open:\n• call the dentist" <> _}
     assert_received {:with, replace: 90, choices: [[{"✓ call the dentist", _}]]}
 
-    Inbox.hear([press("tick", dentist)], "telegram", "42", say)
+    Inbox.hear([press("tick", dentist)], "telegram", "42", say, DateTime.add(friday(), 1, :hour))
     assert_received {:said, "42", "Coming up:" <> _}
     assert Inbox.digest("telegram", DateTime.add(friday(), 3, :day)) != nil
   end
