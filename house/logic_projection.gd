@@ -19,6 +19,7 @@ func run() -> void:
 	_what_if()
 	_history()
 	_subscriptions()
+	_budget()
 	_no_clock()
 
 
@@ -540,6 +541,84 @@ func _forecast_everyday() -> void:
 	)
 	_eq(f["everyday"]["high_daily_cents"], 4000, "high is the busy 30 days")
 	_eq(f["everyday"]["low_daily_cents"] < 4000, true, "low is below it")
+
+
+func _budget_of(txns: Array, available: int = 480000) -> Dictionary:
+	var accounts := _accounts()
+	accounts[0]["available"] = available
+	return _ok(Projecting.budget(_data(txns, accounts), TODAY), "budget")
+
+
+func _budget() -> void:
+	var salary := _monthly("Salary", -300000, "2026-10-24", 4)
+	var rent := _monthly("Rent", 120000, "2026-10-22", 4)
+	var gym := _weekly("Gym", 1500, TODAY, 5)
+	var today := [
+		_txn(TODAY, 2300, "Corner Cafe"),
+		_txn(TODAY, 500, "Bakery", {"pending": true}),
+	]
+	var week := [
+		_txn("2026-11-17", 14000, "Walmart"),
+		_txn("2026-11-16", 2500, "Lyft"),
+		_txn("2026-11-18", 3100, "Lyft"),
+		_txn("2026-11-12", 20000, "ATM Withdrawal"),
+	]
+	var all := [salary, rent, gym, today, week, _everyday(100)]
+	var b := _budget_of(all)
+	_eq(b["until"], "2026-11-24", "until the next deposit")
+	_eq(b["deposit"], "Salary", "named")
+	_eq(b["days"], 4, "four days to it")
+	_eq(b["bills_cents"], 120000, "the rent before the deposit is a bill; the gym after today too")
+	_eq(
+		b["bills"].map(func(x): return x["name"]),
+		["Rent"],
+		"listed: %s" % str(b["bills"])
+	)
+	_eq(b["spent_today_cents"], 2800, "today's spend counts pending and leaves out the gym bill")
+	_eq(b["cushion_cents"] > 0, true, "a day of everyday spending is the cushion")
+	_eq(
+		b["safe_daily_cents"],
+		(480000 + 2800 - 120000 - b["cushion_cents"]) / 4,
+		"spare at the start of today over the days to the deposit"
+	)
+	_eq(b["short_cents"], 0, "nothing short")
+
+	var short := _budget_of(all, 100000)
+	_eq(short["safe_daily_cents"], 0, "nothing spare")
+	_eq(
+		short["short_cents"],
+		120000 + short["cushion_cents"] - 100000 - 2800,
+		"short by what the bills and the cushion are over what is there"
+	)
+	_eq(short["other_available_cents"], 9000000, "the savings are beside it")
+
+	var late := _budget_of(
+		[_monthly("Salary", -300000, "2026-10-20", 4), today, _everyday(100)]
+	)
+	_eq(late["until"], U.add(TODAY, 1), "a deposit due today and not in is kept just ahead")
+	_eq(late["days"], 1, "one day to it")
+
+	var none := _budget_of([rent, today, _everyday(100)])
+	_eq([none["until"], none["safe_daily_cents"]], [null, null], "no deposit seen, no figure")
+	_eq(none["spent_today_cents"], 2800, "today's spend still")
+
+	var this: Dictionary = b["weeks"][0]
+	_eq([this["from"], this["to"]], ["2026-11-16", TODAY], "this week runs from Monday")
+	_eq(
+		this["top"].slice(0, 2),
+		[{"name": "Walmart", "amount_cents": 14000}, {"name": "Lyft", "amount_cents": 5600}],
+		"the week's top merchants by amount, a merchant's spends together"
+	)
+	_eq(this["top"].size(), 4, "at most four")
+	_eq(
+		this["top"].any(func(m): return m["name"] == "Gym"),
+		false,
+		"a bill is not where it went"
+	)
+	var last: Dictionary = b["weeks"][1]
+	_eq([last["from"], last["to"]], ["2026-11-09", "2026-11-15"], "last week, Monday to Sunday")
+	_eq(last["top"][0], {"name": "ATM Withdrawal", "amount_cents": 20000}, "its biggest")
+	_eq(last["total_cents"], 20000 + 7 * 3000, "its total")
 
 
 func _afford_ok(

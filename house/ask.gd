@@ -135,6 +135,8 @@ func _compute(call: Dictionary) -> Dictionary:
 				out = {"ok": _summary(money)}
 		"subscriptions":
 			out = bank.subscriptions()
+		"budget":
+			out = bank.budget()
 		"forecast":
 			out = bank.forecast(call["until"])
 		"afford":
@@ -290,6 +292,9 @@ Today is %s.
 The lookups you may ask for, each one JSON object:
 - {"ask": "summary"}: the balance, what is due this week, the next deposit.
 - {"ask": "subscriptions"}: the recurring charges.
+- {"ask": "budget"}: how much is safe to spend a day until the next deposit, the bills due before
+  it, what was spent today, and this week's and last week's biggest everyday spends. Ask for it
+  for any question about budgeting, a daily limit or how they should spend.
 - {"ask": "forecast", "until": "YYYY-MM-DD"}: the checking balance day by day to that date.
 - {"ask": "afford", "amount_cents": N, "on": "YYYY-MM-DD" or null}: whether a purchase of N cents
   on that day (null is today) is covered.

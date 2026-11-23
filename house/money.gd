@@ -216,6 +216,58 @@ static func lowest_line(forecast: Dictionary, today: String) -> String:
 	return text
 
 
+# "Safe to spend: about $45 a day until Fri." or, with nothing spare, "Nothing spare until Fri:
+# about $120 short." and what the savings hold when they cover it; "" with no budget or no
+# deposit seen
+static func safe_line(forecast: Dictionary, today: String) -> String:
+	var b: Variant = forecast.get("budget")
+	if not b is Dictionary or b.get("until") == null:
+		return ""
+	var until := str(b["until"])
+	var word := When.day_word(until, today)
+	var short := roundi(float(b.get("short_cents", 0)))
+	if short <= 0:
+		return (
+			"Safe to spend: about %s a day until %s."
+			% [fmt_whole(roundi(float(b["safe_daily_cents"]))), word]
+		)
+	var text := "Nothing spare until %s: about %s short." % [word, fmt_whole(short)]
+	var held := roundi(float(b.get("other_available_cents", 0)))
+	if held >= short:
+		text += " %s holds %s, which covers it." % [savings_name(b), fmt_whole(held)]
+	return text
+
+
+# ["Spent $23 of $45 today.", over]: over the day's figure it says by how much and `over` is true;
+# with nothing spare, only what was spent; ["", false] with no budget
+static func today_line(forecast: Dictionary) -> Array:
+	var b: Variant = forecast.get("budget")
+	if not b is Dictionary:
+		return ["", false]
+	var spent := roundi(float(b.get("spent_today_cents", 0)))
+	var safe: Variant = b.get("safe_daily_cents")
+	if safe == null or roundi(float(b.get("short_cents", 0))) > 0:
+		return ["Spent %s today." % fmt_whole(spent), false]
+	var limit := roundi(float(safe))
+	if spent > limit:
+		return [
+			(
+				"Spent %s of %s today, over by %s."
+				% [fmt_whole(spent), fmt_whole(limit), fmt_whole(spent - limit)]
+			),
+			true
+		]
+	return ["Spent %s of %s today." % [fmt_whole(spent), fmt_whole(limit)], false]
+
+
+# "Walmart $140 · Lyft $96 · ATM $200" for a week of the budget, "nothing yet" for an empty one
+static func week_line(week: Dictionary) -> String:
+	var parts: Array = []
+	for m in week.get("top", []):
+		parts.append("%s %s" % [str(m["name"]), fmt_whole(roundi(float(m["amount_cents"])))])
+	return "nothing yet" if parts.is_empty() else " · ".join(PackedStringArray(parts))
+
+
 static func _counting(forecast: Dictionary) -> String:
 	var every: Variant = forecast.get("everyday")
 	var daily := roundi(float(every.get("expected_daily_cents", 0))) if every is Dictionary else 0
@@ -254,7 +306,8 @@ static func staged_summary(spec: Dictionary, today: String) -> Dictionary:
 
 # a forecast as the server answers it, from a spec: `start_cents`, `everyday_cents` a day, `ahead`
 # days (45), `events` [{in_days, kind, name, amount_cents, rhythm?}], `subscriptions` [{name,
-# amount_cents, rhythm, in_days, was_cents?}], `other_available_cents`, `other_accounts`
+# amount_cents, rhythm, in_days, was_cents?}], `other_available_cents`, `other_accounts`, a
+# `budget` as `Projecting.budget` answers it with `until` as `in_days`
 static func staged_forecast(spec: Dictionary, today: String) -> Dictionary:
 	var events: Array = []
 	for e in spec.get("events", []):
@@ -329,6 +382,10 @@ static func staged_forecast(spec: Dictionary, today: String) -> Dictionary:
 	}
 	if spec.has("notices"):
 		out["notices"] = spec["notices"]
+	if spec.get("budget") is Dictionary:
+		var b: Dictionary = spec["budget"].duplicate(true)
+		b["until"] = When.add_days(today, int(b.get("in_days", 0)))
+		out["budget"] = b
 	return out
 
 

@@ -69,6 +69,8 @@ static func _ask(ask: Variant, today: String) -> Variant:
 			return {"json": {"ask": "summary"}, "call": {"call": "summary"}}
 		"subscriptions":
 			return {"json": {"ask": "subscriptions"}, "call": {"call": "subscriptions"}}
+		"budget":
+			return {"json": {"ask": "budget"}, "call": {"call": "budget"}}
 		"forecast":
 			if ask.has("until"):
 				return _forecast(ask["until"], today)

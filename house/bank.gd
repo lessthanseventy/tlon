@@ -139,6 +139,12 @@ func forecast(until: String) -> Dictionary:
 	)
 
 
+# what is safe to spend a day until the next deposit, today's spend and the last two weeks' top
+# spends (`Projecting.budget`); {"error": "no_data"} as `forecast`
+func budget() -> Dictionary:
+	return _projected(func(d: Dictionary) -> Dictionary: return Projecting.budget(d, today()))
+
+
 func afford(cents: Variant, on: Variant = null, cushion: Variant = null) -> Dictionary:
 	var opts := {} if cushion == null else {"cushion_cents": cushion}
 	return _projected(

@@ -367,6 +367,8 @@ static func _entry(e: Dictionary) -> String:
 					)
 				)
 			return "Recurring charges: " + _join("; ", rows) + "."
+		"budget":
+			return _budget(r)
 		"forecast":
 			return _join(" ", [_outlook(r)] + _basis(r))
 		"afford":
@@ -440,6 +442,60 @@ static func _history(ask: Dictionary, r: Dictionary) -> String:
 		+ _counted(r.get("merchants", []))
 		+ ("" if largest == "" else " Largest: %s." % largest)
 	)
+
+
+static func _budget(r: Dictionary) -> String:
+	var parts: Array = []
+	if r.get("until") == null:
+		parts.append("I have seen no deposit, so I can't say what is spare a day.")
+	elif int(r["short_cents"]) > 0:
+		parts.append(
+			(
+				(
+					"Nothing is spare until the next deposit (%s, %s): you are about %s short"
+					+ " after %s of bills before it."
+				)
+				% [
+					_t(r.get("deposit")),
+					_day(r["until"]),
+					_t(r.get("short_cents_text")),
+					_t(r.get("bills_cents_text"))
+				]
+			)
+		)
+	else:
+		parts.append(
+			(
+				(
+					"You can spend about %s a day until the next deposit (%s, %s),"
+					+ " after %s of bills before it and a %s cushion."
+				)
+				% [
+					_t(r.get("safe_daily_cents_text")),
+					_t(r.get("deposit")),
+					_day(r["until"]),
+					_t(r.get("bills_cents_text")),
+					_t(r.get("cushion_cents_text"))
+				]
+			)
+		)
+	parts.append("Spent today: %s." % _t(r.get("spent_today_cents_text")))
+	for pair in [["This week", r["weeks"][0]], ["Last week", r["weeks"][1]]]:
+		var top: Array = pair[1]["top"].map(
+			func(m: Dictionary) -> String:
+				return "%s %s" % [_t(m.get("name")), _t(m.get("amount_cents_text"))]
+		)
+		parts.append(
+			(
+				"%s: %s in all%s."
+				% [
+					pair[0],
+					_t(pair[1].get("total_cents_text")),
+					"" if top.is_empty() else ", most at " + _join(", ", top)
+				]
+			)
+		)
+	return _join(" ", parts)
 
 
 static func _outlook(r: Dictionary) -> String:

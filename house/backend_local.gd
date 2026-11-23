@@ -338,6 +338,9 @@ func _money_forecast(query: String) -> Dictionary:
 	var out: Dictionary = forecast["ok"]
 	out["subscriptions"] = subs["ok"]
 	out["notices"] = bank.notices()
+	var budget: Dictionary = bank.budget()
+	if budget.has("ok"):
+		out["budget"] = budget["ok"]
 	return {"code": 200, "body": out}
 
 

@@ -91,6 +91,7 @@ func build(box: VBoxContainer) -> void:
 	_now(box, money)
 	_noticed(box)
 	_ahead(box)
+	_went(box)
 	_subscriptions(box)
 	_look(box)
 	_ask(box)
@@ -130,6 +131,28 @@ func _now(box: VBoxContainer, money: Dictionary) -> void:
 	var names: Array = forecast.get("other_accounts", []) if fstate == "ok" else []
 	if fstate == "ok" and (held != 0 or not names.is_empty()):
 		_tile(row, "Savings", held, ", ".join(names))
+	if fstate != "ok":
+		return
+	var safe := Money.safe_line(forecast, home.today())
+	if safe != "":
+		_indented(box, Blocks.wrapped(safe, Fonts.BODY, Paper.INK))
+	var spent := Money.today_line(forecast)
+	if spent[0] != "":
+		_indented(
+			box, Blocks.wrapped(spent[0], Fonts.SMALL, Paper.WARM if spent[1] else Paper.QUIET)
+		)
+
+
+func _went(box: VBoxContainer) -> void:
+	var b: Variant = forecast.get("budget") if fstate == "ok" else null
+	if not b is Dictionary:
+		return
+	Views.heading(box, "Where it went")
+	for pair in [["This week", b["weeks"][0]], ["Last week", b["weeks"][1]]]:
+		_indented(
+			box,
+			Blocks.wrapped("%s: %s" % [pair[0], Money.week_line(pair[1])], Fonts.SMALL, Paper.INK)
+		)
 
 
 func _noticed(box: VBoxContainer) -> void:

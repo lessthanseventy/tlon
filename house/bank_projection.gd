@@ -174,6 +174,84 @@ static func subscriptions(data: Dictionary, today: String) -> Array:
 	return U.sort_by(out, func(s): return [s["next"], s["name"]])
 
 
+# What is safe to spend a day until the next deposit and where the money went. The day's figure is
+# what is spare at the start of today (available, with today's everyday outflow given back, less
+# the bills before the deposit and a day of expected everyday spending as cushion) over the days
+# until it; `short_cents` is how far below nothing that is. Today's spend and the weeks (this one
+# from Monday, and the last) are the everyday outflows, pending ones too, a week's top 4 merchants
+# by amount. No deposit seen: `until` and the daily figure are null.
+static func budget(data: Dictionary, today: String) -> Dictionary:
+	var c := _context(data, today)
+	if c.has("error"):
+		return c
+	var ctx: Dictionary = c["ok"]
+	var items := _items(ctx, today)
+	var deposit: Variant = _next_deposit(items)
+	var bills_keys := {}
+	for s in ctx["out"]:
+		bills_keys[s["key"]] = true
+	var spends: Array = ctx["txns"].filter(
+		func(t): return t["cents"] > 0 and not bills_keys.has(t["key"]) and t["date"] <= today
+	)
+	var spent := U.sum(
+		spends.filter(func(t): return t["date"] == today).map(func(t): return t["cents"])
+	)
+	var monday := U.add(today, -posmod(U.weekday(today) - 1, 7))
+	var weeks := [_week(spends, monday, today), _week(spends, U.add(monday, -7), U.add(monday, -1))]
+	var other: Dictionary = ctx["other"]
+	var out := {
+		"until": null,
+		"deposit": null,
+		"days": null,
+		"bills_cents": 0,
+		"bills": [],
+		"cushion_cents": ctx["everyday"]["expected_daily_cents"],
+		"safe_daily_cents": null,
+		"short_cents": 0,
+		"spent_today_cents": spent,
+		"weeks": weeks,
+		"other_available_cents": other["cents"],
+		"other_accounts": other["names"],
+	}
+	if deposit == null:
+		return {"ok": out}
+	var until: String = deposit["date"]
+	var charges := _events(items, until).filter(
+		func(e): return e["kind"] == "charge" and e["date"] < until
+	)
+	var bills := -U.sum(charges.map(func(e): return e["amount_cents"]))
+	var days := maxi(U.diff(until, today), 1)
+	var spare: int = ctx["start"] + spent - bills - out["cushion_cents"]
+	out["until"] = until
+	out["deposit"] = deposit["name"]
+	out["days"] = days
+	out["bills_cents"] = bills
+	out["bills"] = charges.map(
+		func(e): return {"name": e["name"], "on": e["date"], "amount_cents": -e["amount_cents"]}
+	)
+	out["safe_daily_cents"] = maxi(spare, 0) / days
+	out["short_cents"] = maxi(-spare, 0)
+	return {"ok": out}
+
+
+static func _week(spends: Array, from: String, to: String) -> Dictionary:
+	var rows := spends.filter(func(t): return t["date"] >= from and t["date"] <= to)
+	var groups := U.group_by(rows, func(t): return t["key"])
+	var top: Array = []
+	for k in groups:
+		var g: Array = groups[k]
+		top.append(
+			{"name": g[0]["label"], "amount_cents": U.sum(g.map(func(t): return t["cents"]))}
+		)
+	top = U.sort_by(top, func(m): return [-m["amount_cents"], m["name"]])
+	return {
+		"from": from,
+		"to": to,
+		"total_cents": U.sum(rows.map(func(t): return t["cents"])),
+		"top": top.slice(0, 4),
+	}
+
+
 static func _min_of(values: Array) -> int:
 	var low: int = values[0]
 	for v in values:

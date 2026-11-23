@@ -59,6 +59,18 @@ const FORECAST := {
 		{"name": "Rent", "amount_cents": -120000, "rhythm": "monthly", "in_days": 4},
 		{"name": "Cloud storage", "amount_cents": -2999, "rhythm": "yearly", "in_days": 160},
 	],
+	"budget":
+	{
+		"in_days": 6,
+		"safe_daily_cents": 4500,
+		"short_cents": 0,
+		"spent_today_cents": 6000,
+		"weeks":
+		[
+			{"top": [{"name": "Corner Market", "amount_cents": 14000}]},
+			{"top": []},
+		],
+	},
 }
 
 var s
@@ -276,6 +288,16 @@ func _view() -> void:
 		"and are never added in"
 	)
 	s._check(_has("Lowest point before"), "the lowest-point sentence is there: %s" % str(texts))
+	s._check(_has("Safe to spend: about $45 a day"), "the day's figure is there: %s" % str(texts))
+	s._check(
+		"Spent $60 of $45 today, over by $15." in texts,
+		"today against it, over: %s" % str(texts)
+	)
+	s._check(
+		"Where it went" in texts and "This week: Corner Market $140" in texts,
+		"where it went this week: %s" % str(texts)
+	)
+	s._check("Last week: nothing yet" in texts, "and an empty last week")
 	var strips := _strips()
 	s._check(
 		strips.size() == 1 and strips[0].days.size() == 7,

@@ -24,6 +24,7 @@ func run() -> void:
 	_say_errors()
 	_say_check()
 	_say_present()
+	_say_budget()
 
 
 func _plan_of(asks: Array) -> String:
@@ -431,6 +432,61 @@ func _say_errors() -> void:
 	presented = Say.present([entry])
 	_eq(presented[0]["result"], {"error": "bad_range"}, "bad_range is a result")
 	s._check("runs backwards" in Say.render(presented), "and is worded")
+
+
+func _say_budget() -> void:
+	var r := Plan.parse('{"asks": [{"ask": "budget"}]}', PLAN_TODAY)
+	_eq(r.get("ok", [{}])[0].get("call"), {"call": "budget"}, "a budget is asked for")
+	var week := func(from: String, total: int, top: Array) -> Dictionary:
+		return {"from": from, "to": from, "total_cents": total, "top": top}
+	var budget := {
+		"until": "2026-11-27",
+		"deposit": "Paycheck",
+		"days": 4,
+		"bills_cents": 12000,
+		"bills": [],
+		"cushion_cents": 3000,
+		"safe_daily_cents": 4500,
+		"short_cents": 0,
+		"spent_today_cents": 2300,
+		"weeks":
+		[
+			week.call("2026-11-23", 14000, [{"name": "Walmart", "amount_cents": 14000}]),
+			week.call("2026-11-16", 0, []),
+		],
+		"other_available_cents": 0,
+		"other_accounts": [],
+	}
+	var presented := Say.present([{"ask": {"ask": "budget"}, "result": {"ok": budget}}])
+	var text := Say.render(presented)
+	_eq(
+		text,
+		(
+			"You can spend about $45 a day until the next deposit (Paycheck, Fri 27 Nov),"
+			+ " after $120 of bills before it and a $30 cushion. Spent today: $23."
+			+ " This week: $140 in all, most at Walmart $140. Last week: $0 in all."
+		),
+		"the budget in plain words"
+	)
+	_eq(
+		Say.check("Keep to about $45 a day; Walmart took $140 this week.", presented),
+		{"ok": true},
+		"a model's advice may use its figures"
+	)
+	var short: Dictionary = budget.duplicate(true)
+	short["safe_daily_cents"] = 0
+	short["short_cents"] = 8000
+	_eq(
+		(
+			Say
+			. render(Say.present([{"ask": {"ask": "budget"}, "result": {"ok": short}}]))
+			. begins_with(
+				"Nothing is spare until the next deposit (Paycheck, Fri 27 Nov): you are about $80 short"
+			)
+		),
+		true,
+		"nothing spare, plainly"
+	)
 
 
 func _say_check() -> void:

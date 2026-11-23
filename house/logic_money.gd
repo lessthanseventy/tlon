@@ -20,6 +20,73 @@ func run() -> void:
 	_subscriptions()
 	_figures()
 	_staged()
+	_budget()
+
+
+func _budgeted(extra: Dictionary) -> Dictionary:
+	var b := {
+		"until": When.add_days(TODAY, 2),
+		"safe_daily_cents": 4512,
+		"short_cents": 0,
+		"spent_today_cents": 2340,
+		"other_available_cents": 0,
+		"other_accounts": [],
+	}
+	b.merge(extra, true)
+	return {"budget": b}
+
+
+func _budget() -> void:
+	_eq(
+		Money.safe_line(_budgeted({}), TODAY),
+		"Safe to spend: about $45 a day until Fri.",
+		"the day's figure to the deposit"
+	)
+	_eq(
+		Money.safe_line(_budgeted({"safe_daily_cents": 0, "short_cents": 12000}), TODAY),
+		"Nothing spare until Fri: about $120 short.",
+		"nothing spare, plainly"
+	)
+	_eq(
+		Money.safe_line(
+			_budgeted(
+				{
+					"safe_daily_cents": 0,
+					"short_cents": 12000,
+					"other_available_cents": 50000,
+					"other_accounts": ["Rainy day"]
+				}
+			),
+			TODAY
+		),
+		"Nothing spare until Fri: about $120 short. Rainy day holds $500, which covers it.",
+		"and the savings that cover it"
+	)
+	_eq(Money.safe_line(_budgeted({"until": null}), TODAY), "", "no deposit seen, no line")
+	_eq(Money.safe_line({}, TODAY), "", "no budget, no line")
+	_eq(Money.today_line(_budgeted({})), ["Spent $23 of $45 today.", false], "today against it")
+	_eq(
+		Money.today_line(_budgeted({"spent_today_cents": 6000})),
+		["Spent $60 of $45 today, over by $15.", true],
+		"over it, by how much"
+	)
+	_eq(
+		Money.today_line(_budgeted({"safe_daily_cents": 0, "short_cents": 100})),
+		["Spent $23 today.", false],
+		"nothing spare: only what was spent"
+	)
+	_eq(Money.today_line({}), ["", false], "no budget, no line")
+	_eq(
+		Money.week_line(
+			{
+				"top":
+				[{"name": "Walmart", "amount_cents": 14012}, {"name": "Lyft", "amount_cents": 9600}]
+			}
+		),
+		"Walmart $140 · Lyft $96",
+		"a week's top spends"
+	)
+	_eq(Money.week_line({"top": []}), "nothing yet", "an empty week")
 
 
 func _summary(available: Variant, due: Array, balance: Variant = null) -> Dictionary:

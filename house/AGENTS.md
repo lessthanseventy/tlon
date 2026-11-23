@@ -230,8 +230,11 @@ runs on the local list.
   and its forecast (`money_forecast`, built by `Money.staged_forecast`); `--money quiet|short|none` stages the room's
   three states. A click opens the **Money view** (`money_view.gd`; `viewed` "money", `sb.open_money()`, the sidebar's
   `money_ui`): Now (`available`, else `balance`; savings beside it from the forecast's `other_available_cents` and
-  `other_accounts`, named and never added in), Until the next deposit (`Money.lowest_line`, to the whole dollar, from `before_next_deposit`
-  and `basis.next_deposit`, then a `DayStrip` of the days ahead with each of `events` on its date), Subscriptions
+  `other_accounts`, named and never added in; under them, from the forecast's `budget` when it has one, `Money.safe_line`
+  "Safe to spend: about $45 a day until Fri" or "Nothing spare until Fri: about $120 short", and `Money.today_line`
+  "Spent $23 of $45 today", over it "over by $N" in `Paper.WARM`), Until the next deposit (`Money.lowest_line`, to the whole dollar, from `before_next_deposit`
+  and `basis.next_deposit`, then a `DayStrip` of the days ahead with each of `events` on its date), Where it went (the
+  budget's `weeks`, this one from Monday and the last, each its top four merchants, `Money.week_line`), Subscriptions
   (`subscriptions`: `amount_cents`, `rhythm`, `next`, a rise mark and "was $X" from `was_cents`), Noticed (the forecast's
   `notices` `[{key, kind, text, why}]`, absent from an older server: a row each under Now, the first three and "and N
   more", a quiet "seen" that clears the row at once and posts `{key}` to `POST /api/home/money/notices/seen`; a
@@ -251,7 +254,9 @@ runs on the local list.
   (the only two Plaid calls: `/transactions/sync` and `/accounts/get`; no link flow, so the one link and the ten the
   account allows are never touched; `mise run home:bank:link` stays the server's), and runs the engine: `bank_recurring.gd`
   (series, ended, new, price change; rent through Flex is one bill under its names, its installments monthly series),
-  `bank_projection.gd` (forecast, afford, what-if, history; no clock, `today` is passed in; everyday spending is the
+  `bank_projection.gd` (forecast, afford, what-if, history, budget: what is spare a day to the next deposit after the
+  bills before it and a day's cushion, today's everyday spend, the two weeks' top merchants, served as the local
+  forecast's `budget` and the ask's `budget` lookup; no clock, `today` is passed in; everyday spending is the
   median week of what is in no series, the mean and the occasional beside it, and the lowest-point sentence says it), `bank_util.gd` (dates are `YYYY-MM-DD` strings, a stable sort, `money`). The credentials are read at each
   call, never kept or logged: env `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ACCESS_TOKEN`, else
   `$XDG_RUNTIME_DIR/agenix/plaid-client-id|plaid-secret|plaid-access-token`, else `user://house_plaid.json`
