@@ -644,7 +644,7 @@ func _cleaning() -> void:
 	_eq(Ics.title("Lunch @ the park"), "Lunch @ the park", "an ordinary @ stays")
 
 
-# the day's and the range's rows, on a fixed local clock (Wednesday 2026-11-18 14:00, zone +0)
+# the day's and the range's rows, on a fixed local clock (Wednesday 2026-11-18 10:00, zone +0)
 func _days() -> void:
 	var feed := Feed.new()
 	feed.clock = func() -> float: return _utc("2026-11-18T10:00:00")
