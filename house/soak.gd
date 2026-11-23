@@ -27,6 +27,7 @@ const ArtSoak := preload("res://soak_art.gd")
 const PackLooksSoak := preload("res://soak_looks.gd")
 const TalkSoak := preload("res://soak_talk.gd")
 const TelegramSoak := preload("res://soak_telegram.gd")
+const BackgroundSoak := preload("res://soak_background.gd")
 const WeatherSoak := preload("res://soak_weather.gd")
 const AnticSoak := preload("res://soak_antics.gd")
 const DriveSoak := preload("res://soak_drive.gd")
@@ -141,6 +142,7 @@ func _sections() -> Array:
 		["contract", func(): ContractSoak.new(self).run()],
 		["talk", _on_main.bind(func(main): await TalkSoak.new(self).run(main))],
 		["telegram", _on_main.bind(func(main): await TelegramSoak.new(self).run(main))],
+		["background", _on_main.bind(func(main): await BackgroundSoak.new(self).run(main))],
 		["weather", func(): await WeatherSoak.new(self).run()],
 		["drive", func(): await DriveSoak.new(self).run()],
 		["packlooks", _packlooks],

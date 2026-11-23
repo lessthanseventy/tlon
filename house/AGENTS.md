@@ -398,7 +398,7 @@ runs on the local list.
   waits between remarks), `visitors` and `visitors_rate`, `litter_box`, `bowls`, `pet_things` (the switches),
   `weather` (on) and `weather_town` (`""`: the wttr.in weather of the local house, below), `degrees` (`"f"` or `"c"`; absent follows the system locale, `f` for a US one, else `c`: the server sends Celsius,
   `Settings.temp` words it everywhere a temperature is shown),
-  `widget` (start as the small widget), `on_top` (the widget stays on top), `url` (empty: `TLON_URL`, else
+  `widget` (start as the small widget), `on_top` (the widget stays on top), `background` (off; above, "Background"), `url` (empty: `TLON_URL`, else
   `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server), and over the
   house's own list only `telegram` (off), `telegram_list_at` (`"17:30"`), `claude` (off) and `claude_command`
   (`"claude"`): the two helpers below (the bot's token is not here but in its own file); and the four
@@ -492,7 +492,20 @@ runs on the local list.
   message from before a restart is followed only by its own buttons). Once a day at `telegram_list_at` by the house
   clock, or at the next start that day, "Still open: ...; tomorrow: ..." (nothing to say, nothing sent). A network
   failure backs off 5 s doubling to 5 min and shows nothing in the room; a refused token stops it and says so in the
-  settings. It works while this computer is on and the house is open, as the settings say.
+  settings. It works while this computer is on and the house is running (open, or in the background).
+  **Background** (`background.gd`, the setting `background`, off; Connections): the house keeps running with its window
+  shut. Turning it on writes the login entry, which starts the app with `-- --background` (hidden); turning it off removes it
+  (`Background.entry` per OS: Linux `~/.config/autostart/asterion.desktop`, macOS a LaunchAgent plist with RunAtLoad,
+  Windows the `HKCU\...\Run` value through `reg`; macOS and Windows are written but never run here, so unverified; an
+  unexported run from the engine writes none). A close request then hides the window to a tray icon (`StatusIndicator`, menu Show /
+  Quit, left click shows) where the system has one, else minimizes it; with the setting off a close quits. One house at a time:
+  the running one beats into `user://house_running.json` every 2 s, and a second launch that sees a beat under 6 s old
+  drops `user://house_show` and quits, which the running one answers by showing its window (`OS.is_process_running` only
+  knows children, so a heartbeat is the liveness). The engine's own `--headless` (no display) runs the same loop with
+  the room and sidebar hidden and stopped (`main.gd` `go_headless`): the list's tick, Telegram and the polls go on,
+  and there is no window to show. A staged or scripted run does none of this. `soak_background.gd` (section
+  `background`) tells a due reminder and answers a line against the Telegram stub with the room stopped;
+  `logic_background.gd` holds the entries and the one-house rule.
   **Claude reading** (`reader_claude.gd`, `claude` and `claude_command` in the settings): "read my messages with
   Claude", the command (default `claude`, resolved on PATH, with the Windows extensions; the screen says whether it
   was found), a "test" button (one tiny reading: "works" or the reason), the last reading's outcome and "your messages
@@ -658,7 +671,7 @@ runs on the local list.
   that needs neither the tree nor the clock goes in `logic.gd`, not in the soak; none runs in both.
 - `mise run house:soak -- <section>...` runs only those sections, in the suite's order; `-- --list`
   prints the names (`home sim decorate packs looks hacks eggs guests petlife antics petthings cards
-  routes forms sidebar chores people door money chat local talk telegram weather drive packlooks art`); an unknown name prints
+  routes forms sidebar chores people door money chat local talk telegram background weather drive packlooks art`); an unknown name prints
   them and fails. **Iterate on your own section by name** and run the whole soak once, alone, on the
   final tree. Each section stands alone: the runner (`soak.gd` `_sections`, `_reset`, `_leave`) reseeds
   with 7 and resets the stub server's state, its log and its flags before it, and fails the section

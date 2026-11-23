@@ -31,6 +31,7 @@ const DEFAULTS := {
 	"degrees": "",
 	"weather": true,
 	"weather_town": "",
+	"background": false,
 	"telegram": false,
 	"telegram_list_at": "17:30",
 	"claude": false,

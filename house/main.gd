@@ -24,6 +24,7 @@ const LocalList := preload("res://local_list.gd")
 const ReaderClaude := preload("res://reader_claude.gd")
 const Telegram := preload("res://telegram.gd")
 const Wttr := preload("res://wttr.gd")
+const Background := preload("res://background.gd")
 const Chores := preload("res://chores.gd")
 const People := preload("res://people.gd")
 const Money := preload("res://money.gd")
@@ -31,6 +32,8 @@ const SHORT_CENTS := 60000
 
 # false in a staged or scripted run: nothing is sent to Claude or anywhere else
 var talk_live := false
+# no window, no drawing: only what keeps reminders and Telegram going
+var headless := false
 var pets_retry := 20.0
 var pets_every := 300.0
 var pets_nudge := 60.0
@@ -73,6 +76,8 @@ var _pets_since := 0.0
 var _ids: Array = []
 var _ids_known := false
 var _watch_busy := false
+var _kept := false
+var _tray: Node
 
 var _room: Control
 var _sidebar: PanelContainer
@@ -100,6 +105,9 @@ func _ready() -> void:
 	add_child(_room)
 
 	talk_live = not _room.home.staged
+	if not _room.home.staged and not Background.claim(Time.get_unix_time_from_system()):
+		get_tree().quit()
+		return
 	_wttr.live = talk_live
 	_wttr.reported.connect(_on_wttr)
 	add_child(_wttr)
@@ -125,6 +133,8 @@ func _ready() -> void:
 	)
 	_sidebar.closet.tabbed.connect(func() -> void: _room.home.sound.request("tab"))
 	_sidebar.closet.applied.connect(func() -> void: _room.home.sound.request("save"))
+	if not _room.home.staged:
+		_keep_house(args)
 	_use_backend(args)
 	if "--forecast" in args:
 		_forecast_arg = _staged_forecast(args[args.find("--forecast") + 1])
@@ -271,6 +281,120 @@ func _ready() -> void:
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(_shot)
 		get_tree().quit()
+
+
+# the house that is the one running: its heartbeat, its close button, its tray
+func _keep_house(args: Array) -> void:
+	_kept = true
+	get_tree().auto_accept_quit = false
+	var beat := Timer.new()
+	beat.wait_time = Background.BEAT
+	beat.timeout.connect(
+		func() -> void:
+			Background.beat(Time.get_unix_time_from_system())
+			if Background.shown():
+				_show_window()
+	)
+	add_child(beat)
+	beat.start()
+	if DisplayServer.get_name() == "headless":
+		go_headless()
+		return
+	_apply_background()
+	if Background.FLAG in args and _background_on():
+		_to_background()
+
+
+func go_headless() -> void:
+	headless = true
+	for n in [_room, _sidebar]:
+		n.visible = false
+		n.process_mode = Node.PROCESS_MODE_DISABLED
+	set_process(false)
+
+
+func _background_on() -> bool:
+	return not _room.home.staged and bool(_room.home.settings.value("background"))
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		if _background_on() and not headless:
+			_to_background()
+		else:
+			get_tree().quit()
+	elif what == NOTIFICATION_EXIT_TREE and _kept:
+		Background.release()
+
+
+# a tray icon where the system has one, else the window is minimized to the taskbar
+func _to_background() -> void:
+	if _tray != null:
+		get_window().visible = false
+	else:
+		get_window().mode = Window.MODE_MINIMIZED
+
+
+func _show_window() -> void:
+	if headless:
+		return
+	var w := get_window()
+	w.visible = true
+	if w.mode == Window.MODE_MINIMIZED:
+		w.mode = Window.MODE_WINDOWED
+	w.grab_focus()
+
+
+# the login entry and the tray follow the setting; a run from the engine (no exported app) has no
+# app of its own to start at login
+func _apply_background() -> void:
+	if _room.home.staged:
+		return
+	var on := _background_on()
+	if OS.has_feature("template"):
+		var home := OS.get_environment("HOME" if OS.get_name() != "Windows" else "USERPROFILE")
+		var e := Background.entry(
+			OS.get_name(), OS.get_executable_path(), home, OS.get_environment("XDG_CONFIG_HOME")
+		)
+		Background.set_autostart(on, e)
+	if on:
+		_make_tray()
+	elif _tray != null:
+		_tray.queue_free()
+		_tray = null
+		_show_window()
+
+
+func _make_tray() -> void:
+	if _tray != null or not DisplayServer.has_feature(DisplayServer.FEATURE_STATUS_INDICATOR):
+		return
+	var menu := PopupMenu.new()
+	menu.add_item("Show", 0)
+	menu.add_item("Quit", 1)
+	menu.id_pressed.connect(
+		func(id: int) -> void:
+			if id == 0:
+				_show_window()
+			else:
+				get_tree().quit()
+	)
+	add_child(menu)
+	var tray := StatusIndicator.new()
+	tray.tooltip = "Asterion"
+	var img := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	for y in 32:
+		for x in 32:
+			if Vector2(x - 15.5, y - 15.5).length() <= 13.0:
+				img.set_pixel(x, y, Color("e0b252"))
+	tray.icon = ImageTexture.create_from_image(img)
+	tray.pressed.connect(
+		func(button: int, _at: Vector2i) -> void:
+			if button == MOUSE_BUTTON_LEFT:
+				_show_window()
+	)
+	add_child(tray)
+	tray.menu = tray.get_path_to(menu)
+	_tray = tray
 
 
 func _use_backend(args: Array) -> void:
@@ -1311,6 +1435,8 @@ func _on_setting(key: String) -> void:
 				get_window().always_on_top = _room.home.settings.value("on_top")
 		"claude", "claude_command", "telegram", "telegram_list_at":
 			_apply_talk()
+		"background":
+			_apply_background()
 
 
 func _poll() -> void:

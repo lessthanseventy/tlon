@@ -57,6 +57,7 @@ var _kind2: KindPicker
 var _sound: Button
 var _volume: HSlider
 var _widget: Button
+var _background: Button
 var _top: Button
 var _looks := {}
 var _weather_box: VBoxContainer
@@ -284,6 +285,19 @@ func _ready() -> void:
 	_town = _field(r, "Automatic", "weather_town")
 	_quiet(_weather_box).text = "Asks wttr.in about every half hour; nothing of yours is sent."
 
+	_head(col, "Background")
+	r = _flow(col)
+	_background = Paper.chip(
+		"Keep running when the window is closed",
+		r,
+		func() -> void: _put("background", _background.button_pressed),
+		true
+	)
+	_quiet(col).text = (
+		"Starts when you log in. Reminders and Telegram keep going; the tray icon or"
+		+ " opening the app again brings the window back."
+	)
+
 	_talk_box = VBoxContainer.new()
 	_talk_box.add_theme_constant_override("separation", 7)
 	col.add_child(_talk_box)
@@ -435,7 +449,7 @@ func _telegram_section(box: VBoxContainer) -> void:
 	_tg_at.text_submitted.connect(func(_t: String) -> void: _tg_list_at())
 	_tg_at.focus_exited.connect(_tg_list_at)
 	_tg_off = Paper.chip("Disconnect", r, _tg_disconnect)
-	_quiet(_tg_box).text = "works while this computer is on and the house is open"
+	_quiet(_tg_box).text = "works while this computer is on and the house is running"
 
 
 func _tg_connect() -> void:
@@ -675,6 +689,7 @@ func _refresh() -> void:
 	_local_say.text = "kept in " + ProjectSettings.globalize_path(LocalList.STORE)
 	_talk_box.visible = local
 	_weather_box.visible = local
+	_background.set_pressed_no_signal(bool(settings.value("background")))
 	_tg_on.set_pressed_no_signal(bool(settings.value("telegram")))
 	_tg_box.visible = _tg_on.button_pressed
 	_tg_lines()
