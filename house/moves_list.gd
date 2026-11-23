@@ -4,6 +4,7 @@ extends RefCounted
 # Pure over a status as `LocalList.status()` answers it; the stamps are ISO UTC, so they compare as
 # strings. A to-do's age is its `since`: the list keeps no later touch. `bias` is the list's offset
 # from UTC, so a `why` names the person's day, not UTC's.
+const Money := preload("res://money.gd")
 const STALE_DAYS := 14
 const WEEKDAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -19,6 +20,27 @@ static func sources(status: Dictionary, now: String, stale: String, bias: float 
 		if t.get("kind") == "todo" and str(t.get("since", "")) != "" and str(t["since"]) < stale:
 			out.append(_someday(t, bias))
 	return out
+
+
+# The one move money being short makes: `budget` is `bank.budget()`'s `ok`. It is the source's word
+# that this is urgent, and keyed by the deposit so it is offered once for each.
+static func money_short(budget: Dictionary) -> Array:
+	var short := roundi(float(budget.get("short_cents", 0)))
+	if short <= 0 or budget.get("until") == null:
+		return []
+	var text := "Cover the %s shortfall before %s" % [Money.fmt_whole(short), budget["until"]]
+	return [
+		{
+			"key": "money-short-%s" % budget["until"],
+			"kind": "proposal",
+			"source": "money",
+			"text": text,
+			"why": "spare cash runs out before the %s deposit" % budget["deposit"],
+			"action": {"do": "add", "kind": "todo", "text": text},
+			"date": str(budget["until"]),
+			"urgent": true
+		}
+	]
 
 
 static func _day(stamp: String, bias: float) -> Dictionary:

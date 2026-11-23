@@ -4,6 +4,7 @@ extends "res://logic_local.gd"
 # the closed set of actions, taking an item back and the file. Fixtures only.
 const Moves := preload("res://moves.gd")
 const MovesList := preload("res://moves_list.gd")
+const Telegram := preload("res://telegram.gd")
 const DAY := 86400.0
 const STORE := "user://soak_moves.json"
 
@@ -20,6 +21,7 @@ func run() -> void:
 	_status()
 	_words()
 	_sources()
+	_money_short()
 
 
 func _moves(l: RefCounted = null, path: String = "") -> RefCounted:
@@ -349,6 +351,25 @@ func _why_in_local_day() -> void:
 	var got := _sources_of(zoned)
 	_eq(got[0]["why"], "waiting since Wed", "the waiting-on names the local day, not the UTC one")
 	_eq(got[1]["why"], "open since 18 Nov, never moved", "the to-do names the local date")
+
+
+func _money_short() -> void:
+	var short := {"until": "2026-11-27", "deposit": "Payroll", "short_cents": 12000}
+	var got := MovesList.money_short(short)
+	_eq(got.size(), 1, "a shortfall before the deposit is a move")
+	_eq(got[0]["key"], "money-short-2026-11-27", "keyed by the deposit's day")
+	_eq(got[0]["urgent"], true, "and urgent")
+	_eq(got[0]["text"], "Cover the $120 shortfall before 2026-11-27", "worded with the amount")
+	_eq(Telegram.urgent_item(got[0], 0.0), true, "the source's own move rings, whatever the date")
+	_eq(
+		MovesList.money_short({"until": "2026-11-27", "short_cents": 0}),
+		[],
+		"nothing short, no move"
+	)
+	_eq(MovesList.money_short({"until": null, "short_cents": 5}), [], "no deposit seen, no move")
+	var m := _moves(_list())
+	m.sweep(got)
+	_eq(_keys(m), ["money-short-2026-11-27"], "the sweep keeps it")
 
 
 func _sources_of(l: RefCounted) -> Array:
