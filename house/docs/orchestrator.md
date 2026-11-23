@@ -315,31 +315,31 @@ To do
 
 ## Build steps
 
-Each is a ticket under #14, filed in backlog until this design is approved. The order is the
+Each is a tlon ticket under #14 (ficciones #524 aside), filed in backlog until this design is approved. The order is the
 dependency order. The orchestrator lives over the house's own list only, as Telegram and the Claude
 reader do. Over a tlon server, Home keeps today's Proposed.
 
-1. **Your move, the model** (`moves.gd`, `logic_moves.gd`): items `{key, kind: ask|proposal|look_at,
+1. **#516 Your move, the model** (`moves.gd`, `logic_moves.gd`): items `{key, kind: ask|proposal|look_at,
    source, text, why, options | action, date}`, `user://house_moves.json`, settle (go, no, answer),
    no is final for the key, the five-a-day and two-asks limits, the closed action set and
    self-retraction. `LocalList.status()` answers `moves` in place of `proposals: []`.
-2. **Your move on screen:** Home's "Your move (N)" section first, the Your move view with its keys,
+2. **#517 Your move on screen:** Home's "Your move (N)" section first, the Your move view with its keys,
    and `▲ N` in the header. It replaces Proposed over the local list. A soak section `moves`.
-3. **The list's own sources:** overdue waiting-ons and stale to-dos (step 1's rules). This is all
+3. **#518 The list's own sources:** overdue waiting-ons and stale to-dos (step 1's rules). This is all
    Jude and Robyn's houses get, and it is enough to prove the loop with no bank or model.
-4. **Money's sources:** the short-before-deposit proposal and the new-or-raised-charge ask, whose
+4. **#519 Money's sources:** the short-before-deposit proposal and the new-or-raised-charge ask, whose
    answers are kept as facts ("Flex is rent"). It waits on #509 and #510 and uses #510's
    safe-to-spend figures.
-5. **The chat is the orchestrator:** money questions go through `ask.gd` from the chat, Money's own
+5. **#520 The chat is the orchestrator:** money questions go through `ask.gd` from the chat, Money's own
    ask line goes, list questions are answered, items are settled in words, and a new item is said
    once. It delivers #510's point 4 ("advice comes through the ask") in the chat.
-6. **Telegram's Your move:** the day card's lettered block and an urgent item as its own message,
+6. **#521 Telegram's Your move:** the day card's lettered block and an urgent item as its own message,
    edited when settled. **Absorbs #325**: its Proposed block becomes this, and its Notices line and
    deliveries stay #325's design, carried here.
-7. **Notices off Telegram:** the desktop notice (`notify-send`, `osascript`, the taskbar flash),
+7. **#522 Notices off Telegram:** the desktop notice (`notify-send`, `osascript`, the taskbar flash),
    quiet hours and the window-in-front rule.
-8. **`asterion --tell`:** a line handed to the running house through the one-house handshake. Then
-   a **ficciones** ticket: `Super+Shift+U` opens a one-line prompt and runs it.
+8. **#523 `asterion --tell`:** a line handed to the running house through the one-house handshake. Then
+   **ficciones #524**: `Super+Shift+U` opens a one-line prompt and runs it.
 9. **Mail (#314)** stays its own spike. If it is built, it is a source for step 1: a mail that wants
    a reply becomes a proposal, and a delivery becomes a notice line on the card (#325). Its
    `proposals` gap becomes "moves from mail". If it is dropped, nothing above changes.
