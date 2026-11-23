@@ -181,7 +181,6 @@ async function readDossier($) {
   $.ui.invalidate("ui.render");
 }
 
-
 // The office from this seat: who else is on, what is red here, this seat's voice, a line now and then.
 async function refreshGlance($) {
   try {

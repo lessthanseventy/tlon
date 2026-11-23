@@ -375,7 +375,6 @@ defmodule Server.Sweep do
     :ok
   end
 
-
   @doc """
   The coworker windows whose identity has gone stale: their live process still holds a `TLON_AUTHOR`
   that is no longer a handle on this workspace's bench. Conservative: a window is stale only when

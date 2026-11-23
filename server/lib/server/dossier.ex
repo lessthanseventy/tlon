@@ -227,7 +227,6 @@ defmodule Server.Dossier do
     end
   end
 
-
   @doc """
   A workline landed: the open issues its tickets own are resolved, `how` named — the PR, so a beat
   incident's postmortem banks; a landing with no PR (no GitHub) names its commit and banks none. The

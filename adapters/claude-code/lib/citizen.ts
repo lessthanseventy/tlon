@@ -176,7 +176,6 @@ export function landingsOf(d: Dossier, seen: number): number[] {
   return d.done.shown.filter((e) => e.source === "event" && e.kind === "work_landed" && e.id > seen).map((e) => e.id);
 }
 
-
 const VERBS = ["Catalogued", "Deciphered", "Dreamed", "Mapped", "Indexed", "Annotated", "Transcribed", "Unriddled", "Mirrored", "Labyrinthed"];
 
 /** The word under a finished turn, the same for the same turn: a Borgesian verb. */

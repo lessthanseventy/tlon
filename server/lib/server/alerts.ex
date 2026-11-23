@@ -77,7 +77,6 @@ defmodule Server.Alerts do
       Enum.map(Keyword.get(opts, :home_agenda, []), &info("home_agenda", &1, &1.body))
   end
 
-
   defp info(kind, m, title) do
     %{
       key: "#{kind}:#{m.id}",

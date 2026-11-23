@@ -360,7 +360,6 @@ defmodule Server.Release.PM do
     end
   end
 
-
   @doc """
   The operator answered a release gate (`Server.Attention.answer_prompt/3` has resolved it): `"a"`
   queues the cut, `"n"` holds it.

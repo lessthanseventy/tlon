@@ -155,7 +155,6 @@ describe("usageReport", () => {
   });
 });
 
-
 describe("offlineNote — the band says when the server has gone quiet", () => {
   const POLL = 120_000;
 

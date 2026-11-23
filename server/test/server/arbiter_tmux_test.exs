@@ -312,7 +312,6 @@ defmodule Server.Arbiter.TmuxTest do
     assert [_parked, seated] = Channel.thread_messages(t)
     assert seated.kind == "notice" and seated.payload == %{"seated" => "claude-code"}
     assert seated.body == "claude-code sat down on ##{t.id} — spawn me"
-
   end
 
   test "spawn: a standing duty's leaf takes no seat — at the cap counting it, a work thread still spawns",
