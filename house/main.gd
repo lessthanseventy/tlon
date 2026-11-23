@@ -528,7 +528,12 @@ func _set_up_phone() -> void:
 	_phone.load_state()
 	_phone.clock = Callable(home, "_now_local")
 	_phone.bias = home._bias()
-	_phone.status = func() -> Dictionary: return _backend.list.status() if _backend.local else {}
+	_phone.status = func() -> Dictionary:
+		if not _backend.local:
+			return {}
+		var st: Dictionary = _backend.list.status()
+		st["notices"] = _backend.bank.notices()
+		return st
 	_phone.rng.randomize()
 	_phone.heard.connect(_phone_heard)
 	_phone.tapped.connect(_phone_tapped)

@@ -537,7 +537,8 @@ runs on the local list.
   `editMessageText`, `deleteMessage`, `answerCallbackQuery`. The card carries Your move over the list's `moves`
   (not asks, which stay in the window): "Your move" lettered A, B… for the day with Go for each letter, Pick…
   (Go and No for each) and "go A" / "no B" / "go all" typed, which `main.gd` settles through `_settle_move`
-  (`moved`); once settled it reads "Done: A · Dropped: B". A new move dated today to 48 hours on is its own
+  (`moved`); once settled it reads "Done: A · Dropped: B". Under it one line, "N money", counts the bank's
+  `notices()` (never tickable; deliveries wait on mail). A new move dated today to 48 hours on is its own
   message with Go and No (`on_moves`): never for one already waiting, with the window in front or in quiet
   hours (the evening card's time to the morning's), and it is edited when settled anywhere. An edit never notifies the
   phone; a new message does, so what must be seen is sent again at the bottom and the old one deleted (Telegram lets a

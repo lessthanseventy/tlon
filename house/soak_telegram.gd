@@ -845,6 +845,18 @@ func _moves(base: String, bot: Bot) -> void:
 		],
 		"the day's card letters Your move, with Go for each and Pick…"
 	)
+	var notes := {"open": [], "coming": [], "done": [], "moves": st["moves"], "notices": [{}, {}]}
+	_eq(
+		Telegram.card_text(tg.card, notes, t, 0).ends_with("\n\n2 money"),
+		true,
+		"the card ends in one Notices line, a count, never a row to tick"
+	)
+	notes["notices"] = []
+	_eq(
+		Telegram.card_text(tg.card, notes, t, 0).contains("money"),
+		false,
+		"no notices, no line"
+	)
 	var edits := bot.named("editMessageText").size()
 	bot.text(777, "go A")
 	tg.start()

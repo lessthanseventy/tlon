@@ -805,6 +805,9 @@ static func card_text(c: Dictionary, st: Dictionary, now: float, offset_s: float
 		parts.append("To do\n" + "\n".join(lines))
 	if parts.is_empty():
 		return ""
+	var noted: Array = st.get("notices", [])
+	if not noted.is_empty():
+		parts.append("%d money" % noted.size())
 	return "\n\n".join([("This evening · " if evening else "Today · ") + date] + parts)
 
 
