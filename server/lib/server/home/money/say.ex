@@ -256,7 +256,7 @@ defmodule Server.Home.Money.Say do
   defp entry(%{"ask" => %{"ask" => "summary"}, "result" => r}) do
     [
       "You have #{r["available_cents_text"]} available in checking.",
-      due(r["due_this_week"]),
+      due(r["due_this_week"], r["next_deposit"]),
       deposit(r["next_deposit"])
     ]
     |> Enum.join(" ")
@@ -347,12 +347,23 @@ defmodule Server.Home.Money.Say do
   defp months(1), do: "1 month"
   defp months(n), do: "#{n} months"
 
-  defp due([]), do: "Nothing recurring is due this week."
+  defp due([], _deposit), do: "Nothing recurring is due this week."
 
-  defp due(items),
+  defp due(items, deposit),
     do:
       "Due this week: " <>
-        Enum.map_join(items, ", ", &"#{&1["name"]} #{&1["amount_cents_text"]} #{day(&1["on"])}") <> "."
+        Enum.map_join(items, ", ", &"#{&1["name"]} #{&1["amount_cents_text"]} #{day(&1["on"])}#{against(&1, deposit)}") <>
+        "."
+
+  defp against(_item, nil), do: ""
+
+  defp against(%{"on" => on}, %{"on" => deposit_on}) do
+    case Date.compare(Date.from_iso8601!(on), Date.from_iso8601!(deposit_on)) do
+      :lt -> " (before the next deposit)"
+      :eq -> " (the same day as the next deposit)"
+      :gt -> " (after the next deposit)"
+    end
+  end
 
   defp deposit(nil), do: ""
   defp deposit(d), do: "Next deposit: #{d["name"]}, #{d["amount_cents_text"]} on #{day(d["on"])}."

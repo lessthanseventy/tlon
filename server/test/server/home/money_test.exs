@@ -302,6 +302,29 @@ defmodule Server.Home.MoneyTest do
       assert lead =~ "which does not cover it."
     end
 
+    test "the summary says which bills fall before, on and after the next deposit" do
+      item = fn name, on -> %{"name" => name, "amount_cents_text" => "$10", "on" => on} end
+
+      presented = [
+        %{
+          "ask" => %{"ask" => "summary"},
+          "result" => %{
+            "available_cents_text" => "$500",
+            "due_this_week" => [item.("Early", "2026-11-26"), item.("Same", "2026-11-27"), item.("Late", "2026-11-28")],
+            "next_deposit" => item.("Pay", "2026-11-27")
+          }
+        }
+      ]
+
+      text = Say.render(presented)
+      assert text =~ "Early $10 Thu 26 Nov (before the next deposit)"
+      assert text =~ "Same $10 Fri 27 Nov (the same day as the next deposit)"
+      assert text =~ "Late $10 Sat 28 Nov (after the next deposit)"
+
+      no_deposit = put_in(presented, [Access.at(0), "result", "next_deposit"], nil)
+      refute Say.render(no_deposit) =~ "next deposit)"
+    end
+
     test "the lead names a baseline that is already short and what the purchase adds" do
       presented = [
         %{
