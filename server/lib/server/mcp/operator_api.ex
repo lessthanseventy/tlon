@@ -1445,7 +1445,7 @@ defmodule Server.MCP.OperatorAPI do
         case name_ok(name) do
           :ok ->
             {soul, source} = Soul.preview(name, arch)
-            pitch = "#{name}: a #{b["grade"] || "junior"} #{arch} for #{b["specialty"] || "office"}."
+            pitch = "#{name}: a #{b["grade"] || "junior"} #{arch} for #{b["specialty"] || "general work"}."
             json(conn, 200, %{soul: soul, pitch: pitch, source: source})
 
           {:error, :bad_name} ->
