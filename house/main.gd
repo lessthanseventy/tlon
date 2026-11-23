@@ -109,7 +109,7 @@ func _ready() -> void:
 	add_child(_room)
 
 	talk_live = not _room.home.staged
-	var hidden: bool = Background.FLAG in args or "--headless" in args
+	var hidden: bool = Background.FLAG in args or DisplayServer.get_name() == "headless"
 	if not _room.home.staged and not Background.claim(
 		Time.get_unix_time_from_system(), Background.LIVE, Background.SHOW, not hidden
 	):
