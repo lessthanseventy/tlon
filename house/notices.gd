@@ -32,7 +32,7 @@ static func raise(os_name: String, m: Dictionary) -> void:
 	var text := text_of(m)
 	match os_name:
 		"Linux", "FreeBSD", "NetBSD", "OpenBSD", "BSD":
-			OS.create_process("notify-send", ["--app-name=Asterion", "Your move", text])
+			OS.create_process("notify-send", ["--app-name=Asterion", "--", "Your move", text])
 		"macOS":
 			var q := text.replace("\\", "\\\\").replace('"', '\\"')
 			OS.create_process(

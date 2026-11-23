@@ -149,7 +149,7 @@ static func house_args(cmdline: Array) -> Array:
 static func notify(os_name: String, text: String) -> void:
 	match os_name:
 		"Linux", "FreeBSD", "NetBSD", "OpenBSD", "BSD":
-			OS.create_process("notify-send", ["--app-name=Asterion", "Asterion", text])
+			OS.create_process("notify-send", ["--app-name=Asterion", "--", "Asterion", text])
 		"macOS":
 			var q := text.replace("\\", "\\\\").replace('"', '\\"')
 			OS.create_process(
