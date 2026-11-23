@@ -208,7 +208,7 @@ defmodule Server.Dossier do
 
   @doc """
   Give an issue to the ticket that fixes it, and say so on the issue's thread: a `notice` (it wakes
-  nobody) with payload `fixing`, which `Server.Alerts` raises as info. An owned issue leaves the
+  nobody) with payload `fixing`. An owned issue leaves the
   operator's list (`Server.Office.Needs`). `owner` is who has it, in words. `{:ok, issue}`.
   """
   def own_issue(%Issue{} = issue, %{id: ticket_id}, owner) do
@@ -227,14 +227,6 @@ defmodule Server.Dossier do
     end
   end
 
-  @doc "The issues taken (`own_issue/3`) at or after `since`, as their notices, newest first."
-  def fixing_since(%DateTime{} = since) do
-    Repo.all(
-      from m in Message,
-        where: m.kind == "notice" and m.created_at >= ^since and fragment("? \\? 'fixing'", m.payload),
-        order_by: [desc: m.id]
-    )
-  end
 
   @doc """
   A workline landed: the open issues its tickets own are resolved, `how` named — the PR, so a beat

@@ -602,13 +602,11 @@ defmodule Server.Release.PMTest do
     test "a boot on a new release says so once, with how many changes it brought; a rollback says where from",
          ctx do
       %{ws: ws, repo: repo, live: seed, main: main} = ctx
-      since = DateTime.add(DateTime.utc_now(), -60)
-
       assert :ok = PM.note_live(root: repo)
       assert List.last(bodies(ws)) == "release #{String.slice(seed, 0, 7)} is live"
 
       assert :ok = PM.note_live(root: repo)
-      assert [%{payload: %{"live" => ^seed}}] = PM.live_since(since)
+      assert length(Enum.filter(bodies(ws), &(&1 =~ "is live"))) == 1
 
       git!(repo, ["branch", "-f", "live", main])
       assert :ok = PM.note_live(root: repo)
@@ -620,14 +618,12 @@ defmodule Server.Release.PMTest do
       assert List.last(bodies(ws)) ==
                "release #{String.slice(seed, 0, 7)} is live — back from #{String.slice(main, 0, 7)}"
 
-      assert [%{payload: %{"live" => ^seed}}, %{payload: %{"live" => ^main}}, _] = PM.live_since(since)
-      assert [] == PM.live_since(DateTime.add(DateTime.utc_now(), 60))
+      assert length(Enum.filter(bodies(ws), &(&1 =~ "is live"))) == 3
     end
 
     test "no release cut yet records nothing", %{ws: ws, repo: repo} do
       git!(repo, ["branch", "-D", "live"])
       assert :ok = PM.note_live(root: repo)
-      assert [] == PM.live_since(DateTime.add(DateTime.utc_now(), -60))
       refute Enum.any?(bodies(ws), &(&1 =~ "is live"))
     end
 

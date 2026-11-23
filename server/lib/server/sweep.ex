@@ -360,7 +360,7 @@ defmodule Server.Sweep do
   @doc """
   Say that a thread parked on the leaf cap got its seat: a `notice` (it wakes nobody) from `tlon`,
   payload `seated: agent`, which ends the parked note's run as the latest message — so one per
-  seating. The office's in-tray shows it; `Server.Alerts` raises it as info. `:ok`.
+  seating. The office's in-tray shows it. `:ok`.
   """
   def note_seated(%Thread{} = thread, agent) do
     _ =
@@ -375,14 +375,6 @@ defmodule Server.Sweep do
     :ok
   end
 
-  @doc "The seatings (`note_seated/2`) posted at or after `since`, newest first."
-  def seated_since(%DateTime{} = since) do
-    Repo.all(
-      from m in Message,
-        where: m.kind == "notice" and m.created_at >= ^since and fragment("? \\? 'seated'", m.payload),
-        order_by: [desc: m.id]
-    )
-  end
 
   @doc """
   The coworker windows whose identity has gone stale: their live process still holds a `TLON_AUTHOR`

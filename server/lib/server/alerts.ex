@@ -77,8 +77,6 @@ defmodule Server.Alerts do
       Enum.map(Keyword.get(opts, :home_agenda, []), &info("home_agenda", &1, &1.body))
   end
 
-  @doc "The one wording of a landing, for every surface that toasts it: `#185 landed — <title>`."
-  def landed_title(%{thread_id: id, title: title}), do: "##{id} landed — #{title}"
 
   defp info(kind, m, title) do
     %{

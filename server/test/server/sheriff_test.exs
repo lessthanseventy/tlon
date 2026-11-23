@@ -151,7 +151,7 @@ defmodule Server.SheriffTest do
 
       assert Server.Office.Needs.list() == []
 
-      assert [%{thread_id: thread_id, body: body}] = Server.Dossier.fixing_since(DateTime.add(DateTime.utc_now(), -60))
+      assert %{thread_id: thread_id, body: body} = beat |> Channel.thread_messages() |> List.last()
       assert thread_id == beat.id
       assert body =~ "issue ##{issue.id}" and body =~ "ticket ##{ticket.id}" and body =~ "routed to tertius-f"
     end
@@ -165,12 +165,12 @@ defmodule Server.SheriffTest do
       assert {:error, :closed} = Server.Dossier.fix_issue(closed)
     end
 
-    test "a coworker's ticket for the issue owns it too, named as theirs", %{ws: ws, issue: issue} do
+    test "a coworker's ticket for the issue owns it too, named as theirs", %{ws: ws, beat: beat, issue: issue} do
       {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "clean server/tmp before the rebase"})
       {:ok, _} = Server.Dossier.own_issue(issue, ticket, "filed by scharlach")
 
       assert Server.Office.Needs.list() == []
-      assert [%{body: body}] = Server.Dossier.fixing_since(DateTime.add(DateTime.utc_now(), -60))
+      assert %{body: body} = beat |> Channel.thread_messages() |> List.last()
       assert body =~ "filed by scharlach"
     end
 

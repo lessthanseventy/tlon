@@ -2030,7 +2030,7 @@ defmodule Server.MCP.ServerTest do
       |> decode_tool_json()
 
     assert Server.Repo.get!(Server.Issue, issue.id).ticket_id == filed["id"]
-    assert [%{body: body}] = Server.Dossier.fixing_since(DateTime.add(DateTime.utc_now(), -60))
+    assert %{body: body} = thread |> Channel.thread_messages() |> List.last()
     assert body =~ "filed by IssueFiler"
 
     assert call(token, session, 3, "file_ticket", %{"title" => "again", "issue_id" => issue.id})["isError"]

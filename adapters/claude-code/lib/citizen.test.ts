@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attribution, bandParts, gateOf, landedAlerts, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport } from "./citizen.ts";
+import { attribution, bandParts, gateOf, landingsOf, mentionsOf, offlineNote, operatorApi, turnWord, usageReport } from "./citizen.ts";
 import type { Dossier } from "./brief.ts";
 
 const NONE = { shown: [], more: 0 };
@@ -155,15 +155,6 @@ describe("usageReport", () => {
   });
 });
 
-test("landedAlerts keeps the landing rows of an alerts reply, newest first", () => {
-  const rows = [
-    { kind: "decision", title: "pick one", key: "d:1" },
-    { kind: "landed", key: "landed:1", title: "#1 landed — a", thread_id: 1, at: "2026-10-19T09:00:00Z" },
-    { kind: "landed", key: "landed:2", title: "#2 landed — b", thread_id: 2, at: "2026-10-19T10:00:00Z" },
-  ];
-  expect(landedAlerts(rows).map((a) => a.key)).toEqual(["landed:2", "landed:1"]);
-  expect(landedAlerts({ error: "x" })).toEqual([]);
-});
 
 describe("offlineNote — the band says when the server has gone quiet", () => {
   const POLL = 120_000;

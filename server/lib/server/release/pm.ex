@@ -360,14 +360,6 @@ defmodule Server.Release.PM do
     end
   end
 
-  @doc "The live-release notices (`note_live/1`) posted at or after `since`, newest first."
-  def live_since(%DateTime{} = since) do
-    Repo.all(
-      from m in Message,
-        where: m.kind == "notice" and m.created_at >= ^since and fragment("? \\? 'live'", m.payload),
-        order_by: [desc: m.id]
-    )
-  end
 
   @doc """
   The operator answered a release gate (`Server.Attention.answer_prompt/3` has resolved it): `"a"`
