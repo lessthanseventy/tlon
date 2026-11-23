@@ -194,43 +194,7 @@ defmodule Server.AlertsTest do
     assert [%{label: "Join", open: "https://meet.google.com/abc"}] = a.actions
   end
 
-  test "a parked thread getting its seat is info: one toast per seating, nothing to do, last in the list" do
-    seated = %{id: 90, thread_id: 7, body: "emma sat down on #7 — the finder", created_at: @now}
-
-    assert [%{level: "sticky"}, info] =
-             Alerts.build([need("verify_failed", %{key: "verify_failed:9"})], [], @now, seated: [seated])
-
-    assert %{key: "seated:90", level: "info", kind: "seated", title: "emma sat down on #7 — the finder"} = info
-    assert info.thread_id == 7 and info.at == @now and info.actions == []
-  end
-
-  test "an issue someone took is info: who has it, nothing to do" do
-    fixing = %{
-      id: 91,
-      thread_id: 144,
-      body: "issue #32 is ticket #400 now (routed to tertius) — landing fails",
-      created_at: @now
-    }
-
-    assert [info] = Alerts.build([], [], @now, fixing: [fixing])
-    assert %{key: "fixing:91", level: "info", kind: "fixing", title: "issue #32 is ticket #400 now" <> _} = info
-    assert info.thread_id == 144 and info.actions == []
-  end
-
-  test "a workline landing is info: one toast per landing, naming the thread, nothing to do" do
-    landed = %{id: 51, thread_id: 185, title: "Mailbox: letters reach the street", created_at: @now}
-
-    assert [info] = Alerts.build([], [], @now, landed: [landed])
-
-    assert %{key: "landed:51", level: "info", kind: "landed", title: "#185 landed — Mailbox: letters reach the street"} =
-             info
-
-    assert info.thread_id == 185 and info.at == @now and info.actions == []
-  end
-
-  test "a release going live is info: one toast per boot onto a new release" do
-    live = %{id: 92, thread_id: 1, body: "release 7b54006 is live — 3 changes", created_at: @now}
-
+  test "the home's notices are info toasts; reminders and asks are sticky" do
     pile = %{id: "3:1763560800", created_at: @now, thread_id: nil, body: "Retro in 15 — 2 things: a; b"}
 
     assert [
@@ -269,10 +233,6 @@ defmodule Server.AlertsTest do
              Alerts.build([], [], @now, told: [told], asked: [asked])
 
     assert keep == %{label: "Keep", method: "POST", path: "/api/home/9/answer", body: %{choice: "keep"}}
-
-    assert [info] = Alerts.build([], [], @now, live: [live])
-    assert %{key: "live:92", level: "info", kind: "live", title: "release 7b54006 is live — 3 changes"} = info
-    assert info.actions == []
   end
 
   test "alarms first, then decisions, then sticky" do

@@ -14,12 +14,7 @@ defmodule Server.Alerts do
       chat's choices, delete among them;
     * **info** — something the operator set going took effect where they can't see it: a toast
       that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
-      minutes after. Kinds: `seated`, a thread parked on the leaf cap got its coworker
-      (`Server.Sweep.note_seated/2`); `landed`, GitHub merged a workline's PR
-      (`Server.Workline.landed_since/1`; one row per landing, keyed by its event, worded by
-      `landed_title/1` — the desktop's toast and the Claude Code plugin's read this row); `fixing`, an issue a ticket
-      took, saying who has it (`Server.Dossier.own_issue/3`); `live`, the service booted
-      on a new release (`Server.Release.PM.note_live/1`); `home_list`, the home's daily list, for the
+      minutes after. Kinds: `home_list`, the home's daily list, for the
       ten minutes after its time (`Server.Home.listing/1`); `home_morning`, the morning message, the
       same for `home_morning_at` (`Server.Home.morning/1`); `home_agenda`, an agenda's pile told ahead of its
       time (`Server.Home.told_agendas/1`). A `mention` of the operator is info too: a
@@ -46,10 +41,6 @@ defmodule Server.Alerts do
 
     build(Server.Office.Needs.list(), Server.Calendar.alarmable(Server.Calendar.upcoming(window)), now,
       alarm_minutes: minutes,
-      seated: Server.Sweep.seated_since(since),
-      landed: Server.Workline.landed_since(since),
-      fixing: Server.Dossier.fixing_since(since),
-      live: Server.Release.PM.live_since(since),
       told: Server.Home.told(),
       asked: Server.Home.asked(),
       home_list: List.wrap(Server.Home.listing(now)),
@@ -60,8 +51,7 @@ defmodule Server.Alerts do
 
   @doc """
   The alerts for these needs and meetings at `now` — `list/0` without the reads. Raised as info:
-  `seated:` the seating notices, `landed:` the landings, `fixing:` the issues a ticket took,
-  `live:` the live-release notices, `home_list:` the home's daily list. `told:` the reminders
+  `home_list:` the home's daily list, `home_morning:` and `home_agenda:`. `told:` the reminders
   told and not done, raised sticky, and `asked:` the questions the home put and the operator has
   not answered (`Server.Home.asked/0`), sticky too, each choice a call on `/api/home/:id/answer`.
   """
@@ -82,10 +72,6 @@ defmodule Server.Alerts do
       Enum.map(Keyword.get(opts, :told, []), &reminder/1) ++
       Enum.map(Keyword.get(opts, :asked, []), &asked/1) ++
       Enum.filter(from_needs, &(&1.level == "info")) ++
-      Enum.map(Keyword.get(opts, :seated, []), &info("seated", &1, &1.body)) ++
-      Enum.map(Keyword.get(opts, :landed, []), &info("landed", &1, landed_title(&1))) ++
-      Enum.map(Keyword.get(opts, :fixing, []), &info("fixing", &1, &1.body)) ++
-      Enum.map(Keyword.get(opts, :live, []), &info("live", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :home_list, []), &info("home_list", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :home_morning, []), &info("home_morning", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :home_agenda, []), &info("home_agenda", &1, &1.body))

@@ -1429,25 +1429,18 @@ defmodule Server.WorklineTest do
     assert id == landed.id and tid == t.id
   end
 
-  test "a landing is one info alert, keyed by its event and worded once, however often the alerts are read" do
+  test "a landing raises no alert" do
     t = open!(%{title: "Mailbox: letters", slug: "mailbox-alert"})
 
-    landed =
-      Repo.insert!(%Event{
-        thread_id: t.id,
-        kind: "work_landed",
-        correlation: "workline:mailbox-alert:landing",
-        detail: %{"summary" => "merged"},
-        created_at: DateTime.truncate(DateTime.utc_now(), :second)
-      })
+    Repo.insert!(%Event{
+      thread_id: t.id,
+      kind: "work_landed",
+      correlation: "workline:mailbox-alert:landing",
+      detail: %{"summary" => "merged"},
+      created_at: DateTime.truncate(DateTime.utc_now(), :second)
+    })
 
-    landings = fn -> Enum.filter(Server.Alerts.list(), &(&1.kind == "landed")) end
-
-    assert [row] = landings.()
-    assert landings.() == [row]
-    assert row.key == "landed:#{landed.id}" and row.level == "info" and row.thread_id == t.id
-    assert row.title == Server.Alerts.landed_title(%{thread_id: t.id, title: "Mailbox: letters"})
-    assert row.title == "##{t.id} landed — Mailbox: letters"
+    assert Enum.filter(Server.Alerts.list(), &(&1.kind == "landed")) == []
   end
 
   # an approving verdict on a thread with no repo: the Git checker refuses the park, which leaves the
