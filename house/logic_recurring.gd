@@ -27,6 +27,7 @@ func run() -> void:
 	_games_store()
 	_labels_apart()
 	_same_merchant()
+	_rent_names()
 	_run_ends()
 	_old_odd_charge()
 	_merchant_name()
@@ -445,6 +446,13 @@ func _same_merchant() -> void:
 	]
 	for c in cases:
 		_eq(Recurring.same_merchant(c[0], c[1]), c[2], "same_merchant %s / %s" % [c[0], c[1]])
+
+
+func _rent_names() -> void:
+	for n in ["Flex", "FLEXIBLE FINANCE"]:
+		_eq(_txn("2026-01-01", -100000, n)["label"], Recurring.RENT_LABEL, "%s is rent" % n)
+	for n in ["Flex Fitness", "Flexible Finance Ltd", "Flexor"]:
+		_eq(_txn("2026-01-01", -5000, n)["label"], n, "%s is not rent" % n)
 
 
 func _run_ends() -> void:

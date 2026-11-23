@@ -84,7 +84,7 @@ static func key(label: String) -> String:
 
 
 static func _rent(k: String) -> bool:
-	return RENT.any(func(r): return same_merchant(k, r))
+	return k in RENT
 
 
 static func _label(merchant: Variant, name: Variant) -> String:
