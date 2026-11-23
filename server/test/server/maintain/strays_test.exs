@@ -126,8 +126,11 @@ defmodule Server.Maintain.StraysTest do
     {_, 0} = System.cmd("git", ["-C", ticket, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "c"])
     hand = Worktree.path(repo, "by-hand-old")
     {_, 0} = System.cmd("git", ["-C", repo, "worktree", "add", "-q", "-b", "office/old", hand])
-    {index, 0} = System.cmd("git", ["-C", hand, "rev-parse", "--path-format=absolute", "--git-path", "index"])
-    File.touch!(String.trim(index), System.os_time(:second) - 2 * 86_400)
+
+    for wt <- [ticket, hand] do
+      {index, 0} = System.cmd("git", ["-C", wt, "rev-parse", "--path-format=absolute", "--git-path", "index"])
+      File.touch!(String.trim(index), System.os_time(:second) - 2 * 86_400)
+    end
 
     names = for %{name: n} <- Strays.worktrees(), do: n
     refute "t12-x" in names
