@@ -89,3 +89,10 @@ folder into the same place on the new one, then start it.
 The program was called "the house", so its folder was `the house` beside `Asterion`. The first start of
 Asterion copies every file in it (the list, the Telegram pairing, the settings) into `Asterion` once, leaves
 the old folder as it was, and never overwrites a file already there (`adopt.gd`).
+
+## First run on a bare machine
+
+With no tlon server, no `claude` program, no Telegram and no calendar, the first start finds no server and keeps
+its own list with a few starter things; add, done, later and a ringing reminder, the weather (wttr.in, or off
+in Settings, Connections) and the Telegram pairing code all work from there. Checked live on the Linux build
+(a throwaway data folder, no server); the Windows and macOS builds are unverified until someone runs them.

@@ -483,6 +483,7 @@ func _telegram_section(box: VBoxContainer) -> void:
 	_tg_on = Paper.chip(
 		"A Telegram bot in Asterion", r, func() -> void: _put("telegram", _tg_on.button_pressed), true
 	)
+	_quiet(box).text = "Add things, mark them done and get reminders from your phone. Optional."
 	_tg_box = VBoxContainer.new()
 	_tg_box.add_theme_constant_override("separation", 7)
 	box.add_child(_tg_box)
@@ -569,6 +570,10 @@ func _claude_section(box: VBoxContainer) -> void:
 	_claude_on = Paper.chip(
 		"Read my messages with Claude", r, func() -> void: _put("claude", _claude_on.button_pressed), true
 	)
+	_quiet(box).text = (
+		"Reads looser sentences. Needs the claude program; without it "
+		+ "Asterion reads simple ones itself. Optional."
+	)
 	_claude_box = VBoxContainer.new()
 	_claude_box.add_theme_constant_override("separation", 7)
 	box.add_child(_claude_box)
@@ -585,7 +590,7 @@ func _claude_section(box: VBoxContainer) -> void:
 # a wrapped quiet line
 func _quiet(parent: Control) -> Label:
 	var l := Paper.label("", Fonts.SMALL, Paper.QUIET)
-	l.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	parent.add_child(l)
 	return l
 
