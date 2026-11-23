@@ -826,7 +826,12 @@ func _routes(main: Control) -> void:
 	_check("not kept" in main._sidebar.jot._hint.text, "failed jot says so: '%s'" % main._sidebar.jot._hint.text)
 	var home = main._room.home
 	await _until(
-		func(): return is_equal_approx(home.rhythm.list_at, 9.25), "the house reads home_list_at from /api/settings"
+		func():
+			if is_equal_approx(home.rhythm.list_at, 9.25):
+				return true
+			main._slow_poll()
+			return false,
+		"the house reads home_list_at from /api/settings"
 	)
 	_check(
 		is_equal_approx(home.rhythm.list_at, 9.25),
