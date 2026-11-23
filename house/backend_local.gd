@@ -4,6 +4,7 @@ extends "res://backend.gd"
 # `reader` (`reader_rules.gd`; anything with `read(text, context) -> reading` can stand in front).
 const LocalList := preload("res://local_list.gd")
 const Moves := preload("res://moves.gd")
+const MovesList := preload("res://moves_list.gd")
 const MOVES_STORE := "user://house_moves.json"
 const ReaderRules := preload("res://reader_rules.gd")
 const CalendarFeed := preload("res://calendar_feed.gd")
@@ -161,6 +162,10 @@ func _agenda_route(id: int, action: String, body: Dictionary) -> Dictionary:
 func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 	if p.size() == 2 and p[1] == "home":
 		var status: Dictionary = list.status()
+		var now: float = list.now()
+		var stale: float = now - MovesList.STALE_DAYS * 86400.0
+		list.moves.sweep(MovesList.sources(status, list.iso(now), list.iso(stale)))
+		status["moves"] = list.moves.open_items()
 		status["meetings"] = [] if calendar == null else calendar.meetings()
 		status["money"] = bank.summary()
 		return {"code": 200, "body": status}

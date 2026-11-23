@@ -3,6 +3,8 @@ extends "res://logic_local.gd"
 # The logic checks of Your move (`moves.gd`): the order, the limits, settling by go, no and answer,
 # the closed set of actions, taking an item back and the file. Fixtures only.
 const Moves := preload("res://moves.gd")
+const MovesList := preload("res://moves_list.gd")
+const DAY := 86400.0
 const STORE := "user://soak_moves.json"
 
 
@@ -17,6 +19,7 @@ func run() -> void:
 	_file()
 	_status()
 	_words()
+	_sources()
 
 
 func _moves(l: RefCounted = null, path: String = "") -> RefCounted:
@@ -255,3 +258,50 @@ func _words() -> void:
 	_eq(Moves.says({"do": "open", "url": "https://a"}), "opens the link", "a link")
 	var shown := Moves.shown([_p("p1"), {"key": "l", "kind": "look_at"}, _a("a1"), _p("p2")])
 	_eq(shown.map(func(x): return x["key"]), ["a1", "p1", "p2", "l"], "asks, proposals, look-ats")
+
+
+func _sources() -> void:
+	var l := _list()
+	l.add({"kind": "waiting", "text": "the invoice", "who": "Sam"})
+	l.add({"kind": "todo", "text": "Renew passport"})
+	t += 20 * DAY
+	l.add({"kind": "waiting", "text": "the quote", "who": "Dana"})
+	l.add({"kind": "todo", "text": "Fresh"})
+	l.add({"kind": "reminder", "text": "an old reminder", "at": "2026-11-17T09:00"})
+	var got := _sources_of(l)
+	_eq(
+		got.map(func(x): return x["text"]),
+		["Nudge Sam about the invoice", 'Put "Renew passport" on someday'],
+		"an overdue waiting-on and a stale to-do, nothing newer and no reminder"
+	)
+	_eq(got[0]["why"], "waiting since Wed", "the waiting-on says since when")
+	_eq(got[0]["date"], "2026-11-21", "dated by when it fell due")
+	_eq(got[1]["why"], "open since 18 Nov, never moved", "the to-do says since when")
+	_eq(got[1]["action"], {"do": "someday", "id": 2}, "go moves that to-do to someday")
+	var m := _moves(l)
+	m.sweep(got)
+	_eq(m.settle("waiting-1", "go").get("ok"), "Added: Nudge Sam about the invoice.", "go nudges")
+	_eq(
+		l.status()["open"].any(func(r): return r["text"] == "Nudge Sam about the invoice"),
+		true,
+		"a to-do today"
+	)
+	_eq(m.settle("stale-2", "go").get("ok"), "Moved to someday.", "go puts it on someday")
+	m.sweep(_sources_of(l))
+	_eq(_keys(m), [], "a settled one is not offered again, and the fresh ones are not due")
+	var n := _moves(l)
+	n.sweep(got)
+	n.settle("waiting-1", "no")
+	n.sweep(_sources_of(l))
+	_eq(n.settled("waiting-1")["how"], "no", "no is final for that waiting-on")
+	var r := _moves(l)
+	r.sweep(_sources_of(l))
+	_eq(_keys(r), ["waiting-1"], "the waiting-on is still a move")
+	l.done(1)
+	r.sweep(_sources_of(l))
+	_eq(_keys(r), [], "a ticked waiting-on takes its move back")
+	t = at(2026, 11, 18, 10)
+
+
+func _sources_of(l: RefCounted) -> Array:
+	return MovesList.sources(l.status(), l.iso(t), l.iso(t - MovesList.STALE_DAYS * DAY))
