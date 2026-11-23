@@ -16,8 +16,15 @@ const WEEKDAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 var path := ""
 var clock := Callable()
-var list: RefCounted = null
+var list: RefCounted:
+	get:
+		return _list.get_ref() if _list != null else null
+	set(value):
+		_list = weakref(value) if value != null else null
 var doc := {"v": 1, "open": [], "settled": {}, "facts": {}, "day": "", "shown": 0}
+
+# weak: the list owns its Moves, and a strong back-reference is a cycle that outlives the tree
+var _list: WeakRef = null
 
 
 func _init(

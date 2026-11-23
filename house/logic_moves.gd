@@ -94,7 +94,8 @@ func _limits() -> void:
 	var bias := -5.0 * 3600.0
 	var utc := at(2026, 11, 19, 3)
 	t = utc + bias
-	var zoned := _moves(_list("", bias))
+	var zoned_list := _list("", bias)
+	var zoned := _moves(zoned_list)
 	zoned.sweep(many)
 	t = utc + 1.5 * 3600.0 + bias
 	zoned.sweep(many)
