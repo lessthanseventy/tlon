@@ -23,6 +23,7 @@ const BackendLocal := preload("res://backend_local.gd")
 const LocalList := preload("res://local_list.gd")
 const ReaderClaude := preload("res://reader_claude.gd")
 const Telegram := preload("res://telegram.gd")
+const CalendarFeed := preload("res://calendar_feed.gd")
 const Wttr := preload("res://wttr.gd")
 const Adopt := preload("res://adopt.gd")
 const Background := preload("res://background.gd")
@@ -46,6 +47,7 @@ var _backend: Node
 var _claude := ReaderClaude.new()
 var _wttr := Wttr.new()
 var _phone := Telegram.new()
+var _calendar := CalendarFeed.new()
 var _fixture := ""
 var _probing := false
 var _starters := false
@@ -113,6 +115,7 @@ func _ready() -> void:
 	_wttr.live = talk_live
 	_wttr.reported.connect(_on_wttr)
 	add_child(_wttr)
+	_set_up_calendar()
 	_set_up_phone()
 	_sidebar = Sidebar.new()
 	_sidebar.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
@@ -120,6 +123,7 @@ func _ready() -> void:
 	_sidebar.offset_right = 0
 	add_child(_sidebar)
 	_sidebar.setup(_room.home, _claude, _phone)
+	_sidebar.settings_view.calendar = _calendar
 	_sidebar.jot_submitted.connect(_send_jot)
 	_sidebar.chat_sent.connect(_send_chat)
 	_sidebar.chat_acted.connect(_chat_act)
@@ -456,10 +460,31 @@ func _install(node: Node) -> void:
 	add_child(_backend)
 	_sidebar.set_reachable(true)
 	_apply_weather()
+	_apply_calendar()
 	_apply_talk()
 	if _backend.local and _phone_on():
 		for row in _backend.started:
 			_phone.on_told(row)
+
+
+func _set_up_calendar() -> void:
+	var home = _room.home
+	_calendar.persist = not home.staged
+	_calendar.live = talk_live
+	_calendar.load_state()
+	_calendar.clock = Callable(home, "_now_local")
+	_calendar.bias = home._bias()
+	_calendar.fetched.connect(_refresh)
+	add_child(_calendar)
+
+
+# over the house's own list the meetings come from its calendar feed, when one is set
+func _apply_calendar() -> void:
+	if _backend.local:
+		_backend.calendar = _calendar
+		_calendar.start()
+	else:
+		_calendar.stop()
 
 
 func _set_up_phone() -> void:

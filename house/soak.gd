@@ -29,6 +29,7 @@ const TalkSoak := preload("res://soak_talk.gd")
 const TelegramSoak := preload("res://soak_telegram.gd")
 const BackgroundSoak := preload("res://soak_background.gd")
 const WeatherSoak := preload("res://soak_weather.gd")
+const CalendarSoak := preload("res://soak_calendar.gd")
 const AnticSoak := preload("res://soak_antics.gd")
 const DriveSoak := preload("res://soak_drive.gd")
 # stops a hang, not slow work: the soak takes about 7 minutes on a quiet machine and about twice
@@ -36,6 +37,8 @@ const DriveSoak := preload("res://soak_drive.gd")
 const DEADLINE_MS := 900000
 
 # what the stub of wttr.in (`?format=j1` on any path) answers
+var ics_code := 200
+var ics_body := ""
 var wttr_code := 200
 var wttr_body: Variant = {}
 var _srv := TCPServer.new()
@@ -144,6 +147,7 @@ func _sections() -> Array:
 		["telegram", _on_main.bind(func(main): await TelegramSoak.new(self).run(main))],
 		["background", _on_main.bind(func(main): await BackgroundSoak.new(self).run(main))],
 		["weather", func(): await WeatherSoak.new(self).run()],
+		["calendar", func(): await CalendarSoak.new(self).run()],
 		["drive", func(): await DriveSoak.new(self).run()],
 		["packlooks", _packlooks],
 		["art", func(): ArtSoak.new(self).run()],
@@ -215,6 +219,8 @@ func _reset() -> void:
 	_mode = ""
 	wttr_code = 200
 	wttr_body = {}
+	ics_code = 200
+	ics_body = ""
 	bot = Callable()
 	stub = Callable()
 	hold_reads = false
@@ -925,6 +931,7 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 	_log.append([method, path, body, query])
 	var code := 200
 	var out: Variant = {}
+	var raw: Variant = null
 	var parsed: Variant = JSON.parse_string(body) if body != "" else {}
 	var mine: Variant = stub.call(method, path, parsed) if stub.is_valid() else null
 	if mine is Dictionary:
@@ -934,6 +941,9 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 		var answer: Dictionary = bot.call(path, parsed)
 		code = answer["code"]
 		out = answer["body"]
+	elif method == "GET" and path.begins_with("/calendar/"):
+		raw = ics_body
+		code = ics_code
 	elif method == "GET" and path.ends_with("?format=j1"):
 		code = wttr_code
 		out = wttr_body
@@ -1008,7 +1018,7 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 				out["row"] = made
 	else:
 		code = 404
-	var payload := JSON.stringify(out).to_utf8_buffer()
+	var payload: PackedByteArray = (raw if raw is String else JSON.stringify(out)).to_utf8_buffer()
 	var head := (
 		"HTTP/1.1 %d X\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n"
 		% [code, payload.size()]

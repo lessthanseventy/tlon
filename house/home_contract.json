@@ -23,9 +23,7 @@
   },
   "gaps": {
     "status-forecast": {"what": "GET /api/home has no forecast: the server sends up to three days of the weather (Server.Office.Weather.forecast, wttr.in)", "needs": "network", "size": "S"},
-    "status-meetings": {"what": "GET /api/home has no meetings: today's and tomorrow's, cleaned, from the calendars the server reads (Server.Home.Day)", "needs": "network, secret (calendar credentials)", "size": "L"},
     "status-money": {"what": "GET /api/home has no money (the server's is null with the bank source off, a summary of the checking accounts with it on)", "needs": "network, secret (Plaid)", "size": "L"},
-    "meetings-range": {"what": "GET /api/home/meetings answers [] for anything, where the server validates from/to (YYYY-MM-DD, from not after to, at most 62 days: 400) and answers the meetings on each date", "needs": "network, secret (calendar credentials)", "size": "L"},
     "proposals": {"what": "POST /api/home/proposals/:id/take and /dismiss are 404 locally and `proposals` is always []; the server's come from sources (Server.Home.Sources: mail, calendar, bank)", "needs": "network, secret", "size": "L", "untested": true},
     "money-routes": {"what": "GET /api/home/money/forecast, POST /api/home/money/notices/seen and POST /api/home/money/ask are 404 locally; the server answers from the stored bank data (forecast null when there is none) and a model phrases the ask", "needs": "network, secret (Plaid), llm", "size": "L"},
     "pets": {"what": "GET /api/home/pets answers {} locally (the house uses its own voices.gd lines); the server answers the model-written lines by pet then occasion", "needs": "llm", "size": "M", "untested": true},
@@ -34,7 +32,7 @@
   },
   "routes": [
     {"name": "status", "method": "GET", "path": "/api/home", "about": "what the jots left open", "cases": [
-      {"name": "an empty list", "code": 200, "shape": "@Status", "gap": ["status-forecast", "status-meetings", "status-money"]}
+      {"name": "an empty list", "code": 200, "shape": "@Status", "gap": ["status-forecast", "status-money"]}
     ]},
     {"name": "add", "method": "POST", "path": "/api/home/add", "about": "{kind: todo|reminder|note|waiting|project, text, at?, every?, who?, project?, steps?} -> the row", "cases": [
       {"name": "a to-do", "body": {"kind": "todo", "text": "buy milk"}, "as": "milk", "code": 200, "shape": "@Row"},
@@ -56,7 +54,7 @@
       {"name": "a project that is not one", "body": {"kind": "todo", "text": "x", "project": 99999}, "code": 404}
     ]},
     {"name": "status after", "method": "GET", "path": "/api/home", "about": "every kind in its list", "cases": [
-      {"name": "the list holds what was added", "code": 200, "shape": "@Status", "gap": ["status-forecast", "status-meetings", "status-money"]}
+      {"name": "the list holds what was added", "code": 200, "shape": "@Status", "gap": ["status-forecast", "status-money"]}
     ]},
     {"name": "edit", "method": "POST", "path": "/api/home/{id}/edit", "about": "{text?, at?, every? (null stops it), kind? (todo|reminder)} -> the row", "cases": [
       {"name": "a new text", "path": "/api/home/{milk}/edit", "body": {"text": "buy oat milk"}, "code": 200, "shape": "@Row"},
@@ -142,8 +140,10 @@
     ]},
     {"name": "meetings", "method": "GET", "path": "/api/home/meetings", "about": "?from=&to= (YYYY-MM-DD, at most 62 days) -> [{title, starts_at, ends_at, tentative, all_day, date}]", "cases": [
       {"name": "a week", "path": "/api/home/meetings?from=2026-11-16&to=2026-11-22", "code": 200, "shape": ["any"]},
-      {"name": "a bad range", "path": "/api/home/meetings?from=2026-11-22&to=2026-11-16", "code": 400, "error": "from and to are dates as YYYY-MM-DD, from not after to, at most 62 days", "gap": "meetings-range"},
-      {"name": "no dates", "path": "/api/home/meetings", "code": 400, "error": "from and to are dates as YYYY-MM-DD, from not after to, at most 62 days", "gap": "meetings-range"}
+      {"name": "a bad range", "path": "/api/home/meetings?from=2026-11-22&to=2026-11-16", "code": 400, "error": "from and to are dates as YYYY-MM-DD, from not after to, at most 62 days"},
+      {"name": "no dates", "path": "/api/home/meetings", "code": 400, "error": "from and to are dates as YYYY-MM-DD, from not after to, at most 62 days"},
+      {"name": "more than 62 days", "path": "/api/home/meetings?from=2026-11-01&to=2027-01-02", "code": 400, "error": "from and to are dates as YYYY-MM-DD, from not after to, at most 62 days"},
+      {"name": "a date that is not one", "path": "/api/home/meetings?from=2026-11-31&to=2026-12-02", "code": 400, "error": "from and to are dates as YYYY-MM-DD, from not after to, at most 62 days"}
     ]},
     {"name": "proposals", "method": "POST", "path": "/api/home/proposals/{id}/take", "about": "take|dismiss an open proposal -> its row; 404 when it is not open, 409 when it could not be filed", "cases": [
       {"name": "none is open", "path": "/api/home/proposals/1/take", "code": 404},

@@ -49,9 +49,9 @@ to its docked size (30% of the sidebar, 176 px at least); its handle
 while a thing's view is open, and `K` or a click on the phone brings it up. While a LineEdit or TextEdit has focus no letter hotkey fires (`main.gd` `_input`).
 
 **Meetings** are `meetings` of `GET /api/home` (`Server.Home.Day`: today's remaining and tomorrow's, already
-cleaned, UTC, `home.meetings`; `[]` over the local list, which shows nothing extra); Today lists the ones still on. The wall calendar's card reads the month in view from `GET /api/home/meetings` (once per
+cleaned, UTC, `home.meetings`; over the local list the same rows from the calendar feed (below), `[]` with none set); Today lists the ones still on. The wall calendar's card reads the month in view from `GET /api/home/meetings` (once per
 month while the view is open, again when it is reopened; `things.calendar_blocks` asks, so every way of opening
-the card does: `things.want_meetings`, `month_meetings`; the local list answers `[]`). A month's rows stay as
+the card does: `things.want_meetings`, `month_meetings`; the local list answers the feed's, `[]` with none set). A month's rows stay as
 last fetched: a failed refetch keeps the last good copy, and a failed first one shows "nothing" until the card
 is reopened. With no date picked it shows Today and Tomorrow, each headed with its date, its meetings
 then the home's own things, "nothing" when it has neither; a clicked date shows its own block (headed "Today ·"
@@ -380,7 +380,7 @@ runs on the local list.
   Five groups, chips across the top ("You", "Pets", "Look", "Sound", "Connections"), one open at a time: You (name,
   birthday, temperature), Pets (each pet's name, animal and personality, talk, antics, the pets' things, visitors),
   Look (the four looks, the widget, the room's reset, the finds, the art), Sound, Connections (where the list lives,
-  weather, Telegram, Claude, the phone's chat). Captions are sentence case. The birthday is one field that reads "8 June",
+  weather, calendar, Telegram, Claude, the phone's chat). Captions are sentence case. The birthday is one field that reads "8 June",
   "June 8" or "06-08" (`parse_birthday`), says what it kept ("Kept as 8 June.", "No birthday set.") or that it is
   not a day, and "none" or empty clears it.
   One flat object in `user://house_settings.json`, written on a change only, other keys kept as found, never in a
@@ -472,6 +472,16 @@ runs on the local list.
   **Two helpers, over the house's own list only** (the server's house has neither, is offered neither, and runs
   exactly as before). Each is off until switched on in the settings screen (the keys below), is never started in a
   staged or scripted run (`main.gd` `talk_live`), and fails quietly: nothing nags.
+  **Calendar** (`calendar_feed.gd`, a node `main.gd` holds; only over the local list): an optional feed. The
+  settings' "Calendar" section takes the calendar's secret `.ics` link (`webcal://` is read as `https://`),
+  fetches it once to see that it is a calendar, keeps it in `user://house_calendar.json` at mode 0600 and nowhere
+  else (never in `house_settings.json`, never printed or shown: the section says "connected", or "connected;
+  " and a fixed phrase when the last fetch failed), then fetches it every 15 minutes, a failure keeping the last
+  good copy. `ics.gd` reads it as `Server.Calendar.Feed` does (RRULE, EXDATE, moved instances, all-day, busy and
+  cancelled, `clean`); Godot has no zone database, so a TZID is read from a table of the common zones, else the
+  feed's own VTIMEZONE, else the `(UTC±hh:mm)` prefix, else UTC. `calendar_feed.gd` answers `meetings` of
+  `GET /api/home` and `GET /api/home/meetings?from=&to=` as `Server.Home.Day` does, and the route's date check
+  is the server's (400, at most 62 days). The house only reads.
   **Telegram** (`telegram.gd`, a node `main.gd` holds): a bot of his own. The settings: "a Telegram bot in the
   house", three lines of setup (message @BotFather, `/newbot`, paste the token), the token field (masked, emptied once
   saved, then shown by its last four) and "connect" (`getMe`: the bot's @name or Telegram's own one-line reason),
@@ -668,7 +678,7 @@ runs on the local list.
   `POST /api/home/:id/done`, `.../later` (`{"until": "hour"|"tomorrow"}`), `.../drop`, `.../revive`,
   `.../edit`, `.../plan`, `.../answer`, `POST /api/home/add`, asks `GET /api/home/now?skip=`, and
   `POST /api/home` (`{"text"}` → `{"reply"}`, slow: a model reads it). The home also asks
-  `/api/settings` every 5 min and `/api/office` (its `weather` only; the route is the server's, the house reads nothing else from it) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above), apart from one outward call, the weather from wttr.in (below), and only when he has switched them on to Telegram (`api.telegram.org`) and to the `claude` program (his own account). A server that does not answer leaves the
+  `/api/settings` every 5 min and `/api/office` (its `weather` only; the route is the server's, the house reads nothing else from it) every 60 s and `/api/home/pets` on its own schedule (above). With `where` = `local` it talks to no server at all and keeps its own list (above), apart from one outward call, the weather from wttr.in (below), the calendar feed he pasted (when he has), and only when he has switched them on to Telegram (`api.telegram.org`) and to the `claude` program (his own account). A server that does not answer leaves the
   last data on screen and a quiet line saying so; a post that fails moves nothing.
 
 - **Nothing nags.** No scores, streaks or warnings; the only settings are the ones on the cog's screen (sound starts muted and is his to turn on); the only timer is the one you
@@ -712,7 +722,7 @@ runs on the local list.
   unless `TLON_HOUSE_GATE=required` (the home machine sets it), which makes it red.
 - `mise run house:soak` (about 7 minutes quiet, up to twice that loaded; its own deadline is 15 minutes and the task wraps it in `timeout 1000`, so a caller's wrapper needs at least that) — ten simulated hours of the person and the pets on the grid with random
   state changes (nobody on a blocked cell, nobody walking in place, the person always settles), the
-  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock and the day's rhythm in the room, the TV hacks drawn, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), the contract (`soak_contract.gd`, section `contract`: every case of `home_contract.json`, the server's `/api/home/*` and `GET /api/settings` as it answers them, run against the local backend; a case marked with a `gap` must still differ, so closing a gap fails the soak until its mark is deleted; the gap list is the contract's `gaps`), the weather (`soak_weather.gd`: degrees, the card's days, the j1 reader, the address, the pace and the switch, against a stub of wttr.in), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`; the task fails when an `ERROR` or `SCRIPT ERROR` line comes before it (the engine's own `ERROR` leak lines at exit, printed after it, are not counted).
+  closet's composition over every ready-made recipe, decorating (placement rules, reachability from the door, random layouts walked on, saving and loading, the pointer work), the cards (each opens from its hit area, one at a time, none over a menu), the hero look, every layer file reachable from the closet, the knock and the day's rhythm in the room, the TV hacks drawn, the POST and GET routes against a local stub, and the forms (each request body, local times across midnight and month ends, the server's refusals, delete's second click, plan order, what now, the calendar's repeats), the settings (file, precedence, names, the second clicks, the address check) and the chat (history, told reminders and their buttons, unread, blockers), the calendar feed (`soak_calendar.gd`: the address kept at 0600, a fetch from a stub feed host, a failure keeping the last copy, the local routes over it; `logic_calendar.gd` holds the server's feed, Outlook, `clean` and `Day` tests as cases of `ics.gd`), and the two helpers (`soak_talk.gd`: Claude reading against a fake `claude` script in a temp dir; `soak_telegram.gd`: the bot against a stub of Telegram's API on the same local server; neither real service is ever reached), the contract (`soak_contract.gd`, section `contract`: every case of `home_contract.json`, the server's `/api/home/*` and `GET /api/settings` as it answers them, run against the local backend; a case marked with a `gap` must still differ, so closing a gap fails the soak until its mark is deleted; the gap list is the contract's `gaps`), the weather (`soak_weather.gd`: degrees, the card's days, the j1 reader, the address, the pace and the switch, against a stub of wttr.in), and the four looks (`soak_looks.gd`: tables that resolve and load, no art falls back, the settings and `--plain`, no glow by day, weather inside the glass, a cast played once, the font's coverage, the pack list, and the frame cost of plain against all four on, printed). Stdout ends `SOAK OK`; the task fails when an `ERROR` or `SCRIPT ERROR` line comes before it (the engine's own `ERROR` leak lines at exit, printed after it, are not counted).
 - `mise run house:art-pack` / `mise run house:build -- windows|mac|linux|all` — the art the house can open, packed to
   `~/.cache/tlon/house-dist/house-art.zip` (`-- --list` prints the files only), and a build of the house per platform
   with it inside (Windows and Linux: one file; the Mac app ad-hoc signed by the export, nothing added to it after; the art raw in the pck), zipped as

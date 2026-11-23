@@ -42,6 +42,8 @@ var sure := Sure.new()
 # the reader that runs the claude program and the Telegram bot (`telegram.gd`); set by main.gd
 var claude: RefCounted
 var phone: Node
+# the calendar feed (`calendar_feed.gd`)
+var calendar: Node
 
 var _name: LineEdit
 var _birth: LineEdit
@@ -86,6 +88,10 @@ var _tg_reached: Label
 var _tg_at: LineEdit
 var _tg_morning: LineEdit
 var _tg_off: Button
+var _cal_link: LineEdit
+var _cal_say: Label
+var _cal_state: Label
+var _cal_off: Button
 var _claude_on: Button
 var _claude_box: VBoxContainer
 var _claude_cmd: LineEdit
@@ -302,6 +308,7 @@ func _ready() -> void:
 	_talk_box = VBoxContainer.new()
 	_talk_box.add_theme_constant_override("separation", 7)
 	col.add_child(_talk_box)
+	_calendar_section(_talk_box)
 	_telegram_section(_talk_box)
 	_claude_section(_talk_box)
 
@@ -422,6 +429,52 @@ func url_result(ok: bool) -> void:
 
 func _head(parent: Control, text: String) -> void:
 	parent.add_child(Paper.section(text.substr(0, 1).to_upper() + text.substr(1)))
+
+
+func _calendar_section(box: VBoxContainer) -> void:
+	_head(box, "Calendar")
+	_quiet(box).text = (
+		"Paste your calendar's secret .ics link (Google: Settings, your calendar, \"Secret address in"
+		+ " iCal format\"). The house reads it every 15 minutes and only reads."
+	)
+	var r := _flow(box)
+	_cal_link = Paper.edit("the calendar's link", r)
+	_cal_link.secret = true
+	_cal_link.text_submitted.connect(func(_t: String) -> void: _cal_connect())
+	Paper.chip("Connect", r, _cal_connect)
+	_cal_say = _quiet(box)
+	_cal_state = _quiet(box)
+	_cal_off = Paper.chip("Remove", _flow(box), _cal_disconnect)
+
+
+func _cal_connect() -> void:
+	if calendar == null:
+		return
+	_cal_say.text = "connecting..."
+	calendar.connect_feed(
+		_cal_link.text,
+		func(line: String) -> void:
+			_cal_say.text = "" if line == "ok" else line
+			if line == "ok":
+				_cal_link.text = ""
+	)
+
+
+func _cal_disconnect() -> void:
+	if calendar != null and sure.ask("cal"):
+		calendar.disconnect_feed()
+		_cal_say.text = ""
+
+
+func _cal_lines() -> void:
+	if calendar == null:
+		return
+	if not calendar.has_url():
+		_cal_state.text = "no calendar connected"
+	elif calendar.problem != "":
+		_cal_state.text = "connected; " + calendar.problem
+	else:
+		_cal_state.text = "connected"
 
 
 func _telegram_section(box: VBoxContainer) -> void:
@@ -701,14 +754,15 @@ func _refresh() -> void:
 	_tg_on.set_pressed_no_signal(bool(settings.value("telegram")))
 	_tg_box.visible = _tg_on.button_pressed
 	_tg_lines()
+	_cal_lines()
 	_claude_on.set_pressed_no_signal(bool(settings.value("claude")))
 	_claude_box.visible = _claude_on.button_pressed
 	_claude_lines()
-	for l in [_tg_say, _tg_reached, _claude_say, _claude_last]:
+	for l in [_tg_say, _tg_reached, _cal_say, _claude_say, _claude_last]:
 		l.visible = l.text != ""
 	_found.text = "%d of %d found" % [home.eggs.found.size(), home.eggs.CATALOGUE.size()]
 	_chat_n.text = "%d messages" % home.chat.messages.size()
-	for pair in [[_forget, "forget", "Forget them all"], [_reset, "reset", "Reset the room to how it came"], [_clear, "clear", "Clear"], [_tg_off, "tg", "Disconnect"]]:
+	for pair in [[_forget, "forget", "Forget them all"], [_reset, "reset", "Reset the room to how it came"], [_clear, "clear", "Clear"], [_tg_off, "tg", "Disconnect"], [_cal_off, "cal", "Remove"]]:
 		(pair[0] as Button).text = "sure?" if sure.armed(pair[1]) else pair[2]
 
 

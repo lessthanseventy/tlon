@@ -4,12 +4,15 @@ extends "res://backend.gd"
 # `reader` (`reader_rules.gd`; anything with `read(text, context) -> reading` can stand in front).
 const LocalList := preload("res://local_list.gd")
 const ReaderRules := preload("res://reader_rules.gd")
+const CalendarFeed := preload("res://calendar_feed.gd")
 
 const E_NOW := "skip is ids joined by commas, minutes a number"
 # the server's defaults of the knobs the settings screen reads
 const KNOBS := [["home_morning_at", "08:30"], ["home_list_at", "17:30"], ["home_review_on", "sun"]]
 
 var list: RefCounted
+# the calendar feed (`calendar_feed.gd`); null answers no meetings
+var calendar: Node
 var reader: RefCounted = ReaderRules.new()
 # when set (`reader_claude.gd`), a loose line is asked of it first; `reader` reads what it cannot
 var claude: RefCounted
@@ -124,11 +127,13 @@ func _agenda_route(id: int, action: String, body: Dictionary) -> Dictionary:
 
 func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 	if p.size() == 2 and p[1] == "home":
-		return {"code": 200, "body": list.status()}
+		var status: Dictionary = list.status()
+		status["meetings"] = [] if calendar == null else calendar.meetings()
+		return {"code": 200, "body": status}
 	if p.size() == 3 and p[1] == "home" and p[2] == "pets":
 		return {"code": 200, "body": {}}
 	if p.size() == 3 and p[1] == "home" and p[2] == "meetings":
-		return {"code": 200, "body": []}
+		return _meetings_between(query)
 	if p.size() == 3 and p[1] == "home" and p[2] == "now":
 		var skip: Variant = _skip_of(query)
 		if skip == null:
@@ -137,6 +142,17 @@ func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 	if p.size() == 2 and p[1] == "settings":
 		return {"code": 200, "body": {"knobs": _knobs(), "restart_pending": false}}
 	return _nowhere()
+
+
+func _meetings_between(query: String) -> Dictionary:
+	var q := {}
+	for pair in query.split("&", false):
+		q[pair.get_slice("=", 0)] = pair.get_slice("=", 1)
+	var from := str(q.get("from", ""))
+	var to := str(q.get("to", ""))
+	if not CalendarFeed.range_ok(from, to):
+		return {"code": 400, "body": {"error": CalendarFeed.E_RANGE}}
+	return {"code": 200, "body": [] if calendar == null else calendar.between(from, to)}
 
 
 func _nowhere() -> Dictionary:
