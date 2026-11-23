@@ -128,6 +128,14 @@ kill -KILL -- "-$group" 2>/dev/null
 job X 0
 expect "once the group is gone the next check runs" "$(starts | grep -c X)" "1"
 
+# a check that finishes but leaves a process in its group: the queue ends it, the next check runs
+fresh
+CHECKS_LABEL=L "$here/checks-queue.sh" bash -c "echo start L >>'$log'; sleep 43 >/dev/null 2>&1 &" 2>>"$err"
+expect "a check's leftover is gone when its queue exits" "$(pgrep -f 'sleep 43' | wc -l | tr -d ' ')" "0"
+job M 0
+expect "…and the next check runs, not refused" "$(starts | grep -c M)" "1"
+pkill -f 'sleep 43' 2>/dev/null
+
 # a lock file that cannot be opened is a different refusal: exit 2
 fresh
 XDG_RUNTIME_DIR="$tmp/missing" job Y 0

@@ -130,4 +130,6 @@ trap 'stop_group 143' TERM
 trap 'stop_group 130' INT
 trap 'stop_group 129' HUP
 wait "$child"
+# what the check left in its group would otherwise refuse every check after it (exit 75 above)
+stop_group "$?"
 
