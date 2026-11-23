@@ -85,6 +85,7 @@ class Bot:
 	var sent: Array = []
 	var attempts := 0
 	var fail := 0
+	var gone := 0
 	var next_message := 100
 	var next_update := 1
 
@@ -140,6 +141,13 @@ class Bot:
 				var from := int(params.get("offset", 0))
 				updates = updates.filter(func(u): return int(u["update_id"]) >= from)
 				result = updates.duplicate()
+			"editMessageText":
+				if int(params.get("message_id", 0)) == gone:
+					return {
+						"code": 400,
+						"body":
+						{"ok": false, "description": "Bad Request: message to edit not found"}
+					}
 			"sendMessage":
 				result = {"message_id": next_message}
 				sent.append({"mid": next_message, "params": params})
@@ -677,6 +685,26 @@ func _daily(base: String, bot: Bot) -> void:
 		true,
 		"a refused edit is tried again on the next change"
 	)
+	edits = bot.named("editMessageText").size()
+	n = bot.sent.size()
+	bot.gone = int(tg.card["mid"])
+	st["open"] = [_row(1, "buy milk"), _row(4, "pay rent"), _row(6, "water plants")]
+	tg.sync([])
+	await s._until(func() -> bool: return bot.sent.size() == n + 1)
+	await s._until(func() -> bool: return int(tg.card["mid"]) == int(bot.sent.back()["mid"]))
+	var resent: String = bot.sent.back()["params"]["text"]
+	_eq(
+		[bot.named("editMessageText").size() - edits, "water plants" in resent],
+		[1, true],
+		"a card whose message is gone is sent anew, not edited again"
+	)
+	tg.sync([])
+	await _settle()
+	_eq(bot.named("editMessageText").size() - edits, 1, "and the new message is not retried")
+	bot.gone = 0
+	tg.card["mid"] = mid
+	tg._save()
+	st["open"] = [_row(1, "buy milk"), _row(4, "pay rent")]
 	st["open"] = [_row(1, "buy milk"), _row(4, "pay rent")]
 	tg.stop()
 	var tg2 := _tg(base, [], taps)

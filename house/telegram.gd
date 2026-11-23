@@ -997,9 +997,13 @@ func _card_refresh() -> void:
 			"text": text.left(4000),
 			"reply_markup": keys
 		},
-		func(ok: bool, _result: Variant, why: String, _http: int) -> void:
-			if not (ok or "not modified" in why) and str(card.get("sent", "")) == sent:
-				card["sent"] = ""
+		func(ok: bool, _result: Variant, why: String, http: int) -> void:
+			if ok or "not modified" in why or str(card.get("sent", "")) != sent:
+				return
+			card["sent"] = ""
+			if http == 400 and "not found" in why:
+				_send_card(st, now, 0)
+			else:
 				_save()
 	)
 
