@@ -332,9 +332,9 @@ defmodule Server.PRLandingTest do
       cut = fn _, _ -> {:error, {:interrupted, "killed, exit 143"}} end
 
       assert {:error, {:interrupted, _}} = land(ctx, gate: cut)
-      refute posts(ctx) =~ "143"
+      refute posts(ctx) =~ "exit 143"
       assert {:error, {:interrupted, _}} = land(ctx, gate: cut, last: true)
-      assert posts(ctx) =~ "143"
+      assert posts(ctx) =~ "exit 143"
     end
 
     test "a fetch that keeps losing the ref lock is interrupted, for the queue to try again; said only on the last attempt",
