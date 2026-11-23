@@ -80,6 +80,56 @@ func pet_said(who: String, text: String, now: float = Time.get_unix_time_from_sy
 	add(who, text, {"t": now})
 
 
+# Your move in the chat: each open item is said once, as a message with its buttons (`move` is the
+# item's key, `buttons` is [[label, choice]]); a message whose item is no longer open is marked
+# with how it was settled ("go", "no", "answer") or "gone" when its cause went away.
+func sync_moves(open: Array, outcomes: Dictionary) -> void:
+	var said := {}
+	var live := {}
+	for m in messages:
+		if m.has("move"):
+			said[m["move"]] = true
+	for item in open:
+		live[item["key"]] = true
+		if not said.has(item["key"]):
+			add("home", _move_text(item), {"move": item["key"], "buttons": _move_buttons(item)})
+	var any := false
+	for m in messages:
+		if m.has("move") and not m.has("done") and not live.has(m["move"]):
+			m["done"] = str(outcomes.get(m["move"], "gone"))
+			any = true
+	if any:
+		_save()
+
+
+# the key of the item said last that is still waiting, "" when none is
+func last_move() -> String:
+	for i in range(messages.size() - 1, -1, -1):
+		if messages[i].has("move") and not messages[i].has("done"):
+			return str(messages[i]["move"])
+	return ""
+
+
+static func _move_text(item: Dictionary) -> String:
+	var text := "▲ " + str(item["text"])
+	if item["kind"] == "ask":
+		var options: Array = item["options"]
+		var numbered: Array = []
+		for i in options.size():
+			numbered.append("%d %s" % [i + 1, options[i]])
+		text += "\n" + " · ".join(numbered)
+	return text
+
+
+static func _move_buttons(item: Dictionary) -> Array:
+	if item["kind"] == "ask":
+		var out: Array = []
+		for i in item["options"].size():
+			out.append([str(i + 1), i + 1])
+		return out
+	return [["looks good" if item["kind"] == "look_at" else "go", "go"], ["no", "no"]]
+
+
 func slip(title: String, labels: Array) -> void:
 	add("home", "%s: %s" % [title, ", ".join(labels)] if not labels.is_empty() else title)
 

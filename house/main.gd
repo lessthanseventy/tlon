@@ -143,7 +143,7 @@ func _ready() -> void:
 	_sidebar.move_settled.connect(_settle_move)
 	_sidebar.check_requested.connect(_check_server)
 	_sidebar.money_ui.forecast_wanted.connect(_fetch_forecast)
-	_sidebar.money_ui.ask_wanted.connect(_ask_money)
+
 	_sidebar.money_ui.seen_wanted.connect(_notice_seen)
 	_sidebar.form_submitted.connect(
 		func(req: Dictionary) -> void: _write(req["path"], req["body"], _form_saved)
@@ -724,28 +724,6 @@ func _notice_seen(key: String) -> void:
 		_post("/api/home/money/notices/seen", {"key": key}, func(_r, _c, _b) -> void: pass)
 
 
-# a question about the money: the server's model reads it, so it may take a while; the demo answers
-# with the forecast it has
-func _ask_money(text: String, thread: String, gen: int) -> void:
-	var view = _sidebar.money_ui
-	if _demo:
-		var staged: Dictionary = Money.staged_forecast(_money_spec, _room.home.today())
-		var answer := {"reply": "Here are the days ahead.", "figures": staged, "thread": "demo"}
-		get_tree().create_timer(1.0).timeout.connect(
-			func() -> void: view.got_reply(gen, true, 200, answer)
-		)
-		return
-	var body := {"text": text}
-	if thread != "":
-		body["thread"] = thread
-	_post(
-		"/api/home/money/ask",
-		body,
-		func(reached: bool, code: int, parsed: Variant) -> void:
-			view.got_reply(gen, reached, code, parsed),
-		60.0
-	)
-
 
 # demo meetings are `{title, mins, tentative}` with `in_min` (minutes from now), `tomorrow`
 # (local "HH:MM") or `in_days` (and `from`, or `all_day`), so the demo never goes stale: the
@@ -796,6 +774,7 @@ func _apply(data: Dictionary) -> void:
 	_room.home.set_data(_data)
 	var listed: Array = _room.home.things.moves.map(func(m: Dictionary) -> Variant: return m["key"])
 	_settling = _settling.filter(func(k: String) -> bool: return k in listed)
+	_room.home.chat.sync_moves(_data["moves"], data.get("moves_settled", {}))
 	if _forecast_arg != null:
 		_room.home.set_forecast(_forecast_arg)
 	elif not _backend.local:
@@ -1496,6 +1475,8 @@ func _tell(text: String, done: Callable, via: String = "", kept: Callable = Call
 			reply = body["reply"]
 		if reached:
 			chat.add("home", reply, marks)
+			if body is Dictionary and body.get("open") is String:
+				OS.shell_open(body["open"])
 			if kept.is_valid():
 				kept.call(_made(body), reply)
 			if _demo:
@@ -1514,7 +1495,10 @@ func _tell(text: String, done: Callable, via: String = "", kept: Callable = Call
 			func() -> void: finished.call(true, 200, {"reply": "to do: " + text})
 		)
 	else:
-		_post("/api/home", {"text": text}, finished, 40.0)
+		var sent := {"text": text}
+		if chat.last_move() != "" and via == "":
+			sent["last"] = chat.last_move()
+		_post("/api/home", sent, finished, 60.0)
 
 
 # the row the answer to a jot carries, {} when it made none; a note's row has no kind

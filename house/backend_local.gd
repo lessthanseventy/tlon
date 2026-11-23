@@ -10,6 +10,8 @@ const ReaderRules := preload("res://reader_rules.gd")
 const CalendarFeed := preload("res://calendar_feed.gd")
 const Bank := preload("res://bank.gd")
 const Ask := preload("res://ask.gd")
+const ChatRoute := preload("res://chat_route.gd")
+const ChatList := preload("res://chat_list.gd")
 const AskModel := preload("res://ask_model.gd")
 const BankUtil := preload("res://bank_util.gd")
 
@@ -31,6 +33,7 @@ var started: Array = []
 # the operator's bank, read-only (`bank.gd`), and the questions asked about it (`ask.gd`)
 var bank := Bank.new()
 var money_ask := Ask.new()
+var _money_thread := ""
 
 
 func _init() -> void:
@@ -88,12 +91,71 @@ func send(path: String, body: Dictionary, cb: Callable, _timeout: float = 6.0) -
 			_model()
 		)
 		return
+	if path == "/api/home" and text.strip_edges() != "" and _chat(text, body, cb):
+		return
 	if claude != null and path == "/api/home" and text.strip_edges() != "":
 		claude.ask(
 			text, _context(), func(reading: Dictionary) -> void: _deliver(cb, _tell(text, reading))
 		)
 		return
 	_deliver.call_deferred(cb, _route("POST", path, body))
+
+
+# A line the chat answers from the house's own state, true when it did: an item of Your move settled
+# in words (`last` is the key of the one said last), a question about the money or about the list.
+# Any other line is a tell, as before.
+func _chat(text: String, body: Dictionary, cb: Callable) -> bool:
+	var open: Array = list.moves.open_items()
+	var shown := {}
+	for m in open:
+		if m["key"] == str(body.get("last", "")):
+			shown = m
+	var settle := ChatRoute.settle(text, shown, open)
+	if not settle.is_empty():
+		var said: Dictionary = list.moves.settle(settle["key"], settle["choice"])
+		var out := {"reply": str(said.get("ok", said.get("error", "")))}
+		if said.has("open"):
+			out["open"] = said["open"]
+		_answered(cb, text, out)
+		return true
+	match ChatRoute.asks(text):
+		"money":
+			money_ask.ask(
+				text,
+				_money_thread,
+				func(answer: Dictionary) -> void:
+					_money_thread = str(answer["thread"])
+					_answered(cb, text, {"reply": answer["reply"]}),
+				_model()
+			)
+			return true
+		"list":
+			_list_answer(text, cb)
+			return true
+	return false
+
+
+func _answered(cb: Callable, text: String, body: Dictionary) -> void:
+	replied.emit(text, body["reply"])
+	_deliver(cb, {"code": 200, "body": body})
+
+
+func _list_answer(text: String, cb: Callable) -> void:
+	var facts := ChatList.facts(list)
+	var plain := ChatList.plain(facts)
+	var model := _model()
+	if not model.is_valid():
+		_answered.call_deferred(cb, text, {"reply": plain})
+		return
+	model.call(
+		ChatList.prompt(text, facts),
+		func(ok: bool, said: String) -> void:
+			_answered(
+				cb,
+				text,
+				{"reply": said.strip_edges() if ok and said.strip_edges() != "" else plain}
+			)
+	)
 
 
 func check(_url: String, cb: Callable) -> void:

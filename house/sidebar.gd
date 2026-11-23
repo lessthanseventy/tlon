@@ -167,6 +167,7 @@ func setup(the_home, claude: RefCounted, phone: Node) -> void:
 	chat_view.setup(home.chat, home)
 	chat_view.sent.connect(func(text: String) -> void: chat_sent.emit(text))
 	chat_view.acted.connect(func(id: int, what: String) -> void: chat_acted.emit(id, what))
+	chat_view.moved.connect(settle_move)
 	chat_view.mode_wanted.connect(_chat_mode_wanted)
 	outer.add_child(chat_view)
 	_apply()

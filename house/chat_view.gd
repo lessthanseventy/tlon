@@ -5,6 +5,7 @@ extends PanelContainer
 # sends and answers.
 signal sent(text: String)
 signal acted(id: int, what: String)
+signal moved(key: String, choice: Variant)
 signal mode_wanted(mode: String)
 
 const Paper := preload("res://paper.gd")
@@ -26,6 +27,9 @@ const DID := {
 	"tomorrow": "moved to tomorrow",
 	"delete": "deleted",
 	"gone": "dealt with",
+	"go": "done",
+	"no": "dropped",
+	"answer": "answered",
 }
 
 var chat
@@ -226,7 +230,10 @@ func pointer(event: InputEvent) -> void:
 				scroll(-WHEEL)
 			MOUSE_BUTTON_LEFT:
 				var at := _hit_at(event.position)
-				if at >= 0:
+				if at >= 0 and _hits[at].has("key"):
+					if acting < 0:
+						moved.emit(_hits[at]["key"], _hits[at]["choice"])
+				elif at >= 0:
 					press(int(_hits[at]["id"]), str(_hits[at]["what"]))
 
 
@@ -282,15 +289,27 @@ func _build(width: float) -> void:
 		var box := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, inner, SIZE)
 		var h := box.y + 2.0 * PAD.y
 		var extra := 0.0
-		if bell:
+		var acts: bool = bell or m.has("move")
+		if acts:
 			extra = 18.0 if m.has("done") else 32.0
 		var head := 14.0 if m["who"] in ["cat", "dog"] else 0.0
 		var w := minf(maxw, box.x + 2.0 * PAD.x + (18.0 if bell else 0.0))
-		if bell and not m.has("done"):
+		if acts and not m.has("done"):
 			w = maxw
 		var x := width - w if m["who"] == "me" else 0.0
 		_items.append(
-			{"m": m, "y": y, "x": x, "w": w, "h": h + extra, "head": head, "text": text, "bell": bell, "inner": inner}
+			{
+				"m": m,
+				"y": y,
+				"x": x,
+				"w": w,
+				"h": h + extra,
+				"head": head,
+				"text": text,
+				"bell": bell,
+				"acts": acts,
+				"inner": inner
+			}
 		)
 		y += head + h + extra + 14.0 + GAP
 	if reading:
@@ -348,7 +367,7 @@ func _paint_message(c: Control, it: Dictionary, sy: float) -> void:
 	if it["bell"]:
 		_bell(c, Vector2(box.position.x + PAD.x + 6.0, box.position.y + PAD.y + 9.0))
 	c.draw_multiline_string(font, Vector2(tx, ty), it["text"], HORIZONTAL_ALIGNMENT_LEFT, it["inner"], SIZE, -1, Paper.INK)
-	if it["bell"]:
+	if it["acts"]:
 		_actions(c, m, box)
 	var stamp := _stamp(float(m["t"])) + (" · from the phone" if m.get("via") == "phone" else "")
 	var sw := font.get_string_size(stamp, HORIZONTAL_ALIGNMENT_LEFT, -1, SMALL).x
@@ -381,14 +400,17 @@ func _actions(c: Control, m: Dictionary, box: Rect2) -> void:
 		)
 		return
 	var x := box.position.x + PAD.x
-	var id := int(m["id"])
-	for b in BUTTONS:
+	var id := int(m.get("id", -1))
+	for b in m["buttons"] if m.has("move") else BUTTONS:
 		var label: String = b[0]
 		if b[1] == "delete" and sure.armed("del:%d" % id):
 			label = "Delete for good?"
 		var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, Fonts.SMALL).x + 14.0
 		var r := Rect2(x, y, w, 22.0)
-		_hits.append({"rect": r, "id": id, "what": b[1]})
+		var hit := {"rect": r, "id": id, "what": b[1]}
+		if m.has("move"):
+			hit = {"rect": r, "key": m["move"], "choice": b[1]}
+		_hits.append(hit)
 		var lit: bool = _hover == _hits.size() - 1 and acting < 0
 		var ink := Paper.QUIET if acting >= 0 else Paper.INK
 		match b[1]:

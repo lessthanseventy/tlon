@@ -2,12 +2,9 @@ extends RefCounted
 
 # The Money view: what is available and what savings hold beside it, the days to the next deposit
 # with each expected charge and deposit on its date and one sentence of the lowest point, the
-# subscriptions, what the bank thinks is worth a look, and a line to ask about the money. It reads
-# `home.things.money` and the forecast `main.gd` fetches when the view opens; a question goes out
-# through `ask_wanted` and its answer comes back through `got_reply`. A draft and the last answer
-# are kept here, not in the controls, so the view can be built again.
+# subscriptions and what the bank thinks is worth a look; a question about the money is asked in the
+# chat. It reads `home.things.money` and the forecast `main.gd` fetches when the view opens.
 signal forecast_wanted(gen: int)
-signal ask_wanted(text: String, thread: String, gen: int)
 signal seen_wanted(key: String)
 
 # notices drawn before "and N more"
@@ -27,14 +24,6 @@ const RISE := Color("b07d2a")
 # "idle", "loading", "ok", "none" (the server has nothing stored) or "error"
 var fstate := "idle"
 var forecast := {}
-# the last question and its answer: {q, reply?, figures?}
-var asked := {}
-var waiting := false
-var thread := ""
-# one line over the asking when it did not go
-var say := ""
-var draft := ""
-var focus := false
 # a call that comes back after the view was reset is not for this one
 var gen := 0
 
@@ -51,12 +40,6 @@ func reset() -> void:
 	gen += 1
 	fstate = "idle"
 	forecast = {}
-	asked = {}
-	waiting = false
-	thread = ""
-	say = ""
-	draft = ""
-	focus = false
 
 
 # the view was just opened: ask for the forecast
@@ -89,29 +72,9 @@ func seen(key: String) -> void:
 	seen_wanted.emit(key)
 
 
-func got_reply(for_gen: int, reached: bool, code: int, body: Variant) -> void:
-	if for_gen != gen:
-		return
-	waiting = false
-	if reached and code == 200 and body is Dictionary and body.get("reply") is String:
-		asked["reply"] = body["reply"]
-		asked["figures"] = body.get("figures")
-		thread = str(body.get("thread", thread))
-		return
-	asked = {}
-	if not reached:
-		say = "Couldn't reach tlon, so nothing was asked."
-	elif code == 400 and body is Dictionary and body.get("error") is String:
-		say = "Couldn't ask: %s." % body["error"]
-	else:
-		say = "tlon answered %d, so nothing came back." % code
-
-
 # what the view shows, so it is built again only when that changes
 func signature() -> String:
-	return JSON.stringify(
-		[home.things.money, fstate, forecast, asked, waiting, say, _bank_proposals(), home.today()]
-	)
+	return JSON.stringify([home.things.money, fstate, forecast, _bank_proposals(), home.today()])
 
 
 func _bank_proposals() -> Array:
@@ -288,36 +251,7 @@ func _look(box: VBoxContainer) -> void:
 
 func _ask(box: VBoxContainer) -> void:
 	Views.heading(box, "Ask")
-	if not asked.is_empty():
-		_indented(box, Views.quiet(str(asked["q"]), Fonts.SMALL))
-	if waiting:
-		_indented(box, Views.quiet("Asking...", Fonts.BODY))
-	elif asked.has("reply"):
-		_indented(box, Blocks.wrapped(str(asked["reply"]), Fonts.BODY, Paper.INK))
-		var shown := Money.forecast_of(asked.get("figures"))
-		if not shown.is_empty():
-			_days(box, shown)
-	if say != "":
-		_indented(box, Blocks.wrapped(say, Fonts.SMALL, Paper.WARM))
-	var edit := Paper.edit("ask about your money", box)
-	edit.text = draft
-	edit.text_changed.connect(func(t: String) -> void: draft = t)
-	edit.focus_entered.connect(func() -> void: focus = true)
-	edit.text_submitted.connect(
-		func(text: String) -> void:
-			var q := text.strip_edges()
-			if q == "" or waiting:
-				return
-			asked = {"q": q}
-			say = ""
-			draft = ""
-			waiting = true
-			focus = true
-			edit.clear()
-			ask_wanted.emit(q, thread, gen)
-	)
-	if focus:
-		edit.grab_focus.call_deferred()
+	_indented(box, Views.quiet("ask in the chat", Fonts.BODY))
 
 
 # the days ahead as a row of cells: weekday, date, and a bar for each charge and deposit

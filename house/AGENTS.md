@@ -236,13 +236,13 @@ runs on the local list.
   `notices` `[{key, kind, text, why}]`, absent from an older server: a row each under Now, the first three and "and N
   more", a quiet "seen" that clears the row at once and posts `{key}` to `POST /api/home/money/notices/seen`; a
   failed post brings it back with the next forecast; nothing drawn, no heading, when there are none), Worth a look (the
-  proposals of `GET /api/home` with `source` "bank", add and no as on Home) and a line to ask: `POST
-  /api/home/money/ask {text, thread?}` answers `{reply, figures, thread}`, the thread kept until the view is left, a
-  `figures` that holds a forecast (or an afford answer's `with`) drawn as the same strip. The forecast is
+  proposals of `GET /api/home` with `source` "bank", add and no as on Home) and "ask in the chat" where its ask line
+  was: a question about the money goes through the chat (below) to `POST /api/home/money/ask {text, thread?}`'s
+  engine, `{reply, figures, thread}`. The forecast is
   `GET /api/home/money/forecast` (`main.gd` `_fetch_forecast`; null body: "No forecast yet."). Home's Today has one
   row when a charge is due within `Money.SOON` days (`Money.today_row` "Rent $1,200 due Fri", the others counted under it by `Money.today_more`, "and 1 more"). Money is formatted only by `Money.fmt` (`fmt_whole` for an estimate);
   there are no budgets, category charts, totals or scores. `soak_money.gd` (section `money`) is its stub server, the
-  states, the view, the ask and the room without money.
+  states, the view, the pointer to the chat and the room without money.
 - **Money over the local list** (the operator's own, optional): with a Plaid token present the house reads the bank
   itself, read-only, and answers `money` of `GET /api/home`, `GET /api/home/money/forecast`, `POST
   /api/home/money/notices/seen` and `POST /api/home/money/ask` as the server does. `bank.gd` (a node `backend_local.gd`
@@ -439,9 +439,20 @@ runs on the local list.
   Done / In an hour / Tomorrow / Delete (the item view's routes through `_act`; a repeating one asks twice) that
   become a quiet line once used, the day's banners, and now and then a pet's bubble (not twice in ten minutes), marked
   with the pet's name. A message that arrives while it is closed puts a small dot on the phone until it opens. The
-  last 300 are kept in `user://house_chat.json` (`{"messages": [{t, who: me|home|cat|dog, text, done?, via?}]}`, `via` "phone" on a line from Telegram and its reply, a
+  last 300 are kept in `user://house_chat.json` (`{"messages": [{t, who: me|home|cat|dog, text, done?, via?, move?, buttons?}]}`, `via` "phone" on a line from Telegram and its reply, a
   reminder also `id` and `told_at`), never in a scripted or staged run. A question the server holds for him is not
-  shown: the house has no route that lists them. `--chat "talk,reminder,acted,pet,phone,reading,fail|empty"` and `--unread` stage it.
+  shown: the house has no route that lists them. **The chat is the orchestrator** over the local list
+  (`chat_route.gd`, code deciding, never a model): `backend_local.gd` `_chat` answers a line of `POST /api/home`
+  before the reader sees it. A bare "go", "no" or "looks good" settles the item said last (`main.gd` `_tell` sends
+  its key as `last`, `chat.last_move`), a number answers an ask shown last, "no to the Spotify one" the one open
+  non-ask whose text has "Spotify"; a line settling nothing is a tell as before. A question (a `?` or a question
+  word) with a money word goes to `ask.gd` (the model plans, code computes, the model phrases; the thread is
+  kept by the backend), one with a list word ("what's left this week") is answered from the open things, what is
+  waited on and the next 7 days (`chat_list.gd`; haiku phrases them, with no model the plain list is the answer).
+  Each open item of Your move is said once as a message with its buttons (`chat.sync_moves`, from every home
+  read: `move` the key, `buttons` `[[label, choice]]`, go / no, looks good / no, or an ask's numbers under its
+  options written out) and marked done / dropped / answered / dealt with when it leaves the list, wherever it was
+  settled; a button posts the same `/api/home/moves/settle` as the view. `logic_chat.gd` holds the rules. `--chat "talk,reminder,acted,pet,phone,reading,fail|empty"` and `--unread` stage it.
 - **One place for the list's calls**: `main.gd` `_post`, `_write`, `_act`, `_tell` and `_refresh` carry every
   write and the notepad/chat line; the polls (`_poll`, `_slow_poll`, `_pets_ask`, `_watch_weather`, `_ask_now`) are plain
   GETs there too. All of them are `Backend.fetch(route, cb, timeout)` and `Backend.send(route, body, cb, timeout)`,

@@ -1,8 +1,8 @@
 extends RefCounted
 
-# The soak's checks of the piggy bank and the Money view over a stub that answers the forecast and
-# the ask as the server does: the three states of the envelope, the click, the view, a short balance
-# said calmly, the bank's proposals, the ask line with its reply, its figures and its error, Home's
+# The soak's checks of the piggy bank and the Money view over a stub that answers the forecast
+# as the server does: the three states of the envelope, the click, the view, a short balance
+# said calmly, the bank's proposals, the asking sent to the chat, Home's
 # Today row, and the room without money (the server says null, the house's own list). The rules
 # without a scene are `logic_money.gd`.
 const Money := preload("res://money.gd")
@@ -67,9 +67,6 @@ var h
 var sb
 var mv
 var _fspec: Variant = FORECAST
-var _ask_error := ""
-var _thread := ""
-var _figures := true
 
 
 func _init(soak, the_main) -> void:
@@ -90,7 +87,6 @@ func run() -> void:
 	await _proposals()
 	await _notices()
 	await _ask()
-	await _ask_failed()
 	await _today()
 	await _row_fits()
 	await _cell()
@@ -116,14 +112,6 @@ func answer(method: String, path: String, _body: Variant) -> Variant:
 		return {"code": 200, "body": out}
 	if method == "POST" and path == "/api/home/money/notices/seen":
 		return {"code": 200, "body": {"ok": true}}
-	if method == "POST" and path == "/api/home/money/ask":
-		if _ask_error != "":
-			return {"code": 400, "body": {"error": _ask_error}}
-		var figures: Variant = Money.staged_forecast(FORECAST, h.today()) if _figures else null
-		return {
-			"code": 200,
-			"body": {"reply": "Here are the days ahead.", "figures": figures, "thread": _thread}
-		}
 	return null
 
 
@@ -171,12 +159,6 @@ func _buttons(text: String) -> Array:
 		func(b: Button) -> bool: return b.text == text
 	)
 
-
-func _edit() -> Variant:
-	for e in sb._dyn.find_children("*", "LineEdit", true, false):
-		if e.placeholder_text == "ask about your money":
-			return e
-	return null
 
 
 func _posted(path: String) -> Array:
@@ -443,66 +425,13 @@ func _notices() -> void:
 	_fspec = FORECAST
 
 
-func _ask_line(text: String) -> void:
-	var edit: Variant = _edit()
-	s._check(edit != null, "the view has an ask line")
-	if edit == null:
-		return
-	edit.text = text
-	edit.text_submitted.emit(text)
-
-
 func _ask() -> void:
 	await _stage(DUE)
 	await _open()
-	_thread = "t-7"
-	_ask_line("can I afford a chair?")
-	s._check(mv.waiting, "a question waits for its answer")
-	await s._until(func() -> bool: return mv.asked.has("reply"), "the reply comes")
-	await _sync()
-	var texts := _texts(sb._dyn)
+	s._check("ask in the chat" in _texts(sb._dyn), "the view sends the asking to the chat")
 	s._check(
-		"can I afford a chair?" in texts and "Here are the days ahead." in texts,
-		"the question and its reply show"
+		sb._dyn.find_children("*", "LineEdit", true, false).is_empty(), "and has no ask line"
 	)
-	s._check(
-		_strips().size() == 2,
-		"the figures' forecast is drawn as a second strip (%d)" % _strips().size()
-	)
-	var body: Dictionary = JSON.parse_string(_posted("/api/home/money/ask")[0][2])
-	s._check(
-		body == {"text": "can I afford a chair?"},
-		"the first question carries no thread: %s" % str(body)
-	)
-	s._check(mv.thread == "t-7", "the thread is kept")
-	_figures = false
-	_ask_line("and a lamp?")
-	await s._until(
-		func() -> bool: return _posted("/api/home/money/ask").size() == 2,
-		"the second question goes"
-	)
-	await s._until(func() -> bool: return not mv.waiting, "its reply comes")
-	await _sync()
-	body = JSON.parse_string(_posted("/api/home/money/ask")[1][2])
-	s._check(body.get("thread") == "t-7", "the next question names the thread: %s" % str(body))
-	s._check(_strips().size() == 1, "an answer without figures draws no strip")
-	_figures = true
-	sb.back()
-	s._check(mv.asked.is_empty() and mv.thread == "", "leaving the view forgets the talk")
-
-
-func _ask_failed() -> void:
-	await _open()
-	_ask_error = "the model is busy"
-	_ask_line("anything?")
-	await s._until(func() -> bool: return not mv.waiting, "the error comes")
-	await _sync()
-	s._check(
-		"Couldn't ask: the model is busy." in _texts(sb._dyn),
-		"a plain error line: %s" % str(_texts(sb._dyn))
-	)
-	s._check(not mv.asked.has("reply"), "and no reply")
-	_ask_error = ""
 	sb.back()
 
 

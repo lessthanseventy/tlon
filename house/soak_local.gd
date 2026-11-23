@@ -1,6 +1,7 @@
 extends "res://logic_local.gd"
 
 const BackendLocal := preload("res://backend_local.gd")
+const Ask := preload("res://ask.gd")
 
 # The routes with the local list behind them, as the soak's stub is behind the server's: it logs
 # every request as the stub does and answers an error when the soak asks for one. With `frozen` it
@@ -154,6 +155,50 @@ func _frozen_pass(main) -> void:
 	s._state = server_state
 
 
+# the chat's lines answered from the house's state: an item settled in words, a question about the
+# money and one about the list; any other line still a tell
+func _chat_lines() -> void:
+	var plain := BackendLocal.new()
+	plain.setup("", Callable(self, "_clock"), 0.0, false)
+	plain.list.moves.sweep(
+		[
+			{
+				"key": "later",
+				"kind": "proposal",
+				"source": "list",
+				"text": "Put the lamp on someday",
+				"why": "w",
+				"action": {"do": "add", "kind": "todo", "text": "the lamp"},
+				"date": ""
+			}
+		]
+	)
+	plain.list.add({"kind": "todo", "text": "buy milk"})
+	var got: Array = []
+	var say := func(text: String, last: String) -> void:
+		plain.send(
+			"/api/home",
+			{"text": text, "last": last},
+			func(_r: bool, code: int, b: Variant) -> void: got.append([code, b.get("reply")])
+		)
+	say.call("how much is rent?", "")
+	await s._until(func(): return got.size() == 1, "the money question is answered")
+	_eq(got[0], [200, Ask.NO_BANK], "a money question goes to the money engine")
+	say.call("what's left this week?", "")
+	await s._until(func(): return got.size() == 2, "the list question is answered")
+	s._check("Open:" in str(got[1][1]), "a list question is answered from the list: %s" % str(got[1]))
+	say.call("go", "other")
+	await s._until(func(): return got.size() == 3, "a go for no item is read")
+	s._check(
+		plain.list.moves.open_items().size() == 1, "a go naming no open item settles nothing"
+	)
+	say.call("go", "later")
+	await s._until(func(): return got.size() == 4, "the go is answered")
+	_eq(got[3], [200, "Added: the lamp."], "go settles the item shown")
+	_eq(plain.list.moves.open_items().size(), 0, "and it is no longer waiting")
+	plain.free()
+
+
 func _wait() -> void:
 	await s._answered(_main)
 
@@ -193,6 +238,7 @@ func _real_pass(main) -> void:
 	plain.fetch("/api/home/pets", func(_r: bool, code: int, b: Variant) -> void: pets.append([code, b]))
 	await s._until(func(): return not pets.is_empty(), "the pets' answer arrives")
 	_eq(pets, [[200, {}]], "the pets' lines: an empty batch, so the house's own are used")
+	await _chat_lines()
 	main._poll()
 	await _wait()
 	main._open_add()
@@ -206,7 +252,7 @@ func _real_pass(main) -> void:
 	_eq(_texts(main._data["coming"]), ["stretch"], "the reminder is coming")
 	main._send_jot("what's left")
 	await _wait()
-	_eq(main._sidebar.jot._said.text, "Still open: buy milk.\nToday: stretch at 15:00.", "what's left is read back as the reply")
+	_eq(main._sidebar.jot._said.text, "Coming up in the next 7 days: stretch (15:00). Open: buy milk.", "what's left is answered from the list")
 	main._send_jot("done buy milk")
 	await _wait()
 	_eq([main._sidebar.jot._said.text, main._data["open"].size(), main._data["done_week"]], ["Done: buy milk.", 0, 1], "done by a loose line")

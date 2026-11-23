@@ -347,7 +347,8 @@ func _conversation() -> void:
 	v._submit("hello house")
 	s._check(v.reading and chat.messages[-1]["who"] == "me", "sending shows his line and a reading state")
 	await _wait()
-	s._check(not v.reading and chat.messages[-1]["text"] == s.reply_for("hello house") and chat.messages[-1]["who"] == "home", "the reply replaces reading")
+	var said: Array = chat.messages.filter(func(m: Dictionary) -> bool: return not m.has("move"))
+	s._check(not v.reading and said[-1]["text"] == s.reply_for("hello house") and said[-1]["who"] == "home", "the reply replaces reading")
 	s._check(s._seen("POST", "/api/home", "hello house"), "the line is posted to /api/home")
 	s._check(s._count("/api/home") > before, "the status is read again at once")
 	s._fail_jot = true
