@@ -252,13 +252,16 @@ runs on the local list.
   itself, read-only, and answers `money` of `GET /api/home`, `GET /api/home/money/forecast`, `POST
   /api/home/money/notices/seen` and `POST /api/home/money/ask` as the server does. `bank.gd` (a node `backend_local.gd`
   holds) keeps the transactions of the last 800 days, the sync cursor, the accounts and the cleared notices in
-  `user://house_bank.json` (0600, never the token), refreshes at start and every 15 minutes through `bank_plaid.gd`
+  `user://house_bank.json` (0600, never the token; a store of an older `format` syncs again from no cursor, which
+  replaces the rows), refreshes at start and every 15 minutes through `bank_plaid.gd`
   (the only two Plaid calls: `/transactions/sync` and `/accounts/get`; no link flow, so the one link and the ten the
   account allows are never touched; `mise run home:bank:link` stays the server's), and runs the engine: `bank_recurring.gd`
   (series, ended, new, price change; rent through Flex is one bill under its names, its installments monthly series),
   `bank_projection.gd` (forecast, afford, what-if, history, budget: what is spare a day to the next deposit after the
   bills before it and a day's cushion, today's everyday spend, the two weeks' top merchants, served as the local
-  forecast's `budget` and the ask's `budget` lookup; no clock, `today` is passed in; everyday spending is the
+  forecast's `budget` and the ask's `budget` lookup; no clock, `today` is passed in; a transaction's day is the day it
+  was made (Plaid's `authorized_date`), and a card payment or a transfer to the person's own savings or investments
+  (by Plaid's `personal_finance_category`) is never spending; everyday spending is the
   median week of what is in no series, the mean and the occasional beside it, and the lowest-point sentence says it), `bank_util.gd` (dates are `YYYY-MM-DD` strings, a stable sort, `money`). The credentials are read at each
   call, never kept or logged: env `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ACCESS_TOKEN`, else
   `$XDG_RUNTIME_DIR/agenix/plaid-client-id|plaid-secret|plaid-access-token`, else `user://house_plaid.json`

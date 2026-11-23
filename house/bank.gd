@@ -22,6 +22,8 @@ const Projecting := preload("res://bank_projection.gd")
 const U := preload("res://bank_util.gd")
 
 const STORE := "user://house_bank.json"
+# a store of another format is read again from the first sync, so every row has what `_row` keeps
+const FORMAT := 2
 const KEEP_DAYS := 800
 const PAGE := 500
 const PAGES := 40
@@ -79,7 +81,10 @@ func load_file() -> void:
 			var row: Dictionary = r.duplicate()
 			row["cents"] = int(row["cents"])
 			rows[row["id"]] = row
-	for key in ["cursor", "accounts", "as_of", "summary", "seen"]:
+	var keys := ["accounts", "as_of", "summary", "seen"]
+	if int(d.get("format", 0)) == FORMAT:
+		keys.append("cursor")
+	for key in keys:
 		if d.has(key):
 			state[key] = d[key]
 	if state.has("accounts"):
@@ -93,6 +98,7 @@ func _save() -> void:
 	if not persist:
 		return
 	var out := state.duplicate()
+	out["format"] = FORMAT
 	out["transactions"] = rows.values()
 	var tmp := store + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
@@ -324,7 +330,7 @@ func _over(result: Dictionary, cb: Callable) -> void:
 func _sync(start: String, retries: int, cb: Callable) -> void:
 	_pages(
 		start,
-		{"cursor": start, "rows": [], "removed": []},
+		{"cursor": start, "rows": [], "removed": [], "full": start == ""},
 		PAGES,
 		func(r: Dictionary) -> void:
 			if r.get("error") == "plaid" and r.get("code") == MUTATION and retries > 0:
@@ -382,8 +388,14 @@ static func _row(t: Variant) -> Array:
 			"name": t.get("name"),
 			"merchant": t.get("merchant_name"),
 			"pending": t.get("pending") == true,
+			"made": t.get("authorized_date"),
+			"category": _category(t.get("personal_finance_category")),
 		}
 	]
+
+
+static func _category(pfc: Variant) -> Variant:
+	return pfc.get("detailed") if pfc is Dictionary else null
 
 
 static func _account(a: Variant) -> Variant:
@@ -411,6 +423,8 @@ func _apply(changes: Dictionary, got: Dictionary, cb: Callable) -> void:
 		if account != null:
 			accounts.append(account)
 	var day := today()
+	if changes["full"]:
+		rows = {}
 	for r in changes["rows"]:
 		rows[r["id"]] = r
 	for id in changes["removed"]:

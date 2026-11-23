@@ -10,12 +10,13 @@ extends RefCounted
 # out negative, money in positive. Events start tomorrow, the horizon is capped at 180 days, and
 # only live series count. An expected charge or deposit not posted by today stays on tomorrow as
 # overdue for a grace of half its rhythm (a yearly one 30 days), then is skipped and named.
-# Everyday spending is what is in no series: the posted outflows of the spendable accounts over the
-# last 90 days. The expected daily figure is the median week of them over seven (their mean with
-# under three weeks of history), so a few lumps (cash, a transfer to someone) do not spread over
-# every day; `mean_daily_cents` is the plain average and `occasional_daily_cents` what it is above
-# the expected. The low and high lines are the 25th and 75th percentile (nearest rank) of rolling
-# 30-day totals, never above or below the expected, equal to it under 30 days of history.
+# Everyday spending is what is in no series and no move between the person's own accounts: the
+# posted outflows of the spendable accounts over the last 90 days. The expected daily figure is the
+# median week of them over seven (their mean with under three weeks of history), so a few lumps
+# (cash, a transfer to someone) do not spread over every day; `mean_daily_cents` is the plain
+# average and `occasional_daily_cents` what it is above the expected. The low and high lines are
+# the 25th and 75th percentile (nearest rank) of rolling 30-day totals, never above or below the
+# expected, equal to it under 30 days of history.
 
 const Recurring := preload("res://bank_recurring.gd")
 const U := preload("res://bank_util.gd")
@@ -191,7 +192,13 @@ static func budget(data: Dictionary, today: String) -> Dictionary:
 	for s in ctx["out"]:
 		bills_keys[s["key"]] = true
 	var spends: Array = ctx["txns"].filter(
-		func(t): return t["cents"] > 0 and not bills_keys.has(t["key"]) and t["date"] <= today
+		func(t):
+			return (
+				t["cents"] > 0
+				and not t["own"]
+				and not bills_keys.has(t["key"])
+				and t["date"] <= today
+			)
 	)
 	var spent := U.sum(
 		spends.filter(func(t): return t["date"] == today).map(func(t): return t["cents"])
@@ -432,7 +439,7 @@ static func _everyday(mine: Array, out: Array, today: String) -> Dictionary:
 	var from := U.add(today, 1 - span)
 	var totals := {}
 	for t in posted:
-		if t["cents"] > 0 and not keys.has(t["key"]) and t["date"] >= from:
+		if t["cents"] > 0 and not t["own"] and not keys.has(t["key"]) and t["date"] >= from:
 			totals[t["date"]] = int(totals.get(t["date"], 0)) + int(t["cents"])
 	var per_day: Array = []
 	for i in span:

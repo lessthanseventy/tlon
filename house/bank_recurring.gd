@@ -34,10 +34,18 @@ const BANDS := [
 const LABEL_MAX := 40
 const RENT := ["flex", "flexible finance"]
 const RENT_LABEL := "Rent (Flex)"
+const OWN := [
+	"LOAN_PAYMENTS_CREDIT_CARD_PAYMENT",
+	"TRANSFER_OUT_SAVINGS",
+	"TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS",
+	"TRANSFER_OUT_ACCOUNT_TRANSFER",
+]
 
 
-# a stored row {id, account_id, cents, date, name, merchant, pending} as a transaction, null when
-# its id, amount, date or label is not usable
+# a stored row {id, account_id, cents, date, name, merchant, pending, made, category} as a
+# transaction, null when its id, amount, date or label is not usable. Its date is the day it was
+# made (`made`, Plaid's authorized date) when known, else the day it posted; `own` is a move
+# between the person's own accounts (a card payment, a transfer to savings): not spending.
 static func txn(row: Dictionary) -> Variant:
 	var id: Variant = row.get("id")
 	var cents: Variant = row.get("cents")
@@ -55,11 +63,13 @@ static func txn(row: Dictionary) -> Variant:
 		return null
 	if _rent(key(label)):
 		label = RENT_LABEL
+	var made: Variant = row.get("made")
 	return {
 		"id": id,
 		"account_id": row.get("account_id"),
 		"cents": cents,
-		"date": date,
+		"date": made if U.valid(made) else date,
+		"own": row.get("category") in OWN,
 		"key": key(label),
 		"label": label,
 		"pending": row.get("pending") == true,

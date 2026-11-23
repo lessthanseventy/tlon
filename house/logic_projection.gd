@@ -602,6 +602,34 @@ func _budget() -> void:
 	_eq([none["until"], none["safe_daily_cents"]], [null, null], "no deposit seen, no figure")
 	_eq(none["spent_today_cents"], 2800, "today's spend still")
 
+	var moves := [
+		_txn(
+			TODAY,
+			20000,
+			"Direct Debit: Capital One Card",
+			{"category": "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"}
+		),
+		_txn(TODAY, 30000, "Transfer to Savings", {"category": "TRANSFER_OUT_SAVINGS"}),
+		_txn(TODAY, 429, "7-Eleven", {"made": U.add(TODAY, -1), "pending": true}),
+	]
+	var moved := _budget_of(all + [moves])
+	_eq(
+		moved["spent_today_cents"],
+		2800,
+		"a card payment, a transfer to savings and yesterday's purchase posted today are not today's"
+	)
+	_eq(
+		moved["weeks"][0]["total_cents"],
+		b["weeks"][0]["total_cents"] + 429,
+		"the week counts the purchase, not the moves between accounts"
+	)
+	_eq(
+		moved["weeks"][0]["top"].any(func(m): return m["name"].begins_with("Direct Debit")),
+		false,
+		"a card payment is not where it went"
+	)
+	_eq(moved["cushion_cents"], b["cushion_cents"], "nor in the everyday rate")
+
 	var this: Dictionary = b["weeks"][0]
 	_eq([this["from"], this["to"]], ["2026-11-16", TODAY], "this week runs from Monday")
 	_eq(

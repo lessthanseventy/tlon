@@ -250,6 +250,32 @@ func _refresh() -> void:
 	_eq(bank.state["cursor"], "c2", "the cursor kept")
 	_eq(bank.state["accounts"][0]["available"], 290050, "balances in cents")
 	_eq(bank.state["as_of"], "2026-11-20T12:00:00Z", "as of now")
+
+	var card := _txn("t3", 200.0, "2026-11-20", "Capital One")
+	card["authorized_date"] = "2026-11-19"
+	card["personal_finance_category"] = {
+		"primary": "LOAN_PAYMENTS", "detailed": "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"
+	}
+	var full := [
+		[
+			200,
+			{"next_cursor": "c3", "has_more": false, "added": [card], "modified": [], "removed": []}
+		]
+	]
+	bank.state.erase("cursor")
+	bank.plaid.http = _stub(full, [_plaid_account()], [])
+	bank.refresh()
+	_eq(bank.rows.keys(), ["t3"], "a sync from no cursor replaces the rows")
+	_eq(
+		[bank.rows["t3"]["made"], bank.rows["t3"]["category"]],
+		["2026-11-19", "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"],
+		"the day it was made and its category are kept"
+	)
+	_eq(
+		[bank.transactions()[0]["date"], bank.transactions()[0]["own"]],
+		["2026-11-19", true],
+		"read by the day it was made, a move between own accounts"
+	)
 	bank.free()
 
 
@@ -335,6 +361,20 @@ func _persistence() -> void:
 	_eq(again.state["accounts"][0]["current"], 300000, "an amount stays whole")
 	_eq(again.state["seen"], ["bank:new:abc"], "the cleared notices read back")
 	_eq(JSON.stringify(again.state).contains("tok-789"), false, "the token is in no file")
+	var old: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(STORE))
+	_eq(int(old["format"]), Bank.FORMAT, "the store says its format")
+	old.erase("format")
+	old["cursor"] = "c9"
+	var f := FileAccess.open(STORE, FileAccess.WRITE)
+	f.store_string(JSON.stringify(old))
+	f.close()
+	again.load_file()
+	_eq(
+		again.state.has("cursor"),
+		false,
+		"a store of an older format is synced again from the start"
+	)
+	_eq(again.rows.size(), bank.rows.size(), "its rows kept until then")
 	_wipe_bank()
 	again.free()
 	bank.free()
