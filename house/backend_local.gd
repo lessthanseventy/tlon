@@ -3,6 +3,8 @@ extends "res://backend.gd"
 # The routes answered by the house's own list (`local_list.gd`), with the loose line read by
 # `reader` (`reader_rules.gd`; anything with `read(text, context) -> reading` can stand in front).
 const LocalList := preload("res://local_list.gd")
+const Moves := preload("res://moves.gd")
+const MOVES_STORE := "user://house_moves.json"
 const ReaderRules := preload("res://reader_rules.gd")
 const CalendarFeed := preload("res://calendar_feed.gd")
 const Bank := preload("res://bank.gd")
@@ -41,6 +43,8 @@ func setup(path: String, clock: Callable, bias: float, keep: bool = true) -> voi
 	list = LocalList.new(path, clock, bias)
 	list.keep = keep
 	list.load_file()
+	list.moves = Moves.new(MOVES_STORE if keep else "", clock, list)
+	list.moves.load_file()
 	if not keep:
 		list.path = ""
 	var first := func(row: Dictionary) -> void: started.append(row)

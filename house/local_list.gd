@@ -38,6 +38,7 @@ var notice := ""
 # a list that cannot be read is moved aside only by a house that keeps its list
 var keep := true
 var fresh := false
+var moves: RefCounted = null
 
 
 func _init(the_path: String = "", the_clock: Callable = Callable(), the_bias: float = 0.0) -> void:
@@ -353,7 +354,7 @@ func status() -> Dictionary:
 		"agendas": _piles("agenda").map(_agenda_row),
 		"people": _people(),
 		"door": _door_row(),
-		"proposals": [],
+		"moves": moves.open_items() if moves != null else [],
 	}
 	for t in things():
 		var s := _state(t)
@@ -756,6 +757,15 @@ func later(id: int, body: Dictionary) -> Dictionary:
 	t["nudges"] = 0
 	save()
 	return _ok({"id": id, "text": t["text"], "due_at": t["due_at"]})
+
+
+func put_off(id: int) -> Dictionary:
+	var t := _find(id, ["open"])
+	if t.is_empty() or not str(t["kind"]) in ["todo", "reminder"]:
+		return _gone()
+	t["state"] = "someday"
+	save()
+	return _ok(_row(t))
 
 
 func answer(id: int, body: Dictionary) -> Dictionary:

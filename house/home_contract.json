@@ -11,6 +11,7 @@
     "Door": {"id": "int|null", "notes": "@Pile"},
     "Meeting": {"title": "str", "starts_at": "str", "ends_at": "str", "tentative": "bool", "all_day": "bool", "day": "str"},
     "Proposal": {"id": "int", "source": "str", "text": "str", "why": "str", "url": "str|null"},
+    "Move": {"key": "str", "kind": "str", "source": "str", "text": "str", "why?": "str", "options?": ["str"], "action?": "obj", "date?": "str", "at": "str"},
     "Day": {"date": "str", "high_c": "num", "low_c": "num", "kind": "str", "wet": "any"},
     "Item": {"name": "str", "amount": "int", "on": "str"},
     "Account": {"id": "str", "name": "str", "type": "str|null", "subtype": "str|null", "balance": "int|null", "available": "int|null", "spendable": "bool"},
@@ -18,14 +19,14 @@
     "Status": {
       "open": ["@Row"], "coming": ["@Row"], "notes": ["str"], "note_rows": ["@NoteRow"], "projects": ["@Project"],
       "waiting": ["@Waiting"], "someday": ["@Row"], "done": [{"text": "str", "done_at": "str|null"}], "done_week": "int",
-      "agendas": ["@Agenda"], "people": ["@Person"], "door": "@Door", "proposals": ["@Proposal"],
+      "agendas": ["@Agenda"], "people": ["@Person"], "door": "@Door", "proposals?": ["@Proposal"], "moves?": ["@Move"],
       "forecast": ["@Day"], "meetings": ["@Meeting"], "money": {"$or": ["@Money", "null"]}
     },
     "Closed": {"id": "int", "text": "str", "due_at": "str|null", "done_at?": "str|null", "dropped_at?": "str|null"}
   },
   "gaps": {
     "status-forecast": {"what": "GET /api/home has no forecast: the server sends up to three days of the weather (Server.Office.Weather.forecast, wttr.in)", "needs": "network", "size": "S"},
-    "proposals": {"what": "POST /api/home/proposals/:id/take and /dismiss are 404 locally and `proposals` is always []; the server's come from sources (Server.Home.Sources: mail, calendar, bank)", "needs": "network, secret", "size": "L", "untested": true},
+    "proposals": {"what": "POST /api/home/proposals/:id/take and /dismiss are 404 locally and `proposals` is not sent: the local list answers `moves` instead (`moves.gd`, Your move); the server's come from sources (Server.Home.Sources: mail, calendar, bank)", "needs": "network, secret", "size": "L", "untested": true},
     "pets": {"what": "GET /api/home/pets answers {} locally (the house uses its own voices.gd lines); the server answers the model-written lines by pet then occasion", "needs": "llm", "size": "M", "untested": true},
     "say-reader": {"what": "POST /api/home {text}: the server reads the line with a model (Server.Home.Inbox.keep) and answers its words; the local backend reads with reader_rules.gd (or the claude helper when set) and words the reply itself", "needs": "llm", "size": "L", "untested": true},
     "office-weather": {"what": "GET /api/office's `weather` ({kind, temp_c, desc} | null) has no local route: the house reads wttr.in itself (wttr.gd) when `weather` is on", "needs": "network", "size": "S", "untested": true}

@@ -72,7 +72,7 @@ saved choice), `tv.gd` and `hacks.gd` (the TV and its screen hacks), `view.gd` (
 `decorate.gd` (the catalogue and the pointer work of decorating), `pet_view.gd` (the pet view) and `pet_now.gd` (its "right now" phrase). `drive.gd` (`--drive`: the live house driven over TCP). `soak.gd` is the scripted check, `logic.gd` the logic-only one.
 
 Where the list lives is one `Backend` (`backend.gd`): `backend_http.gd` is the tlon server, `backend_local.gd`
-the house's own file (`local_list.gd` the list, `reader_rules.gd` the loose-line reader; agendas are there too,
+the house's own file (`local_list.gd` the list, `reader_rules.gd` the loose-line reader, `moves.gd` Your move: the items waiting on a go, a no or an answer, kept in `user://house_moves.json` (0600) and answered as `moves` of the local status in place of `proposals`; agendas are there too,
 added through the shelf only: the reader has none, and an agenda's pile is told once, 15 minutes ahead, to the
 house's own Telegram chat as reminders are, `told_agenda`). `main.gd` holds one and
 never asks which. The sections below describe the server's list; with `where` = `local` (below) the same room
