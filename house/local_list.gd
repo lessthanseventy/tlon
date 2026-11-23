@@ -297,7 +297,7 @@ func _plain_row(t: Dictionary) -> Dictionary:
 	var parent := {}
 	if t.get("project_id") != null:
 		parent = _find(int(t["project_id"]), ["open"])
-	return {
+	var row := {
 		"id": int(t["id"]),
 		"kind": t["kind"],
 		"text": t["text"],
@@ -307,6 +307,9 @@ func _plain_row(t: Dictionary) -> Dictionary:
 		"told_at": t.get("told_at"),
 		"project": null if parent.is_empty() else {"id": int(parent["id"]), "text": parent["text"]},
 	}
+	if t.get("list") != null:
+		row["list"] = t["list"]
+	return row
 
 
 func _steps(project_id: int, states: Array = ["open"]) -> Array:
@@ -480,6 +483,14 @@ func add(body: Dictionary) -> Dictionary:
 			every = every_of(body["every"])
 			if every == "":
 				text = _line(E_EVERY)
+	var listed: Variant = null
+	if not _err(text) and body.get("list") != null:
+		if kind not in ["todo", "reminder"] or body.get("project") != null:
+			text = _line("list is for a to-do or reminder")
+		else:
+			listed = _list_name(body["list"])
+			if _err(listed):
+				text = listed
 	if _err(text):
 		return _bad(text["error"])
 	match kind:
@@ -503,7 +514,7 @@ func add(body: Dictionary) -> Dictionary:
 					return _bad("project is a project's id")
 				return _step(int(pid), text)
 		"reminder":
-			var out := _new("reminder", text)
+			var out := _new("reminder", text, {"list": listed})
 			var at := float(due)
 			var anchor: Variant = _anchor(every, iso(at)) if every != "" else null
 			if every != "" and at <= now():
@@ -516,9 +527,23 @@ func add(body: Dictionary) -> Dictionary:
 			return _ok(_row(out))
 	if body.get("project") != null:
 		return _bad("project is for a to-do")
-	var made := _new(kind, text)
+	var made := _new(kind, text, {"list": listed})
 	save()
 	return _ok(_row(made))
+
+
+# the name a person gave a list: trimmed, null when empty, and spelled as the list already
+# there is when one matches ignoring case
+func _list_name(v: Variant) -> Variant:
+	if not v is String:
+		return _line("list is a name")
+	var name: String = v.strip_edges().substr(0, MAX_NAME)
+	if name == "":
+		return null
+	for t in doc["things"]:
+		if t.get("list") != null and str(t["list"]).to_lower() == name.to_lower():
+			return t["list"]
+	return name
 
 
 func _step(project_id: int, text: String) -> Dictionary:
@@ -574,8 +599,17 @@ func edit(id: int, body: Dictionary) -> Dictionary:
 	if final == "reminder" and at == null:
 		if current == "todo" or (t.get("due_at") == null and every != null):
 			return _bad("a reminder needs at")
+	var listed: Variant = null
+	if body.has("list"):
+		if current not in ["todo", "reminder"]:
+			return _bad("list is for a to-do or reminder")
+		listed = _list_name(body["list"])
+		if _err(listed):
+			return _bad(listed["error"])
 	var to_todo := final == "todo" and current == "reminder"
 	var changes := {}
+	if body.has("list"):
+		changes["list"] = listed
 	if text != null:
 		changes["text"] = text
 	if final != current:

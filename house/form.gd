@@ -54,6 +54,9 @@ var _title: Label
 var _kind_row: Container
 var _who_row: Container
 var _who: LineEdit
+var _list_row: Container
+var _list: LineEdit
+var _was_list := ""
 var _text: LineEdit
 var _steps: TextEdit
 var _when: VBoxContainer
@@ -153,6 +156,11 @@ func _ready() -> void:
 	_who_row.add_child(_label("who", Fonts.SMALL, QUIET))
 	_who = _edit("a name", _who_row)
 	_text = _edit("", col)
+	_list_row = HBoxContainer.new()
+	_list_row.add_theme_constant_override("separation", 6)
+	col.add_child(_list_row)
+	_list_row.add_child(_label("list", Fonts.SMALL, QUIET))
+	_list = _edit("Work, School... (optional)", _list_row)
 	_steps = TextEdit.new()
 	_steps.placeholder_text = "the first step, then one more per line"
 	_steps.custom_minimum_size = Vector2(0, 90)
@@ -282,6 +290,7 @@ func _set_kind(k: String) -> void:
 	for key in _kind_chips:
 		(_kind_chips[key] as Button).set_pressed_no_signal(key == k)
 	_who_row.visible = k == "waiting" and id == 0
+	_list_row.visible = k in ["todo", "reminder"] and project == 0
 	_steps.visible = k == "project" and id == 0
 	_when.visible = k == "reminder"
 	_text.placeholder_text = PLACEHOLDERS[k]
@@ -332,12 +341,13 @@ func open_new(preset: Dictionary, today: Dictionary) -> void:
 	_del.visible = false
 	_text.text = ""
 	_who.text = ""
+	_list.text = ""
 	_steps.text = ""
 	_time.text = "09:00"
 	_n.text = ""
 	_set_kind("todo" if project > 0 else kinds[0])
 	var start := {"date": preset.get("date", today), "every": ""}
-	start.merge(_only(preset, ["text", "who", "steps", "time", "every"]), true)
+	start.merge(_only(preset, ["text", "who", "list", "steps", "time", "every"]), true)
 	fill(start)
 	_text.grab_focus()
 	_text.caret_column = _text.text.length()
@@ -352,6 +362,8 @@ func open_edit(row: Dictionary, due: float, today: Dictionary) -> void:
 	var kinds: Array = ["todo", "reminder"] if _was in ["todo", "reminder"] else [_was]
 	_show("Change this", kinds, today)
 	_text.text = str(row["text"])
+	_was_list = "" if row.get("list") == null else str(row["list"])
+	_list.text = _was_list
 	_set_kind(_was)
 	var stamp := {"date": today, "time": "09:00", "every": _was_every}
 	if due >= 0.0:
@@ -384,6 +396,8 @@ func fill(d: Dictionary) -> void:
 		_text.text = str(d["text"])
 	if d.has("who"):
 		_who.text = str(d["who"])
+	if d.has("list"):
+		_list.text = str(d["list"])
 	if d.has("steps"):
 		_steps.text = str(d["steps"])
 	if d.has("time"):
@@ -452,6 +466,8 @@ func request() -> Dictionary:
 		if w.has("error"):
 			return w
 	if id > 0:
+		if kind in ["todo", "reminder"] and _list.text.strip_edges() != _was_list:
+			body["list"] = _list.text.strip_edges()
 		if kind in ["todo", "reminder"] and kind != _was:
 			body["kind"] = kind
 		if kind == "reminder":
@@ -459,6 +475,8 @@ func request() -> Dictionary:
 			body["every"] = w["every"]
 		return {"path": "/api/home/%d/edit" % id, "body": body}
 	body["kind"] = kind if project == 0 else "todo"
+	if kind in ["todo", "reminder"] and project == 0 and _list.text.strip_edges() != "":
+		body["list"] = _list.text.strip_edges()
 	match kind:
 		"reminder":
 			body["at"] = w["at"]
@@ -513,7 +531,7 @@ func finish() -> void:
 func close() -> void:
 	visible = false
 	_busy = false
-	for e in [_text, _who, _time, _n]:
+	for e in [_text, _who, _list, _time, _n]:
 		(e as LineEdit).release_focus()
 	_steps.release_focus()
 

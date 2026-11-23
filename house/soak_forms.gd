@@ -128,6 +128,11 @@ func _bodies() -> void:
 	s._check(body["every"] == "3 month", "every 3 months is sent as 3 month")
 	body = await _send({"kinds": ["todo", "reminder"]}, {"text": "call the vet"})
 	s._check(body == {"kind": "todo", "text": "call the vet"}, "a to-do: %s" % str(body))
+	body = await _send({"kinds": ["todo"]}, {"text": "read chapter 4", "list": " School "})
+	s._check(
+		body == {"kind": "todo", "text": "read chapter 4", "list": "School"},
+		"a to-do with a list: %s" % str(body)
+	)
 	body = await _send({"kinds": ["note"]}, {"text": "wifi is on the fridge"})
 	s._check(body == {"kind": "note", "text": "wifi is on the fridge"}, "a note: %s" % str(body))
 	body = await _send(
@@ -287,6 +292,13 @@ func _edits() -> void:
 	await _wait()
 	body = _sent("/api/home/7/edit", from)
 	s._check(body == {"text": "bins", "kind": "todo"}, "a reminder becomes a to-do: %s" % str(body))
+	h.things.act("edit:8")
+	f.fill({"list": "Work"})
+	from = s._log.size()
+	f.submit()
+	await _wait()
+	body = _sent("/api/home/8/edit", from)
+	s._check(body == {"text": "buy milk", "list": "Work"}, "a list set on a to-do: %s" % str(body))
 	h.things.act("edit:8")
 	f.fill({"text": "buy oat milk", "kind": "todo"})
 	from = s._log.size()

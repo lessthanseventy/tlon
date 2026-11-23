@@ -591,7 +591,10 @@ static func number(c: Dictionary, st: Dictionary, now: float, offset_s: float) -
 		var text := str(r["text"])
 		if r.get("project") is Dictionary:
 			text = "%s: %s" % [r["project"]["text"], text]
-		c["items"].append({"id": int(r["id"]), "text": pair[1] + text})
+		var item := {"id": int(r["id"]), "text": pair[1] + text}
+		if r.get("list") != null:
+			item["list"] = str(r["list"])
+		c["items"].append(item)
 		seen.append(int(r["id"]))
 
 
@@ -633,15 +636,27 @@ static func card_text(c: Dictionary, st: Dictionary, now: float, offset_s: float
 	var date := "%s %d %s" % [WEEKDAYS[d["weekday"]], d["day"], MONTHS[d["month"] - 1]]
 	var evening: bool = c["phase"] == "evening"
 	var live := _live(st)
-	var lines: Array = []
+	var groups := {"": []}
 	for i in c["items"].size():
 		var item: Dictionary = c["items"][i]
 		var id := int(item["id"])
+		var line := ""
 		if c["ticked"].has(id):
 			if not evening:
-				lines.append("%d. ✓ %s" % [i + 1, item["text"]])
+				line = "%d. ✓ %s" % [i + 1, item["text"]]
 		elif live.has(id):
-			lines.append("%d. %s" % [i + 1, item["text"]])
+			line = "%d. %s" % [i + 1, item["text"]]
+		if line != "":
+			var list := str(item.get("list", ""))
+			if not groups.has(list):
+				groups[list] = []
+			groups[list].append(line)
+	var lines: Array = groups[""]
+	for list in groups:
+		if list != "":
+			lines.append(
+				("\n" if not lines.is_empty() else "") + list + "\n" + "\n".join(groups[list])
+			)
 	var parts: Array = []
 	if evening:
 		var done := done_today(st, now, offset_s)

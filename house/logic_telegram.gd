@@ -84,6 +84,30 @@ func _card() -> void:
 		"This evening · Wed 18 Nov\n\nDone today: send photos\n\nStill to do\n1. buy milk\n4. pay rent",
 		"the evening says what was done and what is left, under the same numbers"
 	)
+	var listed := {
+		"open":
+		[
+			{"id": 1, "kind": "todo", "text": "read ch 4", "due_at": null, "list": "School"},
+			_row(2, "buy milk"),
+			{
+				"id": 3,
+				"kind": "todo",
+				"text": "plan fractions",
+				"due_at": null,
+				"list": "Jude's lessons"
+			},
+			{"id": 4, "kind": "todo", "text": "essay", "due_at": null, "list": "School"},
+		],
+		"coming": [],
+		"done": [],
+	}
+	var g := Telegram.new_card("2026-11-18", "morning")
+	Telegram.number(g, listed, now, 0.0)
+	_eq(
+		Telegram.card_text(g, listed, now, 0.0),
+		"Today · Wed 18 Nov\n\nTo do\n2. buy milk\n\nSchool\n1. read ch 4\n4. essay\n\nJude's lessons\n3. plan fractions",
+		"the card groups by list, unlisted first, under one numbering"
+	)
 	var empty := Telegram.new_card("2026-11-18", "morning")
 	var none := {"open": [], "coming": [], "done": []}
 	Telegram.number(empty, none, now, 0.0)

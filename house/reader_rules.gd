@@ -16,6 +16,9 @@ const MONTH_ABBR := [
 	"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ]
 const STOP := ["a", "an", "the", "to", "my", "of", "and", "me"]
+const RESERVED := [
+	"note", "done", "did", "finished", "delete", "forget", "remind me", "waiting on", "list", "today",
+]
 const MORNING := 9
 const TONIGHT := 19
 const DAY_RX := "(sunday|monday|tuesday|wednesday|thursday|friday|saturday)"
@@ -49,6 +52,13 @@ func read(text: String, context: Dictionary) -> Dictionary:
 	m = _m("^(?:delete|forget)(?:\\s*:\\s*|\\s+)(.+)$", line)
 	if m != null:
 		return _find(m.get_string(1), context, "delete")
+	m = _m("^for\\s+([^:]{1,40}?)\\s*:\\s*(.+)$", line)
+	if m == null:
+		m = _m("^([\\p{L}\\p{N}']+(?:\\s[\\p{L}\\p{N}']+)?)\\s*:\\s+(.+)$", line)
+		if m != null and RESERVED.has(m.get_string(1).to_lower()):
+			m = null
+	if m != null:
+		return _listed(m.get_string(1).strip_edges(), m.get_string(2), context)
 	return _timed(line, context)
 
 
@@ -76,6 +86,19 @@ static func _cut(box: Dictionary, pattern: String) -> RegExMatch:
 
 static func _excise(box: Dictionary, m: RegExMatch) -> void:
 	box["s"] = box["s"].substr(0, m.get_start()) + " " + box["s"].substr(m.get_end())
+
+
+# "for school: read chapter 4", "school: read chapter 4": the rest read as any line, in that list
+func _listed(name: String, rest: String, context: Dictionary) -> Dictionary:
+	var reading := read(rest, context)
+	if reading["action"] != "add" or reading["body"]["kind"] not in ["todo", "reminder"]:
+		return reading
+	var body: Dictionary = reading["body"]
+	if body.has("list"):
+		return reading
+	body["list"] = name
+	reading["say"] = "%s (list: %s)" % [str(reading["say"]).trim_suffix("."), name]
+	return reading
 
 
 func _timed(line: String, context: Dictionary) -> Dictionary:

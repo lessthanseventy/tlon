@@ -452,7 +452,7 @@ runs on the local list.
   `--local FILE|starters` stages it, nothing saved; `--tell "line;line"` sends loose lines and opens the chat). The same room runs on `backend_local.gd`: every route of the
   server's list answered on the next frame by `local_list.gd`, a Dictionary kept in `user://house_list.json`
   `{"v": 1, "next_id": N, "things": [...], "agendas": [...]}` (an agenda may carry `kind` "person" with a `birthday`, or "door"; one without is an agenda; a thing: `id kind text state since due_at every every_day told_at nudges
-  project_id who plan done_at hidden_until`; unknown keys, top level or on a thing, are kept; `due_at` is UTC `Z` as
+  project_id who list plan done_at hidden_until`; `list` is a name the person gave a to-do or reminder (Work, School), a field and not a project, sent as `list` on add and edit, spelled as the list already there when one matches ignoring case, empty clears it, and a row has the key only when it is set; unknown keys, top level or on a thing, are kept; `due_at` is UTC `Z` as
   the server's rows). Saved after every change, written to a temp file and renamed over the old one, which stays as
   `house_list.bak.json`; a file that cannot be read is moved aside as `house_list.broken-N.json` and the house starts
   empty, saying so once. The clock is injected (`clock` is the house's `_now_local`), so the soak moves time.
@@ -482,6 +482,7 @@ runs on the local list.
   week"); `note: X` ("Noted: X."), `waiting on WHO for X` or `WHO owes me X` ("Waiting on Dana for the lease. I'll ask
   in 3 days."), `done|did|finished X` and `delete|forget X` ("Done: buy milk.", "Deleted: ..."; the one whose words
   overlap most, a tie is listed and nothing changes, a repeating reminder or a project is left to its card),
+  `for school: X` or `school: X` (one or two words then a colon; not `note`, `done`, `list`...) puts the rest, read as any line, in that list when it is a to-do or reminder,
   `what's left|list|today` (what is open and today's reminders). A line it cannot read a time from stays a to-do with
   the whole line as its text: nothing is dropped.
   **Seams** (what the two helpers below use): the reader is `read(text, context) -> reading` (`context`: `now`,
@@ -527,7 +528,7 @@ runs on the local list.
   message from before a restart is followed only by its own buttons; an older message's Tomorrow, Delete and its
   "Delete for good?" still work). **The day's card** (`daily`, every 20 s; `card_text`, `card_keys` and `number` are
   static, checked in `logic_telegram.gd`): at `telegram_morning_at` by the house clock, or at the next start that day,
-  one message, "Today · Wed 18 Nov", then "To do" numbered: the open things, then the reminders still to come today
+  one message, "Today · Wed 18 Nov", then "To do" numbered (unlisted things first, then each list's under its name, one numbering across them): the open things, then the reminders still to come today
   with their time, each keeping its number for the day (a new one takes the next; a ticked one stays, "2. ✓ …"; one
   put off or deleted loses its line). Under it one "✓ Tick…" button, which swaps the keyboard for the numbers still
   to tick (five a row) and "‹ Back"; a number ticks it. A reply that is only numbers ("2", "2 4 5", "2, 4") ticks

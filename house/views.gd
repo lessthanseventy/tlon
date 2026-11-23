@@ -325,6 +325,8 @@ func item_view(box: VBoxContainer, id: int) -> void:
 	var facts: Array = [KINDS.get(kind, kind)]
 	if item.get("who") != null:
 		facts.append("from " + str(item["who"]))
+	if item.get("list") != null:
+		facts.append(str(item["list"]))
 	if item.get("due_at") != null:
 		facts.append(home._clock(home._due(item)))
 	if item.get("every") != null:

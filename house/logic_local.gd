@@ -59,6 +59,7 @@ func run() -> void:
 	_repeats()
 	_done_and_projects()
 	_edits()
+	_lists()
 	_later_revive_plan()
 	_agendas()
 	_pick()
@@ -535,6 +536,66 @@ func _edits() -> void:
 		[200, 0],
 		"a repeat set on a put-off thing brings it back"
 	)
+
+
+func _lists() -> void:
+	var l := _list()
+	var todo := func(text: String, list: Variant) -> Dictionary:
+		return l.add({"kind": "todo", "text": text, "list": list})
+	var a: Dictionary = todo.call("read chapter 4", " School ")["body"]
+	_eq(a["list"], "School", "a to-do's list is trimmed and kept")
+	_eq(todo.call("essay", "school")["body"]["list"], "School", "spelled as the list there")
+	var r: Dictionary = l.add(
+		{"kind": "reminder", "text": "lesson", "at": "2026-11-20T10:00", "list": "Jude's lessons"}
+	)
+	_eq(r["body"]["list"], "Jude's lessons", "a reminder takes a list")
+	var plain: Dictionary = l.add({"kind": "todo", "text": "buy milk"})["body"]
+	_eq(plain.has("list"), false, "a row with no list has no list key")
+	_eq(todo.call("x", "")["body"].has("list"), false, "an empty list is none")
+	var note := {"kind": "note", "text": "n", "list": "Work"}
+	_line(l.add(note), 400, "list is for a to-do or reminder", "a note has no list")
+	_line(todo.call("x", 3), 400, "list is a name", "a list is a name")
+	var id := int(plain["id"])
+	_eq(l.edit(id, {"list": "Work"})["body"]["list"], "Work", "an edit sets the list")
+	_eq(l.edit(id, {"list": ""})["body"].has("list"), false, "an empty list clears it")
+	var kept: Dictionary = l.edit(int(a["id"]), {"text": "read chapter 5"})
+	_eq(kept["body"]["list"], "School", "an edit of the text keeps it")
+	var n: int = l.add({"kind": "note", "text": "n"})["body"]["id"]
+	_line(l.edit(n, {"list": "Work"}), 400, "list is for a to-do or reminder", "a note's edit")
+	var open: Array = l.status()["open"]
+	_eq(open.filter(func(x): return x.get("list") == "School").size(), 2, "status rows carry it")
+	_reader_lists()
+
+
+func _reader_lists() -> void:
+	var wed := at(2026, 11, 18, 14)
+	for pair in [
+		["for school: read chapter 4", "school"],
+		["School: read chapter 4", "School"],
+		["for School : read chapter 4", "School"],
+	]:
+		var got := _read(wed, pair[0])
+		_eq(
+			[got["action"], got["body"]],
+			["add", {"kind": "todo", "text": "read chapter 4", "list": pair[1]}],
+			"a list named before the colon, as typed: " + pair[0]
+		)
+	var timed := _read(wed, "Work: call the plumber tomorrow at 9")
+	_eq(
+		[timed["body"]["kind"], timed["body"]["list"], timed["body"]["at"]],
+		["reminder", "Work", "2026-11-19T09:00"],
+		"a list and a time"
+	)
+	_eq(
+		_read(wed, "for Jude's lessons: fractions p. 12")["body"]["list"],
+		"Jude's lessons",
+		"a list name may have spaces after for"
+	)
+	_eq(_read(wed, "note: school: x")["body"]["kind"], "note", "note: stays a note")
+	_eq(_read(wed, "done: milk").has("body"), false, "done: is no list")
+	var waiting := _read(wed, "Work: waiting on Dana for the lease")
+	_eq(waiting["body"].has("list"), false, "a waiting-on under a list has none")
+	_eq(_read(wed, "buy milk")["body"].has("list"), false, "a plain line has none")
 
 
 func _later_revive_plan() -> void:
