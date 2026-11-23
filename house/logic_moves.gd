@@ -467,7 +467,9 @@ func _money() -> void:
 	m.sweep(got + asks)
 	_eq(_keys(m), ["short-2026-11-20-rent"], "and never asked again")
 	_eq(m.settle("short-2026-11-20-rent", "go").get("ok"), "Added: Move $120 from savings.", "go")
-	var seen := l.status()["coming"].filter(func(r): return r["text"] == "Move $120 from savings")
+	var seen: Array = l.status()["coming"].filter(
+		func(r): return r["text"] == "Move $120 from savings"
+	)
 	_eq(seen.size(), 1, "a reminder in the list")
 	m.sweep(MovesMoney.sources(120000, _budget([rent], 240000), [], "2026-11-18"))
 	_eq(_keys(m), [], "money arrived: nothing is left")
