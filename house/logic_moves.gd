@@ -5,6 +5,7 @@ extends "res://logic_local.gd"
 const Moves := preload("res://moves.gd")
 const MovesList := preload("res://moves_list.gd")
 const Telegram := preload("res://telegram.gd")
+const MovesMoney := preload("res://moves_money.gd")
 const DAY := 86400.0
 const STORE := "user://soak_moves.json"
 
@@ -22,6 +23,7 @@ func run() -> void:
 	_words()
 	_sources()
 	_money_short()
+	_money()
 
 
 func _moves(l: RefCounted = null, path: String = "") -> RefCounted:
@@ -394,6 +396,81 @@ func _money_short() -> void:
 	_eq(now_open["action"]["text"], now_open["text"], "and so does the to-do its go adds")
 	_eq(now_open["at"], at, "it is the same card, not a new one")
 	_eq(m.sweep(MovesList.money_short(short)), false, "the same shortfall changes nothing")
+
+
+func _budget(bills: Array, savings: int) -> Dictionary:
+	var total := 0
+	for b in bills:
+		total += b["amount_cents"]
+	return {
+		"until": "2026-12-01",
+		"bills": bills,
+		"bills_cents": total,
+		"other_available_cents": savings
+	}
+
+
+func _money() -> void:
+	var rent := {"name": "Rent", "on": "2026-11-20", "amount_cents": 120000}
+	var got := MovesMoney.sources(108000, _budget([rent], 240000), [], "2026-11-18")
+	_eq(got.size(), 1, "a bill the checking cannot pay is one proposal")
+	_eq(got[0]["text"], "Move $120 from savings by Thu", "worded with Money.fmt, by the day before")
+	_eq(
+		got[0]["why"],
+		"Rent $1,200 is due Fri and checking has $1,080",
+		"says the bill and what checking has"
+	)
+	_eq(
+		got[0]["action"],
+		{
+			"do": "add",
+			"kind": "reminder",
+			"text": "Move $120 from savings",
+			"at": "2026-11-18T18:00"
+		},
+		"go is a reminder the evening before, and no more"
+	)
+	_eq(got[0]["date"], "2026-11-19", "dated by the day it is to be moved by")
+	_eq(Telegram.urgent_item(got[0], 0.0), true, "a shortfall rings, as the plain one does")
+	var later := MovesMoney.sources(108000, _budget([rent], 240000), [], "2026-11-10")
+	_eq(later[0]["action"]["at"], "2026-11-18T18:00", "the evening before the day it is due by")
+	_eq(
+		MovesMoney.sources(120000, _budget([rent], 240000), [], "2026-11-18"),
+		[],
+		"a bill the checking covers is nothing"
+	)
+	_eq(
+		MovesMoney.sources(108000, _budget([rent], 5000), [], "2026-11-18"),
+		[],
+		"nothing to propose when savings would not cover it"
+	)
+	_eq(MovesMoney.sources(108000, {}, [], "2026-11-18"), [], "no budget, no proposal")
+	_eq(MovesMoney.sources(null, _budget([rent], 240000), [], "2026-11-18"), [], "no bank, none")
+	var gym := {"name": "Gym", "on": "2026-11-25", "amount_cents": 3000}
+	var two := MovesMoney.sources(110000, _budget([rent, gym], 240000), [], "2026-11-18")
+	_eq(two[0]["text"], "Move $130 from savings by Thu", "all that is missing, by the first bill")
+
+	var l := _list()
+	var m := _moves(l)
+	var notice := {
+		"key": "bank:price:ab:1399",
+		"kind": "price",
+		"text": "Spotify went up from $11.99 to $13.99",
+		"why": "monthly, the last on 3 Nov"
+	}
+	var asks := MovesMoney.sources(108000, {}, [notice], "2026-11-18")
+	_eq(asks[0]["kind"], "ask", "a raised charge is an ask")
+	_eq(asks[0]["options"], ["keep it", "remind me to cancel", "it isn't a bill"], "three ways")
+	m.sweep(got + asks)
+	_eq(m.settle("bank:price:ab:1399", 3).get("ok"), "Noted: it isn't a bill.", "an answer")
+	_eq(m.facts()["bank:price:ab:1399"], "it isn't a bill", "kept as a fact")
+	m.sweep(got + asks)
+	_eq(_keys(m), ["short-2026-11-20-rent"], "and never asked again")
+	_eq(m.settle("short-2026-11-20-rent", "go").get("ok"), "Added: Move $120 from savings.", "go")
+	var seen := l.status()["coming"].filter(func(r): return r["text"] == "Move $120 from savings")
+	_eq(seen.size(), 1, "a reminder in the list")
+	m.sweep(MovesMoney.sources(120000, _budget([rent], 240000), [], "2026-11-18"))
+	_eq(_keys(m), [], "money arrived: nothing is left")
 
 
 func _sources_of(l: RefCounted) -> Array:

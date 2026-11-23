@@ -5,6 +5,7 @@ extends "res://backend.gd"
 const LocalList := preload("res://local_list.gd")
 const Moves := preload("res://moves.gd")
 const MovesList := preload("res://moves_list.gd")
+const MovesMoney := preload("res://moves_money.gd")
 const MOVES_STORE := "user://house_moves.json"
 const ReaderRules := preload("res://reader_rules.gd")
 const CalendarFeed := preload("res://calendar_feed.gd")
@@ -227,13 +228,11 @@ func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 		var now: float = list.now()
 		var stale: float = now - MovesList.STALE_DAYS * 86400.0
 		var sources := MovesList.sources(status, list.iso(now), list.iso(stale), list.bias)
-		var budget: Dictionary = bank.budget()
-		if budget.has("ok"):
-			sources.append_array(MovesList.money_short(budget["ok"]))
+		status["money"] = bank.summary()
+		sources.append_array(_money_moves(status["money"]))
 		list.moves.sweep(sources)
 		status["moves"] = list.moves.open_items()
 		status["meetings"] = [] if calendar == null else calendar.meetings()
-		status["money"] = bank.summary()
 		return {"code": 200, "body": status}
 	if p.size() == 4 and p[1] == "home" and p[2] == "money" and p[3] == "forecast":
 		return _money_forecast(query)
@@ -249,6 +248,18 @@ func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 	if p.size() == 2 and p[1] == "settings":
 		return {"code": 200, "body": {"knobs": _knobs(), "restart_pending": false}}
 	return _nowhere()
+
+
+# Money's moves: the move-from-savings proposal when savings cover the shortfall, else the plain
+# shortfall move, so one shortfall is never two proposals.
+func _money_moves(summary: Variant) -> Array:
+	var budget: Dictionary = bank.budget().get("ok", {})
+	var available: Variant = null if summary == null else summary["available"]
+	var out := MovesMoney.sources(available, budget, bank.notices(), bank.today())
+	var proposed := out.any(func(m): return m["kind"] == "proposal")
+	if not proposed:
+		out.append_array(MovesList.money_short(budget))
+	return out
 
 
 func _meetings_between(query: String) -> Dictionary:
