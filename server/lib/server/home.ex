@@ -298,6 +298,10 @@ defmodule Server.Home do
     end
   end
 
+  @doc "The whole home for the house's import (`Server.Home.Export`): read-only."
+  @spec export() :: map()
+  def export, do: Server.Home.Export.build(via())
+
   defp via, do: Application.get_env(:server, :home_messenger, Server.Home.Telegram).name()
 
   @doc """

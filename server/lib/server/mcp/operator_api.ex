@@ -174,6 +174,7 @@ defmodule Server.MCP.OperatorAPI do
                                          [open to-do/reminder/waiting rows, as in open, whose text, or a waiting-on's who,
                                          names the person as a whole word in any case]}; door is the pile by the door,
                                          {id (nil before the first note), notes: [{id, text, since}]}; agendas holds agendas alone
+      GET    /api/home/export            Server.Home.export; {v, things, agendas, proposals, settings, counts}: every jot (done, dropped too) and pile in the house's own list shape, read-only; the house imports it
       GET    /api/home/now?skip=&minutes=  Server.Home.now; {pick: {id, text, kind, due_at, project, why} | nil, say}: the one open
                                          thing to do now; skip is ids joined by commas, minutes the time there is; 400 on either not numbers
       GET    /api/home/meetings?from=&to=  Server.Home.Day.between; [{title, starts_at, ends_at, tentative, all_day, date}]: the
@@ -658,6 +659,8 @@ defmodule Server.MCP.OperatorAPI do
       |> Map.put(:money, Server.Home.Bank.summary(now: now))
     )
   end
+
+  defp route(conn, "GET", "home", ["export"]), do: json(conn, 200, Server.Home.export())
 
   defp route(conn, "GET", "home", ["meetings"]) do
     q = fetch_query_params(conn).query_params
