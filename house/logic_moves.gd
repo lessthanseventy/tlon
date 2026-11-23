@@ -16,6 +16,7 @@ func run() -> void:
 	_answer()
 	_file()
 	_status()
+	_words()
 
 
 func _moves(l: RefCounted = null, path: String = "") -> RefCounted:
@@ -231,3 +232,26 @@ func _status() -> void:
 	l.moves.sweep([_a("ask"), _p("p")])
 	_eq(l.status()["moves"].map(func(x): return x["key"]), ["ask", "p"], "status answers moves")
 	_eq(l.status().has("proposals"), false, "and not proposals")
+
+
+func _words() -> void:
+	_eq(
+		Moves.says({"do": "add", "kind": "reminder", "text": "x", "at": "2026-11-19T18:00"}),
+		"a reminder Thu 18:00",
+		"a reminder is said with its day and time"
+	)
+	_eq(
+		Moves.says({"do": "add", "kind": "waiting", "text": "x", "who": "S"}),
+		"a waiting-on",
+		"a waiting-on"
+	)
+	_eq(Moves.says({"do": "add", "kind": "todo", "text": "x"}), "a to-do", "a to-do")
+	_eq(Moves.says({"do": "someday", "id": 1}), "someday", "someday")
+	_eq(
+		Moves.says({"do": "day", "id": 1, "at": "2026-11-21T09:00"}),
+		"a reminder Sat 09:00",
+		"a day"
+	)
+	_eq(Moves.says({"do": "open", "url": "https://a"}), "opens the link", "a link")
+	var shown := Moves.shown([_p("p1"), {"key": "l", "kind": "look_at"}, _a("a1"), _p("p2")])
+	_eq(shown.map(func(x): return x["key"]), ["a1", "p1", "p2", "l"], "asks, proposals, look-ats")

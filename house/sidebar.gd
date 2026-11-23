@@ -11,6 +11,7 @@ signal form_acted(id: int, what: String)
 signal jot_submitted(text: String)
 signal chat_sent(text: String)
 signal chat_acted(id: int, what: String)
+signal move_settled(key: String, choice: Variant)
 signal check_requested(url: String)
 signal kept_closet
 signal close_requested
@@ -21,6 +22,8 @@ const IconButton := preload("res://icon_button.gd")
 const Card := preload("res://card.gd")
 const Blocks := preload("res://blocks.gd")
 const Views := preload("res://views.gd")
+const Moves := preload("res://moves.gd")
+const Needs := preload("res://needs.gd")
 const PeopleView := preload("res://people_view.gd")
 const MoneyView := preload("res://money_view.gd")
 const Form := preload("res://form.gd")
@@ -31,6 +34,7 @@ const PetView := preload("res://pet_view.gd")
 const Closet := preload("res://closet.gd")
 const Pets := preload("res://pets.gd")
 const Settings := preload("res://settings.gd")
+const VIEWS_IN_DYN := ["home", "item", "open", "card", "agenda", "people", "door", "money", "moves"]
 const WIDTH := 360
 const SLOT := 28
 const FRAME := Color("2a2530")
@@ -60,6 +64,7 @@ const VIEW_TITLES := {
 	"people": "People",
 	"door": "By the door",
 	"money": "Money",
+	"moves": "Your move",
 }
 
 var home
@@ -67,6 +72,8 @@ var view := "home"
 var arg: Variant = null
 var open_expanded := false
 var proposed_expanded := false
+var moves_expanded := false
+var move_pick := 0
 var notes_expanded := false
 var later_expanded := false
 # the agenda's add line takes the cursor back after a note went in
@@ -94,6 +101,7 @@ var _banner_sig := ""
 var _header: HBoxContainer
 var _back: Control
 var _title: Label
+var _needs: Control
 var _add: Control
 var _cog: Control
 var _close: Control
@@ -179,6 +187,9 @@ func _build_header(outer: VBoxContainer) -> void:
 	_title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_title.clip_text = true
 	_header.add_child(_title)
+	_needs = Needs.new()
+	_needs.pressed.connect(open_moves)
+	_header.add_child(_needs)
 	_add = IconButton.new("plus", "Add (I)", LIGHT, SLOT)
 	_add.pressed.connect(open_add)
 	_header.add_child(_add)
@@ -415,6 +426,56 @@ func open_money() -> void:
 	money_ui.open()
 
 
+func open_moves() -> void:
+	move_pick = 0
+	_switch("moves", null)
+
+
+# a click on an item: from Home it opens Your move, in it the item is the picked one
+func pick_move(key: String, in_view: bool) -> void:
+	if not in_view:
+		open_moves()
+	var items: Array = Moves.shown(home.things.moves)
+	for i in items.size():
+		if items[i]["key"] == key:
+			move_pick = i
+
+
+# a go, a no or an answer on one item of Your move
+func settle_move(key: String, choice: Variant) -> void:
+	move_settled.emit(key, choice)
+
+
+# the keys of the Your move view: j k pick, Enter go, x no, 1-9 answer the picked ask
+func move_key(code: int) -> bool:
+	var items: Array = Moves.shown(home.things.moves)
+	if items.is_empty():
+		return false
+	move_pick = clampi(move_pick, 0, items.size() - 1)
+	var item: Dictionary = items[move_pick]
+	var ask: bool = item["kind"] == "ask"
+	match code:
+		KEY_J, KEY_DOWN:
+			move_pick = mini(move_pick + 1, items.size() - 1)
+		KEY_K, KEY_UP:
+			move_pick = maxi(move_pick - 1, 0)
+		KEY_ENTER, KEY_KP_ENTER:
+			if ask:
+				return true
+			settle_move(str(item["key"]), "go")
+		KEY_X:
+			if ask:
+				return true
+			settle_move(str(item["key"]), "no")
+		_:
+			var n: int = code - KEY_1
+			if n < 0 or n > 8 or not ask:
+				return false
+			if n < item["options"].size():
+				settle_move(str(item["key"]), n + 1)
+	return true
+
+
 func open_settings() -> void:
 	_switch("settings", null)
 	settings_view.open()
@@ -530,7 +591,7 @@ func _apply() -> void:
 	if decorate != null:
 		decorate.visible = view == "decorate"
 	scroll.visible = view != "decorate"
-	_dyn.visible = view in ["home", "item", "open", "card", "agenda", "people", "door", "money"]
+	_dyn.visible = view in VIEWS_IN_DYN
 	_add_root.visible = view in ["add", "edit"]
 	settings_view.visible = view == "settings"
 	pet_view.visible = view == "pet"
@@ -556,6 +617,7 @@ func _process(_dt: float) -> void:
 		_sig = sig
 		_rebuild()
 	_title.text = view_title()
+	_needs.count = home.things.moves.size()
 	_banner_update()
 	_layout()
 
@@ -574,6 +636,8 @@ func _signature() -> String:
 						home.things.people,
 						home.things.money,
 						home.things.proposals,
+						home.things.moves,
+						moves_expanded,
 						proposed_expanded,
 						home.things.pick,
 						home.weather,
@@ -604,6 +668,8 @@ func _signature() -> String:
 			return people_ui.signature(view)
 		"money":
 			return money_ui.signature()
+		"moves":
+			return JSON.stringify([home.things.moves, move_pick])
 	return ""
 
 
@@ -629,6 +695,8 @@ func _rebuild() -> void:
 			people_ui.door_view(_dyn)
 		"money":
 			money_ui.build(_dyn)
+		"moves":
+			_views.moves_view(_dyn)
 	_restore_scroll.call_deferred(keep)
 
 

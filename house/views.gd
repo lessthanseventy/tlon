@@ -11,8 +11,10 @@ const Sure := preload("res://sure.gd")
 const Settings := preload("res://settings.gd")
 const Shelf := preload("res://shelf.gd")
 const Money := preload("res://money.gd")
+const Moves := preload("res://moves.gd")
 const OPEN_SHOWN := 6
 const PROPOSED_SHOWN := 3
+const MOVES_SHOWN := 3
 const SHORT := ["jar", "plant", "clock", "found", "globe", "piano", "weather"]
 const KINDS := {
 	"todo": "a to-do",
@@ -73,6 +75,7 @@ func _in_now() -> Array:
 
 
 func home_view(box: VBoxContainer) -> void:
+	_moves(box)
 	_now(box)
 	_today(box)
 	_open(box)
@@ -238,6 +241,74 @@ func _notes(box: VBoxContainer) -> void:
 			var note := Blocks.Row.new(str(n["text"]), "", false)
 			note.pressed.connect(func() -> void: home.things.open_note(n))
 			box.add_child(note)
+
+
+# what waits on a go, a no or an answer: Home's first section, three then "N more..." in place
+func _moves(box: VBoxContainer) -> void:
+	var rows: Array = Moves.shown(home.things.moves)
+	if rows.is_empty():
+		return
+	heading(box, "Your move (%d)" % rows.size())
+	var shown: Array = rows if sb.moves_expanded else rows.slice(0, MOVES_SHOWN)
+	for m in shown:
+		_move_item(box, m, false)
+	var more: int = rows.size() - MOVES_SHOWN
+	if more > 0:
+		var label := "less" if sb.moves_expanded else "%d more..." % more
+		var row := Blocks.Row.new(label, "", false, true, true)
+		row.pressed.connect(func() -> void: sb.moves_expanded = not sb.moves_expanded)
+		box.add_child(row)
+
+
+# one item: its text and why, then its options (an ask) or go and no; `full` says what a go does
+func _move_item(box: Control, m: Dictionary, full: bool, picked: bool = false) -> void:
+	var key := str(m["key"])
+	var sub := str(m.get("why", ""))
+	if full and m["kind"] != "ask":
+		var says := Moves.says(m["action"])
+		if says != "":
+			sub += ("\n" if sub != "" else "") + "-> " + says
+	var row := Blocks.Row.new(str(m["text"]), sub)
+	row.pressed.connect(func() -> void: sb.pick_move(key, full))
+	if m["kind"] != "ask":
+		var yes := "looks good" if m["kind"] == "look_at" else "go"
+		row.marks(
+			[{"label": yes, "act": "go"}, {"label": "no", "act": "no", "k": "quiet"}],
+			func(a: String) -> void: sb.settle_move(key, a)
+		)
+	if not full:
+		box.add_child(row)
+	else:
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 3)
+		var bar := ColorRect.new()
+		bar.custom_minimum_size.x = 3
+		bar.color = Paper.GOLD if picked else Color(0, 0, 0, 0)
+		line.add_child(bar)
+		line.add_child(row)
+		box.add_child(line)
+	if m["kind"] == "ask":
+		var items: Array = []
+		for i in m["options"].size():
+			items.append({"label": "%d %s" % [i + 1, m["options"][i]], "act": str(i + 1), "k": "quiet"})
+		_chips(box, items, func(a: String) -> void: sb.settle_move(key, int(a)))
+
+
+# the whole of Your move: asks, proposals, look-ats, the keys at the foot
+func moves_view(box: VBoxContainer) -> void:
+	var rows: Array = Moves.shown(home.things.moves)
+	if rows.is_empty():
+		box.add_child(quiet("nothing needs you", Fonts.BODY))
+		return
+	sb.move_pick = clampi(sb.move_pick, 0, rows.size() - 1)
+	var last := ""
+	for i in rows.size():
+		var kind: String = rows[i]["kind"]
+		if kind != last:
+			last = kind
+			heading(box, {"ask": "Asks", "proposal": "Proposals", "look_at": "Look at"}[kind])
+		_move_item(box, rows[i], true, i == sb.move_pick)
+	box.add_child(quiet("j k pick, enter go, x no, 1-9 answer, esc back", Fonts.LABEL))
 
 
 # what outside sources suggest: never a banner, a ring or a badge, only these rows

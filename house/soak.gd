@@ -18,6 +18,7 @@ const PetThingsSoak := preload("res://soak_petthings.gd")
 const FormSoak := preload("res://soak_forms.gd")
 const ChatSoak := preload("res://soak_chat.gd")
 const SidebarSoak := preload("res://soak_sidebar.gd")
+const MovesSoak := preload("res://soak_moves.gd")
 const ChoreSoak := preload("res://soak_chores.gd")
 const PeopleSoak := preload("res://soak_people.gd")
 const MoneySoak := preload("res://soak_money.gd")
@@ -137,6 +138,7 @@ func _sections() -> Array:
 		["routes", _on_main.bind(_routes)],
 		["forms", _on_main.bind(func(main): await FormSoak.new(self, main).run())],
 		["sidebar", _on_main.bind(func(main): await SidebarSoak.new(self, main).run())],
+		["moves", _on_main.bind(func(main): await MovesSoak.new(self, main).run())],
 		["chores", _on_main.bind(func(main): await ChoreSoak.new(self, main).run())],
 		["people", _on_main.bind(func(main): await PeopleSoak.new(self, main).people())],
 		["door", _on_main.bind(func(main): await PeopleSoak.new(self, main).door())],
@@ -992,6 +994,10 @@ func _respond(p: StreamPeerTCP, method: String, path: String, body: String) -> v
 			code = 404
 		else:
 			out = {"id": 99, "text": str(parsed.get("text", "")), "reply": "ok"}
+	elif method == "POST" and path == "/api/home/moves/settle":
+		var gone := str(parsed.get("key", ""))
+		_state["moves"] = _state.get("moves", []).filter(func(m): return m["key"] != gone)
+		out = {"ok": "done"}
 	elif method == "POST" and path.begins_with("/api/home/proposals/"):
 		var id := int(path.get_slice("/", 4))
 		var proposals: Array = _state.get("proposals", [])

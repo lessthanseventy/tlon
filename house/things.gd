@@ -28,6 +28,8 @@ var door := {"id": null, "notes": []}
 # `GET /api/home`'s `money`: null when the bank is off, over the local list and from an older server
 var money: Variant = null
 var proposals: Array = []
+# `moves` of the local `GET /api/home`: what waits on a go, a no or an answer (`moves.gd`)
+var moves: Array = []
 var mo := 0
 var day := 0
 # "YYYY-MM" -> the server's meeting rows for that month, kept while the view is open
@@ -59,6 +61,7 @@ func set_data(d: Dictionary) -> void:
 	door = d["door"] if d.get("door") is Dictionary else {"id": null, "notes": []}
 	money = d["money"] if d.get("money") is Dictionary else null
 	proposals = d.get("proposals", [])
+	moves = d.get("moves", [])
 
 
 func reset() -> void:

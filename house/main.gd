@@ -136,6 +136,7 @@ func _ready() -> void:
 	_sidebar.jot_submitted.connect(_send_jot)
 	_sidebar.chat_sent.connect(_send_chat)
 	_sidebar.chat_acted.connect(_chat_act)
+	_sidebar.move_settled.connect(_settle_move)
 	_sidebar.check_requested.connect(_check_server)
 	_sidebar.money_ui.forecast_wanted.connect(_fetch_forecast)
 	_sidebar.money_ui.ask_wanted.connect(_ask_money)
@@ -647,6 +648,7 @@ static func _home_data(d: Dictionary) -> Dictionary:
 		"door": d.get("door", {"id": null, "notes": []}),
 		"money": d.get("money"),
 		"proposals": d.get("proposals", []),
+		"moves": d.get("moves", []),
 		"forecast": d.get("forecast", []),
 		"meetings": d.get("meetings", []),
 	}
@@ -794,6 +796,9 @@ func _input(event: InputEvent) -> void:
 		_escape(typing)
 		return
 	if typing or event.ctrl_pressed or event.alt_pressed:
+		return
+	if _sidebar.view == "moves" and _sidebar.move_key(event.keycode):
+		get_viewport().set_input_as_handled()
 		return
 	if _decorate.active and _decorate.key(event.keycode):
 		get_viewport().set_input_as_handled()
@@ -1126,6 +1131,25 @@ func _write(path: String, body: Dictionary, ok: Callable = Callable()) -> void:
 			if reached and code == 200:
 				if ok.is_valid():
 					ok.call()
+			else:
+				_trouble(_why(reached, code, parsed))
+	)
+
+
+# a go, a no or an answer on an item of Your move; a go that opens a link opens it here
+func _settle_move(key: String, choice: Variant) -> void:
+	if _demo:
+		return
+	_post(
+		"/api/home/moves/settle",
+		{"key": key, "choice": choice},
+		func(reached: bool, code: int, parsed: Variant) -> void:
+			_sidebar.set_reachable(reached)
+			if reached:
+				_refresh()
+			if reached and code == 200:
+				if parsed is Dictionary and parsed.get("open") != null:
+					OS.shell_open(str(parsed["open"]))
 			else:
 				_trouble(_why(reached, code, parsed))
 	)

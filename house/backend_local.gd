@@ -114,6 +114,8 @@ func _route(method: String, path: String, body: Dictionary) -> Dictionary:
 		return _tell(str(body.get("text", "")))
 	if p.size() >= 4 and p[2] == "money":
 		return _money_post(p, body)
+	if p.size() == 4 and p[2] == "moves" and p[3] == "settle":
+		return _settle_move(body)
 	if p.size() == 3 and p[2] == "add":
 		return list.add(body)
 	if p.size() == 4 and p[2] == "door" and p[3] == "add":
@@ -291,3 +293,12 @@ func _money_post(p: PackedStringArray, body: Dictionary) -> Dictionary:
 	var box := {}
 	money_ask.ask(text, body.get("thread"), func(answer: Dictionary) -> void: box.merge(answer))
 	return {"code": 200, "body": box}
+
+
+# `{key, choice}`: go or no, or an ask's option number or words (`Moves.settle`)
+func _settle_move(body: Dictionary) -> Dictionary:
+	var choice: Variant = body.get("choice")
+	if choice is float and choice == floorf(choice):
+		choice = int(choice)
+	var said: Dictionary = list.moves.settle(str(body.get("key", "")), choice)
+	return {"code": 400 if said.has("error") else 200, "body": said}

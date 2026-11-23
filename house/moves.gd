@@ -12,6 +12,7 @@ const ASKS := 2
 const DAY := 86400.0
 const LISTED := ["todo", "reminder", "waiting"]
 const OPENED := ["http://", "https://", "mailto:"]
+const WEEKDAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 var path := ""
 var clock := Callable()
@@ -216,3 +217,38 @@ func _listed(r: Dictionary, said: String) -> Dictionary:
 	if r["code"] != 200:
 		return {"error": "the list would not take it"}
 	return {"ok": said}
+
+
+# `items` as the Your move view lists them: asks, then proposals, then look-ats, each in its order
+static func shown(items: Array) -> Array:
+	var out: Array = []
+	for kind in KINDS:
+		out.append_array(items.filter(func(m): return m["kind"] == kind))
+	return out
+
+
+# what a go will do, in words: "a reminder Wed 18:00"
+static func says(action: Dictionary) -> String:
+	var at := str(action.get("at", ""))
+	if at.length() == 16:
+		at += ":00"
+	var when := ""
+	if at != "":
+		var d := Time.get_datetime_dict_from_unix_time(
+			int(Time.get_unix_time_from_datetime_string(at.trim_suffix("Z")))
+		)
+		when = " %s %02d:%02d" % [WEEKDAYS[d["weekday"]], d["hour"], d["minute"]]
+	match action.get("do"):
+		"add":
+			var what: String = (
+				{"todo": "a to-do", "reminder": "a reminder", "waiting": "a waiting-on"}
+				. get(action.get("kind"), "a to-do")
+			)
+			return what + when
+		"someday":
+			return "someday"
+		"day":
+			return "a reminder" + when
+		"open":
+			return "opens the link"
+	return ""

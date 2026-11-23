@@ -13,7 +13,7 @@ still for 2 s) and the selected thing's gold outline. Top: an optional banner st
 a reply, a ringing reminder; buttons, never covering the pane, never closing a view, never taking a
 room click), then the header and the context pane, a paper sheet. The header has one layout in every
 view: a fixed left slot (a drawn back chevron, tooltip "Back (Esc)", empty at Home), the view's title
-in the pixel face ("Home", "Calendar", "Settings"), and on the right the drawn plus (tooltip "Add (I)")
+in the pixel face ("Home", "Calendar", "Settings"), and on the right `▲ N` (`needs.gd`: what waits on a decision, absent at zero, a click opens Your move), the drawn plus (tooltip "Add (I)")
 and the settings cog, always in the same place. Bottom: the chat dock. `sidebar.gd` owns the views and the
 chat modes; `views.gd` builds Home, an item, the "On the desk" list; `blocks.gd`
 turns a card's blocks (title, text, dim, gap, month, buttons, row, foot, day) into Controls.
@@ -25,7 +25,7 @@ only, underlined on hover: Something else, Not today, Cancel, "no"); a block's b
 `"k": "primary"|"quiet"`. A chip (a kind or a personality) is the secondary look unselected and a gold fill
 selected. Arrows, the plus and the chat's handle are `icons.gd` drawings (`icon_button.gd` is one as a
 button), never characters; a shortcut is in the tooltip.
-Views: `home` (in this order, an empty section drawing nothing, not even its label: "Now", the pick with Done /
+Views: `home` (in this order, an empty section drawing nothing, not even its label: "Your move (N)", the local list's `moves` (`moves.gd`: asks with their options as quiet buttons, proposals and look-ats with go / no or looks good / no), three then "N more..." in place, a click on a row opening `moves`; "Now", the pick with Done /
 Something else / Not today, and the pinned thing with its timer; "Today", what has a time today in time
 order, each row time-first in one aligned column: meetings still on (a quiet line, "09:00  Standup": no tick, no click), reminders due today and an
 agenda due today; "Open", the to-dos but not the pick or the pinned thing, six with "N more..."; "Proposed (N)" when sources have suggested things (`proposals` of `GET /api/home`: `{id, source, text, why, url}`; `views.gd` `_proposed`: three rows, each its text with the why line small under it and two small buttons, "add" and "no", which post `/api/home/proposals/:id/take|dismiss`; then "N more..." in place; never a banner, a ring or a badge; the family's local list has no sources and answers none; "Later (N)", the coming things after today, one line that opens in place; the weather in one line, which opens the window's view; "Notes (N)" collapsed. At 1100x700 with the demo list and the dock compact Home does not scroll; the soak holds it), `card`
@@ -40,7 +40,7 @@ agenda's pile, `views.gd` `agenda_view`: its rhythm as text, its notes, each ope
 Enter puts a note on it, and Clear, which archives the pile; opened from a shelf row or from Home's row
 "14:00  Retro · 3 things" under "Today" when an agenda with notes is due today; back from it goes to the shelf
 it came from. The data is `agendas` of `GET /api/home`: `{id, name, every, next_at, notes}`; the notes are in no
-other list), `people` and `door` (`people_view.gd`, below), `item`, `open`, `add` (`jot.gd` the jot line alone and what the house read it as; `form.gd` the
+other list), `people` and `door` (`people_view.gd`, below), `moves` (Your move: every item under Asks, Proposals and Look at, a proposal saying what go does as `-> a reminder Thu 18:00`; j k pick, Enter go, x no, 1-9 answer the picked ask, the keys written at its foot; "nothing needs you" when empty; `main.gd` posts a settle to `/api/home/moves/settle`), `item`, `open`, `add` (`jot.gd` the jot line alone and what the house read it as; `form.gd` the
 typed form, behind its "Fill in the details instead" link), `edit`, `pet` (`pet_view.gd`), `closet` (`closet.gd`), `settings`
 (`settings_view.gd`), `decorate`. A click on a thing replaces the view; the back chevron, Esc and a click on
 empty floor go back. The chat dock (`chat_view.gd`, "Chat") is its input line alone until there is a real exchange: a line he typed or the house's word to him (a pet's passing remark is logged and shown once the dock is open, but never grows it). It grows
