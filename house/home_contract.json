@@ -1,5 +1,5 @@
 {
-  "about": "What the house asks of its backend: the server's /api/home/*, GET /api/settings and the weather of GET /api/office, as the server answers them (Server.MCP.OperatorAPI docs, Server.Home). `soak_contract.gd` (section `contract`) runs every case against backend_local.gd on a fixed clock (2026-11-18 14:00), cases in order on one fresh list, `as` keeping the answer's id for later `{name}` in a path. A case's `code` and `error` are the server's; a 200 answer must fit `shape`. A case with `gap` is where the local backend answers otherwise: the soak holds it to that, so fixing the gap fails the case until `gap` is deleted, and a gap that is not true fails too. `needs` of a gap: none, network, secret or llm; `size` S, M or L. Shape language: a type name (int num str bool null any obj), `a|b` a union, `@Name` a type below, `[shape]` a list of them, an object lists its keys (every one present, `key?` optional, no extras); `{\"$or\": [..]}` a union of shapes.",
+  "about": "What the house asks of its backend: the server's /api/home/*, GET /api/settings and the weather of GET /api/office, as the server answers them (Server.MCP.OperatorAPI docs, Server.Home). `soak_contract.gd` (section `contract`) runs every case against backend_local.gd on a fixed clock (2026-11-18 14:00), cases in order on one fresh list, `as` keeping the answer's id for later `{name}` in a path; `put_off` names an id to move to someday before the request (no route does it). A case's `code` and `error` are the server's; a 200 answer must fit `shape`. A case with `gap` is where the local backend answers otherwise: the soak holds it to that, so fixing the gap fails the case until `gap` is deleted, and a gap that is not true fails too. `needs` of a gap: none, network, secret or llm; `size` S, M or L. Shape language: a type name (int num str bool null any obj), `a|b` a union, `@Name` a type below, `[shape]` a list of them, an object lists its keys (every one present, `key?` optional, no extras); `{\"$or\": [..]}` a union of shapes.",
   "types": {
     "Row": {"id": "int", "kind": "str", "text": "str", "due_at": "str|null", "every": "str|null", "since": "str|null", "told_at": "str|null", "project": {"$or": [{"id": "int", "text": "str"}, "null"]}},
     "Waiting": {"id": "int", "kind": "str", "text": "str", "due_at": "str|null", "every": "str|null", "since": "str|null", "told_at": "str|null", "project": "null", "who": "str|null"},
@@ -38,6 +38,7 @@
       {"name": "a to-do", "body": {"kind": "todo", "text": "buy milk"}, "as": "milk", "code": 200, "shape": "@Row"},
       {"name": "a reminder", "body": {"kind": "reminder", "text": "call Sam", "at": "2026-11-19T09:00:00Z"}, "as": "call", "code": 200, "shape": "@Row"},
       {"name": "a repeating reminder", "body": {"kind": "reminder", "text": "water the plant", "at": "2026-11-19T09:00:00Z", "every": "week"}, "as": "plant", "code": 200, "shape": "@Row"},
+      {"name": "a to-do to put off", "body": {"kind": "todo", "text": "maybe one day"}, "as": "maybe", "code": 200, "shape": "@Row"},
       {"name": "a note", "body": {"kind": "note", "text": "ideas: a shelf"}, "as": "note", "code": 200, "shape": "@Row"},
       {"name": "another note", "body": {"kind": "note", "text": "a second idea"}, "as": "note2", "code": 200, "shape": "@Row"},
       {"name": "a waiting-on", "body": {"kind": "waiting", "text": "the parts", "who": "Dana"}, "as": "wait", "code": 200, "shape": "@Waiting"},
@@ -86,6 +87,7 @@
       {"name": "a repeating reminder", "path": "/api/home/{plant}/done", "code": 200, "shape": "@Closed"},
       {"name": "a note is not done", "path": "/api/home/{note2}/done", "code": 404},
       {"name": "twice", "path": "/api/home/{milk}/done", "code": 404},
+      {"name": "a put-off to-do", "put_off": "maybe", "path": "/api/home/{maybe}/done", "code": 404},
       {"name": "not a number", "path": "/api/home/abc/done", "code": 404}
     ]},
     {"name": "drop", "method": "POST", "path": "/api/home/{id}/drop", "about": "-> {id, text, dropped_at, due_at}", "cases": [

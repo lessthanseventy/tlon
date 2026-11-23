@@ -34,6 +34,9 @@ func _check_contract(ok: bool, what: String) -> void:
 
 
 func _case(backend: Node, route: Dictionary, c: Dictionary) -> void:
+	if c.has("put_off"):
+		var id: int = _ids[c["put_off"]]
+		backend.list.things().filter(func(x): return x["id"] == id)[0]["state"] = "someday"
 	var path: String = _fill(str(c.get("path", route["path"])))
 	var body: Dictionary = _fill_body(c.get("body", {}))
 	var answer: Dictionary = backend._route(str(route["method"]), path, body)
