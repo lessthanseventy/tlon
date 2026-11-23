@@ -71,8 +71,7 @@ pure parts are `lib/` (bun-tested).
   commits, cited threads, the crew and what each is doing (a seat's `status` as the server words it, `lib/status.ts`: ● working, ! waiting, ○ idle, ◌ cold, · off), and the thread's conversation.
 - **Toasts**: a new @mention of this seat, something newly red, the day's landings at start, a
   landing the seat led (with a chime), and a line from the office's pool at most hourly. A landing is worded by the
-  server's alert row (`GET /api/alerts`, kind `landed`), the same title the desktop toasts; `landed ✓` only when
-  none can be read.
+  glance's `landed` list (`#<thread> landed — <title>`); `landed ✓` only when the thread isn't in it.
 - The spinner speaks in the seat's catchphrase; a finished turn gets a Borgesian verb.
 - `#` and `@` complete from the threads and crew the session knows.
 
