@@ -12,6 +12,7 @@ func run() -> void:
 	_dry_then_write()
 	_twice()
 	_hand_made_door()
+	_same_named_piles()
 
 
 func _thing(id: int, kind: String, text: String, extra: Dictionary = {}) -> Dictionary:
@@ -146,6 +147,16 @@ func _twice() -> void:
 	var again := Import.run(list, _export(), true)
 	_eq(again["added"], {}, "a second run adds nothing")
 	_eq(JSON.stringify(list.doc), once, "and the list is as it was")
+
+
+func _same_named_piles() -> void:
+	var list := _list()
+	var agendas := [_pile(30, "person", "Sam"), _pile(31, "person", "sam")]
+	var d := {"v": 1, "things": [], "agendas": agendas}
+	d["counts"] = Import.counts([], agendas)
+	var report := Import.run(list, JSON.parse_string(JSON.stringify(d)), true)
+	_eq(report["local"], report["server"], "two same-named server piles stay two")
+	_eq(report["added"], {"person": 2}, "both added")
 
 
 func _hand_made_door() -> void:

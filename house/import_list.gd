@@ -129,8 +129,8 @@ static func run(list: RefCounted, export: Dictionary, write: bool) -> Dictionary
 	return report
 
 
-# the pile this one already is here: by origin, else a hand-made one of the same kind and name
-# (the door is one only)
+# the pile this one already is here: by origin, else a hand-made one (no origin yet) of the same
+# kind and name (the door is one only)
 static func _pile_of(doc: Dictionary, key: String, a: Dictionary) -> Dictionary:
 	for x in doc["agendas"]:
 		if x.get("origin") == key:
@@ -138,7 +138,8 @@ static func _pile_of(doc: Dictionary, key: String, a: Dictionary) -> Dictionary:
 	for x in doc["agendas"]:
 		var kind := str(x.get("kind", "agenda"))
 		if (
-			kind == a["kind"]
+			x.get("origin") == null
+			and kind == a["kind"]
 			and (kind == "door" or str(x["name"]).to_lower() == str(a["name"]).to_lower())
 		):
 			return x
