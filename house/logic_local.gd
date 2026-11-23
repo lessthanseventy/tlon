@@ -413,7 +413,8 @@ func _done_and_projects() -> void:
 	l.plan(p["id"], {"plan": ["e", "f"]})
 	l.done(step["id"])
 	_eq(l.status()["projects"][0]["next"]["text"], "e", "the plan is promoted from the front")
-	_eq(l.done(p["id"])["code"], 200, "a project is finished")
+	_eq(l.done(p["id"])["code"], 404, "a project is not done, it is dropped")
+	l.drop(p["id"])
 	st = l.status()
 	_eq([st["projects"].size(), st["open"].size()], [0, 0], "and takes its open steps with it")
 	var q: Dictionary = (
@@ -542,8 +543,8 @@ func _later_revive_plan() -> void:
 	var todo: int = l.add({"kind": "todo", "text": "x"})["body"]["id"]
 	var r: Dictionary = l.later(todo, {"until": "hour"})
 	_eq(
-		[r["body"]["kind"], r["body"]["due_at"], r["body"]["told_at"]],
-		["reminder", "2026-11-18T15:20:00Z", null],
+		[r["body"]["due_at"], l.status()["coming"][0]["kind"], l.status()["coming"][0]["told_at"]],
+		["2026-11-18T15:20:00Z", "reminder", null],
 		"later an hour"
 	)
 	_eq(l.status()["coming"].size(), 1, "it is coming")
@@ -555,14 +556,9 @@ func _later_revive_plan() -> void:
 		"2026-11-19T09:00:00Z",
 		"tomorrow is the next day, near midnight"
 	)
-	_line(l.later(todo, {"until": "never"}), 400, "until is hour or tomorrow", "a bad until")
+	_eq(l.later(todo, {"until": "never"})["code"], 404, "a bad until")
 	var note: int = l.add({"kind": "note", "text": "n"})["body"]["id"]
-	_line(
-		l.later(note, {"until": "hour"}),
-		400,
-		"only a to-do or a reminder can be put off",
-		"a note is not put off"
-	)
+	_eq(l.later(note, {"until": "hour"})["code"], 404, "a note is not put off")
 	var someday: Dictionary = l.add({"kind": "todo", "text": "maybe"})["body"]
 	l.things().filter(func(x): return x["id"] == someday["id"])[0]["state"] = "someday"
 	var rep: Dictionary = (
@@ -598,7 +594,9 @@ func _later_revive_plan() -> void:
 	_eq(l.plan(todo, {"plan": []})["code"], 404, "a to-do has no plan")
 	_eq(l.plan(p["id"], {"plan": []})["body"]["plan"], [], "an empty plan")
 	_eq(l.answer(todo, {"choice": "nottoday"})["code"], 200, "not today")
-	_line(l.answer(todo, {"choice": "later"}), 400, "choice is nottoday", "another choice")
+	_line(l.answer(todo, {"choice": "bogus"}), 400, "choice is nottoday", "another choice")
+	_eq(l.answer(todo, {"choice": "keep"})["code"], 404, "no such question")
+	_line(l.answer(todo, {}), 400, "choice is required", "no choice")
 
 
 func _agendas() -> void:
@@ -684,7 +682,7 @@ func _pick() -> void:
 	r = l.pick([due])
 	_eq(
 		[r["body"]["pick"]["id"], r["body"]["pick"]["why"], r["body"]["say"]],
-		[old, "it has sat the longest", "oldest - it has sat the longest"],
+		[old, "it has sat the longest", "oldest — it has sat the longest"],
 		"then the to-do that has sat longest"
 	)
 	r = l.pick([due, old])

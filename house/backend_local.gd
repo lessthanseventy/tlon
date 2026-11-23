@@ -5,6 +5,10 @@ extends "res://backend.gd"
 const LocalList := preload("res://local_list.gd")
 const ReaderRules := preload("res://reader_rules.gd")
 
+const E_NOW := "skip is ids joined by commas, minutes a number"
+# the server's defaults of the knobs the settings screen reads
+const KNOBS := [["home_morning_at", "08:30"], ["home_list_at", "17:30"], ["home_review_on", "sun"]]
+
 var list: RefCounted
 var reader: RefCounted = ReaderRules.new()
 # when set (`reader_claude.gd`), a loose line is asked of it first; `reader` reads what it cannot
@@ -71,7 +75,7 @@ func _route(method: String, path: String, body: Dictionary) -> Dictionary:
 	var query := path.get_slice("?", 1) if "?" in path else ""
 	var p := path.get_slice("?", 0).split("/", false)
 	if p.size() < 2 or p[0] != "api":
-		return {"code": 404, "body": null}
+		return _nowhere()
 	if method == "GET":
 		return _read_route(p, query)
 	if p.size() == 2 and p[1] == "home":
@@ -85,7 +89,7 @@ func _route(method: String, path: String, body: Dictionary) -> Dictionary:
 	if p.size() == 5 and p[2] == "agendas" and p[3].is_valid_int():
 		return _agenda_route(int(p[3]), p[4], body)
 	if p.size() != 4 or not p[2].is_valid_int():
-		return {"code": 404, "body": null}
+		return _nowhere()
 	var id := int(p[2])
 	match p[3]:
 		"edit":
@@ -102,7 +106,7 @@ func _route(method: String, path: String, body: Dictionary) -> Dictionary:
 			return list.drop(id)
 		"answer":
 			return list.answer(id, body)
-	return {"code": 404, "body": null}
+	return _nowhere()
 
 
 func _agenda_route(id: int, action: String, body: Dictionary) -> Dictionary:
@@ -115,7 +119,7 @@ func _agenda_route(id: int, action: String, body: Dictionary) -> Dictionary:
 			return list.agenda_clear(id)
 		"drop":
 			return list.agenda_drop(id)
-	return {"code": 404, "body": null}
+	return _nowhere()
 
 
 func _read_route(p: PackedStringArray, query: String) -> Dictionary:
@@ -126,14 +130,38 @@ func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 	if p.size() == 3 and p[1] == "home" and p[2] == "meetings":
 		return {"code": 200, "body": []}
 	if p.size() == 3 and p[1] == "home" and p[2] == "now":
-		var skip := []
-		if query.begins_with("skip="):
-			for s in query.trim_prefix("skip=").split(",", false):
-				skip.append(int(s))
+		var skip: Variant = _skip_of(query)
+		if skip == null:
+			return {"code": 400, "body": {"error": E_NOW}}
 		return list.pick(skip)
 	if p.size() == 2 and p[1] == "settings":
-		return {"code": 200, "body": {"knobs": []}}
-	return {"code": 404, "body": null}
+		return {"code": 200, "body": {"knobs": _knobs(), "restart_pending": false}}
+	return _nowhere()
+
+
+func _nowhere() -> Dictionary:
+	return {"code": 404, "body": {"error": "no such route"}}
+
+
+# the ids of `skip`; null when skip or minutes is not what the server accepts
+func _skip_of(query: String) -> Variant:
+	var skip := []
+	for pair in query.split("&", false):
+		var value := pair.get_slice("=", 1)
+		match pair.get_slice("=", 0):
+			"skip":
+				for s in value.split(",", false):
+					if not s.is_valid_int():
+						return null
+					skip.append(int(s))
+			"minutes":
+				if not value.is_valid_float():
+					return null
+	return skip
+
+
+func _knobs() -> Array:
+	return KNOBS.map(func(k): return {"key": k[0], "value": k[1], "boot": k[1]})
 
 
 func _context() -> Dictionary:

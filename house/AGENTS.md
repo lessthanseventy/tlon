@@ -441,9 +441,12 @@ runs on the local list.
   is day, week or month, or a number then one of them: 6 week`, `who is required for a waiting-on`, `steps is a list
   of texts, at least one`, `project is a project's id`, `project is for a to-do`, `kind is only todo or reminder`,
   `a to-do has no time: send kind reminder with at`, `a to-do has no time and no repeat`, `plan is a list of texts`;
-  and the house's own `until is hour or tomorrow`, `only a to-do or a reminder can be put off`, `choice is nottoday`;
-  404 for an id that is not live. What now is overdue reminders (most overdue first), the to-do that has sat longest,
-  then a project's open step; "not today" hides a thing until 06:00 tomorrow.
+  and `choice is required`, `choice is nottoday`, `skip is ids joined by commas, minutes a number`; 404 ({error: "no such
+  route"}) for an id that is not live, for /done on anything but a to-do or reminder, for /later with no `until` or on
+  anything else, and for the choices of a question (the local list holds none). What now is overdue reminders (most
+  overdue first), the to-do that has sat longest, then a project's open step (`minutes` is validated, not weighed);
+  "not today" hides a thing until 06:00 tomorrow. `GET /api/settings` answers the server's defaults of `home_morning_at`,
+  `home_list_at` and `home_review_on`.
   **Reminders**: once a second the backend marks due reminders told (`told_at`, `nudges`), and the room rings from it
   as it does for the server's; a told one not acted on is told again after 30 min, 1 h, 2 h, then every 4 h, six times
   in all, never between 22:00 and 08:00 (it waits for 08:00); a repeating one missed for days stands at its newest time;

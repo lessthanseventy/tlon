@@ -22,21 +22,13 @@
     "Closed": {"id": "int", "text": "str", "due_at": "str|null", "done_at?": "str|null", "dropped_at?": "str|null"}
   },
   "gaps": {
-    "no-route-body": {"what": "an unknown route or a thing that is not there answers 404 with {error: \"no such route\"}; the local backend answers 404 with no body", "needs": "none", "size": "S"},
     "status-forecast": {"what": "GET /api/home has no forecast: the server sends up to three days of the weather (Server.Office.Weather.forecast, wttr.in)", "needs": "network", "size": "S"},
     "status-meetings": {"what": "GET /api/home has no meetings: today's and tomorrow's, cleaned, from the calendars the server reads (Server.Home.Day)", "needs": "network, secret (calendar credentials)", "size": "L"},
     "status-money": {"what": "GET /api/home has no money (the server's is null with the bank source off, a summary of the checking accounts with it on)", "needs": "network, secret (Plaid)", "size": "L"},
     "meetings-range": {"what": "GET /api/home/meetings answers [] for anything, where the server validates from/to (YYYY-MM-DD, from not after to, at most 62 days: 400) and answers the meetings on each date", "needs": "network, secret (calendar credentials)", "size": "L"},
-    "now-query": {"what": "GET /api/home/now: skip and minutes are not validated (the server answers 400 {error: \"skip is ids joined by commas, minutes a number\"}), and minutes is ignored (the server's Server.Home.Now weighs what fits the time there is, and the day)", "needs": "none", "size": "M"},
-    "now-say": {"what": "the `say` of GET /api/home/now: the server words a project's step as \"Project: step\" and joins the why with an em dash (Server.Home.label); the local one says the bare text and joins with a hyphen", "needs": "none", "size": "S"},
-    "closed-row": {"what": "/later answers {id, text, due_at} on the server; the local backend answers the whole row (kind, every, since, told_at, project beside them). /done answers {id, text, done_at, due_at}, and the local one the whole row too", "needs": "none", "size": "S"},
-    "done-kinds": {"what": "/done is for a to-do or reminder alone (Jot.open): the server answers 404 for a note, a project and a waiting-on; the local backend closes them (200)", "needs": "none", "size": "S"},
-    "later-refusals": {"what": "/later with no until, or on anything but a to-do or reminder, answers 404 on the server (Server.Home.later returns :error); the local backend answers 400 (\"until is hour or tomorrow\", \"only a to-do or a reminder can be put off\")", "needs": "none", "size": "S"},
-    "answer-choices": {"what": "/answer takes the choices of a question the home put (next: add|finish|step, review: keep|later|drop, waiting: got|chased|tomorrow, shrink: add|no) beside nottoday; no question is held locally (a thing has no ask state), so those are 400 \"choice is nottoday\" where the server answers 404 for no such question; with no choice the server says \"choice is required\"", "needs": "none for the state; an llm to put the questions (the server's readers do)", "size": "M"},
     "proposals": {"what": "POST /api/home/proposals/:id/take and /dismiss are 404 locally and `proposals` is always []; the server's come from sources (Server.Home.Sources: mail, calendar, bank)", "needs": "network, secret", "size": "L", "untested": true},
     "money-routes": {"what": "GET /api/home/money/forecast, POST /api/home/money/notices/seen and POST /api/home/money/ask are 404 locally; the server answers from the stored bank data (forecast null when there is none) and a model phrases the ask", "needs": "network, secret (Plaid), llm", "size": "L"},
     "pets": {"what": "GET /api/home/pets answers {} locally (the house uses its own voices.gd lines); the server answers the model-written lines by pet then occasion", "needs": "llm", "size": "M", "untested": true},
-    "settings": {"what": "GET /api/settings answers {knobs: []} locally; the server answers {knobs: [{key, value, boot, ...}], restart_pending: bool}, the knobs the settings screen reads (home_morning_at, home_list_at, home_review_on)", "needs": "none (a file of knobs) ", "size": "M"},
     "say-reader": {"what": "POST /api/home {text}: the server reads the line with a model (Server.Home.Inbox.keep) and answers its words; the local backend reads with reader_rules.gd (or the claude helper when set) and words the reply itself", "needs": "llm", "size": "L", "untested": true},
     "office-weather": {"what": "GET /api/office's `weather` ({kind, temp_c, desc} | null) has no local route: the house reads wttr.in itself (wttr.gd) when `weather` is on", "needs": "network", "size": "S", "untested": true}
   },
@@ -80,21 +72,21 @@
       {"name": "not a project", "path": "/api/home/{call}/plan", "body": {"plan": ["x"]}, "code": 404}
     ]},
     {"name": "later", "method": "POST", "path": "/api/home/{id}/later", "about": "{until: hour|tomorrow} -> {id, text, due_at}", "cases": [
-      {"name": "an hour", "path": "/api/home/{call}/later", "body": {"until": "hour"}, "code": 200, "shape": {"id": "int", "text": "str", "due_at": "str|null"}, "gap": "closed-row"},
-      {"name": "a note put off", "path": "/api/home/{note}/later", "body": {"until": "hour"}, "code": 404, "gap": "later-refusals"},
-      {"name": "no until", "path": "/api/home/{call}/later", "body": {}, "code": 404, "gap": "later-refusals"},
+      {"name": "an hour", "path": "/api/home/{call}/later", "body": {"until": "hour"}, "code": 200, "shape": {"id": "int", "text": "str", "due_at": "str|null"}},
+      {"name": "a note put off", "path": "/api/home/{note}/later", "body": {"until": "hour"}, "code": 404},
+      {"name": "no until", "path": "/api/home/{call}/later", "body": {}, "code": 404},
       {"name": "nothing there", "path": "/api/home/99999/later", "body": {"until": "hour"}, "code": 404}
     ]},
     {"name": "answer", "method": "POST", "path": "/api/home/{id}/answer", "about": "{choice, text?} -> {reply}", "cases": [
       {"name": "not today", "path": "/api/home/{milk}/answer", "body": {"choice": "nottoday"}, "code": 200, "shape": {"reply": "str"}},
-      {"name": "no choice", "path": "/api/home/{milk}/answer", "body": {}, "code": 400, "error": "choice is required", "gap": "answer-choices"},
-      {"name": "no such question", "path": "/api/home/{milk}/answer", "body": {"choice": "keep"}, "code": 404, "gap": "answer-choices"},
+      {"name": "no choice", "path": "/api/home/{milk}/answer", "body": {}, "code": 400, "error": "choice is required"},
+      {"name": "no such question", "path": "/api/home/{milk}/answer", "body": {"choice": "keep"}, "code": 404},
       {"name": "nothing there", "path": "/api/home/99999/answer", "body": {"choice": "nottoday"}, "code": 404}
     ]},
     {"name": "done", "method": "POST", "path": "/api/home/{id}/done", "about": "-> {id, text, done_at, due_at}; a repeating reminder moves on", "cases": [
-      {"name": "a to-do", "path": "/api/home/{milk}/done", "code": 200, "shape": "@Closed", "gap": "closed-row"},
-      {"name": "a repeating reminder", "path": "/api/home/{plant}/done", "code": 200, "shape": "@Closed", "gap": "closed-row"},
-      {"name": "a note is not done", "path": "/api/home/{note2}/done", "code": 404, "gap": "done-kinds"},
+      {"name": "a to-do", "path": "/api/home/{milk}/done", "code": 200, "shape": "@Closed"},
+      {"name": "a repeating reminder", "path": "/api/home/{plant}/done", "code": 200, "shape": "@Closed"},
+      {"name": "a note is not done", "path": "/api/home/{note2}/done", "code": 404},
       {"name": "twice", "path": "/api/home/{milk}/done", "code": 404},
       {"name": "not a number", "path": "/api/home/abc/done", "code": 404}
     ]},
@@ -107,10 +99,10 @@
       {"name": "an open thing", "path": "/api/home/{wait}/revive", "code": 404}
     ]},
     {"name": "now", "method": "GET", "path": "/api/home/now", "about": "{pick: row+why | null, say}", "cases": [
-      {"name": "the pick", "code": 200, "shape": {"pick": {"$or": [{"id": "int", "kind": "str", "text": "str", "due_at": "str|null", "every": "str|null", "since": "str|null", "told_at": "str|null", "project": "any", "why": "str"}, "null"]}, "say": "str"}, "has": {"say": " — "}, "gap": "now-say"},
+      {"name": "the pick", "code": 200, "shape": {"pick": {"$or": [{"id": "int", "kind": "str", "text": "str", "due_at": "str|null", "every": "str|null", "since": "str|null", "told_at": "str|null", "project": "any", "why": "str"}, "null"]}, "say": "str"}, "has": {"say": " — "}},
       {"name": "skipping ids", "path": "/api/home/now?skip=1,2&minutes=10", "code": 200, "shape": {"pick": "any", "say": "str"}},
-      {"name": "skip is not numbers", "path": "/api/home/now?skip=a", "code": 400, "error": "skip is ids joined by commas, minutes a number", "gap": "now-query"},
-      {"name": "minutes is not a number", "path": "/api/home/now?minutes=soon", "code": 400, "error": "skip is ids joined by commas, minutes a number", "gap": "now-query"}
+      {"name": "skip is not numbers", "path": "/api/home/now?skip=a", "code": 400, "error": "skip is ids joined by commas, minutes a number"},
+      {"name": "minutes is not a number", "path": "/api/home/now?minutes=soon", "code": 400, "error": "skip is ids joined by commas, minutes a number"}
     ]},
     {"name": "agenda add", "method": "POST", "path": "/api/home/agendas", "about": "{name, kind? (agenda|person), every?, at?, birthday?} -> the agenda, or the person", "cases": [
       {"name": "an agenda", "body": {"name": "Retro", "every": "week", "at": "2026-11-19T14:00:00Z"}, "as": "retro", "code": 200, "shape": "@Agenda"},
@@ -170,10 +162,10 @@
       {"name": "no text", "body": {}, "code": 400, "error": "text is required", "gap": "money-routes"}
     ]},
     {"name": "settings", "method": "GET", "path": "/api/settings", "about": "{knobs: [{key, value, boot, ...}], restart_pending}", "cases": [
-      {"name": "the knobs", "code": 200, "shape": {"knobs": ["obj"], "restart_pending": "bool"}, "gap": "settings"}
+      {"name": "the knobs", "code": 200, "shape": {"knobs": ["obj"], "restart_pending": "bool"}}
     ]},
     {"name": "unknown", "method": "GET", "path": "/api/home/nowhere", "about": "no such route -> 404 {error: \"no such route\"}", "cases": [
-      {"name": "an unknown route", "code": 404, "error": "no such route", "gap": "no-route-body"}
+      {"name": "an unknown route", "code": 404, "error": "no such route"}
     ]}
   ]
 }

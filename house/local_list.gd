@@ -13,6 +13,9 @@ const STORE := "user://house_list.json"
 const KINDS := ["todo", "reminder", "note", "waiting", "project"]
 const DONE_KEPT := 200
 const NUDGES := 6
+const QUESTION_CHOICES := [
+	"add", "finish", "step", "keep", "later", "drop", "got", "chased", "tomorrow", "no"
+]
 const MAX_TEXT := 500
 const MAX_LIST := 50
 const DAY := 86400.0
@@ -267,7 +270,7 @@ func _bad(line: String) -> Dictionary:
 
 
 func _gone() -> Dictionary:
-	return {"code": 404, "body": null}
+	return {"code": 404, "body": {"error": "no such route"}}
 
 
 static func _err(v: Variant) -> bool:
@@ -640,8 +643,8 @@ func revive(id: int) -> Dictionary:
 
 
 func done(id: int) -> Dictionary:
-	var t := _find(id)
-	if t.is_empty():
+	var t := _find(id, ["open"])
+	if t.is_empty() or not str(t["kind"]) in ["todo", "reminder"]:
 		return _gone()
 	var n := now()
 	if t.get("every") != null and t.get("due_at") != null:
@@ -650,17 +653,14 @@ func done(id: int) -> Dictionary:
 		t["told_at"] = null
 		t["nudges"] = 0
 		save()
-		return _ok(_row(t))
+		return _ok({"id": id, "text": t["text"], "done_at": iso(n), "due_at": t["due_at"]})
 	t["state"] = "done"
 	t["done_at"] = iso(n)
 	t["told_at"] = null
-	if str(t["kind"]) == "project":
-		_close_project(int(t["id"]))
-	else:
-		_advance(t)
+	_advance(t)
 	_forget_old_done()
 	save()
-	return _ok(_row(t))
+	return _ok({"id": id, "text": t["text"], "done_at": t["done_at"], "due_at": t.get("due_at")})
 
 
 func _close_project(id: int) -> void:
@@ -711,13 +711,9 @@ func drop(id: int) -> Dictionary:
 
 func later(id: int, body: Dictionary) -> Dictionary:
 	var until: Variant = body.get("until")
-	if not until in ["hour", "tomorrow"]:
-		return _bad("until is hour or tomorrow")
 	var t := _find(id)
-	if t.is_empty():
+	if not until in ["hour", "tomorrow"] or t.is_empty() or not str(t["kind"]) in ["todo", "reminder"]:
 		return _gone()
-	if not str(t["kind"]) in ["todo", "reminder"]:
-		return _bad("only a to-do or a reminder can be put off")
 	var n := now()
 	t["kind"] = "reminder"
 	t["state"] = "open"
@@ -725,14 +721,19 @@ func later(id: int, body: Dictionary) -> Dictionary:
 	t["told_at"] = null
 	t["nudges"] = 0
 	save()
-	return _ok(_row(t))
+	return _ok({"id": id, "text": t["text"], "due_at": t["due_at"]})
 
 
 func answer(id: int, body: Dictionary) -> Dictionary:
 	var t := _find(id, ["open"])
 	if t.is_empty():
 		return _gone()
-	if body.get("choice") != "nottoday":
+	var choice := str(body.get("choice", ""))
+	if choice == "":
+		return _bad("choice is required")
+	if choice in QUESTION_CHOICES:
+		return _gone()
+	if choice != "nottoday":
 		return _bad("choice is nottoday")
 	t["hidden_until"] = iso(midnight(now()) + DAY + 6 * 3600.0)
 	save()
@@ -776,7 +777,10 @@ func pick(skip: Array = []) -> Dictionary:
 		return _ok({"pick": null, "say": "Nothing open right now. That's a good place to be."})
 	var row := _row(chosen)
 	row["why"] = why
-	return _ok({"pick": row, "say": "%s - %s" % [chosen["text"], why]})
+	var label := str(chosen["text"])
+	if row["project"] != null:
+		label = "%s: %s" % [row["project"]["text"], label]
+	return _ok({"pick": row, "say": "%s — %s" % [label, why]})
 
 
 func _why_due(due: float, n: float) -> String:
