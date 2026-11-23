@@ -301,6 +301,19 @@ func _sources() -> void:
 	_eq(got[0]["date"], "2026-11-21", "dated by when it fell due")
 	_eq(got[1]["why"], "open since 18 Nov, never moved", "the to-do says since when")
 	_eq(got[1]["action"], {"do": "someday", "id": 2}, "go moves that to-do to someday")
+	var nameless := {
+		"id": 9, "text": "the quote", "since": "2026-11-01T09:00:00Z", "due_at": "2026-11-02"
+	}
+	var nulled := nameless.duplicate()
+	nulled["who"] = null
+	var blank := nameless.duplicate()
+	blank["who"] = " "
+	var odd := MovesList.sources({"waiting": [nameless, nulled, blank]}, "2026-11-20", "")
+	_eq(
+		odd.map(func(x): return x["text"]),
+		["Follow up on the quote", "Follow up on the quote", "Follow up on the quote"],
+		"a waiting-on with no who, a null who or a blank one never reads Nudge nobody"
+	)
 	var m := _moves(l)
 	m.sweep(got)
 	_eq(m.settle("waiting-1", "go").get("ok"), "Added: Nudge Sam about the invoice.", "go nudges")

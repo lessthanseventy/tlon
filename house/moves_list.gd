@@ -27,7 +27,10 @@ static func _day(stamp: String) -> Dictionary:
 
 
 static func _nudge(w: Dictionary) -> Dictionary:
-	var text := "Nudge %s about %s" % [w["who"], w["text"]]
+	var who := str(w.get("who", "")).strip_edges() if w.get("who") != null else ""
+	var text := (
+		"Nudge %s about %s" % [who, w["text"]] if who != "" else "Follow up on %s" % w["text"]
+	)
 	return {
 		"key": "waiting-%d" % int(w["id"]),
 		"kind": "proposal",
