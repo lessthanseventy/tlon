@@ -280,12 +280,13 @@ func _process(_dt: float) -> void:
 
 # a refresh at the start and then every `EVERY` seconds, never oftener; a failure waits for the next
 func step() -> void:
-	if not live or _busy or not enabled():
+	if not live or _busy:
 		return
 	_due -= get_process_delta_time()
 	if _due <= 0.0:
 		_due = EVERY
-		refresh()
+		if enabled():
+			refresh()
 
 
 # sync the transactions and read the accounts, then keep both with the new cursor:

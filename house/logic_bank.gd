@@ -21,6 +21,7 @@ func run() -> void:
 	_summary()
 	_refresh()
 	_refresh_failures()
+	_step_waits_for_due()
 	_persistence()
 	_notices()
 	_routes()
@@ -291,6 +292,29 @@ func _refresh_failures() -> void:
 	_eq(got, {"error": "transport"}, "the network down")
 	_eq(JSON.stringify(bank.state) + str(bank.rows.size()), before, "nothing kept")
 
+	bank.free()
+
+
+func _step_waits_for_due() -> void:
+	var bank := _bank(false)
+	var seen := []
+	bank.plaid.http = _stub(
+		[[200, {"added": [], "modified": [], "removed": [], "has_more": false}]], [], seen
+	)
+	bank.live = true
+	bank._due = 100.0
+	bank.step()
+	_eq(seen.size(), 0, "step: not due, no refresh")
+	bank._due = 0.0
+	bank.step()
+	_eq(seen.size() > 0, true, "step: due, refreshes")
+	_eq(bank._due, bank.EVERY, "step: due restarts the cycle")
+	bank.plaid.given = {"client_id": "a", "secret": "b", "access_token": ""}
+	bank._busy = false
+	seen.clear()
+	bank._due = 0.0
+	bank.step()
+	_eq([seen.size(), bank._due], [0, bank.EVERY], "step: due with no token waits a cycle")
 	bank.free()
 
 
