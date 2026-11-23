@@ -135,8 +135,7 @@ func sweep(candidates: Array) -> bool:
 	var before: int = doc["open"].size()
 	doc["open"] = doc["open"].filter(func(m): return live.has(m["key"]))
 	var changed: bool = doc["open"].size() != before
-	var offset: float = list.bias if list != null else 0.0
-	var today := _iso(now() - offset).substr(0, 10)
+	var today := _iso(now()).substr(0, 10)
 	if doc["day"] != today:
 		doc["day"] = today
 		doc["shown"] = 0

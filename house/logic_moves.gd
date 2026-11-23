@@ -91,16 +91,17 @@ func _limits() -> void:
 	t = at(2026, 11, 19, 10)
 	m.sweep(many)
 	_eq(_keys(m), ["p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7"], "the next day takes the rest")
-	t = at(2026, 11, 18, 20)
-	var utc := _moves()
-	var zoned := _moves(_list("", -3.0 * 3600.0))
-	utc.sweep(many)
+	var bias := -5.0 * 3600.0
+	var utc := at(2026, 11, 19, 3)
+	t = utc + bias
+	var zoned := _moves(_list("", bias))
 	zoned.sweep(many)
-	t = at(2026, 11, 18, 22)
-	utc.sweep(many)
+	t = utc + 1.5 * 3600.0 + bias
 	zoned.sweep(many)
-	_eq(utc.open_items().size(), 5, "at 22:00 UTC it is still the same day in UTC")
-	_eq(zoned.open_items().size(), 8, "three hours east of UTC it is already the next day")
+	_eq(zoned.open_items().size(), 5, "UTC midnight is mid-evening for the person: same day")
+	t = utc + 3.0 * 3600.0 + bias
+	zoned.sweep(many)
+	_eq(zoned.open_items().size(), 8, "the person's midnight starts a new day")
 	t = at(2026, 11, 18, 10)
 	var a := _moves()
 	a.sweep([_a("a1"), _a("a2"), _a("a3"), _p("p")])
