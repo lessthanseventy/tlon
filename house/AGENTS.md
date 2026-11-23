@@ -546,7 +546,7 @@ runs on the local list.
   (`Background.entry` per OS: Linux `~/.config/autostart/asterion.desktop`, macOS a LaunchAgent plist with RunAtLoad,
   Windows the `HKCU\...\Run` value through `reg`; macOS and Windows are written but never run here, so unverified; an
   unexported run from the engine writes none). A close request then hides the window to a tray icon (`StatusIndicator`, menu Show /
-  Quit, left click shows) where the system has one, else minimizes it (a desktop that reports a tray but has no host, GNOME without an extension, hides the window with only a relaunch to bring it back, which the settings text says); with the setting off a close quits. One house at a time:
+  Quit, left click shows) where the system has one (a desktop that reports a tray but has no host, GNOME without an extension, hides the window with only a relaunch to bring it back, which the settings text says); with no tray, the setting off or the window already hidden a close quits (`Background.hides`). The settings' Background section has a "Quit Asterion" button, so the house can always be quit. One house at a time:
   the running one beats into `user://house_running.json` every 2 s, and a second launch that sees a beat under 6 s old
   drops `user://house_show` and quits, which the running one answers by showing its window (`OS.is_process_running` only
   knows children, so a heartbeat is the liveness). The engine's own `--headless` (no display) runs the same loop with

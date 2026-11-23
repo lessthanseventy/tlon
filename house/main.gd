@@ -127,6 +127,7 @@ func _ready() -> void:
 	add_child(_sidebar)
 	_sidebar.setup(_room.home, _claude, _phone)
 	_sidebar.settings_view.calendar = _calendar
+	_sidebar.settings_view.quit_requested.connect(func() -> void: get_tree().quit())
 	_sidebar.jot_submitted.connect(_send_jot)
 	_sidebar.chat_sent.connect(_send_chat)
 	_sidebar.chat_acted.connect(_chat_act)
@@ -328,7 +329,7 @@ func _background_on() -> bool:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		if _background_on() and not headless:
+		if Background.hides(_background_on(), headless, _tray != null, get_window().visible):
 			_to_background()
 		else:
 			get_tree().quit()
@@ -336,7 +337,6 @@ func _notification(what: int) -> void:
 		Background.release()
 
 
-# a tray icon where the system has one, else the window is minimized to the taskbar
 func _to_background() -> void:
 	if _tray != null:
 		get_window().visible = false

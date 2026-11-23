@@ -11,6 +11,15 @@ func run() -> void:
 	_entries()
 	_files()
 	_instances()
+	_close()
+
+
+func _close() -> void:
+	_eq(Background.hides(true, false, true, true), true, "a shown window with a tray hides")
+	_eq(Background.hides(true, false, false, true), false, "with no tray a close quits")
+	_eq(Background.hides(true, false, true, false), false, "a second close while hidden quits")
+	_eq(Background.hides(false, false, true, true), false, "with the setting off a close quits")
+	_eq(Background.hides(true, true, true, true), false, "a headless house quits")
 
 
 func _entries() -> void:

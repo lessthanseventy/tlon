@@ -43,6 +43,16 @@ func run(main) -> void:
 	settings.forced["telegram"] = true
 	main._apply_talk()
 
+	var view = main._sidebar.settings_view
+	_eq(view.quit_requested.get_connections().size(), 1, "the house listens for Quit")
+	for c in view.quit_requested.get_connections():
+		view.quit_requested.disconnect(c["callable"])
+	var quit := [false]
+	view.quit_requested.connect(func() -> void: quit[0] = true)
+	view.quit_button.pressed.emit()
+	_eq(quit[0], true, "the settings' Quit button asks to quit")
+	_eq(view.quit_button.text, "Quit Asterion", "and says so")
+
 	main.go_headless()
 	_eq(
 		[main.headless, main._room.visible, main._sidebar.visible],

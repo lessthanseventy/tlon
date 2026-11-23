@@ -4,6 +4,7 @@ extends VBoxContainer
 # drives what already exists (sound, the room's layout, the finds, the chat); the address check
 # goes up to main.gd, which owns the server calls.
 signal check_requested(url: String)
+signal quit_requested
 
 const Paper := preload("res://paper.gd")
 const Fonts := preload("res://fonts.gd")
@@ -36,6 +37,7 @@ const LOOKS := {
 
 var settings
 var home
+var quit_button: Button
 var _menus := {}
 var _things := {}
 var sure := Sure.new()
@@ -303,7 +305,10 @@ func _ready() -> void:
 	_quiet(col).text = (
 		"Starts when you log in. Reminders and Telegram keep going; the tray icon or"
 		+ " opening the app again brings the window back. With no tray on your desktop,"
-		+ " opening the app again is the way."
+		+ " closing the window quits."
+	)
+	quit_button = Paper.chip(
+		"Quit Asterion", _flow(col), func() -> void: quit_requested.emit(), false, "quiet"
 	)
 
 	_talk_box = VBoxContainer.new()
