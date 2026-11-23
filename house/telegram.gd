@@ -767,6 +767,9 @@ static func card_text(c: Dictionary, st: Dictionary, now: float, offset_s: float
 	var date := "%s %d %s" % [WEEKDAYS[d["weekday"]], d["day"], MONTHS[d["month"] - 1]]
 	var evening: bool = c["phase"] == "evening"
 	var live := _live(st)
+	var lists := {}
+	for r in st.get("open", []) + st.get("coming", []):
+		lists[int(r["id"])] = "" if r.get("list") == null else str(r["list"])
 	var groups := {"": []}
 	for i in c["items"].size():
 		var item: Dictionary = c["items"][i]
@@ -778,7 +781,7 @@ static func card_text(c: Dictionary, st: Dictionary, now: float, offset_s: float
 		elif live.has(id):
 			line = "%d. %s" % [i + 1, item["text"]]
 		if line != "":
-			var list := str(item.get("list", ""))
+			var list: String = lists.get(id, str(item.get("list", "")))
 			if not groups.has(list):
 				groups[list] = []
 			groups[list].append(line)

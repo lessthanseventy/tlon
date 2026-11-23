@@ -194,6 +194,17 @@ func _card() -> void:
 		"Today · Wed 18 Nov\n\nTo do\n2. buy milk\n\nSchool\n1. read ch 4\n4. essay\n\nJude's lessons\n3. plan fractions",
 		"the card groups by list, unlisted first, under one numbering"
 	)
+	listed["open"][0]["list"] = "Work"
+	listed["open"][1]["list"] = "Home"
+	listed["open"][3].erase("list")
+	_eq(
+		Telegram.card_text(g, listed, now, 0.0),
+		(
+			"Today · Wed 18 Nov\n\nTo do\n4. essay\n\nWork\n1. read ch 4\n\nHome\n2. buy milk"
+			+ "\n\nJude's lessons\n3. plan fractions"
+		),
+		"a list set or changed after the card was numbered shows at once"
+	)
 	var empty := Telegram.new_card("2026-11-18", "morning")
 	var none := {"open": [], "coming": [], "done": []}
 	Telegram.number(empty, none, now, 0.0)
