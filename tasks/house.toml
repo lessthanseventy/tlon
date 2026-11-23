@@ -53,3 +53,7 @@ run = "scripts/house-gate.sh \"$@\""
 description = "the house's gate when house/ changed in the commits being gated (scripts/house-gate.sh --if-changed): unchanged is said and passes, no godot is a named skip, red with TLON_HOUSE_GATE=required"
 wait_for = ["server:check", "server:eval-det", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check"]
 run = "scripts/house-gate.sh --if-changed"
+
+["house:import"]
+description = "house: read the server's home (GET /api/home/export, nothing there is changed) and print what it would add to the house's own list, row counts per kind beside the server's; `-- --write` imports it (idempotent, the house closed), `-- URL` names another server (needs Godot)"
+run = "godot --headless --path house --script res://import_server.gd -- \"$@\""
