@@ -351,6 +351,12 @@ func _why_in_local_day() -> void:
 	var got := _sources_of(zoned)
 	_eq(got[0]["why"], "waiting since Wed", "the waiting-on names the local day, not the UTC one")
 	_eq(got[1]["why"], "open since 18 Nov, never moved", "the to-do names the local date")
+	var west := _list("", -5.0 * 3600.0)
+	t = at(2026, 11, 17, 22)
+	west.add({"kind": "todo", "text": "Renew passport"})
+	t += 20 * DAY
+	var behind := _sources_of(west)
+	_eq(behind[0]["date"], "2026-11-17", "a to-do's date is the person's day, not UTC's")
 
 
 func _money_short() -> void:

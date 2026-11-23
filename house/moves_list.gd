@@ -49,6 +49,11 @@ static func _day(stamp: String, bias: float) -> Dictionary:
 	)
 
 
+static func _date(stamp: String, bias: float) -> String:
+	var d := _day(stamp, bias)
+	return "%04d-%02d-%02d" % [d["year"], d["month"], d["day"]]
+
+
 static func _nudge(w: Dictionary, bias: float) -> Dictionary:
 	var who := str(w.get("who", "")).strip_edges() if w.get("who") != null else ""
 	var text := (
@@ -61,7 +66,7 @@ static func _nudge(w: Dictionary, bias: float) -> Dictionary:
 		"text": text,
 		"why": "waiting since %s" % WEEKDAYS[_day(str(w["since"]), bias)["weekday"]],
 		"action": {"do": "add", "kind": "todo", "text": text},
-		"date": str(w["due_at"]).substr(0, 10)
+		"date": _date(str(w["due_at"]), bias)
 	}
 
 
@@ -74,5 +79,5 @@ static func _someday(t: Dictionary, bias: float) -> Dictionary:
 		"text": 'Put "%s" on someday' % t["text"],
 		"why": "open since %d %s, never moved" % [d["day"], MONTHS[d["month"] - 1]],
 		"action": {"do": "someday", "id": int(t["id"])},
-		"date": str(t["since"]).substr(0, 10)
+		"date": _date(str(t["since"]), bias)
 	}
