@@ -552,6 +552,27 @@ func _claude_in_the_house(main) -> void:
 		[true, true, true],
 		"the settings offer it over the house's own list"
 	)
+	var lines := {}
+	for l in v._talk_box.find_children("*", "Label", true, false):
+		lines[l.text] = l.autowrap_mode
+	var first_run := [
+		"Add things, mark them done and get reminders from your phone. Optional.",
+		(
+			"1. message @BotFather in Telegram\n2. send it /newbot and follow the steps\n"
+			+ "3. paste the token it gives you here"
+		),
+		"works while this computer is on and Asterion is running",
+		(
+			"Reads looser sentences. Needs the claude program; without it "
+			+ "Asterion reads simple ones itself. Optional."
+		),
+		"your messages are sent to your own Claude account",
+	]
+	_eq(
+		first_run.map(func(x): return lines.get(x, -1)),
+		first_run.map(func(_x): return TextServer.AUTOWRAP_WORD_SMART),
+		"the Telegram and Claude lines say what they are, and wrap at words"
+	)
 	_eq(v._claude_found.text, "found: " + _dir.path_join("claude"), "and say the program was found")
 	_eq(v._claude_last.text, "last Claude reading: ok", "and how the last reading went")
 	_out("junk")
