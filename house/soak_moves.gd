@@ -155,6 +155,9 @@ func _keys() -> void:
 	s._check(
 		_moves_posted()[0] == ["ask", 2], "option 2 posts the ask's key: %s" % str(_moves_posted())
 	)
+	sb.move_key(KEY_2)
+	await _sync()
+	s._check(_moves_posted().size() == 1, "a second press before the refresh posts nothing")
 	await _poll_home()
 	await _sync()
 	s._check(sb.view == "moves" and sb._needs.count == 4, "the ask is gone, 4 are left")

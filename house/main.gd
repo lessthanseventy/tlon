@@ -58,6 +58,8 @@ var _forecast_arg: Variant = null
 var _data := {"open": [], "coming": [], "notes": [], "done_week": 0, "done": null}
 var _skip: Array = []
 var _again := false
+# keys of moves settled and still listed: a second press on one is ignored, not a 400
+var _settling: Array = []
 # writes answered; the write a read began after; the latest read begun after a write that came
 var _writes := 0
 var _poll_gen := 0
@@ -792,6 +794,8 @@ func _apply(data: Dictionary) -> void:
 	if _demo:
 		_demo_todos(_data)
 	_room.home.set_data(_data)
+	var listed: Array = _room.home.things.moves.map(func(m: Dictionary) -> Variant: return m["key"])
+	_settling = _settling.filter(func(k: String) -> bool: return k in listed)
 	if _forecast_arg != null:
 		_room.home.set_forecast(_forecast_arg)
 	elif not _backend.local:
@@ -1168,10 +1172,17 @@ func _settle_move(key: String, choice: Variant, finish: Callable = Callable()) -
 		if finish.is_valid():
 			finish.call({"error": "not in the demo"})
 		return
+	if key in _settling:
+		if finish.is_valid():
+			finish.call({"error": "already settled"})
+		return
+	_settling.append(key)
 	_post(
 		"/api/home/moves/settle",
 		{"key": key, "choice": choice},
 		func(reached: bool, code: int, parsed: Variant) -> void:
+			if not (reached and code == 200):
+				_settling.erase(key)
 			_sidebar.set_reachable(reached)
 			if reached:
 				_refresh()
