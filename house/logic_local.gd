@@ -596,6 +596,8 @@ func _reader_lists() -> void:
 		"Jude's lessons",
 		"a list name may have spaces after for"
 	)
+	for clock in ["for 9:30 call mom", "for dinner at 6:30 buy wine"]:
+		_eq(_read(wed, clock).get("body", {}).has("list"), false, "a time's colon is no list: " + clock)
 	_eq(_read(wed, "note: school: x")["body"]["kind"], "note", "note: stays a note")
 	_eq(_read(wed, "done: milk").has("body"), false, "done: is no list")
 	var waiting := _read(wed, "Work: waiting on Dana for the lease")
