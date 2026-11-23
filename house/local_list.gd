@@ -678,7 +678,7 @@ func revive(id: int) -> Dictionary:
 
 func done(id: int) -> Dictionary:
 	var t := _find(id, ["open"])
-	if t.is_empty() or not str(t["kind"]) in ["todo", "reminder"]:
+	if t.is_empty() or not str(t["kind"]) in ["todo", "reminder", "waiting"]:
 		return _gone()
 	var n := now()
 	if t.get("every") != null and t.get("due_at") != null:

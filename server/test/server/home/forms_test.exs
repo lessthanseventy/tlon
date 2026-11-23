@@ -374,6 +374,13 @@ defmodule Server.Home.FormsTest do
       assert %{every_day: 25} = fresh(id)
     end
 
+    test "done on a waiting-on records a completion; a second done is refused" do
+      {:ok, %{id: id}} = add(kind: "waiting", text: "the photos", who: "Sam")
+      assert {:ok, %{text: "the photos"}} = Home.done(id, now())
+      assert %{done_at: %DateTime{}, dropped_at: nil} = fresh(id)
+      assert :error = Home.done(id, now())
+    end
+
     test "done on a repeating reminder with no time closes it, and a project with no steps can be planned and shown" do
       {:ok, %{id: id}} = add(kind: "todo", text: "odd")
       set(fresh(id), kind: "reminder", every: "week", due_at: nil)

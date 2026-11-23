@@ -409,8 +409,8 @@ func _deletes() -> void:
 	sb.item_act(9, "got")
 	await _wait()
 	s._check(
-		_sent("/api/home/9/drop", from) != null and _sent("/api/home/9/done", from) == null,
-		"Got it closes a waiting-on through drop"
+		_sent("/api/home/9/done", from) != null and _sent("/api/home/9/drop", from) == null,
+		"Got it closes a waiting-on as done"
 	)
 	f.close()
 

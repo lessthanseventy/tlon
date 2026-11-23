@@ -207,7 +207,7 @@ defmodule Server.MCP.OperatorAPI do
                                          bank off 200 and a reply saying so; 400 with no text. Read-only
       GET    /api/home/pets              Server.Home.Pets.voices; the pets' lines about the home now, by pet then occasion; ?nina_|argos_ + name|species|personality (sassy sweet lazy mischievous shy bold) choose the cast
                                          (asking may write the next batch); {} before the first
-      POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open
+      POST   /api/home/:id/done          Server.Home.done; the jot, or 404 when it is not open (a waiting-on got counts as done)
       POST   /api/home/add               {kind: todo|reminder|note|waiting|project, text, at?, every?, who?, project?, steps?} →
                                          Server.Home.add; the row as GET /api/home shows it, no model: at is ISO 8601, with a zone that
                                          instant, without the machine's local time, a year back to 20 ahead; every is day|week|month or "N day|week|month";

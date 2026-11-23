@@ -219,12 +219,12 @@ defmodule Server.Home do
   def board(via, now), do: via |> Jot.opens() |> Enum.split_with(&coming?(&1, now))
 
   @doc """
-  Mark the open thing `id` done at `now`: `{:ok, jot}`, `:error` when it is none or is done. The last
-  step of a project done puts the project's next step to the operator (`asked/0`).
+  Mark the open thing `id`, or the waiting-on got, done at `now`: `{:ok, jot}`, `:error` when it is none or
+  is done. The last step of a project done puts the project's next step to the operator (`asked/0`).
   """
   @spec done(integer(), DateTime.t()) :: {:ok, Jot.t()} | :error
   def done(id, now) do
-    case Jot.open(via(), id) do
+    case Jot.open(via(), id) || Enum.find(Jot.waiting(via()), &(&1.id == id)) do
       nil ->
         :error
 

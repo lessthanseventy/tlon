@@ -1043,7 +1043,7 @@ func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 		"done":
 			_write("/api/home/%d/done" % id, {}, _then(ok, func() -> void: _remove(id)))
 		"got":
-			_write("/api/home/%d/drop" % id, {}, _then(ok, func() -> void: _gone(id)))
+			_write("/api/home/%d/done" % id, {}, _then(ok, func() -> void: _got(id)))
 		"delete":
 			_write("/api/home/%d/drop" % id, {}, _then(ok, func() -> void: _gone(id)))
 		"revive":
@@ -1146,6 +1146,17 @@ func _refresh() -> void:
 		_again = true
 	else:
 		_poll()
+
+
+func _got(id: int) -> void:
+	_room.home.sound.request("delete")
+	var at := Time.get_datetime_string_from_system(true) + "Z"
+	for t in _data["waiting"]:
+		if int(t["id"]) == id and _data.get("done") is Array:
+			_data["done"] = [{"text": t["text"], "done_at": at}] + _data["done"]
+	_data["waiting"] = _data["waiting"].filter(func(t): return int(t["id"]) != id)
+	_data["done_week"] = int(_data.get("done_week", 0)) + 1
+	_apply(_data)
 
 
 func _gone(id: int) -> void:
