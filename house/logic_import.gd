@@ -77,7 +77,8 @@ func _export() -> Dictionary:
 		"things": things,
 		"agendas": agendas,
 		"proposals": [{"id": 1, "text": "x"}],
-		"settings": {"telegram_list_at": "18:00", "telegram_morning_at": "07:45"},
+		"settings":
+		{"telegram_list_at": "18:00", "telegram_morning_at": "07:45", "telegram_chat": "4242"},
 	}
 	d["counts"] = Import.counts(things, agendas)
 	d["counts"]["proposals"] = 1
@@ -129,6 +130,10 @@ func _dry_then_write() -> void:
 	_eq(report["server"]["todo"], 3, "three to-dos, done and someday among them")
 	_eq(report["proposals"], 1, "the proposal is told, not carried")
 	_eq(report["settings"]["telegram_morning_at"], "07:45", "the times are read")
+	_eq(report["chat"], 4242, "the paired chat id is read")
+	_eq(Import.chat_of({"settings": {"telegram_chat": ""}}), 0, "no chat on the server is 0")
+	_eq(Import.chat_of({"settings": {"telegram_chat": "x"}}), 0, "a non-number is 0")
+	_eq(Import.chat_of({}), 0, "no settings is 0")
 	var s2: Dictionary = list.status()
 	_eq(s2["open"].size(), 1 + 1, "the starter to-do and the step are open")
 	_eq(s2["someday"].size(), 1, "someday stays someday")

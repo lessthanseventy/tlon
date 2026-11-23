@@ -2,7 +2,8 @@ defmodule Server.Home.Export do
   @moduledoc """
   The operator's whole home as the house's own list keeps it (`house/local_list.gd`): every jot of
   the home's messenger, done and dropped ones too, every agenda, person and the door, the open
-  proposals and the two times the list and the morning message go out. Read-only: nothing is
+  proposals, the two times the list and the morning message go out and the paired chat's id
+  (`telegram_chat`, "" when none). Read-only: nothing is
   changed or deleted here. Ids are the server's own; the importer maps them.
 
   `counts` is what the importer prints beside its own: jots by kind, piles by kind, proposals.
@@ -30,7 +31,8 @@ defmodule Server.Home.Export do
       proposals: proposals,
       settings: %{
         telegram_list_at: Server.OperatorConfig.setting("home_list_at"),
-        telegram_morning_at: Server.OperatorConfig.setting("home_morning_at")
+        telegram_morning_at: Server.OperatorConfig.setting("home_morning_at"),
+        telegram_chat: Server.OperatorConfig.setting("home_chat")
       },
       counts: counts(things, agendas, proposals)
     }

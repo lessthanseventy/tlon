@@ -8,6 +8,7 @@ const Import := preload("res://import_list.gd")
 const LocalList := preload("res://local_list.gd")
 const Settings := preload("res://settings.gd")
 const Background := preload("res://background.gd")
+const Telegram := preload("res://telegram.gd")
 const BackendHttp := preload("res://backend_http.gd")
 
 var _write := false
@@ -62,6 +63,8 @@ func _read(reached: bool, code: int, parsed: Variant, settings: RefCounted) -> v
 	if _write:
 		for key in report["settings"]:
 			settings.put(key, report["settings"][key])
+		if int(report["chat"]) != 0:
+			_pair(int(report["chat"]))
 		var wrong := _mismatch(report)
 		if wrong != "":
 			_stop("written, but the counts differ: " + wrong)
@@ -70,6 +73,25 @@ func _read(reached: bool, code: int, parsed: Variant, settings: RefCounted) -> v
 	else:
 		print("dry run: nothing written; add -- --write to import")
 	quit(0)
+
+
+# the server's paired chat goes into the house's bot state beside its token, so a taken-over bot
+# answers at once; a chat the house already has is kept
+func _pair(chat: int) -> void:
+	var state := {}
+	if FileAccess.file_exists(Telegram.STORE):
+		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(Telegram.STORE))
+		if d is Dictionary:
+			state = d
+	if int(state.get("chat", 0)) != 0:
+		return
+	state["chat"] = chat
+	var f := FileAccess.open(Telegram.STORE, FileAccess.WRITE)
+	if f == null:
+		_stop("cannot write %s" % Telegram.STORE)
+		return
+	f.store_string(JSON.stringify(state))
+	print("paired chat %d: %s" % [chat, Telegram.STORE])
 
 
 # after a write every row the server gave must be in the list: server counts == local counts

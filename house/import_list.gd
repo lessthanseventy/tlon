@@ -60,8 +60,16 @@ static func refusal(export: Dictionary) -> String:
 	return ""
 
 
-# the report: {"error"} and nothing changed, or {"server", "added", "already", "local": counts by
-# kind (local: the imported rows the list holds), "proposals": n not carried, "settings": {...}}.
+# the server's paired chat id from the export's settings, 0 when it has none or it is no number
+static func chat_of(export: Dictionary) -> int:
+	var s: Variant = export.get("settings")
+	var id: Variant = s.get("telegram_chat") if s is Dictionary else null
+	return int(id) if id is String and id.is_valid_int() else 0
+
+
+# the report: {"error"} and nothing changed, or {"chat": the server's paired chat id or 0, "server",
+# "added", "already", "local": counts by kind (local: the imported rows the list holds),
+# "proposals": n not carried, "settings": {...}}.
 # `write` puts the copy in the list, saves it and answers the same report.
 static func run(list: RefCounted, export: Dictionary, write: bool) -> Dictionary:
 	var why := refusal(export)
@@ -122,6 +130,7 @@ static func run(list: RefCounted, export: Dictionary, write: bool) -> Dictionary
 		if export.get("settings") is Dictionary and export["settings"].get(key) is String:
 			settings[key] = export["settings"][key]
 	var report := {
+		"chat": chat_of(export),
 		"server": counts(things, agendas),
 		"added": added,
 		"already": already,

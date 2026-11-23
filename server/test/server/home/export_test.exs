@@ -55,6 +55,6 @@ defmodule Server.Home.ExportTest do
              "proposals" => 0
            }
 
-    assert export.settings == %{telegram_list_at: "17:30", telegram_morning_at: "08:30"}
+    assert export.settings == %{telegram_list_at: "17:30", telegram_morning_at: "08:30", telegram_chat: ""}
   end
 end
