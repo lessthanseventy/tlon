@@ -762,8 +762,8 @@ func answer(id: int, body: Dictionary) -> Dictionary:
 	var t := _find(id, ["open"])
 	if t.is_empty():
 		return _gone()
-	var choice := str(body.get("choice", ""))
-	if choice == "":
+	var choice = body.get("choice")
+	if typeof(choice) != TYPE_STRING or choice == "":
 		return _bad("choice is required")
 	if choice in QUESTION_CHOICES:
 		return _gone()

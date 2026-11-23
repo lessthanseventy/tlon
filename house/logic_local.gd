@@ -658,6 +658,8 @@ func _later_revive_plan() -> void:
 	_line(l.answer(todo, {"choice": "bogus"}), 400, "choice is nottoday", "another choice")
 	_eq(l.answer(todo, {"choice": "keep"})["code"], 404, "no such question")
 	_line(l.answer(todo, {}), 400, "choice is required", "no choice")
+	_line(l.answer(todo, {"choice": null}), 400, "choice is required", "a null choice")
+	_line(l.answer(todo, {"choice": 5}), 400, "choice is required", "a number choice")
 
 
 func _agendas() -> void:
