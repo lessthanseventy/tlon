@@ -327,6 +327,21 @@ func _forecast_overdue() -> void:
 	_eq(f["basis"]["skipped"], [], "beyond the window it has ended, not skipped")
 	_eq(_named(f["events"], "Rent"), [], "and is no event")
 
+	var halves := _data(
+		[
+			_monthly("Rent", 50000, "2026-10-14", 4),
+			_monthly("Rent", 70000, "2026-10-16", 4),
+			_txn("2026-11-15", 50000, "Rent"),
+			_everyday(100),
+		]
+	)
+	var rent_halves := _named(_forecast(halves, "2026-12-31")["events"], "Rent")
+	_eq(
+		rent_halves.filter(func(e): return e["overdue"]).map(func(e): return e["amount_cents"]),
+		[-70000],
+		"a posting is one installment's arrival, the other close to it stays overdue"
+	)
+
 	var rent_series := _monthly("Corner Shop", 4000, "2026-10-01", 3)
 	f = _forecast(_data([rent_series, _everyday(100)]), "2026-12-31")
 	_eq(f["basis"]["skipped"], ["Corner Shop"], "an unseen monthly charge is skipped")

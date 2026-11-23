@@ -488,7 +488,7 @@ static func _series_items(
 	ctx: Dictionary, series: Dictionary, kind: String, sign: int, today: String
 ) -> Array:
 	var normal := _series_item(series, kind, sign, U.add(today, 1))
-	if series["next"] > today or _arrived(ctx["txns"], series, sign):
+	if series["next"] > today or _arrived(ctx, series, sign):
 		return [normal]
 	if U.diff(today, series["next"]) <= _grace(series["period"]):
 		var late := normal.duplicate()
@@ -501,13 +501,20 @@ static func _series_items(
 	return [skipped]
 
 
-static func _arrived(txns: Array, series: Dictionary, sign: int) -> bool:
+# Installments of one bill share a key, so a posting that is a sibling's latest charge is that
+# sibling's, never this one's arrival.
+static func _arrived(ctx: Dictionary, series: Dictionary, sign: int) -> bool:
 	var since := U.add(series["next"], -Recurring.tolerance(series))
-	for t in txns:
+	var siblings := {}
+	for s in ctx["out"] + ctx["deposits"]:
+		if s["key"] == series["key"] and not is_same(s, series):
+			siblings[s["last"]] = true
+	for t in ctx["txns"]:
 		if (
 			Recurring.same_merchant(t["key"], series["key"])
 			and t["cents"] * sign < 0
 			and t["date"] >= since
+			and not siblings.has(t["date"])
 		):
 			return true
 	return false
