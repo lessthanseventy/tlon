@@ -13,6 +13,7 @@ signal chat_sent(text: String)
 signal chat_acted(id: int, what: String)
 signal check_requested(url: String)
 signal kept_closet
+signal close_requested
 
 const Paper := preload("res://paper.gd")
 const Fonts := preload("res://fonts.gd")
@@ -95,6 +96,7 @@ var _back: Control
 var _title: Label
 var _add: Control
 var _cog: Control
+var _close: Control
 var _status: Label
 var _sheet: PanelContainer
 var _pane: VBoxContainer
@@ -186,6 +188,9 @@ func _build_header(outer: VBoxContainer) -> void:
 	_cog.pressed.connect(toggle_settings)
 	_cog.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_header.add_child(_cog)
+	_close = IconButton.new("close", "Close Asterion", LIGHT, SLOT)
+	_close.pressed.connect(func() -> void: close_requested.emit())
+	_header.add_child(_close)
 
 
 func _build_persistent(stack: VBoxContainer, claude: RefCounted, phone: Node) -> void:

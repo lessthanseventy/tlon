@@ -79,12 +79,6 @@ static func set_autostart(on: bool, e: Dictionary) -> bool:
 	return false
 
 
-# Does the close button hide the window rather than quit? Only with the setting on, a display, a
-# tray to come back from and a window still shown; otherwise the house can always be closed.
-static func hides(on: bool, headless: bool, has_tray: bool, shown: bool) -> bool:
-	return on and not headless and has_tray and shown
-
-
 # Is another house running? A heartbeat younger than `STALE` says so; then the show marker is
 # dropped for it (unless `ask_window` is false: a hidden launch asks for no window) and false
 # answers (this one should quit). Otherwise this one is the house.

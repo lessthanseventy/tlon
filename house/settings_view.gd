@@ -297,15 +297,14 @@ func _ready() -> void:
 	_head(col, "Background")
 	r = _flow(col)
 	_background = Paper.chip(
-		"Keep running when the window is closed",
+		"Keep running in the background",
 		r,
 		func() -> void: _put("background", _background.button_pressed),
 		true
 	)
 	_quiet(col).text = (
-		"Starts when you log in. Reminders and Telegram keep going; the tray icon or"
-		+ " opening the app again brings the window back. With no tray on your desktop,"
-		+ " closing the window quits."
+		"Starts hidden when you log in. Reminders and Telegram keep going; the tray icon or"
+		+ " opening the app again brings the window back. Closing the window always quits."
 	)
 	quit_button = Paper.chip(
 		"Quit Asterion", _flow(col), func() -> void: quit_requested.emit(), false, "quiet"

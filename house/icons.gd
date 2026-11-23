@@ -15,6 +15,11 @@ static func draw(c: CanvasItem, kind: String, at: Vector2, color: Color, r: floa
 			c.draw_line(m + Vector2(-r, 0), m + Vector2(r, 0), color, WIDTH)
 			c.draw_line(m + Vector2(0, -r), m + Vector2(0, r), color, WIDTH)
 			return
+		"close":
+			var q := r * 0.8
+			c.draw_line(m + Vector2(-q, -q), m + Vector2(q, q), color, WIDTH)
+			c.draw_line(m + Vector2(-q, q), m + Vector2(q, -q), color, WIDTH)
+			return
 		"left":
 			a = Vector2(r * 0.5, -r)
 			b = Vector2(-r * 0.5, 0)

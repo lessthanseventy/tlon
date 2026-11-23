@@ -545,8 +545,7 @@ runs on the local list.
   shut. Turning it on writes the login entry, which starts the app with `-- --background` (hidden); turning it off removes it
   (`Background.entry` per OS: Linux `~/.config/autostart/asterion.desktop`, macOS a LaunchAgent plist with RunAtLoad,
   Windows the `HKCU\...\Run` value through `reg`; macOS and Windows are written but never run here, so unverified; an
-  unexported run from the engine writes none). A close request then hides the window to a tray icon (`StatusIndicator`, menu Show /
-  Quit, left click shows) where the system has one (a desktop that reports a tray but has no host, GNOME without an extension, hides the window with only a relaunch to bring it back, which the settings text says); with no tray, the setting off or the window already hidden a close quits (`Background.hides`). The settings' Background section has a "Quit Asterion" button, so the house can always be quit. One house at a time:
+  unexported run from the engine writes none). A close request always quits (the window's button, title-bar Close, the WM's kill, SIGTERM); the header's drawn ✕ ("Close Asterion") does too. Running on hidden is only chosen: the `--background` launch flag, or "Hide to tray" in the tray icon's menu (`StatusIndicator`, menu Show / Hide to tray / Quit, left click shows) where the system has a tray. The settings' Background section has a "Quit Asterion" button. One house at a time:
   the running one beats into `user://house_running.json` every 2 s, and a second launch that sees a beat under 6 s old
   drops `user://house_show` and quits, which the running one answers by showing its window (`OS.is_process_running` only
   knows children, so a heartbeat is the liveness). The engine's own `--headless` (no display) runs the same loop with

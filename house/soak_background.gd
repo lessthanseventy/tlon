@@ -53,6 +53,15 @@ func run(main) -> void:
 	_eq(quit[0], true, "the settings' Quit button asks to quit")
 	_eq(view.quit_button.text, "Quit Asterion", "and says so")
 
+	settings.forced["background"] = true
+	var ended := [0]
+	main._quit = func() -> void: ended[0] += 1
+	main._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
+	_eq(ended[0], 1, "a close request quits with the background setting on")
+	main._sidebar._close.pressed.emit()
+	_eq(ended[0], 2, "the close button quits")
+	settings.forced.erase("background")
+
 	main.go_headless()
 	_eq(
 		[main.headless, main._room.visible, main._sidebar.visible],

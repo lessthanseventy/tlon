@@ -81,6 +81,7 @@ var _ids_known := false
 var _watch_busy := false
 var _kept := false
 var _tray: Node
+var _quit := func() -> void: get_tree().quit()
 
 var _room: Control
 var _sidebar: PanelContainer
@@ -127,7 +128,8 @@ func _ready() -> void:
 	add_child(_sidebar)
 	_sidebar.setup(_room.home, _claude, _phone)
 	_sidebar.settings_view.calendar = _calendar
-	_sidebar.settings_view.quit_requested.connect(func() -> void: get_tree().quit())
+	_sidebar.settings_view.quit_requested.connect(func() -> void: _quit.call())
+	_sidebar.close_requested.connect(func() -> void: _quit.call())
 	_sidebar.jot_submitted.connect(_send_jot)
 	_sidebar.chat_sent.connect(_send_chat)
 	_sidebar.chat_acted.connect(_chat_act)
@@ -296,7 +298,6 @@ func _ready() -> void:
 # the house that is the one running: its heartbeat, its close button, its tray
 func _keep_house(args: Array) -> void:
 	_kept = true
-	get_tree().auto_accept_quit = false
 	var beat := Timer.new()
 	beat.wait_time = Background.BEAT
 	beat.timeout.connect(
@@ -329,10 +330,7 @@ func _background_on() -> bool:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		if Background.hides(_background_on(), headless, _tray != null, get_window().visible):
-			_to_background()
-		else:
-			get_tree().quit()
+		_quit.call()
 	elif what == NOTIFICATION_EXIT_TREE and _kept:
 		Background.release()
 
@@ -379,13 +377,16 @@ func _make_tray() -> void:
 		return
 	var menu := PopupMenu.new()
 	menu.add_item("Show", 0)
+	menu.add_item("Hide to tray", 2)
 	menu.add_item("Quit", 1)
 	menu.id_pressed.connect(
 		func(id: int) -> void:
 			if id == 0:
 				_show_window()
+			elif id == 2:
+				_to_background()
 			else:
-				get_tree().quit()
+				_quit.call()
 	)
 	add_child(menu)
 	var tray := StatusIndicator.new()
