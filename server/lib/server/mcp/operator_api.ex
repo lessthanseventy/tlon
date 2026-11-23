@@ -187,7 +187,7 @@ defmodule Server.MCP.OperatorAPI do
                                          amount_cents (negative is money out), name, kind (charge|deposit), rhythm (weekly|fortnightly|
                                          monthly|yearly|once), count, overdue (expected and not yet posted, held on tomorrow), expected_on
                                          (the date it was due, when overdue; else null)}], everyday: {expected_daily_cents, low_daily_cents,
-                                         high_daily_cents, history_days}, lowest: {date, balance_cents}, before_next_deposit: {date,
+                                         high_daily_cents, mean_daily_cents, occasional_daily_cents, history_days}, lowest: {date, balance_cents}, before_next_deposit: {date,
                                          balance_cents} | null, other_available_cents (what the other depository accounts, savings, hold;
                                          never in the balance), other_accounts (their names), basis: {months_of_history, series, next_deposit: {name, date, overdue} | null,
                                          skipped (names of series whose expected charge did not post), caveats (pending_ignored|short_history|

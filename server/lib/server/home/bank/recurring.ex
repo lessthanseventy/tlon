@@ -30,6 +30,11 @@ defmodule Server.Home.Bank.Recurring do
   tolerance of `today` (a yearly one: one rhythm plus 30 days), else it has **ended**: nothing is
   expected of it any more. Weekly is 7 days, fortnightly 14, monthly 30 and yearly 365 days, with a
   tolerance of 2, 3, 4 and 10 days, so the windows are 16, 31, 64 and 395 days.
+
+  Rent paid through a rent service (`@rent`) is one merchant under any of its names, labelled
+  `@rent_label`. It may come in installments: when the three months before the newest each hold
+  the same number (two or more) of charges, each installment is a monthly series of its own (the
+  median of its latest three, on the day it last came); one a month is found as any other series.
   """
 
   @type txn :: %{
@@ -56,6 +61,8 @@ defmodule Server.Home.Bank.Recurring do
 
   @bands [weekly: 5..9, fortnightly: 11..17, monthly: 26..34, yearly: 355..375]
   @label_max 40
+  @rent ["flex", "flexible finance"]
+  @rent_label "Rent (Flex)"
 
   @doc """
   A stored row (`%{"id", "account_id", "cents", "date", "name", "merchant", "pending"}`) as a
@@ -66,6 +73,8 @@ defmodule Server.Home.Bank.Recurring do
   def txn(%{"id" => id, "cents" => cents, "date" => date} = row) when is_binary(id) and is_integer(cents) do
     with {:ok, date} <- Date.from_iso8601(date),
          label when label != "" <- label(row["merchant"], row["name"]) do
+      label = if rent?(key(label)), do: @rent_label, else: label
+
       %{
         id: id,
         account_id: row["account_id"],
@@ -225,7 +234,56 @@ defmodule Server.Home.Bank.Recurring do
   defp window(:fortnightly), do: 2 * 14 + tolerance(:fortnightly)
   defp window(:weekly), do: 2 * 7 + tolerance(:weekly)
 
-  defp key_series(group, direction) do
+  defp key_series([%{label: @rent_label} | _] = group, :out) do
+    case installments(group) do
+      [] -> usual_series(group, :out)
+      parts -> parts
+    end
+  end
+
+  defp key_series(group, direction), do: usual_series(group, direction)
+
+  defp installments(group) do
+    by_month = Enum.group_by(group, &Date.beginning_of_month(&1.date))
+    months = by_month |> Map.keys() |> Enum.sort({:desc, Date}) |> month_run()
+    rows = Enum.map(months, fn month -> Enum.sort_by(by_month[month], & &1.date, Date) end)
+
+    with [_newest, [_, _ | _] = r1, r2, r3 | _] <- rows,
+         n = length(r1),
+         true <- length(r2) == n and length(r3) == n do
+      for i <- 0..(n - 1), do: installment(Enum.flat_map(rows, &List.wrap(Enum.at(&1, i))))
+    else
+      _ -> []
+    end
+  end
+
+  defp month_run([month | rest]), do: [month | month_run(month, rest)]
+  defp month_run([]), do: []
+
+  defp month_run(month, [earlier | rest]) do
+    if Date.shift(earlier, month: 1) == month, do: [earlier | month_run(earlier, rest)], else: []
+  end
+
+  defp month_run(_month, []), do: []
+
+  defp installment([last | _] = nth) do
+    recent = nth |> Enum.take(3) |> Enum.map(&abs(&1.cents)) |> Enum.sort()
+
+    %{
+      key: last.key,
+      label: last.label,
+      period: :monthly,
+      amount: Enum.at(recent, 1),
+      last: last.date,
+      next: next(last.date, :monthly),
+      count: length(nth),
+      at_amount: length(nth),
+      was: nil,
+      account_id: last.account_id
+    }
+  end
+
+  defp usual_series(group, direction) do
     dated = Enum.sort_by(group, & &1.date, {:desc, Date})
     charges = Enum.uniq_by(dated, & &1.date)
     parts = charges |> amount_clusters() |> Enum.flat_map(&List.wrap(detect(&1, direction)))
@@ -371,4 +429,6 @@ defmodule Server.Home.Bank.Recurring do
   defp recent(:in), do: 6
 
   defp comparable?(a, level), do: a * 2 >= level and a <= level * 2
+
+  defp rent?(key), do: Enum.any?(@rent, &same_merchant?(key, &1))
 end

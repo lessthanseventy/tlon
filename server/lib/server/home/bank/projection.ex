@@ -29,11 +29,13 @@ defmodule Server.Home.Bank.Projection do
   it, so it is not counted again.
 
   **Everyday spending**, what is in no series: the posted outflows of the spendable accounts in the
-  last 90 days (or the history there is), without series charges and transfers, are spread evenly
-  over those days for the expected daily figure. Rolling 30-day totals of the same give the 25th
-  and 75th percentile (nearest rank) as the low and high daily figures; under 30 days of history
-  all three are equal and the caveat is `:short_history`. Per-day figures are the one place a
-  total is rounded to a cent.
+  last 90 days (or the history there is), without series charges and transfers. The expected daily
+  figure is the median week of them over seven (their mean with under three weeks of history), so a
+  few lumps (cash, a transfer to someone) do not spread over every day; `mean_daily_cents` is the
+  plain average and `occasional_daily_cents` what it is above the expected. Rolling 30-day totals
+  of the same give the 25th and 75th percentile (nearest rank) as the low and high daily figures,
+  never above or below the expected; under 30 days of history all three are equal and the caveat
+  is `:short_history`. Per-day figures are the one place a total is rounded to a cent.
   """
 
   alias Server.Home.Bank
@@ -43,6 +45,7 @@ defmodule Server.Home.Bank.Projection do
   @window 90
   @labels 60
   @month 30
+  @week 7
   @afford_days 60
   @cushion_days 7
 
@@ -64,6 +67,8 @@ defmodule Server.Home.Bank.Projection do
           expected_daily_cents: non_neg_integer(),
           low_daily_cents: non_neg_integer(),
           high_daily_cents: non_neg_integer(),
+          mean_daily_cents: non_neg_integer(),
+          occasional_daily_cents: non_neg_integer(),
           history_days: non_neg_integer()
         }
   @type caveat :: :pending_ignored | :short_history | :skipped_charge | :no_deposit_seen | :one_off_bills_unknown
@@ -369,7 +374,8 @@ defmodule Server.Home.Bank.Projection do
       |> Map.new(fn {date, cents} -> {date, Enum.sum(cents)} end)
 
     per_day = for i <- 0..(span - 1)//1, do: Map.get(totals, Date.add(today, -i), 0)
-    expected = per(Enum.sum(per_day), max(span, 1))
+    mean = per(Enum.sum(per_day), max(span, 1))
+    expected = median_week(per_day, span, mean)
 
     {low, high} =
       if span < @month do
@@ -379,8 +385,29 @@ defmodule Server.Home.Bank.Projection do
         {min(per(rank(sums, 25), @month), expected), max(per(rank(sums, 75), @month), expected)}
       end
 
-    %{expected_daily_cents: expected, low_daily_cents: low, high_daily_cents: high, history_days: span}
+    %{
+      expected_daily_cents: expected,
+      low_daily_cents: low,
+      high_daily_cents: high,
+      mean_daily_cents: mean,
+      occasional_daily_cents: max(mean - expected, 0),
+      history_days: span
+    }
   end
+
+  defp median_week(per_day, span, _mean) when span >= 3 * @week do
+    weeks = per_day |> Enum.chunk_every(@week, @week, :discard) |> Enum.map(&Enum.sum/1) |> Enum.sort()
+    mid = div(length(weeks), 2)
+
+    week =
+      if rem(length(weeks), 2) == 1,
+        do: Enum.at(weeks, mid),
+        else: div(Enum.at(weeks, mid - 1) + Enum.at(weeks, mid) + 1, 2)
+
+    per(week, @week)
+  end
+
+  defp median_week(_per_day, _span, mean), do: mean
 
   defp history_days([], _today), do: 0
 

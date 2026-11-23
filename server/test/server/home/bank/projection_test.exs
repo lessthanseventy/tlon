@@ -251,7 +251,7 @@ defmodule Server.Home.Bank.ProjectionTest do
       assert Enum.sum(outflow) > 0
 
       rounding =
-        abs(Enum.sum(outflow) - Enum.sum(series_out) - f.everyday.expected_daily_cents * f.everyday.history_days)
+        abs(Enum.sum(outflow) - Enum.sum(series_out) - f.everyday.mean_daily_cents * f.everyday.history_days)
 
       assert rounding <= div(f.everyday.history_days, 2)
     end
@@ -267,7 +267,15 @@ defmodule Server.Home.Bank.ProjectionTest do
       other = txn(Date.add(@today, -3), 900, "Elsewhere", %{"account_id" => "s1"})
       f = forecast!(data([other]))
 
-      assert f.everyday == %{expected_daily_cents: 0, low_daily_cents: 0, high_daily_cents: 0, history_days: 0}
+      assert f.everyday == %{
+               expected_daily_cents: 0,
+               low_daily_cents: 0,
+               high_daily_cents: 0,
+               mean_daily_cents: 0,
+               occasional_daily_cents: 0,
+               history_days: 0
+             }
+
       assert List.last(f.days).expected_cents == 480_000
     end
 
@@ -316,7 +324,44 @@ defmodule Server.Home.Bank.ProjectionTest do
       with_rest = forecast!(data([everyday(100), monthly("Rent", 120_000, ~D[2026-10-27], 4), transfer]))
 
       assert with_rest.everyday.expected_daily_cents == only_shops.everyday.expected_daily_cents
-      assert only_shops.everyday.expected_daily_cents == 2_967
+      assert only_shops.everyday.expected_daily_cents == 3_000
+      assert only_shops.everyday.mean_daily_cents == 2_967
+    end
+
+    test "a few lumps barely move the expected everyday figure, and are said apart as occasional" do
+      lumps = [
+        txn(Date.add(@today, -9), 100_000, "Cash one"),
+        txn(Date.add(@today, -32), 90_000, "Transfer to a friend"),
+        txn(Date.add(@today, -70), 120_000, "Cash two")
+      ]
+
+      plain = forecast!(data([everyday(100)])).everyday
+      lumpy = forecast!(data([everyday(100), lumps])).everyday
+
+      assert lumpy.expected_daily_cents * 4 <= plain.expected_daily_cents * 5
+      assert lumpy.mean_daily_cents > plain.mean_daily_cents + 3_000
+      assert lumpy.occasional_daily_cents == lumpy.mean_daily_cents - lumpy.expected_daily_cents
+      assert lumpy.high_daily_cents > lumpy.expected_daily_cents
+    end
+
+    test "rent in installments on two merchant names is one monthly bill each, none of it everyday" do
+      flex = [
+        txn(~D[2026-11-13], 50_000, "Flexible Finance Inc.", %{"merchant" => "Flexible Finance"}),
+        txn(~D[2026-11-02], 70_000, "Flex* Flexible Finance", %{"merchant" => "Flex"}),
+        txn(~D[2026-10-16], 50_000, "Flex* Flexible Finance", %{"merchant" => "Flex"}),
+        txn(~D[2026-10-03], 52_000, "Flexible Finance Inc.", %{"merchant" => "Flexible Finance"}),
+        txn(~D[2026-09-07], 50_000, "Flex* Flexible Finance", %{"merchant" => "Flex"}),
+        txn(~D[2026-09-02], 51_000, "Flex* Flexible Finance", %{"merchant" => "Flex"}),
+        txn(~D[2026-08-11], 50_000, "Flex* Flexible Finance", %{"merchant" => "Flex"}),
+        txn(~D[2026-08-02], 51_000, "Flex* Flexible Finance", %{"merchant" => "Flex"})
+      ]
+
+      f = forecast!(data([everyday(100), flex]), ~D[2026-12-31])
+
+      assert f.events |> Enum.filter(&(&1.name == "Rent (Flex)")) |> Enum.map(&{&1.date, &1.amount_cents}) ==
+               [{~D[2026-12-02], -52_000}, {~D[2026-12-13], -50_000}]
+
+      assert f.everyday == forecast!(data([everyday(100)])).everyday
     end
 
     test "moves between checking and savings, either way and a day apart, never reach everyday spending or the series" do

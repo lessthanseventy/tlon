@@ -2,8 +2,7 @@ extends RefCounted
 
 # Where the checking balance goes in the days ahead, worked out from the transactions kept: pure
 # arithmetic, no clock (`today` is always passed in), in cents. A port of the server's
-# `Server.Home.Bank.Projection`; the rules are the same but for everyday spending's median week
-# and the rent series (`bank_recurring.gd`).
+# `Server.Home.Bank.Projection`; the rules are the same.
 #
 # `data` is {"transactions": [txn], "accounts": [account]}. What is handed in is a magnitude (the
 # cost of a purchase, the new size of a series); what comes back is the effect on the balance: money
