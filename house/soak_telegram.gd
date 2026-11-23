@@ -738,6 +738,11 @@ func _daily(base: String, bot: Bot) -> void:
 		true,
 		"a house opened after the evening's time says it that day, once"
 	)
+	var before := bot.sent.size()
+	t = LocalList.wall(2026, 11, 28, 23)
+	tg2.daily()
+	await _settle()
+	_eq(bot.sent.size() - before, 0, "a weekend evening with no morning card, nothing done: nothing")
 	tg2.morning_at = "08:30"
 	st["open"] = []
 	t = LocalList.wall(2026, 11, 24, 9)

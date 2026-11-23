@@ -705,6 +705,8 @@ func _card_evening(today: String, now: float) -> void:
 		old = int(card["mid"])
 	else:
 		card = new_card(today, "evening")
+		number(card, st, now, bias)
+		card["first"] = card["items"].size()
 	number(card, st, now, bias)
 	var weekday: int = LocalList.parts(now)["weekday"]
 	if weekday in [0, 6] and not _moved(st, now):
