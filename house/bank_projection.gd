@@ -252,11 +252,14 @@ static func _week(spends: Array, from: String, to: String) -> Dictionary:
 			{"name": g[0]["label"], "amount_cents": U.sum(g.map(func(t): return t["cents"]))}
 		)
 	top = U.sort_by(top, func(m): return [-m["amount_cents"], m["name"]])
+	var rest := top.slice(4)
 	return {
 		"from": from,
 		"to": to,
 		"total_cents": U.sum(rows.map(func(t): return t["cents"])),
 		"top": top.slice(0, 4),
+		"rest_count": rest.size(),
+		"rest_cents": U.sum(rest.map(func(m): return m["amount_cents"])),
 	}
 
 

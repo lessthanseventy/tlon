@@ -236,7 +236,7 @@ runs on the local list.
   "Safe to spend: about $45 a day until Fri" or "Nothing spare until Fri: about $120 short", and `Money.today_line`
   "Spent $23 of $45 today", over it "over by $N" in `Paper.WARM`), Until the next deposit (`Money.lowest_line`, to the whole dollar, from `before_next_deposit`
   and `basis.next_deposit`, then a `DayStrip` of the days ahead with each of `events` on its date), Where it went (the
-  budget's `weeks`, this one from Monday and the last, each its top four merchants, `Money.week_line`), Subscriptions
+  budget's `weeks`, this one from Monday and the last, each a sub-heading with its total, its top four merchants as name/amount rows in the bills' amount column and "N others", `Money.went_rows`; `week_line` stays for the chat's text), Subscriptions
   (`subscriptions`: `amount_cents`, `rhythm`, `next`, a rise mark and "was $X" from `was_cents`), Noticed (the forecast's
   `notices` `[{key, kind, text, why}]`, absent from an older server: a row each under Now, the first three and "and N
   more", a quiet "seen" that clears the row at once and posts `{key}` to `POST /api/home/money/notices/seen`; a

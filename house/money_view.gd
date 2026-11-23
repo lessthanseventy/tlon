@@ -149,10 +149,29 @@ func _went(box: VBoxContainer) -> void:
 		return
 	Views.heading(box, "Where it went")
 	for pair in [["This week", b["weeks"][0]], ["Last week", b["weeks"][1]]]:
-		_indented(
-			box,
-			Blocks.wrapped("%s: %s" % [pair[0], Money.week_line(pair[1])], Fonts.SMALL, Paper.INK)
-		)
+		var week: Dictionary = pair[1]
+		_went_row(box, pair[0], Money.fmt_whole(week.get("total_cents", 0)), true)
+		var rows := Money.went_rows(week)
+		if rows["rows"].is_empty():
+			_indented(box, Views.quiet("nothing yet", Fonts.SMALL))
+		for r in rows["rows"]:
+			_went_row(box, r[0], Money.fmt_whole(r[1]), false)
+		if rows["others"] != null:
+			var o: Array = rows["others"]
+			_went_row(box, "%d others" % o[0], Money.fmt_whole(o[1]), false)
+
+
+# a name and an amount in the bills' columns: the amount last, at the row's right edge
+func _went_row(box: Control, name: String, amount: String, head: bool) -> void:
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_left", 5)
+	box.add_child(pad)
+	var row := Paper.row(pad)
+	var left := Paper.label(name, Fonts.SMALL, Paper.QUIET if head else Paper.INK)
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.clip_text = true
+	row.add_child(left)
+	row.add_child(Paper.label(amount, Fonts.SMALL if head else Fonts.BODY, Paper.INK))
 
 
 func _noticed(box: VBoxContainer) -> void:

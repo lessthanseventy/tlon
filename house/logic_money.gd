@@ -87,6 +87,40 @@ func _budget() -> void:
 		"a week's top spends"
 	)
 	_eq(Money.week_line({"top": []}), "nothing yet", "an empty week")
+	_eq(
+		Money.clean_name("Direct Debit: Capital One Card, Online D"),
+		"Capital One Card",
+		"a bank prefix and the text after a comma go"
+	)
+	_eq(
+		Money.clean_name("POS Corner Market 4411"),
+		"Corner Market",
+		"a prefix and a trailing code go"
+	)
+	_eq(Money.clean_name("Online Banking Transfer x1234"), "Banking Transfer", "a card number goes")
+	_eq(Money.clean_name("Positano"), "Positano", "a prefix is a whole word")
+	_eq(Money.clean_name("7-Eleven"), "7-Eleven", "a first word is never a code")
+	_eq(Money.shorten("Corner Market", 24), "Corner Market", "short enough stays")
+	_eq(
+		Money.shorten("The Very Long Merchant Name Incorporated", 24),
+		"The Very Long Merchant…",
+		"cut at a word, never in one"
+	)
+	_eq(
+		Money.shorten("Supercalifragilisticexpialidocious", 10),
+		"Supercalifragilisticexpialidocious",
+		"one long word stays"
+	)
+	var went := Money.went_rows(
+		{
+			"top": [{"name": "Direct Debit: Capital One Card, Online D", "amount_cents": 20000}],
+			"rest_count": 3,
+			"rest_cents": 1250
+		}
+	)
+	_eq(went["rows"], [["Capital One Card", 20000]], "rows are cleaned names and cents")
+	_eq(went["others"], [3, 1250], "and the rest is a count and a sum")
+	_eq(Money.went_rows({"top": []})["others"], null, "no rest, no others row")
 
 
 func _summary(available: Variant, due: Array, balance: Variant = null) -> Dictionary:

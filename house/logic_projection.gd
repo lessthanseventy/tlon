@@ -654,6 +654,8 @@ func _budget() -> void:
 		"the week's top merchants by amount, a merchant's spends together"
 	)
 	_eq(this["top"].size(), 4, "at most four")
+	var shown: int = U.sum(this["top"].map(func(m): return m["amount_cents"]))
+	_eq(this["rest_cents"], this["total_cents"] - shown, "the rest is summed beside the top four")
 	_eq(
 		this["top"].any(func(m): return m["name"] == "Gym"),
 		false,

@@ -24,6 +24,7 @@ const HIT := [
 	Vector2(-23, -6),
 ]
 const SOON := 5
+const WENT_NAME := 24
 const STRIP_MIN := 7
 const STRIP_MAX := 14
 const WEEKDAYS := ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -266,6 +267,60 @@ static func week_line(week: Dictionary) -> String:
 	for m in week.get("top", []):
 		parts.append("%s %s" % [str(m["name"]), fmt_whole(roundi(float(m["amount_cents"])))])
 	return "nothing yet" if parts.is_empty() else " · ".join(PackedStringArray(parts))
+
+
+# a bank's merchant text as a name: "Direct Debit: Capital One Card, Online D" is "Capital One Card"
+static func clean_name(raw: String) -> String:
+	var name := raw.strip_edges()
+	for prefix in ["direct debit", "debit card purchase", "purchase", "pos", "online"]:
+		var rest := name.substr(prefix.length())
+		if name.to_lower().begins_with(prefix) and (rest.begins_with(" ") or rest.begins_with(":")):
+			name = rest.lstrip(" :-")
+	name = name.get_slice(",", 0)
+	var words: PackedStringArray = name.split(" ", false)
+	while words.size() > 1 and _is_code(words[words.size() - 1]):
+		words.remove_at(words.size() - 1)
+	var out := " ".join(words)
+	return out if out != "" else raw.strip_edges()
+
+
+# a card number or reference: "x1234", "#4411", "*0042", "AB12CD34"
+static func _is_code(word: String) -> bool:
+	var digits := 0
+	for c in word:
+		if c >= "0" and c <= "9":
+			digits += 1
+	return (
+		digits > 0
+		and (digits == word.length() or word.length() >= 5 or word[0] in ["#", "*", "x", "X"])
+	)
+
+
+# `name` held to `limit` characters at a word boundary with "…" after it; one long word stays whole
+static func shorten(name: String, limit: int) -> String:
+	if name.length() <= limit:
+		return name
+	var words: PackedStringArray = name.split(" ", false)
+	var out := words[0]
+	for i in range(1, words.size()):
+		if out.length() + 1 + words[i].length() > limit - 1:
+			break
+		out += " " + words[i]
+	return out + "…" if out.length() < name.length() and words.size() > 1 else name
+
+
+# a week of the budget as what its rows say: {rows: [[name, cents]], others: [count, cents] or null}
+static func went_rows(week: Dictionary) -> Dictionary:
+	var rows: Array = []
+	for m in week.get("top", []):
+		rows.append(
+			[shorten(clean_name(str(m["name"])), WENT_NAME), roundi(float(m["amount_cents"]))]
+		)
+	var count := roundi(float(week.get("rest_count", 0)))
+	var others: Variant = null
+	if count > 0:
+		others = [count, roundi(float(week.get("rest_cents", 0)))]
+	return {"rows": rows, "others": others}
 
 
 static func _counting(forecast: Dictionary) -> String:

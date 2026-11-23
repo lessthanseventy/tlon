@@ -67,8 +67,17 @@ const FORECAST := {
 		"spent_today_cents": 6000,
 		"weeks":
 		[
-			{"top": [{"name": "Corner Market", "amount_cents": 14000}]},
-			{"top": []},
+			{
+				"total_cents": 20000,
+				"top":
+				[
+					{"name": "Corner Market", "amount_cents": 14000},
+					{"name": "Direct Debit: Capital One Card, Online D", "amount_cents": 4000},
+				],
+				"rest_count": 2,
+				"rest_cents": 2000,
+			},
+			{"total_cents": 0, "top": []},
 		],
 	},
 }
@@ -158,6 +167,13 @@ func _texts(node: Node, out: Array = []) -> Array:
 
 func _has(prefix: String) -> bool:
 	return _texts(sb._dyn).any(func(t: String) -> bool: return t.begins_with(prefix))
+
+
+func _label(text: String) -> Label:
+	for l in sb._dyn.find_children("*", "Label", true, false):
+		if l.text == text:
+			return l
+	return null
 
 
 func _strips() -> Array:
@@ -294,10 +310,26 @@ func _view() -> void:
 		"today against it, over: %s" % str(texts)
 	)
 	s._check(
-		"Where it went" in texts and "This week: Corner Market $140" in texts,
-		"where it went this week: %s" % str(texts)
+		"Where it went" in texts and "Corner Market" in texts and "Capital One Card" in texts,
+		"where it went this week, names cleaned: %s" % str(texts)
 	)
-	s._check("Last week: nothing yet" in texts, "and an empty last week")
+	s._check(
+		"2 others" in texts and "$140" in texts and "$200" in texts,
+		"the rest grouped, the amounts and the week's total: %s" % str(texts)
+	)
+	s._check("nothing yet" in texts, "and an empty last week")
+	var bill := _label("Streaming")
+	var amount := _label("-$15.99")
+	var went := _label("2 others")
+	s._check(bill != null and amount != null and went != null, "the rows are there")
+	if amount != null and went != null:
+		var went_amount: Label = went.get_parent().get_child(went.get_index() + 1)
+		s._check(
+			is_equal_approx(went_amount.get_global_rect().end.x, amount.get_global_rect().end.x),
+			"a went row's amount sits in the bills' amount column (%s vs %s)" % [
+				str(went_amount.get_global_rect().end.x), str(amount.get_global_rect().end.x)
+			]
+		)
 	var strips := _strips()
 	s._check(
 		strips.size() == 1 and strips[0].days.size() == 7,
