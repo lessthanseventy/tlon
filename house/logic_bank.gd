@@ -658,9 +658,6 @@ func _ask_edges() -> void:
 	var first := {"ask": "forecast", "until": "2026-12-20"}
 	var asker := Ask.new()
 	asker.bank = bank
-	var down := func(prompt: String, cb: Callable) -> void:
-		_asked.append(prompt)
-		cb.call(false, "")
 	var step := func(text: String, thread: String) -> void:
 		var queue := [_plan([first]), [false, ""]]
 		var model := func(prompt: String, cb: Callable) -> void:
@@ -697,7 +694,6 @@ func _ask_edges() -> void:
 	)
 	_eq(Ask._id("plain-1_x"), "plain-1_x", "a plain one is kept")
 	bank.free()
-	down.call("", func(_o: bool, _t: String) -> void: pass)
 
 
 func _ask_without_model() -> void:
