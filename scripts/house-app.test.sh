@@ -2,7 +2,7 @@
 # Self-test of house-app.sh: install builds through house-build.sh and leaves an executable at the
 # path (replacing atomically, no .new left), a missing godot is a named skip that leaves nothing, a
 # failed build keeps the old copy, run starts the installed file or says to install, and install
-# writes the launcher's desktop entry and icon, leaving both untouched on a second run.
+# writes the launcher's desktop entry and icon, leaving both untouched on a second run and rewriting each when its content changes.
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tmp="$(mktemp -d)"
@@ -42,6 +42,13 @@ touch -d '2020-01-01' "$entry" "$icon"
 app install >/dev/null
 expect "a second install leaves the entry" "$(stat -c %y "$entry" | cut -c1-4)" 2020
 expect "a second install leaves the icon" "$(stat -c %y "$icon" | cut -c1-4)" 2020
+moved="$tmp/moved/asterion"
+TLON_ASTERION_BIN="$moved" app install >/dev/null
+expect "a moved binary rewrites the entry" "$(grep -c "^Exec=$moved\$" "$entry")" 1
+expect "the rewritten entry leaves no old Exec" "$(grep -c "^Exec=$TLON_ASTERION_BIN\$" "$entry")" 0
+printf 'png2' >"$tmp/house/icon.png"
+app install >/dev/null
+expect "a changed icon is rewritten" "$(cat "$icon")" png2
 echo old >"$TLON_ASTERION_BIN"
 FAKE_BUILD=fail app install >/dev/null
 expect "a failed build keeps the old copy" "$(cat "$TLON_ASTERION_BIN")" old
