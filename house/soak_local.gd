@@ -193,6 +193,7 @@ func _chat_lines() -> void:
 		plain.list.moves.open_items().size() == 1, "a go naming no open item settles nothing"
 	)
 	say.call("go", "later")
+	_eq(got.size(), 3, "a settle's answer comes on a later frame, never inside the call")
 	await s._until(func(): return got.size() == 4, "the go is answered")
 	_eq(got[3], [200, "Added: the lamp."], "go settles the item shown")
 	_eq(plain.list.moves.open_items().size(), 0, "and it is no longer waiting")

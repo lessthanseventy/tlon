@@ -116,7 +116,7 @@ func _chat(text: String, body: Dictionary, cb: Callable) -> bool:
 		var out := {"reply": str(said.get("ok", said.get("error", "")))}
 		if said.has("open"):
 			out["open"] = said["open"]
-		_answered(cb, text, out)
+		_answered.call_deferred(cb, text, out)
 		return true
 	match ChatRoute.asks(text):
 		"money":
