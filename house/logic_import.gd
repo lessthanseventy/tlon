@@ -92,6 +92,20 @@ func _refused() -> void:
 	var counted := _export()
 	counted["counts"]["todo"] = 99
 	_eq(Import.run(list, counted, true).get("error") != null, true, "a miscounted read is refused")
+	var phantom := _export()
+	phantom["things"].pop_back()
+	_eq(
+		Import.run(list, phantom, true).get("error") != null,
+		true,
+		"a claimed kind with no rows is refused"
+	)
+	var skewed := _export()
+	skewed["counts"]["proposals"] = 4
+	_eq(
+		Import.run(list, skewed, true).get("error") != null,
+		true,
+		"a miscounted proposals is refused"
+	)
 	var dangling := _export()
 	dangling["things"][1]["project_id"] = 777
 	_eq(Import.run(list, dangling, true).get("error") != null, true, "a dangling project stops")

@@ -43,12 +43,19 @@ static func refusal(export: Dictionary) -> String:
 		if not a.get("name") is String:
 			return "agenda %s has no name" % str(a["id"])
 	var got := counts(things, agendas)
+	got["proposals"] = (
+		(export["proposals"] as Array).size() if export.get("proposals") is Array else 0
+	)
 	var said: Dictionary = export["counts"]
-	for kind in got:
-		if int(said.get(kind, -1)) != int(got[kind]):
+	var kinds := got.keys()
+	for kind in said:
+		if not got.has(kind):
+			kinds.append(kind)
+	for kind in kinds:
+		if int(said.get(kind, 0)) != int(got.get(kind, 0)):
 			return (
 				"the server counts %s %s, the export holds %d"
-				% [str(said.get(kind)), kind, got[kind]]
+				% [str(said.get(kind, 0)), kind, int(got.get(kind, 0))]
 			)
 	return ""
 
