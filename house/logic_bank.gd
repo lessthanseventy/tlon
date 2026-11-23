@@ -408,6 +408,12 @@ func _routes() -> void:
 		"no key"
 	)
 	_line(off._route("POST", "/api/home/money/ask", {}), 400, "text is required", "no text")
+	_line(
+		off._route("POST", "/api/home/money/ask", {"text": "  "}),
+		400,
+		"text is required",
+		"blank text"
+	)
 	var asked: Dictionary = off._route(
 		"POST", "/api/home/money/ask", {"text": "how much?", "thread": "t1"}
 	)

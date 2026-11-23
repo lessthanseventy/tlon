@@ -282,7 +282,7 @@ func _money_post(p: PackedStringArray, body: Dictionary) -> Dictionary:
 	if p.size() != 4 or p[3] != "ask":
 		return _nowhere()
 	var text: Variant = body.get("text")
-	if not (text is String and text != ""):
+	if not (text is String and text.strip_edges() != ""):
 		return {"code": 400, "body": {"error": "text is required"}}
 	var box := {}
 	money_ask.ask(text, body.get("thread"), func(answer: Dictionary) -> void: box.merge(answer))
