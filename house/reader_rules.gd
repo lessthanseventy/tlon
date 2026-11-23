@@ -52,7 +52,7 @@ func read(text: String, context: Dictionary) -> Dictionary:
 	m = _m("^(?:delete|forget)(?:\\s*:\\s*|\\s+)(.+)$", line)
 	if m != null:
 		return _find(m.get_string(1), context, "delete")
-	m = _m("^for\\s+([^:]{1,40}?)\\s*:(?!\\d)\\s*(.+)$", line)
+	m = _m("^for\\s+([^:]{1,40}?)\\s*(?:(?<!\\d):|:(?!\\d))\\s*(.+)$", line)
 	if m == null:
 		m = _m("^([\\p{L}\\p{N}']+(?:\\s[\\p{L}\\p{N}']+)?)\\s*:\\s+(.+)$", line)
 		if m != null and RESERVED.has(m.get_string(1).to_lower()):
