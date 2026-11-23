@@ -282,7 +282,7 @@ func _telegram() -> void:
 			int(kept["chat"]),
 			int(kept["offset"]) == tg.offset
 		],
-		[5, true, 777, true],
+		[7, true, 777, true],
 		"and is kept with the token and chat in the bot's own file"
 	)
 	tg.stop()
@@ -526,6 +526,7 @@ func _telegram() -> void:
 	tg3.stop()
 
 	await _daily(base, bot)
+	await _moves(base, bot)
 	await _failures(base, bot, said)
 	for l in said:
 		_eq(str(l).contains(TOKEN), false, "no line the bot says holds the token")
@@ -771,6 +772,140 @@ func _daily(base: String, bot: Bot) -> void:
 	)
 	tg.free()
 	tg2.free()
+	t = LocalList.wall(2026, 11, 18, 14)
+
+
+func _move(key: String, text: String, date: String = "") -> Dictionary:
+	return {"key": key, "kind": "proposal", "text": text, "why": "because", "date": date}
+
+
+func _rung(bot: Bot, n: int) -> Array:
+	return bot.sent.slice(n).filter(func(m): return m["params"]["text"].begins_with("Your move\n"))
+
+
+# Your move on the day's card: lettered, settled by a button or typed, then "Done: A · Dropped: B";
+# and an urgent one as its own message, rung once, never in quiet hours or with the window in front,
+# edited when it is settled on the card, on its own button or anywhere.
+func _moves(base: String, bot: Bot) -> void:
+	var st := {
+		"open": [],
+		"coming": [],
+		"done": [],
+		"moves": [_move("a", "Move $120", "2026-12-30"), _move("b", "Nudge Sam", "2026-12-30")],
+		"moves_settled": {}
+	}
+	var tg := _tg(base, [], [])
+	tg.token = TOKEN
+	tg.chat = 777
+	tg.status = func() -> Dictionary: return st
+	tg.moved.connect(
+		func(key: String, choice: String, finish: Callable) -> void:
+			st["moves"] = st["moves"].filter(func(m): return m["key"] != key)
+			st["moves_settled"][key] = choice
+			finish.call({"ok": "%s %s" % [choice, key]})
+	)
+	var n := bot.sent.size()
+	t = LocalList.wall(2026, 11, 23, 8, 30)
+	tg.daily()
+	await s._until(func() -> bool: return int(tg.card.get("mid", 0)) != 0)
+	await _settle()
+	var card: Dictionary = bot.sent.back()
+	_eq(
+		[card["params"]["text"], _keys(card["params"]["reply_markup"])],
+		[
+			"Today · Mon 23 Nov\n\nYour move\nA. Move $120\nB. Nudge Sam",
+			["card:go:A", "card:go:B", "card:pick"]
+		],
+		"the day's card letters Your move, with Go for each and Pick…"
+	)
+	var edits := bot.named("editMessageText").size()
+	bot.text(777, "go A")
+	tg.start()
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	await _settle()
+	_eq(
+		[
+			bot.sent.back()["params"]["text"],
+			bot.named("editMessageText").back()["text"],
+			bot.named("editMessageText").back()["message_id"] == card["mid"]
+		],
+		[
+			"A: go a",
+			"Today · Mon 23 Nov\n\nYour move\nB. Nudge Sam\nDone: A",
+			true
+		],
+		'"go A" settles it through the house, says so, and edits the card'
+	)
+	edits = bot.named("editMessageText").size()
+	bot.tap(777, "card:pick", card["mid"], "")
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	_eq(
+		_keys(bot.named("editMessageText").back()["reply_markup"]),
+		["card:go:B", "card:no:B", "card:back"],
+		"Pick… opens Go and No for what waits"
+	)
+	edits = bot.named("editMessageText").size()
+	bot.tap(777, "card:no:B", card["mid"], "")
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	await _settle()
+	_eq(
+		[bot.named("editMessageText").back()["text"], bot.named("editMessageText").back()["reply_markup"]],
+		["Today · Mon 23 Nov\n\nYour move\nDone: A · Dropped: B", {"inline_keyboard": []}],
+		"a press settles the last one, and the card reads Done and Dropped"
+	)
+
+	n = bot.sent.size()
+	tg.card = {}
+	tg.noticed = null
+	t = LocalList.wall(2026, 11, 23, 12)
+	st["moves"] = []
+	tg.on_moves(false)
+	st["moves"] = [_move("u1", "Pay Sam", "2026-11-24"), _move("n1", "Later", "2026-12-30")]
+	tg.on_moves(true)
+	st["moves"].append(_move("u2", "Book it", "2026-11-24"))
+	t = LocalList.wall(2026, 11, 23, 18)
+	tg.on_moves(false)
+	await _settle()
+	_eq(_rung(bot, n).size(), 0, "nothing is rung for the first look, with the window in front, or in quiet hours")
+	t = LocalList.wall(2026, 11, 23, 12)
+	st["moves"].append(_move("u3", "Call the vet", "2026-11-25"))
+	tg.on_moves(false)
+	tg.on_moves(false)
+	await s._until(func() -> bool: return _rung(bot, n).size() == 1)
+	await _settle()
+	var urgent: Dictionary = _rung(bot, n)[0]
+	_eq(
+		[urgent["params"]["text"], _keys(urgent["params"]["reply_markup"])],
+		["Your move\nCall the vet\nbecause", ["move:go:u3", "move:no:u3"]],
+		"a new urgent one is its own message, once, with Go and No"
+	)
+	edits = bot.named("editMessageText").size()
+	bot.tap(777, "move:go:u3", urgent["mid"], "")
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	await _settle()
+	_eq(
+		[bot.named("editMessageText").back()["text"], bot.named("editMessageText").back()["message_id"] == urgent["mid"]],
+		["Your move\nCall the vet\nbecause\nDone", true],
+		"its Go settles it through the house and edits it"
+	)
+	st["moves"].append(_move("u4", "Renew", "2026-11-24"))
+	tg.on_moves(false)
+	tg.on_moves(false)
+	await s._until(func() -> bool: return _rung(bot, n).size() == 2)
+	await _settle()
+	edits = bot.named("editMessageText").size()
+	st["moves"] = st["moves"].filter(func(m): return m["key"] != "u4")
+	st["moves_settled"]["u4"] = "no"
+	tg.on_moves(false)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	_eq(
+		bot.named("editMessageText").back()["text"],
+		"Your move\nRenew\nbecause\nDropped",
+		"one settled anywhere else is edited too"
+	)
+	tg.stop()
+	await _settle()
+	tg.free()
 	t = LocalList.wall(2026, 11, 18, 14)
 
 

@@ -528,6 +528,7 @@ func _set_up_phone() -> void:
 	_phone.rng.randomize()
 	_phone.heard.connect(_phone_heard)
 	_phone.tapped.connect(_phone_tapped)
+	_phone.moved.connect(_phone_moved)
 	add_child(_phone)
 
 
@@ -578,6 +579,10 @@ func _phone_heard(text: String, finish: Callable) -> void:
 		func(ok: bool, reply: String) -> void: finish.call(reply if ok else "I couldn't keep that."),
 		"phone"
 	)
+
+
+func _phone_moved(key: String, choice: String, finish: Callable) -> void:
+	_settle_move(key, choice, finish)
 
 
 func _phone_tapped(id: int, what: String, finish: Callable) -> void:
@@ -1136,9 +1141,12 @@ func _write(path: String, body: Dictionary, ok: Callable = Callable()) -> void:
 	)
 
 
-# a go, a no or an answer on an item of Your move; a go that opens a link opens it here
-func _settle_move(key: String, choice: Variant) -> void:
+# a go, a no or an answer on an item of Your move; a go that opens a link opens it here. `finish`,
+# when given, is told the answer, `{ok}` or `{error}`.
+func _settle_move(key: String, choice: Variant, finish: Callable = Callable()) -> void:
 	if _demo:
+		if finish.is_valid():
+			finish.call({"error": "not in the demo"})
 		return
 	_post(
 		"/api/home/moves/settle",
@@ -1152,6 +1160,10 @@ func _settle_move(key: String, choice: Variant) -> void:
 					OS.shell_open(str(parsed["open"]))
 			else:
 				_trouble(_why(reached, code, parsed))
+			if finish.is_valid():
+				finish.call(
+					parsed if reached and code == 200 else {"error": _why(reached, code, parsed)}
+				)
 	)
 
 
@@ -1559,6 +1571,7 @@ func _on_polled(reached: bool, code: int, body: Variant) -> void:
 				. filter(func(t): return t.get("told_at") != null)
 				. map(func(t): return int(t["id"]))
 			)
+			_phone.on_moves(get_window().has_focus())
 	_sidebar.set_reachable(ok)
 	if ok:
 		_apply(_data)

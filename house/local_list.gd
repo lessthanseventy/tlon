@@ -355,6 +355,7 @@ func status() -> Dictionary:
 		"people": _people(),
 		"door": _door_row(),
 		"moves": moves.open_items() if moves != null else [],
+		"moves_settled": moves.outcomes() if moves != null else {},
 	}
 	for t in things():
 		var s := _state(t)

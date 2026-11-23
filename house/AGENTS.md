@@ -510,11 +510,16 @@ runs on the local list.
   the day's card times (`telegram_morning_at` and `telegram_list_at`, each `HH:MM` or `off`, default 08:30 and 17:30)
   and "disconnect" (second click; forgets token, chat, offset and card). The token, the paired chat id, the
   `getUpdates` offset, the day the evening card was last said and the day's card live in `user://house_telegram.json`
-  `{"token", "chat", "offset", "listed", "card"}` and nowhere else (never in the settings
+  `{"token", "chat", "offset", "listed", "card", "seen", "urgent"}` and nowhere else (never in the settings
   file, and never in a line printed or shown: the URL carries it, so `_call` is the one place it is built). Methods
   called: `getMe`, `getUpdates` (long poll 25 s, `allowed_updates` message and callback_query, the offset kept before
   the batch is handled so nothing is filed twice; a backlog is read oldest first at start), `sendMessage`,
-  `editMessageText`, `deleteMessage`, `answerCallbackQuery`. An edit never notifies the
+  `editMessageText`, `deleteMessage`, `answerCallbackQuery`. The card carries Your move over the list's `moves`
+  (not asks, which stay in the window): "Your move" lettered A, B… for the day with Go for each letter, Pick…
+  (Go and No for each) and "go A" / "no B" / "go all" typed, which `main.gd` settles through `_settle_move`
+  (`moved`); once settled it reads "Done: A · Dropped: B". A new move dated today to 48 hours on is its own
+  message with Go and No (`on_moves`): never for one already waiting, with the window in front or in quiet
+  hours (the evening card's time to the morning's), and it is edited when settled anywhere. An edit never notifies the
   phone; a new message does, so what must be seen is sent again at the bottom and the old one deleted (Telegram lets a
   bot delete its own messages for 48 h). Only the paired private chat is ever heard or
   answered; every other message, before pairing or after, is ignored. A text goes through `main.gd` `_tell` (so the

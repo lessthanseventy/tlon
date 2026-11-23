@@ -67,6 +67,14 @@ func facts() -> Dictionary:
 	return doc["facts"]
 
 
+# every settled key and how: go, no or answer
+func outcomes() -> Dictionary:
+	var out := {}
+	for key in doc["settled"]:
+		out[key] = doc["settled"][key]["how"]
+	return out
+
+
 func settled(key: String) -> Dictionary:
 	return doc["settled"].get(key, {})
 

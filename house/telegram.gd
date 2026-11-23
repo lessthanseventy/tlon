@@ -10,6 +10,7 @@ extends Node
 # alone builds.
 signal heard(text: String, finish: Callable)
 signal tapped(id: int, verb: String, finish: Callable)
+signal moved(key: String, choice: String, finish: Callable)
 
 const LocalList := preload("res://local_list.gd")
 const STORE := "user://house_telegram.json"
@@ -30,6 +31,9 @@ const ASK := "Delete for good?"
 const WEEKDAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 const PICK_ROW := 5
+const LETTERS := 26
+const SETTLED := {"go": "Done", "no": "Dropped"}
+const MOVE_OUTCOME := {"go": "Done", "no": "Dropped", "answer": "Answered"}
 
 var base := "https://api.telegram.org"
 var store := STORE
@@ -52,6 +56,8 @@ var morning_at := "08:30"
 # the day's card: {day, phase "morning"|"evening", mid, items [{id, text}] numbered in order,
 # ticked [ids], first (how many items the morning had), keys "main"|"tick", sent}
 var card := {}
+var noticed: Variant = null
+var urgent := {}
 var clock := Callable()
 var status := Callable()
 var bias := 0.0
@@ -90,6 +96,12 @@ func load_state() -> void:
 		offset = int(d.get("offset", 0))
 		listed = str(d.get("listed", ""))
 		card = _card_of(d.get("card"))
+		noticed = d["seen"] if d.get("seen") is Array else null
+		var raised: Variant = d.get("urgent")
+		for key in raised if raised is Dictionary else {}:
+			urgent[key] = {
+				"mid": int(raised[key]["mid"]), "text": str(raised[key]["text"]), "then": Callable()
+			}
 
 
 # JSON reads every number back as a float, and an id must stay an int to be found
@@ -98,6 +110,8 @@ static func _card_of(c: Variant) -> Dictionary:
 		return {}
 	c["mid"] = int(c.get("mid", 0))
 	c["first"] = int(c.get("first", 0))
+	if not c.get("moves") is Array:
+		c["moves"] = []
 	c["ticked"] = c["ticked"].map(func(id): return int(id))
 	for item in c["items"]:
 		item["id"] = int(item["id"])
@@ -109,9 +123,20 @@ func _save() -> void:
 		return
 	var f := FileAccess.open(store, FileAccess.WRITE)
 	if f != null:
+		var raised := {}
+		for key in urgent:
+			raised[key] = {"mid": urgent[key]["mid"], "text": urgent[key]["text"]}
 		f.store_string(
 			JSON.stringify(
-				{"token": token, "chat": chat, "offset": offset, "listed": listed, "card": card}
+				{
+					"token": token,
+					"chat": chat,
+					"offset": offset,
+					"listed": listed,
+					"card": card,
+					"seen": noticed,
+					"urgent": raised
+				}
 			)
 		)
 
@@ -312,6 +337,9 @@ func _message(m: Dictionary) -> void:
 		_say("I'm here. Send me a line and I'll keep it.")
 	elif not numbers(text).is_empty() and _card_today():
 		_tick_numbers(numbers(text))
+	elif not move_words(text).is_empty() and _card_today() and not _open_letters().is_empty():
+		var said := move_words(text)
+		_settle_letters(said["verb"], said["letters"])
 	elif text.strip_edges() != "":
 		_queue.append(text)
 		_pump()
@@ -446,6 +474,104 @@ func sync(ringing: Array) -> void:
 	_card_refresh()
 
 
+# Nothing is rung for a move that was already waiting, one that is not urgent, one found with the
+# window in front (`front`) or in quiet hours: the card says it. A new urgent one is its own
+# message, edited when it is settled, wherever that was.
+func on_moves(front: bool) -> void:
+	if chat == 0 or not clock.is_valid() or not status.is_valid():
+		return
+	var st: Dictionary = status.call()
+	var now: float = clock.call()
+	var items: Array = st.get("moves", [])
+	var live: Array = items.map(func(m): return str(m["key"]))
+	for key in urgent.keys():
+		if not live.has(key):
+			_urgent_done(key, str(st.get("moves_settled", {}).get(key, "gone")))
+	var rings: Array = []
+	if noticed != null and not front and not quiet(list_at, morning_at, now):
+		rings = items.filter(
+			func(m): return m["kind"] != "ask" and not noticed.has(m["key"]) and urgent_item(m, now)
+		)
+	if noticed == null or noticed != live:
+		noticed = live
+		_save()
+	for m in rings:
+		_raise(m)
+
+
+# dated today or within 48 hours, or the source's word that money is short
+static func urgent_item(m: Dictionary, now: float) -> bool:
+	var date := str(m.get("date", ""))
+	return (
+		m.get("urgent") == true
+		or (date != "" and date >= day_of(now) and date <= day_of(now + 2.0 * LocalList.DAY))
+	)
+
+
+# from the evening card's time to the morning's; with either off, never
+static func quiet(evening_at: String, morning: String, now: float) -> bool:
+	var time := RegEx.create_from_string("^([01]?\\d|2[0-3]):([0-5]\\d)$")
+	if time.search(evening_at) == null or time.search(morning) == null:
+		return false
+	return reached(evening_at, now) or not reached(morning, now)
+
+
+func _raise(m: Dictionary) -> void:
+	var key := str(m["key"])
+	var text := "Your move\n" + str(m["text"])
+	if str(m.get("why", "")) != "":
+		text += "\n" + str(m["why"])
+	var entry := {"mid": 0, "text": text, "then": Callable()}
+	urgent[key] = entry
+	_call(
+		"sendMessage",
+		{
+			"chat_id": chat,
+			"text": text.left(4000),
+			"reply_markup":
+			{
+				"inline_keyboard":
+				[[_button("Go", "move:go:" + key), _button("No", "move:no:" + key)]]
+			}
+		},
+		func(ok: bool, result: Variant, _why: String, _http: int) -> void:
+			if not (ok and result is Dictionary):
+				if is_same(urgent.get(key), entry):
+					urgent.erase(key)
+				return
+			entry["mid"] = int(result["message_id"])
+			_save()
+			if entry["then"].is_valid():
+				entry["then"].call(entry["mid"])
+	)
+
+
+func _urgent_done(key: String, how: String) -> void:
+	var entry: Dictionary = urgent[key]
+	urgent.erase(key)
+	_save()
+	var said: String = entry["text"] + "\n" + MOVE_OUTCOME.get(how, "No longer waiting")
+	_after_sent(entry, func(mid: int) -> void: _edit(mid, said, {"inline_keyboard": []}))
+
+
+# a press on an urgent message: `parts` is ["move", "go"|"no", key]
+func _move_tap(parts: PackedStringArray, qid: String) -> void:
+	if parts.size() < 3 or parts[1] not in ["go", "no"] or not urgent.has(parts[2]):
+		_answer(qid, "that is not waiting any more")
+		return
+	var key := parts[2]
+	var verb := parts[1]
+	moved.emit(
+		key,
+		verb,
+		func(result: Dictionary) -> void:
+			_answer(qid, str(result.get("ok", result.get("error", ""))).left(190))
+			if result.has("ok") and urgent.has(key):
+				_urgent_done(key, verb)
+			_card_refresh()
+	)
+
+
 func _delete(mid: int) -> void:
 	_call("deleteMessage", {"chat_id": chat, "message_id": mid}, Callable(self, "_ignored"))
 
@@ -468,7 +594,10 @@ func _callback(q: Dictionary) -> void:
 	var qid := str(q.get("id", ""))
 	var mid := int(message.get("message_id", 0))
 	if verb == "card":
-		_card_tap(id_text, mid, qid)
+		_card_tap(id_text, data.get_slice(":", 2), mid, qid)
+		return
+	if verb == "move":
+		_move_tap(data.split(":", true, 2), qid)
 		return
 	if (
 		not id_text.is_valid_int()
@@ -569,6 +698,7 @@ static func new_card(day: String, phase: String) -> Dictionary:
 		"mid": 0,
 		"items": [],
 		"ticked": [],
+		"moves": [],
 		"first": 0,
 		"keys": "main",
 		"sent": ""
@@ -580,6 +710,7 @@ static func new_card(day: String, phase: String) -> Dictionary:
 static func number(c: Dictionary, st: Dictionary, now: float, offset_s: float) -> void:
 	var seen: Array = c["items"].map(func(i): return int(i["id"]))
 	var end := LocalList.midnight(now) + LocalList.DAY
+	_letter(c, st)
 	var rows: Array = st.get("open", []).map(func(r): return [r, ""])
 	for r in st.get("coming", []):
 		if _at(r["due_at"], offset_s) < end:
@@ -658,6 +789,9 @@ static func card_text(c: Dictionary, st: Dictionary, now: float, offset_s: float
 				("\n" if not lines.is_empty() else "") + list + "\n" + "\n".join(groups[list])
 			)
 	var parts: Array = []
+	var block := moves_block(c, st)
+	if block != "":
+		parts.append(block)
 	if evening:
 		var done := done_today(st, now, offset_s)
 		if not done.is_empty():
@@ -671,17 +805,106 @@ static func card_text(c: Dictionary, st: Dictionary, now: float, offset_s: float
 	return "\n\n".join([("This evening · " if evening else "Today · ") + date] + parts)
 
 
-# one ✓ button that opens the numbers; the numbers, five a row, and Back
+# Your move on the card: each item under the letter it first got for the whole day; a new one takes
+# the next letter. An item that left Your move is kept as how it was settled ("gone" when the house
+# does not say), and asks stay in the window.
+static func _letter(c: Dictionary, st: Dictionary) -> void:
+	var items: Array = st.get("moves", [])
+	var live: Array = items.map(func(m): return str(m["key"]))
+	var outcomes: Dictionary = st.get("moves_settled", {})
+	for m in c["moves"]:
+		if m["how"] == "" and not live.has(m["key"]):
+			m["how"] = str(outcomes.get(m["key"], "gone"))
+	var known: Array = c["moves"].map(func(m): return m["key"])
+	for m in items:
+		if m["kind"] != "ask" and not known.has(m["key"]) and known.size() < LETTERS:
+			c["moves"].append({"key": str(m["key"]), "text": str(m["text"]), "how": ""})
+			known.append(m["key"])
+
+
+static func letter_of(i: int) -> String:
+	return char(65 + i)
+
+
+# the letters still waiting: on the card, unsettled, and still in Your move
+static func open_letters(c: Dictionary, st: Dictionary) -> Array:
+	var live: Array = st.get("moves", []).map(func(m): return str(m["key"]))
+	var out: Array = []
+	for i in c["moves"].size():
+		if c["moves"][i]["how"] == "" and live.has(c["moves"][i]["key"]):
+			out.append(letter_of(i))
+	return out
+
+
+# "Your move", the open ones lettered, then what was settled: "Done: A · Dropped: B"
+static func moves_block(c: Dictionary, st: Dictionary) -> String:
+	var open := open_letters(c, st)
+	var lines: Array = []
+	var settled: Array = []
+	for how in SETTLED:
+		var ls: Array = []
+		for i in c["moves"].size():
+			if c["moves"][i]["how"] == how:
+				ls.append(letter_of(i))
+		if not ls.is_empty():
+			settled.append("%s: %s" % [SETTLED[how], ", ".join(ls)])
+	for i in c["moves"].size():
+		if open.has(letter_of(i)):
+			lines.append("%s. %s" % [letter_of(i), c["moves"][i]["text"]])
+	if not settled.is_empty():
+		lines.append(" · ".join(settled))
+	return "" if lines.is_empty() else "Your move\n" + "\n".join(lines)
+
+
+# "go A", "no B", "go all", "go a b": {verb, letters} (["all"] for all), {} for any other text
+static func move_words(text: String) -> Dictionary:
+	var m := (
+		RegEx
+		. create_from_string("(?i)^\\s*(go|no)\\s+(all|[a-z](?:\\s*[ ,]\\s*[a-z])*)\\s*$")
+		. search(text)
+	)
+	if m == null:
+		return {}
+	var out: Array = []
+	if m.get_string(2).to_lower() == "all":
+		out.append("all")
+	else:
+		for part in RegEx.create_from_string("[A-Za-z]").search_all(m.get_string(2)):
+			if not out.has(part.get_string().to_upper()):
+				out.append(part.get_string().to_upper())
+	return {"verb": m.get_string(1).to_lower(), "letters": out}
+
+
+# Go for each letter waiting, and Pick…, then ✓ Tick…. Pick… opens Go and No for each letter; Tick…
+# opens the numbers, five a row; each has Back.
 static func card_keys(c: Dictionary, st: Dictionary) -> Dictionary:
 	var open := tickable(c, st)
-	if open.is_empty():
-		return {"inline_keyboard": []}
-	if c["keys"] != "tick":
-		return {"inline_keyboard": [[_button("✓ Tick…", "card:tick")]]}
+	var waiting := open_letters(c, st)
 	var rows: Array = []
-	for i in range(0, open.size(), PICK_ROW):
-		rows.append(open.slice(i, i + PICK_ROW).map(func(n): return _button(str(n), "card:%d" % n)))
-	rows.append([_button("‹ Back", "card:back")])
+	if c["keys"] == "pick" and not waiting.is_empty():
+		for l in waiting:
+			rows.append([_button("Go " + l, "card:go:" + l), _button("No " + l, "card:no:" + l)])
+		rows.append([_button("‹ Back", "card:back")])
+	elif c["keys"] == "tick" and not open.is_empty():
+		for i in range(0, open.size(), PICK_ROW):
+			rows.append(
+				open.slice(i, i + PICK_ROW).map(func(n): return _button(str(n), "card:%d" % n))
+			)
+		rows.append([_button("‹ Back", "card:back")])
+	else:
+		for i in range(0, waiting.size(), PICK_ROW):
+			rows.append(
+				waiting.slice(i, i + PICK_ROW).map(
+					func(l): return _button("Go " + l, "card:go:" + l)
+				)
+			)
+		var last: Array = []
+		if not waiting.is_empty():
+			last.append(_button("Pick…", "card:pick"))
+		if not open.is_empty():
+			last.append(_button("✓ Tick…", "card:tick"))
+		if not last.is_empty():
+			rows.append(last)
 	return {"inline_keyboard": rows}
 
 
@@ -786,14 +1009,17 @@ func _ticked(id: int) -> void:
 				_save()
 
 
-func _card_tap(arg: String, mid: int, qid: String) -> void:
+func _card_tap(arg: String, letter: String, mid: int, qid: String) -> void:
 	if not _card_today() or mid != int(card.get("mid", 0)):
 		_answer(qid, "that card is from another day")
 		return
-	if arg in ["tick", "back"]:
+	if arg in ["tick", "back", "pick"]:
 		_answer(qid, "")
-		card["keys"] = "tick" if arg == "tick" else "main"
+		card["keys"] = arg if arg != "back" else "main"
 		_card_refresh()
+	elif arg in ["go", "no"]:
+		card["keys"] = "main"
+		_settle_letters(arg, [letter], qid)
 	elif arg.is_valid_int():
 		card["keys"] = "main"
 		_tick_numbers([int(arg)], qid)
@@ -826,6 +1052,56 @@ func _tick_numbers(ns: Array, qid: String = "") -> void:
 			else:
 				_say(said)
 			_card_refresh()
+	)
+
+
+func _open_letters() -> Array:
+	return open_letters(card, status.call() if status.is_valid() else {})
+
+
+# Go or No for the card's letters (["all"] is every one waiting), one after the other through the
+# house, then say how each went: in the chat for a typed reply, on the button for a press (`qid`)
+func _settle_letters(verb: String, letters: Array, qid: String = "") -> void:
+	var waiting := _open_letters()
+	var names: Array = waiting if letters == ["all"] else letters
+	var said: Array = []
+	var todo: Array = []
+	for l in names:
+		if waiting.has(l):
+			todo.append(l)
+		else:
+			said.append("Nothing waiting at %s." % l)
+	_settle_each(
+		verb,
+		todo,
+		said,
+		func() -> void:
+			var line := "\n".join(said)
+			if qid != "":
+				_answer(qid, line.left(190))
+			elif line != "":
+				_say(line)
+			_card_refresh()
+	)
+
+
+func _settle_each(verb: String, letters: Array, said: Array, then: Callable) -> void:
+	if letters.is_empty():
+		then.call()
+		return
+	var l: String = letters.pop_front()
+	var item: Dictionary = card["moves"][l.unicode_at(0) - 65]
+	moved.emit(
+		str(item["key"]),
+		verb,
+		func(result: Dictionary) -> void:
+			if result.has("error"):
+				said.append("%s: %s" % [l, result["error"]])
+			else:
+				item["how"] = verb
+				said.append("%s: %s" % [l, result["ok"]])
+				_save()
+			_settle_each(verb, letters, said, then)
 	)
 
 

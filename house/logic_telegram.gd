@@ -9,6 +9,7 @@ func run() -> void:
 	_numbers()
 	_reached()
 	_card()
+	_moves()
 
 
 func _numbers() -> void:
@@ -33,6 +34,91 @@ func _reached() -> void:
 		[Telegram.reached("off", now), Telegram.reached("25:00", now)],
 		[false, false],
 		"off never is"
+	)
+
+
+func _move(key: String, text: String, kind: String = "proposal", date: String = "") -> Dictionary:
+	return {"key": key, "kind": kind, "text": text, "date": date}
+
+
+func _moves() -> void:
+	var now := at(2026, 11, 23, 8, 30)
+	var st := {
+		"open": [_row(1, "buy milk")],
+		"coming": [],
+		"done": [],
+		"moves":
+		[_move("a", "Move $120 from savings"), _move("b", "Nudge Sam"), _move("q", "Flex?", "ask")]
+	}
+	var c := Telegram.new_card("2026-11-23", "morning")
+	Telegram.number(c, st, now, 0.0)
+	_eq(
+		Telegram.card_text(c, st, now, 0.0),
+		"Today · Mon 23 Nov\n\nYour move\nA. Move $120 from savings\nB. Nudge Sam\n\nTo do\n1. buy milk",
+		"the card letters Your move before To do, and leaves asks to the window"
+	)
+	_eq(
+		Telegram.card_keys(c, st)["inline_keyboard"].map(
+			func(row): return row.map(func(b): return b["callback_data"])
+		),
+		[["card:go:A", "card:go:B"], ["card:pick", "card:tick"]],
+		"Go for each letter, then Pick… and ✓ Tick…"
+	)
+	c["keys"] = "pick"
+	_eq(
+		Telegram.card_keys(c, st)["inline_keyboard"].map(
+			func(row): return row.map(func(b): return b["callback_data"])
+		),
+		[["card:go:A", "card:no:A"], ["card:go:B", "card:no:B"], ["card:back"]],
+		"Pick… opens Go and No for each letter"
+	)
+	st["moves"] = [_move("a", "Move $120 from savings"), _move("c", "Pay rent")]
+	st["moves_settled"] = {"b": "no"}
+	Telegram.number(c, st, now, 0.0)
+	c["moves"][0]["how"] = "go"
+	_eq(
+		Telegram.card_text(c, st, now, 0.0).split("\n\nTo do")[0].split("\n\n")[1],
+		"Your move\nC. Pay rent\nDone: A · Dropped: B",
+		"a settled one leaves its line for Done and Dropped, a new one takes the next letter"
+	)
+	st["moves"] = []
+	Telegram.number(c, st, now, 0.0)
+	_eq(
+		[c["moves"][2]["how"], Telegram.card_keys(c, st)["inline_keyboard"].size()],
+		["gone", 1],
+		"one gone with no word of how is dropped from the block, and the buttons follow"
+	)
+	for pair in [
+		["go A", {"verb": "go", "letters": ["A"]}],
+		[" No b, c ", {"verb": "no", "letters": ["B", "C"]}],
+		["go all", {"verb": "go", "letters": ["all"]}],
+		["go a walk", {}],
+		["no thanks", {}],
+		["go", {}]
+	]:
+		_eq(Telegram.move_words(pair[0]), pair[1], "'%s' as a reply to Your move" % pair[0])
+	var today := Telegram.day_of(now)
+	_eq(
+		[
+			Telegram.urgent_item(_move("a", "x", "proposal", today), now),
+			Telegram.urgent_item(_move("a", "x", "proposal", "2026-11-25"), now),
+			Telegram.urgent_item(_move("a", "x", "proposal", "2026-11-26"), now),
+			Telegram.urgent_item(_move("a", "x", "proposal", "2026-11-20"), now),
+			Telegram.urgent_item(_move("a", "x"), now),
+			Telegram.urgent_item({"urgent": true}, now)
+		],
+		[true, true, false, false, false, true],
+		"urgent is dated today to 48 hours on, or the source's word; overdue and undated wait for the card"
+	)
+	_eq(
+		[
+			Telegram.quiet("17:30", "08:30", at(2026, 11, 23, 18, 0)),
+			Telegram.quiet("17:30", "08:30", at(2026, 11, 23, 8, 0)),
+			Telegram.quiet("17:30", "08:30", at(2026, 11, 23, 12, 0)),
+			Telegram.quiet("off", "08:30", at(2026, 11, 23, 18, 0))
+		],
+		[true, true, false, false],
+		"quiet is from the evening card to the morning's, and never with either off"
 	)
 
 
