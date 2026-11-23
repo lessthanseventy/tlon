@@ -1039,6 +1039,8 @@ func _act(id: int, what: String, ok: Callable = Callable()) -> void:
 	match what:
 		"done":
 			_write("/api/home/%d/done" % id, {}, _then(ok, func() -> void: _remove(id)))
+		"got":
+			_write("/api/home/%d/drop" % id, {}, _then(ok, func() -> void: _gone(id)))
 		"delete":
 			_write("/api/home/%d/drop" % id, {}, _then(ok, func() -> void: _gone(id)))
 		"revive":

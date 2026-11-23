@@ -395,7 +395,7 @@ func _actions(item: Dictionary, kind: String) -> Array:
 		var pinned: bool = home.focus.id == id
 		out.append({"label": "Not now" if pinned else "Now", "act": "unnow" if pinned else "now"})
 	elif kind == "waiting":
-		out.append({"label": "Got it", "act": "done", "k": "primary"})
+		out.append({"label": "Got it", "act": "got", "k": "primary"})
 	out.append({"label": "Edit", "act": "edit"})
 	var sure: bool = Sure.needs(item) and home.sure.armed("del:%d" % id)
 	out.append({"label": "Delete for good?" if sure else "Delete", "act": "delete", "k": "quiet"})
