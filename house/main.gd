@@ -1227,8 +1227,10 @@ func _got(id: int) -> void:
 	for t in _data["waiting"]:
 		if int(t["id"]) == id and _data.get("done") is Array:
 			_data["done"] = [{"text": t["text"], "done_at": at}] + _data["done"]
+	var before: int = _data["waiting"].size()
 	_data["waiting"] = _data["waiting"].filter(func(t): return int(t["id"]) != id)
-	_data["done_week"] = int(_data.get("done_week", 0)) + 1
+	if _data["waiting"].size() < before:
+		_data["done_week"] = int(_data.get("done_week", 0)) + 1
 	_apply(_data)
 
 
@@ -1694,8 +1696,9 @@ func _remove(id: int) -> void:
 	if chore:
 		_demo_repeat(id)
 	var kept: Array = _data["open"].filter(func(t): return int(t["id"]) != id)
+	if kept.size() < _data["open"].size():
+		_data["done_week"] = int(_data.get("done_week", 0)) + 1
 	_data["open"] = kept
-	_data["done_week"] = int(_data.get("done_week", 0)) + 1
 	_apply(_data)
 	_room.home.chore_reload(_loaded_gen)
 
