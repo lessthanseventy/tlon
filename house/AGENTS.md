@@ -1,6 +1,6 @@
 # house — the standalone window over the home
 
-A Godot 4.7 project: one isometric room and one sidebar. The home keeps in sight what the operator's
+A Godot 4.7 project, shown to people as **Asterion**: one isometric room and one sidebar. The home keeps in sight what the operator's
 jots left open, what is coming, and the newest notes. `main.gd` polls and posts the home's data,
 `room.gd` draws the room (floor, walls, furniture, a front door), `sidebar.gd` is everything
 that is not the room (below).
@@ -427,6 +427,7 @@ runs on the local list.
   which answer `cb(reached, code, parsed)` on a later frame, never inside the call; `Backend.check(url, cb)` is the
   address check. `main.gd` `_make_backend` picks the server's (`backend_http.gd`, at `base`) or the house's own
   (`backend_local.gd`) from the `where` setting and swaps it at once when that changes.
+- **The project name is the data folder.** `config/name` ("Asterion") names Godot's `user://` folder; `adopt.gd` copies the old `the house` folder into it once at start (`main.gd` `_ready`). Renaming the project again needs the same step first, or every list and Telegram pairing is left behind.
 - **The house's own list** (`where`: `"server"` by default, `"local"` for "this computer"; the cog's screen chooses,
   `--local FILE|starters` stages it, nothing saved; `--tell "line;line"` sends loose lines and opens the chat). The same room runs on `backend_local.gd`: every route of the
   server's list answered on the next frame by `local_list.gd`, a Dictionary kept in `user://house_list.json`

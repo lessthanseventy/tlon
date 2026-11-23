@@ -24,6 +24,7 @@ const LocalList := preload("res://local_list.gd")
 const ReaderClaude := preload("res://reader_claude.gd")
 const Telegram := preload("res://telegram.gd")
 const Wttr := preload("res://wttr.gd")
+const Adopt := preload("res://adopt.gd")
 const Background := preload("res://background.gd")
 const Chores := preload("res://chores.gd")
 const People := preload("res://people.gd")
@@ -85,6 +86,7 @@ var _pick_ids: Array = []
 
 
 func _ready() -> void:
+	Adopt.adopt(OS.get_user_data_dir())
 	var args := OS.get_cmdline_user_args()
 	if "--sounds" in args:
 		print(preload("res://sound.gd").listing(_art_dir()))
@@ -216,7 +218,7 @@ func _ready() -> void:
 			_slow_poll()
 			_pets_ask()
 			_watch_weather()
-	get_window().title = "the house"
+	get_window().title = "Asterion"
 	_apply(_data)
 	if not _demo:
 		_poll()

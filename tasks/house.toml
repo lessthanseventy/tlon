@@ -26,7 +26,7 @@ description = "house: pack the art the house can open (derived from its loaders,
 run = "scripts/house-art-pack.sh \"$@\""
 
 ["house:build"]
-description = "house: `-- windows|mac|linux|all` — export the house with the art inside it (Windows and Linux: one file; the Mac app too, ad-hoc signed) into ~/.cache/tlon/house-dist/<platform>/ and the-house-<platform>.zip (never inside a repo: the art's licence forbids redistributing it; hand the zips over privately; needs Godot's 4.7.2 export templates; the Mac build is ad-hoc signed, not notarized: see house/SHIPPING.md)"
+description = "house: `-- windows|mac|linux|all` — export the house with the art inside it (Windows and Linux: one file; the Mac app too, ad-hoc signed) into ~/.cache/tlon/house-dist/<platform>/ and asterion-<platform>.zip (never inside a repo: the art's licence forbids redistributing it; hand the zips over privately; needs Godot's 4.7.2 export templates; the Mac build is ad-hoc signed, not notarized: see house/SHIPPING.md)"
 run = "scripts/house-build.sh \"$@\""
 
 ["house:drive:start"]

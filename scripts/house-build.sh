@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the house for another machine, from this one, into $dist/<platform>/ and
-# $dist/the-house-<platform>.zip (see lib/house-dist.sh; never inside a repo). Windows and Linux are
+# $dist/asterion-<platform>.zip (see lib/house-dist.sh; never inside a repo). Windows and Linux are
 # one executable with the code and the art pack (scripts/house-art-pack.sh) in its embedded pck; the Mac
 # app carries it in its pck too, and is ad-hoc signed by the export, so nothing is added to it after.
 # Presets: house/export_presets.cfg.
@@ -18,9 +18,9 @@ templates="${XDG_DATA_HOME:-$HOME/.local/share}/godot/export_templates/$(godot -
 build() {
   local platform="$1" preset exe tmpl
   case "$platform" in
-    windows) preset="Windows Desktop"; exe="the-house.exe"; tmpl="windows_release_x86_64.exe" ;;
-    mac)     preset="macOS";           exe="the-house.zip"; tmpl="macos.zip" ;;
-    linux)   preset="Linux";           exe="the-house";     tmpl="linux_release.x86_64" ;;
+    windows) preset="Windows Desktop"; exe="asterion.exe"; tmpl="windows_release_x86_64.exe" ;;
+    mac)     preset="macOS";           exe="asterion.zip"; tmpl="macos.zip" ;;
+    linux)   preset="Linux";           exe="asterion";     tmpl="linux_release.x86_64" ;;
     *) echo "usage: house-build.sh windows|mac|linux|all" >&2; return 2 ;;
   esac
   [ -f "$templates/$tmpl" ] || {
@@ -28,7 +28,7 @@ build() {
     return 1
   }
   local out="$dist/$platform" stage="$dist/.stage-$platform"
-  rm -rf "$out" "$dist/the-house-$platform.zip" "$stage"
+  rm -rf "$out" "$dist/asterion-$platform.zip" "$stage"
   mkdir -p "$out" "$stage"
   rsync -a --exclude .godot --exclude '*.uid' --exclude .logs "$root/house/" "$stage/" || return 1
   unzip -q "$dist/house-art.zip" -d "$stage" || return 1
@@ -41,14 +41,14 @@ build() {
   rm -f "$out/export.log" "$out/import.log"
   if [ "$platform" = mac ]; then
     # The export's own zip is the hand-over: the signature seals the bundle, so nothing is added to it.
-    cp "$out/$exe" "$dist/the-house-mac.zip" || return 1
-    unzip -Z1 "$dist/the-house-mac.zip" | grep -q '/_CodeSignature/CodeResources$' ||
+    cp "$out/$exe" "$dist/asterion-mac.zip" || return 1
+    unzip -Z1 "$dist/asterion-mac.zip" | grep -q '/_CodeSignature/CodeResources$' ||
       { echo "house: the Mac export is not signed (no _CodeSignature/CodeResources): Apple silicon would refuse it" >&2; return 1; }
     (cd "$out" && unzip -q "$exe" && rm "$exe") || return 1
   else
-    (cd "$out" && zip -q -X "$dist/the-house-$platform.zip" "$exe") || return 1
+    (cd "$out" && zip -q -X "$dist/asterion-$platform.zip" "$exe") || return 1
   fi
-  echo "house: $platform -> $dist/the-house-$platform.zip ($(du -h "$dist/the-house-$platform.zip" | cut -f1))" >&2
+  echo "house: $platform -> $dist/asterion-$platform.zip ($(du -h "$dist/asterion-$platform.zip" | cut -f1))" >&2
 }
 
 [ $# -eq 1 ] || { echo "usage: house-build.sh windows|mac|linux|all" >&2; exit 2; }

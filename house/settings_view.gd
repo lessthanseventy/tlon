@@ -428,7 +428,7 @@ func _telegram_section(box: VBoxContainer) -> void:
 	_head(box, "Telegram")
 	var r := _flow(box)
 	_tg_on = Paper.chip(
-		"A Telegram bot in the house", r, func() -> void: _put("telegram", _tg_on.button_pressed), true
+		"A Telegram bot in Asterion", r, func() -> void: _put("telegram", _tg_on.button_pressed), true
 	)
 	_tg_box = VBoxContainer.new()
 	_tg_box.add_theme_constant_override("separation", 7)
@@ -456,7 +456,7 @@ func _telegram_section(box: VBoxContainer) -> void:
 	_tg_at.text_submitted.connect(func(_t: String) -> void: _tg_time("telegram_list_at"))
 	_tg_at.focus_exited.connect(func() -> void: _tg_time("telegram_list_at"))
 	_tg_off = Paper.chip("Disconnect", r, _tg_disconnect)
-	_quiet(_tg_box).text = "works while this computer is on and the house is running"
+	_quiet(_tg_box).text = "works while this computer is on and Asterion is running"
 
 
 func _tg_connect() -> void:

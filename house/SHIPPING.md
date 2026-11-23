@@ -1,6 +1,6 @@
-# Shipping the house to another computer
+# Shipping Asterion to another computer
 
-The house is built on this Linux machine for Windows and macOS. The art is Gridwright's bought packs: the
+Asterion (the house) is built on this Linux machine for Windows and macOS. The art is Gridwright's bought packs: the
 licence allows shipping it **inside a finished app** and forbids redistributing it as assets, and this repo is
 public. So the builds and the art pack are written only to `~/.cache/tlon/house-dist/` (the task refuses to
 write inside a git work tree) and are handed over **privately** (a message, a USB stick, a private share), never a
@@ -17,11 +17,11 @@ Needs Godot's official export templates for the exact version (`godot --version`
 
 Output, in `~/.cache/tlon/house-dist/`:
 
-- `the-house-windows.zip`: one file, `the-house.exe`, the code and the art together (the art is raw files in
+- `asterion-windows.zip`: one file, `asterion.exe`, the code and the art together (the art is raw files in
   the executable's embedded pck, so the file is large).
-- `the-house-mac.zip`: `the house.app` (universal, Intel and Apple silicon), the art in its pck like the others,
+- `asterion-mac.zip`: `Asterion.app` (universal, Intel and Apple silicon), the art in its pck like the others,
   ad-hoc signed by the export (nothing is added to the app after it, which would break the seal).
-- `the-house-linux.zip`: one file, `the-house`, the same as Windows, for a Linux machine.
+- `asterion-linux.zip`: one file, `asterion`, the same as Windows, for a Linux machine.
 
 The build stages a throwaway copy of `house/` under the dist dir, puts the pack's files in its `art/` with a
 `keep` import each (so Godot neither imports them as textures nor drops them from the pck), and exports that.
@@ -44,30 +44,30 @@ Neither build is signed by a developer account: Windows and macOS warn about any
 notarized from Linux (that takes an Apple developer account and a Mac).
 
 **Windows.** Unzip it anywhere it can stay (not the Downloads' temporary view of the zip: use "Extract
-all"). Double-click `the-house.exe`. SmartScreen says "Windows protected your PC": click **More info**, then
+all"). Double-click `asterion.exe`. SmartScreen says "Windows protected your PC": click **More info**, then
 **Run anyway**. If the zip came by browser download, right-click the zip first, Properties, tick Unblock, and the
 warning does not come.
 
-**macOS.** Unzip with Finder (double-click the zip), not a third-party tool, and drag `the house.app` to
+**macOS.** Unzip with Finder (double-click the zip), not a third-party tool, and drag `Asterion.app` to
 Applications. The first time, right-click it, choose **Open**, then **Open** in the dialog (a double-click only
 offers Cancel). If macOS says the app "is damaged", run these two lines once in Terminal (use the path it is
 really at), then right-click, **Open** again:
 
-    xattr -cr "/Applications/the house.app"
-    codesign --force --deep --sign - "/Applications/the house.app"
+    xattr -cr "/Applications/Asterion.app"
+    codesign --force --deep --sign - "/Applications/Asterion.app"
 
 Why: the app is ad-hoc signed here, not by an Apple developer account, and not notarized; the second line signs
 it again on the Mac itself.
 
 ## Where it keeps its files
 
-Godot's user data folder, named after the project, `the house`:
+Godot's user data folder, named after the project, `Asterion`:
 
 | OS | Folder |
 | --- | --- |
-| Windows | `%APPDATA%\Godot\app_userdata\the house\` (that is `C:\Users\<name>\AppData\Roaming\...`) |
-| macOS | `~/Library/Application Support/Godot/app_userdata/the house/` |
-| Linux | `~/.local/share/godot/app_userdata/the house/` |
+| Windows | `%APPDATA%\Godot\app_userdata\Asterion\` (that is `C:\Users\<name>\AppData\Roaming\...`) |
+| macOS | `~/Library/Application Support/Godot/app_userdata/Asterion/` |
+| Linux | `~/.local/share/godot/app_userdata/Asterion/` |
 
 There: `house_list.json` (the list, with `house_list.bak.json` beside it), `house_settings.json`,
 `house_person.json` (who they are), `house_layout.json` (the room), `house_sound.json`, `house_found.json` and
@@ -75,11 +75,17 @@ the smaller ones. A list saved by the house is only ever replaced whole, and a c
 
 ## Update
 
-Replace the program: delete the old `the-house.exe` / `the-house` (Windows, Linux) or `the house.app` (Mac)
+Replace the program: delete the old `asterion.exe` / `asterion` (Windows, Linux) or `Asterion.app` (Mac)
 and unzip the new one. The list and settings are in the folder above, not in the app, so they stay.
 
 ## Move a list to a new computer
 
-Quit the house on both. Copy the whole `the house` folder above (or just `house_list.json`, plus
+Quit the house on both. Copy the whole `Asterion` folder above (or just `house_list.json`, plus
 `house_layout.json` and `house_person.json` for the room and who lives in it) from the old computer's user data
 folder into the same place on the new one, then start it.
+
+## From "the house"
+
+The program was called "the house", so its folder was `the house` beside `Asterion`. The first start of
+Asterion copies every file in it (the list, the Telegram pairing, the settings) into `Asterion` once, leaves
+the old folder as it was, and never overwrites a file already there (`adopt.gd`).
