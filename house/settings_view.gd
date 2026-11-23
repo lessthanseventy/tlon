@@ -302,7 +302,8 @@ func _ready() -> void:
 	)
 	_quiet(col).text = (
 		"Starts when you log in. Reminders and Telegram keep going; the tray icon or"
-		+ " opening the app again brings the window back."
+		+ " opening the app again brings the window back. With no tray on your desktop,"
+		+ " opening the app again is the way."
 	)
 
 	_talk_box = VBoxContainer.new()
