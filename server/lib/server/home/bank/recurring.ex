@@ -430,5 +430,5 @@ defmodule Server.Home.Bank.Recurring do
 
   defp comparable?(a, level), do: a * 2 >= level and a <= level * 2
 
-  defp rent?(key), do: Enum.any?(@rent, &same_merchant?(key, &1))
+  defp rent?(key), do: key in @rent
 end
