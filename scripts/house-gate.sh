@@ -70,7 +70,7 @@ fi
 
 section() {
 	local n="$1" began="$SECONDS" code
-	XDG_DATA_HOME="$work/data-$n" timeout -k 5 "$bound" godot --headless --path house --script res://soak.gd -- "$n" >"$work/$n.log" 2>&1
+	XDG_DATA_HOME="$work/data-$n" timeout -k 5 "$bound" godot --headless --path house --script res://soak.gd -- "$n" >"$work/$n.log" 2>&1 </dev/null
 	code=$?
 	echo "$code" >"$work/$n.code"
 	echo "$((SECONDS - began))" >"$work/$n.secs"
