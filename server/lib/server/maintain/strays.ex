@@ -1,7 +1,8 @@
 defmodule Server.Maintain.Strays do
   @moduledoc """
   Worktrees no thread is working in: a project's `.worktrees/<name>` whose thread is closed, or
-  gone (a checkout made by hand, once a day passes with nothing done in it), or is its workspace's
+  gone (a checkout made by hand, once a day passes with nothing done in it; babylon's ticket
+  worktrees, `t<N>-<slug>`, are never strays), or is its workspace's
   standing thread (the lobby never finishes, so work parked on it never
   surfaces otherwise). The Maintain sweep removes the ones holding nothing; the rest are the
   needs list's stranded work (`Server.Office.Needs`), never deleted by a sweep.
@@ -20,9 +21,13 @@ defmodule Server.Maintain.Strays do
         name <- Server.Worktree.names(repo),
         thread <- [owner(name)],
         stray?(thread),
+        thread || not babylon_ticket?(name),
         thread || idle?(Server.Worktree.path(repo, name)),
         do: %{repo: repo, name: name, thread: thread}
   end
+
+  # babylon lands and removes its ticket worktrees (`t<N>-<slug>`); a thread-less one is not a stray
+  defp babylon_ticket?(name), do: name =~ ~r/^t\d+-/
 
   defp repos do
     from(p in Server.Project)

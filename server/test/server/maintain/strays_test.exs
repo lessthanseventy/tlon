@@ -118,6 +118,22 @@ defmodule Server.Maintain.StraysTest do
     assert [%{kind: "stranded", thread_id: nil}] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded"))
   end
 
+  test "a babylon ticket worktree with a commit not on main is no stray; a hand-made one still is", %{repo: repo} do
+    ticket = Worktree.path(repo, "t12-x")
+    {_, 0} = System.cmd("git", ["-C", repo, "worktree", "add", "-q", "-b", "t12-x", ticket])
+    File.write!(Path.join(ticket, "wip.txt"), "wip\n")
+    {_, 0} = System.cmd("git", ["-C", ticket, "add", "wip.txt"])
+    {_, 0} = System.cmd("git", ["-C", ticket, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "c"])
+    hand = Worktree.path(repo, "by-hand-old")
+    {_, 0} = System.cmd("git", ["-C", repo, "worktree", "add", "-q", "-b", "office/old", hand])
+    {index, 0} = System.cmd("git", ["-C", hand, "rev-parse", "--path-format=absolute", "--git-path", "index"])
+    File.touch!(String.trim(index), System.os_time(:second) - 2 * 86_400)
+
+    names = for %{name: n} <- Strays.worktrees(), do: n
+    refute "t12-x" in names
+    assert "by-hand-old" in names
+  end
+
   test "an unchanged stranded worktree is read from git once, not on every list", %{repo: repo, ws: ws, project: p} do
     {:ok, t} = Server.Channel.open_thread(%{title: "left", scope: "machine", workspace_id: ws.id, project_id: p.id})
     {:ok, held} = Worktree.ensure(repo, Worktree.name_for(t))
