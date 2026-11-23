@@ -80,12 +80,15 @@ static func set_autostart(on: bool, e: Dictionary) -> bool:
 
 
 # Is another house running? A heartbeat younger than `STALE` says so; then the show marker is
-# dropped for it and false answers (this one should quit). Otherwise this one is the house.
-static func claim(now: float, live: String = LIVE, show: String = SHOW) -> bool:
+# dropped for it (unless `ask_window` is false: a hidden launch asks for no window) and false
+# answers (this one should quit). Otherwise this one is the house.
+static func claim(
+	now: float, live: String = LIVE, show: String = SHOW, ask_window: bool = true
+) -> bool:
 	if FileAccess.file_exists(live):
 		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(live))
 		if d is Dictionary and now - float(d.get("at", 0.0)) < STALE:
-			var f := FileAccess.open(show, FileAccess.WRITE)
+			var f := FileAccess.open(show, FileAccess.WRITE) if ask_window else null
 			if f != null:
 				f.store_string("1")
 			return false

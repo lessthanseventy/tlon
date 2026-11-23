@@ -65,6 +65,12 @@ func _instances() -> void:
 	_eq(Background.shown(show), true, "and asks it for its window")
 	_eq(Background.shown(show), false, "once")
 	Background.beat(102.0, live)
+	_eq(
+		Background.claim(103.0, live, show, false),
+		false,
+		"a hidden launch beside a beating house quits"
+	)
+	_eq(Background.shown(show), false, "and asks for no window")
 	_eq(Background.claim(107.0, live, show), false, "a beat within the stale time still holds")
 	DirAccess.remove_absolute(show)
 	_eq(Background.claim(109.0, live, show), true, "a house that stopped beating is replaced")

@@ -109,7 +109,10 @@ func _ready() -> void:
 	add_child(_room)
 
 	talk_live = not _room.home.staged
-	if not _room.home.staged and not Background.claim(Time.get_unix_time_from_system()):
+	var hidden: bool = Background.FLAG in args or "--headless" in args
+	if not _room.home.staged and not Background.claim(
+		Time.get_unix_time_from_system(), Background.LIVE, Background.SHOW, not hidden
+	):
 		get_tree().quit()
 		return
 	_wttr.live = talk_live
