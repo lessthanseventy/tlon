@@ -7,6 +7,8 @@ const FLAG := "--background"
 const RUN_KEY := "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
 const LIVE := "user://house_running.json"
 const SHOW := "user://house_show"
+const TELL := "user://house_tell"
+const TELL_FLAG := "--tell"
 const BEAT := 2.0
 const STALE := 6.0
 
@@ -85,15 +87,74 @@ static func set_autostart(on: bool, e: Dictionary) -> bool:
 static func claim(
 	now: float, live: String = LIVE, show: String = SHOW, ask_window: bool = true
 ) -> bool:
-	if FileAccess.file_exists(live):
-		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(live))
-		if d is Dictionary and now - float(d.get("at", 0.0)) < STALE:
-			var f := FileAccess.open(show, FileAccess.WRITE) if ask_window else null
-			if f != null:
-				f.store_string("1")
-			return false
+	if alive(now, live):
+		var f := FileAccess.open(show, FileAccess.WRITE) if ask_window else null
+		if f != null:
+			f.store_string("1")
+		return false
 	beat(now, live)
 	return true
+
+
+static func alive(now: float, live: String = LIVE) -> bool:
+	if not FileAccess.file_exists(live):
+		return false
+	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(live))
+	return d is Dictionary and now - float(d.get("at", 0.0)) < STALE
+
+
+# a line for the running house, one per line of the file; a newline inside it is a space
+static func hand(line: String, tell: String = TELL) -> bool:
+	var f := FileAccess.open(
+		tell, FileAccess.READ_WRITE if FileAccess.file_exists(tell) else FileAccess.WRITE
+	)
+	if f == null:
+		return false
+	f.seek_end()
+	f.store_line(line.replace("\r", " ").replace("\n", " ").strip_edges())
+	return true
+
+
+# the lines handed since last asked, in order; the file is taken, so one is never read twice
+static func told(tell: String = TELL) -> Array:
+	var taken := tell + ".taken"
+	if not FileAccess.file_exists(tell) or DirAccess.rename_absolute(tell, taken) != OK:
+		return []
+	var out: Array = []
+	for l in FileAccess.get_file_as_string(taken).split("\n"):
+		if l.strip_edges() != "":
+			out.append(l.strip_edges())
+	DirAccess.remove_absolute(taken)
+	return out
+
+
+# the command line of a launch that starts the house for a `--tell` when none runs: the same
+# arguments without the tell, hidden
+static func house_args(cmdline: Array) -> Array:
+	var out: Array = []
+	var skip := false
+	for a in cmdline:
+		if skip:
+			skip = false
+		elif a == TELL_FLAG:
+			skip = true
+		else:
+			out.append(a)
+	if FLAG not in out:
+		out.append(FLAG)
+	return out
+
+
+# the reply as a desktop notice where the system has a way
+static func notify(os_name: String, text: String) -> void:
+	match os_name:
+		"Linux", "FreeBSD", "NetBSD", "OpenBSD", "BSD":
+			OS.create_process("notify-send", ["--app-name=Asterion", "Asterion", text])
+		"macOS":
+			var q := text.replace("\\", "\\\\").replace('"', '\\"')
+			OS.create_process(
+				"osascript", ["-e", 'display notification "%s" with title "Asterion"' % q]
+			)
 
 
 static func beat(now: float, live: String = LIVE) -> void:

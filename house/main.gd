@@ -96,6 +96,9 @@ func _ready() -> void:
 		set_process(false)
 		get_tree().quit()
 		return
+	if Background.TELL_FLAG in args:
+		_hand_over(args)
+		return
 	_demo = "--demo" in args
 	if "--shot" in args:
 		_shot = args[args.find("--shot") + 1]
@@ -305,6 +308,8 @@ func _keep_house(args: Array) -> void:
 			Background.beat(Time.get_unix_time_from_system())
 			if Background.shown():
 				_show_window()
+			for line in Background.told():
+				_tell(line, _tell_done.bind(line))
 	)
 	add_child(beat)
 	beat.start()
@@ -314,6 +319,27 @@ func _keep_house(args: Array) -> void:
 	_apply_background()
 	if Background.FLAG in args and _background_on():
 		_to_background()
+
+
+# `--tell "<line>"`: this launch is not a house. It drops the line for the running one, or starts
+# one hidden when none beats (it reads the line on its first beat), and quits.
+func _hand_over(args: Array) -> void:
+	set_process(false)
+	var i := args.find(Background.TELL_FLAG) + 1
+	var line: String = str(args[i]) if i < args.size() else ""
+	if line.strip_edges() != "" and Background.hand(line):
+		if not Background.alive(Time.get_unix_time_from_system()):
+			OS.create_process(
+				OS.get_executable_path(), Background.house_args(OS.get_cmdline_args())
+			)
+	get_tree().quit()
+
+
+# the reply to a told line: a desktop notice (the chat line is `_tell`'s own)
+func _tell_done(ok: bool, reply: String, line: String) -> void:
+	Background.notify(
+		OS.get_name(), reply if ok else "couldn't reach the house: \"%s\" not kept" % line
+	)
 
 
 func go_headless() -> void:

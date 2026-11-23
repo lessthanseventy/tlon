@@ -6,7 +6,7 @@ extends RefCounted
 const OLD_NAME := "the house"
 const MARK := "adopted_from_the_house"
 # the marks of a running instance: stale the moment the old build quits
-const SKIP := ["house_running.json", "house_show"]
+const SKIP := ["house_running.json", "house_show", "house_tell"]
 
 
 # `new_dir` is OS.get_user_data_dir(); the old folder is its sibling. How many files came across.

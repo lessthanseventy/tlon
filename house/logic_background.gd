@@ -76,3 +76,29 @@ func _instances() -> void:
 	_eq(Background.claim(109.0, live, show), true, "a house that stopped beating is replaced")
 	Background.release(live)
 	_eq(FileAccess.file_exists(live), false, "a house leaving takes its mark")
+
+	var tell := OS.get_user_data_dir().path_join("soak_tell")
+	_eq(Background.told(tell), [], "no file, no lines")
+	_eq(Background.alive(200.0, live), false, "no beat, no house")
+	Background.beat(200.0, live)
+	_eq(Background.alive(201.0, live), true, "a fresh beat is a house")
+	_eq(Background.alive(207.0, live), false, "a stale one is not")
+	Background.release(live)
+	Background.hand("call mum\nsaturday", tell)
+	Background.hand("  buy milk ", tell)
+	_eq(
+		Background.told(tell),
+		["call mum saturday", "buy milk"],
+		"lines come back in order, newlines flattened"
+	)
+	_eq(Background.told(tell), [], "and once")
+	_eq(
+		Background.house_args(["--path", "house", "--", "--tell", "buy milk"]),
+		["--path", "house", "--", "--background"],
+		"a house started for a tell is hidden and carries no tell"
+	)
+	_eq(
+		Background.house_args(["--", "--background", "--tell", "x"]),
+		["--", "--background"],
+		"and is not hidden twice"
+	)

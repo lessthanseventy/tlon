@@ -550,7 +550,12 @@ runs on the local list.
   drops `user://house_show` and quits, which the running one answers by showing its window (`OS.is_process_running` only
   knows children, so a heartbeat is the liveness). The engine's own `--headless` (no display) runs the same loop with
   the room and sidebar hidden and stopped (`main.gd` `go_headless`): the list's tick, Telegram and the polls go on,
-  and there is no window to show. A staged or scripted run does none of this. `soak_background.gd` (section
+  and there is no window to show. **`asterion -- --tell "<line>"`** hands one line to the house: that launch is no house
+  (`main.gd` `_hand_over`); it appends the line to `user://house_tell` (`Background.hand`), starts a hidden house
+  (`house_args`: its own command line without the tell, plus `--background`) when no beat is under 6 s old, and quits.
+  The running house takes the file on its 2 s beat (`Background.told`) and runs each line through `_tell`: a chat line
+  and a desktop notice with the reply (`Background.notify`: `notify-send` on Linux, `osascript` on macOS, none on
+  Windows, unverified there). A staged or scripted run does none of this. `soak_background.gd` (section
   `background`) tells a due reminder and answers a line against the Telegram stub with the room stopped;
   `logic_background.gd` holds the entries and the one-house rule.
   **Claude reading** (`reader_claude.gd`, `claude` and `claude_command` in the settings): "read my messages with
