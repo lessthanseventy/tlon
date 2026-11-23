@@ -23,6 +23,7 @@ const BackendLocal := preload("res://backend_local.gd")
 const LocalList := preload("res://local_list.gd")
 const ReaderClaude := preload("res://reader_claude.gd")
 const Telegram := preload("res://telegram.gd")
+const Notices := preload("res://notices.gd")
 const CalendarFeed := preload("res://calendar_feed.gd")
 const Wttr := preload("res://wttr.gd")
 const Adopt := preload("res://adopt.gd")
@@ -47,6 +48,7 @@ var _backend: Node
 var _claude := ReaderClaude.new()
 var _wttr := Wttr.new()
 var _phone := Telegram.new()
+var _notices := Notices.new()
 var _calendar := CalendarFeed.new()
 var _fixture := ""
 var _probing := false
@@ -566,6 +568,24 @@ func _apply_talk() -> void:
 		_phone.start()
 	else:
 		_phone.stop()
+
+
+# a new urgent move as a desktop notice, only where Telegram is not paired to carry it
+func _desktop_notices() -> void:
+	if not (_backend.local and talk_live):
+		return
+	var home = _room.home
+	var rings := _notices.fresh(
+		_backend.list.status().get("moves", []),
+		get_window().has_focus(),
+		str(home.settings.value("telegram_list_at")),
+		str(home.settings.value("telegram_morning_at")),
+		home._now_local()
+	)
+	if _phone_on() and _phone.is_paired():
+		return
+	for m in rings:
+		Notices.raise(OS.get_name(), m)
 
 
 func _phone_on() -> bool:
@@ -1572,6 +1592,7 @@ func _on_polled(reached: bool, code: int, body: Variant) -> void:
 				. map(func(t): return int(t["id"]))
 			)
 			_phone.on_moves(get_window().has_focus())
+		_desktop_notices()
 	_sidebar.set_reachable(ok)
 	if ok:
 		_apply(_data)

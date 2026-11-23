@@ -826,3 +826,8 @@ and seeds their dice (`--seed N` to pick another):
   For `--widget` give gamescope `-W 720 -H 464`. `TLON_ART_DIR=/none` for no art.
 - Not covered by any picture or script: a real pointer (drag, hover feel), the compositor's
   always-on-top and attention request, the real hour of the beats.
+
+**Desktop notice** (`notices.gd`, checked in `logic_notices.gd`; `main.gd`'s `_desktop_notices` on each poll): a new ask or proposal
+dated within 48 hours, or marked urgent by its source, is raised once as `notify-send` (Linux), `osascript` (Mac) or the taskbar flash
+(Windows) — only when Telegram is not paired (Telegram carries it otherwise, never both), not with the window in front, not from the
+evening card's time to the morning's, and never in a staged run. What was open at launch is not new. macOS and Windows are unverified here.
