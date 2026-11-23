@@ -230,6 +230,10 @@ run = "scripts/checks-queue.test.sh"
 description = "script test: house-gate.sh runs only when house/ changed, skips or fails a missing godot by TLON_HOUSE_GATE, and reports a failing or hung section (offline, temp repo, fake godot)"
 run = "scripts/house-gate.test.sh"
 
+["check:scripts:house-check"]
+description = "script test: house-check.sh is quiet when green and names the failing step, godot's exit code and its output when red (offline, fake godot)"
+run = "scripts/house-check.test.sh"
+
 ["check:scripts:house-app"]
 description = "script test: house-app.sh installs the built Asterion atomically, skips a missing godot, keeps the old copy on a failed build and runs the installed file (offline, temp dirs, fake build)"
 run = "scripts/house-app.test.sh"

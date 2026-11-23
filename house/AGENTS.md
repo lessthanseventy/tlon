@@ -719,7 +719,8 @@ runs on the local list.
   the money's envelope states, day strip, lowest-point sentence and wording `logic_money.gd`,
   the bank's engine, store and ask `logic_recurring.gd` `logic_projection.gd` `logic_ask.gd` `logic_bank.gd`,
   voices, the jar, the knock and rhythm rules, the TV, `Card`'s dates, the pet settings). A few seconds:
-  **iterate here.** Godot is the machine's own, so this is not part of `mise run check`. A check
+  **iterate here.** Godot is the machine's own, so this is not part of `mise run check`. A red step
+  (`scripts/house-check.sh`) prints its name, godot's exit code and the last 40 lines of its output. A check
   that needs neither the tree nor the clock goes in `logic.gd`, not in the soak; none runs in both.
 - `mise run house:soak -- <section>...` runs only those sections, in the suite's order; `-- --list`
   prints the names (`home sim decorate packs looks hacks eggs guests petlife antics petthings cards

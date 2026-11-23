@@ -27,7 +27,7 @@ run = "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; s() { XDG_DATA_HOME=\"$d\" tim
 
 ["house:check"]
 description = "house: every script, the soak's too, loads clean in headless Godot, then the logic checks (house/logic.gd, seconds) pass (not in `check`: Godot is not a mise tool)"
-run = "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; g() { XDG_DATA_HOME=\"$d\" godot --headless --path house \"$@\" 2>&1; }; g --quit | { ! grep -E 'ERROR|SCRIPT ERROR|Parse Error|Unicode parsing error'; } && g --check-only --script res://soak.gd | { ! grep -E 'ERROR|SCRIPT ERROR|Parse Error|Unicode parsing error'; } && { out=$(g --script res://logic.gd); echo \"$out\" | awk '/^LOGIC OK/{ok=1} /^(SCRIPT )?ERROR/ && !ok{bad=1} END{exit !(ok && !bad)}' || { echo \"$out\"; false; }; }"
+run = "scripts/house-check.sh"
 
 ["house:art-pack"]
 description = "house: pack the art the house can open (derived from its loaders, with each pack's LICENSE.txt) into ~/.cache/tlon/house-dist/house-art.zip, outside the repo, and print files and size per pack; `-- --list` prints the files and builds nothing (art from TLON_ART_DIR)"
