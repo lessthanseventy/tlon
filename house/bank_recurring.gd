@@ -15,8 +15,9 @@ extends RefCounted
 # one (within 10%). A merchant whose charges fall into two or more steady amount groups that hold
 # four fifths of its charges, and whose latest charges are within one rhythm of each other, has
 # those series. A merchant with ten or more charges in no steady rhythm and more than twice as
-# many as its series holds is everyday spending and has none. Pending transactions never count;
-# several on one day count once.
+# many as its series holds is everyday spending and has none, unless its median gap is a loose
+# month (20 days or more): a bill that drifts in day and amount is still a bill. Pending
+# transactions never count; several on one day count once.
 #
 # A series is live while its latest charge is within two rhythms plus the rhythm's tolerance of
 # today (a yearly one: one rhythm plus 30 days).
@@ -32,6 +33,7 @@ const BANDS := [
 	["weekly", 5, 9], ["fortnightly", 11, 17], ["monthly", 26, 34], ["yearly", 355, 375]
 ]
 const LABEL_MAX := 40
+const LOOSE_MONTHLY := 20
 const RENT := ["flex", "flexible finance"]
 const RENT_LABEL := "Rent (Flex)"
 const OWN := [
@@ -309,7 +311,8 @@ static func _key_series(group: Array, direction: String) -> Array:
 	for f in found:
 		explained += f["count"]
 	var unexplained := _unsteady(charges)
-	if unexplained >= 10 and unexplained > 2 * explained:
+	var everyday := unexplained >= 10 and unexplained > 2 * explained
+	if everyday and _median_gap(charges) < LOOSE_MONTHLY:
 		return []
 	return found
 
@@ -354,6 +357,15 @@ static func _installments(group: Array) -> Array:
 			)
 		)
 	return out
+
+
+# the median gap in days between consecutive `charges` (newest first)
+static func _median_gap(charges: Array) -> int:
+	var gaps: Array = []
+	for i in range(charges.size() - 1):
+		gaps.append(U.diff(charges[i]["date"], charges[i + 1]["date"]))
+	gaps.sort()
+	return gaps[gaps.size() / 2]
 
 
 static func _wrap(found: Variant) -> Array:

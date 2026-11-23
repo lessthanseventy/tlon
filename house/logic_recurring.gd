@@ -22,6 +22,7 @@ func run() -> void:
 	_history()
 	_two_series()
 	_everyday()
+	_loose_monthly_history()
 	_strays()
 	_new_amount()
 	_games_store()
@@ -277,6 +278,19 @@ func _everyday() -> void:
 		_only(Recurring.series(tail + often.slice(0, 4), "out"), "tail and four"),
 		{"count": 3},
 		"a few irregular ones leave the tail"
+	)
+
+
+func _loose_monthly_history() -> void:
+	var rows := _monthly("Mobile Co", 6600, "2026-11-18", 3)
+	var date := "2026-05-01"
+	for i in 12:
+		rows.append(_txn(date, 7000 + 130 * i, "Mobile Co"))
+		date = U.add(date, -[35, 25, 43, 22, 31, 36][i % 6])
+	_has(
+		_only(Recurring.series(rows, "out"), "a loose monthly history"),
+		{"period": "monthly", "amount": 6600, "count": 3},
+		"a bill that drifts is still a series"
 	)
 
 
