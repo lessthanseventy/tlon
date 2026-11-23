@@ -98,9 +98,11 @@ func _adds() -> void:
 		["Dana", "waiting", "2026-11-21T14:00:00Z"],
 		"a waiting-on, asked after three days"
 	)
-	_eq(l.done(w["id"])["code"], 404, "a waiting-on is not done, it is dropped")
-	_eq(l.drop(w["id"])["code"], 200, "a waiting-on is closed by drop")
+	_eq(l.done(w["id"])["code"], 200, "a waiting-on got is done")
 	_eq(l.status()["waiting"], [], "and leaves the waiting list")
+	var got: Dictionary = l.status()
+	_eq([got["done_week"], got["done"][0]["text"]], [1, "the lease"], "and counts as done")
+	_eq(l.done(w["id"])["code"], 404, "a second done is refused")
 	_eq(l.doc["next_id"], 6, "ids are never reused")
 	var z := _list("", -25200.0)
 	r = z.add({"kind": "reminder", "text": "x", "at": "2026-11-21T09:00"})
