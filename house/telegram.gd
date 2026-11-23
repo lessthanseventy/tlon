@@ -763,7 +763,19 @@ func _card_refresh() -> void:
 		return
 	card["sent"] = sent
 	_save()
-	_edit(int(card["mid"]), text, keys)
+	_call(
+		"editMessageText",
+		{
+			"chat_id": chat,
+			"message_id": int(card["mid"]),
+			"text": text.left(4000),
+			"reply_markup": keys
+		},
+		func(ok: bool, _result: Variant, why: String, _http: int) -> void:
+			if not (ok or "not modified" in why) and str(card.get("sent", "")) == sent:
+				card["sent"] = ""
+				_save()
+	)
 
 
 func _ticked(id: int) -> void:

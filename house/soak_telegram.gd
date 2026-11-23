@@ -661,6 +661,22 @@ func _daily(base: String, bot: Bot) -> void:
 		],
 		"a new thing is numbered on the card, edited once"
 	)
+	st["open"] = [_row(1, "buy milk"), _row(4, "pay rent"), _row(5, "call mum")]
+	edits = bot.named("editMessageText").size()
+	bot.fail = 500
+	var tries := bot.attempts
+	tg.sync([])
+	await s._until(func() -> bool: return bot.attempts > tries)
+	await s._until(func() -> bool: return str(tg.card["sent"]) == "")
+	bot.fail = 0
+	tg.sync([])
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	_eq(
+		"call mum" in str(bot.named("editMessageText").back()["text"]),
+		true,
+		"a refused edit is tried again on the next change"
+	)
+	st["open"] = [_row(1, "buy milk"), _row(4, "pay rent")]
 	tg.stop()
 	var tg2 := _tg(base, [], taps)
 	tg2.load_state()
