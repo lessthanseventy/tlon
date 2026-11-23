@@ -1688,6 +1688,9 @@ func _on_watch(reached: bool, code: int, body: Variant) -> void:
 
 func _remove(id: int) -> void:
 	var chore: bool = _demo and _room.home.chore_thing_of(id) != ""
+	var found := false
+	for key in ["open", "coming"]:
+		found = found or _data[key].any(func(t): return int(t["id"]) == id)
 	_room.home.tick_off(id, -1 if _demo else _writes)
 	var at := Time.get_datetime_string_from_system(true) + "Z"
 	for t in _data["open"]:
@@ -1696,7 +1699,7 @@ func _remove(id: int) -> void:
 	if chore:
 		_demo_repeat(id)
 	var kept: Array = _data["open"].filter(func(t): return int(t["id"]) != id)
-	if kept.size() < _data["open"].size():
+	if found:
 		_data["done_week"] = int(_data.get("done_week", 0)) + 1
 	_data["open"] = kept
 	_apply(_data)
