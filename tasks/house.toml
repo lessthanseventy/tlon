@@ -5,6 +5,14 @@
 description = "house: the window over the live server: the home (what the jots left open, what is coming, the notes) (TLON_URL; art from TLON_ART_DIR)"
 run = "godot --path house"
 
+["house:install"]
+description = "house: build Asterion for this machine (Linux, art inside, as house:build) and install it at ~/.local/share/asterion/asterion (TLON_ASTERION_BIN), replaced atomically; no godot is a named skip (what `install` runs after a landing)"
+run = "scripts/house-app.sh install"
+
+["house:app"]
+description = "house: run the installed Asterion, the built app (title \"Asterion\", no DEBUG); none installed says to run house:install; `house:run` is the from-source run for development"
+run = "scripts/house-app.sh run \"$@\""
+
 ["house:demo"]
 description = "house: the window on made-up things, no server"
 run = "godot --path house -- --demo"

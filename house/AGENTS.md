@@ -708,7 +708,9 @@ runs on the local list.
 
 ## Dev loop
 
-- `mise run house:run` — over the live server. `mise run house:demo` — on `demo.json` (the home at
+- `mise run house:app` — the installed, built app (`mise run install` builds and installs it after every
+  landing; `house:install` by hand): its title reads "Asterion", the from-source runs below "Asterion (DEBUG)".
+- `mise run house:run` — from source, over the live server. `mise run house:demo` — on `demo.json` (the home at
   the top level, with `weather`), no server.
 - `mise run house:widget` — over the live server as the small always-on-top widget.
 - `mise run house:check` — every script, the soak's too, loads in headless Godot, then `logic.gd` runs:
