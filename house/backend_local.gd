@@ -226,7 +226,7 @@ func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 		var status: Dictionary = list.status()
 		var now: float = list.now()
 		var stale: float = now - MovesList.STALE_DAYS * 86400.0
-		list.moves.sweep(MovesList.sources(status, list.iso(now), list.iso(stale)))
+		list.moves.sweep(MovesList.sources(status, list.iso(now), list.iso(stale), list.bias))
 		status["moves"] = list.moves.open_items()
 		status["meetings"] = [] if calendar == null else calendar.meetings()
 		status["money"] = bank.summary()

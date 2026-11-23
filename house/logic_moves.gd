@@ -323,6 +323,7 @@ func _sources() -> void:
 		"a to-do today"
 	)
 	_eq(m.settle("stale-2", "go").get("ok"), "Moved to someday.", "go puts it on someday")
+	_why_in_local_day()
 	m.sweep(_sources_of(l))
 	_eq(_keys(m), [], "a settled one is not offered again, and the fresh ones are not due")
 	var n := _moves(l)
@@ -339,5 +340,16 @@ func _sources() -> void:
 	t = at(2026, 11, 18, 10)
 
 
+func _why_in_local_day() -> void:
+	var zoned := _list("", 3.0 * 3600.0)
+	t = at(2026, 11, 18, 1)
+	zoned.add({"kind": "waiting", "text": "the invoice", "who": "Sam"})
+	zoned.add({"kind": "todo", "text": "Renew passport"})
+	t += 20 * DAY
+	var got := _sources_of(zoned)
+	_eq(got[0]["why"], "waiting since Wed", "the waiting-on names the local day, not the UTC one")
+	_eq(got[1]["why"], "open since 18 Nov, never moved", "the to-do names the local date")
+
+
 func _sources_of(l: RefCounted) -> Array:
-	return MovesList.sources(l.status(), l.iso(t), l.iso(t - MovesList.STALE_DAYS * DAY))
+	return MovesList.sources(l.status(), l.iso(t), l.iso(t - MovesList.STALE_DAYS * DAY), l.bias)
