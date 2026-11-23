@@ -20,6 +20,7 @@ func run() -> void:
 	_history()
 	_subscriptions()
 	_budget()
+	_own_moves()
 	_no_clock()
 
 
@@ -1109,6 +1110,49 @@ func _subscriptions() -> void:
 	)
 	_eq(subs.any(func(x): return x["name"] == "Salary"), false, "deposits are not subscriptions")
 	_eq(subs, U.sort_by(subs, func(x): return [x["next"], x["name"]]), "by next date, then name")
+
+
+func _own_moves() -> void:
+	var sweep: Array = []
+	for i in 3:
+		sweep.append(
+			_txn(
+				U.shift_months("2026-11-10", -i),
+				25000,
+				"Sweep to Savings",
+				{"category": "TRANSFER_OUT_SAVINGS"}
+			)
+		)
+	var with_sweep := _data([_base()["transactions"], sweep])
+	var names := func(rows: Array) -> Array: return rows.map(func(x): return x["name"])
+	_eq(
+		names.call(Projecting.subscriptions(with_sweep, TODAY)).has("Sweep to Savings"),
+		false,
+		"a monthly transfer to savings is not a subscription"
+	)
+	_eq(
+		Projecting.merchants(with_sweep, TODAY).has("Sweep to Savings"),
+		false,
+		"nor a merchant"
+	)
+	var h := _ok(
+		Projecting.history(
+			with_sweep, {"match": "sweep", "from": "2026-08-01", "to": "2026-11-30"}
+		),
+		"history"
+	)
+	_eq(h["count"], 0, "nor in the history")
+
+	var base := _forecast(_base())
+	var moved := _forecast(with_sweep)
+	var day := "2026-12-10"
+	var at := func(f: Dictionary) -> int:
+		return f["days"].filter(func(d): return d["date"] == day)[0]["expected_cents"]
+	_eq(
+		at.call(moved),
+		at.call(base) - 25000,
+		"the expected transfer still lowers the balance on its day"
+	)
 
 
 func _no_clock() -> void:

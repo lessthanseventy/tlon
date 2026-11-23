@@ -136,7 +136,8 @@ static func history(data: Dictionary, query: Dictionary) -> Dictionary:
 static func merchants(data: Dictionary, today: String) -> Array:
 	var from := U.add(today, 1 - WINDOW)
 	var rows := Recurring.without_transfers(data["transactions"]).filter(
-		func(t): return not t["pending"] and t["date"] >= from and t["date"] <= today
+		func(t):
+			return not t["own"] and not t["pending"] and t["date"] >= from and t["date"] <= today
 	)
 	var groups := U.group_by(rows, func(t): return t["key"])
 	var listed: Array = []
@@ -152,9 +153,10 @@ static func merchants(data: Dictionary, today: String) -> Array:
 # The live recurring outflow series for display, by next date: amounts are signed, "was_cents"
 # the price before a change.
 static func subscriptions(data: Dictionary, today: String) -> Array:
-	var live := Recurring.live(
-		Recurring.series(Recurring.without_transfers(data["transactions"]), "out"), today
+	var spent := Recurring.without_transfers(data["transactions"]).filter(
+		func(t): return not t["own"]
 	)
+	var live := Recurring.live(Recurring.series(spent, "out"), today)
 	var out: Array = []
 	for s in live:
 		var item := _series_item(s, "charge", -1, today)
@@ -351,7 +353,8 @@ static func _months_of(data: Dictionary, query: Dictionary) -> Dictionary:
 	var rows := Recurring.without_transfers(data["transactions"]).filter(
 		func(t):
 			return (
-				not t["pending"]
+				not t["own"]
+				and not t["pending"]
 				and t["date"] >= from
 				and t["date"] <= to
 				and _contains(t["key"], needle)
