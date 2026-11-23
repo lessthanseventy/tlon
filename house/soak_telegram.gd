@@ -705,7 +705,6 @@ func _daily(base: String, bot: Bot) -> void:
 	tg.card["mid"] = mid
 	tg._save()
 	st["open"] = [_row(1, "buy milk"), _row(4, "pay rent")]
-	st["open"] = [_row(1, "buy milk"), _row(4, "pay rent")]
 	tg.stop()
 	var tg2 := _tg(base, [], taps)
 	tg2.load_state()
