@@ -34,6 +34,7 @@ const DEFAULTS := {
 	"background": false,
 	"telegram": false,
 	"telegram_list_at": "17:30",
+	"telegram_morning_at": "08:30",
 	"claude": false,
 	"claude_command": "claude",
 	"glow": true,

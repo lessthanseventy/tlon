@@ -84,6 +84,7 @@ var _tg_say: Label
 var _tg_state: Label
 var _tg_reached: Label
 var _tg_at: LineEdit
+var _tg_morning: LineEdit
 var _tg_off: Button
 var _claude_on: Button
 var _claude_box: VBoxContainer
@@ -383,6 +384,7 @@ func open() -> void:
 		_looks[key].set_pressed_no_signal(bool(settings.value(key)))
 	_url.text = str(settings.data.get("url", ""))
 	_tg_at.text = str(settings.value("telegram_list_at"))
+	_tg_morning.text = str(settings.value("telegram_morning_at"))
 	_claude_cmd.text = str(settings.data.get("claude_command", ""))
 	for l in [_tg_token, _tg_say, _claude_say]:
 		l.text = ""
@@ -444,10 +446,15 @@ func _telegram_section(box: VBoxContainer) -> void:
 	_tg_state = _quiet(_tg_box)
 	_tg_reached = _quiet(_tg_box)
 	r = _flow(_tg_box)
-	r.add_child(Paper.label("The day's list at", Fonts.SMALL, Paper.QUIET))
+	r.add_child(Paper.label("Morning card at", Fonts.SMALL, Paper.QUIET))
+	_tg_morning = Paper.edit("08:30, or off", r)
+	_tg_morning.text_submitted.connect(func(_t: String) -> void: _tg_time("telegram_morning_at"))
+	_tg_morning.focus_exited.connect(func() -> void: _tg_time("telegram_morning_at"))
+	r = _flow(_tg_box)
+	r.add_child(Paper.label("Evening card at", Fonts.SMALL, Paper.QUIET))
 	_tg_at = Paper.edit("17:30, or off", r)
-	_tg_at.text_submitted.connect(func(_t: String) -> void: _tg_list_at())
-	_tg_at.focus_exited.connect(_tg_list_at)
+	_tg_at.text_submitted.connect(func(_t: String) -> void: _tg_time("telegram_list_at"))
+	_tg_at.focus_exited.connect(func() -> void: _tg_time("telegram_list_at"))
 	_tg_off = Paper.chip("Disconnect", r, _tg_disconnect)
 	_quiet(_tg_box).text = "works while this computer is on and the house is running"
 
@@ -472,11 +479,12 @@ func _tg_disconnect() -> void:
 
 
 # "HH:MM" or "off"; anything else goes back to what was kept
-func _tg_list_at() -> void:
-	var t := _tg_at.text.strip_edges().to_lower()
+func _tg_time(key: String) -> void:
+	var field := _tg_at if key == "telegram_list_at" else _tg_morning
+	var t := field.text.strip_edges().to_lower()
 	if t == "off" or RegEx.create_from_string("^([01]?\\d|2[0-3]):[0-5]\\d$").search(t) != null:
-		_put("telegram_list_at", t)
-	_tg_at.text = str(settings.value("telegram_list_at"))
+		_put(key, t)
+	field.text = str(settings.value(key))
 
 
 func _tg_lines() -> void:

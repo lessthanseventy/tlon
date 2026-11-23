@@ -400,7 +400,7 @@ runs on the local list.
   `Settings.temp` words it everywhere a temperature is shown),
   `widget` (start as the small widget), `on_top` (the widget stays on top), `background` (off; above, "Background"), `url` (empty: `TLON_URL`, else
   `http://127.0.0.1:4040`), `where` (`"server"`, or `"local"`: the house's own list; no key means the server), and over the
-  house's own list only `telegram` (off), `telegram_list_at` (`"17:30"`), `claude` (off) and `claude_command`
+  house's own list only `telegram` (off), `telegram_morning_at` (`"08:30"`), `telegram_list_at` (`"17:30"`), `claude` (off) and `claude_command`
   (`"claude"`): the two helpers below (the bot's token is not here but in its own file); and the four
   looks, `glow`, `weather_art`, `spells`, `font` (above, "Looks").
   **Precedence: a command-line arg beats the settings file beats the default** (`--widget`
@@ -475,22 +475,38 @@ runs on the local list.
   house", three lines of setup (message @BotFather, `/newbot`, paste the token), the token field (masked, emptied once
   saved, then shown by its last four) and "connect" (`getMe`: the bot's @name or Telegram's own one-line reason),
   the pairing code (four digits, shown until a chat sends exactly it; five wrong messages change it), "last reached",
-  the day's list time (`telegram_list_at`, `HH:MM` or `off`, default 17:30) and "disconnect" (second click; forgets
-  token, chat and offset). The token, the paired chat id, the `getUpdates` offset and the day the list was last said
-  live in `user://house_telegram.json` `{"token", "chat", "offset", "listed"}` and nowhere else (never in the settings
+  the day's card times (`telegram_morning_at` and `telegram_list_at`, each `HH:MM` or `off`, default 08:30 and 17:30)
+  and "disconnect" (second click; forgets token, chat, offset and card). The token, the paired chat id, the
+  `getUpdates` offset, the day the evening card was last said and the day's card live in `user://house_telegram.json`
+  `{"token", "chat", "offset", "listed", "card"}` and nowhere else (never in the settings
   file, and never in a line printed or shown: the URL carries it, so `_call` is the one place it is built). Methods
   called: `getMe`, `getUpdates` (long poll 25 s, `allowed_updates` message and callback_query, the offset kept before
   the batch is handled so nothing is filed twice; a backlog is read oldest first at start), `sendMessage`,
-  `editMessageText`, `editMessageReplyMarkup`, `answerCallbackQuery`. Only the paired private chat is ever heard or
+  `editMessageText`, `deleteMessage`, `answerCallbackQuery`. An edit never notifies the
+  phone; a new message does, so what must be seen is sent again at the bottom and the old one deleted (Telegram lets a
+  bot delete its own messages for 48 h). Only the paired private chat is ever heard or
   answered; every other message, before pairing or after, is ignored. A text goes through `main.gd` `_tell` (so the
   reader reads it, the chat keeps it marked `via: phone`, and the reply goes back); `/start` is greeted; a voice
   note, photo or sticker is answered "I can only read text here." and filed nowhere. A told reminder (`told(row)`)
-  is "⏰ text" with Done / In an hour / Tomorrow / Delete (`callback_data` `verb:id`; a repeating one's Delete is
-  `ask:id`, which edits the message to "Delete for good?" with yes / no), a press goes through `_act` and edits the
-  message to what was done; a re-ring sends a new message and takes the old one's buttons off; a thing done in the
+  is "⏰ text" with Done / Later / Skip (`callback_data` `verb:id`: `done`, `hour`, and Skip is `tomorrow` for a
+  one-off, `skip` for a repeating one, which goes through the list's done: that moves a repeating reminder to its next
+  time and records nothing as done); a press goes through `_act` and edits the message to what was done; a re-ring
+  deletes the old message and sends "⏰ text · still waiting since HH:MM" (the first tell's time); a thing done in the
   house (`_act`) or no longer ringing (`sync`, not within `grace`, 3 s, of the message) edits its message too, even one acted on before Telegram has answered the send (the message ids are kept in memory only, so a
-  message from before a restart is followed only by its own buttons). Once a day at `telegram_list_at` by the house
-  clock, or at the next start that day, "Still open: ...; tomorrow: ..." (nothing to say, nothing sent). A network
+  message from before a restart is followed only by its own buttons; an older message's Tomorrow, Delete and its
+  "Delete for good?" still work). **The day's card** (`daily`, every 20 s; `card_text`, `card_keys` and `number` are
+  static, checked in `logic_telegram.gd`): at `telegram_morning_at` by the house clock, or at the next start that day,
+  one message, "Today · Wed 18 Nov", then "To do" numbered: the open things, then the reminders still to come today
+  with their time, each keeping its number for the day (a new one takes the next; a ticked one stays, "2. ✓ …"; one
+  put off or deleted loses its line). Under it one "✓ Tick…" button, which swaps the keyboard for the numbers still
+  to tick (five a row) and "‹ Back"; a number ticks it. A reply that is only numbers ("2", "2 4 5", "2, 4") ticks
+  those through `_act` and is answered "✓ text, …" (a number not to tick: "Nothing to tick at 9."); any other line is
+  read as before. Every tick, and any change of the list (`sync`), edits the card in place, only when what it says
+  changed. At `telegram_list_at` the evening's card, "This evening · …", what was done today and what is still to do
+  under the same numbers, is sent at the bottom and the morning's deleted; on Saturday and Sunday only when the day
+  moved (something done, ticked or added since the morning). Nothing to say, nothing sent; the day still counts. The
+  card is kept in the bot's file, so a restart edits the same message; a press on another day's card ticks nothing.
+  The local list has no sources yet, so the card has no notices or proposals. A network
   failure backs off 5 s doubling to 5 min and shows nothing in the room; a refused token stops it and says so in the
   settings. It works while this computer is on and the house is running (open, or in the background).
   **Background** (`background.gd`, the setting `background`, off; Connections): the house keeps running with its window

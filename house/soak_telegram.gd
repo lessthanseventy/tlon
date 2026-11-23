@@ -55,7 +55,9 @@ func _settle() -> void:
 				polling = polling or tg._running
 				if _in_flight(tg) > 0 or tg._busy:
 					return false
-			return bot == null or not polling or (_polls(bot) - from >= 2 and bot.updates.is_empty()),
+			return (
+				bot == null or not polling or (_polls(bot) - from >= 2 and bot.updates.is_empty())
+			),
 		"the bot's requests answered and the stub's updates taken"
 	)
 
@@ -280,7 +282,7 @@ func _telegram() -> void:
 			int(kept["chat"]),
 			int(kept["offset"]) == tg.offset
 		],
-		[4, true, 777, true],
+		[5, true, 777, true],
 		"and is kept with the token and chat in the bot's own file"
 	)
 	tg.stop()
@@ -329,8 +331,8 @@ func _telegram() -> void:
 	var msg: Dictionary = bot.sent.back()
 	_eq(
 		[msg["params"]["text"], _keys(msg["params"]["reply_markup"])],
-		["⏰ tea", ["done:7", "hour:7", "tomorrow:7", "delete:7"]],
-		"a told reminder is a message with Done, In an hour, Tomorrow, Delete"
+		["⏰ tea", ["done:7", "hour:7", "tomorrow:7"]],
+		"a told reminder is a message with Done, Later and Skip, which is tomorrow for a one-off"
 	)
 	_eq(
 		_keys(msg["params"]["reply_markup"]).all(func(k): return k.to_utf8_buffer().size() < 64),
@@ -346,7 +348,9 @@ func _telegram() -> void:
 		var m: Dictionary = bot.sent.back()
 		var answers := bot.named("answerCallbackQuery").size()
 		var tap_id := bot.tap(777, "%s:20" % pair[0], m["mid"], "⏰ x")
-		await s._until(func() -> bool: return bot.named("answerCallbackQuery").size() == answers + 1)
+		await s._until(
+			func() -> bool: return bot.named("answerCallbackQuery").size() == answers + 1
+		)
 		await s._until(
 			func() -> bool:
 				return (
@@ -374,15 +378,27 @@ func _telegram() -> void:
 	await _settle()
 	_eq(taps.size(), presses, "a press from another chat does nothing")
 
-	# a repeating reminder's Delete asks again
+	# a repeating one's Skip is its next time, which the list's done is for a repeating reminder
 	tg3.on_told({"id": 8, "text": "water", "every": "week"})
 	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ water")
 	var water: Dictionary = bot.sent.back()
 	_eq(
-		_keys(water["params"]["reply_markup"]).back(),
-		"ask:8",
-		"a repeating one's Delete is a question"
+		_keys(water["params"]["reply_markup"]),
+		["done:8", "hour:8", "skip:8"],
+		"a repeating one's Skip is a button of its own"
 	)
+	tg3.on_told({"id": 12, "text": "stretch", "every": "day"})
+	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ stretch")
+	var skipped: Dictionary = bot.sent.back()
+	var before_skip := bot.named("editMessageText").size()
+	bot.tap(777, "skip:12", skipped["mid"], "⏰ stretch")
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == before_skip + 1)
+	_eq(
+		[taps.back(), bot.named("editMessageText").back()["text"]],
+		[[12, "done"], "⏰ stretch\nskipped to its next time"],
+		"Skip moves it on through the list's done, and says it was skipped"
+	)
+	# a message from before carries the old Delete: it still asks again
 	presses = taps.size()
 	var edits := bot.named("editMessageText").size()
 	bot.tap(777, "ask:8", water["mid"], "⏰ water")
@@ -398,7 +414,7 @@ func _telegram() -> void:
 	var back: Dictionary = bot.named("editMessageText").back()
 	_eq(
 		[back["text"], _keys(back["reply_markup"]).size(), taps.size()],
-		["⏰ water", 4, presses],
+		["⏰ water", 3, presses],
 		"no puts the buttons back"
 	)
 	bot.tap(777, "yes:8", water["mid"], ask["text"])
@@ -410,20 +426,25 @@ func _telegram() -> void:
 		"yes deletes it for good"
 	)
 
-	# a re-ring: the new message, the old one loses its buttons
+	# a re-ring: the old message is deleted and the new one, at the bottom, says since when
 	tg3.on_told({"id": 9, "text": "gym", "every": null})
 	await s._until(func() -> bool: return bot.sent.back()["params"]["text"] == "⏰ gym")
 	var old: Dictionary = bot.sent.back()
 	n = bot.sent.size()
+	t += 1800.0
 	tg3.on_told({"id": 9, "text": "gym", "every": null})
 	await s._until(func() -> bool: return bot.sent.size() == n + 1)
-	await s._until(func() -> bool: return bot.named("editMessageReplyMarkup").size() > 0)
-	var cleared: Dictionary = bot.named("editMessageReplyMarkup").back()
+	await s._until(func() -> bool: return bot.named("deleteMessage").size() > 0)
 	_eq(
-		[int(cleared["message_id"]), cleared["reply_markup"]["inline_keyboard"]],
-		[old["mid"], []],
-		"a re-ring sends a new message and takes the buttons off the old"
+		[
+			bot.sent.back()["params"]["text"],
+			_keys(bot.sent.back()["params"]["reply_markup"]).size(),
+			int(bot.named("deleteMessage").back()["message_id"])
+		],
+		["⏰ gym · still waiting since 14:00", 3, old["mid"]],
+		"a re-ring sends it again, still waiting since its first tell, and deletes the old"
 	)
+	t -= 1800.0
 
 	# acted in the house: the message follows
 	var fresh: Dictionary = bot.sent.back()
@@ -437,7 +458,7 @@ func _telegram() -> void:
 			followed["text"],
 			followed["reply_markup"]["inline_keyboard"]
 		],
-		[fresh["mid"], "⏰ gym\n✓ done", []],
+		[fresh["mid"], "⏰ gym · still waiting since 14:00\n✓ done", []],
 		"done in the house takes the buttons off and says so"
 	)
 	tg3.handled(9, "done")
@@ -515,63 +536,207 @@ func _telegram() -> void:
 	_wipe()
 
 
+func _row(id: int, text: String, due: Variant = null) -> Dictionary:
+	return {"id": id, "kind": "todo" if due == null else "reminder", "text": text, "due_at": due}
+
+
+func _cards(bot: Bot, n: int) -> Array:
+	return bot.sent.slice(n).filter(
+		func(m):
+			return (
+				str(m["params"]["text"]).begins_with("Today · ")
+				or str(m["params"]["text"]).begins_with("This evening · ")
+			)
+	)
+
+
+# A day of the card against the stub: one message in the morning, edited by every tick and
+# change, never posted again; in the evening one in its place at the bottom; a weekend evening
+# with nothing moved says nothing.
 func _daily(base: String, bot: Bot) -> void:
-	var tg := _tg(base, [], [])
+	var st := {
+		"open": [_row(1, "buy milk"), _row(2, "send photos")],
+		"coming": [_row(3, "dentist", "2026-11-18T15:00:00Z")],
+		"done": [],
+	}
+	var taps: Array = []
+	var tg := _tg(base, [], taps)
 	tg.token = TOKEN
 	tg.chat = 777
-	tg.status = func() -> Dictionary:
-		return {
-			"open": [{"text": "buy milk"}, {"text": "send photos"}],
-			"coming":
-			[
-				{"text": "dentist", "due_at": "2026-11-19T09:00:00Z"},
-				{"text": "later", "due_at": "2026-11-25T09:00:00Z"},
-			],
-		}
+	tg.status = func() -> Dictionary: return st
 	var n := bot.sent.size()
-	t = LocalList.wall(2026, 11, 18, 17, 29)
+	t = LocalList.wall(2026, 11, 18, 8, 29)
 	tg.daily()
 	await _settle()
-	_eq(bot.sent.size(), n, "no day's list before its time")
-	t = LocalList.wall(2026, 11, 18, 17, 30)
+	_eq(bot.sent.size(), n, "no card before its time")
+	t = LocalList.wall(2026, 11, 18, 8, 30)
 	tg.daily()
 	tg.daily()
-	await s._until(func() -> bool: return bot.sent.size() == n + 1)
+	await s._until(func() -> bool: return int(tg.card.get("mid", 0)) != 0)
 	await _settle()
+	var morning: Dictionary = bot.sent.back()
 	_eq(
-		[bot.sent.size() - n, bot.sent.back()["params"]["text"]],
-		[1, "Still open: buy milk, send photos; tomorrow: dentist"],
-		"at its time, once, the open things and tomorrow's"
+		[bot.sent.size() - n, morning["params"]["text"], _keys(morning["params"]["reply_markup"])],
+		[
+			1,
+			"Today · Wed 18 Nov\n\nTo do\n1. buy milk\n2. send photos\n3. 15:00 dentist",
+			["card:tick"]
+		],
+		"at its time, once, the day's card"
 	)
-	t = LocalList.wall(2026, 11, 19, 17, 31)
-	tg.daily()
-	await s._until(func() -> bool: return bot.sent.size() == n + 2)
-	_eq(bot.sent.size() - n, 2, "and again the next day")
-	var tg2 := _tg(base, [], [])
-	tg2.token = TOKEN
-	tg2.chat = 777
+	var mid: int = morning["mid"]
+
+	# a reply by number ticks through the house, says so, and edits the card
+	var edits := bot.named("editMessageText").size()
+	bot.text(777, "2")
+	tg.start()
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	await _settle()
+	var edit: Dictionary = bot.named("editMessageText").back()
+	_eq(
+		[taps, bot.sent.back()["params"]["text"], int(edit["message_id"]), edit["text"]],
+		[
+			[[2, "done"]],
+			"✓ send photos",
+			mid,
+			"Today · Wed 18 Nov\n\nTo do\n1. buy milk\n2. ✓ send photos\n3. 15:00 dentist"
+		],
+		'"2" ticks the second, says it, and edits the card in place'
+	)
+	bot.text(777, "2 9")
+	await s._until(func() -> bool: return bot.sent.back()["params"]["text"].begins_with("Nothing"))
+	_eq(
+		[taps.size(), bot.sent.back()["params"]["text"]],
+		[1, "Nothing to tick at 2, 9."],
+		"a number already ticked or not on the card ticks nothing"
+	)
+
+	# the ✓ button opens the numbers; a number ticks it and closes them
+	edits = bot.named("editMessageText").size()
+	bot.tap(777, "card:tick", mid, "")
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 1)
+	_eq(
+		_keys(bot.named("editMessageText").back()["reply_markup"]),
+		["card:1", "card:3", "card:back"],
+		"✓ Tick… shows the numbers still to tick, and Back"
+	)
+	var answers := bot.named("answerCallbackQuery").size()
+	bot.tap(777, "card:3", mid, "")
+	await s._until(func() -> bool: return bot.named("answerCallbackQuery").size() == answers + 1)
+	await s._until(func() -> bool: return bot.named("editMessageText").size() == edits + 2)
+	_eq(
+		[
+			taps.back(),
+			bot.named("answerCallbackQuery").back()["text"],
+			_keys(bot.named("editMessageText").back()["reply_markup"])
+		],
+		[[3, "done"], "✓ 15:00 dentist", ["card:tick"]],
+		"a number ticks it, says so on the button, and the keyboard is back"
+	)
+	answers = bot.named("answerCallbackQuery").size()
+	bot.tap(777, "card:1", 4242, "")
+	await s._until(func() -> bool: return bot.named("answerCallbackQuery").size() == answers + 1)
+	_eq(
+		[taps.size(), bot.named("answerCallbackQuery").back()["text"]],
+		[2, "that card is from another day"],
+		"a press on an older card ticks nothing"
+	)
+
+	# the list moves: the card follows, once, and keeps its numbers
+	st["open"] = [_row(1, "buy milk"), _row(4, "pay rent")]
+	st["coming"] = []
+	st["done"] = [{"text": "send photos", "done_at": "2026-11-18T10:00:00Z"}]
+	edits = bot.named("editMessageText").size()
+	tg.sync([])
+	tg.sync([])
+	await _settle()
+	_eq(
+		[bot.named("editMessageText").size() - edits, bot.named("editMessageText").back()["text"]],
+		[
+			1,
+			"Today · Wed 18 Nov\n\nTo do\n1. buy milk\n2. ✓ send photos\n3. ✓ 15:00 dentist\n4. pay rent"
+		],
+		"a new thing is numbered on the card, edited once"
+	)
+	tg.stop()
+	var tg2 := _tg(base, [], taps)
+	tg2.load_state()
 	tg2.status = tg.status
-	tg2.listed = tg.listed
+	_eq([int(tg2.card["mid"]), tg2.card["ticked"]], [mid, [2, 3]], "a restart keeps the card")
+
+	# the evening: one new card in place of the morning's, which is deleted
+	n = bot.sent.size()
+	t = LocalList.wall(2026, 11, 18, 17, 30)
 	tg2.daily()
+	tg2.daily()
+	await s._until(
+		func() -> bool:
+			return bot.named("deleteMessage").any(func(p): return int(p["message_id"]) == mid)
+	)
 	await _settle()
-	_eq(bot.sent.size() - n, 2, "a restart the same day does not say it again")
-	t = LocalList.wall(2026, 11, 20, 23, 30)
-	tg2.list_at = "off"
+	_eq(
+		[_cards(bot, n).size(), bot.sent.back()["params"]["text"]],
+		[
+			1,
+			"This evening · Wed 18 Nov\n\nDone today: send photos\n\nStill to do\n1. buy milk\n4. pay rent"
+		],
+		"at the evening's time the card is sent again at the bottom, and the morning's deleted"
+	)
+	_eq(bot.sent.back()["params"]["text"].contains("clock out"), false, "and never says clock out")
+
+	# a weekend: the evening only when the day moved
+	n = bot.sent.size()
+	st["done"] = []
+	t = LocalList.wall(2026, 11, 21, 8, 30)
 	tg2.daily()
-	await _settle()
-	_eq(bot.sent.size() - n, 2, "off says nothing")
-	tg2.list_at = "17:30"
-	tg2.daily()
-	await s._until(func() -> bool: return bot.sent.size() == n + 3)
-	_eq(bot.sent.size() - n, 3, "a house opened after the time says it that day")
-	t = LocalList.wall(2026, 11, 21, 18)
-	tg2.status = func() -> Dictionary: return {"open": [], "coming": []}
+	await s._until(func() -> bool: return _cards(bot, n).size() == 1)
+	t = LocalList.wall(2026, 11, 21, 17, 30)
 	tg2.daily()
 	await _settle()
 	_eq(
-		[bot.sent.size() - n, tg2.listed],
-		[3, "2026-11-21"],
-		"with nothing to say it says nothing and counts the day"
+		[_cards(bot, n).size(), tg2.listed],
+		[1, "2026-11-21"],
+		"a Saturday evening with nothing moved says nothing"
+	)
+	t = LocalList.wall(2026, 11, 22, 8, 30)
+	tg2.daily()
+	await s._until(func() -> bool: return _cards(bot, n).size() == 2)
+	st["done"] = [{"text": "pay rent", "done_at": "2026-11-22T12:00:00Z"}]
+	t = LocalList.wall(2026, 11, 22, 17, 30)
+	tg2.daily()
+	await s._until(func() -> bool: return _cards(bot, n).size() == 3)
+	_eq(
+		bot.sent.back()["params"]["text"].begins_with(
+			"This evening · Sun 22 Nov\n\nDone today: pay rent"
+		),
+		true,
+		"a Sunday that moved gets its evening"
+	)
+
+	# off, nothing to say, a house opened late
+	n = bot.sent.size()
+	tg2.morning_at = "off"
+	t = LocalList.wall(2026, 11, 23, 9)
+	tg2.daily()
+	await _settle()
+	_eq(bot.sent.size() - n, 0, "a morning that is off says nothing")
+	t = LocalList.wall(2026, 11, 23, 23)
+	tg2.daily()
+	await s._until(func() -> bool: return _cards(bot, n).size() == 1)
+	_eq(
+		bot.sent.back()["params"]["text"].begins_with("This evening · Mon 23 Nov"),
+		true,
+		"a house opened after the evening's time says it that day, once"
+	)
+	tg2.morning_at = "08:30"
+	st["open"] = []
+	t = LocalList.wall(2026, 11, 24, 9)
+	tg2.daily()
+	await _settle()
+	_eq(
+		[bot.sent.size() - n, tg2.card["day"]],
+		[1, "2026-11-24"],
+		"with nothing to say no card, and the day counts"
 	)
 	tg.free()
 	tg2.free()
@@ -745,40 +910,38 @@ func _in_the_house(main) -> void:
 	t = LocalList.wall(2026, 11, 18, 16)
 	b.list.tick()
 	main._poll()
+	var gyms := func() -> Array:
+		return bot.to(777).filter(func(m): return m["params"]["text"].begins_with("⏰ gym"))
 	await s._until(
 		func() -> bool:
 			return (
-				bot.to(777).filter(func(m): return m["params"]["text"] == "⏰ gym").size() == 1
+				gyms.call().size() == 1
 				and bot.to(777).filter(func(m): return m["params"]["text"] == "⏰ water").size() == 1
 			)
 	)
-	var gym_first: Dictionary = bot.to(777).filter(func(m): return m["params"]["text"] == "⏰ gym")[0]
+	var gym_first: Dictionary = gyms.call()[0]
 	t = LocalList.wall(2026, 11, 18, 16, 30)
 	b.list.tick()
 	main._poll()
+	await s._until(func() -> bool: return gyms.call().size() == 2)
 	await s._until(
 		func() -> bool:
-			return bot.to(777).filter(func(m): return m["params"]["text"] == "⏰ gym").size() == 2
+			return bot.named("deleteMessage").any(
+				func(p): return int(p["message_id"]) == gym_first["mid"]
+			),
+		"the old message deleted"
 	)
-	var cleared_of := func() -> Array:
-		return bot.named("editMessageReplyMarkup").filter(
-			func(p): return int(p["message_id"]) == gym_first["mid"]
-		)
-	await s._until(
-		func() -> bool: return not cleared_of.call().is_empty(), "the old message's buttons cleared"
-	)
-	var cleared: Array = cleared_of.call()
 	_eq(
-		[cleared.size() >= 1, cleared[0]["reply_markup"]["inline_keyboard"]],
-		[true, []],
-		"a re-ring in the house sends a new message and clears the old one's buttons"
+		gyms.call()[1]["params"]["text"].begins_with("⏰ gym · still waiting since "),
+		true,
+		"a re-ring in the house sends it again, still waiting, and deletes the old one"
 	)
 	var edits := bot.named("editMessageText").size()
 	main._on_act(gym, "done")
 	await s._until(func() -> bool: return bot.named("editMessageText").size() > edits)
 	_eq(
 		bot.named("editMessageText").back()["text"],
-		"⏰ gym\n✓ done",
+		gyms.call()[1]["params"]["text"] + "\n✓ done",
 		"done in the house is said on the phone"
 	)
 	_eq(
@@ -790,8 +953,8 @@ func _in_the_house(main) -> void:
 	var water_msg: Dictionary = bot.to(777).filter(func(m): return m["params"]["text"] == "⏰ water")[0]
 	_eq(
 		_keys(water_msg["params"]["reply_markup"]).back(),
-		"ask:%d" % water,
-		"a repeating one's Delete asks first"
+		"skip:%d" % water,
+		"a repeating one has Skip"
 	)
 	bot.tap(777, "ask:%d" % water, water_msg["mid"], "⏰ water")
 	bot.tap(777, "yes:%d" % water, water_msg["mid"], "⏰ water\nDelete for good?")
@@ -856,7 +1019,41 @@ func _in_the_house(main) -> void:
 		"and the bot says it too"
 	)
 	DirAccess.remove_absolute(away)
-	main._install(_backend())
+	var fresh := _backend()
+	main._install(fresh)
+
+	# the day's card over the house's own list: a number replied is done in the list
+	var real_clock: Callable = ph.clock
+	ph.clock = Callable(self, "_clock")
+	ph.card = {}
+	ph.listed = ""
+	t = LocalList.wall(2026, 11, 19, 8, 30)
+	var milk: int = fresh.list.status()["open"][0]["id"]
+	ph.daily()
+	await s._until(func() -> bool: return int(ph.card.get("mid", 0)) != 0, "the house's card sent")
+	_eq(
+		bot.sent.back()["params"]["text"],
+		"Today · Thu 19 Nov\n\nTo do\n1. buy milk",
+		"the house's card numbers its own list"
+	)
+	var card_mid := int(ph.card["mid"])
+	var card_edits := func() -> Array:
+		return bot.named("editMessageText").filter(
+			func(p): return int(p["message_id"]) == card_mid
+		)
+	bot.text(777, "1")
+	await s._until(func() -> bool: return not card_edits.call().is_empty(), "the card edited")
+	_eq(
+		[
+			fresh.list.status()["open"].any(func(x): return x["id"] == milk),
+			card_edits.call().back()["text"]
+		],
+		[false, "Today · Thu 19 Nov\n\nTo do\n1. ✓ buy milk"],
+		"\"1\" from the phone is done in the list, and the card is edited"
+	)
+	ph.clock = real_clock
+	ph.card = {}
+	t = LocalList.wall(2026, 11, 18, 14)
 
 	# the settings screen: masked token, pairing code, last reached, the second click
 	var v = main._sidebar.settings_view
@@ -886,23 +1083,39 @@ func _in_the_house(main) -> void:
 		"paired, and when Telegram was last reached"
 	)
 	v._tg_at.text = "25:99"
-	v._tg_list_at()
+	v._tg_time("telegram_list_at")
 	_eq(
 		[settings.value("telegram_list_at"), v._tg_at.text],
 		["17:30", "17:30"],
 		"a time that is not one is put back"
 	)
 	v._tg_at.text = "18:15"
-	v._tg_list_at()
+	v._tg_time("telegram_list_at")
 	_eq(
 		[settings.value("telegram_list_at"), ph.list_at],
 		["18:15", "18:15"],
-		"the day's list time is kept and applied"
+		"the evening card's time is kept and applied"
 	)
 	v._tg_at.text = "off"
-	v._tg_list_at()
+	v._tg_time("telegram_list_at")
 	_eq(ph.list_at, "off", "off is allowed")
 	settings.put("telegram_list_at", "17:30")
+	_eq(
+		[settings.value("telegram_morning_at"), v._tg_morning.text, ph.morning_at],
+		["08:30", "08:30", "08:30"],
+		"the morning card is at 08:30 until changed"
+	)
+	v._tg_morning.text = "7:45"
+	v._tg_time("telegram_morning_at")
+	_eq(
+		[settings.value("telegram_morning_at"), ph.morning_at],
+		["7:45", "7:45"],
+		"and its time is kept and applied"
+	)
+	v._tg_morning.text = "noon"
+	v._tg_time("telegram_morning_at")
+	_eq(v._tg_morning.text, "7:45", "a time that is not one is put back")
+	settings.put("telegram_morning_at", "08:30")
 	v._tg_off.pressed.emit()
 	v._refresh()
 	_eq([v._tg_off.text, ph.token == TOKEN], ["sure?", true], "disconnect asks for a second click")

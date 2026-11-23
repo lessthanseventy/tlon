@@ -4,9 +4,10 @@ extends Node
 # only to the one chat that paired with it (sent the code the settings screen shows), and tells
 # main.gd what that chat says (`heard`) and which button it pressed (`tapped`); main.gd carries both
 # out through the routes the chat and the paper menu use. `on_told`, `handled` and `sync` keep the
-# messages of told reminders in step with the house. The token lives in `user://house_telegram.json`
-# {"token", "chat", "offset", "listed"} and nowhere else, and no line printed, logged or returned
-# holds it: Telegram's API puts it in the URL, which `_call` alone builds.
+# messages of told reminders, and the day's card, in step with the house. The token lives in
+# `user://house_telegram.json` {"token", "chat", "offset", "listed", "card"} and nowhere else, and
+# no line printed, logged or returned holds it: Telegram's API puts it in the URL, which `_call`
+# alone builds.
 signal heard(text: String, finish: Callable)
 signal tapped(id: int, verb: String, finish: Callable)
 
@@ -21,10 +22,14 @@ const OUTCOME := {
 	"done": "✓ done",
 	"hour": "in an hour",
 	"tomorrow": "tomorrow",
+	"skip": "skipped to its next time",
 	"delete": "deleted",
 	"gone": "dealt with in the house",
 }
 const ASK := "Delete for good?"
+const WEEKDAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+const PICK_ROW := 5
 
 var base := "https://api.telegram.org"
 var store := STORE
@@ -43,6 +48,10 @@ var backoff := 0.0
 var poll_gap := 1.0
 var grace := 3.0
 var list_at := "17:30"
+var morning_at := "08:30"
+# the day's card: {day, phase "morning"|"evening", mid, items [{id, text}] numbered in order,
+# ticked [ids], first (how many items the morning had), keys "main"|"tick", sent}
+var card := {}
 var clock := Callable()
 var status := Callable()
 var bias := 0.0
@@ -80,6 +89,19 @@ func load_state() -> void:
 		chat = int(d.get("chat", 0))
 		offset = int(d.get("offset", 0))
 		listed = str(d.get("listed", ""))
+		card = _card_of(d.get("card"))
+
+
+# JSON reads every number back as a float, and an id must stay an int to be found
+static func _card_of(c: Variant) -> Dictionary:
+	if not (c is Dictionary and c.get("items") is Array and c.get("ticked") is Array):
+		return {}
+	c["mid"] = int(c.get("mid", 0))
+	c["first"] = int(c.get("first", 0))
+	c["ticked"] = c["ticked"].map(func(id): return int(id))
+	for item in c["items"]:
+		item["id"] = int(item["id"])
+	return c
 
 
 func _save() -> void:
@@ -88,7 +110,9 @@ func _save() -> void:
 	var f := FileAccess.open(store, FileAccess.WRITE)
 	if f != null:
 		f.store_string(
-			JSON.stringify({"token": token, "chat": chat, "offset": offset, "listed": listed})
+			JSON.stringify(
+				{"token": token, "chat": chat, "offset": offset, "listed": listed, "card": card}
+			)
 		)
 
 
@@ -128,6 +152,7 @@ func disconnect_bot() -> void:
 	chat = 0
 	offset = 0
 	listed = ""
+	card = {}
 	me = ""
 	code = ""
 	problem = ""
@@ -285,6 +310,8 @@ func _message(m: Dictionary) -> void:
 		_say("I can only read text here.")
 	elif text.strip_edges().begins_with("/start"):
 		_say("I'm here. Send me a line and I'll keep it.")
+	elif not numbers(text).is_empty() and _card_today():
+		_tick_numbers(numbers(text))
 	elif text.strip_edges() != "":
 		_queue.append(text)
 		_pump()
@@ -327,14 +354,13 @@ func _ignored(_ok: bool, _result: Variant, _why: String, _http: int = 0) -> void
 	pass
 
 
+# Skip is the next time for a repeating one (the list's done moves it on and records nothing), and
+# tomorrow morning for a one-off
 static func keyboard(id: int, repeating: bool) -> Dictionary:
-	var del := ("ask:%d" if repeating else "delete:%d") % id
+	var skip := ("skip:%d" if repeating else "tomorrow:%d") % id
 	return {
 		"inline_keyboard":
-		[
-			[_button("Done", "done:%d" % id), _button("In an hour", "hour:%d" % id)],
-			[_button("Tomorrow", "tomorrow:%d" % id), _button("Delete", del)],
-		]
+		[[_button("Done", "done:%d" % id), _button("Later", "hour:%d" % id), _button("Skip", skip)]]
 	}
 
 
@@ -354,15 +380,22 @@ func on_agenda(text: String) -> void:
 		_say(text)
 
 
-# a reminder the house has just told: a message with its buttons; one told before loses its buttons
+# a reminder the house has just told: a message with its buttons. Told again, the old message is
+# deleted and the new one, at the bottom of the chat where it rings, says since when it waits.
 func on_told(row: Dictionary) -> void:
 	if chat == 0:
 		return
 	var id := int(row["id"])
-	if _msgs.has(id):
-		_after_sent(_msgs[id], func(mid: int) -> void: _edit_markup(mid, {"inline_keyboard": []}))
+	var since := _hhmm(clock.call()) if clock.is_valid() else ""
 	var text := BELL + str(row["text"])
-	var entry := {"mid": 0, "text": text, "at": Time.get_ticks_msec(), "then": Callable()}
+	if _msgs.has(id):
+		since = str(_msgs[id].get("since", since))
+		_after_sent(_msgs[id], func(mid: int) -> void: _delete(mid))
+		if since != "":
+			text += " · still waiting since " + since
+	var entry := {
+		"mid": 0, "text": text, "at": Time.get_ticks_msec(), "then": Callable(), "since": since
+	}
 	_msgs[id] = entry
 	_call(
 		"sendMessage",
@@ -392,6 +425,8 @@ func _after_sent(entry: Dictionary, fn: Callable) -> void:
 
 # the reminder was dealt with in the house (`what`: done hour tomorrow delete, or gone)
 func handled(id: int, what: String) -> void:
+	if what == "done":
+		_ticked(id)
 	if chat == 0 or _tapping.has(id) or not _msgs.has(id):
 		return
 	var m: Dictionary = _msgs[id]
@@ -402,25 +437,23 @@ func handled(id: int, what: String) -> void:
 
 # What the house still rings: a message whose reminder is no longer among them was dealt with. A
 # message younger than `grace` is left alone: the list that said so may have been read before the tell.
+# The day's card follows the list too: edited in place, which never rings the phone.
 func sync(ringing: Array) -> void:
 	for id in _msgs.keys():
 		var age: float = (Time.get_ticks_msec() - int(_msgs[id]["at"])) / 1000.0
 		if not ringing.has(int(id)) and age >= grace:
 			handled(int(id), "gone")
+	_card_refresh()
+
+
+func _delete(mid: int) -> void:
+	_call("deleteMessage", {"chat_id": chat, "message_id": mid}, Callable(self, "_ignored"))
 
 
 func _edit(mid: int, text: String, markup: Dictionary) -> void:
 	_call(
 		"editMessageText",
 		{"chat_id": chat, "message_id": mid, "text": text.left(4000), "reply_markup": markup},
-		Callable(self, "_ignored")
-	)
-
-
-func _edit_markup(mid: int, markup: Dictionary) -> void:
-	_call(
-		"editMessageReplyMarkup",
-		{"chat_id": chat, "message_id": mid, "reply_markup": markup},
 		Callable(self, "_ignored")
 	)
 
@@ -433,14 +466,17 @@ func _callback(q: Dictionary) -> void:
 	var verb := data.get_slice(":", 0)
 	var id_text := data.get_slice(":", 1)
 	var qid := str(q.get("id", ""))
+	var mid := int(message.get("message_id", 0))
+	if verb == "card":
+		_card_tap(id_text, mid, qid)
+		return
 	if (
 		not id_text.is_valid_int()
-		or verb not in ["done", "hour", "tomorrow", "delete", "ask", "yes", "no"]
+		or verb not in ["done", "hour", "tomorrow", "skip", "delete", "ask", "yes", "no"]
 	):
 		_answer(qid, "")
 		return
 	var id := int(id_text)
-	var mid := int(message.get("message_id", 0))
 	var text := str(message.get("text", ""))
 	match verb:
 		"ask":
@@ -450,7 +486,8 @@ func _callback(q: Dictionary) -> void:
 			_answer(qid, "")
 			_edit(mid, text.trim_suffix("\n" + ASK), keyboard(id, true))
 		_:
-			var what := "delete" if verb == "yes" else verb
+			var said := "delete" if verb == "yes" else verb
+			var what := "done" if verb == "skip" else said
 			_tapping[id] = true
 			tapped.emit(
 				id,
@@ -458,12 +495,15 @@ func _callback(q: Dictionary) -> void:
 				func() -> void:
 					_tapping.erase(id)
 					_msgs.erase(id)
-					_answer(qid, OUTCOME[what])
+					if what == "done":
+						_ticked(id)
+					_answer(qid, OUTCOME[said])
 					_edit(
 						mid,
-						text.trim_suffix("\n" + ASK) + "\n" + OUTCOME[what],
+						text.trim_suffix("\n" + ASK) + "\n" + OUTCOME[said],
 						{"inline_keyboard": []}
 					)
+					_card_refresh()
 			)
 
 
@@ -473,44 +513,306 @@ func _answer(qid: String, text: String) -> void:
 	)
 
 
-# once a day at `list_at` by the house clock (and, if the house was shut then, when it next starts
-# that day): the open things and tomorrow's, in one message
+# The day's card, by the house clock (and, if the house was shut then, when it next starts that
+# day): a new message at `morning_at`, and at `list_at` the evening's in its place at the bottom of
+# the chat, so both ring; on Saturday and Sunday the evening's only when the day moved. In between
+# it is edited as the list changes, which rings nothing.
 func daily() -> void:
-	if chat == 0 or list_at == "off" or not clock.is_valid() or not status.is_valid():
+	if chat == 0 or not clock.is_valid() or not status.is_valid():
 		return
 	var now: float = clock.call()
+	var today := day_of(now)
+	if listed != today and reached(list_at, now):
+		listed = today
+		_save()
+		_card_evening(today, now)
+	elif listed != today and str(card.get("day", "")) != today and reached(morning_at, now):
+		_card_morning(today, now)
+
+
+static func day_of(now: float) -> String:
 	var d := LocalList.parts(now)
-	var today := "%04d-%02d-%02d" % [d["year"], d["month"], d["day"]]
-	var at := list_at.split(":")
-	if (
-		listed == today
-		or at.size() != 2
-		or int(d["hour"]) * 60 + int(d["minute"]) < int(at[0]) * 60 + int(at[1])
-	):
-		return
-	listed = today
-	_save()
-	var text := list_text(status.call(), now)
-	if text != "":
-		_say(text)
+	return "%04d-%02d-%02d" % [d["year"], d["month"], d["day"]]
 
 
-func list_text(st: Dictionary, now: float) -> String:
-	var open: Array = st.get("open", []).map(func(r): return str(r["text"]))
-	var tomorrow: Array = []
-	var from := LocalList.midnight(now) + LocalList.DAY
+# whether the local time `now` is at or past `at` ("HH:MM"; "off" or anything else never is)
+static func reached(at: String, now: float) -> bool:
+	var m := RegEx.create_from_string("^([01]?\\d|2[0-3]):([0-5]\\d)$").search(at)
+	if m == null:
+		return false
+	var d := LocalList.parts(now)
+	return (
+		int(d["hour"]) * 60 + int(d["minute"]) >= int(m.get_string(1)) * 60 + int(m.get_string(2))
+	)
+
+
+static func _hhmm(at: float) -> String:
+	var d := LocalList.parts(at)
+	return "%02d:%02d" % [d["hour"], d["minute"]]
+
+
+# "2", "2 4 5", "2, 4": the numbers of a reply that is nothing else; [] for any other text
+static func numbers(text: String) -> Array:
+	if RegEx.create_from_string("^\\s*\\d{1,3}(\\s*[ ,]\\s*\\d{1,3})*\\s*$").search(text) == null:
+		return []
+	var out: Array = []
+	for part in RegEx.create_from_string("\\d+").search_all(text):
+		if not out.has(int(part.get_string())):
+			out.append(int(part.get_string()))
+	return out
+
+
+static func new_card(day: String, phase: String) -> Dictionary:
+	return {
+		"day": day,
+		"phase": phase,
+		"mid": 0,
+		"items": [],
+		"ticked": [],
+		"first": 0,
+		"keys": "main",
+		"sent": ""
+	}
+
+
+# what the card numbers: the open things, then the reminders still to come today, each kept under
+# the number it first got for the whole day; a new one takes the next number
+static func number(c: Dictionary, st: Dictionary, now: float, offset_s: float) -> void:
+	var seen: Array = c["items"].map(func(i): return int(i["id"]))
+	var end := LocalList.midnight(now) + LocalList.DAY
+	var rows: Array = st.get("open", []).map(func(r): return [r, ""])
 	for r in st.get("coming", []):
-		var due := Time.get_unix_time_from_datetime_string(str(r["due_at"]).trim_suffix("Z")) + bias
-		if due >= from and due < from + LocalList.DAY:
-			tomorrow.append(str(r["text"]))
+		if _at(r["due_at"], offset_s) < end:
+			rows.append([r, _hhmm(_at(r["due_at"], offset_s)) + " "])
+	for pair in rows:
+		var r: Dictionary = pair[0]
+		if seen.has(int(r["id"])):
+			continue
+		var text := str(r["text"])
+		if r.get("project") is Dictionary:
+			text = "%s: %s" % [r["project"]["text"], text]
+		c["items"].append({"id": int(r["id"]), "text": pair[1] + text})
+		seen.append(int(r["id"]))
+
+
+# a UTC "…Z" time of a row, on the house clock
+static func _at(utc: Variant, offset_s: float) -> float:
+	return Time.get_unix_time_from_datetime_string(str(utc).trim_suffix("Z")) + offset_s
+
+
+static func done_today(st: Dictionary, now: float, offset_s: float) -> Array:
+	var start := LocalList.midnight(now)
+	return (
+		st
+		. get("done", [])
+		. filter(func(r): return _at(r["done_at"], offset_s) >= start)
+		. map(func(r): return str(r["text"]))
+	)
+
+
+static func _live(st: Dictionary) -> Array:
+	return (st.get("open", []) + st.get("coming", [])).map(func(r): return int(r["id"]))
+
+
+# the numbers still to tick: open, and not ticked
+static func tickable(c: Dictionary, st: Dictionary) -> Array:
+	var live := _live(st)
+	var out: Array = []
+	for i in c["items"].size():
+		var id := int(c["items"][i]["id"])
+		if live.has(id) and not c["ticked"].has(id):
+			out.append(i + 1)
+	return out
+
+
+# The card's text. Morning: the date, then To do, numbered, a ticked line kept with a ✓ so no number
+# moves; a thing put off or deleted leaves its line. Evening: what was done today, then what is
+# still to do under the same numbers. "" when it has nothing to say.
+static func card_text(c: Dictionary, st: Dictionary, now: float, offset_s: float) -> String:
+	var d := LocalList.parts(now)
+	var date := "%s %d %s" % [WEEKDAYS[d["weekday"]], d["day"], MONTHS[d["month"] - 1]]
+	var evening: bool = c["phase"] == "evening"
+	var live := _live(st)
+	var lines: Array = []
+	for i in c["items"].size():
+		var item: Dictionary = c["items"][i]
+		var id := int(item["id"])
+		if c["ticked"].has(id):
+			if not evening:
+				lines.append("%d. ✓ %s" % [i + 1, item["text"]])
+		elif live.has(id):
+			lines.append("%d. %s" % [i + 1, item["text"]])
 	var parts: Array = []
-	if not open.is_empty():
-		parts.append("Still open: " + _some(open))
-	if not tomorrow.is_empty():
-		parts.append("tomorrow: " + _some(tomorrow))
-	return "; ".join(parts)
+	if evening:
+		var done := done_today(st, now, offset_s)
+		if not done.is_empty():
+			parts.append("Done today: " + ", ".join(done))
+		if not lines.is_empty():
+			parts.append("Still to do\n" + "\n".join(lines))
+	elif not lines.is_empty():
+		parts.append("To do\n" + "\n".join(lines))
+	if parts.is_empty():
+		return ""
+	return "\n\n".join([("This evening · " if evening else "Today · ") + date] + parts)
 
 
-static func _some(items: Array) -> String:
-	var shown := ", ".join(items.slice(0, 10))
-	return shown if items.size() <= 10 else "%s and %d more" % [shown, items.size() - 10]
+# one ✓ button that opens the numbers; the numbers, five a row, and Back
+static func card_keys(c: Dictionary, st: Dictionary) -> Dictionary:
+	var open := tickable(c, st)
+	if open.is_empty():
+		return {"inline_keyboard": []}
+	if c["keys"] != "tick":
+		return {"inline_keyboard": [[_button("✓ Tick…", "card:tick")]]}
+	var rows: Array = []
+	for i in range(0, open.size(), PICK_ROW):
+		rows.append(open.slice(i, i + PICK_ROW).map(func(n): return _button(str(n), "card:%d" % n)))
+	rows.append([_button("‹ Back", "card:back")])
+	return {"inline_keyboard": rows}
+
+
+func _card_today() -> bool:
+	return clock.is_valid() and str(card.get("day", "")) == day_of(clock.call())
+
+
+func _card_morning(today: String, now: float) -> void:
+	var st: Dictionary = status.call()
+	card = new_card(today, "morning")
+	number(card, st, now, bias)
+	card["first"] = card["items"].size()
+	_save()
+	_send_card(st, now, 0)
+
+
+func _card_evening(today: String, now: float) -> void:
+	var st: Dictionary = status.call()
+	var old := 0
+	if str(card.get("day", "")) == today:
+		old = int(card["mid"])
+	else:
+		card = new_card(today, "evening")
+	number(card, st, now, bias)
+	card["phase"] = "evening"
+	card["keys"] = "main"
+	var weekday: int = LocalList.parts(now)["weekday"]
+	if weekday in [0, 6] and not _moved(st, now):
+		_save()
+		return
+	_send_card(st, now, old)
+
+
+# the day moved: something was done, ticked or added since the morning
+func _moved(st: Dictionary, now: float) -> bool:
+	return not (
+		done_today(st, now, bias).is_empty()
+		and card["ticked"].is_empty()
+		and card["items"].size() <= int(card["first"])
+	)
+
+
+# a new message for the card; `old`, the one it takes the place of, is deleted once it is sent
+func _send_card(st: Dictionary, now: float, old: int) -> void:
+	var text := card_text(card, st, now, bias)
+	if text == "":
+		_save()
+		return
+	var keys := card_keys(card, st)
+	var sent := text + JSON.stringify(keys)
+	var day := str(card["day"])
+	_call(
+		"sendMessage",
+		{"chat_id": chat, "text": text.left(4000), "reply_markup": keys},
+		func(ok: bool, result: Variant, _why: String, _http: int) -> void:
+			if not (ok and result is Dictionary) or str(card.get("day", "")) != day:
+				return
+			card["mid"] = int(result["message_id"])
+			card["sent"] = sent
+			_save()
+			if old != 0:
+				_delete(old)
+	)
+
+
+# the card as the list has it now, edited only when that differs from what it shows
+func _card_refresh() -> void:
+	if chat == 0 or not _card_today() or int(card.get("mid", 0)) == 0 or not status.is_valid():
+		return
+	var now: float = clock.call()
+	var st: Dictionary = status.call()
+	number(card, st, now, bias)
+	var text := card_text(card, st, now, bias)
+	var keys := card_keys(card, st)
+	var sent := text + JSON.stringify(keys)
+	if text == "" or sent == str(card["sent"]):
+		return
+	card["sent"] = sent
+	_save()
+	_edit(int(card["mid"]), text, keys)
+
+
+func _ticked(id: int) -> void:
+	if not card.is_empty() and not card["ticked"].has(id):
+		for item in card["items"]:
+			if int(item["id"]) == id:
+				card["ticked"].append(id)
+				_save()
+
+
+func _card_tap(arg: String, mid: int, qid: String) -> void:
+	if not _card_today() or mid != int(card.get("mid", 0)):
+		_answer(qid, "that card is from another day")
+		return
+	if arg in ["tick", "back"]:
+		_answer(qid, "")
+		card["keys"] = "tick" if arg == "tick" else "main"
+		_card_refresh()
+	elif arg.is_valid_int():
+		card["keys"] = "main"
+		_tick_numbers([int(arg)], qid)
+	else:
+		_answer(qid, "")
+
+
+# tick the card's numbers `ns` one after the other through the house, then say what was ticked:
+# in the chat for a typed reply, on the button for a press (`qid`)
+func _tick_numbers(ns: Array, qid: String = "") -> void:
+	var st: Dictionary = status.call() if status.is_valid() else {}
+	var open := tickable(card, st)
+	var ids: Array = []
+	var names: Array = []
+	var missing: Array = []
+	for n in ns:
+		if open.has(n):
+			ids.append(int(card["items"][n - 1]["id"]))
+			names.append(str(card["items"][n - 1]["text"]))
+		else:
+			missing.append(str(n))
+	var said := "✓ " + ", ".join(names) if not names.is_empty() else ""
+	if not missing.is_empty():
+		said += ("\n" if said != "" else "") + "Nothing to tick at %s." % ", ".join(missing)
+	_tick_each(
+		ids,
+		func() -> void:
+			if qid != "":
+				_answer(qid, said.left(190))
+			else:
+				_say(said)
+			_card_refresh()
+	)
+
+
+func _tick_each(ids: Array, then: Callable) -> void:
+	if ids.is_empty():
+		then.call()
+		return
+	var id: int = ids.pop_front()
+	_tapping[id] = true
+	tapped.emit(
+		id,
+		"done",
+		func() -> void:
+			_tapping.erase(id)
+			_ticked(id)
+			if _msgs.has(id):
+				handled(id, "done")
+			_tick_each(ids, then)
+	)

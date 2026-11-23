@@ -501,6 +501,7 @@ func _apply_talk() -> void:
 		_backend.claude = _claude if talk_live and settings.value("claude") else null
 	_phone.live = talk_live
 	_phone.list_at = str(settings.value("telegram_list_at"))
+	_phone.morning_at = str(settings.value("telegram_morning_at"))
 	if _phone_on():
 		_phone.start()
 	else:
@@ -1433,7 +1434,7 @@ func _on_setting(key: String) -> void:
 		"on_top":
 			if _widget:
 				get_window().always_on_top = _room.home.settings.value("on_top")
-		"claude", "claude_command", "telegram", "telegram_list_at":
+		"claude", "claude_command", "telegram", "telegram_list_at", "telegram_morning_at":
 			_apply_talk()
 		"background":
 			_apply_background()
