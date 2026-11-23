@@ -21,6 +21,12 @@ func _entries() -> void:
 		true,
 		"it starts the app hidden"
 	)
+	var odd := Background.entry("Linux", '/o/a\\b"c$d', "/home/sam", "")
+	_eq(
+		odd["text"].contains('Exec="/o/a\\\\\\\\b\\\\"c\\\\$d" -- --background'),
+		true,
+		"a backslash is four in the file, and the quote and dollar take one backslash then doubled"
+	)
 	_eq(
 		Background.entry("Linux", EXE, "/home/sam", "/cfg")["file"],
 		"/cfg/autostart/asterion.desktop",

@@ -22,7 +22,7 @@ static func entry(os_name: String, exe: String, home: String, config: String) ->
 				"text":
 				(
 					'[Desktop Entry]\nType=Application\nName=Asterion\nExec="%s" -- %s\nTerminal=false\n'
-					% [exe.replace("\\", "\\\\").replace('"', '\\"'), FLAG]
+					% [_exec_quote(exe), FLAG]
 				)
 			}
 		"macOS":
@@ -42,6 +42,14 @@ static func entry(os_name: String, exe: String, home: String, config: String) ->
 		"Windows":
 			return {"reg": APP, "data": '"%s" -- %s' % [exe, FLAG]}
 	return {}
+
+
+# inside a quoted Exec argument `"`, `` ` ``, `$` and `\` take a backslash, and the string value's
+# own rule then doubles every backslash: a literal backslash is four in the file
+static func _exec_quote(s: String) -> String:
+	for c in ["\\", '"', "`", "$"]:
+		s = s.replace(c, "\\" + c)
+	return s.replace("\\", "\\\\")
 
 
 static func _xml(s: String) -> String:
