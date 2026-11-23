@@ -691,12 +691,12 @@ func _card_evening(today: String, now: float) -> void:
 	else:
 		card = new_card(today, "evening")
 	number(card, st, now, bias)
-	card["phase"] = "evening"
-	card["keys"] = "main"
 	var weekday: int = LocalList.parts(now)["weekday"]
 	if weekday in [0, 6] and not _moved(st, now):
 		_save()
 		return
+	card["phase"] = "evening"
+	card["keys"] = "main"
 	_send_card(st, now, old)
 
 

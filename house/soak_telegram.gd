@@ -690,9 +690,16 @@ func _daily(base: String, bot: Bot) -> void:
 	t = LocalList.wall(2026, 11, 21, 8, 30)
 	tg2.daily()
 	await s._until(func() -> bool: return _cards(bot, n).size() == 1)
+	var saturday := int(tg2.card["mid"])
 	t = LocalList.wall(2026, 11, 21, 17, 30)
 	tg2.daily()
+	tg2.sync([])
 	await _settle()
+	_eq(
+		bot.named("editMessageText").filter(func(p): return int(p["message_id"]) == saturday),
+		[],
+		"and leaves the morning's card as it is"
+	)
 	_eq(
 		[_cards(bot, n).size(), tg2.listed],
 		[1, "2026-11-21"],
