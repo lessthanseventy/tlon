@@ -362,6 +362,14 @@ func _money_short() -> void:
 	_eq(got[0]["text"], "Cover the $120 shortfall before 2026-11-27", "worded with the amount")
 	_eq(Telegram.urgent_item(got[0], 0.0), true, "the source's own move rings, whatever the date")
 	_eq(
+		(
+			MovesList
+			. money_short({"until": "2026-11-27", "deposit": "Payroll", "short_cents": 30})[0]["text"]
+		),
+		"Cover the $0.30 shortfall before 2026-11-27",
+		"a few cents are not rounded to $0"
+	)
+	_eq(
 		MovesList.money_short({"until": "2026-11-27", "short_cents": 0}),
 		[],
 		"nothing short, no move"

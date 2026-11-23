@@ -28,7 +28,7 @@ static func money_short(budget: Dictionary) -> Array:
 	var short := roundi(float(budget.get("short_cents", 0)))
 	if short <= 0 or budget.get("until") == null:
 		return []
-	var text := "Cover the %s shortfall before %s" % [Money.fmt_whole(short), budget["until"]]
+	var text := "Cover the %s shortfall before %s" % [Money.fmt(short), budget["until"]]
 	return [
 		{
 			"key": "money-short-%s" % budget["until"],
