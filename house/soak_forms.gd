@@ -412,6 +412,17 @@ func _deletes() -> void:
 		_sent("/api/home/9/done", from) != null and _sent("/api/home/9/drop", from) == null,
 		"Got it closes a waiting-on as done"
 	)
+	main._demo = true
+	var data: Dictionary = main._data.duplicate(true)
+	data["waiting"] = [{"id": 51, "kind": "waiting", "text": "the lease", "who": "Dana"}]
+	data["done"] = []
+	main._apply(data)
+	main._act(51, "got")
+	s._check(
+		main._data["waiting"].is_empty() and main._data["done"].size() == 1,
+		"Got it in the demo moves a waiting-on to done"
+	)
+	main._demo = false
 	f.close()
 
 
