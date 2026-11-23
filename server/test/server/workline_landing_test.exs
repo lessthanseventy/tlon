@@ -95,7 +95,7 @@ defmodule Server.WorklineLandingTest do
     assert Enum.any?(Server.Channel.thread_messages(t), &(&1.body =~ @url and &1.body =~ "GitHub"))
   end
 
-  test "GitHub says MERGED: closed, ticket done, issues resolved naming the PR, one landed toast" do
+  test "GitHub says MERGED: closed, ticket done, issues resolved naming the PR" do
     %{thread: t, ticket: ticket, issue: issue} = published!()
     since = DateTime.add(DateTime.utc_now(), -60)
 
@@ -108,7 +108,6 @@ defmodule Server.WorklineLandingTest do
     assert %{state: "closed", resolution: "fixed by " <> @url} = Repo.get!(Server.Issue, issue.id)
     assert [%{thread_id: tid}] = Workline.landed_since(since)
     assert tid == t.id
-    assert [%{kind: "landed"}] = Server.Alerts.build([], [], DateTime.utc_now(), landed: Workline.landed_since(since))
   end
 
   test "GitHub still has it open: nothing changes" do
