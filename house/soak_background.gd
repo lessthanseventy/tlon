@@ -1,7 +1,8 @@
 extends RefCounted
 
 # The soak's check of the headless loop: with the room and sidebar hidden and stopped, a due
-# reminder is told to the paired chat and a line from it is answered, against the Telegram stub.
+# reminder is told to the paired chat by the backend's own timer (the test only moves the fake
+# clock) and a line from it is answered, against the Telegram stub.
 const LocalList := preload("res://local_list.gd")
 const BackendLocal := preload("res://backend_local.gd")
 const TelegramSoak := preload("res://soak_telegram.gd")
@@ -58,10 +59,9 @@ func run(main) -> void:
 		b.list.add({"kind": "reminder", "text": "tea", "at": "2026-11-18T15:00"})["body"]["id"]
 	)
 	t = LocalList.wall(2026, 11, 18, 15)
-	b.list.tick()
 	await s._until(
 		func() -> bool: return bot.to(777).any(func(m): return m["params"]["text"] == "⏰ tea"),
-		"the due reminder told to the chat with the window shut"
+		"the backend's own timer told the due reminder to the chat with the window shut"
 	)
 	bot.text(777, "buy cake")
 	await s._until(
