@@ -121,6 +121,7 @@ func _ready() -> void:
 	if not _room.home.staged and not Background.claim(
 		Time.get_unix_time_from_system(), Background.LIVE, Background.SHOW, not hidden
 	):
+		set_process(false)
 		get_tree().quit()
 		return
 	_wttr.live = talk_live
