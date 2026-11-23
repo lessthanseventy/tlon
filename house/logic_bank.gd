@@ -630,8 +630,14 @@ func _ask_edges() -> void:
 		"past the horizon: code's sentence, one call"
 	)
 
-	r = _ask(bank, "can I?", [[false, ""]])
-	_eq(r[0]["reply"].contains("can't reach the model"), true, "the model down at the plan")
+	r = _ask(bank, "can I?", [[false, "exit 1: Invalid API key"]])
+	_eq(
+		r[0]["reply"].begins_with(
+			Ask.FAILED % "exit 1: Invalid API key" + " You have $2,900 available in checking."
+		),
+		true,
+		"the model down at the plan: why, then the summary"
+	)
 	r = _ask(bank, "can I?", [_plan([_afford(40000)]), [false, ""]])
 	_eq(
 		r[0]["reply"].begins_with("A purchase of $400 on today"),

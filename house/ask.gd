@@ -7,8 +7,9 @@ extends RefCounted
 # purchase's verdict or a name not found judges that the phrasing agrees with what code wrote
 # (`ask_say.gd`). Every dollar amount in its text must be one of the results' and it must not
 # say the opposite of a verdict; any failed check, a failed call or no model at all makes the
-# answer the plain wording of the results. Merchant and account names reach the model only as
-# JSON string values in a data block the prompt says is never instruction. Nothing here writes
+# answer the plain wording of the results; a plan the model could not make says why. Merchant and
+# account names reach the model only as JSON string values in a data block the prompt says is
+# never instruction. Nothing here writes
 # to the bank's file or calls Plaid: the only memory is a thread's last turns, in this object.
 const Plan := preload("res://ask_plan.gd")
 const Say := preload("res://ask_say.gd")
@@ -20,9 +21,9 @@ const TURNS := 10
 const TTL := 7200.0
 const NO_BANK := "Your bank isn't connected yet, so I have no numbers to work from."
 const REPHRASE := "I couldn't turn that into a question about your money. Could you rephrase it?"
-const DOWN := "I can't reach the model right now, so I can't read your question. Try again."
+const FAILED := "I couldn't use Claude (%s), so here is where your money stands."
 const CANNOT := "I can't answer that from your accounts."
-const NO_MODEL := "I can't read questions without Claude, so here is where your money stands."
+const NO_MODEL := "Claude is off in Settings, so here is where your money stands."
 const DAYS := ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 var bank: Node
@@ -96,7 +97,7 @@ func _plan(c: Dictionary, listed: Array, done: Callable) -> void:
 		prompt,
 		func(ok: bool, out: String) -> void:
 			if not ok:
-				done.call(DOWN, null)
+				done.call(FAILED % out + " " + _plain(), null)
 				return
 			var plan := Plan.parse(out, c["today"])
 			if plan.has("ok"):

@@ -6,6 +6,7 @@ extends RefCounted
 const LocalList := preload("res://local_list.gd")
 const Claude := preload("res://reader_claude.gd")
 const BackendLocal := preload("res://backend_local.gd")
+const AskModel := preload("res://ask_model.gd")
 const DIR := "user://soak_talk"
 const FAKE := """#!/bin/sh
 d=$(dirname "$0")
@@ -14,6 +15,7 @@ printf '%s|%s|%s|%s|%s|%s' "$#" "$1" "$3" "$4" "$5" "$6" > "$d/args.txt"
 cat > /dev/null
 if [ -f "$d/sleep" ]; then sleep "$(cat "$d/sleep")"; fi
 cat "$d/out.json"
+if [ -f "$d/err" ]; then cat "$d/err" >&2; fi
 if [ -f "$d/exit" ]; then exit "$(cat "$d/exit")"; fi
 """
 
@@ -52,9 +54,59 @@ func run(main) -> void:
 	FileAccess.set_unix_permissions(fake, 0x1ED)
 	await _claude()
 	await _claude_in_the_house(main)
+	await _money_model()
 	_wipe()
 	DirAccess.remove_absolute(_dir)
 	print("claude: the fake program was run %d times" % _runs)
+
+
+# the money chat's model over the fake program: [ok, text] of one prompt
+func _model_ask(command: String) -> Array:
+	_runs += 1
+	var model := AskModel.new()
+	model.command = command
+	model.limit = 5.0
+	var got: Array = []
+	var cb := func(ok: bool, text: String) -> void: got.append_array([ok, text])
+	model.ask("how much can I spend?", cb)
+	var end := Time.get_ticks_msec() + 12000
+	while got.is_empty() and Time.get_ticks_msec() < end:
+		await s.process_frame
+	s._check(not got.is_empty(), "the money model answered within 12 s")
+	return got
+
+
+func _money_model() -> void:
+	var path := OS.get_environment("PATH")
+	OS.set_environment("PATH", _dir + ":" + path)
+	_envelope('{"asks": [{"ask": "summary"}]}')
+	_eq(
+		await _model_ask("claude"),
+		[true, '{"asks": [{"ask": "summary"}]}'],
+		"money: claude on PATH answers"
+	)
+	_out("")
+	_knob("err", "\nError: Invalid API key · Please run /login\nmore\n")
+	_knob("exit", "1")
+	_eq(
+		await _model_ask("claude"),
+		[false, "exit 1: Error: Invalid API key · Please run /login"],
+		"money: a failing claude says its first line"
+	)
+	_envelope("Credit balance is too low", true)
+	_knob("err", "")
+	_eq(
+		await _model_ask("claude"),
+		[false, "exit 1: Credit balance is too low"],
+		"money: an error envelope says its result"
+	)
+	_knob("exit", "")
+	OS.set_environment("PATH", path)
+	_eq(
+		await _model_ask("claude-x-absent"),
+		[false, "claude-x-absent not found on PATH"],
+		"money: no claude on PATH"
+	)
 
 
 func _envelope(result: Variant, is_error: bool = false) -> void:

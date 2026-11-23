@@ -264,7 +264,8 @@ runs on the local list.
   Nothing is asked of Plaid unless `live` (never in a staged run, as the weather). The ask (`ask.gd`, `ask_plan.gd`,
   `ask_say.gd`) is the server's: a model plans, code computes, the model phrases, every dollar amount is checked and a
   verdict is code's; the model is the `claude` program (`ask_model.gd`) when the claude setting is on, else the reply is
-  the plain summary (`ask.gd` `NO_MODEL`); a thread's turns are kept in memory for two hours. Not here: the bank's
+  the plain summary (`ask.gd` `NO_MODEL`, which says the setting is off; a failed plan call gives it after
+  `FAILED`, naming why: not found on PATH, timed out, or the exit code and the error's first line); a thread's turns are kept in memory for two hours. Not here: the bank's
   proposals (short dues, doubles, a relink) — the local list has no sources. The server's tests are ported as checks:
   `logic_recurring.gd`, `logic_projection.gd`, `logic_ask.gd` (the plan and the wording), `logic_bank.gd` (the store, a
   refresh against a stub, the notices, the routes, the ask against a scripted model); `soak_bank.gd` (section `bank`)
