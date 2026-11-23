@@ -46,6 +46,7 @@ func load_file() -> void:
 	if not (d is Dictionary and d.get("open") is Array and d.get("settled") is Dictionary):
 		return
 	doc.merge(d, true)
+	doc["open"] = doc["open"].filter(_whole)
 	if not doc["facts"] is Dictionary:
 		doc["facts"] = {}
 

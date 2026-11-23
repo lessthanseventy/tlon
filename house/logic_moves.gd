@@ -219,6 +219,17 @@ func _file() -> void:
 	var broken := _moves(null, STORE)
 	broken.load_file()
 	_eq(_keys(broken), [], "a file that cannot be read starts empty")
+	f = FileAccess.open(STORE, FileAccess.WRITE)
+	f.store_string(
+		JSON.stringify(
+			{"open": [_p("a"), {"kind": "ask"}, {"key": "k"}, 7, _a("b")], "settled": {}}
+		)
+	)
+	f.close()
+	var odd := _moves(null, STORE)
+	odd.load_file()
+	_eq(_keys(odd).size(), 2, "an open entry that is not whole is dropped on load")
+	_eq(odd.open_items().size(), 2, "and the rest can be sorted")
 	_wipe_moves()
 
 
