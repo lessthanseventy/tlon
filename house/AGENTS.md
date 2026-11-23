@@ -262,8 +262,9 @@ runs on the local list.
   forecast's `budget` and the ask's `budget` lookup; no clock, `today` is passed in; a transaction's day is the day it
   was made (Plaid's `authorized_date`), and a card payment or a transfer to the person's own savings or investments
   (by Plaid's `personal_finance_category`) is never spending; everyday spending is the
-  median week of what is in no series, the mean and the occasional beside it, and the lowest-point sentence says it), `bank_util.gd` (dates are `YYYY-MM-DD` strings, a stable sort, `money`). The credentials are read at each
-  call, never kept or logged: env `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ACCESS_TOKEN`, else
+  median week of what is in no series, the mean and the occasional beside it, and the lowest-point sentence says it),
+  `bank_util.gd` (dates are `YYYY-MM-DD` strings, a stable sort, `money`). The credentials are read at each call, never
+  kept or logged: env `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ACCESS_TOKEN`, else
   `$XDG_RUNTIME_DIR/agenix/plaid-client-id|plaid-secret|plaid-access-token`, else `user://house_plaid.json`
   `{client_id, secret, access_token}` that the operator writes; no token, no source (`money` null, forecast null).
   Nothing is asked of Plaid unless `live` (never in a staged run, as the weather). The ask (`ask.gd`, `ask_plan.gd`,
