@@ -21,6 +21,7 @@ const SidebarSoak := preload("res://soak_sidebar.gd")
 const ChoreSoak := preload("res://soak_chores.gd")
 const PeopleSoak := preload("res://soak_people.gd")
 const MoneySoak := preload("res://soak_money.gd")
+const BankSoak := preload("res://soak_bank.gd")
 const LocalSoak := preload("res://soak_local.gd")
 const ContractSoak := preload("res://soak_contract.gd")
 const ArtSoak := preload("res://soak_art.gd")
@@ -140,6 +141,7 @@ func _sections() -> Array:
 		["people", _on_main.bind(func(main): await PeopleSoak.new(self, main).people())],
 		["door", _on_main.bind(func(main): await PeopleSoak.new(self, main).door())],
 		["money", _on_main.bind(func(main): await MoneySoak.new(self, main).run())],
+		["bank", func(): await BankSoak.new(self).run()],
 		["chat", _on_main.bind(func(main): await ChatSoak.new(self, main).run())],
 		["local", _on_main.bind(func(main): await LocalSoak.new(self).over(main))],
 		["contract", func(): ContractSoak.new(self).run()],

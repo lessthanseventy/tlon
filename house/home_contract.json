@@ -12,7 +12,9 @@
     "Meeting": {"title": "str", "starts_at": "str", "ends_at": "str", "tentative": "bool", "all_day": "bool", "day": "str"},
     "Proposal": {"id": "int", "source": "str", "text": "str", "why": "str", "url": "str|null"},
     "Day": {"date": "str", "high_c": "num", "low_c": "num", "kind": "str", "wet": "any"},
-    "Money": {"balance": "int", "available": "int", "as_of": "str", "due_this_week": ["any"], "next_deposit": "any", "accounts": ["any"]},
+    "Item": {"name": "str", "amount": "int", "on": "str"},
+    "Account": {"id": "str", "name": "str", "type": "str|null", "subtype": "str|null", "balance": "int|null", "available": "int|null", "spendable": "bool"},
+    "Money": {"balance": "int|null", "available": "int|null", "as_of": "str", "due_this_week": ["@Item"], "next_deposit": {"$or": ["@Item", "null"]}, "accounts": ["@Account"]},
     "Status": {
       "open": ["@Row"], "coming": ["@Row"], "notes": ["str"], "note_rows": ["@NoteRow"], "projects": ["@Project"],
       "waiting": ["@Waiting"], "someday": ["@Row"], "done": [{"text": "str", "done_at": "str|null"}], "done_week": "int",
@@ -23,16 +25,14 @@
   },
   "gaps": {
     "status-forecast": {"what": "GET /api/home has no forecast: the server sends up to three days of the weather (Server.Office.Weather.forecast, wttr.in)", "needs": "network", "size": "S"},
-    "status-money": {"what": "GET /api/home has no money (the server's is null with the bank source off, a summary of the checking accounts with it on)", "needs": "network, secret (Plaid)", "size": "L"},
     "proposals": {"what": "POST /api/home/proposals/:id/take and /dismiss are 404 locally and `proposals` is always []; the server's come from sources (Server.Home.Sources: mail, calendar, bank)", "needs": "network, secret", "size": "L", "untested": true},
-    "money-routes": {"what": "GET /api/home/money/forecast, POST /api/home/money/notices/seen and POST /api/home/money/ask are 404 locally; the server answers from the stored bank data (forecast null when there is none) and a model phrases the ask", "needs": "network, secret (Plaid), llm", "size": "L"},
     "pets": {"what": "GET /api/home/pets answers {} locally (the house uses its own voices.gd lines); the server answers the model-written lines by pet then occasion", "needs": "llm", "size": "M", "untested": true},
     "say-reader": {"what": "POST /api/home {text}: the server reads the line with a model (Server.Home.Inbox.keep) and answers its words; the local backend reads with reader_rules.gd (or the claude helper when set) and words the reply itself", "needs": "llm", "size": "L", "untested": true},
     "office-weather": {"what": "GET /api/office's `weather` ({kind, temp_c, desc} | null) has no local route: the house reads wttr.in itself (wttr.gd) when `weather` is on", "needs": "network", "size": "S", "untested": true}
   },
   "routes": [
     {"name": "status", "method": "GET", "path": "/api/home", "about": "what the jots left open", "cases": [
-      {"name": "an empty list", "code": 200, "shape": "@Status", "gap": ["status-forecast", "status-money"]}
+      {"name": "an empty list", "code": 200, "shape": "@Status", "gap": ["status-forecast"]}
     ]},
     {"name": "add", "method": "POST", "path": "/api/home/add", "about": "{kind: todo|reminder|note|waiting|project, text, at?, every?, who?, project?, steps?} -> the row", "cases": [
       {"name": "a to-do", "body": {"kind": "todo", "text": "buy milk"}, "as": "milk", "code": 200, "shape": "@Row"},
@@ -54,7 +54,7 @@
       {"name": "a project that is not one", "body": {"kind": "todo", "text": "x", "project": 99999}, "code": 404}
     ]},
     {"name": "status after", "method": "GET", "path": "/api/home", "about": "every kind in its list", "cases": [
-      {"name": "the list holds what was added", "code": 200, "shape": "@Status", "gap": ["status-forecast", "status-money"]}
+      {"name": "the list holds what was added", "code": 200, "shape": "@Status", "gap": ["status-forecast"]}
     ]},
     {"name": "edit", "method": "POST", "path": "/api/home/{id}/edit", "about": "{text?, at?, every? (null stops it), kind? (todo|reminder)} -> the row", "cases": [
       {"name": "a new text", "path": "/api/home/{milk}/edit", "body": {"text": "buy oat milk"}, "code": 200, "shape": "@Row"},
@@ -153,13 +153,13 @@
       {"name": "a batch", "code": 200, "shape": "obj"}
     ]},
     {"name": "money forecast", "method": "GET", "path": "/api/home/money/forecast", "about": "?until= -> the forecast, or null when the bank source is off", "cases": [
-      {"name": "the bank is off", "code": 200, "shape": "null", "gap": "money-routes"}
+      {"name": "the bank is off", "code": 200, "shape": "null"}
     ]},
     {"name": "money notice seen", "method": "POST", "path": "/api/home/money/notices/seen", "about": "{key} -> {ok: true}; 422 for a key that is not a bank notice's", "cases": [
-      {"name": "a key that is not a notice's", "body": {"key": "x"}, "code": 422, "error": "key is a bank:new: or bank:price: notice key", "gap": "money-routes"}
+      {"name": "a key that is not a notice's", "body": {"key": "x"}, "code": 422, "error": "key is a bank:new: or bank:price: notice key"}
     ]},
     {"name": "money ask", "method": "POST", "path": "/api/home/money/ask", "about": "{text, thread?} -> {reply, figures, thread}; 400 with no text", "cases": [
-      {"name": "no text", "body": {}, "code": 400, "error": "text is required", "gap": "money-routes"}
+      {"name": "no text", "body": {}, "code": 400, "error": "text is required"}
     ]},
     {"name": "settings", "method": "GET", "path": "/api/settings", "about": "{knobs: [{key, value, boot, ...}], restart_pending}", "cases": [
       {"name": "the knobs", "code": 200, "shape": {"knobs": ["obj"], "restart_pending": "bool"}}

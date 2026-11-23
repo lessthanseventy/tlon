@@ -526,6 +526,7 @@ func _apply_talk() -> void:
 	_claude.command = cmd if cmd != "" else "claude"
 	if _backend.local:
 		_backend.claude = _claude if talk_live and settings.value("claude") else null
+		_backend.bank.live = talk_live
 	_phone.live = talk_live
 	_phone.list_at = str(settings.value("telegram_list_at"))
 	_phone.morning_at = str(settings.value("telegram_morning_at"))

@@ -243,6 +243,26 @@ runs on the local list.
   row when a charge is due within `Money.SOON` days (`Money.today_row` "Rent $1,200 due Fri", the others counted under it by `Money.today_more`, "and 1 more"). Money is formatted only by `Money.fmt` (`fmt_whole` for an estimate);
   there are no budgets, category charts, totals or scores. `soak_money.gd` (section `money`) is its stub server, the
   states, the view, the ask and the room without money.
+- **Money over the local list** (the operator's own, optional): with a Plaid token present the house reads the bank
+  itself, read-only, and answers `money` of `GET /api/home`, `GET /api/home/money/forecast`, `POST
+  /api/home/money/notices/seen` and `POST /api/home/money/ask` as the server does. `bank.gd` (a node `backend_local.gd`
+  holds) keeps the transactions of the last 800 days, the sync cursor, the accounts and the cleared notices in
+  `user://house_bank.json` (0600, never the token), refreshes at start and every 15 minutes through `bank_plaid.gd`
+  (the only two Plaid calls: `/transactions/sync` and `/accounts/get`; no link flow, so the one link and the ten the
+  account allows are never touched; `mise run home:bank:link` stays the server's), and runs the engine: `bank_recurring.gd`
+  (series, ended, new, price change), `bank_projection.gd` (forecast, afford, what-if, history; no clock, `today` is
+  passed in), `bank_util.gd` (dates are `YYYY-MM-DD` strings, a stable sort, `money`). The credentials are read at each
+  call, never kept or logged: env `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ACCESS_TOKEN`, else
+  `$XDG_RUNTIME_DIR/agenix/plaid-client-id|plaid-secret|plaid-access-token`, else `user://house_plaid.json`
+  `{client_id, secret, access_token}` that the operator writes; no token, no source (`money` null, forecast null).
+  Nothing is asked of Plaid unless `live` (never in a staged run, as the weather). The ask (`ask.gd`, `ask_plan.gd`,
+  `ask_say.gd`) is the server's: a model plans, code computes, the model phrases, every dollar amount is checked and a
+  verdict is code's; the model is the `claude` program (`ask_model.gd`) when the claude setting is on, else the reply is
+  the plain summary (`ask.gd` `NO_MODEL`); a thread's turns are kept in memory for two hours. Not here: the bank's
+  proposals (short dues, doubles, a relink) — the local list has no sources. The server's tests are ported as checks:
+  `logic_recurring.gd`, `logic_projection.gd`, `logic_ask.gd` (the plan and the wording), `logic_bank.gd` (the store, a
+  refresh against a stub, the notices, the routes, the ask against a scripted model); `soak_bank.gd` (section `bank`)
+  runs one refresh through the real HTTP request against a stub of Plaid.
 - **The room** is 11x11 cells (`Pets.COLS`/`ROWS`, which the home, the room and the walkers all follow; the back walls are column 0 and row 0, so a bigger room grows toward the front and a saved layout loads unchanged) and, in the 1100x700 window beside the sidebar, drawn with the 2x art (`fit_scale`; the 3x art needs a 1072 px area, which a 1450x980 window has). `layout.gd` holds what stands in it: the fixed pieces the behaviour is tied to
   (desk, office chair, TV stand, sofa, wardrobe, bin, large plant, floor lamp; also the door, window,
   board, calendar, jar, none of them movable) and the plain ones (the rest of
@@ -694,12 +714,13 @@ runs on the local list.
   the checks that need no scene tree and no simulated room (the due-time rule `when.gd`, the reader and
   the list's rules `logic_local.gd`, the forecast, the j1 reader and the address `logic_weather.gd`, the chores' table, rhythm and states `logic_chores.gd`, the people's birthdays and the door's mark `logic_people.gd`,
   the money's envelope states, day strip, lowest-point sentence and wording `logic_money.gd`,
+  the bank's engine, store and ask `logic_recurring.gd` `logic_projection.gd` `logic_ask.gd` `logic_bank.gd`,
   voices, the jar, the knock and rhythm rules, the TV, `Card`'s dates, the pet settings). A few seconds:
   **iterate here.** Godot is the machine's own, so this is not part of `mise run check`. A check
   that needs neither the tree nor the clock goes in `logic.gd`, not in the soak; none runs in both.
 - `mise run house:soak -- <section>...` runs only those sections, in the suite's order; `-- --list`
   prints the names (`home sim decorate packs looks hacks eggs guests petlife antics petthings cards
-  routes forms sidebar chores people door money chat local talk telegram background weather drive packlooks art`); an unknown name prints
+  routes forms sidebar chores people door money bank chat local talk telegram background weather drive packlooks art`); an unknown name prints
   them and fails. **Iterate on your own section by name** and run the whole soak once, alone, on the
   final tree. Each section stands alone: the runner (`soak.gd` `_sections`, `_reset`, `_leave`) reseeds
   with 7 and resets the stub server's state, its log and its flags before it, and fails the section

@@ -5,8 +5,15 @@ extends "res://backend.gd"
 const LocalList := preload("res://local_list.gd")
 const ReaderRules := preload("res://reader_rules.gd")
 const CalendarFeed := preload("res://calendar_feed.gd")
+const Bank := preload("res://bank.gd")
+const Ask := preload("res://ask.gd")
+const AskModel := preload("res://ask_model.gd")
+const BankUtil := preload("res://bank_util.gd")
 
 const E_NOW := "skip is ids joined by commas, minutes a number"
+const E_UNTIL := "until is a date as YYYY-MM-DD"
+const E_KEY := "key is a bank:new: or bank:price: notice key"
+const FORECAST_DAYS := 45
 # the server's defaults of the knobs the settings screen reads
 const KNOBS := [["home_morning_at", "08:30"], ["home_list_at", "17:30"], ["home_review_on", "sun"]]
 
@@ -18,10 +25,14 @@ var reader: RefCounted = ReaderRules.new()
 var claude: RefCounted
 # the reminders that came due while the house was closed: the first tick tells them before anyone listens
 var started: Array = []
+# the operator's bank, read-only (`bank.gd`), and the questions asked about it (`ask.gd`)
+var bank := Bank.new()
+var money_ask := Ask.new()
 
 
 func _init() -> void:
 	local = true
+	money_ask.bank = bank
 
 
 # the list is read from `path` and, with `keep`, written back there; `clock` is the house's
@@ -38,6 +49,10 @@ func setup(path: String, clock: Callable, bias: float, keep: bool = true) -> voi
 	list.told.disconnect(first)
 	list.told.connect(func(row: Dictionary) -> void: told.emit(row))
 	list.told_agenda.connect(func(text: String) -> void: told_agenda.emit(text))
+	bank.clock = clock
+	bank.bias = bias
+	bank.persist = keep
+	bank.load_file()
 
 
 func _ready() -> void:
@@ -48,6 +63,8 @@ func _ready() -> void:
 			if list.tick():
 				changed.emit()
 	)
+	add_child(bank)
+	bank.refreshed.connect(func() -> void: changed.emit())
 	add_child(timer)
 	timer.start()
 
@@ -58,6 +75,14 @@ func fetch(path: String, cb: Callable, _timeout: float = 8.0) -> void:
 
 func send(path: String, body: Dictionary, cb: Callable, _timeout: float = 6.0) -> void:
 	var text := str(body.get("text", ""))
+	if path == "/api/home/money/ask" and text.strip_edges() != "":
+		money_ask.ask(
+			text,
+			body.get("thread"),
+			func(answer: Dictionary) -> void: _deliver(cb, {"code": 200, "body": answer}),
+			_model()
+		)
+		return
 	if claude != null and path == "/api/home" and text.strip_edges() != "":
 		claude.ask(
 			text, _context(), func(reading: Dictionary) -> void: _deliver(cb, _tell(text, reading))
@@ -83,6 +108,8 @@ func _route(method: String, path: String, body: Dictionary) -> Dictionary:
 		return _read_route(p, query)
 	if p.size() == 2 and p[1] == "home":
 		return _tell(str(body.get("text", "")))
+	if p.size() >= 4 and p[2] == "money":
+		return _money_post(p, body)
 	if p.size() == 3 and p[2] == "add":
 		return list.add(body)
 	if p.size() == 4 and p[2] == "door" and p[3] == "add":
@@ -129,7 +156,10 @@ func _read_route(p: PackedStringArray, query: String) -> Dictionary:
 	if p.size() == 2 and p[1] == "home":
 		var status: Dictionary = list.status()
 		status["meetings"] = [] if calendar == null else calendar.meetings()
+		status["money"] = bank.summary()
 		return {"code": 200, "body": status}
+	if p.size() == 4 and p[1] == "home" and p[2] == "money" and p[3] == "forecast":
+		return _money_forecast(query)
 	if p.size() == 3 and p[1] == "home" and p[2] == "pets":
 		return {"code": 200, "body": {}}
 	if p.size() == 3 and p[1] == "home" and p[2] == "meetings":
@@ -208,3 +238,52 @@ func _tell(text: String, given: Dictionary = {}) -> Dictionary:
 	if reading["action"] == "add" and made["code"] == 200 and made["body"] is Dictionary:
 		body["row"] = made["body"]
 	return {"code": 200, "body": body}
+
+
+# the money chat's model: the `claude` program when the house may use it, else none
+func _model() -> Callable:
+	if claude == null:
+		return Callable()
+	var command: String = claude.command
+	return func(prompt: String, cb: Callable) -> void:
+		var model := AskModel.new()
+		model.command = command
+		model.ask(prompt, cb)
+
+
+func _money_forecast(query: String) -> Dictionary:
+	var until := BankUtil.add(bank.today(), FORECAST_DAYS)
+	for pair in query.split("&", false):
+		if pair.get_slice("=", 0) == "until":
+			until = pair.get_slice("=", 1)
+			if not BankUtil.valid(until):
+				return {"code": 400, "body": {"error": E_UNTIL}}
+	var forecast: Dictionary = bank.forecast(until)
+	var subs: Dictionary = bank.subscriptions()
+	if forecast.has("error") or subs.has("error"):
+		return {"code": 200, "body": null}
+	var out: Dictionary = forecast["ok"]
+	out["subscriptions"] = subs["ok"]
+	out["notices"] = bank.notices()
+	return {"code": 200, "body": out}
+
+
+func _money_seen(body: Dictionary) -> Dictionary:
+	if bank.see(body.get("key")):
+		return {"code": 200, "body": {"ok": true}}
+	return {"code": 422, "body": {"error": E_KEY}}
+
+
+# the money's posts that need no model: a notice seen, a question with none to read it (`send`
+# gives the model a question when the house may use one)
+func _money_post(p: PackedStringArray, body: Dictionary) -> Dictionary:
+	if p.size() == 5 and p[3] == "notices" and p[4] == "seen":
+		return _money_seen(body)
+	if p.size() != 4 or p[3] != "ask":
+		return _nowhere()
+	var text: Variant = body.get("text")
+	if not (text is String and text != ""):
+		return {"code": 400, "body": {"error": "text is required"}}
+	var box := {}
+	money_ask.ask(text, body.get("thread"), func(answer: Dictionary) -> void: box.merge(answer))
+	return {"code": 200, "body": box}
