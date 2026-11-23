@@ -303,6 +303,15 @@ func _lowest() -> void:
 		"no deposit seen: the lowest over the forecast"
 	)
 	_eq(Money.lowest_line({}, TODAY), "", "no lowest point, no sentence")
+	var every := {"everyday": {"expected_daily_cents": 12460}}
+	_eq(
+		Money.lowest_line(_forecast([], fri, below, every), TODAY),
+		(
+			"Lowest point before Friday's deposit: about -$40, tomorrow,"
+			+ " counting about $125 a day of everyday spending. That is below zero."
+		),
+		"the everyday spending it counts is said"
+	)
 
 
 func _subscriptions() -> void:
@@ -359,8 +368,11 @@ func _staged() -> void:
 	_eq(f["events"].map(func(e): return e["name"]), ["Rent", "Paycheck"], "events by date")
 	_eq(
 		Money.lowest_line(f, TODAY),
-		"Lowest point before Tuesday's deposit: about $450.",
-		"read as the server's"
+		(
+			"Lowest point before Tuesday's deposit: about $450,"
+			+ " counting about $10 a day of everyday spending."
+		),
+		"read as the server's, with the everyday spending it counts"
 	)
 	var spec_summary := {
 		"available": 1,

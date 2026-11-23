@@ -2,7 +2,8 @@ extends RefCounted
 
 # Where the checking balance goes in the days ahead, worked out from the transactions kept: pure
 # arithmetic, no clock (`today` is always passed in), in cents. A port of the server's
-# `Server.Home.Bank.Projection`; the rules are the same.
+# `Server.Home.Bank.Projection`; the rules are the same but for everyday spending's median week
+# and the rent series (`bank_recurring.gd`).
 #
 # `data` is {"transactions": [txn], "accounts": [account]}. What is handed in is a magnitude (the
 # cost of a purchase, the new size of a series); what comes back is the effect on the balance: money
@@ -10,8 +11,11 @@ extends RefCounted
 # only live series count. An expected charge or deposit not posted by today stays on tomorrow as
 # overdue for a grace of half its rhythm (a yearly one 30 days), then is skipped and named.
 # Everyday spending is what is in no series: the posted outflows of the spendable accounts over the
-# last 90 days, spread evenly; the low and high lines are the 25th and 75th percentile (nearest
-# rank) of rolling 30-day totals, equal to the expected one under 30 days of history.
+# last 90 days. The expected daily figure is the median week of them over seven (their mean with
+# under three weeks of history), so a few lumps (cash, a transfer to someone) do not spread over
+# every day; `mean_daily_cents` is the plain average and `occasional_daily_cents` what it is above
+# the expected. The low and high lines are the 25th and 75th percentile (nearest rank) of rolling
+# 30-day totals, never above or below the expected, equal to it under 30 days of history.
 
 const Recurring := preload("res://bank_recurring.gd")
 const U := preload("res://bank_util.gd")
@@ -20,6 +24,7 @@ const CAP := 180
 const WINDOW := 90
 const LABELS := 60
 const MONTH := 30
+const WEEK := 7
 const AFFORD_DAYS := 60
 const CUSHION_DAYS := 7
 
@@ -354,7 +359,18 @@ static func _everyday(mine: Array, out: Array, today: String) -> Dictionary:
 	var per_day: Array = []
 	for i in span:
 		per_day.append(int(totals.get(U.add(today, -i), 0)))
-	var expected := _per(U.sum(per_day), maxi(span, 1))
+	var mean := _per(U.sum(per_day), maxi(span, 1))
+	var expected := mean
+	if span >= 3 * WEEK:
+		var weeks: Array = []
+		for w in span / WEEK:
+			weeks.append(U.sum(per_day.slice(w * WEEK, (w + 1) * WEEK)))
+		weeks.sort()
+		var mid: int = weeks.size() / 2
+		var week: int = (
+			weeks[mid] if weeks.size() % 2 == 1 else (weeks[mid - 1] + weeks[mid] + 1) / 2
+		)
+		expected = _per(week, WEEK)
 	var low := expected
 	var high := expected
 	if span >= MONTH:
@@ -368,6 +384,8 @@ static func _everyday(mine: Array, out: Array, today: String) -> Dictionary:
 		"expected_daily_cents": expected,
 		"low_daily_cents": low,
 		"high_daily_cents": high,
+		"mean_daily_cents": mean,
+		"occasional_daily_cents": maxi(mean - expected, 0),
 		"history_days": span,
 	}
 

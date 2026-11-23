@@ -187,8 +187,9 @@ static func savings_name(forecast: Dictionary) -> String:
 	return str(names[0]) if names is Array and names.size() == 1 else "Savings"
 
 
-# "Lowest point before Friday's deposit: about $312." Below zero it says so plainly with the day
-# and, when the savings cover it, what they hold. "" when there is no lowest point.
+# "Lowest point before Friday's deposit: about $312, counting about $40 a day of everyday
+# spending." Below zero it says so plainly with the day and, when the savings cover it, what they
+# hold. "" when there is no lowest point.
 static func lowest_line(forecast: Dictionary, today: String) -> String:
 	var basis: Variant = forecast.get("basis")
 	var deposit: Variant = basis.get("next_deposit") if basis is Dictionary else null
@@ -202,16 +203,25 @@ static func lowest_line(forecast: Dictionary, today: String) -> String:
 			return ""
 		lead = "Lowest point in the next %d days" % When.days_between(today, str(forecast["until"]))
 	var cents := roundi(float(low["balance_cents"]))
+	var counting := _counting(forecast)
 	if cents >= 0:
-		return "%s: about %s." % [lead, fmt_whole(cents)]
+		return "%s: about %s%s." % [lead, fmt_whole(cents), counting]
 	var text := (
-		"%s: about %s, %s. That is below zero."
-		% [lead, fmt_whole(cents), _on(str(low["date"]), today)]
+		"%s: about %s, %s%s. That is below zero."
+		% [lead, fmt_whole(cents), _on(str(low["date"]), today), counting]
 	)
 	var held := roundi(float(forecast.get("other_available_cents", 0)))
 	if held >= -cents:
 		text += " %s holds %s, which covers it." % [savings_name(forecast), fmt_whole(held)]
 	return text
+
+
+static func _counting(forecast: Dictionary) -> String:
+	var every: Variant = forecast.get("everyday")
+	var daily := roundi(float(every.get("expected_daily_cents", 0))) if every is Dictionary else 0
+	if daily <= 0:
+		return ""
+	return ", counting about %s a day of everyday spending" % fmt_whole(daily)
 
 
 # "" for a price that did not go up, else "was $9.99"

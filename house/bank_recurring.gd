@@ -20,6 +20,11 @@ extends RefCounted
 #
 # A series is live while its latest charge is within two rhythms plus the rhythm's tolerance of
 # today (a yearly one: one rhythm plus 30 days).
+#
+# Rent paid through a rent service (`RENT`) is one merchant under any of its names, labelled
+# `RENT_LABEL`. It may come in installments: when the three months before the newest each hold
+# the same number of charges, each installment is a monthly series of its own (the median of its
+# latest three, on the day it last came); one a month is found as any other series.
 
 const U := preload("res://bank_util.gd")
 
@@ -27,6 +32,8 @@ const BANDS := [
 	["weekly", 5, 9], ["fortnightly", 11, 17], ["monthly", 26, 34], ["yearly", 355, 375]
 ]
 const LABEL_MAX := 40
+const RENT := ["flex", "flexible finance"]
+const RENT_LABEL := "Rent (Flex)"
 
 
 # a stored row {id, account_id, cents, date, name, merchant, pending} as a transaction, null when
@@ -46,6 +53,8 @@ static func txn(row: Dictionary) -> Variant:
 	var label := _label(row.get("merchant"), row.get("name"))
 	if label == "":
 		return null
+	if _rent(key(label)):
+		label = RENT_LABEL
 	return {
 		"id": id,
 		"account_id": row.get("account_id"),
@@ -62,6 +71,10 @@ static func txn(row: Dictionary) -> Variant:
 static func key(label: String) -> String:
 	var re := RegEx.create_from_string("[^\\p{L}\\p{N}]+")
 	return re.sub(label.to_lower(), " ", true).strip_edges()
+
+
+static func _rent(k: String) -> bool:
+	return RENT.any(func(r): return same_merchant(k, r))
 
 
 static func _label(merchant: Variant, name: Variant) -> String:
@@ -263,6 +276,10 @@ static func _window(period: String) -> int:
 
 
 static func _key_series(group: Array, direction: String) -> Array:
+	if group[0]["label"] == RENT_LABEL and direction == "out":
+		var parts := _installments(group)
+		if not parts.is_empty():
+			return parts
 	var dated := U.sort_by(group, func(t): return t["date"], true)
 	var charges := U.uniq_by(dated, func(t): return t["date"])
 	var parts: Array = []
@@ -285,6 +302,48 @@ static func _key_series(group: Array, direction: String) -> Array:
 	if unexplained >= 10 and unexplained > 2 * explained:
 		return []
 	return found
+
+
+static func _installments(group: Array) -> Array:
+	var by_month := U.group_by(group, func(t): return U.month_start(t["date"]))
+	var months: Array = U.sort_by(by_month.keys(), func(m): return m, true)
+	if months.size() < 4:
+		return []
+	var run := 1
+	while run < months.size() and U.shift_months(months[run], 1) == months[run - 1]:
+		run += 1
+	if run < 4:
+		return []
+	var rows: Array = []
+	for m in months.slice(0, run):
+		rows.append(U.sort_by(by_month[m], func(t): return t["date"]))
+	var n: int = rows[1].size()
+	if n < 2 or rows[2].size() != n or rows[3].size() != n:
+		return []
+	var out: Array = []
+	for i in n:
+		var nth: Array = rows.filter(func(r): return r.size() > i).map(func(r): return r[i])
+		var recent: Array = nth.slice(0, 3).map(func(t): return absi(t["cents"]))
+		recent.sort()
+		var last: Dictionary = nth[0]
+		(
+			out
+			. append(
+				{
+					"key": last["key"],
+					"label": last["label"],
+					"period": "monthly",
+					"amount": recent[1],
+					"last": last["date"],
+					"next": _next(last["date"], "monthly"),
+					"count": nth.size(),
+					"at_amount": nth.size(),
+					"was": null,
+					"account_id": last["account_id"],
+				}
+			)
+		)
+	return out
 
 
 static func _wrap(found: Variant) -> Array:

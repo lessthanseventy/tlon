@@ -230,7 +230,14 @@ func _forecast_basics() -> void:
 	f = _forecast(_data([other]))
 	_eq(
 		f["everyday"],
-		{"expected_daily_cents": 0, "low_daily_cents": 0, "high_daily_cents": 0, "history_days": 0},
+		{
+			"expected_daily_cents": 0,
+			"low_daily_cents": 0,
+			"high_daily_cents": 0,
+			"mean_daily_cents": 0,
+			"occasional_daily_cents": 0,
+			"history_days": 0,
+		},
 		"a checking account with no transactions of its own spends nothing everyday"
 	)
 	_eq(f["days"][-1]["expected_cents"], 480000, "and stays at its balance")
@@ -423,7 +430,7 @@ func _forecast_everyday() -> void:
 			series_out += t["cents"]
 	_eq(outflow > 0, true, "there is outflow in the window")
 	var rounding := absi(
-		outflow - series_out - f["everyday"]["expected_daily_cents"] * f["everyday"]["history_days"]
+		outflow - series_out - f["everyday"]["mean_daily_cents"] * f["everyday"]["history_days"]
 	)
 	_eq(
 		rounding <= f["everyday"]["history_days"] / 2,
@@ -444,7 +451,57 @@ func _forecast_everyday() -> void:
 		only_shops["everyday"]["expected_daily_cents"],
 		"recurring charges and transfers do not count toward everyday spending"
 	)
-	_eq(only_shops["everyday"]["expected_daily_cents"], 2967, "the everyday figure")
+	_eq(only_shops["everyday"]["expected_daily_cents"], 3000, "the everyday figure, a median week")
+	_eq(only_shops["everyday"]["mean_daily_cents"], 2967, "and the plain average")
+
+	var lumps := [
+		_txn(U.add(TODAY, -9), 100000, "Cash one"),
+		_txn(U.add(TODAY, -32), 90000, "Transfer to a friend"),
+		_txn(U.add(TODAY, -70), 120000, "Cash two"),
+	]
+	var lumpy: Dictionary = _forecast(_data([_everyday(100), lumps]))["everyday"]
+	_eq(
+		lumpy["expected_daily_cents"] * 4 <= only_shops["everyday"]["expected_daily_cents"] * 5,
+		true,
+		"three lumps in 90 days move the expected daily figure at most a quarter: %s" % str(lumpy)
+	)
+	_eq(
+		lumpy["mean_daily_cents"] > only_shops["everyday"]["mean_daily_cents"] + 3000,
+		true,
+		"the plain average carries them"
+	)
+	_eq(
+		lumpy["occasional_daily_cents"],
+		lumpy["mean_daily_cents"] - lumpy["expected_daily_cents"],
+		"what they add is said apart as occasional"
+	)
+	_eq(
+		lumpy["high_daily_cents"] > lumpy["expected_daily_cents"],
+		true,
+		"and the cautious line still counts them"
+	)
+
+	var flex := [
+		_txn("2026-11-13", 50000, "Flexible Finance Inc.", {"merchant": "Flexible Finance"}),
+		_txn("2026-11-02", 70000, "Flex* Flexible Finance", {"merchant": "Flex"}),
+		_txn("2026-10-16", 50000, "Flex* Flexible Finance", {"merchant": "Flex"}),
+		_txn("2026-10-03", 52000, "Flexible Finance Inc.", {"merchant": "Flexible Finance"}),
+		_txn("2026-09-07", 50000, "Flex* Flexible Finance", {"merchant": "Flex"}),
+		_txn("2026-09-02", 51000, "Flex* Flexible Finance", {"merchant": "Flex"}),
+		_txn("2026-08-11", 50000, "Flex* Flexible Finance", {"merchant": "Flex"}),
+		_txn("2026-08-02", 51000, "Flex* Flexible Finance", {"merchant": "Flex"}),
+	]
+	var on_flex := _forecast(_data([_everyday(100), flex]), "2026-12-31")
+	_eq(
+		_pairs(_named(on_flex["events"], Recurring.RENT_LABEL)),
+		[["2026-12-02", -52000], ["2026-12-13", -50000]],
+		"rent in two installments on two merchant names is one monthly bill, each on its day"
+	)
+	_eq(
+		on_flex["everyday"],
+		only_shops["everyday"],
+		"and none of it is everyday spending"
+	)
 
 	var labels := [
 		"Transfer to Acme Savings Account", "Moved to Acme Savings account", "Acme transfer"

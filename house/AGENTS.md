@@ -250,8 +250,9 @@ runs on the local list.
   `user://house_bank.json` (0600, never the token), refreshes at start and every 15 minutes through `bank_plaid.gd`
   (the only two Plaid calls: `/transactions/sync` and `/accounts/get`; no link flow, so the one link and the ten the
   account allows are never touched; `mise run home:bank:link` stays the server's), and runs the engine: `bank_recurring.gd`
-  (series, ended, new, price change), `bank_projection.gd` (forecast, afford, what-if, history; no clock, `today` is
-  passed in), `bank_util.gd` (dates are `YYYY-MM-DD` strings, a stable sort, `money`). The credentials are read at each
+  (series, ended, new, price change; rent through Flex is one bill under its names, its installments monthly series),
+  `bank_projection.gd` (forecast, afford, what-if, history; no clock, `today` is passed in; everyday spending is the
+  median week of what is in no series, the mean and the occasional beside it, and the lowest-point sentence says it), `bank_util.gd` (dates are `YYYY-MM-DD` strings, a stable sort, `money`). The credentials are read at each
   call, never kept or logged: env `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ACCESS_TOKEN`, else
   `$XDG_RUNTIME_DIR/agenix/plaid-client-id|plaid-secret|plaid-access-token`, else `user://house_plaid.json`
   `{client_id, secret, access_token}` that the operator writes; no token, no source (`money` null, forecast null).
