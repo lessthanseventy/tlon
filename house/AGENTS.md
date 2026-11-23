@@ -716,7 +716,7 @@ runs on the local list.
 - `mise run house:art-pack` / `mise run house:build -- windows|mac|linux|all` — the art the house can open, packed to
   `~/.cache/tlon/house-dist/house-art.zip` (`-- --list` prints the files only), and a build of the house per platform
   with it inside (Windows and Linux: one file; the Mac app ad-hoc signed by the export, nothing added to it after; the art raw in the pck), zipped as
-  `the-house-<platform>.zip` there. Templates are Godot's own 4.7.2 export
+  `asterion-<platform>.zip` there. Templates are Godot's own 4.7.2 export
   templates; presets in `export_presets.cfg`; what to hand over and the first run on each OS: `SHIPPING.md`. The soak's
   art section (`soak_art.gd`) holds the order the art is looked up in over packs generated from 1x1 PNGs.
 
