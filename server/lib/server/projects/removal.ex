@@ -12,7 +12,7 @@ defmodule Server.Projects.Removal do
       tie, schedule or schedule run, a wake still queued, a child thread, a workline's state (stage,
       slug, awaiting), an agent other than the workspace's lead, or a thread that is not one of the
       two born-with ones;
-    * on the project: a ticket or a jot;
+    * on the project: a ticket;
     * on the workspace, when this is its last project: a thread of its own, a ticket, a topic
       channel, a bench seat or policy, a schedule, routine or quest.
 
@@ -158,7 +158,7 @@ defmodule Server.Projects.Removal do
     lead = Server.Channel.designated_lead(workspace.id)
 
     Enum.flat_map(threads, &thread_holds(&1, lead)) ++
-      holds("project", [{"ticket", :project_id, project.id, "tickets"}, {"jot", :project_id, project.id, "jots"}]) ++
+      holds("project", [{"ticket", :project_id, project.id, "tickets"}]) ++
       if(drop_workspace, do: workspace_holds(project, workspace), else: [])
   end
 

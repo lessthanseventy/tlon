@@ -99,7 +99,6 @@ defmodule Server.Projects.RemovalTest do
           child: "is not one of its two born-with threads",
           other_agent: "not the workspace's lead",
           ticket: "project holds 1 tickets",
-          jot: "project holds 1 jots",
           bench: "workspace holds 1 bench seats",
           topic: "workspace holds 1 topic channels"
         ] do
@@ -152,19 +151,6 @@ defmodule Server.Projects.RemovalTest do
 
   defp hold(:ticket, ws, p, _desk, _memory),
     do: {:ok, _} = Server.Tickets.file(%{workspace_id: ws.id, project_id: p.id, title: "t"})
-
-  defp hold(:jot, _ws, p, _desk, _memory) do
-    {1, _} =
-      Repo.insert_all("jot", [
-        %{
-          via: "t",
-          external_id: 1,
-          body: "b",
-          received_at: NaiveDateTime.truncate(NaiveDateTime.utc_now(), :second),
-          project_id: p.id
-        }
-      ])
-  end
 
   defp hold(:bench, ws, _p, _desk, _memory),
     do: {:ok, _} = Workspaces.seat(ws.id, %{name: "w-#{stamp()}", archetype: "builder"})
