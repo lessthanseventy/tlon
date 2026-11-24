@@ -104,7 +104,7 @@ description = "server: the CLI passthrough — mise run server:cli -- <subcomman
 run = "scripts/tlon-cli.sh"
 
 ["server:project:remove"]
-description = "server: remove a project whose repo is deleted, with its empty born-with threads, its repo rows and its workspace when it was the last project, on the LIVE service — a DRY RUN that changes nothing unless `-- --yes` is given; anything that carries work (a message, a workline, a session, a ticket, a jot) refuses it and is named; it also dismisses the project's pending keep-up notes (remote, off-main, drift). <name> is the project's name, or workspace/name when two workspaces share it. usage: mise run server:project:remove -- <name|workspace/name> [--yes]"
+description = "server: remove a project whose repo is deleted, with its empty born-with threads, its repo rows and its workspace when it was the last project, on the LIVE service — a DRY RUN that changes nothing unless `-- --yes` is given; anything that carries work (a message, a workline, a session, a ticket) refuses it and is named; it also dismisses the project's pending keep-up notes (remote, off-main, drift). <name> is the project's name, or workspace/name when two workspaces share it. usage: mise run server:project:remove -- <name|workspace/name> [--yes]"
 run = "scripts/tlon-cli.sh project-remove"
 
 ["server:roster"]
