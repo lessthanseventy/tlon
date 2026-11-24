@@ -20,7 +20,8 @@ func ask(prompt: String, cb: Callable) -> void:
 		cb.call_deferred(false, "%s could not start" % path)
 		return
 	var pid: int = spawned["pid"]
-	var box := {"timed_out": false, "over": false}
+	# a bound Callable does not hold its object: the box does, until the run is over
+	var box := {"timed_out": false, "over": false, "keep": self}
 	Engine.get_main_loop().create_timer(limit).timeout.connect(
 		func() -> void:
 			if not box["over"] and OS.is_process_running(pid):

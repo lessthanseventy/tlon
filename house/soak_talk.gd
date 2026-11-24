@@ -76,6 +76,20 @@ func _model_ask(command: String) -> Array:
 	return got
 
 
+# the model the backend hands the money chat, called as it is and let go: [ok, text]
+func _model_through_backend() -> Array:
+	_runs += 1
+	var b := _backend()
+	var got: Array = []
+	var cb := func(ok: bool, text: String) -> void: got.append_array([ok, text])
+	b._model().call("how much can I spend?", cb)
+	var end := Time.get_ticks_msec() + 12000
+	while got.is_empty() and Time.get_ticks_msec() < end:
+		await s.process_frame
+	s._check(not got.is_empty(), "the backend's model answered within 12 s")
+	return got
+
+
 func _money_model() -> void:
 	var path := OS.get_environment("PATH")
 	OS.set_environment("PATH", _dir + ":" + path)
@@ -84,6 +98,11 @@ func _money_model() -> void:
 		await _model_ask("claude"),
 		[true, '{"asks": [{"ask": "summary"}]}'],
 		"money: claude on PATH answers"
+	)
+	_eq(
+		await _model_through_backend(),
+		[true, '{"asks": [{"ask": "summary"}]}'],
+		"money: the backend's model answers with nothing else holding it"
 	)
 	_out("")
 	_knob("err", "\nError: Invalid API key · Please run /login\nmore\n")
