@@ -1042,6 +1042,38 @@ func _outside_edit() -> void:
 		[true, false, ["keep me, edited"]],
 		"the open house follows a change to its file before it saves, once"
 	)
+	var outside := func(change: Callable) -> void:
+		var doc: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(FILE))
+		change.call(doc)
+		var w := FileAccess.open(FILE, FileAccess.WRITE)
+		w.store_string(JSON.stringify(doc))
+		w.close()
+	var row := {"id": 90, "kind": "todo", "text": "from outside", "state": "open"}
+	row["since"] = "2026-11-24T08:00:00Z"
+	outside.call(func(doc: Dictionary) -> void: doc["things"].append(row.duplicate()))
+	house._seen = 0
+	house.follow()
+	house.edit(90, {"text": "from outside, edited here"})
+	_eq(
+		_on_disk().map(func(x): return x["text"]),
+		["call mum", "keep me, edited", "from outside, edited here"],
+		"a row the house followed in and then edited keeps the edit at the next save"
+	)
+	row["id"] = 91
+	row["text"] = "gone outside"
+	outside.call(func(doc: Dictionary) -> void: doc["things"].append(row.duplicate()))
+	house._seen = 0
+	house.follow()
+	outside.call(
+		func(doc: Dictionary) -> void:
+			doc["things"] = doc["things"].filter(func(x): return x["text"] != "gone outside")
+	)
+	house.edit(91, {"text": "gone outside, edited here"})
+	_eq(
+		_on_disk().map(func(x): return x["text"]).has("gone outside, edited here"),
+		true,
+		"a followed-in row edited here and removed outside is kept"
+	)
 	_wipe()
 
 

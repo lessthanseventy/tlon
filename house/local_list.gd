@@ -262,7 +262,8 @@ func _merge_disk() -> bool:
 	if not FileAccess.file_exists(path):
 		return false
 	_seen = FileAccess.get_modified_time(path)
-	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	var text := FileAccess.get_file_as_string(path)
+	var d: Variant = JSON.parse_string(text)
 	if not (d is Dictionary and d.get("things") is Array and d["things"].all(_whole)):
 		return false
 	var theirs := _rows(d)
@@ -296,7 +297,7 @@ func _merge_disk() -> bool:
 				continue
 			var id: int = here["id"]
 			here.clear()
-			here.merge(row)
+			here.merge(row.duplicate(true))
 			_whole_numbers(here)
 			here["id"] = id
 			here["key"] = k
@@ -324,7 +325,8 @@ func _merge_disk() -> bool:
 		print("list: kept %s, saved by another writer" % _said(row))
 		changed = true
 	doc["next_id"] = maxi(int(doc["next_id"]), _top() + 1)
-	_base = theirs
+	# a parse of its own: a row the list took from the file must not be the base's row too
+	_base = _rows(JSON.parse_string(text))
 	return changed
 
 
