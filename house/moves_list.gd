@@ -61,6 +61,8 @@ static func _nudge(w: Dictionary, bias: float) -> Dictionary:
 	)
 	return {
 		"key": "waiting-%d" % int(w["id"]),
+		"waiting_id": int(w["id"]),
+		"about": str(w["text"]),
 		"kind": "proposal",
 		"source": "list",
 		"text": text,

@@ -318,6 +318,14 @@ func _sources() -> void:
 		["Follow up on the quote", "Follow up on the quote", "Follow up on the quote"],
 		"a waiting-on with no who, a null who or a blank one never reads Nudge nobody"
 	)
+	var own := _list()
+	own.add({"kind": "waiting", "text": "the invoice", "who": "Sam"})
+	var fin := _moves(own)
+	fin.sweep(got)
+	_eq(fin.settle("waiting-1", "done").get("ok"), "Done: the invoice.", "done says what")
+	_eq(fin.settled("waiting-1")["how"], "done", "and keeps how it was settled")
+	_eq(own.status()["waiting"].size(), 0, "the waiting-on is ticked")
+	_eq(own.status()["open"].size(), 0, "and no to-do came of it")
 	var m := _moves(l)
 	m.sweep(got)
 	_eq(m.settle("waiting-1", "go").get("ok"), "Added: Nudge Sam about the invoice.", "go nudges")

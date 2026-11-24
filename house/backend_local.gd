@@ -35,6 +35,7 @@ var started: Array = []
 var bank := Bank.new()
 var money_ask := Ask.new()
 var _money_thread := ""
+var _asked_done := ""
 
 
 func _init() -> void:
@@ -112,7 +113,26 @@ func _chat(text: String, body: Dictionary, cb: Callable) -> bool:
 	for m in open:
 		if m["key"] == str(body.get("last", "")):
 			shown = m
-	var settle := ChatRoute.settle(text, shown, open)
+	var settle := {}
+	var asked := _asked_done
+	_asked_done = ""
+	var line := text.strip_edges().to_lower().trim_suffix(".").trim_suffix("!")
+	if asked != "" and line in ChatRoute.NO:
+		_answered.call_deferred(cb, text, {"reply": "Left it open."})
+		return true
+	if asked != "" and line in ChatRoute.GO and open.any(func(m): return m["key"] == asked):
+		settle = {"key": asked, "choice": "done"}
+	if settle.is_empty():
+		settle = ChatRoute.settle(text, shown, open)
+	if settle.is_empty():
+		var fin := ChatRoute.finished(text, shown, open)
+		if not fin.is_empty() and fin["sure"]:
+			settle = {"key": fin["key"], "choice": "done"}
+		elif not fin.is_empty():
+			_asked_done = fin["key"]
+			var about: String = open.filter(func(m): return m["key"] == fin["key"])[0]["about"]
+			_answered.call_deferred(cb, text, {"reply": 'Mark "%s" done?' % about})
+			return true
 	if not settle.is_empty():
 		var said: Dictionary = list.moves.settle(settle["key"], settle["choice"])
 		var out := {"reply": str(said.get("ok", said.get("error", "")))}

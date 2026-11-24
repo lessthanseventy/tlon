@@ -169,7 +169,7 @@ func sweep(candidates: Array) -> bool:
 # stay. True when anything differed.
 func _reword(open: Dictionary, c: Dictionary) -> bool:
 	var changed := false
-	for k in ["text", "why", "action", "date", "options"]:
+	for k in ["text", "why", "action", "date", "options", "waiting_id", "about"]:
 		if c.has(k) and open.get(k) != c[k]:
 			open[k] = c[k].duplicate(true) if c[k] is Array or c[k] is Dictionary else c[k]
 			changed = true
@@ -187,12 +187,24 @@ func settle(key: String, choice: Variant) -> Dictionary:
 		return _answer(m, choice)
 	if choice == "no":
 		return _close(m, "no", {"ok": "Dropped: %s." % m["text"]})
+	if choice == "done":
+		return _finish(m)
 	if choice != "go":
 		return {"error": "choice is go or no"}
 	var done := _run(m["action"])
 	if done.has("error"):
 		return done
 	return _close(m, "go", done)
+
+
+# the waiting-on behind a nudge is done: ticked in the list, and the nudge is closed with it
+func _finish(m: Dictionary) -> Dictionary:
+	if m.get("waiting_id") == null:
+		return {"error": "that is not a waiting-on"}
+	var r: Dictionary = list.done(int(m["waiting_id"]))
+	if r["code"] != 200:
+		return {"error": "the list would not take it"}
+	return _close(m, "done", {"ok": "Done: %s." % m.get("about", m["text"])})
 
 
 func _answer(m: Dictionary, choice: Variant) -> Dictionary:

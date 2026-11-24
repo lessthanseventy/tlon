@@ -464,7 +464,11 @@ runs on the local list.
   Each open item of Your move is said once as a message with its buttons (`chat.sync_moves`, from every home
   read: `move` the key, `buttons` `[[label, choice]]`, go / no, looks good / no, or an ask's numbers under its
   options written out) and marked done / dropped / answered / dealt with when it leaves the list, wherever it was
-  settled; a button posts the same `/api/home/moves/settle` as the view. `logic_chat.gd` holds the rules. `--chat "talk,reminder,acted,pet,phone,reading,fail|empty"` and `--unread` stage it.
+  settled; a button posts the same `/api/home/moves/settle` as the view. A reply to a nudge ("Nudge Dana about X",
+  key `waiting-N`) that says the thing is done ("merged", "they replied", `ChatRoute.finished`) ticks that waiting-on
+  and says "Done: X." (settle choice `done`), never a new to-do; one that only speaks of the thing, or is vague, is
+  asked once ("Mark "X" done?", the next go ticks it, no leaves it); a not-yet or an unrelated line is as before.
+  `logic_chat.gd` holds the rules. `--chat "talk,reminder,acted,pet,phone,reading,fail|empty"` and `--unread` stage it.
 - **One place for the list's calls**: `main.gd` `_post`, `_write`, `_act`, `_tell` and `_refresh` carry every
   write and the notepad/chat line; the polls (`_poll`, `_slow_poll`, `_pets_ask`, `_watch_weather`, `_ask_now`) are plain
   GETs there too. All of them are `Backend.fetch(route, cb, timeout)` and `Backend.send(route, body, cb, timeout)`,

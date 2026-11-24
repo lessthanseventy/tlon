@@ -197,7 +197,60 @@ func _chat_lines() -> void:
 	await s._until(func(): return got.size() == 4, "the go is answered")
 	_eq(got[3], [200, "Added: the lamp."], "go settles the item shown")
 	_eq(plain.list.moves.open_items().size(), 0, "and it is no longer waiting")
+	await _done_replies(plain)
 	plain.free()
+
+
+# a reply to a nudge that says the thing is done settles the waiting-on; an unrelated line is still a
+# new to-do; a reply about the thing without saying it is done is asked about once
+func _done_replies(plain: BackendLocal) -> void:
+	var added: Dictionary = plain.list.add(
+		{"kind": "waiting", "text": "the support skill review", "who": "Dana"}
+	)
+	var w: int = added["body"]["id"]
+	var key := "waiting-%d" % w
+	var nudge := {
+		"key": key,
+		"kind": "proposal",
+		"source": "list",
+		"text": "Nudge Dana about the support skill review",
+		"why": "w",
+		"action": {"do": "add", "kind": "todo", "text": "Nudge Dana"},
+		"date": "",
+		"waiting_id": w,
+		"about": "the support skill review"
+	}
+	var got: Array = []
+	var say := func(text: String, last: String) -> void:
+		got.clear()
+		plain.send(
+			"/api/home",
+			{"text": text, "last": last},
+			func(_r: bool, _code: int, b: Variant) -> void: got.append(b.get("reply"))
+		)
+		await s._until(func(): return got.size() == 1, "the answer to: " + text)
+	plain.list.moves.sweep([nudge])
+	var todos := func() -> int:
+		return plain.list.status()["open"].filter(func(r): return r["kind"] == "todo").size()
+	var before: int = todos.call()
+	await say.call("buy a lamp", key)
+	_eq(todos.call(), before + 1, "an unrelated line after a nudge is still a to-do")
+	await say.call("the support skill is in review", key)
+	_eq(
+		got,
+		['Mark "the support skill review" done?'],
+		"a reply about it, not saying done, is asked once"
+	)
+	await say.call("no", key)
+	_eq(plain.list.status()["waiting"].size(), 1, "a no to the question leaves it waiting")
+	await say.call("the support skill merged", key)
+	_eq(got, ["Done: the support skill review."], "a done-reply settles it and says so")
+	_eq(
+		[plain.list.status()["waiting"].size(), todos.call()],
+		[0, before + 1],
+		"ticked, and no new to-do"
+	)
+	_eq(plain.list.moves.settled(key)["how"], "done", "the move is kept as done")
 
 
 func _wait() -> void:

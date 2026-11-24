@@ -12,6 +12,7 @@ func run() -> void:
 	t = at(2026, 11, 18, 10)
 	_asks()
 	_settles()
+	_finishes()
 	_list_answer()
 	_said()
 
@@ -77,6 +78,47 @@ func _settles() -> void:
 		"a name matching no item is a tell"
 	)
 	_eq(ChatRoute.settle("go home and rest", spotify, open), {}, "any other line is a tell")
+
+
+func _nudge(key: String, about: String) -> Dictionary:
+	var m := _p(key, "Nudge Sam about " + about)
+	m["waiting_id"] = int(key.trim_prefix("waiting-"))
+	m["about"] = about
+	return m
+
+
+func _finishes() -> void:
+	var support := _nudge("waiting-27", "[FTC-7189] Make the support skill enumerate every record")
+	var open := [support, _nudge("waiting-3", "the invoice"), _p("spotify", "Cancel Spotify")]
+	for line in ["The support skill merged", "done", "it merged.", "they replied"]:
+		_eq(
+			ChatRoute.finished(line, support, open),
+			{"key": "waiting-27", "sure": true},
+			"done to the nudge shown: " + line
+		)
+	_eq(
+		ChatRoute.finished("the support skill is in review", support, open),
+		{"key": "waiting-27", "sure": false},
+		"the item's own words with no done word is asked about"
+	)
+	_eq(
+		ChatRoute.finished("i think so", support, open),
+		{"key": "waiting-27", "sure": false},
+		"a vague reply is asked about"
+	)
+	for line in ["buy milk", "go", "no", "what's left?", "the support skill has not merged"]:
+		_eq(ChatRoute.finished(line, support, open), {}, "not a done-reply: " + line)
+	_eq(ChatRoute.finished("done", {}, open), {}, "a bare done with nothing shown is a tell")
+	_eq(
+		ChatRoute.finished("the invoice was paid and done", {}, open),
+		{"key": "waiting-3", "sure": true},
+		"a done word naming exactly one nudge settles it with none shown"
+	)
+	_eq(
+		ChatRoute.finished("the support skill merged", _p("spotify", "Cancel Spotify"), open),
+		{"key": "waiting-27", "sure": true},
+		"and a nudge named in the line wins over another item shown"
+	)
 
 
 func _list_answer() -> void:
