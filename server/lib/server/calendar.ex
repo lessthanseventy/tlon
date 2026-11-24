@@ -1,8 +1,7 @@
 defmodule Server.Calendar do
   @moduledoc """
-  The operator's calendars, read by the alerts a meeting earns (`Server.Alerts`), by the home's day
-  (`Server.Home.Day`: `GET /api/home`, the reader's answers) and by the office's celebrations
-  (`Server.Office`). Each source is a `.ics` feed named in the settings file (`Server.OperatorConfig`):
+  The operator's calendars, read by the alerts a meeting earns (`Server.Alerts`) and by the office's
+  celebrations (`Server.Office`). Each source is a `.ics` feed named in the settings file (`Server.OperatorConfig`):
 
       "calendars": [
         {"name": "work", "ics_secret": "calendar-work"},

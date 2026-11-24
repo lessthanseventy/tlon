@@ -118,7 +118,7 @@ and every layer the spine design's re-laid §9 asked for
   own, once per PR head (`Workline.requeue_blocked/3`); one GitHub still isn't merging — the merge
   refused, held again at a head already requeued, the requeued landing red or conflicting, an hour
   gone — is a `pr_blocked` Need, answered by rebase (back into the merge queue, `Workline.reland_queued/2`: rebased, gated, `tlon/check` posted and merged at that head — never GitHub's own update-branch, whose head no gate ran on), close and reland, or a look at the PR).
-  `KeepUp` leaves out a project whose repo folder is gone, with one keyed note `keep_up:gone:<repo>` (naming `server:project:remove`) instead of a failed job. It also warms each main checkout's `_build` for test once per tip (`warm_test_builds/2`): a mix project with a locked dependency and no `deps/` is skipped (never fetched), as is a compile that says its dependencies are unavailable (kept with its tip, not recompiled until the tip moves); each skip or failure is one keyed rollout note `keep_up:warm:<dir>`, and the tried tip is kept in `Server.Home.Keep`, so a restart does not recompile it, and its note is posted again while the condition holds.
+  `KeepUp` leaves out a project whose repo folder is gone, with one keyed note `keep_up:gone:<repo>` (naming `server:project:remove`) instead of a failed job. It also warms each main checkout's `_build` for test once per tip (`warm_test_builds/2`): a mix project with a locked dependency and no `deps/` is skipped (never fetched), as is a compile that says its dependencies are unavailable (kept with its tip, not recompiled until the tip moves); each skip or failure is one keyed rollout note `keep_up:warm:<dir>`, and the tried tip is kept in `Server.Jobs.KeepUp.Warm`, so a restart does not recompile it, and its note is posted again while the condition holds.
   The operator reviews a branch from the office (`Server.Workline.OperatorReview`): its diff as
   files, hunks and numbered lines, and notes on lines or files submitted with a verdict — comment,
   request changes (`send_back/5` to build, the notes its why) or approve — reaching the lead as one
@@ -185,102 +185,6 @@ and every layer the spine design's re-laid §9 asked for
 - **review marks** (`Server.ReviewMarks`, swept each minute) — each tmux pane on a checkout of this
   repo carries `@arena_review` (`reviewed`, `changes`, `queued`, `landed`, or unset), the state of the
   branch it is on, for arena's rail; a commit after the review clears it.
-- **the home's inbox** (`Server.Home.Inbox`, `Server.Jot`) — what the operator texts a messenger bot
-  from their phone (a voice note heard on this machine by whisper.cpp, `Server.Home.Ear`, when
-  `TLON_WHISPER_MODEL` names a model), kept raw as a `jot`, then read by one small model call (`Server.Home.Reader`: a
-  reminder with its time and whether it repeats, a to-do with a rough size, a note, a project of up to five
-  steps, or a waiting-on) and the reading said back, with what it assumed and the one question it may have
-  (its answer amends the jot). A
-  message can also ask the helper for something and is then kept as nothing: that things are done,
-  what is open, what to do now (`Server.Home.Now`), what is on someday, that a thing is to be deleted, or a question its notes and today's and tomorrow's meetings (`Server.Home.Day`, from `Server.Calendar`) answer. The house's calendar view reads any run of dates from `GET /api/home/meetings` (`Day.between/3`).
-  A form puts things in and changes them with no model call (`Server.Home.Form`, `POST /api/home/add|:id/edit|:id/plan|:id/revive`).
-  `POST /api/home {text}` reads a text as the chat does and answers `{reply, row}` (`Server.Home.say_row/2`): `row` the thing it made, in `GET /api/home`'s shape, null when it made none.
-  An **agenda** (`Server.Agenda`, `Server.Home.Agendas`) is a named standing pile of notes for a recurring occasion ("retro",
-  "1:1 with Sam"), with or without a rhythm (`every`, `next_at`): the reader files "for retro: …" on it (a new name starts
-  one, and the reply says so; it is shown the existing names to match loosely), sets its rhythm, and answers what is on it, what
-  was on it, and "retro's done" (archives the notes as done). Its notes (`jot.agenda_id`) are in no plain list. The pile is told
-  once, 15 minutes before `next_at` (in the chat, and as an info `home_agenda` alert on the desktop, as reminders are), and the time moves on an hour after it.
-  The same pile (`home_agenda.kind`, `agenda | person | door`) holds two more things, never told ahead and in none of `agendas`: a
-  **person** (`name`, an optional `birthday` `MM-DD` or `YYYY-MM-DD`, notes as gift ideas; `GET /api/home` `people`, each with its
-  `next_birthday` and the open to-dos, reminders and waiting-ons that name them as a whole word) and **the door**, one pile per `via` made by
-  its first note (`door`; `POST /api/home/door/add`): what to take along and errands for next time out. A note on any pile comes off
-  by `POST /api/home/:id/drop` (`/done` is for reminders and to-dos). The reader files "by the door: umbrella" (`door`), answers "heading
-  out" (`door_show`), makes a person from "Sam's birthday is March 3" (`person`) and files "gift idea for Sam: a kettle" (`person_note`).
-  Birthdays are said in the morning message alone, a week ahead and on the day, with the notes as ideas: no nudge, no alarm.
-  A **proposal** (`Server.Proposal`, `Server.Home.Proposals`; table `home_proposal`) is what an outside source suggests he might
-  want: `{source, key}` unique, `text`, `why`, `kind` todo or waiting, `url`, `state` open/taken/dismissed. Nothing a source offers
-  is filed by itself except a `waiting` one from a source that is trusted for it (`Proposal.offer/5`'s `auto`): a waiting-on is a fact,
-  a to-do is an ask and waits for his yes. Offering a known key changes nothing, whatever its state; a dismissed key is final; a key
-  the source says is gone (`Proposal.resolve/3`) withdraws an open proposal silently, leaves a taken to-do, and marks a taken
-  waiting-on done, said once in the next list as its `done_text` (`Proposal.settled/1`): recorded told by the teller that says it
-  (the chat's message when it goes out, or with no chat the inbox tick at the slot), never by a desktop read, which shows what
-  was told since the slot opened. Nothing is said when one arrives: they
-  are listed in the morning message and the daily list, on ask ("what's proposed?", "take the first", "dismiss all": reader kinds
-  `proposals`, `take`, `dismiss`, shown the first five open ones as PROPOSED numbered as the chat numbers them, and answering
-  those positions), and by Add/No buttons (`p:<id>:take|no`). `GET /api/home` has
-  `proposals`; `POST /api/home/proposals/:id/take|dismiss`. A **source** is a module behind `Server.Home.Source` (`name/0`,
-  `fetch/0` → `{:ok, proposals, resolved_keys} | {:error, why}`, `auto/0` the kinds it may file itself); `Server.Home.Sources` polls
-  the ones in `home_sources` (comma list, default `""`: none), where `mail` is the first source: `Server.Home.Source.Mail`, the personal inbox over read-only IMAP (`EXAMINE`, `BODY.PEEK`; settings `home_mail_host`, `home_mail_user`, password from env `ZOHO_MAIL_PASSWORD` or the agenix secret `zoho-mail-password`), one home-reader model call over what arrived since the mark in `home_keep` `home_mail_mark` (the oldest 40 after a mark, so a backlog is worked off poll by poll; the mark moves in the optional source callback `kept/0`, after the proposals are filed; a reply with no list, and a batch whose filing failed so `kept/0` never ran, are counted per batch, a batch being what is read from one mark (so mail arriving meanwhile does not reset the count; a retry reads only up to the batch's top as first tried, later mail waits for the poll after), and the third skips it, the mark moving to that top, with one warning; message text is made valid UTF-8 first), proposing only a bill, appointment, package or renewal as a to-do keyed by `mid:` and the SHA-256 of its Message-ID (else `uid:<validity>:<uid>`; never the raw text), never filing one itself; every 15 minutes, started with the inbox
-  (`TLON_START_HOME_INBOX=1`), logging a failure once per distinct reason and leaving the proposals alone; a name with no
-  module is logged once as no such source. `bank` is the other: `Server.Home.Source.Bank`, the operator's bank through Plaid
-  (`Server.Home.Bank.Plaid`, **read-only**: only `/link/token/create`, `/item/public_token/exchange`, `/transactions/sync`,
-  `/accounts/get`, listed in `Plaid.paths/0` and pinned by a test; never the paid balance call, a refresh, auth or a transfer), on
-  when `home_sources` names it and an access token is present (env `PLAID_ACCESS_TOKEN` or the agenix secret `plaid-access-token`,
-  with `PLAID_CLIENT_ID`/`PLAID_SECRET` or `plaid-client-id`/`plaid-secret`; never kept or logged). It syncs the last 800 days of transactions (Plaid is asked for 730 at the link, its most, so a yearly charge shows) into
-  the table `home_bank_transactions` (`Server.Home.Bank.Transaction`, upserted by `transaction_id`) and the cursor, accounts, `as_of` and the summary's dated part into the `home_keep` value `home_bank`, all in one database transaction per sync; a `home_bank` still holding a `transactions` list is moved into the table by the first read or refresh that sees it. The summary is worked out once per refresh and stored with the local day it is for, recomputed from the rows when read on another day. And
-  `Server.Home.Bank.Recurring` (pure, in cents) finds the steady charges and deposits (three posted charges, a weekly,
-  fortnightly, monthly or yearly rhythm, a yearly one needing two charges; amounts may vary, the series' amount being the median of the latest
-  three charges, six for a deposit; a lone charge far in amount and off the rhythm is passed over without ending the run and is not
-  counted; two stable amounts at one merchant on two stable days are two series; a merchant with many more
-  charges in no steady rhythm than its series holds is everyday spending, not a series; transfers between its own
-  accounts, equal and opposite within a day, are neither). It proposes only to-dos worded as the action, never filed by itself: a charge due within five days
-  whose account's balance is known and short ("Move money: the balance is $n short for …", `bank:due:…`; a covered one is none, the
-  day's list shows it), two equal charges within two days that are not a habit ("Check for a double charge from …", `bank:double:…`), and `bank:relink:…`.
-  A new subscription (`bank:new:…`) and a price change (`bank:price:…`) are notices, not proposals: `Server.Home.Source.Bank.notices/1`, in the
-  forecast's `notices` and cleared by `see/1` (`POST /api/home/money/notices/seen {key}`; the seen keys are the `home_keep` value `home_bank_seen`, a list that is never trimmed, and a key
-  with a taken or dismissed proposal of the source is seen too). It withdraws its own open `bank:new` and `bank:price` and its open `bank:due` dated before today or no longer among the dues proposed (covered, or no longer due), as the third element of `fetch/1`, leaving taken and dismissed ones, `bank:double` and `bank:relink` alone; `ITEM_LOGIN_REQUIRED` is one proposal that the bank needs linking
-  again. `Server.Home.Bank.summary/1` (nil when off) gives the morning message its one `Money:` line and `GET /api/home` its `money`;
-  spendable is the checking accounts alone. `Server.Home.Bank.Projection` (pure, in cents, no clock: `today` is passed in) is the
-  money engine behind `Bank.forecast/2`, `afford/3`, `what_if/3`, `history/1` and `subscriptions/1`: the checking balance day by
-  day (low, expected, high) from the recurring series repeated at their rhythms plus an everyday estimate (the last 90 days of
-  posted outflows on checking that are in no series and no transfer, spread evenly; the low and high lines are the 25th and 75th
-  percentile of rolling 30-day totals), capped at 180 days. Every number is computed there and none comes from a model, and none
-  is an opinion on the spending. The forecast stays on checking; `other_available_cents` and `other_accounts` (savings) ride beside it and
-  `covered_by_other` says whether they cover a short or tight purchase. An expected charge or deposit that has not posted (today or earlier) stays on tomorrow as
-  `overdue` (with `expected_on`) for half its rhythm, then is named in `basis.skipped`; a series whose last charge is older than two
-  rhythms plus the rhythm's tolerance (yearly: one rhythm plus 30 days; `Recurring.live/2`) has ended and is in none of it, nor in `subscriptions`. `GET /api/home/money/forecast?until=` is the forecast and the subscriptions as JSON (null when
-  off). The **money chat** (`Server.Home.Money`, `POST /api/home/money/ask {text, thread?}` → `{reply, figures, thread}`, read-only) answers a question about his money from that engine: the home reader's model
-  (`:home_reader_cmd`/`:home_reader_model`, no tools; tests pass a `:model` function) plans up to four asks (`Server.Home.Money.Plan`, parsed strictly: a bad shape is a "rephrase" reply; it is given the merchant labels of the last 90 days, at most 60, as data, and a history's `match` may be one string or a list of them, any-of, the result naming the merchants counted with their totals), the
-  `Server.Home.Bank` wrappers compute them, the model phrases the results (amounts as `*_cents_text` strings) after the sentences code writes itself (a purchase's verdict with its date and amount, or the shortfall the balance already has without it and what the purchase adds (`short_without`, `baseline_shortfall_cents`, `adds_cents`), a series not found: `Say.leads/1`), and `Server.Home.Money.Say.check/2` requires every dollar amount in that phrasing to be one of
-  the results' and `Say.contradicts?/2` (a word list) that it not say the opposite of a verdict; when there is a code-written sentence a third call, a judge given only the verdict facts and the text as JSON data, must answer exactly `{"agrees": true}` (a purchase costs three model calls, other questions two, one whose every ask is beyond the 180-day horizon one (the plan alone); the judge is a model too and guarantees nothing, the code-written verdict leads the reply regardless), else the reply is `Say.render/1`, the plain wording of the results (also when the model is down). The check sees dollar amounts only: dates, counts, percentages and numbers in words are not checked. Bank-sourced names reach the model only as JSON in a data block it is told is never instruction.
-  Nothing there writes the bank tables, calls Plaid or files a proposal; its only write is the thread's last ten turns for two hours (`Server.Home.Money.Thread`, in `home_keep`; writing one deletes the threads gone stale, `Keep.expire/2`). `mise run home:bank:link` links once (`Server.Home.Bank.Link`, a loopback page,
-  the token printed once and kept nowhere; refused with a token present, `-- --allow-another-link` overrides: the account allows ten
-  links for ever).
-  The home also does the upkeep itself (`Server.Home.Organize`, `Server.Home.Helper`): a project always has one
-  open next step or a question about it, a waiting-on is asked about after three days, a weekly review
-  (`home_review_on`, at `home_list_at`) offers stale things Keep / Later / Drop and moves anything stale for 28
-  days to someday (said at the first waking moment when its time went by asleep), and a to-do that sat a week is offered a two-minute
-  start after the daily list (written in the background; never at night). Each
-  question is a `jot` row with an `ask`, said in the chat and raised on the desktop
-  (`Server.Home.asked/0`, a sticky `home_ask` alert whose buttons call `POST /api/home/:id/answer`), so it
-  works with no messenger. Its two model calls (next step, a start) go through the reader's provider
-  and `:home_helper`. What is open is also said once a day at the
-  `home_list_at` setting, each thing with a button that ticks it off, then the waiting-ons a source settled; the open proposals
-  follow as a message of their own (an Add and a No each; the chat's morning message has no buttons, and its proposals follow the
-  same way). Once a day at `home_morning_at` (08:30; `""` never; same slot record and quiet hours as the list,
-  `Server.Home.Inbox.morning/6`) the morning message is said (`Server.Home.Morning`): today's meetings (`Server.Home.Day.meetings/1`,
-  today's only: times local, "all day", a tentative one marked), what to start with, agendas due today with a pile, birthdays today and a week ahead, one
-  `Money:` line when the bank source is on, the settled waiting-ons and the proposals (five shown, "and N more"); it is skipped when there is nothing to say, and the desktop
-  gets it as a `home_morning` info alert for ten minutes after its time (`Server.Home.morning/1`), and the daily list as a
-  `home_list` one, each carrying the settled waiting-ons and recording them told the first time it is raised, so a desktop with no chat says them too. A message that corrects the jot before it
-  changes that jot's reading, and a reminder is said in the chat when it comes due, with done / in an
-  hour / tomorrow / delete under it, and again if left unanswered (never at night, six times at most). No
-  reading, and the answer is "got it". Times are the machine's zone (`Server.Home.Clock`). The
-  messenger is a module (`Server.Home.Telegram`: outbound long polling, so no port is opened; its token
-  is the machine's, `TELEGRAM_BOT_TOKEN` or agenix `telegram-bot-token`). Only the `home_chat` setting's
-  chat is kept; unset, a chat that writes is told its id. Opt-in, `TLON_START_HOME_INBOX=1`, set by the
-  service alone: a dev boot, an eval or a smoke node that polled would take the operator's messages
-  from the service. No token, no poller.
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board); a script's `ran-on: <check> <sha>` line records the commit

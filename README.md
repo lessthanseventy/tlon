@@ -85,7 +85,6 @@ All environment, read at start:
 | `TLON_SOULS` | `~/.config/tlon/souls` | the crew's SOUL.md files |
 | `TLON_BANTER`, `TLON_WEATHER`, `TLON_CALENDAR` | on | the office's small talk, weather and calendar, served by the server, each off with `0` |
 | `TLON_WHISPER_MODEL` | none | the whisper.cpp model file the home's inbox hears voice notes with (`whisper-cli` and `ffmpeg` on the PATH); unset, voice notes are refused |
-| `TLON_START_HOME_INBOX` | off | the home's inbox: jots texted to a messenger bot (needs `TELEGRAM_BOT_TOKEN`, or the machine's agenix `telegram-bot-token`, and the `home_chat` setting); on with `1`, on one node only |
 | `TLON_WEB_SECRET` | derived from the MCP secret | the web UI's session secret |
 
 ## From a checkout

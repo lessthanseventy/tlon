@@ -51,12 +51,7 @@ if config_env() != :test do
     start_banter: System.get_env("TLON_BANTER") not in ~w(0 false no),
     # the weather outside the office's windows (Server.Office.Weather, wttr.in): on unless TLON_WEATHER=0
     start_weather: System.get_env("TLON_WEATHER") not in ~w(0 false no),
-    start_calendar: System.get_env("TLON_CALENDAR") not in ~w(0 false no),
-    # the home's inbox (Server.Home.Inbox) is opt-in: every node on the machine can read the bot's
-    # token, and one that polls takes the operator's messages from the service that keeps them
-    start_home_inbox: System.get_env("TLON_START_HOME_INBOX") in ~w(1 true yes),
-    # the whisper.cpp model the home inbox hears voice notes with (Server.Home.Ear); none, none heard
-    home_whisper_model: System.get_env("TLON_WHISPER_MODEL")
+    start_calendar: System.get_env("TLON_CALENDAR") not in ~w(0 false no)
 end
 
 # The operator's handle — who the human IS on this machine's channel. Local

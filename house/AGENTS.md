@@ -50,7 +50,7 @@ to its docked size (30% of the sidebar, 176 px at least); its handle
 (two drawn chevrons) collapses it to the input line or gives it the whole sidebar; it is the input line alone
 while a thing's view is open, and `K` or a click on the phone brings it up. While a LineEdit or TextEdit has focus no letter hotkey fires (`main.gd` `_input`).
 
-**Meetings** are `meetings` of `GET /api/home` (`Server.Home.Day`: today's remaining and tomorrow's, already
+**Meetings** are `meetings` of `GET /api/home` (the server's home, since removed: today's remaining and tomorrow's, already
 cleaned, UTC, `home.meetings`; over the local list the same rows from the calendar feed (below), `[]` with none set); Today lists the ones still on. The wall calendar's card reads the month in view from `GET /api/home/meetings` (once per
 month while the view is open, again when it is reopened; `things.calendar_blocks` asks, so every way of opening
 the card does: `things.want_meetings`, `month_meetings`; the local list answers the feed's, `[]` with none set). A month's rows stay as
@@ -255,7 +255,7 @@ runs on the local list.
   `user://house_bank.json` (0600, never the token; a store of an older `format` syncs again from no cursor, which
   replaces the rows), refreshes at start and every 15 minutes through `bank_plaid.gd`
   (the only two Plaid calls: `/transactions/sync` and `/accounts/get`; no link flow, so the one link and the ten the
-  account allows are never touched; `mise run home:bank:link` stays the server's), and runs the engine: `bank_recurring.gd`
+  account allows are never touched; how to link again is in `docs/plaid-link.md`), and runs the engine: `bank_recurring.gd`
   (series, ended, new, price change; rent through Flex is one bill under its names, its installments monthly series),
   `bank_projection.gd` (forecast, afford, what-if, history, budget: what is spare a day to the next deposit after the
   bills before it and a day's cushion, today's everyday spend, the two weeks' top merchants, served as the local
@@ -537,7 +537,7 @@ runs on the local list.
   good copy. `ics.gd` reads it as `Server.Calendar.Feed` does (RRULE, EXDATE, moved instances, all-day, busy and
   cancelled, `clean`); Godot has no zone database, so a TZID is read from a table of the common zones, else the
   feed's own VTIMEZONE, else the `(UTC±hh:mm)` prefix, else UTC. `calendar_feed.gd` answers `meetings` of
-  `GET /api/home` and `GET /api/home/meetings?from=&to=` as `Server.Home.Day` does, and the route's date check
+  `GET /api/home` and `GET /api/home/meetings?from=&to=` as the server's home did, and the route's date check
   is the server's (400, at most 62 days). The house only reads.
   **Telegram** (`telegram.gd`, a node `main.gd` holds): a bot of his own. The settings: "a Telegram bot in the
   house", three lines of setup (message @BotFather, `/newbot`, paste the token), the token field (masked, emptied once
