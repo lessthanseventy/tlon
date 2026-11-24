@@ -174,11 +174,17 @@ static func _split_work(things: Array) -> Dictionary:
 
 # the work items already in the list from the server and still live: what to offer to clear
 static func work_in(doc: Dictionary) -> Array:
-	var out := []
-	for t in doc["things"]:
-		if t.get("origin") != null and t["state"] in ["open", "someday"] and is_work(t["text"]):
-			out.append(t["text"])
-	return out
+	return (
+		_work_rows(doc)
+		. filter(func(t): return t["state"] in ["open", "someday"])
+		. map(func(t): return t["text"])
+	)
+
+
+# every imported row that is work, whatever its state: the ones this import no longer carries
+static func _work_rows(doc: Dictionary) -> Array:
+	var origin: Array = doc["things"].filter(func(t): return t.get("origin") != null)
+	return _split_work(origin)["work"]
 
 
 # the pile this one already is here: by origin, else a hand-made one (no origin yet) of the same
@@ -246,7 +252,8 @@ static func _thing(t: Dictionary, id: int, key: String) -> Dictionary:
 
 # the rows the server gave, as the list holds them now
 static func _imported(doc: Dictionary) -> Dictionary:
+	var work := _work_rows(doc)
 	return counts(
-		doc["things"].filter(func(t): return t.get("origin") != null),
+		doc["things"].filter(func(t): return t.get("origin") != null and not work.has(t)),
 		doc["agendas"].filter(func(a): return a.get("origin") != null)
 	)

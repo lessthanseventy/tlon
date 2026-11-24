@@ -183,10 +183,37 @@ func _work_stays_out() -> void:
 	_eq(report["work"], {"todo": 3, "waiting": 1, "project": 1}, "the work is counted, not carried")
 	_eq(Import.is_work("buy [a] thing, FTC-1"), false, "a bare key outside brackets is not work")
 	var held := _list()
-	held.doc["things"].append({"origin": "server:1", "state": "open", "text": "Review: [FTC-1] x"})
-	held.doc["things"].append({"origin": "server:2", "state": "done", "text": "Review: [FTC-2] y"})
-	held.doc["things"].append({"origin": null, "state": "open", "text": "Review: my own"})
+	held.doc["things"].append(_held("server:1", "open", "Review: [FTC-1] x"))
+	held.doc["things"].append(_held("server:2", "done", "Review: [FTC-2] y"))
+	held.doc["things"].append(_held(null, "open", "Review: my own"))
 	_eq(Import.work_in(held.doc), ["Review: [FTC-1] x"], "the work already in the list to offer")
+	var again := Import.run(held, export, true)
+	_eq(again["server"], again["local"], "work already in the list does not redden the write")
+	var held2 := _list()
+	held2.doc["things"].append(
+		{
+			"origin": "server:3",
+			"kind": "project",
+			"state": "open",
+			"text": "[FTC-7189] skill",
+			"id": 90
+		}
+	)
+	held2.doc["things"].append(
+		{
+			"origin": "server:4",
+			"kind": "todo",
+			"state": "open",
+			"text": "write the intro",
+			"project_id": 90,
+			"id": 91
+		}
+	)
+	_eq(Import.work_in(held2.doc).size(), 2, "a step of a work project is offered too")
+
+
+func _held(origin: Variant, state: String, text: String) -> Dictionary:
+	return {"origin": origin, "kind": "todo", "state": state, "text": text}
 
 
 func _twice() -> void:
