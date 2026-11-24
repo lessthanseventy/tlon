@@ -69,7 +69,8 @@ func _ready() -> void:
 	timer.wait_time = 1.0
 	timer.timeout.connect(
 		func() -> void:
-			if list.tick():
+			var followed: bool = list.follow()
+			if list.tick() or followed:
 				changed.emit()
 	)
 	add_child(bank)

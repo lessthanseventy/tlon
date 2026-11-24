@@ -66,6 +66,7 @@ func run() -> void:
 	_rings()
 	_files()
 	_two_writers()
+	_outside_edit()
 	_reader()
 	_reader_acts()
 
@@ -995,6 +996,52 @@ func _two_writers() -> void:
 	var left: Array = _on_disk().map(func(x): return x["text"])
 	left.sort()
 	_eq(left, ["later", "nudge Sam", "test asterion"], "a row the list removed itself stays removed")
+	_wipe()
+
+
+# the file changed by hand while the house is open (items cleared, one marked done): the house
+# follows it, its next save keeps it, and a row the house changed meanwhile is kept
+func _outside_edit() -> void:
+	_wipe()
+	t = at(2026, 11, 24, 9)
+	var house := _list(FILE)
+	house.load_file()
+	for text in ["Review: FTC-1", "Review: FTC-2", "call mum", "pay rent", "keep me"]:
+		house.add({"kind": "todo", "text": text})
+	var d: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(FILE))
+	d["things"] = d["things"].filter(
+		func(x): return not str(x["text"]).begins_with("Review") and x["text"] != "keep me"
+	)
+	for x in d["things"]:
+		if x["text"] == "call mum":
+			x["state"] = "done"
+			x["done_at"] = "2026-11-24T09:00:00Z"
+	var f := FileAccess.open(FILE, FileAccess.WRITE)
+	f.store_string(JSON.stringify(d))
+	f.close()
+	var keep: int = house.things().filter(func(x): return x["text"] == "keep me")[0]["id"]
+	house.edit(keep, {"text": "keep me, edited"})
+	_eq(
+		_on_disk().map(func(x): return [x["text"], x["state"]]),
+		[["call mum", "done"], ["pay rent", "open"], ["keep me, edited", "open"]],
+		"a save keeps what was cleared and done outside, and a row changed here meanwhile"
+	)
+	_eq(
+		house.status()["open"].map(func(x): return x["text"]),
+		["pay rent", "keep me, edited"],
+		"and the house's own list is the merged one"
+	)
+	d = JSON.parse_string(FileAccess.get_file_as_string(FILE))
+	d["things"] = d["things"].filter(func(x): return x["text"] != "pay rent")
+	f = FileAccess.open(FILE, FileAccess.WRITE)
+	f.store_string(JSON.stringify(d))
+	f.close()
+	house._seen = 0
+	_eq(
+		[house.follow(), house.follow(), house.status()["open"].map(func(x): return x["text"])],
+		[true, false, ["keep me, edited"]],
+		"the open house follows a change to its file before it saves, once"
+	)
 	_wipe()
 
 

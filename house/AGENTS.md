@@ -479,11 +479,13 @@ runs on the local list.
   project_id who list plan done_at hidden_until`; `list` is a name the person gave a to-do or reminder (Work, School), a field and not a project, sent as `list` on add and edit, spelled as the list already there when one matches ignoring case, empty clears it, and a row has the key only when it is set; unknown keys, top level or on a thing, are kept; `due_at` is UTC `Z` as
   the server's rows). Saved after every change, written to a temp file and renamed over the old one, which stays as
   `house_list.bak.json`; a file that cannot be read is moved aside as `house_list.broken-N.json` and the house starts
-  empty, saying so once. A save first reads the file: a row another writer put there (a second house, `house:import`, a copy
-  read before) that this list never held is kept, with a fresh id if its own is taken, and the log says `list: kept N "text"`;
-  a row this list held and no longer has is its own removal and stays removed, logged `list: removed N "text"`. A row is
-  known by its `since` and text (a pile by kind and name), never by id. Two writers both keep what either made; one's
-  removal can come back from the other's next save, which is the price of never losing a row. The clock is injected (`clock` is the house's `_now_local`), so the soak moves time.
+  empty, saying so once. Nothing writes the file blindly: a save merges three ways against the file as this list last
+  read or wrote it, so another writer (a second house, `house:import`, a hand edit, a copy read before) loses nothing. What
+  only the file changed or removed is taken, what only this list changed or removed stands, a row new on either side is kept
+  (a fresh id when its own is taken), and when both changed one row this list's stands. The open house also follows the
+  file: its one-second tick merges it in as soon as its modified time moves. Each row carries `key` (when it was made and
+  its first id), so a renumbered row is still known. Every row that comes or goes this way prints a `list: …` line to the
+  Godot log (`user://logs/`). The clock is injected (`clock` is the house's `_now_local`), so the soak moves time.
   Done history is the last 200 (`done_at`); `done_week` is the last seven days. Errors are the server's lines:
   `text is required`, `kind is todo, reminder, note, waiting or project`, `a reminder needs at`, `at is for a
   reminder`, the `at` format and `at is no more than a year back or 20 years ahead`, `every is for a reminder`, `every
