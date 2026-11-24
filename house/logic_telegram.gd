@@ -78,8 +78,8 @@ func _moves() -> void:
 	c["moves"][0]["how"] = "go"
 	_eq(
 		Telegram.card_text(c, st, now, 0.0).split("\n\nTo do")[0].split("\n\n")[1],
-		"Your move\nC. Pay rent\nDone: A · Dropped: B",
-		"a settled one leaves its line for Done and Dropped, a new one takes the next letter"
+		"Your move\nC. Pay rent\nDone: Move $120 from savings · Dropped: Nudge Sam",
+		"a settled one leaves its line for Done and Dropped by name, a new one takes the next letter"
 	)
 	st["moves"] = []
 	Telegram.number(c, st, now, 0.0)

@@ -842,18 +842,19 @@ static func open_letters(c: Dictionary, st: Dictionary) -> Array:
 	return out
 
 
-# "Your move", the open ones lettered, then what was settled: "Done: A · Dropped: B"
+# "Your move", the open ones lettered, then what was settled by name, since a settled letter's line
+# is gone: "Done: Pay rent · Dropped: Nudge Sam"
 static func moves_block(c: Dictionary, st: Dictionary) -> String:
 	var open := open_letters(c, st)
 	var lines: Array = []
 	var settled: Array = []
 	for how in SETTLED:
-		var ls: Array = []
-		for i in c["moves"].size():
-			if c["moves"][i]["how"] == how:
-				ls.append(letter_of(i))
-		if not ls.is_empty():
-			settled.append("%s: %s" % [SETTLED[how], ", ".join(ls)])
+		var names: Array = []
+		for m in c["moves"]:
+			if m["how"] == how:
+				names.append(m["text"])
+		if not names.is_empty():
+			settled.append("%s: %s" % [SETTLED[how], "; ".join(names)])
 	for i in c["moves"].size():
 		if open.has(letter_of(i)):
 			lines.append("%s. %s" % [letter_of(i), c["moves"][i]["text"]])

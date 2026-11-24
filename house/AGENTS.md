@@ -479,7 +479,11 @@ runs on the local list.
   project_id who list plan done_at hidden_until`; `list` is a name the person gave a to-do or reminder (Work, School), a field and not a project, sent as `list` on add and edit, spelled as the list already there when one matches ignoring case, empty clears it, and a row has the key only when it is set; unknown keys, top level or on a thing, are kept; `due_at` is UTC `Z` as
   the server's rows). Saved after every change, written to a temp file and renamed over the old one, which stays as
   `house_list.bak.json`; a file that cannot be read is moved aside as `house_list.broken-N.json` and the house starts
-  empty, saying so once. The clock is injected (`clock` is the house's `_now_local`), so the soak moves time.
+  empty, saying so once. A save first reads the file: a row another writer put there (a second house, `house:import`, a copy
+  read before) that this list never held is kept, with a fresh id if its own is taken, and the log says `list: kept N "text"`;
+  a row this list held and no longer has is its own removal and stays removed, logged `list: removed N "text"`. A row is
+  known by its `since` and text (a pile by kind and name), never by id. Two writers both keep what either made; one's
+  removal can come back from the other's next save, which is the price of never losing a row. The clock is injected (`clock` is the house's `_now_local`), so the soak moves time.
   Done history is the last 200 (`done_at`); `done_week` is the last seven days. Errors are the server's lines:
   `text is required`, `kind is todo, reminder, note, waiting or project`, `a reminder needs at`, `at is for a
   reminder`, the `at` format and `at is no more than a year back or 20 years ahead`, `every is for a reminder`, `every
@@ -543,7 +547,7 @@ runs on the local list.
   `editMessageText`, `deleteMessage`, `answerCallbackQuery`. The card carries Your move over the list's `moves`
   (not asks, which stay in the window): "Your move" lettered A, B… for the day with Go for each letter, Pick…
   (Go and No for each) and "go A" / "no B" / "go all" typed, which `main.gd` settles through `_settle_move`
-  (`moved`); once settled it reads "Done: A · Dropped: B". Under it one line, "N money", counts the bank's
+  (`moved`); once settled it reads "Done: Pay rent · Dropped: Nudge Sam", by name, since a settled letter's line is gone. Under it one line, "N money", counts the bank's
   `notices()` (never tickable; money only, no mail source is planned). A new move dated today to 48 hours on is its own
   message with Go and No (`on_moves`): never for one already waiting, with the window in front or in quiet
   hours (the evening card's time to the morning's), and it is edited when settled anywhere. An edit never notifies the

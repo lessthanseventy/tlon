@@ -65,6 +65,7 @@ func run() -> void:
 	_pick()
 	_rings()
 	_files()
+	_two_writers()
 	_reader()
 	_reader_acts()
 
@@ -952,6 +953,53 @@ func _files() -> void:
 			DirAccess.remove_absolute(FILE.get_basename() + ".broken-2.json")
 	broken_cleanup()
 	_wipe()
+
+
+# two lists over one file, each read before the other's change, both taking the same id
+func _two_writers() -> void:
+	_wipe()
+	t = at(2026, 11, 22, 22, 29)
+	var house := _list(FILE)
+	house.load_file()
+	var stale := _list(FILE)
+	stale.load_file()
+	var made: Dictionary = house.add(_read(t, "Remind me to test asterion tomorrow at 9am")["body"])
+	t = at(2026, 11, 23, 0, 6)
+	var nudge: Dictionary = stale.add({"kind": "todo", "text": "nudge Sam"})
+	_eq(nudge["body"]["id"], made["body"]["id"], "both writers take the same id")
+	_eq(
+		_on_disk().map(func(x): return [int(x["id"]), x["text"]]),
+		[[1, "nudge Sam"], [2, "test asterion"]],
+		"the later save keeps the reminder it never read, under a fresh id"
+	)
+	house.add({"kind": "todo", "text": "buy milk"})
+	var rows := _on_disk()
+	_eq(
+		rows.map(func(x): return x["text"]),
+		["test asterion", "buy milk", "nudge Sam"],
+		"the first writer's next save keeps the other's row and does not double its own"
+	)
+	var ids := {}
+	for x in rows:
+		ids[int(x["id"])] = true
+	_eq(ids.size(), 3, "no id taken twice")
+	var told: Array = []
+	stale.told.connect(func(row: Dictionary) -> void: told.append(row["text"]))
+	t = at(2026, 11, 23, 9)
+	stale.tick()
+	_eq(told, ["test asterion"], "the reminder is told at its time by the list that kept it")
+	var back := _list(FILE)
+	back.load_file()
+	back.drop(back.things().filter(func(x): return x["text"] == "buy milk")[0]["id"])
+	back.add({"kind": "todo", "text": "later"})
+	var left: Array = _on_disk().map(func(x): return x["text"])
+	left.sort()
+	_eq(left, ["later", "nudge Sam", "test asterion"], "a row the list removed itself stays removed")
+	_wipe()
+
+
+func _on_disk() -> Array:
+	return JSON.parse_string(FileAccess.get_file_as_string(FILE))["things"]
 
 
 func broken_cleanup() -> void:

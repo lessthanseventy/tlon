@@ -810,7 +810,7 @@ func _rung(bot: Bot, n: int) -> Array:
 	return bot.sent.slice(n).filter(func(m): return m["params"]["text"].begins_with("Your move\n"))
 
 
-# Your move on the day's card: lettered, settled by a button or typed, then "Done: A · Dropped: B";
+# Your move on the day's card: lettered, settled by a button or typed, then "Done: … · Dropped: …";
 # and an urgent one as its own message, rung once, never in quiet hours or with the window in front,
 # edited when it is settled on the card, on its own button or anywhere.
 func _moves(base: String, bot: Bot) -> void:
@@ -870,7 +870,7 @@ func _moves(base: String, bot: Bot) -> void:
 		],
 		[
 			"A: go a",
-			"Today · Mon 23 Nov\n\nYour move\nB. Nudge Sam\nDone: A",
+			"Today · Mon 23 Nov\n\nYour move\nB. Nudge Sam\nDone: Move $120",
 			true
 		],
 		'"go A" settles it through the house, says so, and edits the card'
@@ -889,7 +889,10 @@ func _moves(base: String, bot: Bot) -> void:
 	await _settle()
 	_eq(
 		[bot.named("editMessageText").back()["text"], bot.named("editMessageText").back()["reply_markup"]],
-		["Today · Mon 23 Nov\n\nYour move\nDone: A · Dropped: B", {"inline_keyboard": []}],
+		[
+			"Today · Mon 23 Nov\n\nYour move\nDone: Move $120 · Dropped: Nudge Sam",
+			{"inline_keyboard": []}
+		],
 		"a press settles the last one, and the card reads Done and Dropped"
 	)
 

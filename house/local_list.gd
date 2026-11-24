@@ -39,6 +39,9 @@ var notice := ""
 var keep := true
 var fresh := false
 var moves: RefCounted = null
+# every row this list has read from or written to its file, by `_sig`, so a save tells its own
+# removals from rows another writer put there
+var _held := {}
 
 
 func _init(the_path: String = "", the_clock: Callable = Callable(), the_bias: float = 0.0) -> void:
@@ -168,6 +171,7 @@ func load_file() -> void:
 			DirAccess.rename_absolute(path, aside)
 			notice += " (the file was set aside as %s)" % aside.get_file()
 		return
+	_hold(d)
 	adopt(d)
 
 
@@ -201,16 +205,87 @@ func _top() -> int:
 	return top
 
 
+# a row as it stands on disk, apart from its id, which a merge may change: a thing by when it was
+# made and its text, a pile by its kind and name
+static func _sig(row: Dictionary, pile: bool) -> String:
+	if pile:
+		return "a|%s|%s" % [row.get("kind", "agenda"), str(row.get("name", "")).to_lower()]
+	return "t|%s|%s" % [row.get("since", ""), row.get("text", "")]
+
+
+func _hold(d: Dictionary) -> void:
+	for t in d["things"]:
+		_held[_sig(t, false)] = true
+	for a in d.get("agendas", []):
+		_held[_sig(a, true)] = true
+
+
+# Another writer (a second house, the import, a copy read before this one's last change) may have
+# saved since this list read the file: a row it put there that this list never held is kept, under
+# a fresh id when this list uses its id. A row this list held and no longer has is its own removal,
+# and the log says so, so a row that leaves the list always leaves a line.
+func _keep_others() -> void:
+	if not FileAccess.file_exists(path):
+		return
+	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not (d is Dictionary and d.get("things") is Array and d["things"].all(_whole)):
+		return
+	var piles: Array = (d["agendas"] if d.get("agendas") is Array else []).filter(
+		func(a): return a is Dictionary and a.get("id") != null
+	)
+	var used := {}
+	var here := {}
+	for row in doc["things"]:
+		used[int(row["id"])] = true
+		here[_sig(row, false)] = true
+	for row in doc["agendas"]:
+		used[int(row["id"])] = true
+		here[_sig(row, true)] = true
+	doc["next_id"] = maxi(int(doc["next_id"]), int(d.get("next_id", 1)))
+	var moved := {}
+	var kept: Array = []
+	for pair in piles.map(func(a): return [a, true]) + d["things"].map(func(t): return [t, false]):
+		var row: Dictionary = pair[0]
+		var id := int(row["id"])
+		var sig := _sig(row, pair[1])
+		if here.has(sig):
+			continue
+		if _held.has(sig):
+			if not used.has(id):
+				print("list: removed %d \"%s\"" % [id, row.get("text", row.get("name", ""))])
+			continue
+		if used.has(id):
+			moved[id] = int(doc["next_id"])
+			row["id"] = moved[id]
+			doc["next_id"] = int(doc["next_id"]) + 1
+		used[int(row["id"])] = true
+		kept.append(pair)
+	for pair in kept:
+		var row: Dictionary = pair[0]
+		for k in ["id", "nudges", "every_day", "project_id", "agenda_id"]:
+			if row.get(k) is float:
+				row[k] = int(row[k])
+		for k in ["project_id", "agenda_id"]:
+			if row.get(k) != null and moved.has(row[k]):
+				row[k] = moved[row[k]]
+		doc["agendas" if pair[1] else "things"].append(row)
+		var said: Variant = row.get("text", row.get("name", ""))
+		print("list: kept %d \"%s\", saved by another writer" % [row["id"], said])
+	doc["next_id"] = maxi(int(doc["next_id"]), _top() + 1)
+
+
 # the list is written whole beside itself, then renamed over the old one, which stays as .bak
 func save() -> void:
 	if path == "":
 		return
+	_keep_others()
 	var tmp := path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		return
 	f.store_string(JSON.stringify(doc))
 	f.close()
+	_hold(doc)
 	if FileAccess.file_exists(path):
 		DirAccess.copy_absolute(path, path.get_basename() + ".bak.json")
 	if DirAccess.rename_absolute(tmp, path) != OK:

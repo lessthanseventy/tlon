@@ -14,6 +14,7 @@ func run() -> void:
 	_hand_made_door()
 	_same_named_piles()
 	_work_stays_out()
+	_beside_the_house()
 
 
 func _thing(id: int, kind: String, text: String, extra: Dictionary = {}) -> Dictionary:
@@ -233,6 +234,38 @@ func _same_named_piles() -> void:
 	var report := Import.run(list, JSON.parse_string(JSON.stringify(d)), true)
 	_eq(report["local"], report["server"], "two same-named server piles stay two")
 	_eq(report["added"], {"person": 2}, "both added")
+
+
+# the house set a reminder after the import read the list, and the export has a row with the
+# reminder's own id
+func _beside_the_house() -> void:
+	_wipe()
+	t = at(2026, 11, 22, 22, 29)
+	var read_before := _list(FILE)
+	read_before.load_file()
+	var house := _list(FILE)
+	house.load_file()
+	var id: int = (
+		house.add(_read(t, "Remind me to test asterion tomorrow at 9am")["body"])["body"]["id"]
+	)
+	var things := [_thing(id, "waiting", "Waiting on review: the support skill")]
+	var d := {"v": 1, "things": things, "agendas": [], "counts": Import.counts(things, [])}
+	Import.run(read_before, JSON.parse_string(JSON.stringify(d)), true)
+	var back := _list(FILE)
+	back.load_file()
+	var rows: Array = back.things().map(func(x): return [x["text"], x.get("origin")])
+	rows.sort()
+	_eq(
+		rows,
+		[["Waiting on review: the support skill", "server:%d" % id], ["test asterion", null]],
+		"the import's write keeps the reminder the house set after it read the list"
+	)
+	var told: Array = []
+	back.told.connect(func(row: Dictionary) -> void: told.append(row["text"]))
+	t = at(2026, 11, 23, 9)
+	back.tick()
+	_eq(told, ["test asterion"], "and it is told at its time")
+	_wipe()
 
 
 func _hand_made_door() -> void:
