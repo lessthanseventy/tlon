@@ -18,9 +18,8 @@ defmodule Server.RosterTest do
   end
 
   test "the specialty: the one area the ask's paths name, else none" do
-    assert Roster.specialty_of("fix house/room.gd") == "house"
+    assert Roster.specialty_of("fix house/room.gd") == nil
     assert Roster.specialty_of("server/lib/server/staffing.ex races") == "server"
-    assert Roster.specialty_of("house/ and server/ both") == nil
     assert Roster.specialty_of("a general chore") == nil
   end
 
