@@ -84,7 +84,6 @@ All environment, read at start:
 | `TLON_URL` | `http://127.0.0.1:4040` | (house) the server to talk to |
 | `TLON_SOULS` | `~/.config/tlon/souls` | the crew's SOUL.md files |
 | `TLON_BANTER`, `TLON_WEATHER`, `TLON_CALENDAR` | on | the office's small talk, weather and calendar, served by the server, each off with `0` |
-| `TLON_WHISPER_MODEL` | none | the whisper.cpp model file the home's inbox hears voice notes with (`whisper-cli` and `ffmpeg` on the PATH); unset, voice notes are refused |
 | `TLON_WEB_SECRET` | derived from the MCP secret | the web UI's session secret |
 
 ## From a checkout
