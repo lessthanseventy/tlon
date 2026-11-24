@@ -11,8 +11,5 @@ description = "release: smoke a candidate (default origin/main) — a scratch re
 run = "scripts/run-from-root.sh release-smoke.sh"
 
 [install]
-description = "after a landing: cut the release at origin/main, so what landed is what runs, then build and install Asterion for this machine (house:install; babylon runs this once a change is on main). A failed Asterion build only warns: the cut is done and the landing stands"
-run = [
-  "scripts/release.sh cut",
-  "scripts/house-app.sh install || echo 'install: WARNING: the Asterion build failed; the release is cut, Asterion on this machine is stale' >&2",
-]
+description = "after a landing: cut the release at origin/main, so what landed is what runs (babylon runs this once a change is on main)"
+run = ["scripts/release.sh cut"]

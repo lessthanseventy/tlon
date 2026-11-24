@@ -39,7 +39,6 @@ defmodule Server.CheckScope do
 
   defp area("server/" <> _), do: :server
 
-  defp area("house/" <> _), do: :house
   defp area("adapters/claude-code/" <> _), do: :claude_code
   defp area("adapters/lsp/" <> _), do: :lsp
   defp area("adapters/lspd/" <> _), do: :lspd
@@ -51,7 +50,6 @@ defmodule Server.CheckScope do
 
   defp tasks(:server), do: @greps ++ ["server:check", "server:eval-det"]
 
-  defp tasks(:house), do: @greps ++ ["check:house"]
   defp tasks(:claude_code), do: @greps ++ ["adapters:claude-code:check", "adapters:claude-code:mod"]
   defp tasks(:lsp), do: @greps ++ ["adapters:lsp:check"]
   defp tasks(:lspd), do: @greps ++ ["adapters:lspd:check"]

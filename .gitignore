@@ -67,10 +67,3 @@ adapters/.claude-plugin/types/
 adapters/tsconfig.json
 server/tmp/
 
-# the house's builds and art pack: bought art, never committed (they are written outside the repo)
-house-dist/
-house-art.zip
-house-art.pck
-asterion-*.zip
-the-house-*.zip
-house/export.log

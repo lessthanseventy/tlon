@@ -1,8 +1,8 @@
 # tlon — boundaries for a session at the repo root
 
 Tlön, the dev product: `server/` (the always-up brain — threads, facts, worklines, staffing; its node
-is `funes@`), `adapters/` (what makes a Claude Code session a citizen of the server)
-and `house/` (a standalone Godot window over the home: what the operator's jots left open). It runs on any box with Postgres and mise; the home machine wires it in from
+is `funes@`), `adapters/` (what makes a Claude Code session a citizen of the server).
+Asterion, the standalone Godot window over the home, is its own repo (`~/projects/asterion`). Tlön runs on any box with Postgres and mise; the home machine wires it in from
 ficciones (`~/projects/ficciones`), which is where the Nix, the desktop and the secrets live.
 
 ## The dev loop — one shared API
@@ -20,8 +20,7 @@ control loop, not two, and no second way to run anything:
   into the session's pane and kept in its babylon inbox: done, or back to `doing` with why in the
   ticket's `stage_note`. No PR, no `review_branch`, no `mise run land`, no full check from the session.
   Worklines (the server's own coworker seats and threads) keep the server's line, below.
-- `mise run check` — names gate (which also holds the task manual to its source) + script self-tests (`check:scripts`: each `scripts/*.test.sh` is a `check:scripts:<name>` task, run in parallel) + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server and adapters gates + the task manual + the house's gate (`check:house`, after the others: `house:gate`, below, but only when `house/` changed in the commits being gated, the range from the merge-base with `origin/main` to HEAD and any uncommitted `house/` file; on main itself there is no range, so a full run); the green-before-commit gate. A session's change gets it once, from babylon at `submit_ticket`.
-  The house gate needs Godot, which is the machine's, not mise's: with `godot` on PATH it always runs when `house/` changed. Without it, a machine that sets `TLON_HOUSE_GATE=required` (the home machine does) fails the gate; any other prints `house: SKIPPED — godot not on PATH …` and `check`'s closing summary repeats the skip, so a pass that skipped the house never reads as one that ran it (and such a tree is not recorded green).
+- `mise run check` — names gate (which also holds the task manual to its source) + script self-tests (`check:scripts`: each `scripts/*.test.sh` is a `check:scripts:<name>` task, run in parallel) + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server and adapters gates + the task manual; the green-before-commit gate. A session's change gets it once, from babylon at `submit_ticket`.
   One at a time per machine: it waits its turn in the checks queue (`scripts/checks-queue.sh`, saying who
   holds it), first come, first served, and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
   suites on the one test database at once. Don't call `check:all` to skip the line. A shell that can't open
@@ -53,7 +52,6 @@ control loop, not two, and no second way to run anything:
   changes exit 1 with the findings. The service must be up. `review -- <branch> <repo>` reads a branch of
   another repo's checkout the same way and only prints the review (`Headless.opinion/3`): that repo's
   reviews and landings are not tlon's to keep.
-- `mise run house:gate` — the house's whole verification, fast (`scripts/house-gate.sh`): `house:check`, then each soak section as its own headless Godot in parallel (its own throwaway `XDG_DATA_HOME`, its own stub-server port; `TLON_HOUSE_JOBS` at once, default half the cores), a table of section times, every `FAIL` line named by its section, non-zero on a failed, timed-out or `SOAK OK`-less section. `house/AGENTS.md` has the loop.
 - `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
 - `mise run server:release` / `server:restart` / `server:stop` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to rebuild/stop/inspect/watch it (`server:stop` takes the coworker panes down with it, mid-turn ones too: emergencies only).
 - `mise run release:cut` / `release:status` — what the service runs is the **release pointer** (`refs/heads/live`, built in `.release/`), not main: a merge ships when a cut moves the pointer, and babylon's landing runs `mise run install`, which cuts at origin/main (fast-forward, merged work only; `-- --rollback` to go back). The cut is how new code runs: the restart waits for quiet, and panes whose launch changed roll themselves between turns; a cut that changes neither `server/` nor `mise.toml` builds and restarts nothing, and one that changes only server code that can be swapped hot-loads instead of restarting (`Server.Release.HotLoad`; it restarts when unsure, and says why). Each night, once the gate and smoke have run, the server cuts the newest commit that passed both (`Server.Release.PM.auto/1`): the standing approval and the gate apply as usual, and a pause or a rollback stops it. `scripts/release.sh`. `release:status` also reads whether main is releasable (`Server.Release.Candidate`: `check:main` and `release:smoke` passed on exactly that commit — each run ends `ran-on: <check> <sha>`, which a scheduled run records and a hand run reports via `scripts/lib/record-ran.sh` (`POST /api/release/ran`) — and nothing mid-flight). The `pm` coworker proposes cuts (`Server.Release.PM`): under `auto_land_risk` it cuts them itself, else they reach you as one gate on the root thread.
@@ -67,7 +65,6 @@ control loop, not two, and no second way to run anything:
   `release:smoke` goes through `scripts/run-from-root.sh`, which runs the shared root checkout's (main's) copy, so a
   seat on an old base that has the wrapper still smokes with current tooling; one too old to have it needs a rebase.
 - `mise run bench:*` — memory and role benchmarks that spend real quota: `docs/models.md`.
-- `mise run house:build -- windows|mac|linux|all` / `house:art-pack` — the house for another machine, with the bought art packed inside it: written only to `~/.cache/tlon/house-dist/` (refused inside a git work tree), because the art's licence allows shipping it inside the app and forbids redistributing it, and this repo is public. `house/SHIPPING.md`.
 
 On the home machine, installing and updating the service is ficciones' job (its `home:switch` and
 `machine:update`); here you build and restart the release. mise owns the dev runtimes. **If a command belongs in the loop, it becomes
@@ -149,7 +146,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   structure that does not exist yet. The tree should not lie about what is built.
 - **An `AGENTS.md` is born the same way a comment is — when a scope needs context its parent doesn't
   give.** Root holds repo-wide invariants; a module or subapp gets its own when it has distinct law, a
-  distinct dev loop, or gotchas that bite (`server`, `adapters` + its adapters, `house`). Don't add one per
+  distinct dev loop, or gotchas that bite (`server`, `adapters` + its adapters). Don't add one per
   folder by reflex — `lib/schemas/`, `test/`, etc. earn a file only once they accumulate a rule a
   weaker model keeps getting wrong; until then that guidance lives in the module's file. Keep every one
   terse and actionable to the same standard as comments: orientation, the exact commands, the law, the

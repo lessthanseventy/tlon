@@ -12,16 +12,9 @@ defmodule Server.CheckScopeTest do
     assert CheckScope.suites(["adapters/claude-code/mod.ts"]) ==
              @greps ++ ["adapters:claude-code:check", "adapters:claude-code:mod"]
 
-    assert CheckScope.suites(["house/main.gd", "house/soak_chat.gd"]) == @greps ++ ["check:house"]
     assert CheckScope.suites(["adapters/lsp/a.ts"]) == @greps ++ ["adapters:lsp:check"]
     assert CheckScope.suites(["adapters/lspd/a.ts"]) == @greps ++ ["adapters:lspd:check"]
     assert CheckScope.suites(["docs/plans/a.md", "work/slug/spec.md"]) == @greps ++ ["manual:check"]
-  end
-
-  test "a diff outside house/ never runs the house gate" do
-    for path <- ["server/lib/a.ex", "adapters/claude-code/a.ts", "scripts/x.sh", "docs/a.md", "adapters/lsp/a.ts"] do
-      refute "check:house" in CheckScope.suites([path])
-    end
   end
 
   test "a server-only diff never skips the server suite" do
@@ -37,7 +30,7 @@ defmodule Server.CheckScopeTest do
 
   test "paths across modules, a root file, or nothing at all are the full check" do
     assert CheckScope.suites(["server/lib/a.ex", "adapters/lsp/a.ts"]) == ["check"]
-    assert CheckScope.suites(["house/main.gd", "adapters/lsp/a.ts"]) == ["check"]
+
     assert CheckScope.suites(["README.md"]) == ["check"]
     assert CheckScope.suites(["adapters/other/a.ts"]) == ["check"]
     assert CheckScope.suites([]) == ["check"]

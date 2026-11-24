@@ -67,7 +67,7 @@ tlon                            # migrates the database, then serves on 127.0.0.
 ```
 
 The server is loopback-only. The agents talk to it over MCP at `http://127.0.0.1:4040/mcp`; the
-house reads it over HTTP (`TLON_URL` points it elsewhere).
+Asterion (its own repo) reads it over HTTP (`TLON_URL` points it elsewhere).
 
 ## Configuration
 
@@ -81,7 +81,7 @@ All environment, read at start:
 | `TLON_WEB_PORT` | `4042` | the web UI |
 | `TLON_START_WEB`, `TLON_START_MCP`, `TLON_START_OBAN`, `TLON_START_SWITCHBOARD`, `TLON_START_ATTENTION` | on | the services, each switchable off with `0` |
 | `TLON_WORKLINE_ROOT` | the cwd | the checkout workline checks run git in |
-| `TLON_URL` | `http://127.0.0.1:4040` | (house) the server to talk to |
+| `TLON_URL` | `http://127.0.0.1:4040` | (Asterion) the server to talk to |
 | `TLON_SOULS` | `~/.config/tlon/souls` | the crew's SOUL.md files |
 | `TLON_BANTER`, `TLON_WEATHER`, `TLON_CALENDAR` | on | the office's small talk, weather and calendar, served by the server, each off with `0` |
 | `TLON_WEB_SECRET` | derived from the MCP secret | the web UI's session secret |
@@ -92,14 +92,12 @@ All environment, read at start:
 tlon/
   server/     # the spine — its own spec (server/docs/spec.md), its own boundary
   adapters/   # the hands: the Claude Code launcher and mod, the LSP tools, skills
-  house/      # a standalone Godot window over the home
   tasks/      # the mise tasks (mise.toml includes them) — `mise tasks` lists every verb
   scripts/    # the shell side of the loop (cap, watch, the reaper, the tlon CLI)
 ```
 
 [mise](https://mise.jdx.dev) brings the toolchains (Erlang, Elixir, bun). `mise run server:setup` once,
-`mise run house:run` for the house over a running server, `mise run server:package` to build the
-executables above. Start with `AGENTS.md`; the gate is `mise run check`.
+`mise run server:package` to build the executables above. Start with `AGENTS.md`; the gate is `mise run check`.
 
 ## The name
 
