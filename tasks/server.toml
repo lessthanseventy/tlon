@@ -221,7 +221,6 @@ run = "scripts/check-glossary.test.sh"
 description = "script test: checks-queue.sh runs waiters first come first served, never two at once (offline, temp dirs)"
 run = "scripts/checks-queue.test.sh"
 
-
 ["check:scripts:record-ran"]
 description = "script test: record-ran.sh reports a hand-run gate, and a down service never fails the run (offline, temp dirs)"
 run = "scripts/record-ran.test.sh"
