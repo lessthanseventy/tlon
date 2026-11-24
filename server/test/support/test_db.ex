@@ -51,6 +51,7 @@ defmodule Server.TestDB do
     "jot",
     "home_slot",
     "home_keep",
+    "keep_up_warm",
     "home_bank_transactions",
     "home_agenda",
     "home_proposal",

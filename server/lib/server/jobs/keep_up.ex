@@ -41,7 +41,7 @@ defmodule Server.Jobs.KeepUp do
 
   import Ecto.Query, only: [from: 2]
 
-  alias Server.Home
+  alias Server.Jobs.KeepUp.Warm
 
   require Logger
 
@@ -75,7 +75,7 @@ defmodule Server.Jobs.KeepUp do
   (the row is durable, the note is not), never twice in a run; it clears when the project warms or
   its repo is no longer a project's.
 
-  A tip is tried once, across restarts: `Server.Home.Keep` holds, per project, `"<sha> ok"` or
+  A tip is tried once, across restarts: `Server.Jobs.KeepUp.Warm` holds, per project, `"<sha> ok"` or
   `"<sha> failed\n<last lines of the compiler's output>"`, so a red main costs one compile, not one
   every pass or restart, and its note is posted again from the row. The next tip tries again. A git that won't
   run warms nothing (the repo pass reports it).
@@ -371,8 +371,7 @@ defmodule Server.Jobs.KeepUp do
   end
 
   defp warm(dir, sha, run) do
-    # Home.Keep is the only durable key-value store the server has; its name says home, not what it holds
-    state = Home.Keep.get("keep_up:warm:#{dir}")
+    state = Warm.get("keep_up:warm:#{dir}")
 
     cond do
       state == "#{sha} ok" ->
@@ -399,7 +398,7 @@ defmodule Server.Jobs.KeepUp do
   end
 
   defp settle(dir, state, body) do
-    if body != state, do: Home.Keep.put("keep_up:warm:#{dir}", body)
+    if body != state, do: Warm.put("keep_up:warm:#{dir}", body)
 
     if String.ends_with?(body, " ok") do
       unsay("keep_up:warm:#{dir}")
@@ -448,7 +447,7 @@ defmodule Server.Jobs.KeepUp do
 
     keep =
       Server.Repo.all(
-        from k in Home.Keep, where: fragment("starts_with(?, ?)", k.name, "keep_up:warm:"), select: k.name
+        from k in Warm, where: fragment("starts_with(?, ?)", k.name, "keep_up:warm:"), select: k.name
       )
 
     {notes, Enum.filter(keep, &keyed_to?(&1, paths))}
@@ -458,7 +457,7 @@ defmodule Server.Jobs.KeepUp do
   @spec forget([String.t() | {:off_main | :drift, String.t()}], [String.t()]) :: :ok
   def forget(notes, keep) do
     Enum.each(notes, &unsay/1)
-    Server.Repo.delete_all(from k in Home.Keep, where: k.name in ^keep)
+    Server.Repo.delete_all(from k in Warm, where: k.name in ^keep)
     :ok
   end
 

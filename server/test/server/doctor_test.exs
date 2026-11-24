@@ -28,6 +28,7 @@ defmodule Server.DoctorTest do
                "home_slot",
                "issue",
                "jot",
+               "keep_up_warm",
                "message",
                "need_dismissal",
                "need_heard",

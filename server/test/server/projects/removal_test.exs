@@ -71,21 +71,21 @@ defmodule Server.Projects.RemovalTest do
       Rollout.note("keep_up:gone:#{path}", "gone")
       Rollout.note("keep_up:warm:#{path}/server", "warm")
       Rollout.note("keep_up:gone:#{other}", "someone else's")
-      Server.Home.Keep.put("keep_up:warm:#{path}/server", "abc ok")
-      Server.Home.Keep.put("keep_up:warm:#{other}", "abc ok")
+      Server.Jobs.KeepUp.Warm.put("keep_up:warm:#{path}/server", "abc ok")
+      Server.Jobs.KeepUp.Warm.put("keep_up:warm:#{other}", "abc ok")
       sync()
 
       assert {:ok, plan} = Projects.remove_with_empties("gone", :dry_run)
       assert Enum.sort(plan.notes) == ["keep_up:gone:#{path}", "keep_up:warm:#{path}/server"]
       assert plan.keep == ["keep_up:warm:#{path}/server"]
-      assert Server.Home.Keep.get("keep_up:warm:#{path}/server") == "abc ok"
+      assert Server.Jobs.KeepUp.Warm.get("keep_up:warm:#{path}/server") == "abc ok"
 
       assert {:ok, _} = Projects.remove_with_empties("gone", :remove)
       assert [%{key: key}] = Enum.filter(Rollout.pending(), &String.contains?(&1.text, "someone"))
       assert key == "keep_up:gone:#{other}"
       refute Enum.any?(Rollout.pending(), &(String.contains?(&1.key, path <> "/") or &1.key == "keep_up:gone:#{path}"))
-      assert Server.Home.Keep.get("keep_up:warm:#{path}/server") == nil
-      assert Server.Home.Keep.get("keep_up:warm:#{other}") == "abc ok"
+      assert Server.Jobs.KeepUp.Warm.get("keep_up:warm:#{path}/server") == nil
+      assert Server.Jobs.KeepUp.Warm.get("keep_up:warm:#{other}") == "abc ok"
     end
   end
 

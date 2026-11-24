@@ -176,7 +176,7 @@ defmodule Server.Jobs.KeepUpTest do
       assert text =~ "folder is gone"
       assert text =~ "mise run server:project:remove -- <name>"
       assert [_origin_note] = notes(live)
-      assert Server.Home.Keep.get("keep_up:warm:#{gone}") == nil
+      assert Server.Jobs.KeepUp.Warm.get("keep_up:warm:#{gone}") == nil
 
       assert :ok = KeepUp.perform(%Oban.Job{})
       assert [_one] = notes(gone)
