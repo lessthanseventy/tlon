@@ -25,8 +25,8 @@
       provenance: "stated",
       text:
         "The tlon repo: server/ (OTP app :server, Server.* — the store, MCP, switchboard, staffing, web UI), " <>
-          "house/ (Godot: a standalone window over the home, over the server's HTTP " <>
-          "API) and adapters/ (TypeScript: the Claude Code adapter, its hooks and skills, lsp). funes and " <>
+          "adapters/ (TypeScript: the Claude Code adapter, its hooks and skills, lsp); Asterion, the Godot " <>
+          "window over the home, is its own repo. funes and " <>
           "aleph are legacy names that survive only in prose and in the node name funes@."
     },
     %{
@@ -65,7 +65,7 @@
       provenance: "stated",
       text:
         "Runtime: the server runs as a systemd --user service (tlon.service, node funes@127.0.0.1) — MCP on " <>
-          "127.0.0.1:4040, the web UI on :4042, Oban for scheduled work. The house (`mise run house:run`) talks " <>
+          "127.0.0.1:4040, the web UI on :4042, Oban for scheduled work. Asterion talks " <>
           "to it over HTTP on :4040; `mise run server:dev` runs a scratch node on the dev db (MCP :4041). " <>
           "`mise run server:restart` rebuilds the release and restarts the service. What the service runs is " <>
           "the release pointer (refs/heads/live), moved by `mise run release:cut`, not main's tip."
