@@ -446,9 +446,7 @@ defmodule Server.Jobs.KeepUp do
     notes = for %{key: key} <- Server.Rollout.pending(), keyed_to?(key, paths), do: key
 
     keep =
-      Server.Repo.all(
-        from k in Warm, where: fragment("starts_with(?, ?)", k.name, "keep_up:warm:"), select: k.name
-      )
+      Server.Repo.all(from k in Warm, where: fragment("starts_with(?, ?)", k.name, "keep_up:warm:"), select: k.name)
 
     {notes, Enum.filter(keep, &keyed_to?(&1, paths))}
   end
