@@ -1482,7 +1482,10 @@ func _tell(text: String, done: Callable, via: String = "", kept: Callable = Call
 		if reached and body is Dictionary and body.get("reply") is String:
 			reply = body["reply"]
 		if reached:
-			chat.add("home", reply, marks)
+			var kept_marks := marks.duplicate()
+			if body is Dictionary and body.has("plan"):
+				kept_marks["plan"] = body["plan"]
+			chat.add("home", reply, kept_marks)
 			if body is Dictionary and body.get("open") is String:
 				OS.shell_open(body["open"])
 			if kept.is_valid():

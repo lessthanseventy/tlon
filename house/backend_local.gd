@@ -147,7 +147,7 @@ func _chat(text: String, body: Dictionary, cb: Callable) -> bool:
 				_money_thread,
 				func(answer: Dictionary) -> void:
 					_money_thread = str(answer["thread"])
-					_answered(cb, text, {"reply": answer["reply"]}),
+					_answered(cb, text, _kept(answer)),
 				_model()
 			)
 			return true
@@ -155,6 +155,13 @@ func _chat(text: String, body: Dictionary, cb: Callable) -> bool:
 			_list_answer(text, cb)
 			return true
 	return false
+
+
+static func _kept(answer: Dictionary) -> Dictionary:
+	var body := {"reply": answer["reply"]}
+	if answer.has("plan"):
+		body["plan"] = answer["plan"]
+	return body
 
 
 func _answered(cb: Callable, text: String, body: Dictionary) -> void:

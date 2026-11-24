@@ -387,6 +387,8 @@ static func _months_of(data: Dictionary, query: Dictionary) -> Dictionary:
 			"count": rows.size(),
 			"merchants": _counted(rows) if needle != null else [],
 			"largest": largest,
+			"out_cents": out_sum,
+			"in_cents": in_sum,
 			"average_out_cents": -_per(-out_sum, entries.size()),
 			"average_in_cents": _per(in_sum, entries.size()),
 		}

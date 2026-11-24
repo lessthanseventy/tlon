@@ -427,18 +427,23 @@ static func _history(ask: Dictionary, r: Dictionary) -> String:
 	for m in (r["largest"] as Array).slice(0, 3):
 		rows.append("%s %s on %s" % [_t(m.get("name")), _abs_text(m), _day(m["date"])])
 	var largest := _join("; ", rows)
-	return (
-		(
-			"From %s to %s%s: %s transactions, on average %s out and %s in a month."
-			% [
-				_day(ask["from"]),
-				_day(ask["to"]),
-				what,
-				_t(r.get("count")),
-				_t(r.get("average_out_cents_text")),
-				_t(r.get("average_in_cents_text")),
-			]
+	var span := (
+		"From %s to %s%s: %s transactions"
+		% [_day(ask["from"]), _day(ask["to"]), what, _t(r.get("count"))]
+	)
+	var totals := (
+		", %s out and %s in in all" % [_t(r.get("out_cents_text")), _t(r.get("in_cents_text"))]
+	)
+	var monthly := (
+		""
+		if U.month_start(ask["from"]) == U.month_start(ask["to"])
+		else (
+			", on average %s out and %s in a month"
+			% [_t(r.get("average_out_cents_text")), _t(r.get("average_in_cents_text"))]
 		)
+	)
+	return (
+		(span + totals + monthly + ".")
 		+ _counted(r.get("merchants", []))
 		+ ("" if largest == "" else " Largest: %s." % largest)
 	)
