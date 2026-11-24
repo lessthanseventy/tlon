@@ -48,13 +48,7 @@ defmodule Server.TestDB do
     "generated_part",
     "need_dismissal",
     "need_routing",
-    "jot",
-    "home_slot",
-    "home_keep",
     "keep_up_warm",
-    "home_bank_transactions",
-    "home_agenda",
-    "home_proposal",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so
     # tickets clear before all of them; note has no FK.
     Server.Ticket,
