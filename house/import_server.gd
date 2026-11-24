@@ -117,6 +117,13 @@ func _table(report: Dictionary) -> String:
 				report["local"].get(kind, 0),
 			]
 		)
+	out += "work items not carried (the house is personal): %s\n" % JSON.stringify(report["work"])
+	if not report["in_list"].is_empty():
+		out += (
+			"work items already in the list (offer to clear):\n  "
+			+ "\n  ".join(report["in_list"])
+			+ "\n"
+		)
 	out += "proposals not carried (the list has no sources): %d\n" % report["proposals"]
 	out += "settings: %s" % JSON.stringify(report["settings"])
 	return out

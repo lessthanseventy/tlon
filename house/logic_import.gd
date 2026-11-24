@@ -13,6 +13,7 @@ func run() -> void:
 	_twice()
 	_hand_made_door()
 	_same_named_piles()
+	_work_stays_out()
 
 
 func _thing(id: int, kind: String, text: String, extra: Dictionary = {}) -> Dictionary:
@@ -157,6 +158,35 @@ func _dry_then_write() -> void:
 	back.load_file()
 	_eq(back.things().size(), list.things().size(), "the file holds it")
 	_wipe()
+
+
+func _work_stays_out() -> void:
+	var things := [
+		_thing(30, "todo", "call the dentist"),
+		_thing(31, "todo", "Review: [FTC-6041] Announce team access"),
+		_thing(32, "waiting", "Nudge a reviewer about Waiting on review: [FTAG-24] a11y pass"),
+		_thing(33, "project", "[FTC-7189] Make the support skill"),
+		_thing(34, "todo", "write the intro", {"project_id": 33}),
+		_thing(35, "todo", "Review: PR 12 on acme/app"),
+	]
+	var d := {"v": 1, "things": things, "agendas": [], "proposals": [], "settings": {}}
+	d["counts"] = Import.counts(things, [])
+	d["counts"]["proposals"] = 0
+	var export: Dictionary = JSON.parse_string(JSON.stringify(d))
+	var list := _list()
+	var report := Import.run(list, export, true)
+	var texts: Array = (
+		list.things().filter(func(x): return x.get("origin") != null).map(func(x): return x["text"])
+	)
+	_eq(texts, ["call the dentist"], "only the personal one comes over")
+	_eq(report["server"], report["local"], "the counts still match")
+	_eq(report["work"], {"todo": 3, "waiting": 1, "project": 1}, "the work is counted, not carried")
+	_eq(Import.is_work("buy [a] thing, FTC-1"), false, "a bare key outside brackets is not work")
+	var held := _list()
+	held.doc["things"].append({"origin": "server:1", "state": "open", "text": "Review: [FTC-1] x"})
+	held.doc["things"].append({"origin": "server:2", "state": "done", "text": "Review: [FTC-2] y"})
+	held.doc["things"].append({"origin": null, "state": "open", "text": "Review: my own"})
+	_eq(Import.work_in(held.doc), ["Review: [FTC-1] x"], "the work already in the list to offer")
 
 
 func _twice() -> void:

@@ -76,7 +76,8 @@ static func run(list: RefCounted, export: Dictionary, write: bool) -> Dictionary
 	if why != "":
 		return {"error": why}
 	var doc: Dictionary = list.doc.duplicate(true)
-	var things: Array = export["things"]
+	var split := _split_work(export["things"])
+	var things: Array = split["personal"]
 	var agendas: Array = export["agendas"]
 	var added := {}
 	var already := {}
@@ -134,6 +135,8 @@ static func run(list: RefCounted, export: Dictionary, write: bool) -> Dictionary
 		"server": counts(things, agendas),
 		"added": added,
 		"already": already,
+		"work": counts(split["work"], []),
+		"in_list": work_in(doc),
 		"local": _imported(doc),
 		"proposals":
 		(export["proposals"] as Array).size() if export.get("proposals") is Array else 0,
@@ -143,6 +146,39 @@ static func run(list: RefCounted, export: Dictionary, write: bool) -> Dictionary
 		list.doc = doc
 		list.save()
 	return report
+
+
+# Work is not the house's. The server keeps no source on a jot (a taken proposal is a plain jot),
+# so a work item is known by its text: a tracker key in brackets, a review, a reviewer nudge.
+static func is_work(text: String) -> bool:
+	var key := RegEx.create_from_string("\\[[A-Z][A-Z0-9]+-\\d+\\]")
+	return (
+		key.search(text) != null
+		or text.begins_with("Review: ")
+		or text.contains("Nudge a reviewer")
+	)
+
+
+# the things split into the personal ones and the work ones; a step of a work project is work
+static func _split_work(things: Array) -> Dictionary:
+	var work_ids := {}
+	for t in things:
+		if t["kind"] == "project" and is_work(t["text"]):
+			work_ids[int(t["id"])] = true
+	var out := {"personal": [], "work": []}
+	for t in things:
+		var step_of_work: bool = t.get("project_id") != null and work_ids.has(int(t["project_id"]))
+		out["work" if is_work(t["text"]) or step_of_work else "personal"].append(t)
+	return out
+
+
+# the work items already in the list from the server and still live: what to offer to clear
+static func work_in(doc: Dictionary) -> Array:
+	var out := []
+	for t in doc["things"]:
+		if t.get("origin") != null and t["state"] in ["open", "someday"] and is_work(t["text"]):
+			out.append(t["text"])
+	return out
 
 
 # the pile this one already is here: by origin, else a hand-made one (no origin yet) of the same
