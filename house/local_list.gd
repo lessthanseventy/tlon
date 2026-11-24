@@ -242,6 +242,13 @@ static func _same(a: Dictionary, b: Dictionary) -> bool:
 	return JSON.stringify(x, "", true) == JSON.stringify(y, "", true)
 
 
+# Two writers can each make a row in the same second with the same next id, so the rows share a key.
+# Before either has seen the other's, a shared key is one row only when its kind and words match.
+static func _alike(a: Dictionary, b: Dictionary, pile: bool) -> bool:
+	var words := "name" if pile else "text"
+	return a.get("kind") == b.get("kind") and str(a.get(words, "")) == str(b.get(words, ""))
+
+
 static func _whole_numbers(row: Dictionary) -> void:
 	for k in ["id", "nudges", "every_day", "project_id", "agenda_id"]:
 		if row.get(k) is float:
@@ -288,7 +295,11 @@ func _merge_disk() -> bool:
 	var kept: Array = []
 	for k in theirs:
 		var row: Dictionary = theirs[k][0]
+		var twin := false
 		if mine.has(k):
+			var here: Dictionary = mine[k][0]
+			twin = not _base.has(k) and not _alike(row, here, theirs[k][1])
+		if mine.has(k) and not twin:
 			var here: Dictionary = mine[k][0]
 			if not _base.has(k) or _same(row, _base[k][0]) or _same(row, here):
 				continue
@@ -313,7 +324,7 @@ func _merge_disk() -> bool:
 			row["id"] = moved[id]
 			doc["next_id"] = int(doc["next_id"]) + 1
 		used[int(row["id"])] = true
-		row["key"] = k
+		row["key"] = "%s|%d" % [k, int(row["id"])] if twin else k
 		kept.append(theirs[k])
 	for pair in kept:
 		var row: Dictionary = pair[0]

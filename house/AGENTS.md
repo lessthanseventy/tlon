@@ -488,7 +488,9 @@ runs on the local list.
   only the file changed or removed is taken, what only this list changed or removed stands, a row new on either side is kept
   (a fresh id when its own is taken), and when both changed one row this list's stands. The open house also follows the
   file: its one-second tick merges it in as soon as its modified time moves. Each row carries `key` (when it was made and
-  its first id), so a renumbered row is still known. Every row that comes or goes this way prints a `list: …` line to the
+  its first id), so a renumbered row is still known; two writers' rows made in the same second with the same id share a
+  key, and before either has merged the other's they are one row only when kind and text (a pile's name) match, else both
+  are kept, the other's under a fresh id and key. Every row that comes or goes this way prints a `list: …` line to the
   Godot log (`user://logs/`). The clock is injected (`clock` is the house's `_now_local`), so the soak moves time.
   Done history is the last 200 (`done_at`); `done_week` is the last seven days. Errors are the server's lines:
   `text is required`, `kind is todo, reminder, note, waiting or project`, `a reminder needs at`, `at is for a

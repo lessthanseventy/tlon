@@ -67,6 +67,7 @@ func run() -> void:
 	_files()
 	_two_writers()
 	_outside_edit()
+	_same_second()
 	_reader()
 	_reader_acts()
 
@@ -1074,6 +1075,36 @@ func _outside_edit() -> void:
 		true,
 		"a followed-in row edited here and removed outside is kept"
 	)
+	_wipe()
+
+
+# two writers each add a different row in the same second with the same next id, so the rows
+# share a key: both are kept, and the next saves on either side double neither
+func _same_second() -> void:
+	_wipe()
+	t = at(2026, 11, 24, 10)
+	var house := _list(FILE)
+	house.load_file()
+	var other := _list(FILE)
+	other.load_file()
+	house.add({"kind": "todo", "text": "buy milk"})
+	other.add({"kind": "todo", "text": "call mum"})
+	var texts: Array = _on_disk().map(func(x): return x["text"])
+	texts.sort()
+	_eq(texts, ["buy milk", "call mum"], "both rows made in the same second are in the file")
+	house.add({"kind": "todo", "text": "pay rent"})
+	other.add({"kind": "todo", "text": "water plant"})
+	texts = _on_disk().map(func(x): return x["text"])
+	texts.sort()
+	_eq(
+		texts,
+		["buy milk", "call mum", "pay rent", "water plant"],
+		"and after a save on each side, each is there once"
+	)
+	var ids := {}
+	for x in _on_disk():
+		ids[int(x["id"])] = true
+	_eq(ids.size(), 4, "under four ids")
 	_wipe()
 
 
