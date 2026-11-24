@@ -194,47 +194,6 @@ defmodule Server.AlertsTest do
     assert [%{label: "Join", open: "https://meet.google.com/abc"}] = a.actions
   end
 
-  test "the home's notices are info toasts; reminders and asks are sticky" do
-    pile = %{id: "3:1763560800", created_at: @now, thread_id: nil, body: "Retro in 15 — 2 things: a; b"}
-
-    assert [
-             %{
-               key: "home_agenda:3:1763560800",
-               level: "info",
-               kind: "home_agenda",
-               title: "Retro in 15 — 2 things: a; b",
-               actions: []
-             }
-           ] =
-             Alerts.build([], [], @now, home_agenda: [pile])
-
-    told = %Server.Jot{id: 7, text: "bins", nudges: 2, nudged_at: @now}
-    list = %{id: "2026-11-17", created_at: @now, thread_id: nil, body: "Still open: milk"}
-
-    assert [
-             %{key: "reminder:7:2", level: "sticky", kind: "reminder", title: "bins", actions: [done, hour, _, delete]},
-             %{key: "home_list:2026-11-17", level: "info", title: "Still open: milk"}
-           ] = Alerts.build([], [], @now, told: [told], home_list: [list])
-
-    assert done == %{label: "Done", method: "POST", path: "/api/home/7/done", body: nil}
-    assert hour.body == %{until: "hour"}
-    assert delete == %{label: "Delete", method: "POST", path: "/api/home/7/drop", body: nil}
-
-    asked = %{
-      id: 9,
-      key: "ask:9:review:1",
-      at: @now,
-      text: "Still want this? milk",
-      choices: [{"Keep", "keep"}],
-      typed: nil
-    }
-
-    assert [%{key: "reminder:7:2"}, %{key: "ask:9:review:1", level: "sticky", kind: "home_ask", actions: [keep]}] =
-             Alerts.build([], [], @now, told: [told], asked: [asked])
-
-    assert keep == %{label: "Keep", method: "POST", path: "/api/home/9/answer", body: %{choice: "keep"}}
-  end
-
   test "alarms first, then decisions, then sticky" do
     alerts =
       Alerts.build(

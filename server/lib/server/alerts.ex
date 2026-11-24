@@ -9,15 +9,9 @@ defmodule Server.Alerts do
     * **decision** — work has stopped on a choice (a gate, a prompt, a question, a coworker's
       ask): a banner with its answers;
     * **sticky** — wants the operator, nothing waits on it (a red verify, stuck work): stays until
-      dismissed or resolved. A rollout note raises nothing here: the office's inbox has it. A
-      reminder the operator was told and has not done (`Server.Home.told/0`) is one, with the
-      chat's choices, delete among them;
+      dismissed or resolved. A rollout note raises nothing here: the office's inbox has it;
     * **info** — something the operator set going took effect where they can't see it: a toast
-      that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
-      minutes after. Kinds: `home_list`, the home's daily list, for the
-      ten minutes after its time (`Server.Home.listing/1`); `home_morning`, the morning message, the
-      same for `home_morning_at` (`Server.Home.morning/1`); `home_agenda`, an agenda's pile told ahead of its
-      time (`Server.Home.told_agendas/1`). A `mention` of the operator is info too: a
+      that goes by on its own, no actions. A `mention` of the operator is info: a
       coworker's report goes by, and the office's inbox keeps it; what they must decide is an ask.
 
   Each alert is `%{key, level, kind, title, body, at, thread_id, link, actions}`; an action is a
@@ -30,31 +24,19 @@ defmodule Server.Alerts do
   # a rollout's housekeeping: the inbox has it, the desktop doesn't
   @inbox_only ~w(rollout)
   @alarm_after_s 600
-  @info_s 600
 
   @doc "Every alert now."
   def list do
     now = DateTime.utc_now()
     minutes = Server.OperatorConfig.setting("alarm_minutes")
     window = {DateTime.add(now, -@alarm_after_s), DateTime.add(now, minutes * 60)}
-    since = DateTime.add(now, -@info_s)
 
     build(Server.Office.Needs.list(), Server.Calendar.alarmable(Server.Calendar.upcoming(window)), now,
-      alarm_minutes: minutes,
-      told: Server.Home.told(),
-      asked: Server.Home.asked(),
-      home_list: List.wrap(Server.Home.listing(now)),
-      home_morning: List.wrap(Server.Home.morning(now)),
-      home_agenda: Server.Home.told_agendas(since)
+      alarm_minutes: minutes
     )
   end
 
-  @doc """
-  The alerts for these needs and meetings at `now` — `list/0` without the reads. Raised as info:
-  `home_list:` the home's daily list, `home_morning:` and `home_agenda:`. `told:` the reminders
-  told and not done, raised sticky, and `asked:` the questions the home put and the operator has
-  not answered (`Server.Home.asked/0`), sticky too, each choice a call on `/api/home/:id/answer`.
-  """
+  @doc "The alerts for these needs and meetings at `now` — `list/0` without the reads."
   def build(needs, meetings, now, opts \\ []) do
     lead = Keyword.get(opts, :alarm_minutes, @alarm_minutes) * 60
 
@@ -69,26 +51,7 @@ defmodule Server.Alerts do
     Enum.sort_by(alarms, & &1.at, DateTime) ++
       Enum.filter(from_needs, &(&1.level == "decision")) ++
       Enum.filter(from_needs, &(&1.level == "sticky")) ++
-      Enum.map(Keyword.get(opts, :told, []), &reminder/1) ++
-      Enum.map(Keyword.get(opts, :asked, []), &asked/1) ++
-      Enum.filter(from_needs, &(&1.level == "info")) ++
-      Enum.map(Keyword.get(opts, :home_list, []), &info("home_list", &1, &1.body)) ++
-      Enum.map(Keyword.get(opts, :home_morning, []), &info("home_morning", &1, &1.body)) ++
-      Enum.map(Keyword.get(opts, :home_agenda, []), &info("home_agenda", &1, &1.body))
-  end
-
-  defp info(kind, m, title) do
-    %{
-      key: "#{kind}:#{m.id}",
-      level: "info",
-      kind: kind,
-      title: title,
-      body: nil,
-      at: m.created_at,
-      thread_id: m.thread_id,
-      link: nil,
-      actions: []
-    }
+      Enum.filter(from_needs, &(&1.level == "info"))
   end
 
   defp alarm(m) do
@@ -265,55 +228,4 @@ defmodule Server.Alerts do
   defp other(t), do: "Other…" |> call("/messages", t) |> Map.put(:input, "body")
 
   defp send_back(stage, t), do: "Back to #{stage}…" |> call("/send_back", t, %{stage: stage}) |> Map.put(:input, "why")
-
-  defp asked(question) do
-    answer = fn label, choice, extra ->
-      Map.merge(
-        %{label: label, method: "POST", path: "/api/home/#{question.id}/answer", body: %{choice: choice}},
-        extra
-      )
-    end
-
-    typed =
-      case question.typed do
-        nil -> []
-        choice -> [answer.("Something else…", choice, %{input: "text"})]
-      end
-
-    %{
-      key: question.key,
-      level: "sticky",
-      kind: "home_ask",
-      title: question.text,
-      body: nil,
-      at: question.at,
-      thread_id: nil,
-      link: nil,
-      actions: for({label, choice} <- question.choices, do: answer.(label, choice, %{})) ++ typed
-    }
-  end
-
-  # keyed by the telling, so one dismissed on the desktop comes back when it is told again
-  defp reminder(jot) do
-    later = fn label, until ->
-      %{label: label, method: "POST", path: "/api/home/#{jot.id}/later", body: %{until: until}}
-    end
-
-    %{
-      key: "reminder:#{jot.id}:#{jot.nudges}",
-      level: "sticky",
-      kind: "reminder",
-      title: jot.text,
-      body: nil,
-      at: jot.nudged_at,
-      thread_id: nil,
-      link: nil,
-      actions: [
-        %{label: "Done", method: "POST", path: "/api/home/#{jot.id}/done", body: nil},
-        later.("In an hour", "hour"),
-        later.("Tomorrow", "tomorrow"),
-        %{label: "Delete", method: "POST", path: "/api/home/#{jot.id}/drop", body: nil}
-      ]
-    }
-  end
 end
