@@ -154,47 +154,6 @@ defmodule Server.OperatorConfig do
       doc: "the provider/model every one-shot runs on: banter, titles, the judge, the toys"
     },
     %{key: "weather_location", type: "string", default: "", doc: "where the office's weather comes from"},
-    %{key: "home_chat", type: "string", default: "", doc: "the messenger chat the home's inbox keeps jots from"},
-    %{
-      key: "home_list_at",
-      type: "string",
-      default: "17:30",
-      doc: "when the home's helper says what is still open each day, local HH:MM; empty for never"
-    },
-    %{
-      key: "home_morning_at",
-      type: "string",
-      default: "08:30",
-      doc:
-        "when the home's helper says the morning message (meetings, what to start with, agendas due, what is proposed), local HH:MM; empty for never"
-    },
-    %{
-      key: "home_sources",
-      type: "string",
-      default: "",
-      doc:
-        "the outside sources that propose things for the home's list (`mail`, `bank`), comma separated; polled every 15 minutes; empty for none"
-    },
-    %{
-      key: "home_mail_host",
-      type: "string",
-      default: "imap.zoho.com",
-      doc: "the IMAP host (TLS, port 993) of the inbox the `mail` source reads, read-only"
-    },
-    %{
-      key: "home_mail_user",
-      type: "string",
-      default: "",
-      doc:
-        "the account the `mail` source logs in as; its password is the env ZOHO_MAIL_PASSWORD or the machine secret zoho-mail-password; empty and the source reports it is not set"
-    },
-    %{
-      key: "home_review_on",
-      type: "string",
-      default: "sun",
-      doc:
-        "the weekday the home's helper reviews what has gone stale, as mon..sun, at the daily list's time (17:30 when that is empty); empty for never"
-    },
     %{
       key: "intake_every_minutes",
       type: "int",
