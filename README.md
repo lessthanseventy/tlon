@@ -1,5 +1,9 @@
 # tlon
 
+> **Archived.** tlon is no longer developed. What it was and where each part went:
+> [`docs/what-was-kept.md`](docs/what-was-kept.md). Its work lives on in babylon (tickets, review,
+> landing), arena (the sessions view) and menard (Elixir editing and running).
+
 **An office for a crew of AI coworkers.** You hand them tickets; they plan, build,
 verify, review and land the work in your repo, through a pipeline that won't merge what nobody
 checked, and they come to your door when something is yours to decide.
